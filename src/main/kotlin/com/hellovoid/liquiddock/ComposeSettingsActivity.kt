@@ -132,20 +132,6 @@ private val ROOT_PAGES = listOf(Page.Home, Page.LayoutHub, Page.GlassHub, Page.M
 
 private fun isRootPage(page: Page): Boolean = page in ROOT_PAGES
 
-private data class ThirdPartyAppPageDescriptor(
-    val packageName: String,
-    val displayName: String,
-    val restartLabelRes: Int,
-)
-
-private val THIRD_PARTY_APP_PAGES = mapOf(
-    Page.Gboard to ThirdPartyAppPageDescriptor(
-        packageName = "com.google.android.inputmethod.latin",
-        displayName = "Gboard",
-        restartLabelRes = R.string.action_restart_gboard,
-    ),
-)
-
 // Ordinary UI writes are mirrored to API101 Remote Preferences by LiquidDockApp's
 // SharedPreferences listener. No per-control JSON/file/root synchronization exists.
 
@@ -734,6 +720,17 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         MiuixIcons.Image,
         MiuixIcons.Settings,
     )
+    val restartScopeItems = listOf(
+        RestartScopeItem("com.miui.home", "桌面", "com.miui.home"),
+        RestartScopeItem("com.android.systemui", "系统界面", "com.android.systemui"),
+        RestartScopeItem("com.miui.securitycenter", "安全中心", "com.miui.securitycenter"),
+        RestartScopeItem("com.google.android.inputmethod.latin", "Gboard", "com.google.android.inputmethod.latin"),
+        RestartScopeItem("com.android.quicksearchbox", "系统搜索", "com.android.quicksearchbox"),
+    )
+    var showRestartScopes by remember { mutableStateOf(false) }
+    var selectedRestartScopes by remember {
+        mutableStateOf(setOf("com.miui.home", "com.android.systemui"))
+    }
 
     fun navigateTo(target: Page) {
         if (target == page) return
@@ -761,40 +758,24 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         backLabel = stringResource(R.string.action_back),
         onBack = { navigateBack() },
         actions = {
-            val descriptor = THIRD_PARTY_APP_PAGES[page]
-            when {
-                page == Page.SecurityCenterSidebar ||
-                        page == Page.Animation ||
-                        page == Page.AnimationPopups -> {
-                    ModernTopActionButton(
-                        text = stringResource(R.string.action_restart_security_center_and_launcher),
-                        onClick = { activity.restartSecurityCenterAndLauncher() },
-                    )
-                }
-                descriptor != null -> {
-                    ModernTopActionButton(
-                        text = stringResource(descriptor.restartLabelRes),
-                        onClick = {
-                            activity.restartPackageProcess(
-                                descriptor.packageName,
-                                descriptor.displayName,
-                            )
-                        },
-                    )
-                }
-                else -> {
-                    ModernTopActionButton(
-                        text = stringResource(R.string.action_restart_launcher),
-                        onClick = { activity.restartLauncher() },
-                    )
-                }
-            }
-            if (page == Page.Home) {
-                ModernTopActionButton(
-                    text = stringResource(R.string.action_restart_system_ui),
-                    onClick = { activity.restartSystemUi() },
-                )
-            }
+            ModernTopActionButton(
+                text = stringResource(R.string.action_restart_scopes),
+                onClick = {
+                    selectedRestartScopes = when (page) {
+                        Page.Gboard -> setOf("com.google.android.inputmethod.latin")
+                        Page.SecurityCenterSidebar,
+                        Page.Animation,
+                        Page.AnimationPopups -> setOf(
+                            "com.miui.home",
+                            "com.miui.securitycenter",
+                        )
+                        Page.AnimationSystem -> setOf("com.android.systemui")
+                        Page.Home -> setOf("com.miui.home", "com.android.systemui")
+                        else -> setOf("com.miui.home")
+                    }
+                    showRestartScopes = true
+                },
+            )
         },
         bottomBar = {
             if (root) {
@@ -810,6 +791,26 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     onSelected = { index -> selectRoot(ROOT_PAGES[index]) },
                 )
             }
+        },
+        overlay = {
+            RestartScopesDialog(
+                visible = showRestartScopes,
+                items = restartScopeItems,
+                selected = selectedRestartScopes,
+                onToggle = { id ->
+                    selectedRestartScopes = if (id in selectedRestartScopes) {
+                        selectedRestartScopes - id
+                    } else {
+                        selectedRestartScopes + id
+                    }
+                },
+                onDismiss = { showRestartScopes = false },
+                onRestart = {
+                    val selected = selectedRestartScopes
+                    showRestartScopes = false
+                    activity.restartHookScopes(selected)
+                },
+            )
         },
     ) { padding ->
         AnimatedContent(
