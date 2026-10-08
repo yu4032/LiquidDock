@@ -824,13 +824,28 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
 
 @Composable
 private fun HomePage(
-    padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean,
-    onMasterChanged: (Boolean) -> Unit, open: (Page) -> Unit,
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    onMasterChanged: (Boolean) -> Unit,
+    open: (Page) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader(stringResource(R.string.app_name)) }
-        item { SmallTitle(stringResource(R.string.category_master)) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         item {
+            PageHeader(
+                stringResource(R.string.app_name),
+                "现代化设置界面 · 功能按领域分层，重页面拆成独立子页",
+            )
+        }
+        item {
+            ModernSectionLabel("状态")
             SettingsCard {
                 BooleanSetting(
                     prefs,
@@ -840,29 +855,66 @@ private fun HomePage(
                 ) { onMasterChanged(it) }
             }
         }
-        item { SmallTitle(stringResource(R.string.category_customization)) }
-        item {
-            SettingsCard {
-                ArrowPreference(stringResource(R.string.page_grid), summary = stringResource(R.string.home_grid_summary), onClick = { open(Page.Grid) })
-                ArrowPreference(stringResource(R.string.page_dock), summary = stringResource(R.string.home_dock_summary), onClick = { open(Page.Dock) })
-                ArrowPreference(stringResource(R.string.page_divider), summary = stringResource(R.string.home_divider_summary), onClick = { open(Page.Divider) })
-                ArrowPreference(stringResource(R.string.page_workstation), summary = stringResource(R.string.home_workstation_summary), onClick = { open(Page.Workstation) })
-                ArrowPreference(stringResource(R.string.page_recents), summary = stringResource(R.string.home_recents_summary), onClick = { open(Page.Recents) })
-                ArrowPreference(
-                    stringResource(R.string.page_security_center_sidebar),
-                    summary = stringResource(R.string.home_security_center_sidebar_summary),
-                    onClick = { open(Page.SecurityCenterSidebar) },
+        item { ModernSectionLabel("快捷入口") }
+        overviewEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
                 )
-                ArrowPreference(stringResource(R.string.page_liquid), summary = stringResource(R.string.home_liquid_summary), onClick = { open(Page.Liquid) })
-                ArrowPreference(stringResource(R.string.page_stroke), summary = stringResource(R.string.home_stroke_summary), onClick = { open(Page.Stroke) })
-                ArrowPreference(stringResource(R.string.page_shadow), summary = stringResource(R.string.home_shadow_summary), onClick = { open(Page.Shadow) })
-                ArrowPreference(stringResource(R.string.page_animation), summary = stringResource(R.string.home_animation_summary), onClick = { open(Page.Animation) })
             }
         }
-        item { SmallTitle(stringResource(R.string.category_configuration)) }
-        item { SettingsCard { ArrowPreference(stringResource(R.string.home_data_title), summary = stringResource(R.string.home_data_summary), onClick = { open(Page.Data) }) } }
-        item { SmallTitle(stringResource(R.string.category_about)) }
-        item { SettingsCard { ArrowPreference(stringResource(R.string.home_about_title), summary = stringResource(R.string.home_about_summary), onClick = { open(Page.About) }) } }
+        item {
+            ModernSurface(
+                modifier = Modifier.padding(horizontal = 14.dp, top = 4.dp),
+            ) {
+                Text(
+                    text = if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = if (masterEnabled) {
+                        "可热切换的视觉功能立即响应；结构性 Hook 修改仍按各项说明重启对应作用域。"
+                    } else {
+                        "当前仅保留设置与数据，运行时视觉层已释放。"
+                    },
+                    modifier = Modifier.padding(top = 6.dp),
+                    fontSize = 12.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HubPage(
+    padding: PaddingValues,
+    summary: String,
+    entries: List<HubEntry>,
+    open: (Page) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item { PageHeader("", summary) }
+        entries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+            }
+        }
     }
 }
 
