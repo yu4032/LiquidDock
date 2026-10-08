@@ -2013,7 +2013,14 @@ private fun SettingsList(
     summary: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         item { PageHeader(title, summary) }
         item { SettingsCard(content) }
     }
@@ -2021,15 +2028,40 @@ private fun SettingsList(
 
 @Composable
 internal fun PageHeader(title: String, summary: String? = null) {
-    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-        Text(title, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-        if (!summary.isNullOrBlank()) Text(summary, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
+    Column(
+        modifier = Modifier.padding(
+            start = 20.dp,
+            end = 20.dp,
+            top = if (title.isBlank()) 8.dp else 16.dp,
+            bottom = 6.dp,
+        ),
+    ) {
+        if (title.isNotBlank()) {
+            Text(
+                text = title,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (!summary.isNullOrBlank()) {
+            Text(
+                text = summary,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = if (title.isBlank()) 0.dp else 6.dp),
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+            )
+        }
     }
 }
 
 @Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { Column(content = content) }
+    ModernSurface(
+        modifier = Modifier.padding(horizontal = 14.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
+    ) {
+        Column(content = content)
+    }
 }
 
 @Composable
