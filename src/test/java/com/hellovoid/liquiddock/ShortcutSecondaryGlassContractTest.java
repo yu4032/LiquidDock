@@ -157,15 +157,15 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(settings.contains("快捷菜单深色模式适配"));
         assertTrue(settings.contains("将快捷菜单文字和图标统一改为白色"));
-        assertTrue(settings.contains(
-                "ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,\n"
-                        + "            \"桌面快捷菜单玻璃背景\",\n"
-                        + "            \"替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效\",\n"
-                        + "            masterEnabled && liquidGlass,\n"
-                        + "        )\n"
-                        + "        BooleanSetting(\n"
-                        + "            prefs,\n"
-                        + "            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,"));
+        int menusStart = settings.indexOf("private fun GlassMenusPage(");
+        int menusEnd = settings.indexOf("@Composable", menusStart + 20);
+        assertTrue("shortcut controls must live in the lightweight menu page",
+                menusStart >= 0 && menusEnd > menusStart);
+        String menusPage = settings.substring(menusStart, menusEnd);
+        int glassToggle = menusPage.indexOf("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS");
+        int darkToggle = menusPage.indexOf("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT");
+        assertTrue("dark-mode option must stay after the shortcut glass toggle",
+                glassToggle >= 0 && darkToggle > glassToggle);
     }
 
 
@@ -253,7 +253,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(schema.contains("UNINSTALL_DIALOG_GLASS = bool("));
         assertTrue(schema.contains("\"liquid_uninstall_dialog_glass\", true, true, true"));
         assertTrue(settings.contains("Page.DialogCustomization -> DialogGlassSettingsPage("));
-        assertTrue(settings.contains("openDialogCustomization = { page = Page.DialogCustomization }"));
+        assertTrue(settings.contains("onClick = { open(Page.DialogCustomization) }"));
     }
 
     @Test public void launcherDialogGlassFollowsMiuixDimViewAndHasIndependentAppearancePage()
@@ -321,11 +321,10 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader)"));
         assertTrue(hook.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name()"));
 
-        // UI lives under Liquid Glass as the requested child page.
+        // UI is reached through the lightweight glass menus page.
         assertTrue(settings.contains("DialogCustomization(R.string.page_dialog_customization)"));
-        assertTrue(settings.contains(
-                "Page.DialogCustomization, Page.ThirdPartyApps,"));
-        assertTrue(settings.contains("title = stringResource(R.string.page_dialog_customization)"));
+        assertTrue(settings.contains("private fun GlassMenusPage("));
+        assertTrue(settings.contains("onClick = { open(Page.DialogCustomization) }"));
         assertTrue(dialogPage.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
         assertTrue(dialogPage.contains("ConfigSchema.Glass.DIALOG_DISABLE_DIMMING"));
         assertTrue(dialogPage.contains("DialogAppearanceValueSlider("));
