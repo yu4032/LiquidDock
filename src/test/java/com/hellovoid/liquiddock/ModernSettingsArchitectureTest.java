@@ -18,6 +18,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/SearchboxSettingsActivity.kt");
     private static final Path WIDGET_DETAIL = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentDetailActivity.kt");
+    private static final Path BUILD = Path.of("build.gradle.kts");
+    private static final Path STRINGS_ZH = Path.of("src/main/res/values-zh-rCN/strings.xml");
 
     @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
@@ -68,13 +70,38 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void modernShellUsesRoundedSurfacesAndPillBottomNavigation() throws Exception {
+    public void modernShellUsesCompletePrismalComponentStack() throws Exception {
         String source = Files.readString(SURFACES);
-        assertTrue(source.contains("ModernBottomNavigation"));
-        assertTrue(source.contains("RoundedCornerShape(28.dp)"));
-        assertTrue(source.contains("RoundedCornerShape(24.dp)"));
-        assertTrue(source.contains("ModernFeatureCard"));
-        assertTrue(source.contains("ModernTopActionButton"));
+        String build = Files.readString(BUILD);
+
+        assertTrue(build.contains("com.github.styropyr0:PrismalAGSL:v1.0.4"));
+        assertTrue(source.contains("PrismalGlassSurface"));
+        assertTrue(source.contains("PrismalGlassButton"));
+        assertTrue(source.contains("PrismalGlassBottomTabs"));
+        assertTrue(source.contains("PrismalGlassBottomTab"));
+        assertTrue(source.contains("PrismalGlassToggle"));
+        assertTrue(source.contains("PrismalGlassSlider"));
+        assertTrue(source.contains("PrismalGlassStepper"));
+        assertTrue(source.contains("PrismalGlassMenu"));
+        assertTrue(source.contains("PrismalGlassMenuItem"));
+        assertTrue(source.contains("drawPlainPrismalGlass"));
+        assertTrue(source.contains("rememberPrismalMergedSource"));
+    }
+
+    @Test
+    public void appearanceAndMoreRootNavigationStayUserFacingAndFocused() throws Exception {
+        String source = Files.readString(UI);
+        String zh = Files.readString(STRINGS_ZH);
+
+        assertTrue(zh.contains("<string name=\"tab_glass\">外观</string>"));
+        assertTrue(source.contains(
+                "private val moreEntries = listOf(\n"
+                        + "    HubEntry(Page.Data, R.string.page_data, \"默认配置、导入与导出\"),\n"
+                        + "    HubEntry(Page.About, R.string.page_about, \"第三方开源项目与许可\"),\n"
+                        + ")"));
+        assertFalse(source.contains("拆成独立子页"));
+        assertFalse(source.contains("组合对应控件"));
+        assertFalse(source.contains("轻量页"));
     }
 
     @Test
