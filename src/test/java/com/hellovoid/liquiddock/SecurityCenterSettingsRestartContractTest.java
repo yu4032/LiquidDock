@@ -16,7 +16,7 @@ public class SecurityCenterSettingsRestartContractTest {
     public void sidebarPageUsesOneCombinedRestartAction() throws Exception {
         String compose = Files.readString(
                 MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
-        String marker = "if (page == Page.SecurityCenterSidebar)";
+        String marker = "page == Page.SecurityCenterSidebar ||";
         int sidebarGuard = compose.indexOf(marker);
         assertTrue("Security Center sidebar page must own the combined restart action",
                 sidebarGuard >= 0);
@@ -28,8 +28,8 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue("combined button must call the serialized activity action",
                 compose.indexOf("activity.restartSecurityCenterAndLauncher()", combined) > combined);
 
-        int nextBranch = compose.indexOf("} else if (descriptor != null)", combined);
-        String sidebarBranch = compose.substring(sidebarGuard, nextBranch);
+        int descriptorBranch = compose.indexOf("descriptor != null ->", combined);
+        String sidebarBranch = compose.substring(sidebarGuard, descriptorBranch);
         assertFalse("Security Center page must not expose a second standalone Launcher restart",
                 sidebarBranch.contains("activity.restartLauncher()"));
         assertFalse("old standalone Security Center action must be removed",
@@ -37,17 +37,19 @@ public class SecurityCenterSettingsRestartContractTest {
     }
 
     @Test
-    public void animationPageAlsoUsesCombinedRestartAction() throws Exception {
+    public void animationHubAndPopupPageUseCombinedRestartAction() throws Exception {
         String compose = Files.readString(
                 MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
-        int animationGuard = compose.indexOf("else if (page == Page.Animation)");
-        assertTrue("Animation page must expose the combined restart for its Security Center fade",
+        int animationGuard = compose.indexOf("page == Page.Animation ||");
+        assertTrue("Animation hub must expose the combined restart for Security Center-owned fades",
                 animationGuard >= 0);
+        assertTrue("popup animation page must share the combined restart",
+                compose.indexOf("page == Page.AnimationPopups ->", animationGuard) > animationGuard);
         int combined = compose.indexOf(
                 "R.string.action_restart_security_center_and_launcher", animationGuard);
-        assertTrue("Animation page must render the combined restart action",
+        assertTrue("Animation pages must render the combined restart action",
                 combined > animationGuard);
-        assertTrue("Animation page combined button must call the serialized action",
+        assertTrue("Animation combined button must call the serialized action",
                 compose.indexOf("activity.restartSecurityCenterAndLauncher()", combined) > combined);
     }
 
