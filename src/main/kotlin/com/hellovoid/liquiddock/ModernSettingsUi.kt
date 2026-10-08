@@ -577,6 +577,28 @@ internal fun SliderPreference(
 }
 
 @Composable
+internal fun ModernGlassSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    visibilityThreshold: Float,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    val backdrop = LocalPrismalSurfaceBackdrop.current ?: return
+    PrismalGlassSlider(
+        value = { value },
+        onValueChange = { next ->
+            if (enabled) onValueChange(next)
+        },
+        valueRange = valueRange,
+        visibilityThreshold = visibilityThreshold,
+        backdrop = backdrop,
+        modifier = modifier.alpha(if (enabled) 1f else 0.42f),
+    )
+}
+
+@Composable
 internal fun ModernGlassStepper(
     value: Int,
     valueRange: IntRange,
