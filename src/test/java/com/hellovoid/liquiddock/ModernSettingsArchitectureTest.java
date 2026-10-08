@@ -14,6 +14,10 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
+    private static final Path SEARCHBOX = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SearchboxSettingsActivity.kt");
+    private static final Path WIDGET_DETAIL = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentDetailActivity.kt");
 
     @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
@@ -78,6 +82,16 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("RoundedCornerShape(24.dp)"));
         assertTrue(source.contains("ModernFeatureCard"));
         assertTrue(source.contains("ModernTopActionButton"));
+    }
+
+    @Test
+    public void secondarySettingsActivitiesUseTheSameModernShell() throws Exception {
+        String search = Files.readString(SEARCHBOX);
+        String widget = Files.readString(WIDGET_DETAIL);
+        assertTrue(search.contains("ModernSettingsScaffold("));
+        assertTrue(widget.contains("ModernSettingsScaffold("));
+        assertFalse(search.contains("SmallTopAppBar("));
+        assertFalse(widget.contains("SmallTopAppBar("));
     }
 
     private static String functionBody(String source, String name, String nextName) {
