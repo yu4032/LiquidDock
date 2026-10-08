@@ -463,11 +463,12 @@ internal fun Button(
         blurRadius = 7.dp,
         refractionHeight = 9.dp,
         refractionAmount = 12.dp,
-        pressLift = 2.dp,
+        pressLift = 0.dp,
         contentPadding = insideMargin,
         tint = MiuixTheme.colorScheme.surface,
         tintAlpha = 0.20f,
         depthEffect = false,
+        depthShadow = null,
     ) {
         content()
     }
