@@ -116,26 +116,32 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void allSettingsGlassSurfacesPreserveSampledBackdropHue() throws Exception {
+    public void prismalGlassKeepsNativeOpticsWithoutHueBlendsOrOpaqueSurfaceFills() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        // PrismalGlassTint uses BlendMode.Hue for any specified color, even white/gray.
-        // Backgrounds must use unspecified tint and normal-alpha surfaceColor instead.
-        assertTrue(surfaces.contains("private fun neutralGlassOverlay(alpha: Float)"));
+        // Prismal's tint applies BlendMode.Hue. An unspecified tint skips that pass.
         assertTrue(surfaces.contains("tint = Color.Unspecified"));
-        assertTrue(surfaces.contains("surfaceColor = neutralGlassOverlay(0.16f)"));
-        assertTrue(surfaces.contains("surfaceColor = neutralGlassOverlay(0.18f)"));
-
         assertFalse(surfaces.contains("tint = MiuixTheme.colorScheme.surface"));
         assertFalse(surfaces.contains("tint = surface,"));
         assertFalse(surfaces.contains("tint = Color(0xFFD73333)"));
         assertFalse(surfaces.contains("tintAlpha ="));
-        assertFalse(surfaces.contains("BlendMode.Hue)"));
+        assertFalse(surfaces.contains("neutralGlassOverlay"));
 
-        // Explicit restart action color is a regular fill, not a hue blend.
-        assertTrue(surfaces.contains("surfaceColor = Color(0xFFD73333).copy(alpha = 0.92f)"));
+        // A large opaque surfaceColor overlay hides the refracted background.
+        assertFalse(surfaces.contains("surfaceColor = neutralGlassOverlay("));
+        assertTrue(surfaces.contains("surfaceColor = Color.Gray.copy(alpha = 0.06f)"));
+        assertTrue(surfaces.contains("surfaceColor = Color(0xFFD73333).copy(alpha = 0.40f)"));
+        assertFalse(surfaces.contains("copy(alpha = 0.92f)"));
 
-        // Keep selected tab accents, but do not recolor captured tab contents.
+        // Preserve the actual Prismal edge optics on cards and buttons.
+        assertTrue(surfaces.contains("refractionHeightPx = 16f"));
+        assertTrue(surfaces.contains("refractionAmountPx = 21f"));
+        assertTrue(surfaces.contains("chromaticAberration = 0.28f"));
+        assertTrue(surfaces.contains("depthEffect = true"));
+        assertTrue(surfaces.contains("refractionHeight = 9.dp"));
+        assertTrue(surfaces.contains("refractionAmount = 12.dp"));
+
+        // Selected-tab accents are not a tint on the captured glass contents.
         assertTrue(surfaces.contains("tintDropletContent = false"));
     }
 
