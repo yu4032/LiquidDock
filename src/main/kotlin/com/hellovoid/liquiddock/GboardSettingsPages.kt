@@ -482,21 +482,10 @@ private fun GboardValueSlider(
         },
         title = title,
         summary = "未单独设置时继承全局液态玻璃",
-        valueText = "",
+        valueText = "$rounded${if (unit.isBlank()) "" else " $unit"}",
         enabled = enabled,
         valueRange = 0f..max.toFloat(),
         steps = (max - 1).coerceAtLeast(0),
-        endActions = {
-            Button(
-                onClick = {},
-                enabled = false,
-                minWidth = 62.dp,
-                minHeight = 32.dp,
-                insideMargin = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                Text("$rounded${if (unit.isBlank()) "" else " $unit"}")
-            }
-        },
         insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
     )
 }
@@ -505,6 +494,7 @@ private fun GboardValueSlider(
 private fun GboardPageHeader(title: String, summary: String) {
     PageHeader(title, summary)
 }
+
 
 @Composable
 private fun GboardSettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {

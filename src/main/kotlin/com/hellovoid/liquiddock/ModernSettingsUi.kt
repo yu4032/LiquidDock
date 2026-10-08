@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,14 +36,23 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -60,11 +72,10 @@ import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
-import top.yukonga.miuix.kmp.blur.ProgressiveBlur
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -74,18 +85,16 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.window.WindowDialog
 
 internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
-private val TOP_BAR_PROGRESSIVE_BLUR = ProgressiveBlur.Top.copy(
-    startFraction = 0.68f,
-    endFraction = 1f,
-    curve = 1f,
-)
-private const val TOP_BAR_BLUR_RADIUS = 16f
-private const val TOP_BAR_SURFACE_ALPHA = 0.66f
+// Uniform header blur using a single capture of the actual scrolled page content.
+// Keep Prismal for its controls and backdrop lenses, not the header's screen sampling.
+private const val TOP_BAR_BLUR_RADIUS = 14f
+private const val TOP_BAR_GLASS_TINT_ALPHA = 0.34f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
 private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
@@ -110,8 +119,14 @@ internal fun ModernSettingsScaffold(
     val background = MiuixTheme.colorScheme.background
     val primary = MiuixTheme.colorScheme.primary
     val surface = MiuixTheme.colorScheme.surface
+    // PrismalGlassSurface's tint applies BlendMode.Hue before its alpha overlay.
+    // A neutral surface fill avoids recoloring green/other content behind the bar.
+    val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
+    // HyperIsland-style independent content source: one opaque page capture for
+    // the header, including standalone labels and nested Prismal card output.
+    // Do not merge the wallpaper/source layers for this uniform blur.
     val barBackdrop = if (glassEnabled && isRuntimeShaderSupported()) {
         rememberLayerBackdrop {
             drawRect(surface)
@@ -120,19 +135,27 @@ internal fun ModernSettingsScaffold(
     } else {
         null
     }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            background,
-                            primary.copy(alpha = 0.07f),
-                            background,
-                        ),
-                    ),
+                .then(
+                    if (glassEnabled) {
+                        // Preserve the existing backdrop when glass is enabled.
+                        Modifier.background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    background,
+                                    primary.copy(alpha = 0.07f),
+                                    background,
+                                ),
+                            ),
+                        )
+                    } else {
+                        // In solid mode, gently darken the entire canvas without
+                        // changing any Cell color, transparency, or shape.
+                        Modifier.background(lerp(background, Color.Black, 0.06f))
+                    },
                 )
                 .then(
                     if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)
@@ -147,28 +170,32 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
+                    // Miuix Scaffold paints body before topBar. The header samples
+                    // one fully recorded page source, not a merged Prismal lens source.
+                    // Keep this a solid rectangle with uniform blur and neutral tint.
                     val headerModifier = if (barBackdrop != null) {
                         Modifier
                             .fillMaxWidth()
-                            .progressiveTextureBlur(
+                            .zIndex(1f)
+                            .textureBlur(
                                 backdrop = barBackdrop,
                                 shape = RectangleShape,
                                 blurRadius = TOP_BAR_BLUR_RADIUS,
-                                gradient = TOP_BAR_PROGRESSIVE_BLUR,
+                                noiseCoefficient = 0f,
                                 colors = BlurDefaults.blurColors(
                                     blendColors = listOf(
                                         BlendColorEntry(
-                                            color = surface.copy(alpha = TOP_BAR_SURFACE_ALPHA),
+                                            color = headerNeutralColor.copy(
+                                                alpha = TOP_BAR_GLASS_TINT_ALPHA,
+                                            ),
                                         ),
                                     ),
+                                    saturation = 1.35f,
                                 ),
                             )
                     } else {
-                        Modifier
-                            .fillMaxWidth()
-                            .background(surface.copy(alpha = 0.94f))
+                        Modifier.fillMaxWidth().zIndex(1f).background(surface)
                     }
-
                     Box(modifier = headerModifier) {
                         SmallTopAppBar(
                             title = title,
@@ -190,8 +217,10 @@ internal fun ModernSettingsScaffold(
                                                 refractionAmount = 12.dp,
                                                 pressLift = 2.dp,
                                                 contentPadding = PaddingValues(9.dp),
-                                                tint = surface,
-                                                tintAlpha = 0.20f,
+                                                tint = Color.Unspecified,
+                                                surfaceColor = headerNeutralColor.copy(alpha = 0.20f),
+                                                useVibrancy = false,
+                                                saturation = 1f,
                                                 depthEffect = false,
                                             ) {
                                                 Icon(
@@ -243,6 +272,7 @@ internal fun ModernSettingsScaffold(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .zIndex(0f)
                         .then(
                             if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
                             else Modifier,
@@ -417,8 +447,11 @@ internal fun ModernBottomNavigation(
                     tabsCount = labels.size,
                     modifier = Modifier.fillMaxSize(),
                     tintDropletContent = false,
-                    dropletContentTint = MiuixTheme.colorScheme.primary,
                 ) {
+                    // Prismal renders tab content twice: once visibly and once in a
+                    // hidden recording layer for the droplet lens. Rendering text
+                    // there creates a second, refracted copy while long-pressing.
+                    // Keep the native capsule hit targets / spring gestures empty.
                     labels.indices.forEach { index ->
                         PrismalGlassBottomTab(
                             onClick = {
@@ -427,11 +460,34 @@ internal fun ModernBottomNavigation(
                         ) {}
                     }
                 }
+                // Draw labels and icons once above the droplet, without a second
+                // pointer target: touches still reach Prismal's capsule tabs.
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    labels.forEachIndexed { index, label ->
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.spacedBy(
+                                2.dp, Alignment.CenterVertically,
+                            ),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            ModernTabContents(label, icons[index], index == selected)
+                        }
+                    }
+                }
             } else {
                 val fallbackShape = RoundedCornerShape(30.dp)
-                Box(
+                Row(
                     modifier = Modifier
-                        .matchParentSize()
+                        .fillMaxSize()
+                        .clip(fallbackShape)
                         .background(
                             color = MiuixTheme.colorScheme.surface.copy(alpha = 0.96f),
                             shape = fallbackShape,
@@ -440,52 +496,62 @@ internal fun ModernBottomNavigation(
                             width = 1.dp,
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.14f),
                             shape = fallbackShape,
-                        ),
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .matchParentSize()
-                    .padding(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                labels.forEachIndexed { index, label ->
-                    val active = index == selected
-                    val contentColor = if (active) {
-                        MiuixTheme.colorScheme.primary
-                    } else {
-                        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
-                    }
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable {
-                                if (index != selected) onSelect(index)
-                            },
-                        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(
-                            imageVector = icons[index],
-                            contentDescription = label,
-                            tint = contentColor,
-                            modifier = Modifier.size(21.dp),
                         )
-                        Text(
-                            text = label,
-                            color = contentColor,
-                            fontSize = 11.sp,
-                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    labels.forEachIndexed { index, label ->
+                        val active = index == selected
+                        val shape = RoundedCornerShape(28.dp)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(shape)
+                                .background(
+                                    if (active) MiuixTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    else Color.Transparent,
+                                    shape = shape,
+                                )
+                                .clickable(
+                                    interactionSource = null,
+                                    indication = null,
+                                ) {
+                                    if (index != selected) onSelect(index)
+                                },
+                            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            ModernTabContents(label, icons[index], active)
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ModernTabContents(label: String, icon: ImageVector, active: Boolean) {
+    val contentColor = if (active) {
+        MiuixTheme.colorScheme.primary
+    } else {
+        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = label,
+        tint = contentColor,
+        modifier = Modifier.size(21.dp),
+    )
+    Text(
+        text = label,
+        color = contentColor,
+        fontSize = 11.sp,
+        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
@@ -496,6 +562,8 @@ internal fun ModernTopActionButton(
     modifier: Modifier = Modifier,
 ) {
     val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
+    val actionSurface = MiuixTheme.colorScheme.surface
+    val neutralActionTint = if (actionSurface.luminance() < 0.5f) Color.Black else Color.White
     if (backdrop == null) {
         top.yukonga.miuix.kmp.basic.Button(
             onClick = onClick,
@@ -519,8 +587,12 @@ internal fun ModernTopActionButton(
         refractionAmount = 12.dp,
         pressLift = 2.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        tint = MiuixTheme.colorScheme.surface,
-        tintAlpha = 0.20f,
+        // Prismal tint uses BlendMode.Hue; never let app-bar actions recolor
+        // underlying green content into the theme's purple.
+        tint = Color.Unspecified,
+        surfaceColor = neutralActionTint.copy(alpha = 0.20f),
+        useVibrancy = false,
+        saturation = 1f,
         depthEffect = false,
     ) {
         Text(
@@ -767,6 +839,110 @@ internal fun SwitchPreference(
     )
 }
 
+/**
+ * Parse direct numeric input without silently storing an out-of-range or
+ * fractional integer value. Persistence and quantization remain with the
+ * existing setting's own callback.
+ */
+internal fun parseNumericSettingInput(
+    raw: String,
+    integerOnly: Boolean,
+    min: Float,
+    max: Float,
+): Float? {
+    val normalized = raw.trim().replace(',', '.')
+    val value = if (integerOnly) {
+        normalized.toIntOrNull()?.toFloat()
+    } else {
+        normalized.toFloatOrNull()
+    }
+    return value?.takeIf { it.isFinite() && it in min..max }
+}
+
+@Composable
+internal fun NumericSettingInputDialog(
+    visible: Boolean,
+    title: String,
+    currentText: String,
+    valueRange: ClosedFloatingPointRange<Float>,
+    integerOnly: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Float) -> Unit,
+) {
+    var entered by remember(title) { mutableStateOf(TextFieldValue(currentText)) }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(visible) {
+        if (visible) {
+            entered = TextFieldValue(currentText, selection = TextRange(0, currentText.length))
+        }
+    }
+    val parsed = parseNumericSettingInput(
+        entered.text, integerOnly, valueRange.start, valueRange.endInclusive,
+    )
+    WindowDialog(
+        show = visible,
+        title = title,
+        onDismissRequest = onDismiss,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            val minText = if (integerOnly) valueRange.start.roundToInt().toString() else valueRange.start.toString()
+            val maxText = if (integerOnly) valueRange.endInclusive.roundToInt().toString() else valueRange.endInclusive.toString()
+            Text(
+                text = "允许范围：$minText – $maxText",
+                fontSize = 13.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+            )
+            top.yukonga.miuix.kmp.basic.TextField(
+                value = entered,
+                onValueChange = { entered = it },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = when {
+                        valueRange.start < 0f -> KeyboardType.Text
+                        integerOnly -> KeyboardType.Number
+                        else -> KeyboardType.Decimal
+                    },
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { parsed?.let(onConfirm) },
+                ),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = onDismiss,
+                    minWidth = 72.dp,
+                    minHeight = 40.dp,
+                ) {
+                    Text("取消")
+                }
+                Spacer(Modifier.padding(horizontal = 5.dp))
+                top.yukonga.miuix.kmp.basic.Button(
+                    onClick = { parsed?.let(onConfirm) },
+                    enabled = parsed != null,
+                    minWidth = 72.dp,
+                    minHeight = 40.dp,
+                ) {
+                    Text("确定")
+                }
+            }
+        }
+    }
+}
+
 @Composable
 internal fun SliderPreference(
     value: Float,
@@ -782,6 +958,7 @@ internal fun SliderPreference(
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
     val currentValue by rememberUpdatedState(value)
+    var editingValue by remember(title) { mutableStateOf(false) }
     val intervals = (steps + 1).coerceAtLeast(1)
     val stepSize = ((valueRange.endInclusive - valueRange.start) / intervals)
         .takeIf { it > 0f } ?: 0.01f
@@ -806,6 +983,10 @@ internal fun SliderPreference(
                     if (valueText.isNotBlank()) {
                         Text(
                             text = valueText,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(enabled = enabled) { editingValue = true }
+                                .padding(horizontal = 8.dp, vertical = 9.dp),
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.66f),
                             fontSize = 13.sp,
                         )
@@ -843,6 +1024,20 @@ internal fun SliderPreference(
             )
         }
     }
+    val integerOnly = valueRange.start % 1f == 0f &&
+        valueRange.endInclusive % 1f == 0f && stepSize % 1f == 0f
+    NumericSettingInputDialog(
+        visible = editingValue,
+        title = title,
+        currentText = if (integerOnly) value.roundToInt().toString() else value.toString(),
+        valueRange = valueRange,
+        integerOnly = integerOnly,
+        onDismiss = { editingValue = false },
+        onConfirm = { next ->
+            onValueChange(next)
+            editingValue = false
+        },
+    )
 }
 
 @Composable
