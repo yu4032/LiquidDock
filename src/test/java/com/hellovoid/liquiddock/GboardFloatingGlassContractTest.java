@@ -240,14 +240,14 @@ public class GboardFloatingGlassContractTest {
         assertTrue(session.contains("swapSucceeded = true"));
     }
 
-    @Test public void gboardGuiLivesUnderLiquidThirdPartyAppsAndHasIndependentAppearance() throws Exception {
+    @Test public void gboardGuiLivesUnderGlassThirdPartyAppsAndHasIndependentAppearance() throws Exception {
         String settings = read(SETTINGS);
         String gboardSettings = read(GBOARD_SETTINGS);
         String preferences = read(MAIN.resolve("GboardGlassPreferences.java"));
-        assertTrue(settings.contains("ThirdPartyApps"));
+        assertTrue(settings.contains("Page.ThirdPartyApps"));
         assertTrue(settings.contains("GboardSettingsPage"));
-        assertTrue(settings.contains("openThirdPartyApps"));
-        assertTrue(settings.contains("第三方应用适配"));
+        assertTrue(settings.contains("HubEntry(Page.ThirdPartyApps"));
+        assertTrue(settings.contains("openGboard = { navigateTo(Page.Gboard) }"));
         assertTrue(gboardSettings.contains("Gboard"));
         assertTrue(gboardSettings.contains("启用悬浮键盘液态玻璃"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY"));
