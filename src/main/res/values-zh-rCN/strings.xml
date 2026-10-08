@@ -139,4 +139,6 @@
     <string name="page_workstation_desktop">工作台桌面</string>
     <string name="page_workstation_apps_landscape">所有应用 · 横屏</string>
     <string name="page_workstation_apps_portrait">所有应用 · 竖屏</string>
+    <string name="page_launcher_highlights_compact">图标与小文件夹高光</string>
+    <string name="page_launcher_highlights_large">小组件与大文件夹高光</string>
 </resources>
