@@ -84,7 +84,10 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassStepper"));
         assertTrue(source.contains("PrismalGlassMenu"));
         assertTrue(source.contains("PrismalGlassMenuItem"));
-        assertTrue(source.contains("drawPlainPrismalGlass"));
+        assertTrue(source.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
+        assertTrue(source.contains("tintAlpha = 0.34f"));
+        assertTrue(source.contains("title = \" \""));
+        assertTrue(source.contains("largeTitle = \" \""));
         assertTrue(source.contains("rememberPrismalMergedSource"));
     }
 
