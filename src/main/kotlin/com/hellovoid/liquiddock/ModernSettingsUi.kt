@@ -447,7 +447,6 @@ internal fun ModernBottomNavigation(
                     tabsCount = labels.size,
                     modifier = Modifier.fillMaxSize(),
                     tintDropletContent = false,
-                    dropletContentTint = MiuixTheme.colorScheme.primary,
                 ) {
                     // Prismal renders tab content twice: once visibly and once in a
                     // hidden recording layer for the droplet lens. Rendering text
