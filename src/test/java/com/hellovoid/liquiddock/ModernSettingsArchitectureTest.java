@@ -42,6 +42,10 @@ public class ModernSettingsArchitectureTest {
         assertTrue(liquidHub.contains("liquidEntries.forEach"));
         assertFalse(liquidHub.contains("liquidSpecs.forEach"));
 
+        String workstationHub = functionBody(source, "WorkstationPage", "WorkstationSpecPage");
+        assertTrue(workstationHub.contains("workstationEntries.forEach"));
+        assertFalse(workstationHub.contains("workstationSpecs.forEach"));
+
         String animationHub = functionBody(source, "AnimationPage", "AnimationWorkspacePage");
         assertTrue(animationHub.contains("animationEntries"));
         assertFalse(animationHub.contains("IntSetting("));
@@ -53,7 +57,9 @@ public class ModernSettingsArchitectureTest {
         String[] pages = {
                 "LiquidMaterial", "LiquidRefraction", "LiquidColor", "LiquidLighting",
                 "LiquidShadow", "LiquidSampling", "LiquidOs4",
-                "GlassIcons", "GlassWidgets", "GlassFolders", "GlassMenus"
+                "GlassIcons", "GlassWidgets", "GlassFolders", "GlassMenus",
+                "WorkstationDock", "WorkstationDesktop",
+                "WorkstationAppsLandscape", "WorkstationAppsPortrait"
         };
         for (String page : pages) {
             assertTrue(page + " must remain a dedicated page",
