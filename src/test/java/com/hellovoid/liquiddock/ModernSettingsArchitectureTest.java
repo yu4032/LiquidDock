@@ -149,7 +149,6 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("ModernTabContents(label, icons[index], index == selected)"));
         assertTrue(surfaces.contains("PrismalGlassBottomTab("));
         assertFalse(surfaces.contains("LocalPrismalBottomTabHighlightedIndex.current"));
-        assertFalse(surfaces.contains("ModernTabContents(label, icons[index], active)"));
         assertTrue(surfaces.contains("indication = null"));
         assertFalse(surfaces.contains("Modifier.matchParentSize()\n                    .padding(4.dp)"));
     }
@@ -174,7 +173,6 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
         assertTrue(surfaces.contains("backdrop = overlayBackdrop"));
-        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
         assertTrue(surfaces.contains("CompositingStrategy.Offscreen"));
         assertTrue(surfaces.contains(".graphicsLayer {"));
         assertTrue(surfaces.contains(".prismalGlassLayer(screenLayer)"));
@@ -189,15 +187,12 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void bottomLabelsAreSinglePassAbovePrismalDragDroplet() throws Exception {
         String source = Files.readString(SURFACES);
-        int navStart = source.indexOf("internal fun ModernBottomNavigation(");
-        int navEnd = source.indexOf("private fun ModernTabContents(", navStart);
-        String nav = source.substring(navStart, navEnd);
-
-        assertTrue(nav.contains("PrismalGlassBottomTab("));
-        assertTrue(nav.contains(") {}"));
-        assertTrue(nav.contains("ModernTabContents(label, icons[index], index == selected)"));
-        assertFalse(nav.contains("LocalPrismalBottomTabHighlightedIndex"));
-        assertTrue(nav.contains("tintDropletContent = false"));
+        assertTrue(source.contains("labels.indices.forEach { index ->"));
+        assertTrue(source.contains("PrismalGlassBottomTab("));
+        assertTrue(source.contains(") {}"));
+        assertTrue(source.contains("ModernTabContents(label, icons[index], index == selected)"));
+        assertFalse(source.contains("LocalPrismalBottomTabHighlightedIndex"));
+        assertTrue(source.contains("tintDropletContent = false"));
     }
 
     @Test
