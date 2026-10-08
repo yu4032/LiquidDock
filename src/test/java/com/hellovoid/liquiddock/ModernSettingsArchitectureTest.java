@@ -98,7 +98,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassStepper"));
 
         assertTrue(source.contains("TOP_BAR_GLASS_BLUR = 14.dp"));
-        assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
+        assertTrue(source.contains("tint = Color.Unspecified"));
+        assertTrue(source.contains("surfaceColor = Color.Gray.copy(alpha = 0.06f)"));
+        assertFalse(source.contains("TOP_BAR_GLASS_TINT_ALPHA"));
         assertTrue(source.contains("blurRadius = TOP_BAR_GLASS_BLUR"));
         assertTrue(source.contains("backdrop = overlayBackdrop"));
         assertFalse(source.contains(".progressiveTextureBlur("));
