@@ -86,10 +86,10 @@ public class RestartBoundSettingsContractTest {
     }
 
     @Test
-    public void debugLoggingKeepsItsExistingRestartWording() throws Exception {
+    public void debugLoggingIsNotExposedOnTheUserFacingLicensePage() throws Exception {
         String source = Files.readString(UI);
-        String line = lineContaining(source, "ConfigSchema.Debug.LOGGING");
-        assertTrue(line.contains("重启桌面生效"));
+        assertFalse(source.contains("ConfigSchema.Debug.LOGGING"));
+        assertFalse(source.contains("\"调试日志\""));
     }
 
     @Test
