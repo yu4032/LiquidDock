@@ -254,7 +254,7 @@ public class GboardFloatingGlassContractTest {
         assertTrue(gboardSettings.contains("实时背景采样"));
         assertTrue(gboardSettings.contains("弹出动画期间保持实时"));
         assertTrue(gboardSettings.contains("动画稳定后冻结"));
-        assertTrue(gboardSettings.contains("每次开始移动时刷新一帧"));
+        assertTrue(gboardSettings.contains("再次移动时刷新背景"));
         assertTrue(preferences.contains("REALTIME_BACKGROUND_SAMPLING_DEFAULT = true"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.BLUR_KEY"));
         assertTrue(gboardSettings.contains("GboardGlassPreferences.TINT_RED_KEY"));
