@@ -26,11 +26,8 @@ import androidx.preference.PreferenceManager
 import java.util.HashSet
 import java.util.Locale
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -109,21 +106,17 @@ private fun WidgetComponentDetailScreen(
 
     BackHandler(enabled = selectedType != null) { selectedType = null }
 
-    Scaffold(
-        topBar = {
-            SmallTopAppBar(
-                title = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
-                navigationIcon = {
-                    TextButton(
-                        text = "返回",
-                        onClick = {
-                            if (selectedType != null) selectedType = null else activity.finish()
-                        },
-                    )
-                },
-                actions = {
-                    TextButton(text = "重启桌面", onClick = { activity.restartLauncher() })
-                },
+    ModernSettingsScaffold(
+        title = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
+        showBack = true,
+        backLabel = "返回",
+        onBack = {
+            if (selectedType != null) selectedType = null else activity.finish()
+        },
+        actions = {
+            ModernTopActionButton(
+                text = "重启桌面",
+                onClick = { activity.restartLauncher() },
             )
         },
     ) { padding ->
@@ -191,7 +184,10 @@ private fun WidgetComponentTypePage(
 
         if (isMaml) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                ModernSurface(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+                ) {
                     SwitchPreference(
                         checked = showAllMaml,
                         onCheckedChange = onShowAllMaml,
@@ -202,7 +198,10 @@ private fun WidgetComponentTypePage(
             }
         } else {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                ModernSurface(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+                ) {
                     SwitchPreference(
                         checked = showAdvancedRemote,
                         onCheckedChange = onShowAdvancedRemote,
@@ -216,7 +215,10 @@ private fun WidgetComponentTypePage(
         if (likelyBackgrounds.isNotEmpty()) {
             item { SmallTitle("疑似底层背景") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                ModernSurface(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+                ) {
                     Column {
                         likelyBackgrounds.forEach { descriptor ->
                             ArrowPreference(
@@ -235,7 +237,10 @@ private fun WidgetComponentTypePage(
 
         if (components.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                ModernSurface(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+                ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("该小组件已不在当前载入目录中")
                         Text("返回上一页并重新载入当前小组件。", fontSize = 13.sp)
@@ -244,7 +249,10 @@ private fun WidgetComponentTypePage(
             }
         } else if (typeGroups.isEmpty()) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                ModernSurface(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+                ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("当前没有可安全直接操作的背景或图像层")
                         if (!isMaml) {
@@ -256,7 +264,10 @@ private fun WidgetComponentTypePage(
         } else {
             item { SmallTitle("组件类型") }
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                ModernSurface(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+                ) {
                     Column {
                         componentTypeOrder.forEach { type ->
                             val group = WidgetComponentRanking.sorted(typeGroups[type].orEmpty())
