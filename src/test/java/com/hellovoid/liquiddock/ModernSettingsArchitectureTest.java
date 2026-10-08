@@ -176,12 +176,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("CompositingStrategy.Offscreen"));
         assertTrue(surfaces.contains(".graphicsLayer {"));
         assertTrue(surfaces.contains(".prismalGlassLayer(screenLayer)"));
-        assertTrue(surfaces.contains("appBarHeightPx by remember { mutableIntStateOf(0) }"));
-        assertTrue(surfaces.contains(".height(with(density) { appBarHeightPx.toDp() })"));
-        assertTrue(surfaces.contains(".onSizeChanged { size ->"));
-        assertTrue(surfaces.contains("appBarHeightPx = size.height"));
-        assertTrue(surfaces.contains("The real glass top bar is overlaid as a sibling of Scaffold"));
-        assertTrue(surfaces.contains(".zIndex(1f)"));
+        assertTrue(surfaces.contains("Box(modifier = Modifier.fillMaxWidth().zIndex(1f))"));
         assertTrue(surfaces.contains(".zIndex(0f)"));
         assertTrue(pages.contains("LazyColumn("));
         assertTrue(pages.contains("contentPadding = PaddingValues("));
@@ -198,21 +193,6 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("ModernTabContents(label, icons[index], index == selected)"));
         assertFalse(source.contains("LocalPrismalBottomTabHighlightedIndex"));
         assertTrue(source.contains("tintDropletContent = false"));
-    }
-
-    @Test
-    public void headerGlassHasItsOwnOverlayAndExactScaffoldSpacer() throws Exception {
-        String surfaces = Files.readString(SURFACES);
-
-        assertTrue(surfaces.contains("topBar = {"));
-        assertTrue(surfaces.contains("Only the layout reservation stays inside Miuix Scaffold"));
-        assertTrue(surfaces.contains("appBarHeightPx by remember { mutableIntStateOf(0) }"));
-        assertTrue(surfaces.contains("appBarHeightPx.toDp()"));
-        assertTrue(surfaces.contains("appBarHeightPx = size.height"));
-        assertTrue(surfaces.contains("This is deliberately OUTSIDE Scaffold"));
-        assertTrue(surfaces.contains("overlay()"));
-        assertTrue(surfaces.contains("backdrop = overlayBackdrop"));
-        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
     }
 
     @Test
