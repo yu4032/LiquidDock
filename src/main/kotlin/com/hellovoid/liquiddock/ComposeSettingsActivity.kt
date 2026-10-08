@@ -990,26 +990,23 @@ private fun HubPage(
 
 @Composable
 private fun AnimationPage(
-    padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean,
+    padding: PaddingValues,
+    open: (Page) -> Unit,
 ) {
-    val workspaceVisibility = IntSpec(
-        ConfigSchema.Animation.WORKSPACE_VISIBILITY,
-        "工作区玻璃显隐",
-        "ms",
-        summary = "仅控制 LiquidDock 自己管理的工作区玻璃淡入淡出；HOME / Recents 原生过渡保持系统时序；重启桌面后生效",
+    HubPage(
+        padding = padding,
+        summary = "动画按运行域拆分，进入子页时才组合对应控件",
+        entries = animationEntries,
+        open = open,
     )
-    val dockIconReveal = IntSpec(
-        ConfigSchema.Animation.DOCK_ICON_REVEAL,
-        "Dock 图标玻璃恢复",
-        "ms",
-        summary = "应用退出动画末尾的 Dock 图标玻璃恢复；重启桌面后生效",
-    )
-    val dockResize = IntSpec(
-        ConfigSchema.Animation.DOCK_RESIZE,
-        "Dock 尺寸变化",
-        "ms",
-        summary = "LiquidDock 顺滑尺寸动画的时长；需在 Dock 页面关闭 Dock 尺寸过渡动画并开启 LiquidDock 顺滑尺寸动画；重启桌面后生效",
-    )
+}
+
+@Composable
+private fun AnimationWorkspacePage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
     val dockCustomizationEnabled = prefs.getBoolean(
         ConfigSchema.Dock.ENABLED.name(),
         ConfigSchema.Dock.ENABLED.uiDefault(),
@@ -1022,86 +1019,86 @@ private fun AnimationPage(
         ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(),
         ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault(),
     )
-    val pressIn = IntSpec(
-        ConfigSchema.Animation.PRESS_IN,
-        "按压进入",
-        "ms",
-        summary = "LiquidDock 玻璃按下反馈速度；重启桌面后生效",
-    )
-    val pressOut = IntSpec(
-        ConfigSchema.Animation.PRESS_OUT,
-        "按压释放",
-        "ms",
-        summary = "LiquidDock 玻璃松手恢复速度；重启桌面后生效",
-    )
-    val shortcutDismiss = IntSpec(
-        ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE,
-        "快捷菜单退出渐隐",
-        "ms",
-        summary = "桌面快捷菜单关闭时 LiquidDock 玻璃的快速淡出；重启桌面后生效",
-    )
-    val securityCenterExit = IntSpec(
-        ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE,
-        "安全中心退出渐隐",
-        "ms",
-        summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock 淡出；重启安全中心后生效",
-    )
-    val settingsPage = IntSpec(
-        ConfigSchema.Animation.SETTINGS_PAGE,
-        "GUI 页面切换",
-        "ms",
-        summary = "设置页面滑动与淡入淡出；下一次页面切换立即生效，无需重启",
-    )
+    SettingsList(
+        padding,
+        stringResource(R.string.page_animation_workspace),
+        "这里只调整 LiquidDock 自己拥有的工作区与 Dock 动画。",
+    ) {
+        IntSetting(prefs, animationWorkspaceVisibilitySpec, masterEnabled)
+        IntSetting(prefs, animationDockIconRevealSpec, masterEnabled)
+        IntSetting(
+            prefs,
+            animationDockResizeSpec,
+            masterEnabled && dockCustomizationEnabled && !systemResizeEnabled && smoothResizeEnabled,
+        )
+    }
+}
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item {
-            PageHeader(
-                stringResource(R.string.page_animation),
-                "这里只调整 LiquidDock 自己拥有的动画。系统原生动画继续跟随原实现，不提供伪调节项；0 ms 表示立即完成。",
-            )
-        }
-        item { SmallTitle("工作区玻璃") }
-        item { SettingsCard { IntSetting(prefs, workspaceVisibility, masterEnabled) } }
-        item { SmallTitle("Dock") }
-        item {
-            SettingsCard {
-                IntSetting(prefs, dockIconReveal, masterEnabled)
-                IntSetting(
-                    prefs,
-                    dockResize,
-                    masterEnabled && dockCustomizationEnabled
-                            && !systemResizeEnabled && smoothResizeEnabled,
-                )
-            }
-        }
-        item { SmallTitle("玻璃交互") }
-        item {
-            SettingsCard {
-                IntSetting(prefs, pressIn, masterEnabled)
-                IntSetting(prefs, pressOut, masterEnabled)
-            }
-        }
-        item { SmallTitle("弹出界面") }
-        item {
-            SettingsCard {
-                IntSetting(prefs, shortcutDismiss, masterEnabled)
-                IntSetting(prefs, securityCenterExit, masterEnabled)
-            }
-        }
-        item { SmallTitle("系统界面") }
-        item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
-                    "桌面/多任务隐藏手势小白条",
-                    "桌面与多任务界面将系统手势手柄平滑渐隐至透明，离开后按系统原透明度渐显恢复；开关即时生效，首次安装此版本需重启系统界面",
-                    masterEnabled,
-                )
-            }
-        }
-        item { SmallTitle("GUI") }
-        item { SettingsCard { IntSetting(prefs, settingsPage, masterEnabled) } }
+@Composable
+private fun AnimationInteractionPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    SettingsList(
+        padding,
+        stringResource(R.string.page_animation_interaction),
+        "玻璃按下与释放反馈独立调节；0 ms 表示立即完成。",
+    ) {
+        IntSetting(prefs, animationPressInSpec, masterEnabled)
+        IntSetting(prefs, animationPressOutSpec, masterEnabled)
+    }
+}
+
+@Composable
+private fun AnimationPopupsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    SettingsList(
+        padding,
+        stringResource(R.string.page_animation_popups),
+        "只控制 LiquidDock 自己绘制的退出渐隐，系统原生弹出动画保持原样。",
+    ) {
+        IntSetting(prefs, animationShortcutDismissSpec, masterEnabled)
+        IntSetting(prefs, animationSecurityCenterExitSpec, masterEnabled)
+    }
+}
+
+@Composable
+private fun AnimationSystemPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    SettingsList(
+        padding,
+        stringResource(R.string.page_animation_system),
+        "系统界面联动单独放置，避免与普通玻璃动画混在同一页。",
+    ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
+            "桌面/多任务隐藏手势小白条",
+            "进入桌面或多任务后隐藏手势手柄，离开后交还系统原生显示时序；开关即时生效，首次安装此版本需重启系统界面",
+            masterEnabled,
+        )
+    }
+}
+
+@Composable
+private fun AnimationGuiPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    SettingsList(
+        padding,
+        stringResource(R.string.page_animation_gui),
+        "仅控制设置页面自己的切换过渡，不写入注入进程运行时。",
+    ) {
+        IntSetting(prefs, animationSettingsPageSpec, masterEnabled)
     }
 }
 
