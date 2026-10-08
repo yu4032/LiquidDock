@@ -142,29 +142,35 @@ internal fun DockRecentBlacklistPage(
         }
 
         item { SmallTitle(stringResource(R.string.dock_recent_blacklist_current_candidates)) }
-        item {
-            SettingsCard {
-                if (availableCandidates.isEmpty()) {
+        if (availableCandidates.isEmpty()) {
+            item {
+                SettingsCard {
                     Text(
                         stringResource(R.string.dock_recent_blacklist_empty),
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                     )
-                } else {
-                    Column {
-                        availableCandidates.forEachIndexed { index, packageName ->
-                            val label = appLabel(context.packageManager, packageName)
-                            SwitchPreference(
-                                checked = false,
-                                onCheckedChange = { checked -> setBlocked(packageName, checked) },
-                                title = label,
-                                summary = context.getString(
-                                    R.string.dock_recent_blacklist_candidate_item,
-                                    packageName,
-                                ),
-                                enabled = masterEnabled,
-                            )
-                            if (index != availableCandidates.lastIndex) {
-                                ModernListDivider()
+                }
+            }
+        } else {
+            availableCandidates.chunked(12).forEach { group ->
+                item(key = "candidate-group:${group.first()}") {
+                    SettingsCard {
+                        Column {
+                            group.forEachIndexed { index, packageName ->
+                                val label = appLabel(context.packageManager, packageName)
+                                SwitchPreference(
+                                    checked = false,
+                                    onCheckedChange = { checked -> setBlocked(packageName, checked) },
+                                    title = label,
+                                    summary = context.getString(
+                                        R.string.dock_recent_blacklist_candidate_item,
+                                        packageName,
+                                    ),
+                                    enabled = masterEnabled,
+                                )
+                                if (index != group.lastIndex) {
+                                    ModernListDivider()
+                                }
                             }
                         }
                     }
@@ -173,36 +179,42 @@ internal fun DockRecentBlacklistPage(
         }
 
         item { SmallTitle(stringResource(R.string.dock_recent_blacklist_blocked_apps)) }
-        item {
-            SettingsCard {
-                if (blockedPackages.isEmpty()) {
+        if (blockedPackages.isEmpty()) {
+            item {
+                SettingsCard {
                     Text(
                         stringResource(R.string.dock_recent_blacklist_blocked_empty),
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                     )
-                } else {
-                    Column {
-                        blockedPackages.forEachIndexed { index, packageName ->
-                            val label = appLabel(context.packageManager, packageName)
-                            SwitchPreference(
-                                checked = true,
-                                onCheckedChange = { checked -> setBlocked(packageName, checked) },
-                                title = label,
-                                summary = if (currentCandidates.contains(packageName)) {
-                                    context.getString(
-                                        R.string.dock_recent_blacklist_blocked_active_item,
-                                        packageName,
-                                    )
-                                } else {
-                                    context.getString(
-                                        R.string.dock_recent_blacklist_blocked_inactive_item,
-                                        packageName,
-                                    )
-                                },
-                                enabled = masterEnabled,
-                            )
-                            if (index != blockedPackages.lastIndex) {
-                                ModernListDivider()
+                }
+            }
+        } else {
+            blockedPackages.chunked(12).forEach { group ->
+                item(key = "blocked-group:${group.first()}") {
+                    SettingsCard {
+                        Column {
+                            group.forEachIndexed { index, packageName ->
+                                val label = appLabel(context.packageManager, packageName)
+                                SwitchPreference(
+                                    checked = true,
+                                    onCheckedChange = { checked -> setBlocked(packageName, checked) },
+                                    title = label,
+                                    summary = if (currentCandidates.contains(packageName)) {
+                                        context.getString(
+                                            R.string.dock_recent_blacklist_blocked_active_item,
+                                            packageName,
+                                        )
+                                    } else {
+                                        context.getString(
+                                            R.string.dock_recent_blacklist_blocked_inactive_item,
+                                            packageName,
+                                        )
+                                    },
+                                    enabled = masterEnabled,
+                                )
+                                if (index != group.lastIndex) {
+                                    ModernListDivider()
+                                }
                             }
                         }
                     }
