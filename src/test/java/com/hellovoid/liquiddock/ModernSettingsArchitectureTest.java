@@ -84,11 +84,12 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
+    public void modernShellUsesPrismalComponentsAndHyperIslandStyleProgressiveTopBarBlur() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
 
         assertTrue(build.contains("com.github.styropyr0:PrismalAGSL:v1.0.4"));
+        assertTrue(build.contains("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4"));
         assertTrue(source.contains("PrismalGlassSurface"));
         assertTrue(source.contains("PrismalGlassButton"));
         assertTrue(source.contains("PrismalGlassBottomTabs"));
@@ -97,16 +98,14 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
 
-        assertTrue(source.contains("TOP_BAR_GLASS_BLUR = 14.dp"));
-        assertTrue(source.contains("tint = Color.Unspecified"));
-        assertTrue(source.contains("surfaceColor = Color.Gray.copy(alpha = 0.06f)"));
-        assertFalse(source.contains("TOP_BAR_GLASS_TINT_ALPHA"));
-        assertTrue(source.contains("blurRadius = TOP_BAR_GLASS_BLUR"));
-        assertTrue(source.contains("backdrop = overlayBackdrop"));
-        assertFalse(source.contains(".progressiveTextureBlur("));
-        assertFalse(source.contains("ProgressiveBlur.Top.copy("));
-        assertFalse(source.contains("rememberLayerBackdrop("));
-        assertFalse(source.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertTrue(source.contains("ProgressiveBlur.Top.copy("));
+        assertTrue(source.contains("startFraction = 0.68f"));
+        assertTrue(source.contains("endFraction = 1f"));
+        assertTrue(source.contains("curve = 1f"));
+        assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 16f"));
+        assertTrue(source.contains(".progressiveTextureBlur("));
+        assertTrue(source.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertFalse(source.contains("drawLine("));
         assertFalse(source.contains("drawPlainPrismalGlass("));
 
         assertTrue(source.contains("SmallTopAppBar("));
@@ -116,47 +115,14 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void prismalGlassKeepsNativeOpticsWithoutHueBlendsOrOpaqueSurfaceFills() throws Exception {
+    public void topBarBlurIsLinearFromClearBottomToStrongTitleRegion() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        // Prismal's tint applies BlendMode.Hue. An unspecified tint skips that pass.
-        assertTrue(surfaces.contains("tint = Color.Unspecified"));
-        assertFalse(surfaces.contains("tint = MiuixTheme.colorScheme.surface"));
-        assertFalse(surfaces.contains("tint = surface,"));
-        assertFalse(surfaces.contains("tint = Color(0xFFD73333)"));
-        assertFalse(surfaces.contains("tintAlpha ="));
-        assertFalse(surfaces.contains("neutralGlassOverlay"));
-
-        // A large opaque surfaceColor overlay hides the refracted background.
-        assertFalse(surfaces.contains("surfaceColor = neutralGlassOverlay("));
-        assertTrue(surfaces.contains("surfaceColor = Color.Gray.copy(alpha = 0.06f)"));
-        assertTrue(surfaces.contains("surfaceColor = Color(0xFFD73333).copy(alpha = 0.40f)"));
-        assertFalse(surfaces.contains("copy(alpha = 0.92f)"));
-
-        // Preserve the actual Prismal edge optics on cards and buttons.
-        assertTrue(surfaces.contains("refractionHeightPx = 16f"));
-        assertTrue(surfaces.contains("refractionAmountPx = 21f"));
-        assertTrue(surfaces.contains("chromaticAberration = 0.28f"));
-        assertTrue(surfaces.contains("depthEffect = true"));
-        assertTrue(surfaces.contains("refractionHeight = 9.dp"));
-        assertTrue(surfaces.contains("refractionAmount = 12.dp"));
-
-        // Selected-tab accents are not a tint on the captured glass contents.
-        assertTrue(surfaces.contains("tintDropletContent = false"));
-    }
-
-    @Test
-    public void uniformGlassHeaderHasNoRefractiveRimOrGradient() throws Exception {
-        String surfaces = Files.readString(SURFACES);
-
-        assertTrue(surfaces.contains("modifier = Modifier.matchParentSize()"));
-        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
-        assertTrue(surfaces.contains("refractionHeightPx = 0f"));
-        assertTrue(surfaces.contains("refractionAmountPx = 0f"));
-        assertTrue(surfaces.contains("chromaticAberration = 0f"));
-        assertTrue(surfaces.contains("depthEffect = false"));
-        assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
-        assertFalse(surfaces.contains("TOP_BAR_PROGRESSIVE_BLUR"));
+        assertTrue(surfaces.contains("ProgressiveBlur.Top.copy("));
+        assertTrue(surfaces.contains("startFraction = 0.68f"));
+        assertTrue(surfaces.contains("endFraction = 1f"));
+        assertTrue(surfaces.contains("curve = 1f"));
+        assertTrue(surfaces.contains("TOP_BAR_BLUR_RADIUS = 16f"));
     }
 
     @Test
