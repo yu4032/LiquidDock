@@ -77,6 +77,7 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4")
     implementation("com.github.styropyr0:PrismalAGSL:v1.0.4")
     testImplementation("junit:junit:4.13.2")
 }
