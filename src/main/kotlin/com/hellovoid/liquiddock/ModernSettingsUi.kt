@@ -32,6 +32,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -111,16 +112,25 @@ internal fun ModernSettingsScaffold(
                 topBar = {
                     PrismalGlassSurface(
                         backdrop = overlayBackdrop,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .drawBehind {
+                                drawLine(
+                                    color = Color.White.copy(alpha = 0.16f),
+                                    start = androidx.compose.ui.geometry.Offset(0f, size.height - 1f),
+                                    end = androidx.compose.ui.geometry.Offset(size.width, size.height - 1f),
+                                    strokeWidth = 1f,
+                                )
+                            },
                         shape = { PrismalRoundedRectangle(0.dp) },
                         blurRadius = 14.dp,
                         tint = surface,
                         tintAlpha = 0.34f,
                         saturation = 1.35f,
-                        refractionHeightPx = 18f,
-                        refractionAmountPx = 24f,
-                        chromaticAberration = 0.45f,
-                        depthEffect = true,
+                        refractionHeightPx = 0f,
+                        refractionAmountPx = 0f,
+                        chromaticAberration = 0f,
+                        depthEffect = false,
                     ) {
                         SmallTopAppBar(
                             title = title,
