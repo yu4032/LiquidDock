@@ -407,15 +407,15 @@ private val largeFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_
 private val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")
 private val passBlurCaptureScaleSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,
-    "工作区玻璃清晰度",
+    "工作区渲染分辨率",
     "%",
-    summary = "100% 最清晰；降低数值可减少工作区玻璃的性能占用。Dock 不受影响；重启桌面后生效",
+    summary = "调整工作区玻璃的实际渲染分辨率；100% 为原生分辨率，降低可减少 GPU 开销。Dock 不受影响；重启桌面后生效",
 )
 private val passBlurRenderFpsSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_RENDER_FPS,
-    "玻璃刷新率上限（0 = 自动）",
+    "玻璃实时渲染刷新率上限（0 = Auto）",
     "fps",
-    summary = "限制工作区等实时玻璃的最高刷新率；0 表示自动跟随屏幕刷新率。较低数值可降低性能占用；重启相关应用后生效",
+    summary = "限制除 Dock 外实时玻璃的最高渲染刷新率；0 = 自动跟随可用源帧。降低上限可减少合成开销；重启相关应用后生效",
     dynamicMax = DisplayRefreshRatePolicy::maxSupportedRefreshRateHz,
 )
 private val liquidSpecs = listOf(
@@ -1748,7 +1748,7 @@ private fun LiquidSamplingPage(
     SettingsList(
         padding,
         stringResource(R.string.page_liquid_sampling),
-        "调整玻璃清晰度、刷新率与边缘显示范围。",
+        "调整背景采样安全区、渲染分辨率与实时刷新上限。",
     ) {
         liquidSamplingSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
         IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
@@ -1876,14 +1876,14 @@ private fun GlassWidgetsPage(
             prefs,
             ConfigSchema.Glass.WIDGET_GLASS,
             "小部件玻璃",
-            "只替换小组件背景，保留原有文字、图标与交互内容",
+            "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容",
             masterEnabled && liquidEnabled,
         ) { widgetGlass = it }
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.WIDGET_DARK_CONTENT,
             "小组件深色内容适配",
-            "在深色背景上提高文字可读性，不修改图片与彩色内容",
+            "将深色中性文字适配为浅色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
             masterEnabled && liquidEnabled && widgetGlass,
         )
         IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
