@@ -88,6 +88,13 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassStepper"));
         assertTrue(source.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
         assertTrue(source.contains("tintAlpha = 0.34f"));
+        assertTrue(source.contains("drawLine("));
+        assertTrue(source.contains("start = androidx.compose.ui.geometry.Offset(0f, size.height - 1f)"));
+        assertTrue(source.contains("end = androidx.compose.ui.geometry.Offset(size.width, size.height - 1f)"));
+        assertTrue(source.contains("refractionHeightPx = 0f"));
+        assertTrue(source.contains("refractionAmountPx = 0f"));
+        assertTrue(source.contains("chromaticAberration = 0f"));
+        assertTrue(source.contains("depthEffect = false"));
         assertTrue(source.contains("SmallTopAppBar("));
         assertTrue(source.contains("title = title"));
         assertTrue(source.contains("imageVector = MiuixIcons.Back"));
