@@ -447,6 +447,76 @@ private val launcherHighlightSpecs = listOf(
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.CAUSTICS, ConfigSchema.LauncherHighlight.LARGE_CAUSTICS, R.string.highlight_caustics, R.string.highlight_caustics_summary),
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.PRESS_GLOW, ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW, R.string.highlight_press_glow, R.string.highlight_press_glow_summary),
 )
+private fun liquidSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> {
+    val keys = configs.mapTo(hashSetOf()) { it.name() }
+    return liquidSpecs.filter { it.key in keys }
+}
+
+private val liquidMaterialSpecs = liquidSpecsFor(
+    ConfigSchema.Glass.BLUR,
+    ConfigSchema.Glass.THICKNESS,
+    ConfigSchema.Glass.PRISMAL_TRANSMITTANCE,
+    ConfigSchema.Glass.BRIGHTNESS,
+)
+private val liquidRefractionSpecs = liquidSpecsFor(
+    ConfigSchema.Glass.IOR,
+    ConfigSchema.Glass.NORMAL_STRENGTH,
+    ConfigSchema.Glass.DOME,
+    ConfigSchema.Glass.LENS_REFRACTION,
+    ConfigSchema.Glass.DEPTH_EFFECT,
+    ConfigSchema.Glass.PRISMAL_REFRACTION_INSET,
+    ConfigSchema.Glass.PRISMAL_DISPLACEMENT_SCALE,
+    ConfigSchema.Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH,
+    ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING,
+    ConfigSchema.Glass.PRISMAL_EDGE_REFRACTION_FALLOFF,
+)
+private val liquidColorSpecs = liquidSpecsFor(
+    ConfigSchema.Glass.CHROMATIC,
+    ConfigSchema.Glass.TINT_ALPHA,
+    ConfigSchema.Glass.TINT_RED,
+    ConfigSchema.Glass.TINT_GREEN,
+    ConfigSchema.Glass.TINT_BLUE,
+    ConfigSchema.Glass.PRISMAL_DISPERSION_R,
+    ConfigSchema.Glass.PRISMAL_DISPERSION_B,
+    ConfigSchema.Glass.PRISMAL_VIBRANCY,
+)
+private val liquidLightingSpecs = liquidSpecsFor(
+    ConfigSchema.Glass.HIGHLIGHT_WIDTH,
+    ConfigSchema.Glass.SPECULAR_SHARPNESS,
+    ConfigSchema.Glass.SPECULAR_STRENGTH,
+    ConfigSchema.Glass.RIM_LIGHT,
+    ConfigSchema.Glass.CAUSTICS,
+    ConfigSchema.Glass.PRISMAL_FRESNEL_REFLECT,
+    ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT,
+    ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X,
+    ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y,
+)
+private val liquidShadowSpecs = liquidSpecsFor(
+    ConfigSchema.Glass.PRISMAL_SHADOW_RED,
+    ConfigSchema.Glass.PRISMAL_SHADOW_GREEN,
+    ConfigSchema.Glass.PRISMAL_SHADOW_BLUE,
+    ConfigSchema.Glass.PRISMAL_SHADOW_ALPHA,
+    ConfigSchema.Glass.PRISMAL_SHADOW_SOFTNESS,
+)
+private val liquidSamplingSpecs = liquidSpecsFor(
+    ConfigSchema.Glass.SAMPLING_EXTRA_TOP,
+    ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM,
+    ConfigSchema.Glass.SAMPLING_EXTRA_LEFT,
+    ConfigSchema.Glass.SAMPLING_EXTRA_RIGHT,
+    ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_X,
+    ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y,
+    ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE,
+)
+private val liquidOs4Specs = liquidSpecsFor(
+    ConfigSchema.Glass.OS4_EDGE_WIDTH_PX,
+    ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX,
+    ConfigSchema.Glass.OS4_REFLECTION_STRENGTH,
+    ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN,
+    ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE,
+    ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY,
+    ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
+)
+
 private val strokeSpecs = listOf(
     IntSpec(ConfigSchema.Dock.CORNER_OFFSET, "描边圆角偏移", "dp", null, IntSection.StrokeGeometry),
     IntSpec(ConfigSchema.Dock.STROKE_RED, "描边底色 · 红", "", "dock_stroke", IntSection.StrokeBackground),
