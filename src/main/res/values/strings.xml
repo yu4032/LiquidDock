@@ -138,4 +138,6 @@
     <string name="page_launcher_highlights_compact">Icon &amp; small-folder highlights</string>
     <string name="page_launcher_highlights_large">Widget &amp; large-folder highlights</string>
     <string name="action_restart_scopes">Restart scopes</string>
+    <string name="settings_glass_effect">Settings glass effect</string>
+    <string name="settings_glass_effect_summary">Controls glass surfaces, controls, and bottom navigation in Settings. Turning it off switches immediately to the standard UI and does not affect launcher or other hooks.</string>
 </resources>
