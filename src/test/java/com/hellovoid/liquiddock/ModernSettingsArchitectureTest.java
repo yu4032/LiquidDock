@@ -89,6 +89,7 @@ public class ModernSettingsArchitectureTest {
         String build = Files.readString(BUILD);
 
         assertTrue(build.contains("com.github.styropyr0:PrismalAGSL:v1.0.4"));
+        assertTrue(build.contains("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4"));
         assertTrue(source.contains("PrismalGlassSurface"));
         assertTrue(source.contains("PrismalGlassButton"));
         assertTrue(source.contains("PrismalGlassBottomTabs"));
@@ -97,48 +98,54 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
 
-        assertTrue(source.contains("TOP_BAR_GLASS_BLUR = 14.dp"));
+        assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 14f"));
         assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
-        assertTrue(source.contains("blurRadius = TOP_BAR_GLASS_BLUR"));
-        assertTrue(source.contains("backdrop = overlayBackdrop"));
+        assertTrue(source.contains("blurRadius = TOP_BAR_BLUR_RADIUS"));
+        assertTrue(source.contains("rememberLayerBackdrop {"));
+        assertTrue(source.contains(".textureBlur("));
+        assertTrue(source.contains("Modifier.layerBackdrop(barBackdrop)"));
         assertFalse(source.contains(".progressiveTextureBlur("));
         assertFalse(source.contains("ProgressiveBlur.Top.copy("));
-        assertFalse(source.contains("rememberLayerBackdrop("));
-        assertFalse(source.contains("Modifier.layerBackdrop(barBackdrop)"));
         assertFalse(source.contains("drawPlainPrismalGlass("));
 
         assertTrue(source.contains("SmallTopAppBar("));
         assertTrue(source.contains("title = title"));
         assertTrue(source.contains("imageVector = MiuixIcons.Back"));
-        assertTrue(source.contains("rememberPrismalMergedSource"));
+        assertTrue(source.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
     }
-
     @Test
     public void uniformGlassHeaderHasNoRefractiveRimOrGradient() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String header = surfaces.substring(
+                surfaces.indexOf("val headerModifier ="),
+                surfaces.indexOf("SmallTopAppBar("));
 
-        assertTrue(surfaces.contains("modifier = Modifier.matchParentSize()"));
-        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
-        assertTrue(surfaces.contains("refractionHeightPx = 0f"));
-        assertTrue(surfaces.contains("refractionAmountPx = 0f"));
-        assertTrue(surfaces.contains("chromaticAberration = 0f"));
-        assertTrue(surfaces.contains("depthEffect = false"));
+        assertTrue(header.contains(".textureBlur("));
+        assertTrue(header.contains("shape = RectangleShape"));
+        assertTrue(header.contains("blurRadius = TOP_BAR_BLUR_RADIUS"));
+        assertTrue(header.contains("noiseCoefficient = 0f"));
         assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
+        assertFalse(header.contains("PrismalGlassSurface("));
+        assertFalse(header.contains("progressiveTextureBlur("));
+        assertFalse(header.contains("refraction"));
         assertFalse(surfaces.contains("TOP_BAR_PROGRESSIVE_BLUR"));
     }
-
     @Test
     public void headerGlassPreservesBackdropHueWithoutPrismalHueTint() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String header = surfaces.substring(
+                surfaces.indexOf("val headerModifier ="),
+                surfaces.indexOf("SmallTopAppBar("));
 
         assertTrue(surfaces.contains("val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White"));
+        assertTrue(header.contains("BlendColorEntry("));
+        assertTrue(header.contains("headerNeutralColor.copy("));
+        assertTrue(header.contains("alpha = TOP_BAR_GLASS_TINT_ALPHA"));
+        assertTrue(header.contains("saturation = 1.35f"));
+        assertFalse(header.contains("BlendMode.Hue"));
         assertTrue(surfaces.contains("tint = Color.Unspecified"));
-        assertTrue(surfaces.contains("surfaceColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA)"));
-        assertTrue(surfaces.contains("blurRadius = TOP_BAR_GLASS_BLUR"));
-        assertTrue(surfaces.contains("refractionHeightPx = 0f"));
-        assertTrue(surfaces.contains("refractionAmountPx = 0f"));
+        assertTrue(surfaces.contains("surfaceColor = headerNeutralColor.copy(alpha = 0.20f)"));
     }
-
     @Test
     public void bottomTabSelectionUsesNativeCapsuleClippedHitTargets() throws Exception {
         String surfaces = Files.readString(SURFACES);
@@ -171,19 +178,31 @@ public class ModernSettingsArchitectureTest {
         String surfaces = Files.readString(SURFACES);
         String pages = Files.readString(UI);
 
+        // One complete page recording, independent of the Prismal background and
+        // screen layers that continue to serve Cell and bottom-tab interactions.
         assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
-        assertTrue(surfaces.contains("backdrop = overlayBackdrop"));
-        assertTrue(surfaces.contains("CompositingStrategy.Offscreen"));
-        assertTrue(surfaces.contains(".graphicsLayer {"));
-        assertTrue(surfaces.contains(".prismalGlassLayer(screenLayer)"));
-        assertTrue(surfaces.contains("Box(modifier = Modifier.fillMaxWidth().zIndex(1f))"));
+        assertTrue(surfaces.contains("val barBackdrop = if (glassEnabled && isRuntimeShaderSupported())"));
+        assertTrue(surfaces.contains("rememberLayerBackdrop {\n            drawRect(surface)\n            drawContent()"));
+        assertTrue(surfaces.contains("backdrop = barBackdrop"));
+        assertTrue(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
+        assertTrue(surfaces.contains("Box(modifier = headerModifier)"));
         assertTrue(surfaces.contains(".zIndex(0f)"));
+        assertFalse(surfaces.contains("CompositingStrategy.Offscreen"));
+        assertFalse(surfaces.contains(".graphicsLayer {"));
+
+        int bodyStart = surfaces.indexOf(") { padding ->");
+        int bodyEnd = surfaces.indexOf("overlay()", bodyStart);
+        String body = surfaces.substring(bodyStart, bodyEnd);
+        assertTrue(body.indexOf("Modifier.prismalGlassLayer(screenLayer)")
+                < body.indexOf("Modifier.layerBackdrop(barBackdrop)"));
+        assertTrue(body.indexOf("Modifier.layerBackdrop(barBackdrop)")
+                < body.indexOf("content(padding)"));
+
         assertTrue(pages.contains("LazyColumn("));
-        assertTrue(pages.contains("contentPadding = PaddingValues("));
         assertTrue(pages.contains("ModernSectionLabel(\"状态\")"));
         assertTrue(pages.contains("桌面布局与液态玻璃个性化设置"));
     }
-
     @Test
     public void bottomLabelsAreSinglePassAbovePrismalDragDroplet() throws Exception {
         String source = Files.readString(SURFACES);
