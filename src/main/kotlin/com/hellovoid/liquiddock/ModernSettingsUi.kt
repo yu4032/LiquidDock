@@ -601,8 +601,9 @@ internal fun ModernGlassSlider(
     modifier: Modifier = Modifier,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current ?: return
+    val currentValue by rememberUpdatedState(value)
     PrismalGlassSlider(
-        value = { value },
+        value = { currentValue },
         onValueChange = { next ->
             if (enabled) onValueChange(next)
         },
