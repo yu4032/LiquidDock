@@ -97,12 +97,12 @@ public class ModernSettingsArchitectureTest {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
 
-        assertTrue(ui.contains("ROOT_ICONS: List<ImageVector>"));
+        assertTrue(ui.contains("val rootIcons = listOf("));
         assertTrue(ui.contains("MiuixIcons.Home"));
         assertTrue(ui.contains("MiuixIcons.GridView"));
         assertTrue(ui.contains("MiuixIcons.Image"));
         assertTrue(ui.contains("MiuixIcons.Settings"));
-        assertTrue(ui.contains("icons = ROOT_ICONS"));
+        assertTrue(ui.contains("icons = rootIcons"));
 
         assertTrue(ui.contains("val displayText ="));
         assertTrue(ui.contains("ModernGlassSlider("));
