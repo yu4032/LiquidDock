@@ -71,8 +71,9 @@ internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
-// Opaque-tinted, fixed header: no shader-driven progressive blur or glass edge rim.
-private const val TOP_BAR_SOLID_ALPHA = 0.94f
+// Uniform background blur, with no progressive gradient or refractive edge rim.
+private val TOP_BAR_GLASS_BLUR = 12.dp
+private const val TOP_BAR_GLASS_TINT_ALPHA = 0.36f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
 private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
@@ -125,14 +126,31 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    // A solid translucent rectangle; do not draw the default Prismal rim.
-                    val headerModifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            surface.copy(alpha = if (glassEnabled) TOP_BAR_SOLID_ALPHA else 1f),
-                        )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        // Blur the real scene behind the header uniformly, not through
+                        // a gradient or a perimeter lens. The bar stays rectangular.
+                        if (glassEnabled) {
+                            PrismalGlassSurface(
+                                backdrop = overlayBackdrop,
+                                modifier = Modifier.matchParentSize(),
+                                shape = { PrismalRoundedRectangle(0.dp) },
+                                blurRadius = TOP_BAR_GLASS_BLUR,
+                                tint = surface,
+                                tintAlpha = TOP_BAR_GLASS_TINT_ALPHA,
+                                saturation = 1.15f,
+                                refractionHeightPx = 0f,
+                                refractionAmountPx = 0f,
+                                chromaticAberration = 0f,
+                                depthEffect = false,
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(surface),
+                            )
+                        }
 
-                    Box(modifier = headerModifier) {
                         SmallTopAppBar(
                             title = title,
                             color = Color.Transparent,
