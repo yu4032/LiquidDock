@@ -4,10 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -141,58 +141,70 @@ internal fun DockRecentBlacklistPage(
         }
 
         item { SmallTitle(stringResource(R.string.dock_recent_blacklist_current_candidates)) }
-        if (availableCandidates.isEmpty()) {
-            item {
-                SettingsCard {
-                    Text(stringResource(R.string.dock_recent_blacklist_empty))
-                }
-            }
-        } else {
-            items(availableCandidates, key = { "candidate:$it" }) { packageName ->
-                val label = remember(packageName) { appLabel(context.packageManager, packageName) }
-                SettingsCard {
-                    SwitchPreference(
-                        checked = false,
-                        onCheckedChange = { checked -> setBlocked(packageName, checked) },
-                        title = label,
-                        summary = context.getString(
-                            R.string.dock_recent_blacklist_candidate_item,
-                            packageName,
-                        ),
-                        enabled = masterEnabled,
+        item {
+            SettingsCard {
+                if (availableCandidates.isEmpty()) {
+                    Text(
+                        stringResource(R.string.dock_recent_blacklist_empty),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                     )
+                } else {
+                    Column {
+                        availableCandidates.forEachIndexed { index, packageName ->
+                            val label = appLabel(context.packageManager, packageName)
+                            SwitchPreference(
+                                checked = false,
+                                onCheckedChange = { checked -> setBlocked(packageName, checked) },
+                                title = label,
+                                summary = context.getString(
+                                    R.string.dock_recent_blacklist_candidate_item,
+                                    packageName,
+                                ),
+                                enabled = masterEnabled,
+                            )
+                            if (index != availableCandidates.lastIndex) {
+                                ModernListDivider()
+                            }
+                        }
+                    }
                 }
             }
         }
 
         item { SmallTitle(stringResource(R.string.dock_recent_blacklist_blocked_apps)) }
-        if (blockedPackages.isEmpty()) {
-            item {
-                SettingsCard {
-                    Text(stringResource(R.string.dock_recent_blacklist_blocked_empty))
-                }
-            }
-        } else {
-            items(blockedPackages, key = { "blocked:$it" }) { packageName ->
-                val label = remember(packageName) { appLabel(context.packageManager, packageName) }
-                SettingsCard {
-                    SwitchPreference(
-                        checked = true,
-                        onCheckedChange = { checked -> setBlocked(packageName, checked) },
-                        title = label,
-                        summary = if (currentCandidates.contains(packageName)) {
-                            context.getString(
-                                R.string.dock_recent_blacklist_blocked_active_item,
-                                packageName,
-                            )
-                        } else {
-                            context.getString(
-                                R.string.dock_recent_blacklist_blocked_inactive_item,
-                                packageName,
-                            )
-                        },
-                        enabled = masterEnabled,
+        item {
+            SettingsCard {
+                if (blockedPackages.isEmpty()) {
+                    Text(
+                        stringResource(R.string.dock_recent_blacklist_blocked_empty),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                     )
+                } else {
+                    Column {
+                        blockedPackages.forEachIndexed { index, packageName ->
+                            val label = appLabel(context.packageManager, packageName)
+                            SwitchPreference(
+                                checked = true,
+                                onCheckedChange = { checked -> setBlocked(packageName, checked) },
+                                title = label,
+                                summary = if (currentCandidates.contains(packageName)) {
+                                    context.getString(
+                                        R.string.dock_recent_blacklist_blocked_active_item,
+                                        packageName,
+                                    )
+                                } else {
+                                    context.getString(
+                                        R.string.dock_recent_blacklist_blocked_inactive_item,
+                                        packageName,
+                                    )
+                                },
+                                enabled = masterEnabled,
+                            )
+                            if (index != blockedPackages.lastIndex) {
+                                ModernListDivider()
+                            }
+                        }
+                    }
                 }
             }
         }
