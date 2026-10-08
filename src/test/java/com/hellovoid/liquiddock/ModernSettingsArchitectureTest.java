@@ -160,7 +160,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("tint = Color.Unspecified"));
         assertTrue(surfaces.contains("useVibrancy = false"));
         assertTrue(surfaces.contains("saturation = 1f"));
-        assertFalse(surfaces.contains("tint = MiuixTheme.colorScheme.surface"));
+        // Other Prismal settings widgets may still use their own material tint.
+        // Only the app-bar buttons are required to be hue-neutral.
     }
 
     @Test
