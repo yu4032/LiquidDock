@@ -1508,129 +1508,364 @@ private fun LiquidPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
-    openLauncherHighlights: () -> Unit,
-    openWidgetComponents: () -> Unit,
-    openThirdPartyApps: () -> Unit,
-    openDialogCustomization: () -> Unit,
+    open: (Page) -> Unit,
 ) {
-    var liquidGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())) }
-    var iconGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())) }
-    var functionalDockIconGlass by remember { mutableStateOf(prefs.getBoolean(
-        ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
-        ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.uiDefault(),
-    )) }
-    var widgetGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())) }
-    var smallFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), ConfigSchema.Glass.SMALL_FOLDER_GLASS.uiDefault())) }
-    var largeFolderGlass by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), ConfigSchema.Glass.LARGE_FOLDER_GLASS.uiDefault())) }
+    var liquidGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.ENABLED.name(),
+                ConfigSchema.Glass.ENABLED.uiDefault(),
+            ),
+        )
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            PageHeader(
+                stringResource(R.string.page_liquid),
+                stringResource(R.string.liquid_header_summary),
+            )
+        }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.ENABLED,
+                    stringResource(R.string.liquid_enable),
+                    stringResource(R.string.liquid_enable_summary),
+                    masterEnabled,
+                ) { liquidGlass = it }
+            }
+        }
+        liquidEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+            }
+        }
+        item {
+            ModernFeatureCard(
+                title = stringResource(R.string.page_glass_components),
+                summary = "组件开关与材质光学分离，避免同页组合全部控件",
+                onClick = { open(Page.GlassComponents) },
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
+        }
+        if (!liquidGlass) {
+            item {
+                ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
+                    Text(
+                        "液态玻璃关闭时，参数会继续保存，但运行时玻璃层不参与绘制。",
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiquidSpecPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    summary: String,
+    specs: List<IntSpec>,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    SettingsList(
+        padding = padding,
+        title = "",
+        summary = summary,
+    ) {
+        specs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
+    }
+}
+
+@Composable
+private fun LiquidSamplingPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
     SettingsList(
         padding,
-        stringResource(R.string.page_liquid),
-        stringResource(R.string.liquid_header_summary),
+        stringResource(R.string.page_liquid_sampling),
+        "采样边界与实时更新性能集中在此页，避免与光学参数同时重组。",
     ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.ENABLED,
-            stringResource(R.string.liquid_enable),
-            stringResource(R.string.liquid_enable_summary),
-            masterEnabled,
-        ) { liquidGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
-            "壁纸闪烁修复",
-            "仅在壁纸闪烁时开启；需要在 LSPosed 中为 LiquidDock 启用 System Framework（system）作用域，并重启设备后生效",
-            masterEnabled && liquidGlass,
-        )
-        ArrowPreference(
-            title = "第三方应用适配",
-            summary = "Gboard 等第三方应用的独立液态玻璃适配",
-            enabled = masterEnabled && liquidGlass,
-            onClick = openThirdPartyApps,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS,
-            "应用顶部菜单液态玻璃",
-            "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；重启系统界面后生效",
-            masterEnabled && liquidGlass,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
-            "桌面快捷菜单玻璃背景",
-            "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
-            masterEnabled && liquidGlass,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
-            "快捷菜单深色模式适配",
-            "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
-            masterEnabled && liquidGlass,
-        )
-        ArrowPreference(
-            title = stringResource(R.string.page_dialog_customization),
-            summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
-            enabled = masterEnabled && liquidGlass,
-            onClick = openDialogCustomization,
-        )
-        BooleanSetting(prefs, ConfigSchema.Glass.ICON_GLASS, "图标玻璃", "同时控制桌面与 Dock 全部图标；0 圆角为 Auto", masterEnabled && liquidGlass) { iconGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
-            "仅 Dock 功能图标玻璃",
-            "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
-            masterEnabled && liquidGlass,
-        ) { functionalDockIconGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
-            "多任务操作按钮玻璃",
-            "将多任务界面的清除全部和设备互联胶囊背景替换为完整 Prismal 液态玻璃",
-            masterEnabled && liquidGlass,
-        )
-        IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass))
-        IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidGlass && (iconGlass || functionalDockIconGlass))
-        BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃", "只替换材质背景，保留 RemoteViews / MAML 内容", masterEnabled && liquidGlass) { widgetGlass = it }
-        BooleanSetting(prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配", "将深色中性文字转为白色；MAML 优先使用原生深色变量，不处理图片与彩色内容", masterEnabled && liquidGlass && widgetGlass)
-        IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidGlass && widgetGlass)
-        IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidGlass && widgetGlass)
-        ArrowPreference(
-            stringResource(R.string.widget_components_entry),
-            summary = stringResource(R.string.widget_components_entry_summary),
-            enabled = masterEnabled && liquidGlass && widgetGlass,
-            onClick = openWidgetComponents,
-        )
-        BooleanSetting(prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS, "小文件夹玻璃", "保留 1x1 文件夹缩略预览", masterEnabled && liquidGlass) { smallFolderGlass = it }
-        IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidGlass && smallFolderGlass)
-        IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidGlass && smallFolderGlass)
-        BooleanSetting(prefs, ConfigSchema.Glass.LARGE_FOLDER_GLASS, "大文件夹玻璃", "独立控制大文件夹材质", masterEnabled && liquidGlass) { largeFolderGlass = it }
-        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidGlass && largeFolderGlass)
-        IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidGlass && largeFolderGlass)
-        ArrowPreference(
-            stringResource(R.string.launcher_highlights_entry),
-            summary = stringResource(R.string.launcher_highlights_entry_summary),
-            enabled = masterEnabled && liquidGlass,
-            onClick = openLauncherHighlights,
-        )
-        SmallTitle("玻璃实时渲染性能")
-        IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidGlass)
-        IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidGlass)
+        liquidSamplingSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
+        IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
+        IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidEnabled)
         BooleanSetting(
             prefs,
             ConfigSchema.Dock.FRAME_SYNC,
             stringResource(R.string.dock_frame_sync),
             stringResource(R.string.dock_frame_sync_summary),
-            masterEnabled && liquidGlass,
+            masterEnabled && liquidEnabled,
         )
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
             "显示表面法线（调试）",
             "用颜色显示表面法线方向，便于调试折射与光照",
-            masterEnabled && liquidGlass,
+            masterEnabled && liquidEnabled,
         )
-        liquidSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidGlass) }
+    }
+}
+
+@Composable
+private fun GlassComponentsPage(
+    padding: PaddingValues,
+    open: (Page) -> Unit,
+) {
+    HubPage(
+        padding = padding,
+        summary = "不同类型的玻璃目标独立进入子页，只组合当前需要的控件。",
+        entries = componentEntries,
+        open = open,
+    )
+}
+
+@Composable
+private fun GlassIconsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    var iconGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.ICON_GLASS.name(),
+                ConfigSchema.Glass.ICON_GLASS.uiDefault(),
+            ),
+        )
+    }
+    var functionalDockIconGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
+                ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.uiDefault(),
+            ),
+        )
+    }
+    SettingsList(
+        padding,
+        stringResource(R.string.page_glass_icons),
+        "桌面图标与 Dock 功能图标放在同一轻量页。",
+    ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.ICON_GLASS,
+            "图标玻璃",
+            "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
+            masterEnabled && liquidEnabled,
+        ) { iconGlass = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
+            "仅 Dock 功能图标玻璃",
+            "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
+            masterEnabled && liquidEnabled,
+        ) { functionalDockIconGlass = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
+            "多任务操作按钮玻璃",
+            "将多任务界面的清除全部和设备互联胶囊背景替换为液态玻璃",
+            masterEnabled && liquidEnabled,
+        )
+        IntSetting(
+            prefs,
+            iconSizeOffsetSpec,
+            masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+        )
+        IntSetting(
+            prefs,
+            iconCornerRadiusSpec,
+            masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+        )
+        ArrowPreference(
+            stringResource(R.string.launcher_highlights_entry),
+            summary = stringResource(R.string.launcher_highlights_entry_summary),
+            enabled = masterEnabled && liquidEnabled,
+            onClick = { open(Page.LauncherHighlights) },
+        )
+    }
+}
+
+@Composable
+private fun GlassWidgetsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    var widgetGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.WIDGET_GLASS.name(),
+                ConfigSchema.Glass.WIDGET_GLASS.uiDefault(),
+            ),
+        )
+    }
+    SettingsList(
+        padding,
+        stringResource(R.string.page_glass_widgets),
+        "小组件材质与内部组件隐藏分开管理。",
+    ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.WIDGET_GLASS,
+            "小部件玻璃",
+            "只替换材质背景，保留 RemoteViews / MAML 内容",
+            masterEnabled && liquidEnabled,
+        ) { widgetGlass = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.WIDGET_DARK_CONTENT,
+            "小组件深色内容适配",
+            "将深色中性文字转为白色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
+            masterEnabled && liquidEnabled && widgetGlass,
+        )
+        IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
+        IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
+        ArrowPreference(
+            stringResource(R.string.widget_components_entry),
+            summary = stringResource(R.string.widget_components_entry_summary),
+            enabled = masterEnabled && liquidEnabled && widgetGlass,
+            onClick = { open(Page.WidgetComponents) },
+        )
+    }
+}
+
+@Composable
+private fun GlassFoldersPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    var smallFolderGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(),
+                ConfigSchema.Glass.SMALL_FOLDER_GLASS.uiDefault(),
+            ),
+        )
+    }
+    var largeFolderGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(),
+                ConfigSchema.Glass.LARGE_FOLDER_GLASS.uiDefault(),
+            ),
+        )
+    }
+    SettingsList(
+        padding,
+        stringResource(R.string.page_glass_folders),
+        "小文件夹与大文件夹保留独立开关和几何参数。",
+    ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.SMALL_FOLDER_GLASS,
+            "小文件夹玻璃",
+            "保留 1x1 文件夹缩略预览",
+            masterEnabled && liquidEnabled,
+        ) { smallFolderGlass = it }
+        IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidEnabled && smallFolderGlass)
+        IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidEnabled && smallFolderGlass)
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.LARGE_FOLDER_GLASS,
+            "大文件夹玻璃",
+            "独立控制大文件夹材质",
+            masterEnabled && liquidEnabled,
+        ) { largeFolderGlass = it }
+        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
+        IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
+    }
+}
+
+@Composable
+private fun GlassMenusPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    SettingsList(
+        padding,
+        stringResource(R.string.page_glass_menus),
+        "系统菜单、快捷菜单与弹窗材质集中在单独页面。",
+    ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
+            "壁纸闪烁修复",
+            "仅在壁纸闪烁时开启；需要为 LiquidDock 启用 System Framework（system）作用域并重启设备",
+            masterEnabled && liquidEnabled,
+        )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS,
+            "应用顶部菜单液态玻璃",
+            "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；重启系统界面后生效",
+            masterEnabled && liquidEnabled,
+        )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
+            "桌面快捷菜单玻璃背景",
+            "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
+            masterEnabled && liquidEnabled,
+        )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
+            "快捷菜单深色模式适配",
+            "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
+            masterEnabled && liquidEnabled,
+        )
+        ArrowPreference(
+            title = stringResource(R.string.page_dialog_customization),
+            summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
+            enabled = masterEnabled && liquidEnabled,
+            onClick = { open(Page.DialogCustomization) },
+        )
     }
 }
 
