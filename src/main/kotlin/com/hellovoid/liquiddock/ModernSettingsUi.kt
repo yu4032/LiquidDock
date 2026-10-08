@@ -38,7 +38,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,13 +57,6 @@ import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurDefaults
-import top.yukonga.miuix.kmp.blur.ProgressiveBlur
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -79,13 +71,9 @@ internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
-private val TOP_BAR_PROGRESSIVE_BLUR = ProgressiveBlur.Top.copy(
-    startFraction = 0.68f,
-    endFraction = 1f,
-    curve = 1f,
-)
-private const val TOP_BAR_BLUR_RADIUS = 16f
-private const val TOP_BAR_SURFACE_ALPHA = 0.66f
+// Uniform background blur, with no progressive gradient or refractive edge rim.
+private val TOP_BAR_GLASS_BLUR = 14.dp
+private const val TOP_BAR_GLASS_TINT_ALPHA = 0.34f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
 private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
@@ -112,15 +100,6 @@ internal fun ModernSettingsScaffold(
     val surface = MiuixTheme.colorScheme.surface
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
-    val barBackdrop = if (glassEnabled && isRuntimeShaderSupported()) {
-        rememberLayerBackdrop {
-            drawRect(surface)
-            drawContent()
-        }
-    } else {
-        null
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -147,29 +126,31 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    val headerModifier = if (barBackdrop != null) {
-                        Modifier
-                            .fillMaxWidth()
-                            .progressiveTextureBlur(
-                                backdrop = barBackdrop,
-                                shape = RectangleShape,
-                                blurRadius = TOP_BAR_BLUR_RADIUS,
-                                gradient = TOP_BAR_PROGRESSIVE_BLUR,
-                                colors = BlurDefaults.blurColors(
-                                    blendColors = listOf(
-                                        BlendColorEntry(
-                                            color = surface.copy(alpha = TOP_BAR_SURFACE_ALPHA),
-                                        ),
-                                    ),
-                                ),
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        // Blur the real scene behind the header uniformly, not through
+                        // a gradient or a perimeter lens. The bar stays rectangular.
+                        if (glassEnabled) {
+                            PrismalGlassSurface(
+                                backdrop = overlayBackdrop,
+                                modifier = Modifier.matchParentSize(),
+                                shape = { PrismalRoundedRectangle(0.dp) },
+                                blurRadius = TOP_BAR_GLASS_BLUR,
+                                tint = surface,
+                                tintAlpha = TOP_BAR_GLASS_TINT_ALPHA,
+                                saturation = 1.35f,
+                                refractionHeightPx = 0f,
+                                refractionAmountPx = 0f,
+                                chromaticAberration = 0f,
+                                depthEffect = false,
                             )
-                    } else {
-                        Modifier
-                            .fillMaxWidth()
-                            .background(surface.copy(alpha = 0.94f))
-                    }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(surface),
+                            )
+                        }
 
-                    Box(modifier = headerModifier) {
                         SmallTopAppBar(
                             title = title,
                             color = Color.Transparent,
@@ -245,10 +226,6 @@ internal fun ModernSettingsScaffold(
                         .fillMaxSize()
                         .then(
                             if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
-                            else Modifier,
-                        )
-                        .then(
-                            if (barBackdrop != null) Modifier.layerBackdrop(barBackdrop)
                             else Modifier,
                         ),
                 ) {
