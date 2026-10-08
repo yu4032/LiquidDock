@@ -142,10 +142,10 @@ internal fun WidgetComponentsPage(
             item {
                 Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Column {
-                        groups.forEach { (key, components) ->
+                        groups.forEachIndexed { index, (key, components) ->
                             val first = components.first()
                             val selectedCount = components.count { it.selectorKey() in selected }
-                                                        val source = if (first.isMaml()) "MAML" else "RemoteViews"
+                            val source = if (first.isMaml()) "MAML" else "RemoteViews"
                             val likelyCount = components.count(WidgetComponentRanking::isLikelyBackground)
                             ArrowPreference(
                                 title = first.displayOwner(),
@@ -160,6 +160,9 @@ internal fun WidgetComponentsPage(
                                     )
                                 },
                             )
+                            if (index != groups.lastIndex) {
+                                ModernListDivider()
+                            }
                         }
                     }
                 }
