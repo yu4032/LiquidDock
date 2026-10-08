@@ -14,11 +14,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SliderPreference
 
 /** Launcher-owned dialog glass controls. Appearance overrides inherit the global material by default. */
 @Composable
