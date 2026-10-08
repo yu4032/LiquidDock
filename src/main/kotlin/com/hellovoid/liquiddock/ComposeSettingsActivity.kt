@@ -2318,32 +2318,6 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
     }
 }
 
-@Composable
-private fun StringDropdown(
-    prefs: SharedPreferences,
-    config: ConfigKey<String>,
-    title: String,
-    options: List<Pair<String, String>>,
-    enabled: Boolean = true,
-) {
-    val key = config.name()
-    val default = config.uiDefault()
-    var value by remember(key) { mutableStateOf(prefs.getString(key, default) ?: default) }
-    val index = options.indexOfFirst { it.second == value }.coerceAtLeast(0)
-    ModernChoicePreference(
-        title = title,
-        summary = options[index].first,
-        items = options.map { it.first },
-        selectedIndex = index,
-        enabled = enabled,
-        onSelectedIndexChange = { nextIndex ->
-            val next = options[nextIndex].second
-            value = next
-            prefs.edit().putString(key, next).apply()
-        },
-    )
-}
-
 private fun applyDefaultPreset(activity: ComposeSettingsActivity) {
     val prefs = PreferenceManager.getDefaultSharedPreferences(activity)
     PresetManager.applyDefault(prefs.edit())
