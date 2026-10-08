@@ -2172,31 +2172,19 @@ private fun SettingsList(
 }
 
 @Composable
-internal fun PageHeader(title: String, summary: String? = null) {
-    Column(
+internal fun PageHeader(@Suppress("UNUSED_PARAMETER") title: String, summary: String? = null) {
+    if (summary.isNullOrBlank()) return
+    Text(
+        text = summary,
         modifier = Modifier.padding(
             start = 20.dp,
             end = 20.dp,
-            top = if (title.isBlank()) 8.dp else 16.dp,
+            top = 8.dp,
             bottom = 6.dp,
         ),
-    ) {
-        if (title.isNotBlank()) {
-            Text(
-                text = title,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        if (!summary.isNullOrBlank()) {
-            Text(
-                text = summary,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = if (title.isBlank()) 0.dp else 6.dp),
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-            )
-        }
-    }
+        fontSize = 13.sp,
+        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+    )
 }
 
 @Composable
