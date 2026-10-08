@@ -32,7 +32,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -46,12 +45,9 @@ import com.styropyr0.prismal.PrismalGlassSurface
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
-import com.styropyr0.prismal.components.PrismalGlassMenu
-import com.styropyr0.prismal.components.PrismalGlassMenuItem
 import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
 import com.styropyr0.prismal.components.PrismalGlassToggle
-import com.styropyr0.prismal.components.prismalMenuAnchor
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -742,65 +738,4 @@ internal fun ModernGlassStepper(
         repeatOnHold = true,
         modifier = modifier.alpha(if (enabled) 1f else 0.42f),
     )
-}
-
-@Composable
-internal fun ModernChoicePreference(
-    title: String,
-    summary: String,
-    items: List<String>,
-    selectedIndex: Int,
-    enabled: Boolean = true,
-    onSelectedIndexChange: (Int) -> Unit,
-) {
-    val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
-    var expanded by remember { mutableStateOf(false) }
-    var anchorBounds by remember { mutableStateOf(Rect.Zero) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .prismalMenuAnchor { anchorBounds = it },
-    ) {
-        BasicComponent(
-            title = title,
-            summary = summary,
-            enabled = enabled,
-            insideMargin = ModernPreferenceMargin,
-            endActions = {
-                Icon(
-                    imageVector = MiuixIcons.Basic.ArrowRight,
-                    contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.44f),
-                    modifier = Modifier.size(width = 10.dp, height = 16.dp),
-                )
-            },
-            onClick = {
-                if (enabled && backdrop != null) expanded = true
-            },
-        )
-    }
-
-    if (backdrop != null) {
-        PrismalGlassMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            anchorBounds = anchorBounds,
-            backdrop = backdrop,
-            width = 300.dp,
-            surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.78f),
-        ) {
-            items.forEachIndexed { index, label ->
-                PrismalGlassMenuItem(
-                    text = label,
-                    selected = index == selectedIndex,
-                    enabled = enabled,
-                    onClick = {
-                        onSelectedIndexChange(index)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
 }
