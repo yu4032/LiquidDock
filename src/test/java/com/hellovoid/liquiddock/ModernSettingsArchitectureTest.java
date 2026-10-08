@@ -260,10 +260,10 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("alpha = 0.14f"));
 
         assertTrue(surfaces.contains("TOP_BAR_ACTION_SHADOW_ROOM = 10.dp"));
-        assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
         assertTrue(surfaces.contains("bottomContent = {"));
         assertTrue(surfaces.contains("Spacer(Modifier.height(TOP_BAR_ACTION_SHADOW_ROOM))"));
-        assertTrue(surfaces.contains(".align(Alignment.BottomCenter)"));
+        assertFalse(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA"));
+        assertFalse(surfaces.contains(".height(1.dp)\n                                .background(\n                                    MiuixTheme.colorScheme.onSurface.copy"));
         assertFalse(surfaces.contains("drawLine("));
     }
 
