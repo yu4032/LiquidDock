@@ -938,7 +938,7 @@ private fun HomePage(
         }
         item {
             ModernSurface(
-                modifier = Modifier.padding(horizontal = 14.dp, top = 4.dp),
+                modifier = Modifier.padding(start = 14.dp, top = 4.dp, end = 14.dp),
             ) {
                 Text(
                     text = if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
