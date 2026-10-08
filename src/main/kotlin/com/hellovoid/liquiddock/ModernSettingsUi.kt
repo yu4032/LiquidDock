@@ -28,7 +28,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -37,8 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -110,10 +107,6 @@ internal fun ModernSettingsScaffold(
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
-    // Reserve exactly the height of the independently rendered top overlay.
-    // This preserves existing Scaffold contentPadding and all scroll positions.
-    var appBarHeightPx by remember { mutableIntStateOf(0) }
-    val density = LocalDensity.current
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -140,48 +133,10 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    // Only the layout reservation stays inside Miuix Scaffold.
-                    // The real glass top bar is overlaid as a sibling of Scaffold,
-                    // just like the floating bottom tabs, to sample its content.
-                    Spacer(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(with(density) { appBarHeightPx.toDp() }),
-                    )
-                },
-                bottomBar = bottomBar,
-            ) { padding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(0f)
-                        .then(
-                            if (glassEnabled) {
-                                // Nested Prismal cards have their own offscreen render layers.
-                                // Flatten those child layers with the text before recording
-                                // the entire page for the top-bar backdrop.
-                                Modifier
-                                    .prismalGlassLayer(screenLayer)
-                                    .graphicsLayer {
-                                        compositingStrategy = CompositingStrategy.Offscreen
-                                    }
-                            } else Modifier,
-                        ),
-                ) {
-                    content(padding)
-                }
-            }
-            // This is deliberately OUTSIDE Scaffold. Drawing glass inside its
-            // topBar slot fails to sample some nested offscreen Prismal cards;
-            // the overlay sees the complete recorded scrolling page instead.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .zIndex(1f)
-                            .onSizeChanged { size ->
-                                if (appBarHeightPx != size.height) appBarHeightPx = size.height
-                            },
-                    ) {
+                    // Miuix Scaffold paints its body first. Keep the title bar above
+                    // the complete screenLayer so scrolled text/cards are sampled
+                    // and blurred under the glass instead of drawn sharply over it.
+                    Box(modifier = Modifier.fillMaxWidth().zIndex(1f)) {
                         // Blur the real scene behind the header uniformly, not through
                         // a gradient or a perimeter lens. The bar stays rectangular.
                         if (glassEnabled) {
@@ -275,7 +230,29 @@ internal fun ModernSettingsScaffold(
                                 ),
                         )
                     }
-
+                },
+                bottomBar = bottomBar,
+            ) { padding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(0f)
+                        .then(
+                            if (glassEnabled) {
+                                // Nested Prismal cards have their own offscreen render layers.
+                                // Flatten those child layers with the text before recording
+                                // the entire page for the top-bar backdrop.
+                                Modifier
+                                    .prismalGlassLayer(screenLayer)
+                                    .graphicsLayer {
+                                        compositingStrategy = CompositingStrategy.Offscreen
+                                    }
+                            } else Modifier,
+                        ),
+                ) {
+                    content(padding)
+                }
+            }
             overlay()
         }
     }
