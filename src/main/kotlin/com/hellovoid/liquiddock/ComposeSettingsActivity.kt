@@ -86,6 +86,10 @@ private enum class Page(val titleRes: Int) {
     DockRecentBlacklist(R.string.page_dock_recent_blacklist),
     Divider(R.string.page_divider),
     Workstation(R.string.page_workstation),
+    WorkstationDock(R.string.page_workstation_dock),
+    WorkstationDesktop(R.string.page_workstation_desktop),
+    WorkstationAppsLandscape(R.string.page_workstation_apps_landscape),
+    WorkstationAppsPortrait(R.string.page_workstation_apps_portrait),
     Recents(R.string.page_recents),
 
     Liquid(R.string.page_liquid),
@@ -328,6 +332,31 @@ private val dockSpecs = listOf(
     IntSpec(ConfigSchema.Dock.SPACING, "Dock 图标间距"),
     IntSpec(ConfigSchema.Dock.BOTTOM_OFFSET, "Dock 底部偏移"),
 )
+private fun workstationSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> {
+    val keys = configs.mapTo(hashSetOf()) { it.name() }
+    return workstationSpecs.filter { it.key in keys }
+}
+
+private val workstationDockSpecs = workstationSpecsFor(
+    ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,
+    ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
+    ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
+    ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,
+)
+private val workstationDesktopSpecs = workstationSpecsFor(
+    ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET,
+)
+private val workstationAppsLandscapeSpecs = workstationSpecsFor(
+    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
+    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
+    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
+)
+private val workstationAppsPortraitSpecs = workstationSpecsFor(
+    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
+    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
+    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
+)
+
 private val dividerSpecs = listOf(
     IntSpec(ConfigSchema.Divider.WIDTH_DP, "分隔线宽度", "dp×10"),
     IntSpec(ConfigSchema.Divider.HEIGHT_SCALE, "分隔线高度比例", "%"),
@@ -587,6 +616,13 @@ private val dockEntries = listOf(
     HubEntry(Page.Divider, R.string.page_divider, "分隔线尺寸、位置、颜色与透明度"),
 )
 
+private val workstationEntries = listOf(
+    HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "Dock 长度、图标玻璃圆角与上下间距"),
+    HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "工作台桌面图标区域水平偏移"),
+    HubEntry(Page.WorkstationAppsLandscape, R.string.page_workstation_apps_landscape, "所有应用横屏水平与上下间距"),
+    HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
+)
+
 private val liquidEntries = listOf(
     HubEntry(Page.LiquidMaterial, R.string.page_liquid_material, "模糊、厚度、透射率与亮度"),
     HubEntry(Page.LiquidRefraction, R.string.page_liquid_refraction, "折射、法线、穹顶与位移"),
@@ -808,7 +844,23 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.DockGeometry -> DockGeometryPage(padding, prefs, masterEnabled)
                 Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
-                Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
+                Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.WorkstationDock -> WorkstationSpecPage(
+                    padding, prefs, masterEnabled, workstationDockSpecs,
+                    "工作台 Dock 的尺寸与图标位置参数",
+                )
+                Page.WorkstationDesktop -> WorkstationSpecPage(
+                    padding, prefs, masterEnabled, workstationDesktopSpecs,
+                    "工作台桌面区域只保留水平布局偏移",
+                )
+                Page.WorkstationAppsLandscape -> WorkstationSpecPage(
+                    padding, prefs, masterEnabled, workstationAppsLandscapeSpecs,
+                    "所有应用横屏布局参数",
+                )
+                Page.WorkstationAppsPortrait -> WorkstationSpecPage(
+                    padding, prefs, masterEnabled, workstationAppsPortraitSpecs,
+                    "所有应用竖屏布局参数",
+                )
                 Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
 
                 Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
@@ -1439,11 +1491,83 @@ private fun DividerPage(padding: PaddingValues, prefs: SharedPreferences, master
 }
 
 @Composable
-private fun WorkstationPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
-    var enabled by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(), ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault())) }
-    SettingsList(padding, stringResource(R.string.page_workstation)) {
-        BooleanSetting(prefs, ConfigSchema.Workstation.DOCK_CUSTOMIZATION, stringResource(R.string.workstation_customization), stringResource(R.string.workstation_customization_summary), masterEnabled) { enabled = it }
-        workstationSpecs.forEach { IntSetting(prefs, it, masterEnabled && enabled) }
+private fun WorkstationPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
+    var enabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
+                ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault(),
+            ),
+        )
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            PageHeader(
+                stringResource(R.string.page_workstation),
+                "工作台总开关留在入口页，Dock、桌面与所有应用分开设置。",
+            )
+        }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Workstation.DOCK_CUSTOMIZATION,
+                    stringResource(R.string.workstation_customization),
+                    stringResource(R.string.workstation_customization_summary),
+                    masterEnabled,
+                ) { enabled = it }
+            }
+        }
+        workstationEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+            }
+        }
+        if (!enabled) {
+            item {
+                ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
+                    Text("工作台自定义关闭时，子页参数保持保存但不参与运行时布局。", fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkstationSpecPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    specs: List<IntSpec>,
+    summary: String,
+) {
+    val enabled = prefs.getBoolean(
+        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
+        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault(),
+    )
+    SettingsList(
+        padding = padding,
+        title = "",
+        summary = summary,
+    ) {
+        specs.forEach { IntSetting(prefs, it, masterEnabled && enabled) }
     }
 }
 
