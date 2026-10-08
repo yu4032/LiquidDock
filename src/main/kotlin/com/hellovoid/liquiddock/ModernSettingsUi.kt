@@ -72,8 +72,8 @@ internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
 // Uniform background blur, with no progressive gradient or refractive edge rim.
-private val TOP_BAR_GLASS_BLUR = 12.dp
-private const val TOP_BAR_GLASS_TINT_ALPHA = 0.36f
+private val TOP_BAR_GLASS_BLUR = 14.dp
+private const val TOP_BAR_GLASS_TINT_ALPHA = 0.34f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
 private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
@@ -137,7 +137,7 @@ internal fun ModernSettingsScaffold(
                                 blurRadius = TOP_BAR_GLASS_BLUR,
                                 tint = surface,
                                 tintAlpha = TOP_BAR_GLASS_TINT_ALPHA,
-                                saturation = 1.15f,
+                                saturation = 1.35f,
                                 refractionHeightPx = 0f,
                                 refractionAmountPx = 0f,
                                 chromaticAberration = 0f,
