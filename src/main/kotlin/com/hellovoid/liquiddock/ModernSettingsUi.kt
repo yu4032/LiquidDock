@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -32,10 +33,12 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -43,12 +46,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.PrismalGlassSurface
+import com.styropyr0.prismal.drawPlainPrismalGlass
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
 import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
 import com.styropyr0.prismal.components.PrismalGlassToggle
+import com.styropyr0.prismal.effects.colorControls
+import com.styropyr0.prismal.effects.prismalBlur
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -65,6 +71,8 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
+internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
+internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
@@ -72,6 +80,7 @@ private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdr
 @Composable
 internal fun ModernSettingsScaffold(
     title: String,
+    glassEnabled: Boolean = true,
     showBack: Boolean,
     backLabel: String,
     onBack: () -> Unit,
@@ -86,6 +95,9 @@ internal fun ModernSettingsScaffold(
     val background = MiuixTheme.colorScheme.background
     val primary = MiuixTheme.colorScheme.primary
     val surface = MiuixTheme.colorScheme.surface
+    val density = LocalDensity.current
+    val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
+    val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -100,38 +112,46 @@ internal fun ModernSettingsScaffold(
                         ),
                     ),
                 )
-                .prismalGlassLayer(backgroundLayer),
+                .then(
+                    if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)
+                    else Modifier,
+                ),
         )
 
         CompositionLocalProvider(
-            LocalPrismalSurfaceBackdrop provides backgroundLayer,
-            LocalPrismalOverlayBackdrop provides overlayBackdrop,
+            LocalPrismalSurfaceBackdrop provides surfaceBackdrop,
+            LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
         ) {
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    PrismalGlassSurface(
-                        backdrop = overlayBackdrop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .drawBehind {
-                                drawLine(
-                                    color = Color.White.copy(alpha = 0.16f),
-                                    start = androidx.compose.ui.geometry.Offset(0f, size.height - 1f),
-                                    end = androidx.compose.ui.geometry.Offset(size.width, size.height - 1f),
-                                    strokeWidth = 1f,
-                                )
+                    val baseHeaderModifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            drawLine(
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                start = androidx.compose.ui.geometry.Offset(0f, size.height - 1f),
+                                end = androidx.compose.ui.geometry.Offset(size.width, size.height - 1f),
+                                strokeWidth = 1f,
+                            )
+                        }
+                    val headerModifier = if (glassEnabled) {
+                        baseHeaderModifier.drawPlainPrismalGlass(
+                            backdrop = overlayBackdrop,
+                            shape = { PrismalRoundedRectangle(0.dp) },
+                            effects = {
+                                prismalBlur(with(density) { 14.dp.toPx() })
+                                colorControls(saturation = 1.20f)
                             },
-                        shape = { PrismalRoundedRectangle(0.dp) },
-                        blurRadius = 14.dp,
-                        tint = surface,
-                        tintAlpha = 0.34f,
-                        saturation = 1.35f,
-                        refractionHeightPx = 0f,
-                        refractionAmountPx = 0f,
-                        chromaticAberration = 0f,
-                        depthEffect = false,
-                    ) {
+                            onDrawSurface = {
+                                drawRect(surface.copy(alpha = 0.34f))
+                            },
+                        )
+                    } else {
+                        baseHeaderModifier.background(surface.copy(alpha = 0.94f))
+                    }
+
+                    Box(modifier = headerModifier) {
                         SmallTopAppBar(
                             title = title,
                             color = Color.Transparent,
@@ -141,26 +161,43 @@ internal fun ModernSettingsScaffold(
                                         modifier = Modifier.size(52.dp),
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        PrismalGlassButton(
-                                            onClick = onBack,
-                                            backdrop = overlayBackdrop,
-                                            modifier = Modifier.size(40.dp),
-                                            height = 40.dp,
-                                            blurRadius = 7.dp,
-                                            refractionHeight = 9.dp,
-                                            refractionAmount = 12.dp,
-                                            pressLift = 2.dp,
-                                            contentPadding = PaddingValues(9.dp),
-                                            tint = surface,
-                                            tintAlpha = 0.20f,
-                                            depthEffect = false,
-                                        ) {
-                                            Icon(
-                                                imageVector = MiuixIcons.Back,
-                                                contentDescription = backLabel,
-                                                tint = MiuixTheme.colorScheme.onSurface,
-                                                modifier = Modifier.size(20.dp),
-                                            )
+                                        if (glassEnabled) {
+                                            PrismalGlassButton(
+                                                onClick = onBack,
+                                                backdrop = overlayBackdrop,
+                                                modifier = Modifier.size(40.dp),
+                                                height = 40.dp,
+                                                blurRadius = 7.dp,
+                                                refractionHeight = 9.dp,
+                                                refractionAmount = 12.dp,
+                                                pressLift = 2.dp,
+                                                contentPadding = PaddingValues(9.dp),
+                                                tint = surface,
+                                                tintAlpha = 0.20f,
+                                                depthEffect = false,
+                                            ) {
+                                                Icon(
+                                                    imageVector = MiuixIcons.Back,
+                                                    contentDescription = backLabel,
+                                                    tint = MiuixTheme.colorScheme.onSurface,
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .clip(RoundedCornerShape(20.dp))
+                                                    .clickable(onClick = onBack),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Icon(
+                                                    imageVector = MiuixIcons.Back,
+                                                    contentDescription = backLabel,
+                                                    tint = MiuixTheme.colorScheme.onSurface,
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -174,7 +211,10 @@ internal fun ModernSettingsScaffold(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .prismalGlassLayer(screenLayer),
+                        .then(
+                            if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
+                            else Modifier,
+                        ),
                 ) {
                     content(padding)
                 }
@@ -200,7 +240,7 @@ internal fun RestartScopesDialog(
     onRestart: () -> Unit,
 ) {
     if (!visible) return
-    val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current ?: return
+    val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
 
     BoxWithConstraints(
         modifier = Modifier
@@ -262,27 +302,45 @@ internal fun RestartScopesDialog(
                     .padding(top = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                PrismalGlassButton(
-                    onClick = { if (selected.isNotEmpty()) onRestart() },
-                    backdrop = backdrop,
-                    modifier = Modifier.alpha(if (selected.isNotEmpty()) 1f else 0.38f),
-                    isInteractive = selected.isNotEmpty(),
-                    height = 42.dp,
-                    blurRadius = 7.dp,
-                    refractionHeight = 9.dp,
-                    refractionAmount = 12.dp,
-                    pressLift = 0.dp,
-                    contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
-                    tint = Color(0xFFD73333),
-                    tintAlpha = 0.92f,
-                    depthEffect = false,
-                    depthShadow = null,
-                ) {
-                    Text(
-                        text = "重启",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                if (backdrop != null) {
+                    PrismalGlassButton(
+                        onClick = { if (selected.isNotEmpty()) onRestart() },
+                        backdrop = backdrop,
+                        modifier = Modifier.alpha(if (selected.isNotEmpty()) 1f else 0.38f),
+                        isInteractive = selected.isNotEmpty(),
+                        height = 42.dp,
+                        blurRadius = 7.dp,
+                        refractionHeight = 9.dp,
+                        refractionAmount = 12.dp,
+                        pressLift = 0.dp,
+                        contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                        tint = Color(0xFFD73333),
+                        tintAlpha = 0.92f,
+                        depthEffect = false,
+                        depthShadow = null,
+                    ) {
+                        Text(
+                            text = "重启",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(21.dp))
+                            .background(Color(0xFFD73333))
+                            .alpha(if (selected.isNotEmpty()) 1f else 0.38f)
+                            .clickable(enabled = selected.isNotEmpty(), onClick = onRestart)
+                            .padding(horizontal = 26.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "重启",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
         }
@@ -297,7 +355,6 @@ internal fun ModernBottomNavigation(
     onSelected: (Int) -> Unit,
 ) {
     val backdrop = LocalPrismalOverlayBackdrop.current
-    if (backdrop == null) return
     val selected by rememberUpdatedState(selectedIndex)
     val onSelect by rememberUpdatedState(onSelected)
 
@@ -314,24 +371,33 @@ internal fun ModernBottomNavigation(
                 .fillMaxWidth()
                 .height(64.dp),
         ) {
-            PrismalGlassBottomTabs(
-                selectedTabIndex = { selected },
-                onTabSelected = { index ->
-                    if (index != selected) onSelect(index)
-                },
-                backdrop = backdrop,
-                tabsCount = labels.size,
-                modifier = Modifier.fillMaxSize(),
-                tintDropletContent = false,
-                dropletContentTint = MiuixTheme.colorScheme.primary,
-            ) {
-                labels.indices.forEach { index ->
-                    PrismalGlassBottomTab(
-                        onClick = {
-                            if (index != selected) onSelect(index)
-                        },
-                    ) {}
+            if (backdrop != null) {
+                PrismalGlassBottomTabs(
+                    selectedTabIndex = { selected },
+                    onTabSelected = { index ->
+                        if (index != selected) onSelect(index)
+                    },
+                    backdrop = backdrop,
+                    tabsCount = labels.size,
+                    modifier = Modifier.fillMaxSize(),
+                    tintDropletContent = false,
+                    dropletContentTint = MiuixTheme.colorScheme.primary,
+                ) {
+                    labels.indices.forEach { index ->
+                        PrismalGlassBottomTab(
+                            onClick = {
+                                if (index != selected) onSelect(index)
+                            },
+                        ) {}
+                    }
                 }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(30.dp))
+                        .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                )
             }
 
             Row(
@@ -350,7 +416,10 @@ internal fun ModernBottomNavigation(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight(),
+                            .fillMaxHeight()
+                            .clickable {
+                                if (index != selected) onSelect(index)
+                            },
                         verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
@@ -431,8 +500,10 @@ internal fun ModernSurface(
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .padding(contentPadding)
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+                .clip(RoundedCornerShape(24.dp))
+                .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .padding(contentPadding),
             content = content,
         )
         return
@@ -561,6 +632,8 @@ internal fun Button(
         Row(
             modifier = resolved
                 .height(minHeight)
+                .clip(RoundedCornerShape(minHeight / 2))
+                .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.96f))
                 .clickable(enabled = enabled, onClick = onClick)
                 .padding(insideMargin),
             verticalAlignment = Alignment.CenterVertically,
@@ -638,6 +711,12 @@ internal fun SwitchPreference(
                     onSelect = { next -> if (enabled) onCheckedChange(next) },
                     backdrop = backdrop,
                 )
+            } else {
+                top.yukonga.miuix.kmp.basic.Switch(
+                    checked = checked,
+                    onCheckedChange = { next -> if (enabled) onCheckedChange(next) },
+                    enabled = enabled,
+                )
             }
         },
         onClick = { if (enabled) onCheckedChange(!checked) },
@@ -704,6 +783,19 @@ internal fun SliderPreference(
                     .padding(start = 18.dp, end = 18.dp, bottom = 14.dp)
                     .alpha(if (enabled) 1f else 0.42f),
             )
+        } else {
+            top.yukonga.miuix.kmp.basic.Slider(
+                value = value,
+                onValueChange = { next ->
+                    if (enabled) onValueChange(quantize(next))
+                },
+                valueRange = valueRange,
+                steps = steps,
+                enabled = enabled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+            )
         }
     }
 }
@@ -717,18 +809,30 @@ internal fun ModernGlassSlider(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current ?: return
+    val backdrop = LocalPrismalSurfaceBackdrop.current
     val currentValue by rememberUpdatedState(value)
-    PrismalGlassSlider(
-        value = { currentValue },
-        onValueChange = { next ->
-            if (enabled) onValueChange(next)
-        },
-        valueRange = valueRange,
-        visibilityThreshold = visibilityThreshold,
-        backdrop = backdrop,
-        modifier = modifier.alpha(if (enabled) 1f else 0.42f),
-    )
+    if (backdrop != null) {
+        PrismalGlassSlider(
+            value = { currentValue },
+            onValueChange = { next ->
+                if (enabled) onValueChange(next)
+            },
+            valueRange = valueRange,
+            visibilityThreshold = visibilityThreshold,
+            backdrop = backdrop,
+            modifier = modifier.alpha(if (enabled) 1f else 0.42f),
+        )
+    } else {
+        top.yukonga.miuix.kmp.basic.Slider(
+            value = currentValue,
+            onValueChange = { next ->
+                if (enabled) onValueChange(next)
+            },
+            valueRange = valueRange,
+            enabled = enabled,
+            modifier = modifier,
+        )
+    }
 }
 
 @Composable
@@ -739,13 +843,36 @@ internal fun ModernGlassStepper(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current ?: return
-    PrismalGlassStepper(
-        value = value,
-        onValueChange = { if (enabled) onValueChange(it) },
-        backdrop = backdrop,
-        valueRange = valueRange,
-        repeatOnHold = true,
-        modifier = modifier.alpha(if (enabled) 1f else 0.42f),
-    )
+    val backdrop = LocalPrismalSurfaceBackdrop.current
+    if (backdrop != null) {
+        PrismalGlassStepper(
+            value = value,
+            onValueChange = { if (enabled) onValueChange(it) },
+            backdrop = backdrop,
+            valueRange = valueRange,
+            repeatOnHold = true,
+            modifier = modifier.alpha(if (enabled) 1f else 0.42f),
+        )
+    } else {
+        Row(
+            modifier = modifier,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(
+                onClick = { onValueChange((value - 1).coerceAtLeast(valueRange.first)) },
+                enabled = enabled && value > valueRange.first,
+                minWidth = 36.dp,
+                minHeight = 36.dp,
+                insideMargin = PaddingValues(0.dp),
+            ) { Text("−") }
+            Button(
+                onClick = { onValueChange((value + 1).coerceAtMost(valueRange.last)) },
+                enabled = enabled && value < valueRange.last,
+                minWidth = 36.dp,
+                minHeight = 36.dp,
+                insideMargin = PaddingValues(0.dp),
+            ) { Text("+") }
+        }
+    }
 }
