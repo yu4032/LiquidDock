@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -79,11 +78,6 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
-
-// Ordinary translucent fill: unlike Prismal tint, it never applies BlendMode.Hue.
-@Composable
-private fun neutralGlassOverlay(alpha: Float): Color =
-    (if (isSystemInDarkTheme()) Color.Black else Color.White).copy(alpha = alpha)
 
 @Composable
 internal fun ModernSettingsScaffold(
@@ -179,7 +173,6 @@ internal fun ModernSettingsScaffold(
                                                 pressLift = 2.dp,
                                                 contentPadding = PaddingValues(9.dp),
                                                 tint = Color.Unspecified,
-                                                surfaceColor = neutralGlassOverlay(0.16f),
                                                 depthEffect = false,
                                             ) {
                                                 Icon(
@@ -335,7 +328,7 @@ internal fun RestartScopesDialog(
                         pressLift = 0.dp,
                         contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
                         tint = Color.Unspecified,
-                        surfaceColor = Color(0xFFD73333).copy(alpha = 0.92f),
+                        surfaceColor = Color(0xFFD73333).copy(alpha = 0.40f),
                         depthEffect = false,
                         depthShadow = null,
                     ) {
@@ -504,7 +497,6 @@ internal fun ModernTopActionButton(
         pressLift = 2.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         tint = Color.Unspecified,
-        surfaceColor = neutralGlassOverlay(0.16f),
         depthEffect = false,
     ) {
         Text(
@@ -544,7 +536,6 @@ internal fun ModernSurface(
         onClick = onClick,
         blurRadius = 12.dp,
         tint = Color.Unspecified,
-        surfaceColor = neutralGlassOverlay(0.18f),
         saturation = 1.32f,
         refractionHeightPx = 16f,
         refractionAmountPx = 21f,
@@ -684,7 +675,6 @@ internal fun Button(
         pressLift = 0.dp,
         contentPadding = insideMargin,
         tint = Color.Unspecified,
-        surfaceColor = neutralGlassOverlay(0.16f),
         depthEffect = false,
         depthShadow = null,
     ) {
