@@ -129,14 +129,23 @@ internal fun ModernSettingsScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            background,
-                            primary.copy(alpha = 0.07f),
-                            background,
-                        ),
-                    ),
+                .then(
+                    if (glassEnabled) {
+                        // Preserve the existing backdrop when glass is enabled.
+                        Modifier.background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    background,
+                                    primary.copy(alpha = 0.07f),
+                                    background,
+                                ),
+                            ),
+                        )
+                    } else {
+                        // In solid mode, gently darken the entire canvas without
+                        // changing any Cell color, transparency, or shape.
+                        Modifier.background(lerp(background, Color.Black, 0.06f))
+                    },
                 )
                 .then(
                     if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)
@@ -599,13 +608,7 @@ internal fun ModernSurface(
             modifier = modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(
-                    lerp(
-                        MiuixTheme.colorScheme.surface,
-                        MiuixTheme.colorScheme.onSurface,
-                        0.04f,
-                    ).copy(alpha = 0.94f),
-                )
+                .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(contentPadding),
             content = content,
