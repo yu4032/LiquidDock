@@ -148,6 +148,13 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void prismalSliderObservesExternalStepperAndResetUpdates() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        assertTrue(surfaces.contains("val currentValue by rememberUpdatedState(value)"));
+        assertTrue(surfaces.contains("value = { currentValue }"));
+    }
+
+    @Test
     public void appearanceAndMoreRootNavigationStayUserFacingAndFocused() throws Exception {
         String source = Files.readString(UI);
         String zh = Files.readString(STRINGS_ZH);
