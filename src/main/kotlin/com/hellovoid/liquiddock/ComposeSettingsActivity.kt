@@ -960,7 +960,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.AnimationSystem -> AnimationSystemPage(padding, prefs, masterEnabled)
                 Page.AnimationGui -> AnimationGuiPage(padding, prefs, masterEnabled)
                 Page.Data -> DataPage(padding, activity)
-                Page.About -> AboutPage(padding, activity)
+                Page.About -> AboutPage(padding, activity, prefs)
             }
         }
     }
@@ -1766,6 +1766,13 @@ private fun LiquidSamplingPage(
             stringResource(R.string.dock_frame_sync_summary),
             masterEnabled && liquidEnabled,
         )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
+            "表面法线可视化",
+            "以颜色显示玻璃表面法线方向，用于检查折射、曲面与光照响应",
+            masterEnabled && liquidEnabled,
+        )
     }
 }
 
@@ -2116,9 +2123,24 @@ private fun openUrl(context: Context, url: String) {
 }
 
 @Composable
-private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
+private fun AboutPage(
+    padding: PaddingValues,
+    activity: ComposeSettingsActivity,
+    prefs: SharedPreferences,
+) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader("许可", "LiquidDock 使用的第三方开源项目与许可证") }
+        item { SmallTitle("运行诊断") }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Debug.LOGGING,
+                    "诊断日志",
+                    "将 LiquidDock 运行诊断写入日志文件；修改后重启对应 Hook 作用域生效",
+                )
+            }
+        }
         item { SmallTitle("界面与运行框架") }
         item {
             SettingsCard {
