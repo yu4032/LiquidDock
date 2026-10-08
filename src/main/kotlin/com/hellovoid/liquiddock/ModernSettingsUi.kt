@@ -1,9 +1,12 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -76,6 +80,7 @@ internal fun ModernSettingsScaffold(
     onBack: () -> Unit,
     actions: @Composable RowScope.() -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
+    overlay: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val backgroundLayer = rememberPrismalGlassLayer()
@@ -166,6 +171,112 @@ internal fun ModernSettingsScaffold(
                         .prismalGlassLayer(screenLayer),
                 ) {
                     content(padding)
+                }
+            }
+            overlay()
+        }
+    }
+}
+
+internal data class RestartScopeItem(
+    val id: String,
+    val title: String,
+    val packageName: String,
+)
+
+@Composable
+internal fun RestartScopesDialog(
+    visible: Boolean,
+    items: List<RestartScopeItem>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onRestart: () -> Unit,
+) {
+    if (!visible) return
+    val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current ?: return
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.30f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        val listMaxHeight = (maxHeight - 240.dp).coerceAtLeast(120.dp)
+        ModernSurface(
+            modifier = Modifier
+                .padding(horizontal = 20.dp, vertical = 28.dp)
+                .widthIn(max = 520.dp),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+            onClick = {},
+        ) {
+            Text(
+                text = "重启作用域",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "选择需要重新加载 Hook 的进程作用域。",
+                modifier = Modifier.padding(top = 5.dp, bottom = 10.dp),
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = listMaxHeight)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                items.forEachIndexed { index, item ->
+                    SwitchPreference(
+                        checked = item.id in selected,
+                        onCheckedChange = { onToggle(item.id) },
+                        title = item.title,
+                        summary = item.packageName,
+                    )
+                    if (index != items.lastIndex) {
+                        ModernListDivider()
+                    }
+                }
+            }
+
+            Text(
+                text = "System Framework（system）需要重启设备，因此不在此列表。",
+                modifier = Modifier.padding(top = 10.dp),
+                fontSize = 11.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.52f),
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                PrismalGlassButton(
+                    onClick = { if (selected.isNotEmpty()) onRestart() },
+                    backdrop = backdrop,
+                    modifier = Modifier.alpha(if (selected.isNotEmpty()) 1f else 0.38f),
+                    isInteractive = selected.isNotEmpty(),
+                    height = 42.dp,
+                    blurRadius = 7.dp,
+                    refractionHeight = 9.dp,
+                    refractionAmount = 12.dp,
+                    pressLift = 0.dp,
+                    contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                    tint = Color(0xFFD73333),
+                    tintAlpha = 0.92f,
+                    depthEffect = false,
+                    depthShadow = null,
+                ) {
+                    Text(
+                        text = "重启",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
