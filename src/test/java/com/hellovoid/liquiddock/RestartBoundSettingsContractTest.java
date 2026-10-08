@@ -86,10 +86,12 @@ public class RestartBoundSettingsContractTest {
     }
 
     @Test
-    public void debugLoggingIsNotExposedOnTheUserFacingLicensePage() throws Exception {
+    public void diagnosticLoggingRemainsAvailableAndUsesScopeRestartWording() throws Exception {
         String source = Files.readString(UI);
-        assertFalse(source.contains("ConfigSchema.Debug.LOGGING"));
-        assertFalse(source.contains("\"调试日志\""));
+        assertTrue(source.contains("ConfigSchema.Debug.LOGGING"));
+        assertTrue(source.contains("\"运行诊断\""));
+        assertTrue(source.contains("\"诊断日志\""));
+        assertTrue(source.contains("重启对应 Hook 作用域生效"));
     }
 
     @Test
