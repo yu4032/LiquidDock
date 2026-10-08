@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -99,33 +100,17 @@ public class Miuix307EdgeOverscanContractTest {
     }
 
     @Test
-    public void resolvedSamplingInsetsAreAutomaticGuardPlusSignedUserExtra() throws Exception {
+    public void resolvedSamplingInsetsUseAutomaticOpticalGuardOnly() throws Exception {
         String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
         assertTrue(view.contains("private SamplingInsets resolveSamplingInsets(int width, int height)"));
         assertTrue(view.contains("PrismalSampling.requiredGuardPx("));
         assertTrue(view.contains("Math.max(horizontalOverscanPx(), opticalX)"));
-        assertTrue(view.contains("combineAutoGuardAndUserExtra(autoHorizontal, leftSamplingExtraPx)"));
-        assertTrue(view.contains("combineAutoGuardAndUserExtra(autoHorizontal, rightSamplingExtraPx)"));
-        assertTrue(view.contains("combineAutoGuardAndUserExtra(opticalY, topSamplingExtraPx)"));
-        assertTrue(view.contains("combineAutoGuardAndUserExtra(opticalY, bottomSamplingExtraPx)"));
-    }
-
-    @Test
-    public void signedSamplingExtraCanExpandOrShrinkAutomaticGuardButNeverBelowZero() throws Exception {
-        Method method;
-        try {
-            method = Miuix307PassBlurTextureView.class.getDeclaredMethod(
-                    "combineAutoGuardAndUserExtra", int.class, int.class);
-        } catch (NoSuchMethodException missing) {
-            fail("combineAutoGuardAndUserExtra must implement automatic guard + signed user extra");
-            return;
-        }
-        method.setAccessible(true);
-
-        assertEquals(340, method.invoke(null, 300, 40));
-        assertEquals(220, method.invoke(null, 300, -80));
-        assertEquals(0, method.invoke(null, 100, -200));
-        assertEquals(300, method.invoke(null, 300, 0));
+        assertTrue(view.contains("int left = autoHorizontal;"));
+        assertTrue(view.contains("int right = autoHorizontal;"));
+        assertTrue(view.contains("int top = opticalY;"));
+        assertTrue(view.contains("int bottom = opticalY;"));
+        assertFalse(view.contains("combineAutoGuardAndUserExtra"));
+        assertFalse(view.contains("topSamplingExtraPx"));
     }
 
     @Test
