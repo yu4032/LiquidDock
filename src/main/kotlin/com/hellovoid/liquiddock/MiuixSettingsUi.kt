@@ -40,12 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
@@ -144,27 +140,10 @@ internal fun LiquidDockSettingsScaffold(
                 val customRootHeader = !showBack
                 CompositionLocalProvider(LocalPrismalOverlayBackdrop provides overlayBackdrop) {
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        // Restore the previously validated top-bar glass implementation.
+                        // Keep the top bar as a hard-edged rectangular glass surface.
                         Box(
                             modifier = Modifier
                                 .matchParentSize()
-                                .graphicsLayer {
-                                    compositingStrategy = CompositingStrategy.Offscreen
-                                }
-                                .drawWithContent {
-                                    drawContent()
-                                    drawRect(
-                                        brush = Brush.verticalGradient(
-                                            colorStops = arrayOf(
-                                                0f to Color.Black,
-                                                0.58f to Color.Black,
-                                                0.82f to Color.Black.copy(alpha = 0.42f),
-                                                1f to Color.Transparent,
-                                            ),
-                                        ),
-                                        blendMode = BlendMode.DstIn,
-                                    )
-                                }
                                 .drawPlainPrismalGlass(
                                     backdrop = overlayBackdrop,
                                     shape = { PrismalRoundedRectangle(0.dp) },
