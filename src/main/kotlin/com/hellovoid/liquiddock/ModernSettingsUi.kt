@@ -737,6 +737,7 @@ internal fun SliderPreference(
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
+    val currentValue by rememberUpdatedState(value)
     val intervals = (steps + 1).coerceAtLeast(1)
     val stepSize = ((valueRange.endInclusive - valueRange.start) / intervals)
         .takeIf { it > 0f } ?: 0.01f
@@ -771,7 +772,7 @@ internal fun SliderPreference(
         )
         if (backdrop != null) {
             PrismalGlassSlider(
-                value = { value },
+                value = { currentValue },
                 onValueChange = { next ->
                     if (enabled) onValueChange(quantize(next))
                 },
@@ -785,7 +786,7 @@ internal fun SliderPreference(
             )
         } else {
             top.yukonga.miuix.kmp.basic.Slider(
-                value = value,
+                value = currentValue,
                 onValueChange = { next ->
                     if (enabled) onValueChange(quantize(next))
                 },
