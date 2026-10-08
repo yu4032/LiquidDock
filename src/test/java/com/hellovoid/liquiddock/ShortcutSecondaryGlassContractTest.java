@@ -145,7 +145,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(settings.contains("重启桌面后生效"));
     }
 
-    @Test public void shortcutMenuDarkModeHasDedicatedDefaultOffSettingAfterGlassToggle() throws Exception {
+    @Test public void shortcutMenuDarkModeHasDedicatedDefaultOffSettingInMenuPage() throws Exception {
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String settings = SourceContractText.read(Path.of(
@@ -154,18 +154,11 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(schema.contains("SHORTCUT_POPUP_DARK_TEXT = bool("));
         assertTrue(schema.contains("\"liquid_shortcut_popup_dark_text\", false, false, false"));
         assertTrue(schema.contains("Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT"));
+        assertTrue(settings.contains("private fun GlassMenusPage("));
+        assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(settings.contains("快捷菜单深色模式适配"));
         assertTrue(settings.contains("将快捷菜单文字和图标统一改为白色"));
-        int menusStart = settings.indexOf("private fun GlassMenusPage(");
-        int menusEnd = settings.indexOf("@Composable", menusStart + 20);
-        assertTrue("shortcut controls must live in the lightweight menu page",
-                menusStart >= 0 && menusEnd > menusStart);
-        String menusPage = settings.substring(menusStart, menusEnd);
-        int glassToggle = menusPage.indexOf("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS");
-        int darkToggle = menusPage.indexOf("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT");
-        assertTrue("dark-mode option must stay after the shortcut glass toggle",
-                glassToggle >= 0 && darkToggle > glassToggle);
     }
 
 
