@@ -468,6 +468,129 @@ private val shadowSpecs = listOf(
     IntSpec(ConfigSchema.Dock.STROKE_SHADOW_ALPHA, "描边阴影透明度", "", "stroke_shadow"),
 )
 
+private data class HubEntry(
+    val page: Page,
+    val titleRes: Int,
+    val summary: String,
+)
+
+private val overviewEntries = listOf(
+    HubEntry(Page.Dock, R.string.page_dock, "Dock 外观、位置、动画与最近程序"),
+    HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与采样"),
+    HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏与分屏布局"),
+    HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock、玻璃交互与系统界面"),
+)
+
+private val layoutEntries = listOf(
+    HubEntry(Page.Grid, R.string.page_grid, "网格基础、横屏、竖屏与分屏分别设置"),
+    HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、几何与最近程序"),
+    HubEntry(Page.Workstation, R.string.page_workstation, "工作台独立布局与 Dock 参数"),
+    HubEntry(Page.Recents, R.string.page_recents, "多任务壁纸背景与模糊"),
+)
+
+private val glassEntries = listOf(
+    HubEntry(Page.Liquid, R.string.page_liquid, "液态玻璃材质按光学主题拆分设置"),
+    HubEntry(Page.GlassComponents, R.string.page_glass_components, "图标、小组件、文件夹、菜单分别管理"),
+    HubEntry(Page.Stroke, R.string.page_stroke, "Dock 描边、方圆曲线与颜色"),
+    HubEntry(Page.Shadow, R.string.page_shadow, "Dock 与描边阴影"),
+    HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用独立适配"),
+)
+
+private val moreEntries = listOf(
+    HubEntry(Page.SecurityCenterSidebar, R.string.page_security_center_sidebar, "侧滑呼出与安全中心侧边栏"),
+    HubEntry(Page.Animation, R.string.page_animation, "LiquidDock 自有动画与过渡"),
+    HubEntry(Page.Data, R.string.page_data, "预设、导入与导出"),
+    HubEntry(Page.About, R.string.page_about, "项目、日志、引用与许可证"),
+)
+
+private val gridEntries = listOf(
+    HubEntry(Page.GridBasics, R.string.page_grid_basics, "图标大小、网格尺寸与小组件拉伸"),
+    HubEntry(Page.GridLandscape, R.string.page_grid_landscape, "横屏距离、行距与页面指示器"),
+    HubEntry(Page.GridPortrait, R.string.page_grid_portrait, "竖屏距离、行距与页面指示器"),
+    HubEntry(Page.GridSplit, R.string.page_grid_split, "分屏布局距离与对齐"),
+)
+
+private val dockEntries = listOf(
+    HubEntry(Page.DockBehavior, R.string.page_dock_behavior, "功能开关、尺寸动画与系统入口"),
+    HubEntry(Page.DockGeometry, R.string.page_dock_geometry, "高度、宽度、圆角、间距与底部位置"),
+    HubEntry(Page.DockRecentBlacklist, R.string.page_dock_recent_blacklist, "过滤最近程序，同时由后续候选补位"),
+    HubEntry(Page.Divider, R.string.page_divider, "分隔线尺寸、位置、颜色与透明度"),
+)
+
+private val liquidEntries = listOf(
+    HubEntry(Page.LiquidMaterial, R.string.page_liquid_material, "模糊、厚度、透射率与亮度"),
+    HubEntry(Page.LiquidRefraction, R.string.page_liquid_refraction, "折射、法线、穹顶与位移"),
+    HubEntry(Page.LiquidColor, R.string.page_liquid_color, "底色、色散与鲜艳度"),
+    HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "高光、边缘光、焦散与光源方向"),
+    HubEntry(Page.LiquidShadow, R.string.page_liquid_shadow, "玻璃内部阴影颜色与柔和度"),
+    HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "安全区、背景缩放、帧率与帧同步"),
+    HubEntry(Page.LiquidOs4, R.string.page_liquid_os4, "OS4 边缘反射与方向光"),
+)
+
+private val componentEntries = listOf(
+    HubEntry(Page.GlassIcons, R.string.page_glass_icons, "桌面图标、Dock 功能图标与多任务胶囊"),
+    HubEntry(Page.GlassWidgets, R.string.page_glass_widgets, "小组件玻璃、内容适配与组件隐藏"),
+    HubEntry(Page.GlassFolders, R.string.page_glass_folders, "大小文件夹玻璃与独立尺寸"),
+    HubEntry(Page.GlassMenus, R.string.page_glass_menus, "快捷菜单、系统顶部菜单与对话弹窗"),
+)
+
+private val animationEntries = listOf(
+    HubEntry(Page.AnimationWorkspace, R.string.page_animation_workspace, "工作区显隐、Dock 恢复与尺寸变化"),
+    HubEntry(Page.AnimationInteraction, R.string.page_animation_interaction, "玻璃按压进入与释放"),
+    HubEntry(Page.AnimationPopups, R.string.page_animation_popups, "快捷菜单与安全中心退出渐隐"),
+    HubEntry(Page.AnimationSystem, R.string.page_animation_system, "系统手势手柄等界面联动"),
+    HubEntry(Page.AnimationGui, R.string.page_animation_gui, "设置页面切换时长"),
+)
+
+private val animationWorkspaceVisibilitySpec = IntSpec(
+    ConfigSchema.Animation.WORKSPACE_VISIBILITY,
+    "工作区玻璃显隐",
+    "ms",
+    summary = "仅控制 LiquidDock 自己管理的工作区玻璃淡入淡出；HOME / Recents 原生过渡保持系统时序；重启桌面后生效",
+)
+private val animationDockIconRevealSpec = IntSpec(
+    ConfigSchema.Animation.DOCK_ICON_REVEAL,
+    "Dock 图标玻璃恢复",
+    "ms",
+    summary = "应用退出动画末尾的 Dock 图标玻璃恢复；重启桌面后生效",
+)
+private val animationDockResizeSpec = IntSpec(
+    ConfigSchema.Animation.DOCK_RESIZE,
+    "Dock 尺寸变化",
+    "ms",
+    summary = "LiquidDock 顺滑尺寸动画的时长；需关闭系统 Dock 尺寸过渡并开启 LiquidDock 顺滑尺寸动画；重启桌面后生效",
+)
+private val animationPressInSpec = IntSpec(
+    ConfigSchema.Animation.PRESS_IN,
+    "按压进入",
+    "ms",
+    summary = "LiquidDock 玻璃按下反馈速度；重启桌面后生效",
+)
+private val animationPressOutSpec = IntSpec(
+    ConfigSchema.Animation.PRESS_OUT,
+    "按压释放",
+    "ms",
+    summary = "LiquidDock 玻璃松手恢复速度；重启桌面后生效",
+)
+private val animationShortcutDismissSpec = IntSpec(
+    ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE,
+    "快捷菜单退出渐隐",
+    "ms",
+    summary = "桌面快捷菜单关闭时 LiquidDock 玻璃的快速淡出；重启桌面后生效",
+)
+private val animationSecurityCenterExitSpec = IntSpec(
+    ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE,
+    "安全中心退出渐隐",
+    "ms",
+    summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock 淡出；重启安全中心后生效",
+)
+private val animationSettingsPageSpec = IntSpec(
+    ConfigSchema.Animation.SETTINGS_PAGE,
+    "GUI 页面切换",
+    "ms",
+    summary = "设置页面滑动与淡入淡出；下一次页面切换立即生效，无需重启",
+)
+
 @Composable
 private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     val prefs = remember { PreferenceManager.getDefaultSharedPreferences(activity) }
