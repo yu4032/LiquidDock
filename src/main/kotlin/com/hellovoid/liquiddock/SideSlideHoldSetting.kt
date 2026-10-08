@@ -37,7 +37,7 @@ internal fun SideSlideHoldSetting(
             prefs.edit().putBoolean(key, it).apply()
         },
         title = "侧滑停靠呼出侧边栏",
-        summary = "侧滑达到第二段距离后短暂确认并弹出小 Dock；修改后重启桌面与安全中心",
+        summary = "Launcher 4.50 Pad：保留第一段系统返回反馈；达到第二段触发距离并短暂停留后振动、弹出小 Dock；修改后重启桌面与安全中心",
         enabled = enabled,
     )
     SliderPreference(
