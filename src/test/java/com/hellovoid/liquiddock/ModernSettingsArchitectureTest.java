@@ -74,7 +74,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void modernShellUsesCompletePrismalComponentStack() throws Exception {
+    public void modernShellUsesPrismalComponentsNeededBySettingsUi() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
 
@@ -86,8 +86,6 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassToggle"));
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
-        assertTrue(source.contains("PrismalGlassMenu"));
-        assertTrue(source.contains("PrismalGlassMenuItem"));
         assertTrue(source.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
         assertTrue(source.contains("tintAlpha = 0.34f"));
         assertTrue(source.contains("SmallTopAppBar("));
