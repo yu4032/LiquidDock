@@ -24,8 +24,6 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/DockRecentBlacklistPage.kt");
     private static final Path WIDGET_COMPONENTS = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentsPage.kt");
-    private static final Path WIDGET_DETAIL = Path.of(
-            "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentDetailActivity.kt");
 
     @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
