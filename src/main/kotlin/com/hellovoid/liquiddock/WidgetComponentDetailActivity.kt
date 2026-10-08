@@ -56,6 +56,10 @@ private fun WidgetComponentDetailScreen(
     widgetKey: String,
 ) {
     val prefs = remember(activity) { PreferenceManager.getDefaultSharedPreferences(activity) }
+    val uiPrefs = remember(activity) {
+        activity.getSharedPreferences(SETTINGS_UI_PREFS, Context.MODE_PRIVATE)
+    }
+    val glassEnabled = uiPrefs.getBoolean(SETTINGS_UI_GLASS_ENABLED, true)
     val catalogPrefs = remember(activity) {
         activity.getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)
     }
@@ -103,6 +107,7 @@ private fun WidgetComponentDetailScreen(
 
     ModernSettingsScaffold(
         title = if (selectedType == null) owner else "$owner · ${componentTypeTitle(selectedType!!)}",
+        glassEnabled = glassEnabled,
         showBack = true,
         backLabel = "返回",
         onBack = {
