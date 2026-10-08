@@ -156,7 +156,7 @@
 - 检查 `liquid_edge_band`、`liquid_highlight_alpha`、`liquid_recents_prearm_distance`：当前没有可见 GUI 控件；仍须验证配置链是否仅有声明、预设或历史兼容用途，再决定删除键或保留迁移。
 - 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
 - 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
-- 四边 `SAMPLING_EXTRA_TOP/BOTTOM/LEFT/RIGHT` 的**手动 GUI 控件已在 PR #290 移除**，因为自动光学 guard 足以承担一般用户的采样边界管理；底层读取与补偿算法仍保留以免旧配置升级后出现画面变化。后续单独评估是否在迁移时将历史非零补偿归零，并补齐正负补偿、底限裁剪、双侧比例压缩与无 Prismal 参数的行为测试。
+- 四边 `SAMPLING_EXTRA_TOP/BOTTOM/LEFT/RIGHT` 的 GUI、schema、预设、运行时读取与手动补偿算法已在 PR #290 完全退役；`ConfigMigration` 在升级时清除遗留值。仅保留 `PrismalSampling.requiredGuardPx` 自动保护区及 GPU 纹理上限裁剪。后续仅需维护自动光学 guard/纹理裁剪测试，不重新引入手动控制。
 - 本项不包括 GUI 滑条拖动掉帧优化；高频 SharedPreferences → Remote Preferences 更新另行性能分析，确保最终值可靠落盘。
 
 ---
