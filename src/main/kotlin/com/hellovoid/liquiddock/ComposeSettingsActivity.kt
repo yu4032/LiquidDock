@@ -595,47 +595,92 @@ private val animationSettingsPageSpec = IntSpec(
 private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     val prefs = remember { PreferenceManager.getDefaultSharedPreferences(activity) }
     var masterEnabled by remember {
-        mutableStateOf(prefs.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault()))
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Core.ENABLED.name(),
+                ConfigSchema.Core.ENABLED.uiDefault(),
+            ),
+        )
     }
     var page by rememberSaveable { mutableStateOf(Page.Home) }
-    BackHandler(enabled = page != Page.Home) { page = parentPage(page) }
-    Scaffold(
-        topBar = {
-            SmallTopAppBar(
-                title = stringResource(page.titleRes),
-                navigationIcon = {
-                    if (page != Page.Home) TextButton(text = stringResource(R.string.action_back), onClick = { page = parentPage(page) })
-                },
-                actions = {
-                    val descriptor = THIRD_PARTY_APP_PAGES[page]
-                    if (page == Page.SecurityCenterSidebar) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_security_center_and_launcher),
-                            onClick = { activity.restartSecurityCenterAndLauncher() },
-                        )
-                    } else if (page == Page.Animation) {
-                        TextButton(
-                            text = stringResource(R.string.action_restart_security_center_and_launcher),
-                            onClick = { activity.restartSecurityCenterAndLauncher() },
-                        )
-                    } else if (descriptor != null) {
-                        TextButton(
-                            text = stringResource(descriptor.restartLabelRes),
-                            onClick = {
-                                activity.restartPackageProcess(
-                                    descriptor.packageName,
-                                    descriptor.displayName,
-                                )
-                            },
-                        )
-                    } else {
-                        TextButton(text = stringResource(R.string.action_restart_launcher), onClick = { activity.restartLauncher() })
-                    }
-                    if (page == Page.Home) {
-                        TextButton(text = stringResource(R.string.action_restart_system_ui), onClick = { activity.restartSystemUi() })
-                    }
-                },
-            )
+    var navigationStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    val root = isRootPage(page)
+    val selectedRootIndex = ROOT_PAGES.indexOf(page).coerceAtLeast(0)
+
+    fun navigateTo(target: Page) {
+        if (target == page) return
+        navigationStack = ArrayList(navigationStack).apply { add(page.name) }
+        page = target
+    }
+
+    fun navigateBack() {
+        val previous = navigationStack.lastOrNull()
+            ?.let { runCatching { Page.valueOf(it) }.getOrNull() }
+        navigationStack = ArrayList(navigationStack.dropLast(1))
+        page = previous ?: Page.Home
+    }
+
+    fun selectRoot(target: Page) {
+        navigationStack = arrayListOf()
+        page = target
+    }
+
+    BackHandler(enabled = !root) { navigateBack() }
+
+    ModernSettingsScaffold(
+        title = stringResource(page.titleRes),
+        showBack = !root,
+        backLabel = stringResource(R.string.action_back),
+        onBack = { navigateBack() },
+        actions = {
+            val descriptor = THIRD_PARTY_APP_PAGES[page]
+            when {
+                page == Page.SecurityCenterSidebar ||
+                        page == Page.Animation ||
+                        page == Page.AnimationPopups -> {
+                    ModernTopActionButton(
+                        text = stringResource(R.string.action_restart_security_center_and_launcher),
+                        onClick = { activity.restartSecurityCenterAndLauncher() },
+                    )
+                }
+                descriptor != null -> {
+                    ModernTopActionButton(
+                        text = stringResource(descriptor.restartLabelRes),
+                        onClick = {
+                            activity.restartPackageProcess(
+                                descriptor.packageName,
+                                descriptor.displayName,
+                            )
+                        },
+                    )
+                }
+                else -> {
+                    ModernTopActionButton(
+                        text = stringResource(R.string.action_restart_launcher),
+                        onClick = { activity.restartLauncher() },
+                    )
+                }
+            }
+            if (page == Page.Home) {
+                ModernTopActionButton(
+                    text = stringResource(R.string.action_restart_system_ui),
+                    onClick = { activity.restartSystemUi() },
+                )
+            }
+        },
+        bottomBar = {
+            if (root) {
+                ModernBottomNavigation(
+                    labels = listOf(
+                        stringResource(R.string.tab_overview),
+                        stringResource(R.string.tab_layout),
+                        stringResource(R.string.tab_glass),
+                        stringResource(R.string.tab_more),
+                    ),
+                    selectedIndex = selectedRootIndex,
+                    onSelected = { index -> selectRoot(ROOT_PAGES[index]) },
+                )
+            }
         },
     ) { padding ->
         AnimatedContent(
@@ -644,54 +689,132 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 val duration = prefs.getInt(
                     ConfigSchema.Animation.SETTINGS_PAGE.name(),
                     ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
-                ).coerceIn(0, 2000)
+                ).coerceIn(0, 700)
                 if (targetState.ordinal > initialState.ordinal) {
-                    (slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration))) togetherWith
-                            (slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration)))
+                    (slideInHorizontally(tween(duration)) { it / 4 } + fadeIn(tween(duration))) togetherWith
+                            (slideOutHorizontally(tween(duration)) { -it / 6 } + fadeOut(tween(duration)))
                 } else {
-                    (slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration))) togetherWith
-                            (slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration)))
+                    (slideInHorizontally(tween(duration)) { -it / 4 } + fadeIn(tween(duration))) togetherWith
+                            (slideOutHorizontally(tween(duration)) { it / 6 } + fadeOut(tween(duration)))
                 }
             },
-            label = "page",
+            label = "settings-page",
         ) { target ->
             when (target) {
-                Page.Home -> HomePage(padding, prefs, masterEnabled, { masterEnabled = it }) { page = it }
-                Page.Grid -> GridPage(padding, prefs, masterEnabled)
-                Page.Dock -> DockPage(padding, prefs, masterEnabled) { page = Page.DockRecentBlacklist }
+                Page.Home -> HomePage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                    { masterEnabled = it },
+                    ::navigateTo,
+                )
+                Page.LayoutHub -> HubPage(
+                    padding,
+                    "把大功能拆成独立子页，减少单页控件与重组压力",
+                    layoutEntries,
+                    ::navigateTo,
+                )
+                Page.GlassHub -> HubPage(
+                    padding,
+                    "材质参数与组件适配分离，按主题进入需要的页面",
+                    glassEntries,
+                    ::navigateTo,
+                )
+                Page.MoreHub -> HubPage(
+                    padding,
+                    "系统联动、动画、数据与项目信息",
+                    moreEntries,
+                    ::navigateTo,
+                )
+
+                Page.Grid -> GridPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled)
+                Page.GridLandscape -> GridLandscapePage(padding, prefs, masterEnabled)
+                Page.GridPortrait -> GridPortraitPage(padding, prefs, masterEnabled)
+                Page.GridSplit -> GridSplitPage(padding, prefs, masterEnabled)
+
+                Page.Dock -> DockPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.DockBehavior -> DockBehaviorPage(padding, prefs, masterEnabled)
+                Page.DockGeometry -> DockGeometryPage(padding, prefs, masterEnabled)
                 Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
                 Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled)
                 Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
-                Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
+
+                Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.LiquidMaterial -> LiquidSpecPage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                    "控制玻璃主体的基础材质感",
+                    liquidMaterialSpecs,
                 )
-                Page.Liquid -> LiquidPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                    openLauncherHighlights = { page = Page.LauncherHighlights },
-                    openWidgetComponents = { page = Page.WidgetComponents },
-                    openThirdPartyApps = { page = Page.ThirdPartyApps },
-                    openDialogCustomization = { page = Page.DialogCustomization },
+                Page.LiquidRefraction -> LiquidSpecPage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                    "折射形状、位移、边缘衰减与表面几何",
+                    liquidRefractionSpecs,
                 )
-                Page.DialogCustomization -> DialogGlassSettingsPage(
-                    padding, prefs, masterEnabled,
+                Page.LiquidColor -> LiquidSpecPage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                    "底色、色散与背景鲜艳度",
+                    liquidColorSpecs,
                 )
+                Page.LiquidLighting -> LiquidSpecPage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                    "镜面高光、边缘光、焦散与光源方向",
+                    liquidLightingSpecs,
+                )
+                Page.LiquidShadow -> LiquidSpecPage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                    "玻璃内部阴影颜色与柔和程度",
+                    liquidShadowSpecs,
+                )
+                Page.LiquidSampling -> LiquidSamplingPage(padding, prefs, masterEnabled)
+                Page.LiquidOs4 -> LiquidSpecPage(
+                    padding,
+                    prefs,
+                    masterEnabled,
+                    "OS4 风格边缘反射与方向补光",
+                    liquidOs4Specs,
+                )
+
+                Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
+                Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled)
+                Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.DialogCustomization -> DialogGlassSettingsPage(padding, prefs, masterEnabled)
                 Page.ThirdPartyApps -> ThirdPartyAppsPage(
                     padding = padding,
                     prefs = prefs,
                     masterEnabled = masterEnabled,
-                    openGboard = { page = Page.Gboard },
+                    openGboard = { navigateTo(Page.Gboard) },
                 )
                 Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
                 Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, prefs, masterEnabled)
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
                 Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
-                Page.Animation -> AnimationPage(padding, prefs, masterEnabled)
+
+                Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                )
+                Page.Animation -> AnimationPage(padding, ::navigateTo)
+                Page.AnimationWorkspace -> AnimationWorkspacePage(padding, prefs, masterEnabled)
+                Page.AnimationInteraction -> AnimationInteractionPage(padding, prefs, masterEnabled)
+                Page.AnimationPopups -> AnimationPopupsPage(padding, prefs, masterEnabled)
+                Page.AnimationSystem -> AnimationSystemPage(padding, prefs, masterEnabled)
+                Page.AnimationGui -> AnimationGuiPage(padding, prefs, masterEnabled)
                 Page.Data -> DataPage(padding, activity)
                 Page.About -> AboutPage(padding, activity, prefs)
             }
