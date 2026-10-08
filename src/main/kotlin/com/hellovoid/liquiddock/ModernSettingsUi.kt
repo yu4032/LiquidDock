@@ -173,6 +173,7 @@ internal fun ModernSettingsScaffold(
                                                 pressLift = 2.dp,
                                                 contentPadding = PaddingValues(9.dp),
                                                 tint = Color.Unspecified,
+                                                surfaceColor = surface.copy(alpha = 0.20f),
                                                 depthEffect = false,
                                             ) {
                                                 Icon(
@@ -497,6 +498,7 @@ internal fun ModernTopActionButton(
         pressLift = 2.dp,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         tint = Color.Unspecified,
+        surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.20f),
         depthEffect = false,
     ) {
         Text(
@@ -536,10 +538,11 @@ internal fun ModernSurface(
         onClick = onClick,
         blurRadius = 12.dp,
         tint = Color.Unspecified,
-        saturation = 1.32f,
+        surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.26f),
+        saturation = 1.4f,
         refractionHeightPx = 16f,
-        refractionAmountPx = 21f,
-        chromaticAberration = 0.28f,
+        refractionAmountPx = 22f,
+        chromaticAberration = 0.35f,
         depthEffect = true,
     ) {
         Column(
@@ -675,6 +678,7 @@ internal fun Button(
         pressLift = 0.dp,
         contentPadding = insideMargin,
         tint = Color.Unspecified,
+        surfaceColor = MiuixTheme.colorScheme.surface.copy(alpha = 0.20f),
         depthEffect = false,
         depthShadow = null,
     ) {
