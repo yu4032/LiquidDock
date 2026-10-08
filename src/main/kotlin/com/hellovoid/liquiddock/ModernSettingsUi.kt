@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +36,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -44,6 +49,10 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -76,6 +85,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.window.WindowDialog
 
 internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
@@ -830,6 +840,101 @@ internal fun SwitchPreference(
     )
 }
 
+/**
+ * Parse direct numeric input without silently storing an out-of-range or
+ * fractional integer value. Persistence and quantization remain with the
+ * existing setting's own callback.
+ */
+internal fun parseNumericSettingInput(
+    raw: String,
+    integerOnly: Boolean,
+    min: Float,
+    max: Float,
+): Float? {
+    val normalized = raw.trim().replace(',', '.')
+    val value = if (integerOnly) {
+        normalized.toIntOrNull()?.toFloat()
+    } else {
+        normalized.toFloatOrNull()
+    }
+    return value?.takeIf { it.isFinite() && it in min..max }
+}
+
+@Composable
+internal fun NumericSettingInputDialog(
+    visible: Boolean,
+    title: String,
+    currentText: String,
+    valueRange: ClosedFloatingPointRange<Float>,
+    integerOnly: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Float) -> Unit,
+) {
+    var entered by remember(title) { mutableStateOf(TextFieldValue(currentText)) }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(visible) {
+        if (visible) {
+            entered = TextFieldValue(currentText, selection = TextRange(0, currentText.length))
+        }
+    }
+    val parsed = parseNumericSettingInput(
+        entered.text, integerOnly, valueRange.start, valueRange.endInclusive,
+    )
+    WindowDialog(
+        show = visible,
+        title = title,
+        onDismissRequest = onDismiss,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            val minText = if (integerOnly) valueRange.start.roundToInt().toString() else valueRange.start.toString()
+            val maxText = if (integerOnly) valueRange.endInclusive.roundToInt().toString() else valueRange.endInclusive.toString()
+            Text(
+                text = "允许范围：$minText – $maxText",
+                fontSize = 13.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+            )
+            top.yukonga.miuix.kmp.basic.TextField(
+                value = entered,
+                onValueChange = { entered = it },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (integerOnly) KeyboardType.Number else KeyboardType.Decimal,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { parsed?.let(onConfirm) },
+                ),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(onClick = onDismiss, minWidth = 72.dp, minHeight = 40.dp) {
+                    Text("取消")
+                }
+                Spacer(Modifier.padding(horizontal = 5.dp))
+                Button(
+                    onClick = { parsed?.let(onConfirm) },
+                    enabled = parsed != null,
+                    minWidth = 72.dp,
+                    minHeight = 40.dp,
+                ) {
+                    Text("确定")
+                }
+            }
+        }
+    }
+}
+
 @Composable
 internal fun SliderPreference(
     value: Float,
@@ -845,6 +950,7 @@ internal fun SliderPreference(
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
     val currentValue by rememberUpdatedState(value)
+    var editingValue by remember(title) { mutableStateOf(false) }
     val intervals = (steps + 1).coerceAtLeast(1)
     val stepSize = ((valueRange.endInclusive - valueRange.start) / intervals)
         .takeIf { it > 0f } ?: 0.01f
@@ -869,6 +975,10 @@ internal fun SliderPreference(
                     if (valueText.isNotBlank()) {
                         Text(
                             text = valueText,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(enabled = enabled) { editingValue = true }
+                                .padding(horizontal = 8.dp, vertical = 9.dp),
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.66f),
                             fontSize = 13.sp,
                         )
@@ -906,6 +1016,20 @@ internal fun SliderPreference(
             )
         }
     }
+    val integerOnly = valueRange.start % 1f == 0f &&
+        valueRange.endInclusive % 1f == 0f && stepSize % 1f == 0f
+    NumericSettingInputDialog(
+        visible = editingValue,
+        title = title,
+        currentText = if (integerOnly) value.roundToInt().toString() else value.toString(),
+        valueRange = valueRange,
+        integerOnly = integerOnly,
+        onDismiss = { editingValue = false },
+        onConfirm = { next ->
+            onValueChange(quantize(next))
+            editingValue = false
+        },
+    )
 }
 
 @Composable
