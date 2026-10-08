@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -34,11 +35,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -46,20 +46,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.PrismalGlassSurface
-import com.styropyr0.prismal.drawPlainPrismalGlass
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
 import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
 import com.styropyr0.prismal.components.PrismalGlassToggle
-import com.styropyr0.prismal.effects.colorControls
-import com.styropyr0.prismal.effects.prismalBlur
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -73,6 +77,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
+
+private val TOP_BAR_PROGRESSIVE_BLUR = ProgressiveBlur.Top.copy(
+    startFraction = 0.12f,
+    endFraction = 1f,
+    curve = 1.25f,
+)
+private const val TOP_BAR_BLUR_RADIUS = 16f
+private const val TOP_BAR_SURFACE_ALPHA = 0.66f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
@@ -95,9 +107,16 @@ internal fun ModernSettingsScaffold(
     val background = MiuixTheme.colorScheme.background
     val primary = MiuixTheme.colorScheme.primary
     val surface = MiuixTheme.colorScheme.surface
-    val density = LocalDensity.current
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
+    val barBackdrop = if (glassEnabled && isRuntimeShaderSupported()) {
+        rememberLayerBackdrop {
+            drawRect(surface)
+            drawContent()
+        }
+    } else {
+        null
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -125,31 +144,26 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    val headerDividerColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                    val baseHeaderModifier = Modifier
-                        .fillMaxWidth()
-                        .drawBehind {
-                            drawLine(
-                                color = headerDividerColor,
-                                start = androidx.compose.ui.geometry.Offset(0f, size.height - 1f),
-                                end = androidx.compose.ui.geometry.Offset(size.width, size.height - 1f),
-                                strokeWidth = 1f,
+                    val headerModifier = if (barBackdrop != null) {
+                        Modifier
+                            .fillMaxWidth()
+                            .progressiveTextureBlur(
+                                backdrop = barBackdrop,
+                                shape = RectangleShape,
+                                blurRadius = TOP_BAR_BLUR_RADIUS,
+                                gradient = TOP_BAR_PROGRESSIVE_BLUR,
+                                colors = BlurDefaults.blurColors(
+                                    blendColors = listOf(
+                                        BlendColorEntry(
+                                            color = surface.copy(alpha = TOP_BAR_SURFACE_ALPHA),
+                                        ),
+                                    ),
+                                ),
                             )
-                        }
-                    val headerModifier = if (glassEnabled) {
-                        baseHeaderModifier.drawPlainPrismalGlass(
-                            backdrop = overlayBackdrop,
-                            shape = { PrismalRoundedRectangle(0.dp) },
-                            effects = {
-                                prismalBlur(with(density) { 14.dp.toPx() })
-                                colorControls(saturation = 1.20f)
-                            },
-                            onDrawSurface = {
-                                drawRect(surface.copy(alpha = 0.34f))
-                            },
-                        )
                     } else {
-                        baseHeaderModifier.background(surface.copy(alpha = 0.94f))
+                        Modifier
+                            .fillMaxWidth()
+                            .background(surface.copy(alpha = 0.94f))
                     }
 
                     Box(modifier = headerModifier) {
@@ -214,6 +228,10 @@ internal fun ModernSettingsScaffold(
                         .fillMaxSize()
                         .then(
                             if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
+                            else Modifier,
+                        )
+                        .then(
+                            if (barBackdrop != null) Modifier.layerBackdrop(barBackdrop)
                             else Modifier,
                         ),
                 ) {
@@ -393,11 +411,19 @@ internal fun ModernBottomNavigation(
                     }
                 }
             } else {
+                val fallbackShape = RoundedCornerShape(30.dp)
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .clip(RoundedCornerShape(30.dp))
-                        .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                        .background(
+                            color = MiuixTheme.colorScheme.surface.copy(alpha = 0.96f),
+                            shape = fallbackShape,
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+                            shape = fallbackShape,
+                        ),
                 )
             }
 
