@@ -257,7 +257,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(configRefs.contains("ConfigSchema.Glass.PRISMAL_SHOW_NORMALS"));
 
         assertTrue(countDistinctRefs(gboard, "GboardGlassPreferences") >= 11);
-        assertTrue(countDistinctRefs(search, "MiuiSearchboxGlassPreferences") >= 7);
+        assertTrue(countDistinctRefs(gboard, "MiuiSearchboxGlassPreferences") >= 7);
         assertTrue(countDistinctRefs(widgetCatalog + "\n" + widgetDetail, "WidgetComponentStore") >= 15);
     }
 
