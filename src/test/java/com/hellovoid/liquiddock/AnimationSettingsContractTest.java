@@ -34,7 +34,7 @@ public class AnimationSettingsContractTest {
         assertTrue(ui.contains("ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE"));
         assertTrue(ui.contains("ConfigSchema.Animation.SETTINGS_PAGE"));
         assertTrue(ui.contains("ConfigSchema.Animation.DOCK_RESIZE"));
-        assertTrue(ui.contains("系统原生弹出动画保持原样"));
+        assertTrue(ui.contains("调整快捷菜单与安全中心玻璃的退出渐隐"));
     }
 
     @Test
