@@ -28,7 +28,7 @@
     <string name="page_liquid">液态玻璃</string>
     <string name="page_security_center_sidebar">安全中心侧边栏</string>
     <string name="home_security_center_sidebar_summary">侧滑呼出、第二段触发距离与侧边栏液态玻璃</string>
-    <string name="security_center_sidebar_header_summary">集中管理 Launcher 侧滑呼出与安全中心侧边栏材质；相关设置修改后建议重启桌面与安全中心。</string>
+    <string name="security_center_sidebar_header_summary">集中管理 Launcher 侧滑呼出与安全中心侧边栏材质；需要重新加载时，在右上角“重启作用域”中选择桌面与安全中心。</string>
     <string name="security_center_sidebar_category_gesture">侧滑呼出</string>
     <string name="security_center_sidebar_category_appearance">外观</string>
     <string name="page_dialog_customization">对话弹窗自定义</string>
@@ -50,14 +50,14 @@
     <string name="home_grid_summary">自由主界面网格、横竖屏边距、分屏对齐与指示器</string>
     <string name="home_dock_summary">尺寸、圆角、图标间距、位置与模糊</string>
     <string name="home_divider_summary">独立控制分隔线宽度、高度、位置、颜色与透明度</string>
-    <string name="home_workstation_summary">独立长度与间距；不继承普通 Dock 参数</string>
+    <string name="home_workstation_summary">独立 Dock 几何、桌面水平偏移与所有应用横竖屏间距</string>
     <string name="home_recents_summary">自定义任务卡片后方的全屏壁纸背景模糊</string>
     <string name="home_liquid_summary">模糊、折射、色散、颜色、光照与高光控制</string>
     <string name="home_stroke_summary">底色、方圆曲线与线宽</string>
     <string name="home_shadow_summary">整个 Dock 阴影与描边阴影</string>
-    <string name="home_animation_summary">仅调整 LiquidDock 自有显隐、按压、Dock 与退出渐隐；系统原生时序保持不变</string>
+    <string name="home_animation_summary">工作区、Dock、玻璃交互、弹出界面、系统联动与设置页动画</string>
     <string name="home_data_title">预设、导入与导出</string>
-    <string name="home_data_summary">默认预设、JSON 备份与重启桌面</string>
+    <string name="home_data_summary">默认预设、JSON 备份与参数恢复</string>
     <string name="home_about_title">引用、参考项目与开源许可</string>
     <string name="home_about_summary">查看项目致谢、依赖及许可证</string>
     <string name="grid_header_summary">布局区域会先避让系统 Dock，再应用距离偏移</string>
@@ -77,7 +77,7 @@
     <string name="dock_frame_sync_summary">使Dock玻璃背景与屏幕刷新同步，改善高刷新率下背景更新不跟手的问题；开关即时生效</string>
     <string name="option_off">关闭</string>
     <string name="workstation_customization">自定义工作台</string>
-    <string name="workstation_customization_summary">工作台使用独立的 Dock 长度和 8 列水平距离；重启桌面生效</string>
+    <string name="workstation_customization_summary">工作台使用独立的 Dock 几何、桌面水平偏移与所有应用横竖屏间距；适配当前实际网格列数，重启桌面生效</string>
     <string name="recents_header_summary">调整任务卡片后方的系统壁纸模糊程度；修改后重启桌面生效。</string>
     <string name="liquid_enable">启用液态玻璃</string>
     <string name="liquid_enable_summary">关闭会立即移除当前玻璃效果；重新启用后部分场景需重启桌面生效</string>
@@ -89,8 +89,6 @@
     <string name="liquid_material_blur">HyperOS 高级材质</string>
     <string name="liquid_dynamic_capture">动态应用持续捕获</string>
     <string name="liquid_dynamic_capture_summary">游戏或视频中 Dock 展开时持续刷新；Dock 收起后立即停止</string>
-    <string name="pref_debug_log">调试日志</string>
-    <string name="pref_debug_log_summary">向 logcat 输出 [DC] 诊断日志（关于页），重启桌面生效</string>
     <string name="liquid_header_summary">组件开关可即时调整；部分光学与性能参数需按项目说明重启桌面生效。</string>
     <string name="page_launcher_highlights">图标、文件夹与小组件高光</string>
     <string name="launcher_highlights_entry">图标、文件夹与小组件高光层</string>
