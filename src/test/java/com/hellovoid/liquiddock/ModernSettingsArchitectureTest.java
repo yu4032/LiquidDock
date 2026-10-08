@@ -97,8 +97,10 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
 
-        assertTrue(source.contains("TOP_BAR_SOLID_ALPHA = 0.94f"));
-        assertTrue(source.contains("surface.copy(alpha = if (glassEnabled) TOP_BAR_SOLID_ALPHA else 1f)"));
+        assertTrue(source.contains("TOP_BAR_GLASS_BLUR = 12.dp"));
+        assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.36f"));
+        assertTrue(source.contains("blurRadius = TOP_BAR_GLASS_BLUR"));
+        assertTrue(source.contains("backdrop = overlayBackdrop"));
         assertFalse(source.contains(".progressiveTextureBlur("));
         assertFalse(source.contains("ProgressiveBlur.Top.copy("));
         assertFalse(source.contains("rememberLayerBackdrop("));
@@ -112,11 +114,15 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void solidHeaderHasNoFourSidedPrismalRim() throws Exception {
+    public void uniformGlassHeaderHasNoRefractiveRimOrGradient() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        assertTrue(surfaces.contains("val headerModifier = Modifier"));
-        assertTrue(surfaces.contains("Box(modifier = headerModifier)"));
+        assertTrue(surfaces.contains("modifier = Modifier.matchParentSize()"));
+        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
+        assertTrue(surfaces.contains("refractionHeightPx = 0f"));
+        assertTrue(surfaces.contains("refractionAmountPx = 0f"));
+        assertTrue(surfaces.contains("chromaticAberration = 0f"));
+        assertTrue(surfaces.contains("depthEffect = false"));
         assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
         assertFalse(surfaces.contains("TOP_BAR_PROGRESSIVE_BLUR"));
     }
