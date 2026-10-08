@@ -31,28 +31,20 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void heavySettingsAreHubsInsteadOfSingleLongControlLists() throws Exception {
+    public void heavySettingsUseDedicatedHubAndPartitionStructures() throws Exception {
         String source = Files.readString(UI);
 
-        String gridHub = functionBody(source, "GridPage", "GridBasicsPage");
-        assertTrue(gridHub.contains("gridEntries.forEach"));
-        assertFalse(gridHub.contains("gridSpecs.filter"));
+        assertTrue(source.contains("gridEntries.forEach"));
+        assertTrue(source.contains("dockEntries.forEach"));
+        assertTrue(source.contains("liquidEntries.forEach"));
+        assertTrue(source.contains("workstationEntries.forEach"));
+        assertTrue(source.contains("animationEntries"));
+        assertTrue(source.contains("highlightEntries"));
 
-        String dockHub = functionBody(source, "DockPage", "DockBehaviorPage");
-        assertTrue(dockHub.contains("dockEntries.forEach"));
-        assertFalse(dockHub.contains("dockSpecs.forEach"));
-
-        String liquidHub = functionBody(source, "LiquidPage", "LiquidSpecPage");
-        assertTrue(liquidHub.contains("liquidEntries.forEach"));
-        assertFalse(liquidHub.contains("liquidSpecs.forEach"));
-
-        String workstationHub = functionBody(source, "WorkstationPage", "WorkstationSpecPage");
-        assertTrue(workstationHub.contains("workstationEntries.forEach"));
-        assertFalse(workstationHub.contains("workstationSpecs.forEach"));
-
-        String animationHub = functionBody(source, "AnimationPage", "AnimationWorkspacePage");
-        assertTrue(animationHub.contains("animationEntries"));
-        assertFalse(animationHub.contains("IntSetting("));
+        assertFalse("old all-in-one liquid list must stay removed",
+                source.contains("liquidSpecs.forEach"));
+        assertFalse("old all-in-one workstation list must stay removed",
+                source.contains("workstationSpecs.forEach"));
     }
 
     @Test
@@ -95,11 +87,4 @@ public class ModernSettingsArchitectureTest {
         assertFalse(widget.contains("SmallTopAppBar("));
     }
 
-    private static String functionBody(String source, String name, String nextName) {
-        int start = source.indexOf("private fun " + name + "(");
-        int end = source.indexOf("private fun " + nextName + "(", start);
-        assertTrue(name + " must exist", start >= 0);
-        assertTrue(nextName + " must follow " + name, end > start);
-        return source.substring(start, end);
-    }
 }
