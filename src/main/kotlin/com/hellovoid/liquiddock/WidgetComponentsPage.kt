@@ -188,5 +188,6 @@ internal fun defaultWidgetComponentVisible(descriptor: WidgetComponentStore.Desc
 }
 
 internal fun widgetComponentSummary(descriptor: WidgetComponentStore.Descriptor): String {
-        return "$source · ${descriptor.className.substringAfterLast('.')}"
+    val source = if (descriptor.isMaml()) "MAML" else "RemoteViews"
+    return "$source · ${descriptor.className.substringAfterLast('.')}"
 }
