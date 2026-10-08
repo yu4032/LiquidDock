@@ -45,7 +45,7 @@ internal fun ThirdPartyAppsPage(
             GboardSettingsCard {
                 ArrowPreference(
                     title = "MIUI 系统搜索",
-                    summary = "主界面液态玻璃、严格区域采样与搜索进程控制",
+                    summary = "系统搜索界面的液态玻璃外观与背景更新",
                     enabled = masterEnabled && liquidEnabled,
                     onClick = {
                         context.startActivity(Intent(context, SearchboxSettingsActivity::class.java))
@@ -173,7 +173,7 @@ internal fun SearchboxSettingsPage(
                             .apply()
                     },
                     title = "MIUI 搜索主界面液态玻璃",
-                    summary = "玻璃采样严格对应背景 View 后方区域；重新调出搜索时强制刷新当前帧",
+                    summary = "让玻璃背景与搜索界面当前位置保持一致，重新打开搜索时立即更新",
                     enabled = masterEnabled && liquidEnabled,
                 )
             }
@@ -387,11 +387,11 @@ internal fun GboardSettingsPage(
                             .putBoolean(GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY, it)
                             .apply()
                     },
-                    title = "实时背景采样",
+                    title = "实时背景更新",
                     summary = if (realtimeBackgroundSampling)
-                        "持续采样悬浮键盘后方背景"
+                        "持续更新悬浮键盘后方背景"
                     else
-                        "冻结模式：弹出动画期间保持实时，动画稳定后冻结；每次开始移动时刷新一帧，移动过程中不再采样",
+                        "省电模式：键盘弹出时实时更新，稳定后暂停；再次移动时自动刷新背景",
                     enabled = controlsEnabled,
                 )
             }
