@@ -87,9 +87,20 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
         assertTrue(source.contains("tintAlpha = 0.34f"));
         assertTrue(source.contains("SmallTopAppBar("));
-        assertTrue(source.contains("title = \" \""));
+        assertTrue(source.contains("title = title"));
         assertTrue(source.contains("imageVector = MiuixIcons.Back"));
         assertTrue(source.contains("rememberPrismalMergedSource"));
+    }
+
+    @Test
+    public void pageNameLivesInTopBarInsteadOfContentHeader() throws Exception {
+        String ui = Files.readString(UI);
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("SmallTopAppBar("));
+        assertTrue(surfaces.contains("title = title"));
+        assertTrue(surfaces.contains("imageVector = MiuixIcons.Back"));
+        assertFalse(ui.contains("fontSize = 28.sp"));
     }
 
     @Test
