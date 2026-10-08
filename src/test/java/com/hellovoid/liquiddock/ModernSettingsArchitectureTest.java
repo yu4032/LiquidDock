@@ -350,6 +350,29 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void numericLabelsUseMiuixInputDialogWithoutChangingSliders() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String settings = Files.readString(UI);
+        String gboard = Files.readString(GBOARD);
+        String dialog = Files.readString(DIALOG_GLASS);
+        String sideSlide = Files.readString(SIDE_SLIDE);
+
+        assertTrue(surfaces.contains("internal fun NumericSettingInputDialog("));
+        assertTrue(surfaces.contains("WindowDialog("));
+        assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.TextField("));
+        assertTrue(surfaces.contains("keyboardActions = KeyboardActions("));
+        assertTrue(surfaces.contains(".clickable(enabled = enabled) { editingValue = true }"));
+        assertTrue(surfaces.contains("onConfirm = { next ->"));
+        assertTrue(settings.contains("NumericSettingInputDialog("));
+        assertTrue(settings.contains("save(next)"));
+        assertTrue(settings.contains("ModernGlassSlider("));
+        assertTrue(settings.contains("ModernGlassStepper("));
+        assertTrue(gboard.contains("valueText = \"$rounded"));
+        assertTrue(dialog.contains("valueText = \"$rounded"));
+        assertTrue(sideSlide.contains("valueText = \"$secondStageDistancePx px\""));
+    }
+
+    @Test
     public void topBarUsesOnlyBottomStrokeAndKeepsActionShadowRoom() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
