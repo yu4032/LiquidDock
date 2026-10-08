@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -86,6 +87,7 @@ internal fun ModernSettingsScaffold(
     val background = MiuixTheme.colorScheme.background
     val primary = MiuixTheme.colorScheme.primary
     val surface = MiuixTheme.colorScheme.surface
+    val density = LocalDensity.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -118,7 +120,7 @@ internal fun ModernSettingsScaffold(
                                     backdrop = overlayBackdrop,
                                     shape = { PrismalRoundedRectangle(0.dp) },
                                     effects = {
-                                        prismalBlur(14.dp.value)
+                                        prismalBlur(with(density) { 14.dp.toPx() })
                                         colorControls(saturation = 1.16f)
                                     },
                                     onDrawSurface = {
