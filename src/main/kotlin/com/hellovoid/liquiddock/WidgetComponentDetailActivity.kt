@@ -303,7 +303,7 @@ private fun WidgetExactNodePage(
                 Text(componentTypeTitle(type), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                 Text(
                     when {
-                        isMaml -> "按名称或精确位置隐藏所选元素；页面结构变化时不会误隐藏其他内容。"
+                        isMaml -> "MAML 元素按名称或精确渲染路径隐藏；路径或类型变化时不会回退误命中。"
                         type == WidgetComponentStore.TYPE_BACKGROUND ->
                             "仅移除 View.background，不隐藏 View 与子内容。"
                         type == WidgetComponentStore.TYPE_IMAGE ->
