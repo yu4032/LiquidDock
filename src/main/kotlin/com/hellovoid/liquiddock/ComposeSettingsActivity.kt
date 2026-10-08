@@ -1103,59 +1103,183 @@ private fun AnimationGuiPage(
 }
 
 @Composable
-private fun GridPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
-    var customGrid by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Grid.ENABLED.name(), ConfigSchema.Grid.ENABLED.uiDefault())) }
-    var launcher450IconSizeEnabled by remember {
-        mutableStateOf(prefs.getBoolean(
-            ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
-            ConfigSchema.Grid.ICON_SIZE_ENABLED.uiDefault(),
-        ))
+private fun GridPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
+    var customGrid by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Grid.ENABLED.name(),
+                ConfigSchema.Grid.ENABLED.uiDefault(),
+            ),
+        )
     }
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader(stringResource(R.string.page_grid), stringResource(R.string.grid_header_summary)) }
-        item { SmallTitle("图标大小 · Launcher 4.50") }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
-                    "自定义图标大小",
-                    "作用于工作区、Dock、小文件夹、文件夹内图标与工作台 App 页；重启桌面后生效",
-                    masterEnabled,
-                ) { launcher450IconSizeEnabled = it }
-                IntSetting(
-                    prefs,
-                    launcher450IconSizeSpec,
-                    masterEnabled && launcher450IconSizeEnabled,
-                )
-            }
+            PageHeader(
+                stringResource(R.string.page_grid),
+                "总开关留在入口页，具体方向布局进入独立子页。",
+            )
         }
-        item { SmallTitle(stringResource(R.string.category_grid)) }
         item {
             SettingsCard {
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Grid.ENABLED,
                     "自由主界面网格",
-                    "允许 2×2 到 10×6 的工作区布局；全屏保持原工作区居中，分屏跟随系统 pane 对齐，重启桌面后生效",
+                    "允许 2×2 到 10×6 的工作区布局；全屏居中、分屏跟随系统 pane 对齐；重启桌面生效",
                     masterEnabled,
                 ) { customGrid = it }
-                gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
-                    "小组件随水平边距拉伸",
-                    "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
-                    masterEnabled && customGrid,
+            }
+        }
+        gridEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
                 )
             }
         }
-        item { SmallTitle(stringResource(R.string.category_landscape)) }
-        item { SettingsCard { gridSpecs.filter { it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y" }.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
-        item { SmallTitle(stringResource(R.string.category_portrait)) }
-        item { SettingsCard { gridSpecs.filter { it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y" }.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
-        item { SmallTitle(stringResource(R.string.category_split_screen)) }
-        item { SettingsCard { splitGridSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) } } }
+        if (!customGrid) {
+            item {
+                ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
+                    Text(
+                        "自定义网格关闭时，各方向参数会保留但不参与运行时布局。",
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GridBasicsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    var customGrid by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Grid.ENABLED.name(),
+                ConfigSchema.Grid.ENABLED.uiDefault(),
+            ),
+        )
+    }
+    var iconSizeEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
+                ConfigSchema.Grid.ICON_SIZE_ENABLED.uiDefault(),
+            ),
+        )
+    }
+    SettingsList(
+        padding,
+        stringResource(R.string.page_grid_basics),
+        "这里只放网格尺寸和图标尺寸，方向位置参数不在此页组合。",
+    ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Grid.ICON_SIZE_ENABLED,
+            "自定义图标大小",
+            "工作区、Dock、小文件夹、文件夹内图标与工作台 App 页；重启桌面后生效",
+            masterEnabled,
+        ) { iconSizeEnabled = it }
+        IntSetting(
+            prefs,
+            launcher450IconSizeSpec,
+            masterEnabled && iconSizeEnabled,
+        )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Grid.ENABLED,
+            "自由主界面网格",
+            "控制自定义行列数是否参与布局；重启桌面后生效",
+            masterEnabled,
+        ) { customGrid = it }
+        gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
+            "小组件随水平边距拉伸",
+            "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
+            masterEnabled && customGrid,
+        )
+    }
+}
+
+@Composable
+private fun GridLandscapePage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val customGrid = prefs.getBoolean(
+        ConfigSchema.Grid.ENABLED.name(),
+        ConfigSchema.Grid.ENABLED.uiDefault(),
+    )
+    SettingsList(
+        padding,
+        stringResource(R.string.page_grid_landscape),
+        "仅组合横屏布局参数。",
+    ) {
+        gridSpecs
+            .filter { it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y" }
+            .forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+    }
+}
+
+@Composable
+private fun GridPortraitPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val customGrid = prefs.getBoolean(
+        ConfigSchema.Grid.ENABLED.name(),
+        ConfigSchema.Grid.ENABLED.uiDefault(),
+    )
+    SettingsList(
+        padding,
+        stringResource(R.string.page_grid_portrait),
+        "仅组合竖屏布局参数。",
+    ) {
+        gridSpecs
+            .filter { it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y" }
+            .forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+    }
+}
+
+@Composable
+private fun GridSplitPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val customGrid = prefs.getBoolean(
+        ConfigSchema.Grid.ENABLED.name(),
+        ConfigSchema.Grid.ENABLED.uiDefault(),
+    )
+    SettingsList(
+        padding,
+        stringResource(R.string.page_grid_split),
+        "分屏使用系统 pane 作为边界，只在这里调整额外距离。",
+    ) {
+        splitGridSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
     }
 }
 
