@@ -171,6 +171,29 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void userFacingDescriptionsTrackCurrentWorkstationAndRestartBehavior() throws Exception {
+        String ui = Files.readString(UI);
+        String en = Files.readString(Path.of("src/main/res/values/strings.xml"));
+        String zh = Files.readString(STRINGS_ZH);
+
+        assertFalse(ui.contains("工作台 8 列"));
+        assertFalse(zh.contains("8 列水平距离"));
+        assertFalse(en.contains("8-column horizontal spacing"));
+
+        assertTrue(ui.contains("适用于当前实际网格列数"));
+        assertTrue(zh.contains("适配当前实际网格列数"));
+        assertTrue(en.contains("current grid column count"));
+
+        assertTrue(zh.contains("右上角“重启作用域”"));
+        assertTrue(en.contains("use Restart scopes"));
+
+        assertFalse(ui.contains("旧版 Bitmap 捕获"));
+        assertFalse(ui.contains("旧兼容路径"));
+        assertFalse(en.contains("name=\"pref_debug_log\""));
+        assertFalse(zh.contains("name=\"pref_debug_log\""));
+    }
+
+    @Test
     public void secondarySettingsActivitiesUseTheSameModernShell() throws Exception {
         String search = Files.readString(SEARCHBOX);
         String widget = Files.readString(WIDGET_DETAIL);
