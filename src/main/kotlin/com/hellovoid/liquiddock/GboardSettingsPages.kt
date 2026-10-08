@@ -508,15 +508,10 @@ private fun GboardValueSlider(
 
 @Composable
 private fun GboardPageHeader(title: String, summary: String) {
-    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-        Text(title, fontSize = 26.sp)
-        Text(summary, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
-    }
+    PageHeader(title, summary)
 }
 
 @Composable
 private fun GboardSettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Column(content = content)
-    }
+    SettingsCard(content)
 }
