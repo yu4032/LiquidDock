@@ -417,6 +417,28 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void passBlurSafetyControlsRemainConnectedAndOrphanDescriptionsAreGone() throws Exception {
+        String ui = Files.readString(UI);
+        String runtimeConfig = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/LiquidDockConfig.java"));
+        String passBlurView = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurTextureView.java"));
+        for (String edge : new String[] {"TOP", "BOTTOM", "LEFT", "RIGHT"}) {
+            assertTrue(ui.contains("ConfigSchema.Glass.SAMPLING_EXTRA_" + edge));
+            assertTrue(runtimeConfig.contains("ConfigSchema.Glass.SAMPLING_EXTRA_" + edge));
+        }
+        assertTrue(passBlurView.contains("combineAutoGuardAndUserExtra("));
+        assertTrue(passBlurView.contains("topSamplingExtraPx"));
+        assertTrue(passBlurView.contains("rightSamplingExtraPx"));
+        assertTrue(ui.contains("仅作用于 PassBlur 采样，不是桌面布局边距"));
+        assertFalse(ui.contains("\"liquid_edge_band\" ->"));
+        assertFalse(ui.contains("\"liquid_highlight_alpha\" ->"));
+        assertFalse(ui.contains("\"liquid_recents_prearm_distance\" ->"));
+        assertTrue(ui.contains("ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE"));
+        assertTrue(ui.contains("ConfigSchema.Glass.PASSBLUR_RENDER_FPS"));
+    }
+
+    @Test
     public void secondarySettingsActivitiesUseTheSameModernShell() throws Exception {
         String search = Files.readString(SEARCHBOX);
         String widget = Files.readString(WIDGET_DETAIL);
