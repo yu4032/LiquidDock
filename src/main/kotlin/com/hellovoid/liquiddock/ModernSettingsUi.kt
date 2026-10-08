@@ -39,7 +39,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,7 +52,6 @@ import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.PrismalGlassSurface
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
-import com.styropyr0.prismal.components.LocalPrismalBottomTabHighlightedIndex
 import com.styropyr0.prismal.components.PrismalGlassButton
 import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
@@ -237,10 +238,16 @@ internal fun ModernSettingsScaffold(
                         .fillMaxSize()
                         .zIndex(0f)
                         .then(
-                            // Capture the entire scrollable page, not only its background,
-                            // so the top bar also blurs headers and list item text.
-                            if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
-                            else Modifier,
+                            if (glassEnabled) {
+                                // Nested Prismal cards have their own offscreen render layers.
+                                // Flatten those child layers with the text before recording
+                                // the entire page for the top-bar backdrop.
+                                Modifier
+                                    .prismalGlassLayer(screenLayer)
+                                    .graphicsLayer {
+                                        compositingStrategy = CompositingStrategy.Offscreen
+                                    }
+                            } else Modifier,
                         ),
                 ) {
                     content(padding)
@@ -410,17 +417,37 @@ internal fun ModernBottomNavigation(
                     tintDropletContent = false,
                     dropletContentTint = MiuixTheme.colorScheme.primary,
                 ) {
-                    // Use Prismal's actual capsule-clipped tab rather than an
-                    // overlapping clickable Row (whose ripple was rectangular).
-                    labels.forEachIndexed { index, label ->
+                    // Prismal renders tab content twice: once visibly and once in a
+                    // hidden recording layer for the droplet lens. Rendering text
+                    // there creates a second, refracted copy while long-pressing.
+                    // Keep the native capsule hit targets / spring gestures empty.
+                    labels.indices.forEach { index ->
                         PrismalGlassBottomTab(
                             onClick = {
                                 if (index != selected) onSelect(index)
                             },
+                        ) {}
+                    }
+                }
+                // Draw labels and icons once above the droplet, without a second
+                // pointer target: touches still reach Prismal's capsule tabs.
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    labels.forEachIndexed { index, label ->
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.spacedBy(
+                                2.dp, Alignment.CenterVertically,
+                            ),
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            val highlightedIndex = LocalPrismalBottomTabHighlightedIndex.current
-                            val active = highlightedIndex() == index
-                            ModernTabContents(label, icons[index], active)
+                            ModernTabContents(label, icons[index], index == selected)
                         }
                     }
                 }
