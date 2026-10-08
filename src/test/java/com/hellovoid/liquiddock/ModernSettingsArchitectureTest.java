@@ -176,7 +176,7 @@ public class ModernSettingsArchitectureTest {
         // device-level visual contract, not something source inspection proves.
         assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
         assertTrue(surfaces.contains("val barBackdrop = if (glassEnabled && isRuntimeShaderSupported())"));
-        assertTrue(surfaces.contains("rememberLayerBackdrop {\\n            drawRect(surface)\\n            drawContent()"));
+        assertTrue(surfaces.contains("rememberLayerBackdrop {\n            drawRect(surface)\n            drawContent()"));
         assertTrue(surfaces.contains("backdrop = barBackdrop"));
         assertTrue(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
@@ -186,7 +186,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(surfaces.contains(".graphicsLayer {"));
 
         assertTrue(pages.contains("LazyColumn("));
-        assertTrue(pages.contains("ModernSectionLabel(\\"状态\\")"));
+        assertTrue(pages.contains("ModernSectionLabel(\"状态\")"));
         assertTrue(pages.contains("桌面布局与液态玻璃个性化设置"));
     }
 
