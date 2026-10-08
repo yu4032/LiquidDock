@@ -694,6 +694,12 @@ private val animationSettingsPageSpec = IntSpec(
 @Composable
 private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     val prefs = remember { PreferenceManager.getDefaultSharedPreferences(activity) }
+    val uiPrefs = remember {
+        activity.getSharedPreferences(SETTINGS_UI_PREFS, Context.MODE_PRIVATE)
+    }
+    var uiGlassEnabled by remember {
+        mutableStateOf(uiPrefs.getBoolean(SETTINGS_UI_GLASS_ENABLED, true))
+    }
     var masterEnabled by remember {
         mutableStateOf(
             prefs.getBoolean(
@@ -746,6 +752,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
 
     ModernSettingsScaffold(
         title = stringResource(page.titleRes),
+        glassEnabled = uiGlassEnabled,
         showBack = !root,
         backLabel = stringResource(R.string.action_back),
         onBack = { navigateBack() },
@@ -842,11 +849,16 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     glassEntries,
                     ::navigateTo,
                 )
-                Page.MoreHub -> HubPage(
-                    padding,
-                    "预设与开源许可",
-                    moreEntries,
-                    ::navigateTo,
+                Page.MoreHub -> MoreHubPage(
+                    padding = padding,
+                    glassEnabled = uiGlassEnabled,
+                    onGlassEnabledChange = { enabled ->
+                        uiGlassEnabled = enabled
+                        uiPrefs.edit()
+                            .putBoolean(SETTINGS_UI_GLASS_ENABLED, enabled)
+                            .apply()
+                    },
+                    open = ::navigateTo,
                 )
 
                 Page.Grid -> GridPage(padding, prefs, masterEnabled, ::navigateTo)
@@ -1050,6 +1062,45 @@ private fun HubPage(
     ) {
         item { PageHeader("", summary) }
         entries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoreHubPage(
+    padding: PaddingValues,
+    glassEnabled: Boolean,
+    onGlassEnabledChange: (Boolean) -> Unit,
+    open: (Page) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item { PageHeader("", "设置界面、预设与开源许可") }
+        item {
+            SettingsCard {
+                SwitchPreference(
+                    checked = glassEnabled,
+                    onCheckedChange = onGlassEnabledChange,
+                    title = stringResource(R.string.settings_glass_effect),
+                    summary = stringResource(R.string.settings_glass_effect_summary),
+                )
+            }
+        }
+        moreEntries.forEach { entry ->
             item {
                 ModernFeatureCard(
                     title = stringResource(entry.titleRes),
