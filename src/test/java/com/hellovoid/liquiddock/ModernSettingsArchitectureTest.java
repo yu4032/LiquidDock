@@ -5,6 +5,10 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.junit.Test;
 
@@ -24,6 +28,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/DockRecentBlacklistPage.kt");
     private static final Path WIDGET_COMPONENTS = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentsPage.kt");
+    private static final Path GBOARD = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt");
 
     @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
@@ -86,15 +92,13 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassToggle"));
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
+        assertTrue(source.contains("drawPlainPrismalGlass("));
         assertTrue(source.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
-        assertTrue(source.contains("tintAlpha = 0.34f"));
+        assertTrue(source.contains("drawRect(surface.copy(alpha = 0.34f))"));
         assertTrue(source.contains("drawLine("));
         assertTrue(source.contains("start = androidx.compose.ui.geometry.Offset(0f, size.height - 1f)"));
         assertTrue(source.contains("end = androidx.compose.ui.geometry.Offset(size.width, size.height - 1f)"));
-        assertTrue(source.contains("refractionHeightPx = 0f"));
-        assertTrue(source.contains("refractionAmountPx = 0f"));
-        assertTrue(source.contains("chromaticAberration = 0f"));
-        assertTrue(source.contains("depthEffect = false"));
+        assertTrue(source.contains("baseHeaderModifier.drawPlainPrismalGlass"));
         assertTrue(source.contains("SmallTopAppBar("));
         assertTrue(source.contains("title = title"));
         assertTrue(source.contains("imageVector = MiuixIcons.Back"));
@@ -199,6 +203,57 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void settingsGlassCanBeDisabledWithoutDisablingSettingsControls() throws Exception {
+        String ui = Files.readString(UI);
+        String surfaces = Files.readString(SURFACES);
+        String search = Files.readString(SEARCHBOX);
+        String widget = Files.readString(WIDGET_DETAIL);
+        String zh = Files.readString(STRINGS_ZH);
+
+        assertTrue(ui.contains("SETTINGS_UI_GLASS_ENABLED"));
+        assertTrue(ui.contains("private fun MoreHubPage("));
+        assertTrue(ui.contains("R.string.settings_glass_effect"));
+        assertTrue(ui.contains("glassEnabled = uiGlassEnabled"));
+
+        assertTrue(surfaces.contains("glassEnabled: Boolean = true"));
+        assertTrue(surfaces.contains("LocalPrismalSurfaceBackdrop provides surfaceBackdrop"));
+        assertTrue(surfaces.contains("if (glassEnabled) Modifier.prismalGlassLayer"));
+        assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Switch("));
+        assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Slider("));
+        assertTrue(surfaces.contains("if (backdrop != null)"));
+        assertTrue(surfaces.contains("depthShadow = null"));
+
+        assertTrue(search.contains("SETTINGS_UI_GLASS_ENABLED"));
+        assertTrue(search.contains("glassEnabled = glassEnabled"));
+        assertTrue(widget.contains("SETTINGS_UI_GLASS_ENABLED"));
+        assertTrue(widget.contains("glassEnabled = glassEnabled"));
+        assertTrue(zh.contains("<string name=\"settings_glass_effect\">设置界面玻璃效果</string>"));
+    }
+
+    @Test
+    public void redesignedGuiRetainsTheOriginalUserFacingPreferenceReferences() throws Exception {
+        String compose = Files.readString(UI);
+        String gboard = Files.readString(GBOARD);
+        String search = Files.readString(SEARCHBOX);
+        String widgetCatalog = Files.readString(WIDGET_COMPONENTS);
+        String widgetDetail = Files.readString(WIDGET_DETAIL);
+
+        Set<String> configRefs = new HashSet<>();
+        Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
+                .matcher(compose + "\n" + gboard + "\n" + search + "\n"
+                        + widgetCatalog + "\n" + widgetDetail);
+        while (configMatcher.find()) configRefs.add(configMatcher.group());
+        assertTrue("original GUI ConfigSchema coverage must not shrink: " + configRefs.size(),
+                configRefs.size() >= 233);
+        assertTrue(configRefs.contains("ConfigSchema.Debug.LOGGING"));
+        assertTrue(configRefs.contains("ConfigSchema.Glass.PRISMAL_SHOW_NORMALS"));
+
+        assertTrue(countDistinctRefs(gboard, "GboardGlassPreferences") >= 11);
+        assertTrue(countDistinctRefs(search, "MiuiSearchboxGlassPreferences") >= 7);
+        assertTrue(countDistinctRefs(widgetCatalog + "\n" + widgetDetail, "WidgetComponentStore") >= 15);
+    }
+
+    @Test
     public void secondarySettingsActivitiesUseTheSameModernShell() throws Exception {
         String search = Files.readString(SEARCHBOX);
         String widget = Files.readString(WIDGET_DETAIL);
@@ -206,6 +261,14 @@ public class ModernSettingsArchitectureTest {
         assertTrue(widget.contains("ModernSettingsScaffold("));
         assertFalse(search.contains("SmallTopAppBar("));
         assertFalse(widget.contains("SmallTopAppBar("));
+    }
+
+    private static int countDistinctRefs(String source, String owner) {
+        Set<String> refs = new HashSet<>();
+        Matcher matcher = Pattern.compile(Pattern.quote(owner) + "\\.[A-Za-z0-9_]+")
+                .matcher(source);
+        while (matcher.find()) refs.add(matcher.group());
+        return refs.size();
     }
 
 }
