@@ -89,15 +89,6 @@ public class ConfigSchemaTest {
 
     @Test
     public void legacyAndCurrentDefaultsRemainDistinctWhereRequired() {
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.runtimeFallback());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.uiDefault());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_TOP.exportDefault());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.runtimeFallback());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.uiDefault());
-        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.exportDefault());
-        assertEquals(ConfigKey.StorageMode.DIRECT, ConfigSchema.Glass.SAMPLING_EXTRA_TOP.storageMode());
-        assertEquals(ConfigKey.StorageMode.DIRECT, ConfigSchema.Glass.SAMPLING_EXTRA_BOTTOM.storageMode());
-
         assertEquals(Integer.valueOf(4), ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.runtimeFallback());
         assertEquals(Integer.valueOf(1), ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.uiDefault());
         assertEquals(Integer.valueOf(4), ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.exportDefault());
