@@ -16,11 +16,13 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -2290,6 +2293,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
     else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
         .coerceIn(spec.min.toFloat(), maxValue.toFloat())
     var value by remember(spec.key, maxValue) { mutableStateOf(initial) }
+    var editingValue by remember(spec.key) { mutableStateOf(false) }
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
 
     fun save(nextValue: Float) {
@@ -2323,6 +2327,10 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
             endActions = {
                 Text(
                     text = displayText,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = enabled) { editingValue = true }
+                        .padding(horizontal = 8.dp, vertical = 9.dp),
                     fontSize = 13.sp,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 )
@@ -2367,6 +2375,18 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
             )
         }
     }
+    NumericSettingInputDialog(
+        visible = editingValue,
+        title = spec.title,
+        currentText = displayValue,
+        valueRange = spec.min.toFloat()..maxValue.toFloat(),
+        integerOnly = !decimalDp,
+        onDismiss = { editingValue = false },
+        onConfirm = { next ->
+            save(next)
+            editingValue = false
+        },
+    )
 }
 
 private fun applyDefaultPreset(activity: ComposeSettingsActivity) {
