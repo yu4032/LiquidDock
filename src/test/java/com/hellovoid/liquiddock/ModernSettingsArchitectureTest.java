@@ -86,9 +86,29 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassMenuItem"));
         assertTrue(source.contains("shape = { PrismalRoundedRectangle(0.dp) }"));
         assertTrue(source.contains("tintAlpha = 0.34f"));
+        assertTrue(source.contains("SmallTopAppBar("));
         assertTrue(source.contains("title = \" \""));
-        assertTrue(source.contains("largeTitle = \" \""));
+        assertTrue(source.contains("imageVector = MiuixIcons.Back"));
         assertTrue(source.contains("rememberPrismalMergedSource"));
+    }
+
+    @Test
+    public void bottomTabsHaveIconsAndNumericControlsExposeValueSliderAndStepper() throws Exception {
+        String ui = Files.readString(UI);
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(ui.contains("ROOT_ICONS: List<ImageVector>"));
+        assertTrue(ui.contains("MiuixIcons.Home"));
+        assertTrue(ui.contains("MiuixIcons.GridView"));
+        assertTrue(ui.contains("MiuixIcons.Image"));
+        assertTrue(ui.contains("MiuixIcons.Settings"));
+        assertTrue(ui.contains("icons = ROOT_ICONS"));
+
+        assertTrue(ui.contains("val displayText ="));
+        assertTrue(ui.contains("ModernGlassSlider("));
+        assertTrue(ui.contains("ModernGlassStepper("));
+        assertTrue(surfaces.contains("internal fun ModernGlassSlider("));
+        assertTrue(surfaces.contains("internal fun ModernGlassStepper("));
     }
 
     @Test
