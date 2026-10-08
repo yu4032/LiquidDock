@@ -83,7 +83,7 @@ internal fun WidgetComponentsPage(
                         val synced = stored && LiquidDockApp.syncToRemote(prefs)
                         if (!synced) {
                             prefs.edit().remove(WidgetComponentStore.DISCOVERY_REQUEST_KEY).commit()
-                            Toast.makeText(activity, "设置服务未连接，无法载入小组件", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(activity, "Xposed 服务未连接，无法载入小组件", Toast.LENGTH_SHORT).show()
                             return@ArrowPreference
                         }
                         catalogPrefs.edit().remove(WidgetComponentStore.CATALOG_KEY).commit()
@@ -145,11 +145,12 @@ internal fun WidgetComponentsPage(
                         groups.forEach { (key, components) ->
                             val first = components.first()
                             val selectedCount = components.count { it.selectorKey() in selected }
-                                                        val likelyCount = components.count(WidgetComponentRanking::isLikelyBackground)
+                                                        val source = if (first.isMaml()) "MAML" else "RemoteViews"
+                            val likelyCount = components.count(WidgetComponentRanking::isLikelyBackground)
                             ArrowPreference(
                                 title = first.displayOwner(),
                                 summary = buildString {
-                                    append("已隐藏 $selectedCount / ${components.size}")
+                                    append("$source · 已隐藏 $selectedCount / ${components.size}")
                                     if (likelyCount > 0) append(" · 疑似背景 $likelyCount")
                                 },
                                 onClick = {
