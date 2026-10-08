@@ -39,8 +39,8 @@
     <string name="page_stroke">描边</string>
     <string name="page_shadow">阴影</string>
     <string name="page_animation">动画与过渡</string>
-    <string name="page_data">预设与数据</string>
-    <string name="page_about">引用与许可</string>
+    <string name="page_data">预设</string>
+    <string name="page_about">许可</string>
     <string name="category_master">总开关</string>
     <string name="category_customization">自定义</string>
     <string name="category_configuration">配置</string>
@@ -107,10 +107,10 @@
     <string name="highlight_press_glow">按压辉光</string><string name="highlight_press_glow_summary">交互按压效果使用的局部辉光</string>
     <string name="tab_overview">概览</string>
     <string name="tab_layout">布局</string>
-    <string name="tab_glass">玻璃</string>
+    <string name="tab_glass">外观</string>
     <string name="tab_more">更多</string>
     <string name="page_layout_hub">布局</string>
-    <string name="page_glass_hub">玻璃</string>
+    <string name="page_glass_hub">外观</string>
     <string name="page_more_hub">更多</string>
     <string name="page_grid_basics">网格基础</string>
     <string name="page_grid_landscape">横屏布局</string>
