@@ -152,6 +152,34 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void appBarActionsDoNotApplyHueTintToBackdrop() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(surfaces.contains("surfaceColor = headerNeutralColor.copy(alpha = 0.20f)"));
+        assertTrue(surfaces.contains("surfaceColor = neutralActionTint.copy(alpha = 0.20f)"));
+        assertTrue(surfaces.contains("tint = Color.Unspecified"));
+        assertTrue(surfaces.contains("useVibrancy = false"));
+        assertTrue(surfaces.contains("saturation = 1f"));
+        assertFalse(surfaces.contains("tint = MiuixTheme.colorScheme.surface"));
+    }
+
+    @Test
+    public void headerSamplesEntireScrolledContentLayerBehindGlass() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String pages = Files.readString(UI);
+
+        assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
+        assertTrue(surfaces.contains("backdrop = overlayBackdrop"));
+        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
+        assertTrue(surfaces.contains("Box(modifier = Modifier.fillMaxWidth().zIndex(1f))"));
+        assertTrue(surfaces.contains(".zIndex(0f)"));
+        assertTrue(pages.contains("LazyColumn("));
+        assertTrue(pages.contains("contentPadding = PaddingValues("));
+        assertTrue(pages.contains("ModernSectionLabel(\"状态\")"));
+        assertTrue(pages.contains("桌面布局与液态玻璃个性化设置"));
+    }
+
+    @Test
     public void pageNameLivesInTopBarInsteadOfContentHeader() throws Exception {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
