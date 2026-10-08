@@ -20,6 +20,12 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentDetailActivity.kt");
     private static final Path BUILD = Path.of("build.gradle.kts");
     private static final Path STRINGS_ZH = Path.of("src/main/res/values-zh-rCN/strings.xml");
+    private static final Path RECENT_BLACKLIST = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/DockRecentBlacklistPage.kt");
+    private static final Path WIDGET_COMPONENTS = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentsPage.kt");
+    private static final Path WIDGET_DETAIL = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentDetailActivity.kt");
 
     @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
@@ -120,6 +126,27 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("ModernGlassStepper("));
         assertTrue(surfaces.contains("internal fun ModernGlassSlider("));
         assertTrue(surfaces.contains("internal fun ModernGlassStepper("));
+    }
+
+    @Test
+    public void longListsUseGroupedContinuousRowsAndEmbeddedButtonsDoNotCastOuterShadows() throws Exception {
+        String recent = Files.readString(RECENT_BLACKLIST);
+        String widgetCatalog = Files.readString(WIDGET_COMPONENTS);
+        String widgetDetail = Files.readString(WIDGET_DETAIL);
+        String surfaces = Files.readString(SURFACES);
+
+        assertTrue(recent.contains("availableCandidates.chunked(12)"));
+        assertTrue(recent.contains("blockedPackages.chunked(12)"));
+        assertTrue(recent.contains("ModernListDivider()"));
+        assertFalse(recent.contains("items(availableCandidates"));
+        assertFalse(recent.contains("items(blockedPackages"));
+
+        assertTrue(widgetCatalog.contains("ModernListDivider()"));
+        assertTrue(widgetDetail.contains("rankedComponents.chunked(10)"));
+        assertTrue(widgetDetail.contains("ModernListDivider()"));
+
+        assertTrue(surfaces.contains("pressLift = 0.dp"));
+        assertTrue(surfaces.contains("depthShadow = null"));
     }
 
     @Test
