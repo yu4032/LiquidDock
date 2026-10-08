@@ -143,4 +143,5 @@
     <string name="page_workstation_apps_portrait">All apps · portrait</string>
     <string name="page_launcher_highlights_compact">Icon &amp; small-folder highlights</string>
     <string name="page_launcher_highlights_large">Widget &amp; large-folder highlights</string>
+    <string name="action_restart_scopes">Restart scopes</string>
 </resources>
