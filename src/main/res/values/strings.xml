@@ -137,4 +137,8 @@
     <string name="page_animation_popups">Popup transitions</string>
     <string name="page_animation_system">System UI</string>
     <string name="page_animation_gui">Settings UI</string>
+    <string name="page_workstation_dock">Workstation Dock</string>
+    <string name="page_workstation_desktop">Workstation desktop</string>
+    <string name="page_workstation_apps_landscape">All apps · landscape</string>
+    <string name="page_workstation_apps_portrait">All apps · portrait</string>
 </resources>
