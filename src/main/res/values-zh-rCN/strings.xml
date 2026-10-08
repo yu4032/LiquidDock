@@ -135,4 +135,8 @@
     <string name="page_animation_popups">弹出界面过渡</string>
     <string name="page_animation_system">系统界面</string>
     <string name="page_animation_gui">设置界面</string>
+    <string name="page_workstation_dock">工作台 Dock</string>
+    <string name="page_workstation_desktop">工作台桌面</string>
+    <string name="page_workstation_apps_landscape">所有应用 · 横屏</string>
+    <string name="page_workstation_apps_portrait">所有应用 · 竖屏</string>
 </resources>
