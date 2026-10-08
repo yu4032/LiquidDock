@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -79,12 +80,14 @@ internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
 private val TOP_BAR_PROGRESSIVE_BLUR = ProgressiveBlur.Top.copy(
-    startFraction = 0.12f,
+    startFraction = 0.68f,
     endFraction = 1f,
-    curve = 1.25f,
+    curve = 1f,
 )
 private const val TOP_BAR_BLUR_RADIUS = 16f
 private const val TOP_BAR_SURFACE_ALPHA = 0.66f
+private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
+private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
@@ -218,6 +221,20 @@ internal fun ModernSettingsScaffold(
                                 }
                             },
                             actions = actions,
+                            bottomContent = {
+                                Spacer(Modifier.height(TOP_BAR_ACTION_SHADOW_ROOM))
+                            },
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(
+                                    MiuixTheme.colorScheme.onSurface.copy(
+                                        alpha = TOP_BAR_BOTTOM_STROKE_ALPHA,
+                                    ),
+                                ),
                         )
                     }
                 },
