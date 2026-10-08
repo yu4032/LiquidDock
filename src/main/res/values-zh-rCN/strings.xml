@@ -13,8 +13,8 @@
     <string name="dock_recent_blacklist_header_summary">显示当前可进入 Dock 最近程序推荐的候选。已拉黑程序会单独列出，并在推荐时跳过，由后续可用程序补位。</string>
     <string name="dock_recent_blacklist_load_title">载入当前推荐候选</string>
     <string name="dock_recent_blacklist_load_summary">保持设置页前台，直接载入当前 Dock 推荐列表</string>
-    <string name="dock_recent_blacklist_load_failed">Xposed 服务未连接，无法载入推荐候选</string>
-    <string name="dock_recent_blacklist_apply_failed">Xposed 服务未连接，无法应用最近程序黑名单</string>
+    <string name="dock_recent_blacklist_load_failed">设置服务未连接，无法载入推荐候选</string>
+    <string name="dock_recent_blacklist_apply_failed">设置服务未连接，无法应用最近程序黑名单</string>
     <string name="dock_recent_blacklist_current_candidates">当前推荐候选</string>
     <string name="dock_recent_blacklist_blocked_apps">已加入黑名单</string>
     <string name="dock_recent_blacklist_blocked_empty">当前没有已拉黑程序。</string>
@@ -46,7 +46,7 @@
     <string name="category_configuration">配置</string>
     <string name="category_about">关于</string>
     <string name="enable_liquiddock">启用 LiquidDock</string>
-    <string name="enable_liquiddock_summary">关闭后立即释放可热切换的视觉效果；完整应用结构性 Hook 变更需重启桌面生效</string>
+    <string name="enable_liquiddock_summary">控制 LiquidDock 的整体视觉效果；部分设置需要重启桌面后生效</string>
     <string name="home_grid_summary">自由主界面网格、横竖屏边距、分屏对齐与指示器</string>
     <string name="home_dock_summary">尺寸、圆角、图标间距、位置与模糊</string>
     <string name="home_divider_summary">独立控制分隔线宽度、高度、位置、颜色与透明度</string>
@@ -80,7 +80,7 @@
     <string name="workstation_customization_summary">工作台使用独立的 Dock 长度和 8 列水平距离；重启桌面生效</string>
     <string name="recents_header_summary">调整任务卡片后方的系统壁纸模糊程度；修改后重启桌面生效。</string>
     <string name="liquid_enable">启用液态玻璃</string>
-    <string name="liquid_enable_summary">关闭会立即释放现有玻璃层；重新启用并完整安装玻璃 Hook 需重启桌面</string>
+    <string name="liquid_enable_summary">控制图标、小组件、文件夹等位置的液态玻璃效果；部分场景需要重启桌面后生效</string>
     <string name="liquid_security_center_glass_enable">安全中心侧边栏玻璃</string>
     <string name="liquid_security_center_glass_enable_summary">为已支持的全局侧边栏与所有应用使用 LiquidDock 液态玻璃；LiquidDock 释放所有权后由安全中心自行恢复原生材质或背景模糊。</string>
     <string name="liquid_blur_method">模糊方法</string>
@@ -91,7 +91,7 @@
     <string name="liquid_dynamic_capture_summary">游戏或视频中 Dock 展开时持续刷新；Dock 收起后立即停止</string>
     <string name="pref_debug_log">调试日志</string>
     <string name="pref_debug_log_summary">向 logcat 输出 [DC] 诊断日志（关于页），重启桌面生效</string>
-    <string name="liquid_header_summary">玻璃已安装时，图标、小组件和文件夹等组件开关即时生效；光学参数或 Hook 安装类修改需重启桌面。</string>
+    <string name="liquid_header_summary">调整液态玻璃的材质、折射、颜色、光照与性能表现。</string>
     <string name="page_launcher_highlights">图标、文件夹与小组件高光</string>
     <string name="launcher_highlights_entry">图标、文件夹与小组件高光层</string>
     <string name="launcher_highlights_entry_summary">控制工作区图标、文件夹与小组件玻璃使用的高光层</string>
@@ -128,7 +128,7 @@
     <string name="page_liquid_color">颜色与色散</string>
     <string name="page_liquid_lighting">高光与光照</string>
     <string name="page_liquid_shadow">内阴影</string>
-    <string name="page_liquid_sampling">采样与性能</string>
+    <string name="page_liquid_sampling">画质与性能</string>
     <string name="page_liquid_os4">OS4 反射</string>
     <string name="page_animation_workspace">工作区与 Dock</string>
     <string name="page_animation_interaction">玻璃交互</string>
