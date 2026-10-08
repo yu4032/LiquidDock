@@ -36,10 +36,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -594,11 +596,29 @@ internal fun ModernSurface(
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
     if (backdrop == null) {
+        // The glass-free page previously used an almost-transparent surface
+        // (0.94 alpha), which blended into the underlying canvas. Give ordinary
+        // cells a distinct opaque tonal fill and a restrained boundary instead.
+        val palette = MiuixTheme.colorScheme
+        val darkTheme = palette.background.luminance() < 0.5f
+        val cardShape = RoundedCornerShape(24.dp)
+        val cardFill = if (darkTheme) {
+            lerp(palette.surface, palette.onSurface, 0.09f)
+        } else {
+            palette.surface
+        }
+        val cardStroke = palette.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.12f)
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))
+                .shadow(
+                    elevation = if (darkTheme) 0.dp else 3.dp,
+                    shape = cardShape,
+                    clip = false,
+                )
+                .clip(cardShape)
+                .background(cardFill)
+                .border(width = 1.dp, color = cardStroke, shape = cardShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(contentPadding),
             content = content,
