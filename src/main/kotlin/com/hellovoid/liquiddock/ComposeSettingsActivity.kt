@@ -662,7 +662,7 @@ private val animationWorkspaceVisibilitySpec = IntSpec(
     ConfigSchema.Animation.WORKSPACE_VISIBILITY,
     "工作区玻璃显隐",
     "ms",
-    summary = "仅控制 LiquidDock 自己管理的工作区玻璃淡入淡出；HOME / Recents 原生过渡保持系统时序；重启桌面后生效",
+    summary = "工作区玻璃淡入淡出时长；重启桌面后生效",
 )
 private val animationDockIconRevealSpec = IntSpec(
     ConfigSchema.Animation.DOCK_ICON_REVEAL,
@@ -1017,7 +1017,7 @@ private fun HomePage(
                     text = if (masterEnabled) {
                         "可热切换的视觉功能立即响应；结构性 Hook 修改仍按各项说明重启对应作用域。"
                     } else {
-                        "当前仅保留设置与数据，运行时视觉层已释放。"
+                        "LiquidDock 已暂停，已保存的设置不会丢失。"
                     },
                     modifier = Modifier.padding(top = 6.dp),
                     fontSize = 12.sp,
@@ -1090,7 +1090,7 @@ private fun AnimationWorkspacePage(
     SettingsList(
         padding,
         stringResource(R.string.page_animation_workspace),
-        "这里只调整 LiquidDock 自己拥有的工作区与 Dock 动画。",
+        "调整工作区与 Dock 的玻璃过渡动画。",
     ) {
         IntSetting(prefs, animationWorkspaceVisibilitySpec, masterEnabled)
         IntSetting(prefs, animationDockIconRevealSpec, masterEnabled)
@@ -1127,7 +1127,7 @@ private fun AnimationPopupsPage(
     SettingsList(
         padding,
         stringResource(R.string.page_animation_popups),
-        "只控制 LiquidDock 自己绘制的退出渐隐，系统原生弹出动画保持原样。",
+        "调整快捷菜单与安全中心玻璃的退出渐隐。",
     ) {
         IntSetting(prefs, animationShortcutDismissSpec, masterEnabled)
         IntSetting(prefs, animationSecurityCenterExitSpec, masterEnabled)
@@ -1164,7 +1164,7 @@ private fun AnimationGuiPage(
     SettingsList(
         padding,
         stringResource(R.string.page_animation_gui),
-        "仅控制设置页面自己的切换过渡，不写入注入进程运行时。",
+        "调整设置页面的切换动画。",
     ) {
         IntSetting(prefs, animationSettingsPageSpec, masterEnabled)
     }
@@ -1705,7 +1705,7 @@ private fun LiquidPage(
             item {
                 ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
                     Text(
-                        "液态玻璃关闭时，参数会继续保存，但运行时玻璃层不参与绘制。",
+                        "开启液态玻璃后应用这些外观参数。",
                         fontSize = 12.sp,
                     )
                 }
@@ -2099,7 +2099,7 @@ private fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterE
 @Composable
 private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader("预设与数据", "保存、恢复或迁移 LiquidDock 配置") }
+        item { PageHeader("预设", "默认配置、备份与恢复") }
         item { SmallTitle("预设") }
         item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关", onClick = { applyDefaultPreset(activity) }) } }
         item { SmallTitle("备份与应用") }
@@ -2119,7 +2119,7 @@ private fun openUrl(context: Context, url: String) {
 @Composable
 private fun AboutPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader("引用与许可", "LiquidDock 使用的第三方开源项目与许可证") }
+        item { PageHeader("许可", "LiquidDock 使用的第三方开源项目与许可证") }
         item { SmallTitle("界面与运行框架") }
         item {
             SettingsCard {
