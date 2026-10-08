@@ -125,11 +125,12 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
+                    val headerDividerColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                     val baseHeaderModifier = Modifier
                         .fillMaxWidth()
                         .drawBehind {
                             drawLine(
-                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                color = headerDividerColor,
                                 start = androidx.compose.ui.geometry.Offset(0f, size.height - 1f),
                                 end = androidx.compose.ui.geometry.Offset(size.width, size.height - 1f),
                                 strokeWidth = 1f,
