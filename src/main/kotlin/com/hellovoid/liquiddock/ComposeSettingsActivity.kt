@@ -193,7 +193,7 @@ private fun optionSummary(key: String): String = when (key) {
     "dock_divider_color_b" -> "分隔竖线颜色 · 蓝"
     "dock_divider_alpha" -> "分隔竖线不透明度"
     "workstation_dock_width_offset" -> "相对系统工作台 Dock 的原始长度增减；不会改变位置或普通 Dock"
-    "workstation_grid_horizontal_offset" -> "单独调整工作台 8 列图标区域的左右距离，不继承普通桌面偏移"
+    "workstation_grid_horizontal_offset" -> "整体平移工作台桌面图标区域，适用于当前实际网格列数；不继承普通桌面水平偏移"
     "workstation_all_apps_landscape_horizontal_offset" -> "直接设置工作台所有应用横屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_landscape_top_spacing" -> "直接设置工作台所有应用横屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_landscape_bottom_spacing" -> "直接设置工作台所有应用横屏图标区下间距；不叠加系统默认位置"
@@ -615,7 +615,7 @@ private val dockEntries = listOf(
 
 private val workstationEntries = listOf(
     HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "Dock 长度、图标玻璃圆角与上下间距"),
-    HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "工作台桌面图标区域水平偏移"),
+    HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "按当前网格列数整体调整工作台桌面水平位置"),
     HubEntry(Page.WorkstationAppsLandscape, R.string.page_workstation_apps_landscape, "所有应用横屏水平与上下间距"),
     HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
 )
@@ -875,7 +875,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 )
                 Page.WorkstationDesktop -> WorkstationSpecPage(
                     padding, prefs, masterEnabled, workstationDesktopSpecs,
-                    "工作台桌面区域只保留水平布局偏移",
+                    "工作台桌面水平偏移作用于当前实际网格，不限制固定列数",
                 )
                 Page.WorkstationAppsLandscape -> WorkstationSpecPage(
                     padding, prefs, masterEnabled, workstationAppsLandscapeSpecs,
@@ -2106,14 +2106,14 @@ private fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterE
 @Composable
 private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader("预设", "默认配置、备份与恢复") }
+        item { PageHeader("预设", "默认配置、JSON 备份与恢复") }
         item { SmallTitle("预设") }
         item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关", onClick = { applyDefaultPreset(activity) }) } }
         item { SmallTitle("备份与应用") }
         item {
             SettingsCard {
                 ArrowPreference("导出当前参数", summary = "保存为 LiquidDock JSON", onClick = activity::launchExport)
-                ArrowPreference("导入参数", summary = "校验、写入并重启桌面", onClick = activity::launchImport)
+                ArrowPreference("导入参数", summary = "校验并恢复参数；完成后自动重启桌面", onClick = activity::launchImport)
             }
         }
     }
