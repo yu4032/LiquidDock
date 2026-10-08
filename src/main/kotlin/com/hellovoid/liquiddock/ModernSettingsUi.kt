@@ -389,6 +389,20 @@ internal fun ModernFeatureCard(
 }
 
 @Composable
+internal fun ModernListDivider(
+    modifier: Modifier = Modifier,
+    startIndent: Dp = 18.dp,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = startIndent, end = 18.dp)
+            .height(1.dp)
+            .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+    )
+}
+
+@Composable
 internal fun ModernSectionLabel(text: String) {
     Text(
         text = text,
