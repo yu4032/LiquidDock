@@ -179,14 +179,3 @@ internal fun loadWidgetCatalog(catalogPrefs: SharedPreferences): List<WidgetComp
 
 internal fun widgetGroupKey(descriptor: WidgetComponentStore.Descriptor): String =
     (if (descriptor.isMaml()) "M" else descriptor.source) + "\t" + descriptor.owner
-
-internal fun defaultWidgetComponentVisible(descriptor: WidgetComponentStore.Descriptor): Boolean {
-    if (!descriptor.isMaml()) return true
-    val simple = descriptor.className.substringAfterLast('.')
-    return !simple.contains("VariableElement")
-}
-
-internal fun widgetComponentSummary(descriptor: WidgetComponentStore.Descriptor): String {
-    val source = if (descriptor.isMaml()) "MAML" else "RemoteViews"
-    return "$source · ${descriptor.className.substringAfterLast('.')}"
-}
