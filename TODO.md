@@ -148,6 +148,19 @@
 
 ---
 
+## P2 · 旧 GUI / 采样配置收敛（2026-10-09 审计）
+
+**状态：待清理。** PR #290 仅收紧 GUI 描述并删除无实际控件的旧帮助文本；后续清理必须独立核验和测试。
+
+- 核实 `ConfigSchema.Glass` 中旧 capture/dynamic 参数（如 `liquid_capture_power_limit_fps`、`liquid_capture_stop_delay`、`liquid_capture_scale`、`liquid_dynamic_*`、`liquid_black_threshold`、`liquid_home_settle_delay`）是否有真正的运行时消费或导入导出/预设依赖。无消费者才分批清理，切勿误删 `PASSBLUR_CAPTURE_SCALE` / `PASSBLUR_RENDER_FPS`。
+- 检查 `liquid_edge_band`、`liquid_highlight_alpha`、`liquid_recents_prearm_distance`：当前没有可见 GUI 控件；仍须验证配置链是否仅有声明、预设或历史兼容用途，再决定删除键或保留迁移。
+- 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
+- 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
+- 四边 `SAMPLING_EXTRA_TOP/BOTTOM/LEFT/RIGHT` **保留**：已追踪到 `Miuix307PassBlurTextureView.fillSamplingInsets()`，它们与自动光学 guard 组合后再受 `maxTextureSize` 限制；后续测试应覆盖正负补偿、底限裁剪、双侧比例压缩与无 Prismal 参数时的行为。
+- 本项不包括 GUI 滑条拖动掉帧优化；高频 SharedPreferences → Remote Preferences 更新另行性能分析，确保最终值可靠落盘。
+
+---
+
 ## P2 · Secondary performance cleanup
 
 **状态：未完成。**
