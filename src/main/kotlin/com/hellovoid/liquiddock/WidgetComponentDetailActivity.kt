@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -19,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.preference.PreferenceManager
@@ -169,14 +167,11 @@ private fun WidgetComponentTypePage(
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(owner, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "组件类型 · ${components.size} 个可发现操作",
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 5.dp),
-                )
-            }
+            Text(
+                "组件类型 · ${components.size} 个可发现操作",
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
         }
 
         if (isMaml) {
@@ -217,7 +212,7 @@ private fun WidgetComponentTypePage(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
                 ) {
                     Column {
-                        likelyBackgrounds.forEach { descriptor ->
+                        likelyBackgrounds.forEachIndexed { index, descriptor ->
                             ArrowPreference(
                                 title = exactNodeTitle(descriptor),
                                 summary = buildString {
@@ -226,6 +221,9 @@ private fun WidgetComponentTypePage(
                                 },
                                 onClick = { onOpenType(descriptor.componentType) },
                             )
+                            if (index != likelyBackgrounds.lastIndex) {
+                                ModernListDivider()
+                            }
                         }
                     }
                 }
@@ -266,9 +264,12 @@ private fun WidgetComponentTypePage(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
                 ) {
                     Column {
-                        componentTypeOrder.forEach { type ->
-                            val group = WidgetComponentRanking.sorted(typeGroups[type].orEmpty())
-                            if (group.isEmpty()) return@forEach
+                        val visibleTypes = componentTypeOrder
+                            .mapNotNull { type ->
+                                val group = WidgetComponentRanking.sorted(typeGroups[type].orEmpty())
+                                group.takeIf { it.isNotEmpty() }?.let { type to it }
+                            }
+                        visibleTypes.forEachIndexed { index, (type, group) ->
                             val selectedCount = group.count { it.selectorKey() in selected }
                             val likelyCount = group.count(WidgetComponentRanking::isLikelyBackground)
                             ArrowPreference(
@@ -279,6 +280,9 @@ private fun WidgetComponentTypePage(
                                 },
                                 onClick = { onOpenType(type) },
                             )
+                            if (index != visibleTypes.lastIndex) {
+                                ModernListDivider()
+                            }
                         }
                     }
                 }
@@ -299,32 +303,41 @@ private fun WidgetExactNodePage(
     val rankedComponents = WidgetComponentRanking.sorted(components)
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(componentTypeTitle(type), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    when {
-                        isMaml -> "MAML 元素按名称或精确渲染路径隐藏；路径或类型变化时不会回退误命中。"
-                        type == WidgetComponentStore.TYPE_BACKGROUND ->
-                            "仅移除 View.background，不隐藏 View 与子内容。"
-                        type == WidgetComponentStore.TYPE_IMAGE ->
-                            "仅移除 ImageView 图像 Drawable，不隐藏其他内容。"
-                        else ->
-                            "高级整节点隐藏：只命中当前精确路径；容器节点会同时隐藏其子内容。"
-                    },
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 5.dp),
-                )
-            }
+            Text(
+                when {
+                    isMaml -> "MAML 元素按名称或精确渲染路径隐藏；路径或类型变化时不会回退误命中。"
+                    type == WidgetComponentStore.TYPE_BACKGROUND ->
+                        "仅移除 View.background，不隐藏 View 与子内容。"
+                    type == WidgetComponentStore.TYPE_IMAGE ->
+                        "仅移除 ImageView 图像 Drawable，不隐藏其他内容。"
+                    else ->
+                        "高级整节点隐藏：只命中当前精确路径；容器节点会同时隐藏其子内容。"
+                },
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
         }
-        items(rankedComponents, key = { it.selectorKey() }) { descriptor ->
-            val key = descriptor.selectorKey()
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                SwitchPreference(
-                    checked = key in selected,
-                    onCheckedChange = { checked -> onSelectionChanged(descriptor, checked) },
-                    title = exactNodeTitle(descriptor),
-                    summary = exactNodeSummary(descriptor),
-                )
+        rankedComponents.chunked(10).forEach { group ->
+            item(key = "node-group:${group.first().selectorKey()}") {
+                ModernSurface(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+                ) {
+                    Column {
+                        group.forEachIndexed { index, descriptor ->
+                            val key = descriptor.selectorKey()
+                            SwitchPreference(
+                                checked = key in selected,
+                                onCheckedChange = { checked -> onSelectionChanged(descriptor, checked) },
+                                title = exactNodeTitle(descriptor),
+                                summary = exactNodeSummary(descriptor),
+                            )
+                            if (index != group.lastIndex) {
+                                ModernListDivider()
+                            }
+                        }
+                    }
+                }
             }
         }
     }
