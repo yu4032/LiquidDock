@@ -1288,21 +1288,139 @@ private fun DockPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
-    openRecentBlacklist: () -> Unit,
+    open: (Page) -> Unit,
 ) {
-    var dockEnabled by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())) }
-    var resizeAnimation by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.RESIZE_ANIMATION.name(), ConfigSchema.Dock.RESIZE_ANIMATION.uiDefault())) }
-    var smoothResize by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(), ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault())) }
-    SettingsList(padding, stringResource(R.string.page_dock)) {
-        BooleanSetting(prefs, ConfigSchema.Dock.ENABLED, stringResource(R.string.dock_customization), stringResource(R.string.dock_customization_summary), masterEnabled) { dockEnabled = it }
-        BooleanSetting(prefs, ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT, "隐藏手机互联图标", "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态", masterEnabled)
-        ArrowPreference(
-            title = stringResource(R.string.page_dock_recent_blacklist),
-            summary = stringResource(R.string.dock_recent_blacklist_summary),
-            onClick = openRecentBlacklist,
+    var dockEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Dock.ENABLED.name(),
+                ConfigSchema.Dock.ENABLED.uiDefault(),
+            ),
         )
-        BooleanSetting(prefs, ConfigSchema.Dock.RESIZE_ANIMATION, stringResource(R.string.dock_resize_animation), stringResource(R.string.dock_resize_animation_summary), masterEnabled && dockEnabled) { resizeAnimation = it }
-        BooleanSetting(prefs, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION, stringResource(R.string.dock_smooth_resize_animation), stringResource(R.string.dock_smooth_resize_animation_summary), masterEnabled && dockEnabled && !resizeAnimation) { smoothResize = it }
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            PageHeader(
+                stringResource(R.string.page_dock),
+                "Dock 入口页只保留总开关，其余功能进入独立子页。",
+            )
+        }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Dock.ENABLED,
+                    stringResource(R.string.dock_customization),
+                    stringResource(R.string.dock_customization_summary),
+                    masterEnabled,
+                ) { dockEnabled = it }
+            }
+        }
+        dockEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+            }
+        }
+        item {
+            ModernFeatureCard(
+                title = stringResource(R.string.page_stroke),
+                summary = "描边样式与颜色",
+                onClick = { open(Page.Stroke) },
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
+        }
+        item {
+            ModernFeatureCard(
+                title = stringResource(R.string.page_shadow),
+                summary = "Dock 与描边阴影",
+                onClick = { open(Page.Shadow) },
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
+        }
+        if (!dockEnabled) {
+            item {
+                ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
+                    Text("Dock 自定义关闭时，子页参数会保留但不会参与运行时绘制。", fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DockBehaviorPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val dockEnabled = prefs.getBoolean(
+        ConfigSchema.Dock.ENABLED.name(),
+        ConfigSchema.Dock.ENABLED.uiDefault(),
+    )
+    var resizeAnimation by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Dock.RESIZE_ANIMATION.name(),
+                ConfigSchema.Dock.RESIZE_ANIMATION.uiDefault(),
+            ),
+        )
+    }
+    SettingsList(
+        padding,
+        stringResource(R.string.page_dock_behavior),
+        "功能入口与尺寸动画单独管理，不与几何滑条同时组合。",
+    ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT,
+            "隐藏手机互联图标",
+            "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态",
+            masterEnabled,
+        )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Dock.RESIZE_ANIMATION,
+            stringResource(R.string.dock_resize_animation),
+            stringResource(R.string.dock_resize_animation_summary),
+            masterEnabled && dockEnabled,
+        ) { resizeAnimation = it }
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION,
+            stringResource(R.string.dock_smooth_resize_animation),
+            stringResource(R.string.dock_smooth_resize_animation_summary),
+            masterEnabled && dockEnabled && !resizeAnimation,
+        )
+    }
+}
+
+@Composable
+private fun DockGeometryPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val dockEnabled = prefs.getBoolean(
+        ConfigSchema.Dock.ENABLED.name(),
+        ConfigSchema.Dock.ENABLED.uiDefault(),
+    )
+    SettingsList(
+        padding,
+        stringResource(R.string.page_dock_geometry),
+        "只组合 Dock 的尺寸、位置和模糊几何参数。",
+    ) {
         dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
     }
 }
