@@ -122,7 +122,7 @@ internal fun ModernSettingsScaffold(
                         depthEffect = true,
                     ) {
                         SmallTopAppBar(
-                            title = " ",
+                            title = title,
                             color = Color.Transparent,
                             navigationIcon = {
                                 if (showBack) {
