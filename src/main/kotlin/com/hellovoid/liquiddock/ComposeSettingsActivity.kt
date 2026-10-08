@@ -69,26 +69,61 @@ class ComposeSettingsActivity : SettingsActivity() {
 }
 
 private enum class Page(val titleRes: Int) {
-    Home(R.string.app_name), Grid(R.string.page_grid), Dock(R.string.page_dock),
+    Home(R.string.app_name),
+    LayoutHub(R.string.page_layout_hub),
+    GlassHub(R.string.page_glass_hub),
+    MoreHub(R.string.page_more_hub),
+
+    Grid(R.string.page_grid),
+    GridBasics(R.string.page_grid_basics),
+    GridLandscape(R.string.page_grid_landscape),
+    GridPortrait(R.string.page_grid_portrait),
+    GridSplit(R.string.page_grid_split),
+
+    Dock(R.string.page_dock),
+    DockBehavior(R.string.page_dock_behavior),
+    DockGeometry(R.string.page_dock_geometry),
     DockRecentBlacklist(R.string.page_dock_recent_blacklist),
-    Divider(R.string.page_divider), Workstation(R.string.page_workstation), Recents(R.string.page_recents),
-    SecurityCenterSidebar(R.string.page_security_center_sidebar),
-    Liquid(R.string.page_liquid), DialogCustomization(R.string.page_dialog_customization),
-    ThirdPartyApps(R.string.page_third_party_apps), Gboard(R.string.page_gboard),
+    Divider(R.string.page_divider),
+    Workstation(R.string.page_workstation),
+    Recents(R.string.page_recents),
+
+    Liquid(R.string.page_liquid),
+    LiquidMaterial(R.string.page_liquid_material),
+    LiquidRefraction(R.string.page_liquid_refraction),
+    LiquidColor(R.string.page_liquid_color),
+    LiquidLighting(R.string.page_liquid_lighting),
+    LiquidShadow(R.string.page_liquid_shadow),
+    LiquidSampling(R.string.page_liquid_sampling),
+    LiquidOs4(R.string.page_liquid_os4),
+
+    GlassComponents(R.string.page_glass_components),
+    GlassIcons(R.string.page_glass_icons),
+    GlassWidgets(R.string.page_glass_widgets),
+    GlassFolders(R.string.page_glass_folders),
+    GlassMenus(R.string.page_glass_menus),
+    DialogCustomization(R.string.page_dialog_customization),
+    ThirdPartyApps(R.string.page_third_party_apps),
+    Gboard(R.string.page_gboard),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
-    Stroke(R.string.page_stroke), Shadow(R.string.page_shadow), Animation(R.string.page_animation),
+    Stroke(R.string.page_stroke),
+    Shadow(R.string.page_shadow),
+
+    SecurityCenterSidebar(R.string.page_security_center_sidebar),
+    Animation(R.string.page_animation),
+    AnimationWorkspace(R.string.page_animation_workspace),
+    AnimationInteraction(R.string.page_animation_interaction),
+    AnimationPopups(R.string.page_animation_popups),
+    AnimationSystem(R.string.page_animation_system),
+    AnimationGui(R.string.page_animation_gui),
     Data(R.string.page_data),
-    About(R.string.page_about)
+    About(R.string.page_about),
 }
 
-private fun parentPage(page: Page): Page = when (page) {
-    Page.DockRecentBlacklist -> Page.Dock
-    Page.Gboard -> Page.ThirdPartyApps
-    Page.DialogCustomization, Page.ThirdPartyApps,
-    Page.LauncherHighlights, Page.WidgetComponents -> Page.Liquid
-    else -> Page.Home
-}
+private val ROOT_PAGES = listOf(Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub)
+
+private fun isRootPage(page: Page): Boolean = page in ROOT_PAGES
 
 private data class ThirdPartyAppPageDescriptor(
     val packageName: String,
