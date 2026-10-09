@@ -33,6 +33,16 @@ public class PassBlurConfigModelTest {
     }
 
     @Test
+    public void legacyLensRefractionAboveGuiMaximumIsClampedAtRuntime() {
+        Map<String, Object> values = new HashMap<>();
+        values.put(ConfigSchema.Glass.LENS_REFRACTION.name(), 60);
+        values.put(ConfigSchema.Glass.LENS_REFRACTION.name() + "_tenths", 600);
+
+        LiquidDockConfig config = LiquidDockConfig.from(new ConfigReader(values));
+        assertEquals(8f, config.glass.lensRefraction, 0.0001f);
+    }
+
+    @Test
     public void typedConfigClampsScaleButLeavesFpsForDisplayRuntimePolicy() {
         Map<String, Object> values = new HashMap<>();
         values.put(ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE.name(), 10);
