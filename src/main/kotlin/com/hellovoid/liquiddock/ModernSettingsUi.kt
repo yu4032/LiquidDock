@@ -614,18 +614,31 @@ internal fun ModernSurface(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
+    val colors = MiuixTheme.colorScheme
+    val darkTheme = colors.background.luminance() < 0.5f
+    val cardShape = RoundedCornerShape(24.dp)
+    // Subtle neutral lift + rim distinguish cards from near-black Monet backgrounds.
+    val solidCardColor = if (darkTheme) lerp(colors.surface, colors.onSurface, 0.08f) else colors.surface
+    val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
     if (backdrop == null) {
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))
+                .clip(cardShape)
+                .background(solidCardColor)
+                .border(1.dp, cardStroke, cardShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(contentPadding),
             content = content,
         )
         return
     }
+
+    // Dark glass stays refractive; only a faint neutral wash/rim raises separation.
+    val glassCardModifier = modifier
+        .fillMaxWidth()
+        .then(if (darkTheme) Modifier.border(1.dp, cardStroke, cardShape) else Modifier)
+    val darkGlassWash = if (darkTheme) Color.White.copy(alpha = 0.055f) else Color.Unspecified
 
     val cardContent: @Composable BoxScope.() -> Unit = {
         Column(
@@ -638,7 +651,7 @@ internal fun ModernSurface(
         // but not the scale + parallax layerBlock of an interactive glass surface.
         GuiStaticPressPrismalSurface(
             backdrop = backdrop,
-            modifier = modifier.fillMaxWidth(),
+            modifier = glassCardModifier,
             shape = { PrismalRoundedRectangle(24.dp) },
             onClick = onClick,
             blurRadius = 12.dp,
@@ -649,12 +662,13 @@ internal fun ModernSurface(
             refractionAmountPx = 21f,
             chromaticAberration = 0.28f,
             depthEffect = true,
+            surfaceColor = darkGlassWash,
             content = cardContent,
         )
     } else {
         PrismalGlassSurface(
             backdrop = backdrop,
-            modifier = modifier.fillMaxWidth(),
+            modifier = glassCardModifier,
             shape = { PrismalRoundedRectangle(24.dp) },
             onClick = onClick,
             blurRadius = 12.dp,
@@ -665,6 +679,7 @@ internal fun ModernSurface(
             refractionAmountPx = 21f,
             chromaticAberration = 0.28f,
             depthEffect = true,
+            surfaceColor = darkGlassWash,
             content = cardContent,
         )
     }
@@ -765,16 +780,23 @@ internal fun Button(
     content: @Composable RowScope.() -> Unit,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current ?: LocalPrismalOverlayBackdrop.current
+    val colors = MiuixTheme.colorScheme
+    val darkTheme = colors.background.luminance() < 0.5f
     val resolved = modifier
         .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
-        .alpha(if (enabled) 1f else 0.42f)
+        // Solid +/- and reset buttons need a visible boundary even when disabled.
+        .alpha(if (enabled) 1f else if (backdrop == null) 0.66f else 0.42f)
 
     if (backdrop == null) {
+        val buttonShape = RoundedCornerShape(minHeight / 2)
+        val fillColor = lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
+        val outlineColor = colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
         Row(
             modifier = resolved
                 .height(minHeight)
-                .clip(RoundedCornerShape(minHeight / 2))
-                .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.96f))
+                .clip(buttonShape)
+                .background(fillColor, buttonShape)
+                .border(1.dp, outlineColor, buttonShape)
                 .clickable(enabled = enabled, onClick = onClick)
                 .padding(insideMargin),
             verticalAlignment = Alignment.CenterVertically,

@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -43,6 +44,7 @@ internal fun GuiStaticPressPrismalSurface(
     refractionAmountPx: Float,
     chromaticAberration: Float,
     depthEffect: Boolean,
+    surfaceColor: Color = Color.Unspecified,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val density = LocalDensity.current
@@ -75,6 +77,7 @@ internal fun GuiStaticPressPrismalSurface(
                 // press and drag, while retaining the identical ripple shader.
                 onDrawSurface = {
                     drawPrismalGlassTint(tint, tintAlpha)
+                    if (surfaceColor.isSpecified) drawRect(surfaceColor)
                 },
             )
             .clickable(
