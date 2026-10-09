@@ -78,8 +78,8 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     private final Handler mainHandler;
     private final FloatBuffer quadBuffer;
     private final RootPassBlurBackend sourceBackend;
-    private final PrismalParams prismalParams;
-    private final PrismalHighlightProfile highlightProfile;
+    private volatile PrismalParams prismalParams;
+    private volatile PrismalHighlightProfile highlightProfile;
 
     private volatile boolean shuttingDown;
     private final Object pipelineLock = new Object();
@@ -139,6 +139,24 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 "LiquidDock-SecurityCenterGlass-EGL");
         log("session created root=" + root.getClass().getSimpleName()
                 + "@" + Integer.toHexString(System.identityHashCode(root)));
+    }
+
+    /** Updates the installed Prismal renderer; the existing source generation stays owned by
+     * the Security Center presentation state machine. */
+    void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
+        if (shuttingDown || config == null) return;
+        View root = rootRef.get();
+        float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
+        prismalParams = Miuix307PrismalAdapter.toPortable(
+                Miuix307PrismalMaterial.fromConfig(config, density),
+                SecurityCenterMaterialModePolicy.useShaderBlur());
+        highlightProfile = config.largeSurfaceHighlightProfile;
+        FrameRequest request = frameRequest;
+        if (request != null && cachedSourceFrame != null
+                && request.generation == cachedSourceFrame.generation) {
+            requestCachedPresentation(request.generation);
+        }
+        // Capture density/FPS are applied when this semantic session is next established.
     }
 
     boolean ownsRoot(View root) {

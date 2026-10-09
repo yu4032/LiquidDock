@@ -5,6 +5,7 @@ import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.os.Trace;
 import android.view.Display;
 import android.view.Surface;
@@ -148,6 +149,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile int rootHeight;
     private volatile int configRotation;
     private volatile long sceneGeneration = 1L;
+    private volatile float appliedGlassBlur = Float.NaN;
     private volatile int passBlurCaptureScalePercent =
             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
     private volatile int passBlurRenderFps = PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
@@ -173,6 +175,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeTextureLocation = -1;
     private int compositeCropRectLocation = -1;
     private volatile boolean backdropPrepared;
+    // One bounded recovery request per transient output/producer geometry mismatch.
+    private long lastGeometryMismatchRefreshMs;
 
     // Debug-only aggregate timings. UI and render counters are single-thread owned.
     private long uiPerfWindowStartNs;
@@ -289,17 +293,31 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         });
     }
 
+    /** Optical-only updates reuse the prepared PassBlur backdrop and existing EGL outputs. */
+    void applyLiveGlassConfig(LiquidDockConfig.Glass glassConfig) {
+        if (shuttingDown || glassConfig == null) return;
+        boolean qualityChanged = passBlurCaptureScalePercent != glassConfig.passBlurCaptureScalePercent
+                || passBlurRenderFps != glassConfig.passBlurRenderFps;
+        boolean blurChanged = Float.compare(appliedGlassBlur, glassConfig.blur) != 0;
+        applyGlassConfig(glassConfig);
+        if (qualityChanged) sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
+        if (qualityChanged || blurChanged) {
+            // Gaussian blur lives in the prepared backdrop, not only in final uniforms.
+            // Request a new producer frame without replacing the EGL / PassBlur owner.
+            View root = rootRef.get();
+            if (root != null) LauncherGlassSceneController.requestFreshForRoot(root);
+        } else {
+            requestSceneRedraw();
+        }
+    }
+
     private void applyGlassConfig(LiquidDockConfig.Glass glassConfig) {
         View root = rootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
+        appliedGlassBlur = glassConfig != null ? glassConfig.blur : Float.NaN;
         passBlurCaptureScalePercent = glassConfig != null
                 ? glassConfig.passBlurCaptureScalePercent
                 : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
-        if (MainHook.debugLogging && workspaceSource) {
-            MainHook.log("[DC][WorkspaceQuality] opticsScale="
-                    + PassBlurQualityPolicy.workspaceOpticsScalePercent(
-                            true, passBlurCaptureScalePercent) + " reason=resolution-setting");
-        }
         passBlurRenderFps = glassConfig != null
                 ? glassConfig.passBlurRenderFps
                 : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
@@ -968,6 +986,35 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (root == null || !root.isAttachedToWindow()) return;
         PrismalParams params = prismalParams;
         if (params == null) return;
+        OutputState currentOutput = staticOutput;
+        int windowWidth = currentOutput != null ? currentOutput.width : 0;
+        int windowHeight = currentOutput != null ? currentOutput.height : 0;
+        String mismatch = WorkspaceFrameGeometryPolicy.mismatch(
+                frame.logicalWidth, frame.logicalHeight, frame.rotation,
+                rootWidth, rootHeight, configRotation, windowWidth, windowHeight);
+        if (mismatch != null) {
+            // The source and TextureView change dimensions on different threads. Never
+            // overwrite current root geometry from a stale source callback or rasterize
+            // the old logical coordinates into a newer window (perceived magnification).
+            MainHook.log(TAG + " [WorkspaceGeometry] stale frame rejected reason=" + mismatch
+                    + " frame=" + frame.logicalWidth + "x" + frame.logicalHeight
+                    + " rot=" + frame.rotation
+                    + " root=" + rootWidth + "x" + rootHeight
+                    + " rot=" + configRotation
+                    + " output=" + windowWidth + "x" + windowHeight
+                    + " scene=" + frame.generation);
+            long now = SystemClock.uptimeMillis();
+            if (now - lastGeometryMismatchRefreshMs >= 180L) {
+                lastGeometryMismatchRefreshMs = now;
+                mainHandler.post(() -> {
+                    if (shuttingDown || rootRef.get() != root || !root.isAttachedToWindow()) return;
+                    // Reconcile the actual ViewRoot before obtaining another source buffer.
+                    syncSceneOnUiThread();
+                    LauncherGlassSceneController.requestFreshForRoot(root);
+                });
+            }
+            return;
+        }
         boolean trace = MainHook.debugLogging && workspaceSource;
         if (trace) Trace.beginSection("LD.Workspace.SourceFrame");
         try {
@@ -975,8 +1022,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             long perfStartNs = perf ? System.nanoTime() : 0L;
             long backdropStartNs = perfStartNs;
             ensureLauncherGl();
-            rootWidth = frame.logicalWidth;
-            rootHeight = frame.logicalHeight;
+            // UI pre-draw owns rootWidth/rootHeight. Never regress them to capture-time
+            // dimensions on this render-thread callback.
             sourceBackend.makePbufferCurrent();
             if (trace) Trace.beginSection("LD.Workspace.Backdrop");
             try {
@@ -1079,18 +1126,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         OutputState output = staticOutput;
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
                 || output.width <= 0 || output.height <= 0) return;
-        // The resolution slider controls both backdrop density and Workspace optics, including
-        // stationary frames. At 100% the shared batch can draw straight into its RGBA window.
-        int opticsScale = PassBlurQualityPolicy.workspaceOpticsScalePercent(
-                workspaceSource, passBlurCaptureScalePercent);
-        boolean reduced = opticsScale < 100;
-        if (reduced) {
-            sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrameAtScale(opticsScale);
-        } else {
-            sourceBackend.makeCurrent(output.eglSurface);
-            prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
-        }
+        // Background capture and blur remain downsampled, while procedural refraction
+        // renders directly into the native-resolution window. The Prismal node scissor
+        // limits expensive shading to occupied glass bounds.
+        sourceBackend.makeCurrent(output.eglSurface);
+        prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
         StaticNodeState[] snapshot = staticNodeStateSnapshot;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
@@ -1106,8 +1146,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
-        if (reduced) presentFull(prismalRenderer.outputTexture(), output);
-        else sourceBackend.swapBuffers(output.eglSurface);
+        sourceBackend.swapBuffers(output.eglSurface);
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
@@ -1142,9 +1181,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             LauncherGlassGeometry.Snapshot geometry = node != null ? node.geometry : null;
             if (node == null || geometry == null) continue;
             sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrameAtScale(
-                    PassBlurQualityPolicy.workspaceOpticsScalePercent(
-                            workspaceSource, passBlurCaptureScalePercent));
+            // Drag outputs already use native-sized optical FBOs; backdrop sampling
+            // quality is configured independently on RootPassBlurBackend.
+            prismalRenderer.beginGlassFrame();
             PrismalGeometry prismalGeometry = new PrismalGeometry(
                     rootWidth, rootHeight, geometry.centerX, geometry.centerY,
                     geometry.width, geometry.height, geometry.cornerRadius);
@@ -1157,24 +1196,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     prismalGeometry, params, highlights, node.interaction);
             present(prismalRenderer.outputTexture(), geometry, entry.getValue());
         }
-    }
-
-    private void presentFull(int sceneTexture, OutputState output) {
-        sourceBackend.makeCurrent(output.eglSurface);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-        GLES20.glViewport(0, 0, output.width, output.height);
-        GLES20.glDisable(GLES20.GL_BLEND);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glClearColor(0f, 0f, 0f, 0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositePositionLocation, compositeUvLocation);
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositePositionLocation, compositeUvLocation);
-        sourceBackend.swapBuffers(output.eglSurface);
     }
 
     private void present(

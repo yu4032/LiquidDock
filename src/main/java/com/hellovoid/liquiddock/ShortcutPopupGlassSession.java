@@ -52,8 +52,15 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final FloatBuffer quadBuffer;
-    private final PrismalParams prismalParams;
-    private final PrismalHighlightProfile highlightProfile;
+    private volatile PrismalParams prismalParams;
+    private volatile PrismalHighlightProfile highlightProfile;
+    // RootPassBlurBackend retains its normalized FBO after freezing popup updates.
+    // Reuse that valid texture to re-blur the existing snapshot without recapturing
+    // the now-visible menu or changing the PassBlur/EGL owner.
+    private int frozenNormalizedTexture;
+    private int frozenPhysicalWidth;
+    private int frozenPhysicalHeight;
+    private volatile float appliedBlur;
 
     private volatile LauncherGlassGeometry.Snapshot geometry;
     private volatile boolean shuttingDown;
@@ -85,6 +92,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
         prismalParams = Miuix307PrismalAdapter.toPortable(optical);
+        appliedBlur = glassConfig != null ? glassConfig.blur : Float.NaN;
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
@@ -105,6 +113,37 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     void requestInitialCapture() {
         if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+    }
+
+    /** Refresh a live popup's optics without touching its frozen producer or EGL surface. */
+    void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
+        if (shuttingDown || config == null) return;
+        View root = sourceRootRef.get();
+        float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
+        PrismalParams next = Miuix307PrismalAdapter.toPortable(
+                Miuix307PrismalMaterial.fromConfig(config, density));
+        boolean blurChanged = Float.compare(appliedBlur, config.blur) != 0;
+        appliedBlur = config.blur;
+        prismalParams = next;
+        highlightProfile = config.largeSurfaceHighlightProfile;
+        sourceBackend.postToRenderThread(() -> {
+            if (shuttingDown) return;
+            if (blurChanged && backdropPrepared && frozenNormalizedTexture > 0
+                    && frozenPhysicalWidth > 0 && frozenPhysicalHeight > 0) {
+                try {
+                    sourceBackend.makePbufferCurrent();
+                    prismalRenderer.prepareBackdrop(
+                            frozenNormalizedTexture, frozenPhysicalWidth, frozenPhysicalHeight,
+                            logicalWidth, logicalHeight, next);
+                } catch (Throwable error) {
+                    MainHook.log(TAG + " live blur refresh failed: " + error);
+                    return;
+                }
+            }
+            renderCurrent();
+        });
+        // Capture-scale/FPS changes affect the next popup capture. An already-frozen popup
+        // must not re-capture from behind its own now-visible overlay.
     }
 
     boolean hasFrozenBackdrop() {
@@ -175,6 +214,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
             sourceBackend.makePbufferCurrent();
+            frozenNormalizedTexture = frame.normalizedTextureId;
+            frozenPhysicalWidth = frame.physicalWidth;
+            frozenPhysicalHeight = frame.physicalHeight;
             prismalRenderer.prepareBackdrop(
                     frame.normalizedTextureId,
                     frame.physicalWidth,

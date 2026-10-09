@@ -56,8 +56,14 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final FloatBuffer quadBuffer;
-    private final PrismalParams prismalParams;
-    private final PrismalHighlightProfile highlightProfile;
+    private volatile PrismalParams prismalParams;
+    private volatile PrismalHighlightProfile highlightProfile;
+    private volatile float appliedBlur;
+    private int lastNormalizedTexture;
+    private int lastPhysicalWidth;
+    private int lastPhysicalHeight;
+    private int qualityScalePercent;
+    private int qualityRenderFps;
     private final boolean realtimeBackgroundSampling;
     private final OutputMode outputMode;
     private final Object renderQueueLock = new Object();
@@ -125,6 +131,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 GboardGlassPreferences.resolveShared(ConfigReader.load(), glassConfig);
         prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
         highlightProfile = appearance.highlightProfile;
+        appliedBlur = appearance.blur;
+        qualityScalePercent = appearance.captureScalePercent;
+        qualityRenderFps = appearance.renderFps;
         sourceBackend = new RootPassBlurBackend(
                 root,
                 PassBlurBindRequest.gboardFloating(root),
@@ -132,6 +141,50 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 appearance.renderFps,
                 this,
                 "LiquidDock-GboardFloating-EGL");
+    }
+
+    /** Update Gboard's existing EGL/PassBlur session after an independent-process pref change. */
+    void applyLiveGlassConfig(LiquidDockConfig.Glass glass, ThirdPartyGlassAppearance appearance) {
+        if (shuttingDown || glass == null || appearance == null) return;
+        View root = rootRef.get();
+        float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
+        PrismalParams next = ThirdPartyPrismalParams.apply(
+                Miuix307PrismalAdapter.toPortable(
+                        Miuix307PrismalMaterial.fromConfig(glass, density)), appearance);
+        boolean blurChanged = Float.compare(appliedBlur, appearance.blur) != 0;
+        appliedBlur = appearance.blur;
+        prismalParams = next;
+        highlightProfile = appearance.highlightProfile;
+        boolean qualityChanged = qualityScalePercent != appearance.captureScalePercent
+                || qualityRenderFps != appearance.renderFps;
+        if (qualityChanged && realtimeBackgroundSampling) {
+            qualityScalePercent = appearance.captureScalePercent;
+            qualityRenderFps = appearance.renderFps;
+            // Recreate only the normalized capture target when resolution changes.
+            sourceBackend.setQuality(qualityScalePercent, qualityRenderFps);
+            backdropPrepared = false;
+            sourceBackend.requestFresh(GENERATION);
+            return;
+        }
+        sourceBackend.postToRenderThread(() -> {
+            if (shuttingDown) return;
+            if (blurChanged && backdropPrepared && lastNormalizedTexture > 0
+                    && lastPhysicalWidth > 0 && lastPhysicalHeight > 0
+                    && prismalRenderer != null) {
+                try {
+                    sourceBackend.makePbufferCurrent();
+                    prismalRenderer.prepareBackdrop(
+                            lastNormalizedTexture, lastPhysicalWidth, lastPhysicalHeight,
+                            logicalWidth, logicalHeight, next);
+                } catch (Throwable error) {
+                    notifyFailure("live-blur", error);
+                    return;
+                }
+            }
+            scheduleRender(false);
+        });
+        // Frozen producer: quality changes affect the next keyboard session; never invalidate
+        // its retained normalized texture while the glass is still visible.
     }
 
     void requestInitialCapture() {
@@ -243,6 +296,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
             sourceBackend.makePbufferCurrent();
+            lastNormalizedTexture = frame.normalizedTextureId;
+            lastPhysicalWidth = frame.physicalWidth;
+            lastPhysicalHeight = frame.physicalHeight;
             prismalRenderer.prepareBackdrop(
                     frame.normalizedTextureId,
                     frame.physicalWidth,

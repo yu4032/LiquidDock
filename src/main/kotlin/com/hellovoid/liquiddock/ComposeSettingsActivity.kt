@@ -387,15 +387,15 @@ private val largeFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_
 private val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")
 private val passBlurCaptureScaleSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,
-    "工作区渲染分辨率",
+    "工作区背景采样分辨率",
     "%",
-    summary = "调整工作区玻璃的实际渲染分辨率；100% 为原生分辨率，降低可减少 GPU 开销。Dock 不受影响；重启桌面后生效",
+    summary = "降低工作区 PassBlur 背景纹理分辨率以节省采样与模糊开销；边缘折射、轮廓和高光始终以原生分辨率绘制。Dock 不受影响；配置实时生效",
 )
 private val passBlurRenderFpsSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_RENDER_FPS,
     "玻璃实时渲染刷新率上限（0 = Auto）",
     "fps",
-    summary = "限制除 Dock 外实时玻璃的最高渲染刷新率；0 = 自动跟随可用源帧。降低上限可减少合成开销；重启相关应用后生效",
+    summary = "限制除 Dock 外实时玻璃的最高刷新率；0 = 自动跟随可用源帧。工作区与已连接的 Launcher 玻璃实时生效；独立应用需按其作用域重启",
     dynamicMax = DisplayRefreshRatePolicy::maxSupportedRefreshRateHz,
 )
 private val liquidSpecs = listOf(

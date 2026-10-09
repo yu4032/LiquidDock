@@ -116,7 +116,7 @@ final class SecurityCenterGlassCoordinator
     private final SecurityCenterMaterialOwnershipState ownership =
             new SecurityCenterMaterialOwnershipState();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final LiquidDockConfig.Glass glassConfig;
+    private volatile LiquidDockConfig.Glass glassConfig;
     private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
     private final int allAppsCornerRadiusResId;
     private final int gameToolboxCornerRadiusResId;
@@ -201,6 +201,14 @@ final class SecurityCenterGlassCoordinator
         this.allAppsCornerRadiusResId = allAppsCornerRadiusResId;
         this.gameToolboxCornerRadiusResId = gameToolboxCornerRadiusResId;
         SecurityCenterGlassRuntimeState.setOwner(this);
+    }
+
+    /** Keep existing source, sinks and ownership, updating only shader parameters. */
+    void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
+        if (config == null) return;
+        glassConfig = config;
+        SecurityCenterGlassSession live = session;
+        if (live != null && !live.isShutdown()) live.applyLiveGlassConfig(config);
     }
 
     void bindGlobalDock(View turboLayout, View dockLayout) {

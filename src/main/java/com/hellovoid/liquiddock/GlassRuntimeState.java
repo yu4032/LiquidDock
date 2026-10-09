@@ -43,7 +43,7 @@ final class GlassRuntimeState {
         largeFolderEnabled = initialLargeFolderEnabled;
         if (nextPrefs == null) return;
         listener = (sharedPreferences, key) -> {
-            if (!ConfigSchema.Glass.ENABLED.name().equals(key)
+            if (key != null && !ConfigSchema.Glass.ENABLED.name().equals(key)
                     && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.ICON_GLASS.name().equals(key)
                     && !ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name().equals(key)
@@ -190,6 +190,11 @@ final class GlassRuntimeState {
                 MiuixLauncherStaticGlassHook.onRuntimeWidgetGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] widget glass ownership released");
             });
+        } else if (!before.widget && isWidgetEnabled()) {
+            runOnMain(() -> {
+                MiuixLauncherStaticGlassHook.onRuntimeWidgetGlassEnabled();
+                MainHook.log("[DC][GlassRuntime] widget glass ownership restored");
+            });
         }
         if (transition.widgetDarkContentChanged) {
             runOnMain(() -> {
@@ -204,12 +209,16 @@ final class GlassRuntimeState {
                 MiuixFolderGlassHook.onRuntimeSmallFolderGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] small-folder glass ownership released");
             });
+        } else if (!before.smallFolder && isSmallFolderEnabled()) {
+            runOnMain(() -> MiuixFolderGlassHook.onRuntimeFolderGlassEnabled(true));
         }
         if (transition.largeFolderRelease) {
             runOnMain(() -> {
                 MiuixFolderGlassHook.onRuntimeLargeFolderGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] large-folder glass ownership released");
             });
+        } else if (!before.largeFolder && isLargeFolderEnabled()) {
+            runOnMain(() -> MiuixFolderGlassHook.onRuntimeFolderGlassEnabled(false));
         }
     }
 

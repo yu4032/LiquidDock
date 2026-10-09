@@ -25,16 +25,38 @@ final class WorkstationDockGeometryHook {
     // Weak key alone is insufficient if the value strongly owns the key. Keep both sides weak;
     // the View itself owns the listeners for exactly as long as it is attached.
     private static final WeakHashMap<View, WeakReference<Binding>> bindings = new WeakHashMap<>();
-    private static int widthOffsetPx;
+    private static volatile int widthOffsetPx;
+    private static volatile boolean dockEnabled;
     private static boolean unresolvedChainLogged;
+
+    static void applyLiveConfig(LiquidDockConfig.Workstation config) {
+        if (config == null) return;
+        float scale = config.dimensionsDp
+                ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
+        int nextWidth = Math.round(config.dockWidthOffset * scale);
+        if (widthOffsetPx == nextWidth && dockEnabled == config.dockEnabled) return;
+        widthOffsetPx = nextWidth;
+        dockEnabled = config.dockEnabled;
+        refreshInstalledWidth();
+    }
+
+    private static void refreshInstalledWidth() {
+        ArrayList<Binding> snapshot = new ArrayList<>();
+        synchronized (bindings) {
+            for (WeakReference<Binding> ref : bindings.values()) {
+                Binding binding = ref != null ? ref.get() : null;
+                if (binding != null) snapshot.add(binding);
+            }
+        }
+        for (Binding binding : snapshot) {
+            binding.apply(MainHook.isWorkstationMode() && dockEnabled);
+        }
+    }
 
     private WorkstationDockGeometryHook() {}
 
     static void install(ClassLoader classLoader, LiquidDockConfig.Workstation config) {
-        if (!config.dockEnabled) return;
-        float scale = config.dimensionsDp
-                ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
-        widthOffsetPx = Math.round(config.dockWidthOffset * scale);
+        applyLiveConfig(config);
 
         try {
             HookUtil.hookMethod(classLoader, LINE_HOLDER, "bindView", chain -> {
@@ -72,7 +94,7 @@ final class WorkstationDockGeometryHook {
                 }
             }
         }
-        for (Binding binding : snapshot) binding.apply(enabled);
+        for (Binding binding : snapshot) binding.apply(enabled && dockEnabled);
     }
 
     private static void bindFromAnchor(View anchor) {
@@ -96,7 +118,7 @@ final class WorkstationDockGeometryHook {
             }
         }
         final Binding bound = binding;
-        container.post(() -> bound.apply(MainHook.isWorkstationMode()));
+        container.post(() -> bound.apply(MainHook.isWorkstationMode() && dockEnabled));
     }
 
     private static View resolveDockContainer(View anchor) {
@@ -136,7 +158,7 @@ final class WorkstationDockGeometryHook {
         @Override
         public void onLayoutChange(View v, int left, int top, int right, int bottom,
                                    int oldLeft, int oldTop, int oldRight, int oldBottom) {
-            apply(MainHook.isWorkstationMode());
+            apply(MainHook.isWorkstationMode() && dockEnabled);
         }
 
         @Override

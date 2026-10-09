@@ -31,7 +31,7 @@ final class LauncherGlassStaticNode {
     private final Matrix rootToGlobal = new Matrix();
     private final Matrix globalToRoot = new Matrix();
     private volatile LauncherGlassSession session;
-    private final LiquidDockConfig.Glass glassConfig;
+    private volatile LiquidDockConfig.Glass glassConfig;
     private volatile float nativeCornerRadiusPx;
     private volatile boolean disposed;
     private final LauncherGlassSuppressionState suppressionState =
@@ -84,6 +84,8 @@ final class LauncherGlassStaticNode {
             View materialHost, LauncherGlassDragState.Kind kind,
             float cornerRadiusPx, LiquidDockConfig.Glass glassConfig) {
         if (materialHost == null) return null;
+        LiquidDockConfig.Glass latestGlass = LiveGlassConfigState.currentGlass();
+        if (latestGlass != null) glassConfig = latestGlass;
         LauncherGlassDragState.Kind resolvedKind = kind != null
                 ? kind : LauncherGlassDragState.Kind.FOLDER;
         LauncherGlassNodeKind resolvedNodeKind = resolvedKind == LauncherGlassDragState.Kind.ICON
@@ -94,6 +96,7 @@ final class LauncherGlassStaticNode {
         LauncherGlassStaticNode existing = reference != null ? reference.get() : null;
         if (existing != null && !existing.disposed && existing.kind == resolvedKind
                 && existing.nodeKind == resolvedNodeKind) {
+            existing.glassConfig = glassConfig;
             existing.setNativeCornerRadiusPx(cornerRadiusPx);
             LauncherGlassSession live = existing.ensureLiveSession();
             if (live != null) live.registerStaticNode(existing);
@@ -114,11 +117,14 @@ final class LauncherGlassStaticNode {
             View materialHost, boolean smallFolder, float cornerRadiusPx,
             LiquidDockConfig.Glass glassConfig) {
         if (materialHost == null) return null;
+        LiquidDockConfig.Glass latestGlass = LiveGlassConfigState.currentGlass();
+        if (latestGlass != null) glassConfig = latestGlass;
         LauncherGlassNodeKind resolvedNodeKind = smallFolder
                 ? LauncherGlassNodeKind.SMALL_FOLDER : LauncherGlassNodeKind.LARGE_FOLDER;
         WeakReference<LauncherGlassStaticNode> reference = BY_MATERIAL.get(materialHost);
         LauncherGlassStaticNode existing = reference != null ? reference.get() : null;
         if (existing != null && !existing.disposed && existing.nodeKind == resolvedNodeKind) {
+            existing.glassConfig = glassConfig;
             existing.setNativeCornerRadiusPx(cornerRadiusPx);
             LauncherGlassSession live = existing.ensureLiveSession();
             if (live != null) live.registerStaticNode(existing);
@@ -141,6 +147,34 @@ final class LauncherGlassStaticNode {
         WeakReference<LauncherGlassStaticNode> reference = BY_MATERIAL.get(materialHost);
         LauncherGlassStaticNode node = reference != null ? reference.get() : null;
         return node != null && !node.disposed ? node : null;
+    }
+
+    /** Preserve node/session ownership while replacing per-component optical styles. */
+    static void applyLiveGlassConfigToAll(LiquidDockConfig.Glass glassConfig) {
+        // Component size/corner offsets are applied when captureGeometry() runs on pre-draw.
+        // An optical-only scene redraw would retain the previous geometry snapshot.
+        // Invalidate each distinct stable root once so that geometry is re-collected.
+        java.util.HashSet<View> dirtyRoots = new java.util.HashSet<>();
+        synchronized (BY_MATERIAL) {
+            for (WeakReference<LauncherGlassStaticNode> ref : BY_MATERIAL.values()) {
+                LauncherGlassStaticNode node = ref.get();
+                if (node == null || node.disposed) continue;
+                GlassComponentStyle before = node.componentStyle();
+                node.glassConfig = glassConfig;
+                GlassComponentStyle after = node.componentStyle();
+                if (before.enabled == after.enabled
+                        && Float.compare(before.sizeOffsetDp, after.sizeOffsetDp) == 0
+                        && Float.compare(before.cornerRadiusDp, after.cornerRadiusDp) == 0) {
+                    continue; // Shader-only changes already use the lightweight scene-redraw path.
+                }
+                View material = node.materialRef.get();
+                if (material != null && material.isAttachedToWindow()) {
+                    View root = material.getRootView();
+                    if (root != null && root.isAttachedToWindow()) dirtyRoots.add(root);
+                }
+            }
+        }
+        for (View root : dirtyRoots) root.postInvalidateOnAnimation();
     }
 
     View materialHost() { return materialRef.get(); }
