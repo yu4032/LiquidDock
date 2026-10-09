@@ -617,9 +617,11 @@ internal fun ModernSurface(
             content = content,
         )
     }
-    if (staticPress && onClick != null) {
-        // Chevron navigation Cells retain Prismal press ripple/specular effects,
-        // but not the scale + parallax layerBlock of an interactive glass surface.
+    if (onClick == null || staticPress) {
+        // Ordinary settings Cells and chevron navigation Cells use the same
+        // shadowless Prismal glass optics. The chevron retains press ripple,
+        // but has no scale/parallax layerBlock (PR #293).
+        // Only other interactive surfaces keep stock PrismalGlassSurface.
         GuiStaticPressPrismalSurface(
             backdrop = backdrop,
             modifier = glassCardModifier,
