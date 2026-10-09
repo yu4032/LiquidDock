@@ -1308,6 +1308,18 @@ private fun GridBasicsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
 ) {
+    val context = LocalContext.current
+    var gridCheckPending by remember { mutableStateOf(false) }
+    var gridWarning by remember { mutableStateOf<String?>(null) }
+    // Cancel an in-flight request when the user leaves the page: late Launcher
+    // replies must never write a grid value behind the user's back.
+    val gridCheck = remember { arrayOfNulls<GridWidget4x2PreflightClient.Request>(1) }
+    DisposableEffect(prefs) {
+        onDispose {
+            gridCheck[0]?.cancel()
+            gridCheck[0] = null
+        }
+    }
     val customGridRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Grid.ENABLED.name()] ?: 0
     var customGrid by remember(customGridRevision) {
         mutableStateOf(
@@ -1349,7 +1361,58 @@ private fun GridBasicsPage(
             "控制自定义行列数是否参与布局；重启桌面后生效",
             masterEnabled,
         ) { customGrid = it }
-        gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+        gridDimensionSpecs.forEach { spec ->
+            IntSetting(
+                prefs,
+                spec,
+                masterEnabled && customGrid && !gridCheckPending,
+                beforeSave = { proposed, commit ->
+                    val current = prefs.getInt(spec.key, spec.default)
+                    val target = proposed.roundToInt()
+                    if (!GridWidget4x2PreflightPolicy.needsCheck(current, target)) {
+                        commit()
+                    } else if (!gridCheckPending) {
+                        gridCheckPending = true
+                        val token = prefs.getString(
+                            WidgetComponentStore.DISCOVERY_TOKEN_KEY, "",
+                        ).orEmpty()
+                        gridCheck[0] = GridWidget4x2PreflightClient.start(
+                            context, token,
+                        ) { status ->
+                            gridCheckPending = false
+                            gridCheck[0] = null
+                            when (status) {
+                                GridWidget4x2PreflightClient.CLEAR -> {
+                                    // A concurrent config change invalidates this check.
+                                    if (prefs.getInt(spec.key, spec.default) == current &&
+                                        prefs.getBoolean(
+                                            ConfigSchema.Core.ENABLED.name(),
+                                            ConfigSchema.Core.ENABLED.uiDefault(),
+                                        ) && prefs.getBoolean(
+                                            ConfigSchema.Grid.ENABLED.name(),
+                                            ConfigSchema.Grid.ENABLED.uiDefault(),
+                                        )
+                                    ) {
+                                        commit()
+                                    }
+                                }
+                                GridWidget4x2PreflightClient.BLOCKED ->
+                                    gridWarning = "检测到桌面存在 4×2 小组件（旋转后可能为 2×4）。行数或列数不能降低到 4 以下，请先调整或移除对应小组件。本次修改未保存。"
+                                else ->
+                                    gridWarning = "无法确认桌面是否存在 4×2 小组件。请保持桌面进程运行，确认 LSPosed 服务可用后重试。本次修改未保存。"
+                            }
+                        }
+                    }
+                },
+            )
+        }
+        if (gridCheckPending) {
+            Text(
+                "正在检查桌面 4×2 小组件，确认安全前不会保存行列数……",
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                fontSize = 13.sp,
+            )
+        }
         BooleanSetting(
             prefs,
             ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
@@ -1357,6 +1420,32 @@ private fun GridBasicsPage(
             "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
             masterEnabled && customGrid,
         )
+    }
+    WindowDialog(
+        show = gridWarning != null,
+        title = "网格尺寸无法修改",
+        onDismissRequest = { gridWarning = null },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Text(gridWarning.orEmpty(), fontSize = 15.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                // Same large action height/padding as the Restart Scopes dialog.
+                Button(
+                    onClick = { gridWarning = null },
+                    minWidth = 164.dp,
+                    minHeight = 42.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                ) {
+                    Text("知道了")
+                }
+            }
+        }
     }
 }
 
@@ -2453,7 +2542,12 @@ internal fun BooleanSetting(
 }
 
 @Composable
-private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride: Boolean? = null) {
+private fun IntSetting(
+    prefs: SharedPreferences,
+    spec: IntSpec,
+    enabledOverride: Boolean? = null,
+    beforeSave: ((Float, () -> Unit) -> Unit)? = null,
+) {
     val decimalDp = spec.isDecimal
     val context = LocalContext.current
     val maxValue = remember(spec.key, context) { spec.max(context) }
@@ -2490,10 +2584,13 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
         }
         val bounded = next.coerceIn(spec.min.toFloat(), maxValue.toFloat())
         if (bounded == value) return // already persisted this quantized value
-        value = bounded
-        val editor = prefs.edit().putInt(spec.key, value.roundToInt())
-        if (decimalDp) editor.putInt("${spec.key}_tenths", (value * 10f).roundToInt())
-        editor.apply()
+        val persist = {
+            value = bounded
+            val editor = prefs.edit().putInt(spec.key, bounded.roundToInt())
+            if (decimalDp) editor.putInt("${spec.key}_tenths", (bounded * 10f).roundToInt())
+            editor.apply()
+        }
+        if (beforeSave != null) beforeSave(bounded, persist) else persist()
     }
 
     val displayValue = remember(value, decimalDp) {

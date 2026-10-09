@@ -36,6 +36,26 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/SideSlideHoldSetting.kt");
 
     @Test
+    public void dangerousGridEditsAreCheckedBeforePersistenceAndDisplayLargeWarning() throws Exception {
+        String gui = Files.readString(UI);
+        String bridge = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/LauncherManualDiscoveryBridge.java"));
+        String client = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/GridWidget4x2PreflightClient.java"));
+
+        assertTrue(gui.contains("GridWidget4x2PreflightPolicy.needsCheck(current, target)"));
+        assertTrue(gui.contains("GridWidget4x2PreflightClient.start("));
+        assertTrue(gui.contains("GridWidget4x2PreflightClient.CLEAR ->"));
+        assertTrue(gui.contains("gridCheck[0]?.cancel()"));
+        assertTrue(gui.contains("beforeSave: ((Float, () -> Unit) -> Unit)? = null"));
+        assertTrue(gui.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
+        assertTrue(gui.contains("minWidth = 164.dp"));
+        assertTrue(gui.contains("minHeight = 42.dp"));
+        assertTrue(bridge.contains("new String[]{\"container\", \"spanX\", \"spanY\"}"));
+        assertTrue(client.contains("private static final long TIMEOUT_MS = 4500L"));
+    }
+
+    @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
         String source = Files.readString(UI);
         assertTrue(source.contains(

@@ -28,6 +28,21 @@ public final class LauncherManualDiscoveryBridge {
 
     private LauncherManualDiscoveryBridge() {}
 
+    static void installGridPreflightRegistration(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.Launcher",
+                    "setupViews", chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (chain.getThisObject() instanceof Context) {
+                            ensureRegistered((Context) chain.getThisObject());
+                        }
+                        return result;
+                    });
+        } catch (Throwable error) {
+            MainHook.log("[DC][Grid4x2] Launcher receiver hook unavailable: " + error);
+        }
+    }
+
     static void captureDockProvider(Object provider) {
         if (provider != null) {
             dockProvider = new WeakReference<>(provider);
