@@ -147,8 +147,9 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue("original press highlight/ripple must be preserved",
                 navigationSurface.contains("PrismalPressRipple("));
-        assertTrue(navigationSurface.contains(".then(pressRipple.modifier)"));
-        assertTrue(navigationSurface.contains(".then(pressRipple.gestureModifier)"));
+        assertTrue(navigationSurface.contains(".then(pressRipple?.modifier ?: Modifier)"));
+        assertTrue(navigationSurface.contains(".then(pressRipple?.gestureModifier ?: Modifier)"));
+        assertTrue(navigationSurface.contains("if (onClick != null) PrismalPressRipple("));
         assertTrue(navigationSurface.contains("drawPrismalGlass("));
         assertTrue(navigationSurface.contains("drawPrismalGlassTint("));
         assertTrue(navigationSurface.contains("applyPrismalGlassEffects("));
