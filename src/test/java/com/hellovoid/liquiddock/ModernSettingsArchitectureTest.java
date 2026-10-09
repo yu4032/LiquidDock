@@ -84,6 +84,26 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void denseSettingsUseViewportBoundedLazyItemsWithoutReplacingPrismal() throws Exception {
+        String ui = Files.readString(UI);
+        String surfaces = Files.readString(SURFACES);
+
+        // Static architecture gate, not a frame-rate or runtime behavior assertion.
+        assertTrue(ui.contains("private fun DenseSettingsList("));
+        assertTrue(ui.contains("content: LazyListScope.() -> Unit"));
+        assertTrue(ui.contains("items(specs, key = { it.key })"));
+        assertTrue(ui.contains("item(key = \"stroke-colors-title\")"));
+        assertTrue(ui.contains(".weight(1f)"));
+        assertTrue(ui.contains("contentPadding = PaddingValues(vertical = 4.dp)"));
+        assertTrue(ui.contains("private fun SettingsList("));
+
+        assertTrue(surfaces.contains("PrismalGlassSlider("));
+        assertTrue(surfaces.contains("PrismalGlassStepper("));
+        assertFalse(ui.contains("GlassSliderGroup("));
+        assertFalse(surfaces.contains("LocalLightweightGlassSlider"));
+    }
+
+    @Test
     public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
