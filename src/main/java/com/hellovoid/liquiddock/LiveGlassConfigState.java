@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class LiveGlassConfigState {
     private static final String TAG = "[DC][LiveConfig]";
-    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static Handler mainHandler;
     private static final AtomicBoolean FRAME_PENDING = new AtomicBoolean();
     private static final Set<String> GLASS_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(
@@ -129,6 +129,7 @@ final class LiveGlassConfigState {
             preferences.unregisterOnSharedPreferenceChangeListener(listener);
         }
         preferences = remote;
+        mainHandler = new Handler(Looper.getMainLooper());
         currentGlass = initial.glass;
         generation = 0L;
         FRAME_PENDING.set(false);
@@ -138,7 +139,8 @@ final class LiveGlassConfigState {
         listener = (prefs, key) -> {
             if (!isLiveKey(key)) return;
             // Listener callbacks may be on a Binder thread; Choreographer must run on main.
-            MAIN.post(LiveGlassConfigState::scheduleFrame);
+            Handler handler = mainHandler;
+            if (handler != null) handler.post(LiveGlassConfigState::scheduleFrame);
         };
         if (remote != null) {
             remote.registerOnSharedPreferenceChangeListener(listener);
