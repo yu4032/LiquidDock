@@ -62,9 +62,9 @@ import com.styropyr0.prismal.PrismalGlassSurface
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
-import com.hellovoid.liquiddock.guiglass.GuiFlatPrismalGlassSlider
+import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
-import com.hellovoid.liquiddock.guiglass.GuiFlatPrismalGlassToggle
+import com.styropyr0.prismal.components.PrismalGlassToggle
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -627,14 +627,9 @@ internal fun ModernSurface(
 
     PrismalGlassSurface(
         backdrop = backdrop,
-        // Keep the card's clickable semantics and standard touch indication,
-        // but don't pass onClick to PrismalGlassSurface: upstream creates a
-        // press-ripple motion layer which scales and translates the whole Cell.
-        modifier = modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        modifier = modifier.fillMaxWidth(),
         shape = { PrismalRoundedRectangle(24.dp) },
-        onClick = null,
+        onClick = onClick,
         blurRadius = 12.dp,
         tint = MiuixTheme.colorScheme.surface,
         tintAlpha = 0.24f,
@@ -820,14 +815,23 @@ internal fun SwitchPreference(
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
+    // Row click remains accessible, but remove the row-level press indication:
+    // a scroll beginning on the Cell must not animate the glass row while
+    // Prismal's switch retains all of its own drag and spring interactions.
     BasicComponent(
+        modifier = Modifier.clickable(
+            enabled = enabled,
+            interactionSource = null,
+            indication = null,
+            onClick = { onCheckedChange(!checked) },
+        ),
         title = title,
         summary = summary,
         enabled = enabled,
         insideMargin = insideMargin,
         endActions = {
             if (backdrop != null) {
-                GuiFlatPrismalGlassToggle(
+                PrismalGlassToggle(
                     selected = { checked },
                     onSelect = { next -> if (enabled) onCheckedChange(next) },
                     backdrop = backdrop,
@@ -840,7 +844,9 @@ internal fun SwitchPreference(
                 )
             }
         },
-        onClick = { if (enabled) onCheckedChange(!checked) },
+        // BasicComponent's own onClick attaches an animated Miuix indication.
+        // The outer no-indication clickable above is the sole row click target.
+        onClick = null,
     )
 }
 
@@ -1001,7 +1007,7 @@ internal fun SliderPreference(
             },
         )
         if (backdrop != null) {
-            GuiFlatPrismalGlassSlider(
+            PrismalGlassSlider(
                 value = { currentValue },
                 onValueChange = { next ->
                     if (enabled) onValueChange(quantize(next))
@@ -1057,7 +1063,7 @@ internal fun ModernGlassSlider(
     val backdrop = LocalPrismalSurfaceBackdrop.current
     val currentValue by rememberUpdatedState(value)
     if (backdrop != null) {
-        GuiFlatPrismalGlassSlider(
+        PrismalGlassSlider(
             value = { currentValue },
             onValueChange = { next ->
                 if (enabled) onValueChange(next)
