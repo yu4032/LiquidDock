@@ -93,6 +93,9 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+// Cheap, static approximation of the existing Prismal cells. This flag never
+// gives a body component access to the live header/footer capture layers.
+private val LocalStaticGlassChrome = staticCompositionLocalOf { false }
 
 @Composable
 internal fun ModernSettingsScaffold(
@@ -115,7 +118,9 @@ internal fun ModernSettingsScaffold(
     // PrismalGlassSurface's tint applies BlendMode.Hue before its alpha overlay.
     // A neutral surface fill avoids recoloring green/other content behind the bar.
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
-    val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
+    // Keep live Prismal sampling ONLY for top bar actions/header and bottom
+    // capsule. All body cells, dialogs and numeric controls remain static.
+    val surfaceBackdrop: PrismalBackdrop? = null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
     // Header and bottom navigation share the captured background + content.
     Box(modifier = Modifier.fillMaxSize()) {
@@ -149,6 +154,7 @@ internal fun ModernSettingsScaffold(
         CompositionLocalProvider(
             LocalPrismalSurfaceBackdrop provides surfaceBackdrop,
             LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
+            LocalStaticGlassChrome provides glassEnabled,
         ) {
             Scaffold(
                 containerColor = Color.Transparent,
@@ -274,7 +280,9 @@ internal fun RestartScopesDialog(
     onRestart: (Set<String>) -> Unit,
 ) {
     if (!visible) return
-    val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
+    // Restart dialog is body chrome. It must not sample the header/footer
+    // backdrop or install Prismal's per-control gesture/shader pipeline.
+    val backdrop = LocalPrismalSurfaceBackdrop.current
 
     BoxWithConstraints(
         modifier = Modifier
@@ -635,19 +643,42 @@ internal fun ModernSurface(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
+    val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
     val cardShape = RoundedCornerShape(24.dp)
-    // Subtle neutral lift + rim distinguish cards from near-black Monet backgrounds.
+    // Match the Prismal neutral wash/rim with static Compose gradients.
+    // No RenderEffect, backdrop evaluation or per-cell offscreen shader.
     val solidCardColor = if (darkTheme) lerp(colors.surface, colors.onSurface, 0.08f) else colors.surface
     val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
+    val staticCardBrush = Brush.verticalGradient(
+        if (darkTheme) {
+            listOf(
+                lerp(solidCardColor, Color.White, 0.085f),
+                solidCardColor,
+                lerp(solidCardColor, Color.Black, 0.045f),
+            )
+        } else {
+            listOf(
+                lerp(solidCardColor, Color.White, 0.16f),
+                solidCardColor,
+                lerp(solidCardColor, colors.background, 0.07f),
+            )
+        },
+    )
+    val staticRim = if (staticChrome) {
+        lerp(cardStroke, colors.onSurface, if (darkTheme) 0.17f else 0.08f)
+    } else cardStroke
     if (backdrop == null) {
         Column(
             modifier = modifier
                 .fillMaxWidth()
                 .clip(cardShape)
-                .background(solidCardColor)
-                .border(1.dp, cardStroke, cardShape)
+                .then(
+                    if (staticChrome) Modifier.background(staticCardBrush, cardShape)
+                    else Modifier.background(solidCardColor),
+                )
+                .border(1.dp, staticRim, cardShape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(contentPadding),
             content = content,
@@ -804,7 +835,10 @@ internal fun Button(
     insideMargin: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
     content: @Composable RowScope.() -> Unit,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current ?: LocalPrismalOverlayBackdrop.current
+    // This generic action is inside the scrolling page. Top-bar actions
+    // are rendered separately by ModernTopActionButton with Prismal.
+    val backdrop = LocalPrismalSurfaceBackdrop.current
+    val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
     val resolved = modifier
@@ -816,11 +850,20 @@ internal fun Button(
         val buttonShape = RoundedCornerShape(minHeight / 2)
         val fillColor = lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
         val outlineColor = colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
+        val staticButtonBrush = Brush.verticalGradient(
+            listOf(
+                lerp(fillColor, Color.White, if (darkTheme) 0.12f else 0.22f),
+                fillColor,
+            ),
+        )
         Row(
             modifier = resolved
                 .height(minHeight)
                 .clip(buttonShape)
-                .background(fillColor, buttonShape)
+                .then(
+                    if (staticChrome) Modifier.background(staticButtonBrush, buttonShape)
+                    else Modifier.background(fillColor, buttonShape),
+                )
                 .border(1.dp, outlineColor, buttonShape)
                 .clickable(enabled = enabled, onClick = onClick)
                 .padding(insideMargin),
