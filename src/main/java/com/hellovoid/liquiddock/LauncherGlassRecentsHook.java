@@ -161,6 +161,7 @@ final class LauncherGlassRecentsHook {
                                 int type = ((Number) eventType.invoke(event)).intValue();
                                 if (type == 6203 || type == 7013) {
                                     trace("state-event type=" + type + " owner=" + owner
+                                            + " detail=" + diagnosticEventDetail(event, type)
                                             + " event=" + describeParam(event));
                                 }
                             } catch (Throwable error) {
@@ -183,6 +184,44 @@ final class LauncherGlassRecentsHook {
 
     static long diagnosticReturnSerial() {
         return diagnosticReturnSerial;
+    }
+
+    private static String diagnosticEventDetail(Object event, int type) {
+        if (event == null) return "null";
+        try {
+            if (type == 6203) {
+                return "toHome=" + event.getClass().getMethod("getToHome").invoke(event);
+            }
+            if (type == 7013) {
+                Object info = event.getClass().getMethod("getInfo").invoke(event);
+                if (info != null) {
+                    return "fromRecentLaunchAnimEnd="
+                            + info.getClass().getMethod("isFromRecentLaunchAnimEnd").invoke(info);
+                }
+            }
+        } catch (Throwable ignored) {
+            return "unavailable";
+        }
+        return "none";
+    }
+
+    private static String diagnosticCallsite() {
+        StringBuilder caller = new StringBuilder();
+        try {
+            for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
+                String owner = frame.getClassName();
+                if (!owner.startsWith("com.miui.home.")
+                        || owner.startsWith("com.hellovoid.liquiddock.")) continue;
+                if (caller.length() > 0) caller.append(" <- ");
+                caller.append(owner.substring("com.miui.home.".length()))
+                        .append('.').append(frame.getMethodName())
+                        .append(':').append(frame.getLineNumber());
+                if (caller.length() > 250) break;
+            }
+        } catch (Throwable ignored) {
+            return "unavailable";
+        }
+        return caller.length() > 0 ? caller.toString() : "unknown";
     }
 
     private static String identity(Object object) {
@@ -344,7 +383,8 @@ final class LauncherGlassRecentsHook {
                         long serial = WALLPAPER_SETTLE.pendingSerial();
                         if (MainHook.debugLogging) {
                             trace("system-setTo target=" + describeParam(chain.getArg(0))
-                                    + " pendingSerial=" + serial);
+                                    + " pendingSerial=" + serial
+                                    + " callsite=" + diagnosticCallsite());
                         }
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         trace("system-setTo-applied pendingSerial=" + serial);
@@ -360,7 +400,8 @@ final class LauncherGlassRecentsHook {
                         if (MainHook.debugLogging) {
                             trace("system-animTo target=" + describeParam(chain.getArg(0))
                                     + " pendingSerial=" + serial
-                                    + " owner=" + identity(chain.getThisObject()));
+                                    + " owner=" + identity(chain.getThisObject())
+                                    + " callsite=" + diagnosticCallsite());
                         }
                         boolean armed = serial > 0L && armSystemDrawEnd(serial);
                         if (armed && !WALLPAPER_SETTLE.armCompletionAuthority(serial)) {
