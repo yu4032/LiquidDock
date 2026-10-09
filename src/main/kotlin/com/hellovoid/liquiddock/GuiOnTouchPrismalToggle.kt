@@ -62,6 +62,7 @@ internal fun GuiOnTouchPrismalToggle(
     onSelect: (Boolean) -> Unit,
     backdrop: PrismalBackdrop,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     adaptiveLuminance: Boolean = false,
     luminance: () -> Float = { 0.5f }
 ) {
@@ -132,7 +133,8 @@ internal fun GuiOnTouchPrismalToggle(
     val parentGlassLayer = LocalPrismalParentGlassLayer.current
     val underlayBackdrop = parentGlassLayer ?: backdrop
 
-    if (sampling) {
+    val samplingEnabled = enabled && sampling
+    if (samplingEnabled) {
         trackBackdrop.readSamplingState()
         parentGlassLayer?.readSamplingState()
     }
@@ -143,7 +145,7 @@ internal fun GuiOnTouchPrismalToggle(
     ) {
         Box(
             Modifier
-                .then(if (sampling) Modifier.prismalGlassLayer(trackBackdrop) else Modifier)
+                .then(if (samplingEnabled) Modifier.prismalGlassLayer(trackBackdrop) else Modifier)
                 .clip(PrismalCapsule())
                 .drawBehind {
                     val trackFraction = dampedDragAnimation.value
@@ -162,8 +164,8 @@ internal fun GuiOnTouchPrismalToggle(
                         else lerp(-padding, -(padding + dragWidth), trackFraction)
                 }
                 .semantics { role = Role.Switch }
-                .then(dampedDragAnimation.modifier)
-                .then(if (sampling) Modifier.drawPrismalGlass(
+                .then(if (enabled) dampedDragAnimation.modifier else Modifier)
+                .then(if (samplingEnabled) Modifier.drawPrismalGlass(
                     backdrop = rememberPrismalMergedSource(
                         underlayBackdrop,
                         rememberPrismalWrappedSource(trackBackdrop) { drawPrismalGlass ->

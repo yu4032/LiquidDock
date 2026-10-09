@@ -953,6 +953,7 @@ internal fun SwitchPreference(
                     selected = stableSelected,
                     onSelect = stableToggleChange,
                     backdrop = backdrop,
+                    enabled = enabled,
                 )
             } else {
                 top.yukonga.miuix.kmp.basic.Switch(
@@ -1138,6 +1139,7 @@ internal fun SliderPreference(
                 valueRange = valueRange,
                 visibilityThreshold = stepSize,
                 backdrop = backdrop,
+                enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 18.dp, end = 18.dp, bottom = 14.dp)
@@ -1198,6 +1200,7 @@ internal fun ModernGlassSlider(
             valueRange = valueRange,
             visibilityThreshold = visibilityThreshold,
             backdrop = backdrop,
+            enabled = enabled,
             modifier = modifier.alpha(if (enabled) 1f else 0.42f),
         )
     } else {

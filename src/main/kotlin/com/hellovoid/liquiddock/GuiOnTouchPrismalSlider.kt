@@ -70,6 +70,7 @@ internal fun GuiOnTouchPrismalSlider(
     visibilityThreshold: Float,
     backdrop: PrismalBackdrop,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     adaptiveLuminance: Boolean = false,
     luminance: () -> Float = { 0.5f }
 ) {
@@ -97,7 +98,7 @@ internal fun GuiOnTouchPrismalSlider(
         var didDrag by remember { mutableStateOf(false) }
         var isDragging by remember { mutableStateOf(false) }
         var isTrackPressed by remember { mutableStateOf(false) }
-        val sampling = isDragging || isTrackPressed
+        val sampling = enabled && (isDragging || isTrackPressed)
         var lastReportedValue by remember { mutableFloatStateOf(value()) }
         val trackWidthState = remember { mutableIntStateOf(0) }
         trackWidthState.intValue = trackWidth
@@ -173,7 +174,7 @@ internal fun GuiOnTouchPrismalSlider(
                 Modifier
                     .clip(PrismalCapsule())
                     .background(trackColor)
-                    .pointerInput(animationScope, trackWidth, valueRange, isLtr) {
+                    .then(if (enabled) Modifier.pointerInput(animationScope, trackWidth, valueRange, isLtr) {
                         detectTapGestures(
                             onPress = {
                                 isTrackPressed = true
@@ -190,7 +191,7 @@ internal fun GuiOnTouchPrismalSlider(
                             onValueChange(targetValue)
                             },
                         )
-                    }
+                    } else Modifier)
                     .height(6.dp)
                     .fillMaxWidth()
             )
@@ -220,7 +221,7 @@ internal fun GuiOnTouchPrismalSlider(
                                 .fastCoerceIn(-size.width / 4f, trackWidth - size.width * 3f / 4f) *
                                     if (isLtr) 1f else -1f
                     }
-                    .then(dampedDragAnimation.modifier)
+                    .then(if (enabled) dampedDragAnimation.modifier else Modifier)
                     .then(if (sampling) Modifier.drawPrismalGlass(
                         backdrop = rememberPrismalMergedSource(
                             underlayBackdrop,
