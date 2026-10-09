@@ -24,19 +24,32 @@ public class Api102HotReloadContractTest {
     }
 
     @Test
-    public void keyguardPilotUsesNamedHooksAndRollsBackOnPartialInstall() throws Exception {
+    public void keyguardPilotHasAnOwnerScopedFailClosedLifecycle() throws Exception {
         String owner = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/SystemUiKeyguardGoneSource.java"));
+        String domain = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Api102HookDomain.java"));
         String registry = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/Api102HookRegistry.java"));
-        assertTrue(owner.contains("Api102HookRegistry.stableId("));
-        assertTrue(owner.contains("Api102HookRegistry.hookIdentified("));
-        assertTrue(owner.contains("Api102HookRegistry.rollbackIdentified(installedIds)"));
+        assertTrue(owner.contains("Api102HookDomain.forProcess("));
+        assertTrue(owner.contains("DOMAIN.begin()"));
+        assertTrue(owner.contains("DOMAIN.hook(method, chain ->"));
+        assertTrue(owner.contains("DOMAIN.commit()"));
+        assertTrue(owner.contains("DOMAIN.abort()"));
+        assertTrue(owner.contains("static boolean stopForFutureReload()"));
+        assertTrue(owner.contains("if (step != null && DOMAIN.isActive())"));
+        assertTrue(owner.contains("if (!DOMAIN.isActive()) return;"));
+        assertTrue(domain.contains("state = State.BLOCKED"));
+        assertTrue(domain.contains("boolean clean = registry.rollback("));
+        assertTrue(domain.contains("state = State.ACTIVE"));
         assertTrue(registry.contains(".setId(id)"));
         assertTrue(registry.contains("handle.unhook()"));
         assertTrue(registry.contains("duplicate API 102 hook id"));
         assertTrue(registry.contains("previous.replaceHook(next)"));
         assertFalse(owner.contains("replaceIdentified("));
+        String entry = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/ModuleMain.java"));
+        assertFalse(entry.contains("SystemUiKeyguardGoneSource.stopForFutureReload("));
     }
 
     @Test
