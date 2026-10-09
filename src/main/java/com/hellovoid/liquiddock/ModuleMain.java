@@ -154,6 +154,8 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.dock.shadowEnabled,
                     runtimeConfig.dock.strokeShadow,
                     runtimeConfig.divider.enabled);
+            LiveGlassConfigState.initialize(
+                    Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP), runtimeConfig);
             DockMirrorShortcutHook.install(classLoader);
             DockNativeShadowBridge.install(classLoader, runtimeConfig.dock);
             Launcher450IconSizeHook.install(classLoader,
