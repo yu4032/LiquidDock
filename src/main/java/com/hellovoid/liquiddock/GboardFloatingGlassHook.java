@@ -3,11 +3,27 @@ package com.hellovoid.liquiddock;
 import android.view.ViewGroup;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.WeakHashMap;
 
 /** Hooks stable KeyboardHolder layout and structurally recognizes Gboard floating keyboard. */
 final class GboardFloatingGlassHook {
     private static final String TAG = "[DC][GboardFloatingGlass]";
     private static boolean installed;
+    private static boolean liveEnabled;
+    private static final WeakHashMap<ViewGroup, Boolean> OBSERVED = new WeakHashMap<>();
+
+    /** A glass-enable toggle must also wake a keyboard that had no active glass session. */
+    static synchronized void onLiveConfigChanged(boolean enabled) {
+        if (!enabled || liveEnabled) {
+            liveEnabled = enabled;
+            return;
+        }
+        liveEnabled = true;
+        for (ViewGroup holder : new ArrayList<>(OBSERVED.keySet())) {
+            if (holder != null && holder.isAttachedToWindow()) holder.requestLayout();
+        }
+    }
 
     private GboardFloatingGlassHook() {}
 
@@ -47,6 +63,9 @@ final class GboardFloatingGlassHook {
     }
 
     private static void handleKeyboardHolderLayout(ViewGroup keyboardHolder, ClassLoader classLoader) {
+        synchronized (GboardFloatingGlassHook.class) {
+            OBSERVED.put(keyboardHolder, Boolean.TRUE);
+        }
         GboardFloatingStructureResolver.Structure structure =
                 GboardFloatingStructureResolver.resolveFromKeyboardHolder(keyboardHolder, classLoader);
         if (structure == null) return;
