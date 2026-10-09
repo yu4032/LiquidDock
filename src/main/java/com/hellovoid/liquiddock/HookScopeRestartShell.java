@@ -23,11 +23,12 @@ final class HookScopeRestartShell {
     static final String FAILED = "FAILED";
     private static final String PREFIX = "LDRESTART|";
 
-    // Switching to HOME can background the Settings activity while the root
-    // script is still running. Restart other selected hook scopes first;
-    // relaunch the desktop only after their PID checks have completed.
+    // SystemUI restart immediately switches the device to the lock screen.
+    // Complete every other selected restart before that disruptive final
+    // action. Launcher should be penultimate so returning HOME cannot prevent
+    // other application scopes from restarting.
     private static final String[] ORDER = {
-            SYSTEM_UI, SECURITY_CENTER, GBOARD, SEARCH, HOME
+            SECURITY_CENTER, GBOARD, SEARCH, HOME, SYSTEM_UI
     };
 
     static final Set<String> ALLOWED = Set.of(ORDER);
