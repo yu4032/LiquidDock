@@ -112,8 +112,12 @@ final class GestureHandleRuntimeState {
         // Posted notifications can outlive the owner and even the old module classloader.
         final long generation = activeGeneration;
         MAIN_HANDLER.post(() -> {
-            if (EPOCH.isCurrent(generation) && stateListener == listener) {
-                listener.onEnabledChanged(enabled);
+            // Hold the same lifecycle monitor as shutdown/initialize until invocation returns.
+            // The stale callback cannot cross a completed shutdown even if it was already dequeued.
+            synchronized (GestureHandleRuntimeState.class) {
+                if (EPOCH.isCurrent(generation) && stateListener == listener) {
+                    listener.onEnabledChanged(enabled);
+                }
             }
         });
     }
