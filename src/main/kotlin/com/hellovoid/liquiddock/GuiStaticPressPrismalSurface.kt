@@ -20,22 +20,19 @@ import com.styropyr0.prismal.effects.applyPrismalGlassEffects
 import com.styropyr0.prismal.interactive.PrismalPressRipple
 
 /**
- * Page-entry Cell variant of PrismalGlassSurface (PrismalAGSL v1.0.4, MIT).
+ * Settings Cell variant of PrismalGlassSurface (PrismalAGSL v1.0.4, MIT).
  *
- * Match Prismal's glass optics, specular/depth defaults, click semantics and
- * animated AGSL press ripple. Deliberately omit only its interactive layerBlock,
- * which scales the entire Cell and translates it along the pointer. In particular,
- * DO NOT remove PrismalPressRipple: its flash/highlight is the expected click effect.
- *
- * Scoped to ModernFeatureCard. Switch/slider/thumb and all other surfaces
- * retain their unmodified upstream animations.
+ * Keeps the native glass optics while omitting the depth shadow that would
+ * be sampled again by the bottom capsule. For clickable navigation Cells,
+ * retains the AGSL press ripple without the scale/parallax layerBlock.
+ * Noninteractive Cells have no click listener or press ripple.
  */
 @Composable
 internal fun GuiStaticPressPrismalSurface(
     backdrop: PrismalBackdrop,
     modifier: Modifier,
     shape: () -> Shape,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     blurRadius: Dp,
     tint: Color,
     tintAlpha: Float,
@@ -49,8 +46,8 @@ internal fun GuiStaticPressPrismalSurface(
 ) {
     val density = LocalDensity.current
     val animationScope = rememberCoroutineScope()
-    val pressRipple = remember(animationScope) {
-        PrismalPressRipple(animationScope = animationScope)
+    val pressRipple = remember(animationScope, onClick != null) {
+        if (onClick != null) PrismalPressRipple(animationScope = animationScope) else null
     }
 
     Box(
@@ -58,6 +55,11 @@ internal fun GuiStaticPressPrismalSurface(
             .drawPrismalGlass(
                 backdrop = backdrop,
                 shape = shape,
+                // Default PrismalDepthShadow is re-captured into the bottom
+                // capsule and its soft gradient shows visible color stepping
+                // after a second blur/refraction pass. Preserve the specular
+                // edge, native lens, tint and outline; skip only this shadow.
+                depthShadow = null,
                 effects = {
                     applyPrismalGlassEffects(
                         density = density,
@@ -80,14 +82,18 @@ internal fun GuiStaticPressPrismalSurface(
                     if (surfaceColor.isSpecified) drawRect(surfaceColor)
                 },
             )
-            .clickable(
-                interactionSource = null,
-                indication = null,
-                role = Role.Button,
-                onClick = onClick,
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = null,
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
+                } else Modifier,
             )
-            .then(pressRipple.modifier)
-            .then(pressRipple.gestureModifier),
+            .then(pressRipple?.modifier ?: Modifier)
+            .then(pressRipple?.gestureModifier ?: Modifier),
         content = content,
     )
 }

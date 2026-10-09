@@ -47,7 +47,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
@@ -71,12 +70,6 @@ import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurDefaults
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -92,8 +85,8 @@ internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
-// Uniform header blur using a single capture of the actual scrolled page content.
-// Keep Prismal for its controls and backdrop lenses, not the header's screen sampling.
+// Flat header blur uses the same Prismal source as the bottom navigation.
+// Ordinary Compose text in the page body is captured by prismalGlassLayer.
 private const val TOP_BAR_BLUR_RADIUS = 14f
 private const val TOP_BAR_GLASS_TINT_ALPHA = 0.34f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
@@ -125,42 +118,32 @@ internal fun ModernSettingsScaffold(
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
-    // HyperIsland-style independent content source: one opaque page capture for
-    // the header, including standalone labels and nested Prismal card output.
-    // Do not merge the wallpaper/source layers for this uniform blur.
-    val barBackdrop = if (glassEnabled && isRuntimeShaderSupported()) {
-        rememberLayerBackdrop {
-            drawRect(surface)
-            drawContent()
-        }
-    } else {
-        null
-    }
+    // Header and bottom navigation share the captured background + content.
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // The capture modifier must wrap background() so the sampled
+                // backdrop is opaque and covers unblurred content underneath.
+                .then(
+                    if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)
+                    else Modifier,
+                )
                 .then(
                     if (glassEnabled) {
-                        // Preserve the existing backdrop when glass is enabled.
                         Modifier.background(
                             Brush.verticalGradient(
                                 listOf(
                                     background,
-                                    primary.copy(alpha = 0.07f),
+                                    // Keep the captured gradient opaque.
+                                    lerp(background, primary, 0.07f),
                                     background,
                                 ),
                             ),
                         )
                     } else {
-                        // In solid mode, gently darken the entire canvas without
-                        // changing any Cell color, transparency, or shape.
                         Modifier.background(lerp(background, Color.Black, 0.06f))
                     },
-                )
-                .then(
-                    if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)
-                    else Modifier,
                 ),
         )
 
@@ -171,33 +154,8 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    // Miuix Scaffold paints body before topBar. The header samples
-                    // one fully recorded page source, not a merged Prismal lens source.
-                    // Keep this a solid rectangle with uniform blur and neutral tint.
-                    val headerModifier = if (barBackdrop != null) {
-                        Modifier
-                            .fillMaxWidth()
-                            .zIndex(1f)
-                            .textureBlur(
-                                backdrop = barBackdrop,
-                                shape = RectangleShape,
-                                blurRadius = TOP_BAR_BLUR_RADIUS,
-                                noiseCoefficient = 0f,
-                                colors = BlurDefaults.blurColors(
-                                    blendColors = listOf(
-                                        BlendColorEntry(
-                                            color = headerNeutralColor.copy(
-                                                alpha = TOP_BAR_GLASS_TINT_ALPHA,
-                                            ),
-                                        ),
-                                    ),
-                                    saturation = 1.35f,
-                                ),
-                            )
-                    } else {
-                        Modifier.fillMaxWidth().zIndex(1f).background(surface)
-                    }
-                    Box(modifier = headerModifier) {
+                    // MIUIX lays out the bar; Prismal draws its glass.
+                    val headerContent: @Composable BoxScope.() -> Unit = {
                         SmallTopAppBar(
                             title = title,
                             color = Color.Transparent,
@@ -267,6 +225,20 @@ internal fun ModernSettingsScaffold(
                                 ),
                         )
                     }
+                    if (activeOverlayBackdrop != null) {
+                        GuiPrismalFlatHeader(
+                            backdrop = activeOverlayBackdrop,
+                            modifier = Modifier.fillMaxWidth().zIndex(1f),
+                            blurRadius = TOP_BAR_BLUR_RADIUS.dp,
+                            overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
+                            content = headerContent,
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().zIndex(1f).background(surface),
+                            content = headerContent,
+                        )
+                    }
                 },
                 bottomBar = bottomBar,
             ) { padding ->
@@ -276,10 +248,6 @@ internal fun ModernSettingsScaffold(
                         .zIndex(0f)
                         .then(
                             if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
-                            else Modifier,
-                        )
-                        .then(
-                            if (barBackdrop != null) Modifier.layerBackdrop(barBackdrop)
                             else Modifier,
                         ),
                 ) {
@@ -646,9 +614,9 @@ internal fun ModernSurface(
             content = content,
         )
     }
-    if (staticPress && onClick != null) {
-        // Chevron navigation Cells retain Prismal press ripple/specular effects,
-        // but not the scale + parallax layerBlock of an interactive glass surface.
+    if (onClick == null || staticPress) {
+        // Noninteractive and navigation Cells omit the recaptured depth shadow.
+        // Navigation retains its ripple without scale/parallax.
         GuiStaticPressPrismalSurface(
             backdrop = backdrop,
             modifier = glassCardModifier,
