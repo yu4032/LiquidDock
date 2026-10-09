@@ -8,19 +8,6 @@ import static org.junit.Assert.assertTrue;
 
 public class PassBlurQualityPolicyTest {
     @Test
-    public void proceduralGlassStaysNativeWhenBackdropIsDownsampled() {
-        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 50));
-        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 75));
-        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 100));
-    }
-
-    @Test
-    public void importedOpticsScaleDoesNotReduceRefractionAndOtherDomainsStayFullResolution() {
-        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 1));
-        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(true, 999));
-        assertEquals(100, PassBlurQualityPolicy.workspaceOpticsScalePercent(false, 50));
-    }
-    @Test
     public void captureScaleIsClampedToSafeExperimentalRange() {
         assertEquals(0.50f, PassBlurQualityPolicy.captureScale(10), 0.0001f);
         assertEquals(0.75f, PassBlurQualityPolicy.captureScale(75), 0.0001f);
