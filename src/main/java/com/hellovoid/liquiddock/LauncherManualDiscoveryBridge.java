@@ -4,6 +4,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.Cursor;
+import android.net.Uri;
+import java.lang.reflect.Field;
 import android.os.Build;
 
 import java.lang.ref.WeakReference;
@@ -21,6 +24,11 @@ public final class LauncherManualDiscoveryBridge {
     public static final String EXTRA_TOKEN = "token";
     public static final String KIND_DOCK_RECENTS = "dock_recents";
     public static final String KIND_WIDGETS = "widgets";
+    public static final String KIND_GRID_WIDGET_PREFLIGHT = "grid_widget_4x2";
+    public static final String EXTRA_REQUEST_ID = "request_id";
+    public static final String EXTRA_RESULT = "result";
+    public static final String ACTION_GRID_WIDGET_RESULT =
+            "com.hellovoid.liquiddock.GRID_WIDGET_4X2_RESULT";
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
 
     private static volatile boolean receiverRegistered;
@@ -76,6 +84,12 @@ public final class LauncherManualDiscoveryBridge {
                     } else if (KIND_WIDGETS.equals(kind)) {
                         WidgetComponentStore.beginManualDiscoverySession();
                         LauncherWidgetComponentDiscovery.scanTrackedHosts();
+                    } else if (KIND_GRID_WIDGET_PREFLIGHT.equals(kind)) {
+                        String requestId = intent.getStringExtra(EXTRA_REQUEST_ID);
+                        if (requestId == null || !requestId.matches("[0-9a-fA-F-]{36}")) return;
+                        // Query all persisted desktop pages without blocking Launcher's main thread.
+                        new Thread(() -> replyGridWidgetPreflight(app, token, requestId),
+                                "LiquidDockGrid4x2Check").start();
                     }
                 }
             };
@@ -96,6 +110,73 @@ public final class LauncherManualDiscoveryBridge {
 
     public static boolean requestWidgetScan(Context context, String token) {
         return send(context, KIND_WIDGETS, token);
+    }
+
+    public static boolean requestGridWidgetPreflight(
+            Context context, String token, String requestId) {
+        if (context == null || token == null || token.isEmpty()
+                || requestId == null || !requestId.matches("[0-9a-fA-F-]{36}")) {
+            return false;
+        }
+        try {
+            Intent intent = new Intent(ACTION_REQUEST);
+            intent.setPackage(LAUNCHER_PACKAGE);
+            intent.putExtra(EXTRA_KIND, KIND_GRID_WIDGET_PREFLIGHT);
+            intent.putExtra(EXTRA_TOKEN, token);
+            intent.putExtra(EXTRA_REQUEST_ID, requestId);
+            context.sendBroadcast(intent);
+            return true;
+        } catch (Throwable error) {
+            return false;
+        }
+    }
+
+    private static void replyGridWidgetPreflight(Context context, String token, String requestId) {
+        int result = GridWidget4x2PreflightClient.UNKNOWN;
+        Cursor cursor = null;
+        try {
+            Class<?> favorites = Class.forName(
+                    "com.miui.home.launcher.LauncherSettings$Favorites",
+                    false, context.getClassLoader());
+            Field uriField = favorites.getDeclaredField("CONTENT_URI");
+            uriField.setAccessible(true);
+            Object value = uriField.get(null);
+            if (!(value instanceof Uri)) throw new IllegalStateException("Favorites URI unavailable");
+            cursor = context.getContentResolver().query(
+                    (Uri) value, new String[]{"container", "spanX", "spanY"},
+                    null, null, null);
+            if (cursor == null) throw new IllegalStateException("Favorites query returned null");
+            int containerIndex = cursor.getColumnIndex("container");
+            int xIndex = cursor.getColumnIndex("spanX");
+            int yIndex = cursor.getColumnIndex("spanY");
+            if (containerIndex < 0 || xIndex < 0 || yIndex < 0) {
+                throw new IllegalStateException("Favorites is missing span columns");
+            }
+            result = GridWidget4x2PreflightClient.CLEAR;
+            while (cursor.moveToNext()) {
+                if (GridWidget4x2PreflightPolicy.matches(
+                        cursor.getInt(containerIndex),
+                        cursor.getInt(xIndex),
+                        cursor.getInt(yIndex))) {
+                    result = GridWidget4x2PreflightClient.BLOCKED;
+                    break;
+                }
+            }
+        } catch (Throwable error) {
+            MainHook.log("[DC][Grid4x2] preflight unavailable: " + error);
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        try {
+            Intent reply = new Intent(ACTION_GRID_WIDGET_RESULT);
+            reply.setPackage(WidgetComponentStore.MODULE_PACKAGE);
+            reply.putExtra(EXTRA_TOKEN, token);
+            reply.putExtra(EXTRA_REQUEST_ID, requestId);
+            reply.putExtra(EXTRA_RESULT, result);
+            context.sendBroadcast(reply);
+        } catch (Throwable error) {
+            MainHook.log("[DC][Grid4x2] reply failed: " + error);
+        }
     }
 
     private static boolean send(Context context, String kind, String token) {
