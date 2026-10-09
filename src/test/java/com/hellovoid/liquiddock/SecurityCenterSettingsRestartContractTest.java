@@ -40,9 +40,15 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue(compose.contains("UI_TOGGLE|$id|checked=$checked|selected=$selectedRestartScopes"));
         assertTrue(dialog.contains("onToggle: (String, Boolean) -> Unit"));
         assertTrue(dialog.contains("onRestart: (Set<String>) -> Unit"));
-        assertTrue(dialog.contains("onCheckedChange = { next -> onToggle(item.id, next) }"));
         assertTrue(dialog.contains("onClick = { onToggle(item.id, !checked) }"));
         assertTrue(dialog.contains("val checked = item.id in selected"));
+        assertTrue(dialog.contains("RestartScopeToggle("));
+        assertTrue(dialog.contains("PrismalGlassToggle("));
+        assertTrue(dialog.contains("selected = selectedProvider,"));
+        assertTrue(dialog.contains("onSelect = stableToggle,"));
+        assertTrue(dialog.contains("val currentChecked = rememberUpdatedState(checked)"));
+        assertTrue(dialog.contains("val currentToggle = rememberUpdatedState(onToggle)"));
+        // The ordinary switch stays as the non-glass fallback.
         assertTrue(dialog.contains("top.yukonga.miuix.kmp.basic.Switch("));
         // Interactive PrismalGlassSurface on the parent installs a whole-panel
         // gesture modifier which may consume taps intended for its children.
