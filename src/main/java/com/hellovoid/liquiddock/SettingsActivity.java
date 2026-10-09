@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -270,86 +272,85 @@ public class SettingsActivity extends AppCompatActivity {
             Toast.makeText(this, "未选择重启作用域", Toast.LENGTH_SHORT).show();
             return;
         }
-        for (String scope : scopes) {
-            if (!RESTARTABLE_HOOK_SCOPES.contains(scope)) {
-                Toast.makeText(this, "不支持的重启作用域: " + scope, Toast.LENGTH_SHORT).show();
-                return;
-            }
+        if (!HookScopeRestartShell.ALLOWED.containsAll(scopes)) {
+            Toast.makeText(this, "包含不支持的重启作用域", Toast.LENGTH_SHORT).show();
+            return;
         }
 
         Set<String> selected = Set.copyOf(scopes);
         LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
         new Thread(() -> {
             try {
-                StringBuilder command = new StringBuilder();
-
-                if (selected.contains("com.miui.home")) {
-                    command.append("am force-stop com.miui.home; ")
-                            .append("sleep 1; ")
-                            .append("am start -a android.intent.action.MAIN -c android.intent.category.HOME; ")
-                            .append("i=0; while [ $i -lt 30 ] && [ -z \"$(pidof com.miui.home 2>/dev/null)\" ]; do ")
-                            .append("sleep 0.1; i=$((i+1)); done; ");
-                }
-
-                if (selected.contains("com.android.systemui")) {
-                    command.append("PIDS=$(pidof com.android.systemui 2>/dev/null || true); ")
-                            .append("if [ -n \"$PIDS\" ]; then kill -TERM $PIDS; fi; ");
-                }
-
-                if (selected.contains("com.miui.securitycenter")) {
-                    if (selected.contains("com.miui.home")) {
-                        command.append("sleep 0.8; ");
-                    }
-                    command.append("SC_PIDS=$(pidof com.miui.securitycenter:ui 2>/dev/null || true); ")
-                            .append("if [ -n \"$SC_PIDS\" ]; then kill -TERM $SC_PIDS; fi; ");
-                }
-
-                if (selected.contains("com.google.android.inputmethod.latin")) {
-                    command.append("PIDS=$(pidof com.google.android.inputmethod.latin 2>/dev/null || true); ")
-                            .append("if [ -n \"$PIDS\" ]; then kill -TERM $PIDS; fi; ");
-                }
-
-                if (selected.contains("com.android.quicksearchbox")) {
-                    command.append("PIDS=$(pidof com.android.quicksearchbox 2>/dev/null || true); ")
-                            .append("if [ -n \"$PIDS\" ]; then kill -TERM $PIDS; fi; ");
-                }
-
-                command.append("\nexit\n");
-
                 Process p = new ProcessBuilder("su")
-                        .redirectOutput(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
-                        .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
+                        .redirectErrorStream(true)
                         .start();
                 try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                    os.writeBytes(command.toString());
+                    os.writeBytes(HookScopeRestartShell.buildScript(selected));
                     os.flush();
                 }
-                if (!p.waitFor(15, TimeUnit.SECONDS)) {
+                if (!p.waitFor(45, TimeUnit.SECONDS)) {
                     p.destroy();
                     if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
                     throw new IOException("su timed out while restarting selected hook scopes");
                 }
-                int exitCode = p.exitValue();
-                if (exitCode != 0) {
-                    throw new IOException("scope restart failed with exit code " + exitCode);
+
+                StringBuilder stdout = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("LDRESTART|")) stdout.append(line).append('\n');
+                    }
                 }
-                runOnUiThread(() -> Toast.makeText(
-                        this,
-                        "已重启 " + selected.size() + " 个作用域",
-                        Toast.LENGTH_SHORT).show());
+                if (p.exitValue() != 0) {
+                    throw new IOException("root shell failed (code " + p.exitValue() + ")");
+                }
+                Map<String, String> outcomes = HookScopeRestartShell.parseResults(
+                        selected, stdout.toString());
+                StringBuilder resultText = new StringBuilder();
+                for (Map.Entry<String, String> outcome : outcomes.entrySet()) {
+                    if (resultText.length() > 0) resultText.append('\n');
+                    resultText.append(restartScopeDisplayName(outcome.getKey())).append("：");
+                    switch (outcome.getValue()) {
+                        case HookScopeRestartShell.RESTARTED:
+                            resultText.append("已检测到新进程");
+                            break;
+                        case HookScopeRestartShell.STOPPED:
+                            resultText.append("旧进程已退出，等待系统按需重新启动");
+                            break;
+                        case HookScopeRestartShell.NOT_RUNNING:
+                            resultText.append("原本未运行，未执行重启");
+                            break;
+                        default:
+                            resultText.append("重启失败或未确认进程退出");
+                            break;
+                    }
+                }
+                runOnUiThread(() -> new androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("作用域重启结果")
+                        .setMessage(resultText.toString())
+                        .setPositiveButton("确定", null)
+                        .show());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                runOnUiThread(() -> Toast.makeText(
-                        this,
-                        "作用域重启已中断",
-                        Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(this,
+                        "作用域重启已中断", Toast.LENGTH_SHORT).show());
             } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(
-                        this,
-                        "Error: " + e.getMessage(),
-                        Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(this,
+                        "作用域重启失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
             }
         }).start();
+    }
+
+    private static String restartScopeDisplayName(String scope) {
+        switch (scope) {
+            case HookScopeRestartShell.HOME: return "桌面";
+            case HookScopeRestartShell.SYSTEM_UI: return "系统界面";
+            case HookScopeRestartShell.SECURITY_CENTER: return "安全中心";
+            case HookScopeRestartShell.GBOARD: return "Gboard";
+            case HookScopeRestartShell.SEARCH: return "系统搜索";
+            default: return scope;
+        }
     }
 
     void restartLauncher() {
