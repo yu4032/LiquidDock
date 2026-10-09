@@ -251,6 +251,33 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void singlePreferenceObserverRefreshesOnlyChangedControls() throws Exception {
+        String ui = Files.readString(UI);
+        assertTrue(ui.contains("LocalSettingsPreferenceRevisions"));
+        assertTrue(ui.contains("preferences.registerOnSharedPreferenceChangeListener(listener)"));
+        assertTrue(ui.contains("preferences.unregisterOnSharedPreferenceChangeListener(listener)"));
+        assertTrue(ui.contains("val revision = LocalSettingsPreferenceRevisions.current[key]"));
+        assertTrue(ui.contains("LaunchedEffect(spec.key, maxValue, storedRevision)"));
+        assertTrue(ui.contains("var value by remember(spec.key, maxValue)"));
+    }
+
+    @Test
+    public void defaultPresetRequiresConfirmationAndRecreatesSettingsState() throws Exception {
+        String ui = Files.readString(UI);
+        assertTrue(ui.contains("confirmDefaultReset = true"));
+        assertTrue(ui.contains("WindowDialog("));
+        assertTrue(ui.contains("确认恢复默认配置"));
+        assertTrue(ui.contains("activity.recreate()"));
+    }
+
+    @Test
+    public void widgetDirectoryDoesNotComposeAllGroupsInOneLazyItem() throws Exception {
+        String catalog = Files.readString(WIDGET_COMPONENTS);
+        assertTrue(catalog.contains("groups.chunked(6).forEach"));
+        assertTrue(catalog.contains("item(key = \"widget-groups:"));
+    }
+
+    @Test
     public void parameterRecompositionDoesNotRereadStoredInitialState() throws Exception {
         String ui = Files.readString(UI);
 

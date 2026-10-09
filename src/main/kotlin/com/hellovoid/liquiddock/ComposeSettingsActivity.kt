@@ -30,6 +30,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +64,11 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.window.WindowDialog
+
+// A single observer updates only the changed preference key; long slider pages
+// do not register listeners per control or re-read preferences on every frame.
+private val LocalSettingsPreferenceRevisions = staticCompositionLocalOf<Map<String, Int>> { emptyMap() }
 
 class ComposeSettingsActivity : SettingsActivity() {
 
@@ -67,7 +77,21 @@ class ComposeSettingsActivity : SettingsActivity() {
         enableEdgeToEdge()
         setContent {
             val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
-            MiuixTheme(controller = controller) { LiquidDockSettings(this) }
+            val preferences = remember { PreferenceManager.getDefaultSharedPreferences(this) }
+            val revisions = remember(preferences) { mutableStateMapOf<String, Int>() }
+            DisposableEffect(preferences) {
+                val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, changed ->
+                    if (changed != null) {
+                        val key = changed.removeSuffix("_tenths")
+                        revisions[key] = (revisions[key] ?: 0) + 1
+                    }
+                }
+                preferences.registerOnSharedPreferenceChangeListener(listener)
+                onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+            }
+            CompositionLocalProvider(LocalSettingsPreferenceRevisions provides revisions) {
+                MiuixTheme(controller = controller) { LiquidDockSettings(this) }
+            }
         }
     }
 }
@@ -682,7 +706,8 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     var uiGlassEnabled by remember {
         mutableStateOf(uiPrefs.getBoolean(SETTINGS_UI_GLASS_ENABLED, true))
     }
-    var masterEnabled by remember {
+    val masterRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Core.ENABLED.name()] ?: 0
+    var masterEnabled by remember(masterRevision) {
         mutableStateOf(
             prefs.getBoolean(
                 ConfigSchema.Core.ENABLED.name(),
@@ -1220,7 +1245,8 @@ private fun GridPage(
     masterEnabled: Boolean,
     open: (Page) -> Unit,
 ) {
-    var customGrid by remember {
+    val customGridRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Grid.ENABLED.name()] ?: 0
+    var customGrid by remember(customGridRevision) {
         mutableStateOf(
             prefs.getBoolean(
                 ConfigSchema.Grid.ENABLED.name(),
@@ -1282,7 +1308,8 @@ private fun GridBasicsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
 ) {
-    var customGrid by remember {
+    val customGridRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Grid.ENABLED.name()] ?: 0
+    var customGrid by remember(customGridRevision) {
         mutableStateOf(
             prefs.getBoolean(
                 ConfigSchema.Grid.ENABLED.name(),
@@ -1707,7 +1734,8 @@ private fun LiquidPage(
     masterEnabled: Boolean,
     open: (Page) -> Unit,
 ) {
-    var liquidGlass by remember {
+    val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
+    var liquidGlass by remember(liquidRevision) {
         mutableStateOf(
             prefs.getBoolean(
                 ConfigSchema.Glass.ENABLED.name(),
@@ -2221,15 +2249,44 @@ private fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterE
 
 @Composable
 private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
+    var confirmDefaultReset by rememberSaveable { mutableStateOf(false) }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader("预设", "默认配置、JSON 备份与恢复") }
         item { SmallTitle("预设") }
-        item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关", onClick = { applyDefaultPreset(activity) }) } }
+        item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关（需确认）", onClick = { confirmDefaultReset = true }) } }
         item { SmallTitle("备份与应用") }
         item {
             SettingsCard {
                 ArrowPreference("导出当前参数", summary = "保存为 LiquidDock JSON", onClick = activity::launchExport)
                 ArrowPreference("导入参数", summary = "校验并恢复参数；完成后自动重启桌面", onClick = activity::launchImport)
+            }
+        }
+    }
+    WindowDialog(
+        show = confirmDefaultReset,
+        title = "确认恢复默认配置",
+        onDismissRequest = { confirmDefaultReset = false },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("将覆盖当前内置配置与开关并重启桌面。该操作不能直接撤销，建议先导出 JSON 备份。")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(onClick = { confirmDefaultReset = false }, minWidth = 72.dp) {
+                    Text("取消")
+                }
+                androidx.compose.foundation.layout.Spacer(Modifier.padding(horizontal = 5.dp))
+                Button(onClick = {
+                    confirmDefaultReset = false
+                    applyDefaultPreset(activity)
+                }, minWidth = 72.dp) {
+                    Text("恢复默认")
+                }
             }
         }
     }
@@ -2384,7 +2441,8 @@ internal fun BooleanSetting(
     enabled: Boolean = true, default: Boolean = config.uiDefault(), onChanged: (Boolean) -> Unit = {},
 ) {
     val key = config.name()
-    var value by remember(key) { mutableStateOf(prefs.getBoolean(key, default)) }
+    val revision = LocalSettingsPreferenceRevisions.current[key] ?: 0
+    var value by remember(key, revision) { mutableStateOf(prefs.getBoolean(key, default)) }
     SwitchPreference(
         checked = value,
         onCheckedChange = { value = it; prefs.edit().putBoolean(key, it).apply(); onChanged(it) },
@@ -2404,12 +2462,22 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
     }
     // Reading the disk-backed preference on every drag/recomposition was wasteful:
     // remember() already owns the initial state until this setting leaves composition.
+    val storedRevision = LocalSettingsPreferenceRevisions.current[spec.key] ?: 0
     var value by remember(spec.key, maxValue) {
         val initial = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
             prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
         else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
             .coerceIn(spec.min.toFloat(), maxValue.toFloat())
         mutableStateOf(initial)
+    }
+    LaunchedEffect(spec.key, maxValue, storedRevision) {
+        // Reread only the externally changed key; normal drag recomposition is pure state.
+        if (storedRevision > 0) {
+            value = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
+                prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
+            else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
+                .coerceIn(spec.min.toFloat(), maxValue.toFloat())
+        }
     }
     var editingValue by remember(spec.key) { mutableStateOf(false) }
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
@@ -2516,4 +2584,6 @@ private fun applyDefaultPreset(activity: ComposeSettingsActivity) {
     PresetManager.applyDefault(prefs.edit())
     Toast.makeText(activity, "默认配置已应用", Toast.LENGTH_LONG).show()
     activity.restartLauncher()
+    // Destroy remembered page/slider state after applying a new full preset.
+    activity.recreate()
 }
