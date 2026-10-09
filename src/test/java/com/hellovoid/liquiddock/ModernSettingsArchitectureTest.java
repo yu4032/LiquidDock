@@ -84,21 +84,35 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void denseSettingsUseViewportBoundedLazyItemsWithoutReplacingPrismal() throws Exception {
+    public void denseSettingsScrollTheWholePageWithLazyMovingGlassCells() throws Exception {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
 
-        // Static architecture gate, not a frame-rate or runtime behavior assertion.
         assertTrue(ui.contains("private fun DenseSettingsList("));
         assertTrue(ui.contains("content: LazyListScope.() -> Unit"));
+        assertTrue(ui.contains("if (!summary.isNullOrBlank()) item(key = \"dense-page-summary\")"));
+        assertTrue(ui.contains("contentPadding = PaddingValues("));
+        assertTrue(ui.contains("verticalArrangement = Arrangement.spacedBy(10.dp)"));
         assertTrue(ui.contains("items(specs, key = { it.key })"));
         assertTrue(ui.contains("item(key = \"stroke-colors-title\")"));
-        assertTrue(ui.contains(".weight(1f)"));
-        assertTrue(ui.contains("contentPadding = PaddingValues(vertical = 4.dp)"));
+        assertTrue(ui.contains("SettingsCard {"));
         assertTrue(ui.contains("private fun SettingsList("));
-
+        // Each child is a lazy item with its own Prismal glass card, not a
+        // viewport-height static card enclosing an independently scrolling list.
+        assertFalse(ui.contains(".weight(1f)\n                .padding(horizontal = 14.dp)"));
         assertTrue(surfaces.contains("PrismalGlassSlider("));
         assertTrue(surfaces.contains("PrismalGlassStepper("));
+    }
+
+    @Test
+    public void prismalGesturesReadLatestStateThroughStableBridges() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        assertTrue(surfaces.contains("val stableSelected = remember { { selectedState.value } }"));
+        assertTrue(surfaces.contains("onSelect = stableToggleChange,"));
+        assertTrue(surfaces.contains("val stableSliderChange: (Float) -> Unit = remember {"));
+        assertTrue(surfaces.contains("onValueChange = stableSliderChange,"));
+        assertTrue(surfaces.contains("val stableSelectedIndex = remember { { selected } }"));
+        assertTrue(surfaces.contains("onTabSelected = stableTabChange,"));
     }
 
     @Test
@@ -234,6 +248,28 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void bothHeaderButtonsKeepShadowsBeyondMiuixContentBounds() throws Exception {
+        String source = Files.readString(SURFACES);
+        String bar = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiUnclippedSmallTopAppBar.kt"));
+
+        assertTrue(source.contains("GuiUnclippedSmallTopAppBar("));
+        assertFalse(source.contains("import top.yukonga.miuix.kmp.basic.SmallTopAppBar"));
+        assertTrue(source.contains("navigationIcon = {"));
+        assertTrue(source.contains("actions = actions,"));
+        assertTrue(bar.contains("WindowInsets.systemBars.only(WindowInsetsSides.Top)"));
+        assertTrue(bar.contains("WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)"));
+        assertTrue(bar.contains("WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)"));
+        assertTrue(bar.contains("TopAppBarDefaults.SmallTopAppBarCenterHeight.roundToPx()"));
+        assertTrue(bar.contains("TopAppBarDefaults.CollapsedHeight.roundToPx()"));
+        assertTrue(bar.contains("actionIcons.placeRelative("));
+        assertTrue(bar.contains("navigation.placeRelative("));
+        assertFalse("The content-area clip amputates BOTH upper Prismal shadows",
+                bar.contains(".clipToBounds()"));
+        assertTrue(source.contains("TOP_BAR_ACTION_SHADOW_ROOM"));
+    }
+
+    @Test
     public void uniformGlassHeaderHasNoRefractiveRimOrGradient() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String header = Files.readString(Path.of(
@@ -241,6 +277,22 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
         assertTrue(header.contains("shape = { RectangleShape }"));
+        assertTrue("Preserve Prismal optics instead of weakening upper-status-bar material",
+                header.contains("specular = { PrismalSpecular.Default }"));
+        assertTrue(header.contains("depthShadow = { PrismalDepthShadow.Default }"));
+        assertTrue("Only the glass slab extends past the viewport", header.contains("val overscanPx = 24.dp.roundToPx()"));
+        assertTrue(header.contains("foreground.width + overscanPx * 2"));
+        assertTrue(header.contains("foreground.height + overscanPx"));
+        assertTrue(header.contains("glass.place(-overscanPx, -overscanPx)"));
+        assertTrue(header.contains("foreground.place(0, 0)"));
+        // The physical top edge is opaque and theme-adaptive without adding
+        // another backdrop capture or moving the MIUIX toolbar.
+        assertTrue(header.contains("WindowInsets.statusBars.asPaddingValues().calculateTopPadding()"));
+        assertTrue(header.contains("statusBarHeight > 0.dp"));
+        assertTrue(header.contains("statusBarHeight + 12.dp"));
+        assertTrue(header.contains("0f to statusBarEdgeColor"));
+        assertTrue(header.contains("1f to statusBarEdgeColor.copy(alpha = 0f)"));
+        assertTrue(surfaces.contains("statusBarEdgeColor = if (background.luminance() < 0.5f) Color.Black else Color.White"));
         assertTrue(header.contains("refractionHeightPx = 0f"));
         assertTrue(header.contains("refractionAmountPx = 0f"));
         assertTrue(header.contains("depthEffect = false"));
@@ -408,7 +460,8 @@ public class ModernSettingsArchitectureTest {
     public void prismalSliderObservesExternalStepperAndResetUpdates() throws Exception {
         String surfaces = Files.readString(SURFACES);
         assertTrue(surfaces.contains("val currentValue by rememberUpdatedState(value)"));
-        assertTrue(surfaces.contains("value = { currentValue }"));
+        assertTrue(surfaces.contains("val stableSliderValue = remember { { currentValue } }"));
+        assertTrue(surfaces.contains("value = stableSliderValue,"));
     }
 
     @Test

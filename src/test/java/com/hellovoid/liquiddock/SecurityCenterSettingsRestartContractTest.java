@@ -19,10 +19,44 @@ public class SecurityCenterSettingsRestartContractTest {
 
         assertTrue(compose.contains("R.string.action_restart_scopes"));
         assertTrue(compose.contains("RestartScopesDialog("));
-        assertTrue(compose.contains("activity.restartHookScopes(selected)"));
+        assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
         assertFalse(compose.contains("activity.restartSecurityCenterAndLauncher()"));
         assertFalse(compose.contains("activity.restartSystemUi()"));
         assertFalse(compose.contains("activity.restartPackageProcess("));
+    }
+
+    @Test
+    public void restartDialogSubmitsCurrentSelectionAndUsesIdempotentToggleState() throws Exception {
+        String compose = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String dialog = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt"));
+
+        assertTrue(compose.contains("onToggle = { id, checked ->"));
+        assertTrue(compose.contains("selectedRestartScopes + id"));
+        assertTrue(compose.contains("selectedRestartScopes - id"));
+        assertTrue(compose.contains("onRestart = { confirmedSelection ->"));
+        assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
+        assertTrue(compose.contains("UI_TOGGLE|$id|checked=$checked|selected=$selectedRestartScopes"));
+        assertTrue(dialog.contains("onToggle: (String, Boolean) -> Unit"));
+        assertTrue(dialog.contains("onRestart: (Set<String>) -> Unit"));
+        assertTrue(dialog.contains("onClick = { onToggle(item.id, !checked) }"));
+        assertTrue(dialog.contains("val checked = item.id in selected"));
+        assertTrue(dialog.contains("RestartScopeToggle("));
+        assertTrue(dialog.contains("PrismalGlassToggle("));
+        assertTrue(dialog.contains("selected = selectedProvider,"));
+        assertTrue(dialog.contains("onSelect = stableToggle,"));
+        assertTrue(dialog.contains("val currentChecked = rememberUpdatedState(checked)"));
+        assertTrue(dialog.contains("val currentToggle = rememberUpdatedState(onToggle)"));
+        // Prismal is retained for glass-on mode; MIUIX is the non-glass fallback.
+        assertTrue(dialog.contains("top.yukonga.miuix.kmp.basic.Switch("));
+        // Interactive PrismalGlassSurface on the parent installs a whole-panel
+        // gesture modifier which may consume taps intended for its children.
+        assertTrue(dialog.contains(".widthIn(max = 520.dp)"));
+        assertTrue(dialog.contains(".clickable(onClick = {})"));
+        assertFalse(dialog.contains("onClick = {},"));
+        assertTrue(dialog.contains("onRestart(selected.toSet())"));
+        assertFalse(dialog.contains("onCheckedChange = { onToggle(item.id) }"));
     }
 
     @Test
@@ -42,16 +76,40 @@ public class SecurityCenterSettingsRestartContractTest {
     }
 
     @Test
-    public void batchRestartKeepsLauncherBeforeSecurityCenterAndNeverForceStopsSecurityCenter() throws Exception {
+    public void batchRestartTargetsOnlySecurityCenterUiWithoutForceStoppingItsPackage() throws Exception {
         String activity = Files.readString(
                 MAIN.resolve("java/com/hellovoid/liquiddock/SettingsActivity.java"));
 
+        String shell = Files.readString(
+                MAIN.resolve("java/com/hellovoid/liquiddock/HookScopeRestartShell.java"));
+
         assertTrue(activity.contains("void restartHookScopes(Set<String> scopes)"));
-        assertTrue(activity.contains("RESTARTABLE_HOOK_SCOPES"));
-        assertTrue(activity.contains("am force-stop com.miui.home"));
-        assertTrue(activity.contains("pidof com.miui.securitycenter:ui"));
-        assertTrue(activity.contains("kill -TERM $SC_PIDS"));
-        assertFalse(activity.contains("am force-stop com.miui.securitycenter"));
+        assertTrue(activity.contains("HookScopeRestartShell.buildScript(selected, diagnostic)"));
+        assertTrue(activity.contains("HookScopeRestartShell.parseResults("));
+        assertTrue(activity.contains("new InputStreamReader(p.getInputStream()"));
+        assertTrue(shell.contains("am force-stop com.miui.home"));
+        assertTrue(shell.contains("restart_running com.miui.securitycenter com.miui.securitycenter:ui"));
+        assertTrue(shell.contains("kill -TERM $before"));
+        assertFalse(shell.contains("am force-stop com.miui.securitycenter"));
+    }
+
+    @Test
+    public void systemUiAlwaysRequestsVerifiedRestartWithoutSuccessPopup() throws Exception {
+        String activity = Files.readString(
+                MAIN.resolve("java/com/hellovoid/liquiddock/SettingsActivity.java"));
+        String shell = Files.readString(
+                MAIN.resolve("java/com/hellovoid/liquiddock/HookScopeRestartShell.java"));
+        String compose = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+
+        assertTrue(shell.contains("restart_systemui"));
+        assertTrue(shell.contains("kill -KILL $before_ui"));
+        assertTrue(shell.contains("report com.android.systemui RESTARTED"));
+        assertTrue(activity.contains("HookScopeRestartShell.parseResults("));
+        assertFalse(activity.contains(".setTitle(\"作用域重启结果\")"));
+        assertTrue(activity.contains("以下作用域未能完成重启"));
+        assertTrue(compose.contains("Page.AnimationSystem -> setOf(\"com.android.systemui\")"));
+        assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
     }
 
     @Test
