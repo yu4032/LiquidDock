@@ -7,7 +7,7 @@ Scope: full settings shell and shared Prismal control adapters, plus widget deta
 - User's glass-off GUI can restart selected scopes; glass-on previously restarted only Launcher.
 - The recorded glass-on trace is `UI_REQUEST|[com.miui.home]` → `ROOT_START` → Launcher STEP/RESTARTED → `ROOT_DONE`. This proves the shell ran correctly for the **one ID actually submitted**; SystemUI was never requested in that run.
 - RestartScopesDialog previously used `ModernSurface(onClick = {})`; its glass-on path creates a clickable `PrismalGlassSurface` with a parent-level press ripple/gesture modifier spanning the popup. The same surface with glass off has no Prismal gesture. A hit-test conflict with child toggles is a **strong cause candidate**, but still requires A/B device confirmation.
-- Current PR remedy: passive Prismal optics on the dialog background with an ordinary Compose blank-space click shield; controlled MIUIX switches; explicit `onToggle(id, checked)`; confirm passes `selected.toSet()` directly. The parent click shield should consume blank-space taps without competing in Prismal's gesture recognizer.
+- Current PR remedy: passive Prismal optics on the dialog background with an ordinary Compose blank-space click shield; glass-on PrismalGlassToggle switches with `rememberUpdatedState` callback/state bridges (glass-off MIUIX fallback); explicit `onToggle(id, checked)`; confirm passes `selected.toSet()` directly. The parent click shield should consume blank-space taps without competing in Prismal's gesture recognizer.
 
 ## Reuse/interaction audit
 
