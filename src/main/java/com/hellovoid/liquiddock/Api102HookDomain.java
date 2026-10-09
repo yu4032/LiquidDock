@@ -3,6 +3,8 @@ package com.hellovoid.liquiddock;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import io.github.libxposed.api.XposedInterface;
 
@@ -20,6 +22,10 @@ final class Api102HookDomain {
     private final String domainName;
     private final List<String> ids = new ArrayList<>();
     private volatile State state = State.IDLE;
+    // The observer side effect is deliberately outside chain.proceed(), but must be drained
+    // before stop() can report that this generation is fully detached.
+    private final ReentrantReadWriteLock effectsBarrier = new ReentrantReadWriteLock(true);
+    private static final long STOP_DRAIN_TIMEOUT_MS = 200L;
 
     Api102HookDomain(Api102HookRegistry registry, String domainName) {
         if (registry == null || domainName == null || domainName.isBlank()) {
@@ -63,6 +69,24 @@ final class Api102HookDomain {
         return state == State.ACTIVE;
     }
 
+    /**
+     * Run a bounded, synchronous post-hook side effect with an in-flight reader lease.
+     * Stop() closes the gate first, then obtains the exclusive lease before unhooking.
+     * Never call stop() or dispatch an asynchronous callback from within this action.
+     */
+    boolean runActiveSideEffect(Runnable action) {
+        if (action == null) throw new IllegalArgumentException("action");
+        if (state != State.ACTIVE) return false;
+        effectsBarrier.readLock().lock();
+        try {
+            if (state != State.ACTIVE) return false;
+            action.run();
+            return true;
+        } finally {
+            effectsBarrier.readLock().unlock();
+        }
+    }
+
     State state() {
         return state;
     }
@@ -71,18 +95,33 @@ final class Api102HookDomain {
         return ids.size();
     }
 
-    /** Disarm callback side effects before calling the framework to detach any hook. */
+    /**
+     * Disarm new callbacks and wait for in-flight side effects before unhooking. A timed-out
+     * drain is a failure, not success: stay BLOCKED and retain every handle for a later retry.
+     * Never await this from a callback protected by runActiveSideEffect().
+     */
     synchronized boolean stop() {
         if (state == State.IDLE) return true;
-        // Volatile state is visible to callbacks immediately, even if some unhook fails.
         state = State.BLOCKED;
-        boolean clean = registry.rollback(new ArrayList<>(ids));
-        if (clean) {
-            ids.clear();
-            state = State.IDLE;
+        boolean drained;
+        try {
+            drained = effectsBarrier.writeLock().tryLock(
+                    STOP_DRAIN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
         }
-        // BLOCKED on failure: do not admit a second set of callbacks while the old set remains.
-        return clean;
+        if (!drained) return false;
+        try {
+            boolean clean = registry.rollback(new ArrayList<>(ids));
+            if (clean) {
+                ids.clear();
+                state = State.IDLE;
+            }
+            return clean;
+        } finally {
+            effectsBarrier.writeLock().unlock();
+        }
     }
 
     synchronized boolean abort() {
