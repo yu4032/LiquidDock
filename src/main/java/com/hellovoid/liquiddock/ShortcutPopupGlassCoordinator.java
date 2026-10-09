@@ -15,6 +15,13 @@ final class ShortcutPopupGlassCoordinator {
 
     private ShortcutPopupGlassCoordinator() {}
 
+    /** An installed Hook can switch at runtime; a visible popup is never re-captured in place. */
+    static synchronized void onLivePopupGlassEnabled(boolean enabled) {
+        if (!enabled) releaseLocked("live-popup-glass-disabled");
+        // If enabled while a vendor popup is already visible, wait for the next popup.
+        // Capturing now would recursively sample the popup's own foreground.
+    }
+
     /** Existing popup sessions otherwise keep the optical config captured at construction. */
     static synchronized void onLiveGlassConfigChanged(LiquidDockConfig.Glass glassConfig) {
         State state = current;
