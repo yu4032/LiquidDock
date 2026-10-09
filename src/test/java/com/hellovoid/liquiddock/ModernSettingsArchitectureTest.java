@@ -104,13 +104,20 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void navigationCardsKeepOriginalPrismalPressBehavior() throws Exception {
+    public void chevronPageCellsClickWithoutInteractivePrismalSurfaceScale() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        // Do not remove press/ripple feedback from hub cards when the reported
-        // unwanted effect is confined to switch rows on settings subpages.
-        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(24.dp) },\n        onClick = onClick,"));
+        // Layout/API guard: only ModernFeatureCard reroutes page navigation to
+        // ordinary clickable, avoiding PrismalGlassSurface's animated press scale.
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
+        assertTrue(surfaces.contains(
+                "modifier = modifier.clickable(onClick = onClick),\n        onClick = null,"));
+        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(24.dp) },"));
+        assertTrue(surfaces.contains("PrismalGlassSurface("));
+        // The reusable surface remains interactive for other callers.
+        assertTrue(surfaces.contains("onClick = onClick,"));
+        assertTrue(surfaces.contains("internal fun ArrowPreference("));
+        assertTrue(surfaces.contains("imageVector = MiuixIcons.Basic.ArrowRight"));
     }
 
     @Test
@@ -125,25 +132,14 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void switchSettingCellHasIndependentTextAndToggleHitTargets() throws Exception {
+    public void switchAndSliderRowsKeepOriginalMiuixAndPrismalInteractions() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        // Static API/layout contract only. Do not use method slicing/order to
-        // infer gesture runtime behavior; that requires device-level testing.
         assertTrue(surfaces.contains("internal fun SwitchPreference("));
-        assertTrue(surfaces.contains(
-                "BasicComponent(\n        enabled = enabled,\n        insideMargin = insideMargin,\n        endActions = {"));
-        assertFalse(surfaces.contains("BasicComponent(\n        modifier = Modifier.clickable("));
-        assertTrue(surfaces.contains("interactionSource = null,"));
-        assertTrue(surfaces.contains("indication = null,"));
-        assertTrue(surfaces.contains("onClick = { onCheckedChange(!checked) },"));
-        assertTrue(surfaces.contains("onClick = null,"));
-        assertTrue(surfaces.contains(".fillMaxWidth()\n                .clickable("));
-        assertTrue(surfaces.contains("MiuixTheme.textStyles.headline1.fontSize"));
-        assertTrue(surfaces.contains("MiuixTheme.textStyles.body2.fontSize"));
+        assertTrue(surfaces.contains("onClick = { if (enabled) onCheckedChange(!checked) },"));
         assertTrue(surfaces.contains("PrismalGlassToggle("));
-        assertFalse(surfaces.contains("GuiFlatPrismalGlassToggle("));
         assertTrue(surfaces.contains("PrismalGlassSlider("));
+        assertFalse(surfaces.contains("GuiFlatPrismalGlassToggle("));
         assertFalse(surfaces.contains("GuiFlatPrismalGlassSlider("));
     }
 
