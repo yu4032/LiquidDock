@@ -41,6 +41,7 @@ final class ExternalGlassLiveConfigState {
     static boolean isRelevantKey(String key) {
         return key == null
                 || key.startsWith("liquid_")
+                || key.startsWith("animation_")
                 || key.startsWith("launcher_surface_component_")
                 || key.startsWith("launcher_large_surface_component_")
                 || key.equals("liquiddock_enabled");
