@@ -35,7 +35,8 @@ public class Api102HotReloadContractTest {
         assertTrue(registry.contains(".setId(id)"));
         assertTrue(registry.contains("handle.unhook()"));
         assertTrue(registry.contains("duplicate API 102 hook id"));
-        assertFalse(registry.contains("replaceHook("));
+        assertTrue(registry.contains("previous.replaceHook(next)"));
+        assertFalse(owner.contains("replaceIdentified("));
     }
 
     @Test
