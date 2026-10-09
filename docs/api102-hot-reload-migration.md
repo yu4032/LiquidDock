@@ -63,6 +63,27 @@
 
 ---
 
+## 第五阶段：SystemUI 观察回调排空屏障（2026-10-09）
+
+针对上一阶段单纯使用 `DOMAIN.isActive()` 造成的检查与广播之间的竞态，`Api102HookDomain` 新增**受控的在途副作用租约**：
+
+- `runActiveSideEffect(Runnable)` 持有公平 `ReentrantReadWriteLock` 的读锁，并在进入临界区后重新检查 `ACTIVE`；整个锁屏状态判定及 `sendBroadcast()` 由该临界区保护，而 vendor 原方法的 `chain.proceed()` 不被包入锁内。
+- `stop()` 先将状态设为 `BLOCKED`，再限时 200ms 获取独占写锁。获取成功表明先前获得租约的同步副作用全部结束，此时才进行 `unhook`，成功后进入 `IDLE`；**获取超时或线程被中断，必须返回 false、保留句柄、维持 BLOCKED 状态**，之后可重试。
+- 不允许从已获得读锁的观察回调中直接调用 `stop()`，也不能在受保护的 `Runnable` 中投递未受控异步副作用，否则会绕开排空契约。观察器当前仅使用同步发送广播。被系统消息队列异步接收的广播不属于发送端租约范围。
+- `SystemUiKeyguardGoneSource.install()` 与 `stopForFutureReload()` 序列化，避免并发修改 `INSTALLED` 与事务状态。
+- `Api102HookDomainConcurrencyTest` 使用 `CountDownLatch` 和独立线程验证：停止不能越过未结束的同步副作用；超时保持阻塞且不卸载；回调抛异常仍释放锁；停止后副作用入口不可再触发。
+
+**SystemUI 剩余阻断项（源码审计，未改动这些功能）：**
+
+- `SystemUiGestureHandleFadeHook`：除初始 `NavigationBar` Hook 外，还在运行中动态 Hook handle-alpha、TaskStack listener 和 LauncherProxyListener；同时持有 `HOME_HANDLES`、`HOOKED_*_CLASSES` 集合及 `GestureHandleRuntimeState.setListener()`。未具备关闭所有动态句柄、恢复 vendor alpha、重置场景状态的原子 stop/restore。
+- `GestureHandleRuntimeState`：有 Remote Preferences 监听注册/取消能力，但尚无明确的 shutdown 流程，并且 Handler 发布的使能回调需通过代际 token 防止旧代被新代重复消费。
+- `SystemUiHandleMenuGlassHook` 与 `SystemUiHandleMenuPrismalSession`：维护 active root、SurfaceControl alpha listener、`HandlerThread`、SurfaceTexture、EGLContext/EGLSurface。虽然有单个 root/session 的清理代码，缺少全进程可校验的 owner 汇总排空，以及旧 module classloader 脱离证明。
+- Launcher 侧 `SystemUiKeyguardGoneRuntime` 单独持有 `BroadcastReceiver`；其 process lifetime 需与 Launcher 热重载的回收事务配套，不能仅停止 SystemUI 发送方就推断接收方安全。
+
+**本阶段仍不调用 `ModuleMain.onHotReloading` 内的 stop**，`autoHotReload=false` 保持；上述阻断项关闭前，严禁把“单一锁屏观察器可停止”推断为“整个 SystemUI 可热重载”。
+
+---
+
 ## 后续真正热重载的必要条件
 
 1. **分域 Hook 所有权与具名迁移**。基础全局句柄登记已建立；下一步按 owner 逐一把匿名 Hook 迁为明确且不冲突的稳定 ID，同时提供安装/回滚事务、priority 保持和安全停止流程。不是所有 Hook 都能直接按 method signature 命名：多个合法拦截器会共享同一个目标方法。
