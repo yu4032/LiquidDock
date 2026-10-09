@@ -234,6 +234,28 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void bothHeaderButtonsKeepShadowsBeyondMiuixContentBounds() throws Exception {
+        String source = Files.readString(SURFACES);
+        String bar = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiUnclippedSmallTopAppBar.kt"));
+
+        assertTrue(source.contains("GuiUnclippedSmallTopAppBar("));
+        assertFalse(source.contains("import top.yukonga.miuix.kmp.basic.SmallTopAppBar"));
+        assertTrue(source.contains("navigationIcon = {"));
+        assertTrue(source.contains("actions = actions,"));
+        assertTrue(bar.contains("WindowInsets.systemBars.only(WindowInsetsSides.Top)"));
+        assertTrue(bar.contains("WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)"));
+        assertTrue(bar.contains("WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)"));
+        assertTrue(bar.contains("TopAppBarDefaults.SmallTopAppBarCenterHeight.roundToPx()"));
+        assertTrue(bar.contains("TopAppBarDefaults.CollapsedHeight.roundToPx()"));
+        assertTrue(bar.contains("actionIcons.placeRelative("));
+        assertTrue(bar.contains("navigation.placeRelative("));
+        assertFalse("The content-area clip amputates BOTH upper Prismal shadows",
+                bar.contains(".clipToBounds()"));
+        assertTrue(source.contains("TOP_BAR_ACTION_SHADOW_ROOM"));
+    }
+
+    @Test
     public void uniformGlassHeaderHasNoRefractiveRimOrGradient() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String header = Files.readString(Path.of(
