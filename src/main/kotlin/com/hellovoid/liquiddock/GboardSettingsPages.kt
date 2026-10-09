@@ -477,19 +477,20 @@ private fun GboardValueSlider(
     // per-slider Prismal track/merged backdrop pipelines.
     GlassSliderGroup(5) {
         SliderPreference(
-        value = rounded.toFloat(),
-        onValueChange = {
-            val next = it.roundToInt().coerceIn(0, max)
-            onValueChange(next.toFloat())
-            prefs.edit().putInt(key, next).apply()
-        },
-        title = title,
-        summary = "未单独设置时继承全局液态玻璃",
-        valueText = "$rounded${if (unit.isBlank()) "" else " $unit"}",
-        enabled = enabled,
-        valueRange = 0f..max.toFloat(),
-        steps = (max - 1).coerceAtLeast(0),
-        insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
+            value = rounded.toFloat(),
+            onValueChange = {
+                val next = it.roundToInt().coerceIn(0, max)
+                if (next == rounded) return@SliderPreference
+                onValueChange(next.toFloat())
+                prefs.edit().putInt(key, next).apply()
+            },
+            title = title,
+            summary = "未单独设置时继承全局液态玻璃",
+            valueText = "$rounded${if (unit.isBlank()) "" else " $unit"}",
+            enabled = enabled,
+            valueRange = 0f..max.toFloat(),
+            steps = (max - 1).coerceAtLeast(0),
+            insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
         )
     }
 }
