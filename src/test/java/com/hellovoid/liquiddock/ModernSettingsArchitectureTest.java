@@ -128,6 +128,28 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void listCellsRetainPrismalOpticsWithoutPressEnlargement() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        Path directory = Path.of("src/main/kotlin/com/hellovoid/liquiddock/guiglass");
+        String slider = Files.readString(directory.resolve("GuiFlatPrismalGlassSlider.kt"));
+        String toggle = Files.readString(directory.resolve("GuiFlatPrismalGlassToggle.kt"));
+
+        assertTrue(surfaces.contains("GuiFlatPrismalGlassSlider("));
+        assertTrue(surfaces.contains("GuiFlatPrismalGlassToggle("));
+        for (String control : new String[] {slider, toggle}) {
+            assertTrue("keep original Prismal optical shader effects",
+                    control.contains("drawPrismalGlass("));
+            assertTrue(control.contains("prismalLens("));
+            assertTrue(control.contains("PrismalSpecular.Ambient"));
+            assertTrue(control.contains("pressedScale = 1f,"));
+            assertFalse("press must not enlarge slider/toggle thumb",
+                    control.contains("pressedScale = 1.5f,"));
+            assertFalse("velocity must not stretch control during scrolling",
+                    control.contains("scaleX /= 1f -"));
+        }
+    }
+
+    @Test
     public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
