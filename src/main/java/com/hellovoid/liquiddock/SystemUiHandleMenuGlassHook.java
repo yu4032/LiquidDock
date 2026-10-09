@@ -48,15 +48,29 @@ final class SystemUiHandleMenuGlassHook {
         liveEnabled = config.enabled && config.glass.enabled
                 && config.glass.systemUiHandleMenuEnabled;
         glassConfig = config.glass;
+        // The synchronized WeakHashMaps still require an explicit lock while
+        // materializing a stable iteration snapshot.
+        ArrayList<View> activeRoots;
+        ArrayList<View> pendingRoots;
+        ArrayList<Binding> activeBindings;
+        ArrayList<PendingBinding> pendingBindings;
+        synchronized (ACTIVE) {
+            activeRoots = new ArrayList<>(ACTIVE.keySet());
+            activeBindings = new ArrayList<>(ACTIVE.values());
+        }
+        synchronized (PENDING) {
+            pendingRoots = new ArrayList<>(PENDING.keySet());
+            pendingBindings = new ArrayList<>(PENDING.values());
+        }
         if (!liveEnabled) {
-            for (View root : new ArrayList<>(ACTIVE.keySet())) releaseRoot(root);
-            for (View root : new ArrayList<>(PENDING.keySet())) releaseRoot(root);
+            for (View root : activeRoots) releaseRoot(root);
+            for (View root : pendingRoots) releaseRoot(root);
             return;
         }
-        for (PendingBinding pending : new ArrayList<>(PENDING.values())) {
+        for (PendingBinding pending : pendingBindings) {
             if (pending != null && !pending.released) pending.glass = config.glass;
         }
-        for (Binding binding : new ArrayList<>(ACTIVE.values())) {
+        for (Binding binding : activeBindings) {
             if (binding == null || binding.released) continue;
             binding.glassConfig = config.glass;
             if (binding.prismalSession != null) {
