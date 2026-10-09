@@ -67,6 +67,9 @@ final class RootPassBlurBackend {
     private volatile boolean transitionFrameSyncEnabled;
     private volatile long sourceGeneration = -1L;
     // Workspace-only passive diagnostics; gated by MainHook.debugLogging on the EGL thread.
+    private volatile long sourceArrivalSerial;
+    // UI-thread only: avoid rebind loops during a vendor compositor stall.
+    private long nextStallRolloverAllowedMs;
     private volatile long traceSourceArrivals;
     private volatile long traceSourceLatches;
     private volatile long traceSourceTimestampNs;
@@ -304,6 +307,48 @@ final class RootPassBlurBackend {
             state.onQualityChanged();
             postToRenderThread(this::releaseNormalizedTarget);
         }
+    }
+
+    long sourceArrivalSerial() {
+        return sourceArrivalSerial;
+    }
+
+    long sourceBindEpoch() {
+        return bindEpoch.get();
+    }
+
+    /**
+     * Isolated Recents-stall recovery experiment, modeled on successful rotation rollover.
+     * Unlike a cached update-flag toggle this replaces the SurfaceTexture + producer Surface.
+     * The old native binding is cleared first, and its binder is never republished.
+     */
+    boolean recoverStalledSource(long observedArrivals, long observedEpoch) {
+        if (shuttingDown || bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE) {
+            return false;
+        }
+        View root = rootRef.get();
+        Miuix307PassBlurBridge.Binding current = binding;
+        if (root == null || !root.isAttachedToWindow() || current == null) return false;
+        RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
+        if (endpoint == null || !endpoint.isValid()
+                || !RootPassBlurEndpointBridge.sameGeneration(current, endpoint)) return false;
+
+        long now = android.os.SystemClock.uptimeMillis();
+        if (!PassBlurSourceStallRecoveryPolicy.shouldRollover(
+                RootPassBlurEndpointBridge.isBindingValid(current),
+                state.isRebindPending(),
+                state.hasFreshFrame(state.requestedGeneration()),
+                sourceArrivalSerial, observedArrivals,
+                bindEpoch.get(), observedEpoch,
+                now, nextStallRolloverAllowedMs)) return false;
+
+        // Arm cooldown *before* issuing asynchronous native teardown; one attempt per event.
+        nextStallRolloverAllowedMs = now + 20_000L;
+        boolean accepted = requestRebind("recents-source-stalled-new-bufferqueue", null);
+        MainHook.log(TAG + " Recents source-stall full producer rollover accepted=" + accepted
+                + " rootLayer=" + current.rootLayerId + " oldBindEpoch=" + observedEpoch
+                + " lastArrivals=" + observedArrivals);
+        return accepted;
     }
 
     boolean hasFreshFrame(long generation) {
@@ -609,6 +654,7 @@ final class RootPassBlurBackend {
 
     private void onFrameAvailable(SurfaceTexture input) {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
+        sourceArrivalSerial++;
         if (MainHook.debugLogging && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
             traceSourceArrivals++;
         }

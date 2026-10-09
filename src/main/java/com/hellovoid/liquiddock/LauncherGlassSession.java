@@ -156,6 +156,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile long traceFrameRejections;
     private volatile long traceBackdropPrepared;
     private volatile long traceStaticPresents;
+    private static final long RECENTS_SOURCE_STALL_CHECK_MS = 1800L;
     private volatile float appliedGlassBlur = Float.NaN;
     private volatile int passBlurCaptureScalePercent =
             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
@@ -273,6 +274,21 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.setUpdatesEnabled(true, "recents-shared-root-live");
         MainHook.log("[DC][RecentsCapsule] shared source resumed generation="
                 + sceneGeneration);
+
+        // Rotation reliably revives a stalled producer by creating a NEW BufferQueue.
+        // Reuse only that safe recovery operation, once after a genuinely missing source
+        // callback, with root-generation fences and a backend 20-second cooldown.
+        final long observedArrivals = sourceBackend.sourceArrivalSerial();
+        final long observedEpoch = sourceBackend.sourceBindEpoch();
+        final View watchedRoot = rootRef.get();
+        mainHandler.postDelayed(() -> {
+            if (shuttingDown || rotationSettlePending || rootRef.get() != watchedRoot
+                    || watchedRoot == null || !watchedRoot.isAttachedToWindow()
+                    || !GlassRuntimeState.isRecentsCapsuleEnabled()
+                    || LauncherGlassHomePresentationHook.isUnlockProducerBlocked()
+                    || LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) return;
+            sourceBackend.recoverStalledSource(observedArrivals, observedEpoch);
+        }, RECENTS_SOURCE_STALL_CHECK_MS);
     }
 
     boolean ensureLiveDragSource() {
