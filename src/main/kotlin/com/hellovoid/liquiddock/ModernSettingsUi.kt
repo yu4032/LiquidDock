@@ -313,15 +313,18 @@ internal fun RestartScopesDialog(
                     .verticalScroll(rememberScrollState()),
             ) {
                 items.forEachIndexed { index, item ->
-                    // Only the controlled selection determines which process restarts.
+                    // Prismal is visual only: the current selected set is
+                    // authoritative for both the switch and the row action.
                     val checked = item.id in selected
                     BasicComponent(
                         title = item.title,
                         summary = item.packageName,
                         endActions = {
-                            top.yukonga.miuix.kmp.basic.Switch(
+                            RestartScopeToggle(
+                                scopeId = item.id,
                                 checked = checked,
-                                onCheckedChange = { next -> onToggle(item.id, next) },
+                                backdrop = backdrop,
+                                onToggle = onToggle,
                             )
                         },
                         onClick = { onToggle(item.id, !checked) },
@@ -389,6 +392,41 @@ internal fun RestartScopesDialog(
                 }
             }
         }
+    }
+}
+
+/**
+ * The restart dialog retains native Prismal toggle optics when glass is on.
+ * The spring gesture in PrismalAGSL remembers its original closures, so bridge
+ * both state and callbacks to their latest values instead of capturing the
+ * checkbox defaults from when the dialog first appeared.
+ */
+@Composable
+private fun RestartScopeToggle(
+    scopeId: String,
+    checked: Boolean,
+    backdrop: PrismalBackdrop?,
+    onToggle: (String, Boolean) -> Unit,
+) {
+    val currentId = rememberUpdatedState(scopeId)
+    val currentChecked = rememberUpdatedState(checked)
+    val currentToggle = rememberUpdatedState(onToggle)
+    val selectedProvider = remember { { currentChecked.value } }
+    val stableToggle: (Boolean) -> Unit = remember {
+        { next -> currentToggle.value(currentId.value, next) }
+    }
+
+    if (backdrop != null) {
+        PrismalGlassToggle(
+            selected = selectedProvider,
+            onSelect = stableToggle,
+            backdrop = backdrop,
+        )
+    } else {
+        top.yukonga.miuix.kmp.basic.Switch(
+            checked = checked,
+            onCheckedChange = stableToggle,
+        )
     }
 }
 
