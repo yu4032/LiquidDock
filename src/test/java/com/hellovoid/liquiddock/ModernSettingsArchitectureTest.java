@@ -189,9 +189,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 14f"));
         assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
         assertTrue(source.contains("blurRadius = TOP_BAR_BLUR_RADIUS"));
-        assertTrue(source.contains("rememberLayerBackdrop {"));
+        assertTrue(source.contains("GuiPrismalMiuixBackdrop"));
         assertTrue(source.contains(".textureBlur("));
-        assertTrue(source.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertFalse(source.contains("Modifier.layerBackdrop(barBackdrop)"));
         assertFalse(source.contains(".progressiveTextureBlur("));
         assertFalse(source.contains("ProgressiveBlur.Top.copy("));
         assertFalse(source.contains("drawPlainPrismalGlass("));
@@ -229,37 +229,27 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void bottomTabsSampleTheSameFullPageLayerAsHeader() throws Exception {
+    public void bothBarsShareTheOriginalPrismalBackdropWithoutSecondRecording() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String adapter = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GuiFullPagePrismalBackdrop.kt"));
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalMiuixBackdrop.kt"));
 
-        // Static wiring/API guard; an on-device run is still needed to verify
-        // rendered capture completeness, scrolling and tab animation timing.
-        assertTrue(surfaces.contains("rememberLayerBackdrop {"));
-        assertTrue(surfaces.contains("drawRect(surface)\n            drawContent()"));
-        assertTrue(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
-        assertTrue(surfaces.contains("barBackdrop?.let(::GuiFullPagePrismalBackdrop)"));
-        assertTrue(surfaces.contains(
-                "LocalBottomNavigationBackdrop provides bottomNavigationBackdrop"));
-        assertTrue(surfaces.contains("bottomNavigationBackdrop.onSourcePlaced()"));
-        assertTrue(surfaces.contains(
-                "val backdrop = LocalBottomNavigationBackdrop.current ?: LocalPrismalOverlayBackdrop.current"));
+        assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
+        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
+        assertTrue(surfaces.contains("activeOverlayBackdrop?.let(::GuiPrismalMiuixBackdrop)"));
+        assertTrue(surfaces.contains("val backdrop = LocalPrismalOverlayBackdrop.current"));
         assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
-        assertTrue(surfaces.contains("PrismalGlassBottomTab("));
+        assertTrue(surfaces.contains("backdrop = barBackdrop"));
+        assertFalse(surfaces.contains("rememberLayerBackdrop {"));
+        assertFalse(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertFalse(surfaces.contains("LocalBottomNavigationBackdrop"));
 
-        assertTrue(adapter.contains("class GuiFullPagePrismalBackdrop("));
-        assertTrue(adapter.contains("private val source: LayerBackdrop"));
-        assertTrue(adapter.contains("PrismalBackdrop"));
-        assertTrue(adapter.contains("readSamplingState()"));
-        assertTrue(adapter.contains("drawBackdrop("));
-        assertTrue(adapter.contains("downscaleFactor = 1"));
-        assertTrue(adapter.contains("layerBlock = layerBlock"));
-        assertFalse("do not invent a second source recorder",
-                adapter.contains("rememberGraphicsLayer("));
+        assertTrue(adapter.contains("class GuiPrismalMiuixBackdrop("));
+        assertTrue(adapter.contains("private val source: PrismalBackdrop"));
+        assertTrue(adapter.contains("Backdrop"));
+        assertTrue(adapter.contains("drawPrismalGlass(density, coordinates, layerBlock)"));
+        assertFalse(adapter.contains("rememberGraphicsLayer("));
         assertFalse(adapter.contains("recordLayer("));
-        assertFalse(adapter.contains("Bitmap"));
-        assertFalse(adapter.contains("PixelCopy"));
     }
 
     @Test
@@ -290,22 +280,18 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void headerSamplesEntireScrolledContentLayerBehindGlass() throws Exception {
+    public void headerSamplesSharedPrismalScreenLayerAndKeepsUniformBlur() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String pages = Files.readString(UI);
 
-        // API-level architecture guard only: actual render completeness is a
-        // device-level visual contract, not something source inspection proves.
         assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
-        assertTrue(surfaces.contains("val barBackdrop = if (glassEnabled && isRuntimeShaderSupported())"));
-        assertTrue(surfaces.contains("rememberLayerBackdrop {\n            drawRect(surface)\n            drawContent()"));
-        assertTrue(surfaces.contains("backdrop = barBackdrop"));
-        assertTrue(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertTrue(surfaces.contains("activeOverlayBackdrop?.let(::GuiPrismalMiuixBackdrop)"));
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
+        assertTrue(surfaces.contains("backdrop = barBackdrop"));
         assertTrue(surfaces.contains("Box(modifier = headerModifier)"));
         assertTrue(surfaces.contains(".zIndex(0f)"));
+        assertFalse(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
         assertFalse(surfaces.contains("CompositingStrategy.Offscreen"));
-        assertFalse(surfaces.contains(".graphicsLayer {"));
 
         assertTrue(pages.contains("LazyColumn("));
         assertTrue(pages.contains("ModernSectionLabel(\"状态\")"));
