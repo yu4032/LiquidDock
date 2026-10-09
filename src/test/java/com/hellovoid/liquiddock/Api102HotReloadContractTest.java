@@ -80,6 +80,36 @@ public class Api102HotReloadContractTest {
     }
 
     @Test
+    public void gestureHandleDynamicHooksAndPreferenceLifetimeAreTrackedWithoutLiveReload()
+            throws Exception {
+        String gesture = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/SystemUiGestureHandleFadeHook.java"));
+        String preferences = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/GestureHandleRuntimeState.java"));
+        String domain = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Api102HookDomain.java"));
+        assertTrue(gesture.contains("DOMAIN.begin()"));
+        assertTrue(gesture.contains("DOMAIN.hook(onInit,"));
+        assertTrue(gesture.contains("DOMAIN.hook(onViewAttached,"));
+        assertTrue(gesture.contains("DOMAIN.hook(recentsAnimation,"));
+        assertTrue(gesture.contains("DOMAIN.hookDynamic(method,"));
+        assertTrue(gesture.contains("DOMAIN.hookDynamic(shown,"));
+        assertTrue(gesture.contains("DOMAIN.hookDynamic(connectionChanged,"));
+        assertTrue(gesture.contains("DOMAIN.hookDynamic(setAlpha,"));
+        assertFalse(gesture.contains("HookUtil.hook("));
+        assertTrue(gesture.contains("someInstalled"));
+        assertTrue(domain.contains("synchronized String hookDynamic("));
+        assertTrue(preferences.contains("EPOCH.invalidate()"));
+        assertTrue(preferences.contains("EPOCH.isCurrent(generation)"));
+        assertTrue(preferences.contains("shutdownForFutureReload()"));
+        assertTrue(preferences.contains("unregisterOnSharedPreferenceChangeListener("));
+        assertTrue(preferences.contains("synchronized (GestureHandleRuntimeState.class)"));
+        String metadata = Files.readString(Path.of(
+                "src/main/resources/META-INF/xposed/module.prop"));
+        assertTrue(metadata.contains("autoHotReload=false"));
+    }
+
+    @Test
     public void api102HotReloadFailsClosedAfterAnyHookDomainStarts() throws Exception {
         String entry = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/ModuleMain.java"));
