@@ -83,6 +83,26 @@ final class Api102HookRegistry {
         return handle;
     }
 
+    /**
+     * API 102 primitive for a future generation handoff. A successful replaceHook returns the
+     * new live handle; keep the previous handle registered if replacement itself fails.
+     * This is intentionally not called by ModuleMain until process-owner teardown exists.
+     */
+    synchronized XposedInterface.HookHandle replaceIdentified(
+            String id, XposedInterface.Hooker next) {
+        if (id == null || id.isBlank() || next == null) {
+            throw new IllegalArgumentException("id/next");
+        }
+        XposedInterface.HookHandle previous = handles.get(id);
+        if (previous == null) throw new IllegalStateException("unregistered hook id: " + id);
+        XposedInterface.HookHandle replacement = previous.replaceHook(next);
+        if (replacement == null) {
+            throw new IllegalStateException("null replacement HookHandle: " + id);
+        }
+        handles.put(id, replacement);
+        return replacement;
+    }
+
     synchronized int count() {
         return handles.size();
     }
