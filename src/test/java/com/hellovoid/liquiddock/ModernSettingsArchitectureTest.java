@@ -112,22 +112,36 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void listCellsSkipLensShaderButKeepPrismalBlurAndInteractiveControls() throws Exception {
+    public void staticGuiReplaysRealCachedPrismalUnderLiveSettingsContent() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String ui = Files.readString(UI);
-        assertTrue(surfaces.contains("edgeRefraction: Boolean = true,"));
-        assertTrue(surfaces.contains("val lensHeightPx = if (edgeRefraction) 16f else 0f"));
-        assertTrue(surfaces.contains("val lensAmountPx = if (edgeRefraction) 21f else 0f"));
-        assertTrue(surfaces.contains("val lensDispersion = if (edgeRefraction) 0.28f else 0f"));
-        assertTrue(surfaces.contains("refractionHeightPx = lensHeightPx,"));
-        assertTrue(surfaces.contains("refractionAmountPx = lensAmountPx,"));
-        assertTrue(surfaces.contains("chromaticAberration = lensDispersion,"));
-        assertTrue(surfaces.contains("blurRadius = 12.dp,"));
-        assertTrue(surfaces.contains("edgeRefraction = false,"));
-        assertTrue(ui.contains("edgeRefraction = false,"));
-        assertTrue(surfaces.contains("GuiOnTouchPrismalSlider("));
-        assertTrue(surfaces.contains("PrismalGlassStepper("));
-        assertTrue(surfaces.contains("PrismalGlassButton("));
+        String frozen = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiFrozenPrismalChrome.kt"));
+        assertTrue(surfaces.contains("LocalFrozenPrismalBackdrop provides frozenBackdrop"));
+        assertTrue(surfaces.contains("GuiFrozenPrismalChrome("));
+        assertTrue(surfaces.contains("refractionHeightPx = 16f,"));
+        assertTrue(surfaces.contains("refractionAmountPx = 21f,"));
+        assertTrue(surfaces.contains("chromaticAberration = 0.28f,"));
+        assertTrue(frozen.contains("val layer = rememberGraphicsLayer()"));
+        assertTrue(frozen.contains("layer.record(dimensions)"));
+        assertTrue(frozen.contains("drawLayer(layer)"));
+        assertTrue(frozen.contains("PrismalGlassSurface("));
+        assertTrue(frozen.contains("onClick = null,"));
+        assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(ui.contains("private fun GlassIconsPage("));
+    }
+
+    @Test
+    public void workstationDockGuiOmitsBrokenControlsButKeepsTheirConfigSchema() throws Exception {
+        String ui = Files.readString(UI);
+        assertTrue(ui.contains("工作台 Dock 图标垂直偏移"));
+        assertFalse(ui.contains("工作台 Dock 图标上间距"));
+        assertFalse(ui.contains("工作台 Dock 图标下间距"));
+        assertFalse(ui.contains("工作台 Dock 长度偏移"));
+        assertTrue(ui.contains("ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,"));
+        assertFalse(ui.contains("IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,"));
+        assertFalse(ui.contains("IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,"));
     }
 
     @Test

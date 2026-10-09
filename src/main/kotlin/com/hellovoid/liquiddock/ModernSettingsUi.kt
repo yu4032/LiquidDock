@@ -660,24 +660,6 @@ internal fun ModernSurface(
     // No RenderEffect, backdrop evaluation or per-cell offscreen shader.
     val solidCardColor = if (darkTheme) lerp(colors.surface, colors.onSurface, 0.08f) else colors.surface
     val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
-    val staticCardBrush = Brush.verticalGradient(
-        if (darkTheme) {
-            listOf(
-                lerp(solidCardColor, Color.White, 0.085f),
-                solidCardColor,
-                lerp(solidCardColor, Color.Black, 0.045f),
-            )
-        } else {
-            listOf(
-                lerp(solidCardColor, Color.White, 0.16f),
-                solidCardColor,
-                lerp(solidCardColor, colors.background, 0.07f),
-            )
-        },
-    )
-    val staticRim = if (staticChrome) {
-        lerp(cardStroke, colors.onSurface, if (darkTheme) 0.17f else 0.08f)
-    } else cardStroke
     if (backdrop == null) {
         if (staticChrome && frozenBackdrop != null) {
             // Replay one GPU layer with full original Prismal blur, lens and
@@ -789,7 +771,6 @@ internal fun ModernFeatureCard(
         modifier = modifier,
         onClick = onClick,
         staticPress = true,
-        edgeRefraction = false,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

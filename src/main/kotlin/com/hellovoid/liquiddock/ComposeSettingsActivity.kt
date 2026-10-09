@@ -2373,7 +2373,6 @@ internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     ModernSurface(
         modifier = Modifier.padding(horizontal = 14.dp),
         contentPadding = PaddingValues(vertical = 4.dp),
-        edgeRefraction = false,
     ) {
         Column(content = content)
     }
