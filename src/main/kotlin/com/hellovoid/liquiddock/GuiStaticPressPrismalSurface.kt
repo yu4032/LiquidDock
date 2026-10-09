@@ -20,15 +20,12 @@ import com.styropyr0.prismal.effects.applyPrismalGlassEffects
 import com.styropyr0.prismal.interactive.PrismalPressRipple
 
 /**
- * Page-entry Cell variant of PrismalGlassSurface (PrismalAGSL v1.0.4, MIT).
+ * Settings Cell variant of PrismalGlassSurface (PrismalAGSL v1.0.4, MIT).
  *
- * Match Prismal's glass optics, specular/depth defaults, click semantics and
- * animated AGSL press ripple. Deliberately omit only its interactive layerBlock,
- * which scales the entire Cell and translates it along the pointer. In particular,
- * DO NOT remove PrismalPressRipple: its flash/highlight is the expected click effect.
- *
- * Scoped to ModernFeatureCard. Switch/slider/thumb and all other surfaces
- * retain their unmodified upstream animations.
+ * Keeps the native glass optics while omitting the depth shadow that would
+ * be sampled again by the bottom capsule. For clickable navigation Cells,
+ * retains the AGSL press ripple without the scale/parallax layerBlock.
+ * Noninteractive Cells have no click listener or press ripple.
  */
 @Composable
 internal fun GuiStaticPressPrismalSurface(
