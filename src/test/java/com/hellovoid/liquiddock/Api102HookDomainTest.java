@@ -130,6 +130,34 @@ public class Api102HookDomainTest {
     }
 
     @Test
+    public void dynamicHookIsTrackedAfterCommitAndStoppedWithItsOwner() throws Exception {
+        List<String> events = new ArrayList<>();
+        AtomicBoolean fail = new AtomicBoolean(false);
+        Api102HookRegistry registry = new Api102HookRegistry(
+                (method, id, callback) -> handle(id, events, fail));
+        Api102HookDomain domain = new Api102HookDomain(registry, "systemui.gesture.handle");
+        Method first = Target.class.getDeclaredMethod("observed", int.class);
+        Method next = Target.class.getDeclaredMethod("observed", String.class);
+        XposedInterface.Hooker callback = chain -> chain.proceed();
+
+        assertThrows(IllegalStateException.class, () -> domain.hookDynamic(next, callback));
+        domain.begin();
+        domain.hook(first, callback);
+        assertThrows(IllegalStateException.class, () -> domain.hookDynamic(next, callback));
+        domain.commit();
+        String id = domain.hookDynamic(next, callback);
+        assertEquals(2, registry.count());
+        assertEquals(2, domain.ownedCount());
+        assertThrows(IllegalStateException.class, () -> domain.hookDynamic(next, callback));
+        assertTrue(domain.stop());
+        assertEquals(0, registry.count());
+        assertEquals(id, Api102HookRegistry.stableId("systemui.gesture.handle", next));
+        assertEquals(List.of(id, Api102HookRegistry.stableId("systemui.gesture.handle", first)),
+                events);
+        assertThrows(IllegalStateException.class, () -> domain.hookDynamic(next, callback));
+    }
+
+    @Test
     public void blockedDomainDoesNotRemoveOtherOwnerOrLegacyHook() throws Exception {
         List<String> events = new ArrayList<>();
         AtomicBoolean fail = new AtomicBoolean(false);
