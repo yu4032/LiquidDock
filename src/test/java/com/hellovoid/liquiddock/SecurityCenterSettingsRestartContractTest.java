@@ -46,12 +46,17 @@ public class SecurityCenterSettingsRestartContractTest {
         String activity = Files.readString(
                 MAIN.resolve("java/com/hellovoid/liquiddock/SettingsActivity.java"));
 
+        String shell = Files.readString(
+                MAIN.resolve("java/com/hellovoid/liquiddock/HookScopeRestartShell.java"));
+
         assertTrue(activity.contains("void restartHookScopes(Set<String> scopes)"));
-        assertTrue(activity.contains("RESTARTABLE_HOOK_SCOPES"));
-        assertTrue(activity.contains("am force-stop com.miui.home"));
-        assertTrue(activity.contains("pidof com.miui.securitycenter:ui"));
-        assertTrue(activity.contains("kill -TERM $SC_PIDS"));
-        assertFalse(activity.contains("am force-stop com.miui.securitycenter"));
+        assertTrue(activity.contains("HookScopeRestartShell.buildScript(selected)"));
+        assertTrue(activity.contains("HookScopeRestartShell.parseResults("));
+        assertTrue(activity.contains("new InputStreamReader(p.getInputStream()"));
+        assertTrue(shell.contains("am force-stop com.miui.home"));
+        assertTrue(shell.contains("restart_running com.miui.securitycenter com.miui.securitycenter:ui"));
+        assertTrue(shell.contains("kill -TERM $before"));
+        assertFalse(shell.contains("am force-stop com.miui.securitycenter"));
     }
 
     @Test
