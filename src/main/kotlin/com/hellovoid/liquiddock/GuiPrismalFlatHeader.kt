@@ -6,22 +6,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.drawPrismalGlass
 import com.styropyr0.prismal.effects.applyPrismalGlassEffects
 
 /**
- * Uniform header blur drawn entirely by PrismalAGSL.
- *
- * Uses the same background + screen Prismal source as the bottom glass tabs.
- * Unlike the default interactive PrismalGlassSurface, this static header has
- * no lens zone, hue tint, press geometry or touch interception. The original
- * SmallTopAppBar and its independent glass buttons remain the foreground.
- *
- * Standard Compose text/cards inside the scaffold's captured body are already
- * recorded by prismalGlassLayer; they do not need to become Prismal widgets.
+ * Flat Prismal header that samples the captured background and page content.
+ * No refraction, vibrancy hue shift, or touch handling: MIUIX owns the
+ * foreground app bar, and its buttons retain their independent Prismal effects.
  */
 @Composable
 internal fun GuiPrismalFlatHeader(
