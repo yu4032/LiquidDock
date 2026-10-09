@@ -50,6 +50,11 @@ final class LauncherRecentsCapsuleGlassHook {
         if (decorations != null) scheduleBinding(decorations);
     }
 
+    static void onRecentsHidden() {
+        Binding binding = activeBinding;
+        if (binding != null) binding.onRecentsHidden();
+    }
+
     static void onRecentsShown() {
         if (!GlassRuntimeState.isRecentsCapsuleEnabled()) return;
         Binding binding = activeBinding;
@@ -261,6 +266,10 @@ final class LauncherRecentsCapsuleGlassHook {
             if (!released && !prismalFailed) session.onRecentsShown();
         }
 
+        void onRecentsHidden() {
+            if (!released) session.onRecentsHidden();
+        }
+
         private RecentsCapsuleGlassSinkView installSink(
                 View target, RecentsCapsuleGlassSession.Target targetId) {
             return RecentsCapsuleGlassSinkView.attachInsideTarget(target, session, targetId);
@@ -342,6 +351,17 @@ final class LauncherRecentsCapsuleGlassHook {
                 if (worldSink != null) worldSink.reveal();
             }
             MainHook.log(TAG + " Prismal presented target=" + target);
+        }
+
+        @Override public void onSourceUnavailable(Throwable error) {
+            if (released || prismalFailed) return;
+            clearAllPrismalPresented = false;
+            worldPrismalPresented = false;
+            if (clearAllSink != null) clearAllSink.conceal();
+            if (worldSink != null) worldSink.conceal();
+            restoreStockBackground();
+            applyNativeFallback();
+            MainHook.log(TAG + " native fallback during transient shared source loss");
         }
 
         @Override public void onFailure(Throwable error) {
