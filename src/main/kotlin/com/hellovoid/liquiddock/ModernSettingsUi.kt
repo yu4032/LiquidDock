@@ -118,8 +118,9 @@ internal fun ModernSettingsScaffold(
     // PrismalGlassSurface's tint applies BlendMode.Hue before its alpha overlay.
     // A neutral surface fill avoids recoloring green/other content behind the bar.
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
-    // Keep live Prismal sampling ONLY for top bar actions/header and bottom
-    // capsule. All body cells, dialogs and numeric controls remain static.
+    // Keep continuous Prismal sampling for top bar actions/header and bottom
+    // capsule. Body cells use frozen chrome, while numeric stepper/reset retain
+    // native Prismal and sliders/toggles sample only during touch.
     val surfaceBackdrop: PrismalBackdrop? = null
     // Touch-gated controls use the original background sample, but their
     // render nodes only attach during active gestures. No third capture layer.
@@ -869,7 +870,8 @@ internal fun Button(
     val darkTheme = colors.background.luminance() < 0.5f
     val resolved = modifier
         .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
-        // Solid +/- and reset buttons need a visible boundary even when disabled.
+        // Solid fallback actions need a visible boundary even when disabled.
+        // Numeric +/- and reset opt into native Prismal when GUI glass is on.
         .alpha(if (enabled) 1f else if (backdrop == null) 0.66f else 0.42f)
 
     if (backdrop == null) {

@@ -2,8 +2,6 @@ package com.hellovoid.liquiddock
 
 // Local PrismalAGSL v1.0.4 gesture-preserving adaptation: sample ONLY on touch.
 import com.styropyr0.prismal.components.LocalPrismalParentGlassLayer
-import androidx.compose.foundation.background
-
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
