@@ -3,7 +3,7 @@ package com.hellovoid.liquiddock;
 import java.util.ArrayDeque;
 import java.util.WeakHashMap;
 
-/** Uses HyperOS semantic Recents and wallpaper-animation boundaries instead of wall-clock delays. */
+/** Uses HyperOS semantic Recents and wallpaper-animation boundaries; diagnostics are read-only. */
 final class LauncherGlassRecentsHook {
     private static final String TAG = "[DC][GlassScene]";
     private static final String RECENTS_DISPATCHER =
