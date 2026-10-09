@@ -44,6 +44,10 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue(dialog.contains("onClick = { onToggle(item.id, !checked) }"));
         assertTrue(dialog.contains("val checked = item.id in selected"));
         assertTrue(dialog.contains("top.yukonga.miuix.kmp.basic.Switch("));
+        // Interactive PrismalGlassSurface on the parent installs a whole-panel
+        // gesture modifier which may consume taps intended for its children.
+        assertTrue(dialog.contains(".widthIn(max = 520.dp)\\n                // Consume taps"));
+        assertFalse(dialog.contains("contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),\\n            onClick = {},"));
         assertTrue(dialog.contains("onRestart(selected.toSet())"));
         assertFalse(dialog.contains("onCheckedChange = { onToggle(item.id) }"));
     }
