@@ -115,10 +115,20 @@ final class LiveGlassConfigState {
             Arrays.asList(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name(),
                     ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name())));
 
+    // AnimationRuntimeState already exposes process-local volatile timings. Keep those
+    // timings current without touching hooks or the render backend.
+    private static final Set<String> ANIMATION_KEYS = Collections.unmodifiableSet(new HashSet<>(
+            Arrays.asList(
+                    ConfigSchema.Animation.WORKSPACE_VISIBILITY.name(),
+                    ConfigSchema.Animation.DOCK_ICON_REVEAL.name(),
+                    ConfigSchema.Animation.PRESS_IN.name(),
+                    ConfigSchema.Animation.PRESS_OUT.name(),
+                    ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE.name())));
     private static SharedPreferences preferences;
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
     private static Map<String, ?> lastGlass = Collections.emptyMap();
     private static Map<String, ?> lastRecents = Collections.emptyMap();
+    private static Map<String, ?> lastAnimation = Collections.emptyMap();
     private static volatile LiquidDockConfig.Glass currentGlass;
     private static volatile long generation;
 
@@ -136,6 +146,7 @@ final class LiveGlassConfigState {
         Map<String, ?> all = snapshot(remote);
         lastGlass = project(all, GLASS_KEYS);
         lastRecents = project(all, RECENTS_KEYS);
+        lastAnimation = project(all, ANIMATION_KEYS);
         listener = (prefs, key) -> {
             if (!isLiveKey(key)) return;
             // Listener callbacks may be on a Binder thread; Choreographer must run on main.
@@ -157,7 +168,8 @@ final class LiveGlassConfigState {
 
     static boolean isLiveKey(String key) {
         if (key == null) return true; // bulk preference change
-        if (GLASS_KEYS.contains(key) || RECENTS_KEYS.contains(key)) return true;
+        if (GLASS_KEYS.contains(key) || RECENTS_KEYS.contains(key)
+                || ANIMATION_KEYS.contains(key)) return true;
         return key.endsWith("_tenths")
                 && GLASS_KEYS.contains(key.substring(0, key.length() - "_tenths".length()));
     }
@@ -175,9 +187,11 @@ final class LiveGlassConfigState {
             Map<String, ?> all = snapshot(prefs);
             Map<String, ?> glass = project(all, GLASS_KEYS);
             Map<String, ?> recents = project(all, RECENTS_KEYS);
+            Map<String, ?> animation = project(all, ANIMATION_KEYS);
             boolean glassChanged = !glass.equals(lastGlass);
             boolean recentsChanged = !recents.equals(lastRecents);
-            if (!glassChanged && !recentsChanged) return;
+            boolean animationChanged = !animation.equals(lastAnimation);
+            if (!glassChanged && !recentsChanged && !animationChanged) return;
 
             LiquidDockConfig next = LiquidDockConfig.from(new ConfigReader(all));
             if (glassChanged) {
@@ -199,6 +213,11 @@ final class LiveGlassConfigState {
                 lastRecents = recents;
                 RecentsBackgroundBlurHook.onLiveConfigChanged(next.recents);
                 MainHook.log(TAG + " recents blur=" + next.recents.backgroundBlurPercent);
+            }
+            if (animationChanged) {
+                lastAnimation = animation;
+                AnimationRuntimeState.configure(next.animation);
+                MainHook.log(TAG + " launcher animation timing updated");
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " configuration refresh failed: " + error);
