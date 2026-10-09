@@ -655,8 +655,12 @@ internal fun ModernFeatureCard(
 ) {
     val onSurface = MiuixTheme.colorScheme.onSurface
     ModernSurface(
-        modifier = modifier,
-        onClick = onClick,
+        // Page-entry Cell: keep the entire card clickable, but do not send
+        // onClick to PrismalGlassSurface. Its interactive press layer scales
+        // and shifts the whole card even when a swipe is intended to scroll.
+        // The Compose/Miuix indication is a color overlay, not a scale.
+        modifier = modifier.clickable(onClick = onClick),
+        onClick = null,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -815,12 +819,9 @@ internal fun SwitchPreference(
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
-    // A full-row clickable overlaps the Prismal toggle's own pointer-input
-    // handler. Partition the hit targets: text/body toggles on click, while
-    // the right-hand glass switch exclusively handles its own press and drag.
-    // This also removes the row's animated MIUIX press indication without
-    // suppressing any of the stock Prismal switch spring/drag effects.
     BasicComponent(
+        title = title,
+        summary = summary,
         enabled = enabled,
         insideMargin = insideMargin,
         endActions = {
@@ -838,35 +839,8 @@ internal fun SwitchPreference(
                 )
             }
         },
-        onClick = null,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(
-                    enabled = enabled,
-                    interactionSource = null,
-                    indication = null,
-                    onClick = { onCheckedChange(!checked) },
-                ),
-        ) {
-            Text(
-                text = title,
-                fontSize = MiuixTheme.textStyles.headline1.fontSize,
-                fontWeight = FontWeight.Medium,
-                color = if (enabled) MiuixTheme.colorScheme.onBackground
-                    else MiuixTheme.colorScheme.disabledOnSecondaryVariant,
-            )
-            if (summary != null) {
-                Text(
-                    text = summary,
-                    fontSize = MiuixTheme.textStyles.body2.fontSize,
-                    color = if (enabled) MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        else MiuixTheme.colorScheme.disabledOnSecondaryVariant,
-                )
-            }
-        }
-    }
+        onClick = { if (enabled) onCheckedChange(!checked) },
+    )
 }
 
 /**
