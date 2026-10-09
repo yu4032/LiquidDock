@@ -255,6 +255,9 @@ public final class PrismalRenderer implements AutoCloseable {
         int nextWidth = PrismalFrameTarget.scaledDimension(width, percent);
         int nextHeight = PrismalFrameTarget.scaledDimension(height, percent);
         if (nextWidth == outputWidth && nextHeight == outputHeight) {
+            // A live quality change back to native density must not retain the obsolete
+            // reduced output FBO alongside the already-allocated full-size output.
+            if (reducedOutputFramebuffer != 0) releaseReducedOutput();
             beginGlassFrame();
             return;
         }
