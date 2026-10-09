@@ -49,7 +49,7 @@
     <string name="dock_frame_sync_summary">Keep the Dock glass background synchronized with the display refresh rate for smoother high-refresh-rate background updates; changes apply immediately</string>
     <string name="option_off">Off</string>
     <string name="workstation_customization">Custom workstation</string>
-    <string name="workstation_customization_summary">Workstation Dock icon vertical offset updates live when installed; icon glass corner radius, desktop offset and All Apps spacing still require a launcher restart</string>
+    <string name="workstation_customization_summary">Workstation Dock icon vertical offset updates live when installed; desktop and All Apps spacing adapt to the current grid column count. Icon glass corners and layout changes still require a launcher restart</string>
     <string name="recents_header_summary">Adjust wallpaper blur behind task cards; applies immediately when the Launcher hook is loaded.</string>
     <string name="liquid_enable">Enable liquid glass</string>
     <string name="liquid_enable_summary">Turning off removes the current glass effect immediately; after enabling, some scenes require a launcher restart to take effect</string>
