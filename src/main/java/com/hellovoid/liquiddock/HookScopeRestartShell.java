@@ -50,7 +50,7 @@ final class HookScopeRestartShell {
             // HOME backgrounds/kills the Settings activity or its su process.
             // The app's existing Debug.LOGGING switch gates this entirely.
             script.append("trace() { /system/bin/log -p i -t LD_SCOPE_RESTART \"$1\" 2>/dev/null || true; }\n");
-            script.append("trace \"ROOT_START|pid=$|ppid=$PPID|uid=$(id -u)\"\n");
+            script.append("trace \"ROOT_START|pid=$$|ppid=$PPID|uid=$(id -u)\"\n");
         }
         script.append("report() { printf 'LDRESTART|%s|%s\\n' \"$1\" \"$2\"; ");
         if (diagnostic) script.append("trace \"RESULT|$1|$2\"; ");
