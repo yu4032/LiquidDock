@@ -24,7 +24,11 @@ final class WorkstationDockCustomizationHook {
         dockEnabled = config.dockEnabled;
         iconTopOffset = top;
         iconBottomOffset = bottom;
-        for (View recycler : new ArrayList<>(OBSERVED_RECYCLERS.keySet())) {
+        ArrayList<View> observed;
+        synchronized (OBSERVED_RECYCLERS) {
+            observed = new ArrayList<>(OBSERVED_RECYCLERS.keySet());
+        }
+        for (View recycler : observed) {
             if (recycler == null || !recycler.isAttachedToWindow()) continue;
             HookUtil.tryInvoke(recycler, "invalidateItemDecorations");
             recycler.requestLayout();
@@ -45,7 +49,11 @@ final class WorkstationDockCustomizationHook {
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         Object recycler = chain.getArg(2);
-                        if (recycler instanceof View) OBSERVED_RECYCLERS.put((View) recycler, Boolean.TRUE);
+                        if (recycler instanceof View) {
+                            synchronized (OBSERVED_RECYCLERS) {
+                                OBSERVED_RECYCLERS.put((View) recycler, Boolean.TRUE);
+                            }
+                        }
                         if (dockEnabled && WorkstationRuntimeState.isActive()) {
                             Rect out = (Rect) chain.getArg(0);
                             out.top += iconTopOffset;
