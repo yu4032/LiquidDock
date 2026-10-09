@@ -395,7 +395,7 @@ private val passBlurRenderFpsSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_RENDER_FPS,
     "玻璃实时渲染刷新率上限（0 = Auto）",
     "fps",
-    summary = "限制除 Dock 外实时玻璃的最高渲染刷新率；0 = 自动跟随可用源帧。降低上限可减少合成开销；重启相关应用后生效",
+    summary = "限制除 Dock 外实时玻璃的最高刷新率；0 = 自动跟随可用源帧。工作区与已连接的 Launcher 玻璃实时生效；独立应用需按其作用域重启",
     dynamicMax = DisplayRefreshRatePolicy::maxSupportedRefreshRateHz,
 )
 private val liquidSpecs = listOf(
