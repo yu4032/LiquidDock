@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import android.content.SharedPreferences
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
@@ -41,7 +43,13 @@ internal fun ScopedGlassSettingsPage(
         ScopedGlassOptics.GBOARD -> listOf("capture_scale_percent", "render_fps")
         else -> listOf("capture_scale_percent", "render_fps", "corner_radius_dp")
     }
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    // These are separate rounded cells, not rows inside one shared card.
+    // Keep a visible gap without changing each cell's surface or interaction.
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = padding,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         item(key = "scope-header") {
             PageHeader(
                 "全部参数",

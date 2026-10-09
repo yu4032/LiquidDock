@@ -2390,24 +2390,23 @@ private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) 
             Text("将覆盖当前内置配置与开关并重启桌面。该操作不能直接撤销，建议先导出 JSON 备份。")
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Button(
                     onClick = { confirmDefaultReset = false },
-                    minWidth = 132.dp,
+                    modifier = Modifier.weight(1f),
                     minHeight = 42.dp,
                     insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
                 ) {
                     Text("取消")
                 }
-                androidx.compose.foundation.layout.Spacer(Modifier.padding(horizontal = 5.dp))
                 Button(
                     onClick = {
                         confirmDefaultReset = false
                         applyDefaultPreset(activity)
                     },
-                    minWidth = 132.dp,
+                    modifier = Modifier.weight(1f),
                     minHeight = 42.dp,
                     insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
                     destructive = true,

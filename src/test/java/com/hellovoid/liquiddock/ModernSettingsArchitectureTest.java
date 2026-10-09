@@ -284,6 +284,18 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void scopedGlassCellsStaySeparatedAndResetActionsAreCenteredEqually() throws Exception {
+        String scoped = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ScopedGlassSettingsPage.kt"));
+        String ui = Files.readString(UI);
+        assertTrue(scoped.contains("verticalArrangement = Arrangement.spacedBy(8.dp)"));
+        assertTrue(ui.contains("horizontalArrangement = Arrangement.spacedBy(12.dp)"));
+        assertTrue(ui.contains("modifier = Modifier.weight(1f)"));
+        assertTrue(ui.contains("minHeight = 42.dp"));
+        assertTrue(ui.contains("destructive = true"));
+    }
+
+    @Test
     public void defaultPresetRequiresConfirmationAndRecreatesSettingsState() throws Exception {
         String ui = Files.readString(UI);
         assertTrue(ui.contains("confirmDefaultReset = true"));
