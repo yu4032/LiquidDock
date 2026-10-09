@@ -13,7 +13,7 @@ Scope: all user-visible settings descriptions in `ComposeSettingsActivity.kt`, b
 
 ## Legitimately restart-bound or conditional descriptions retained
 
-- Structural grid mode and icon layout, grid dimension and widget stretching, workstation desktop/All Apps geometry (as opposed to already-installed workstation Dock geometry).
+- Structural grid mode and icon layout, grid dimension and widget stretching, workstation desktop/All Apps geometry and Dock icon glass corner radius (as opposed to the already-installed Dock icon vertical-offset path).
 - Dock resize animation implementation/duration: `AnimationRuntimeState` does not expose it as a live key.
 - Logging: `MainHook.debugLogging` is initialized at process Hook installation rather than updated by the live config subscriber.
 - System Framework wallpaper flicker behavior requires device reboot for framework-level Hook loading.
