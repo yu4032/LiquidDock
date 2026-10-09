@@ -125,27 +125,32 @@ internal fun ModernSettingsScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // Capture must wrap the actual painted background. Putting
+                // background() before prismalGlassLayer() records an EMPTY Box:
+                // its drawContent() excludes the outer background modifier.
+                // The merged backdrop then lacks an opaque base, allowing
+                // sharp page text underneath the glass to show through.
+                .then(
+                    if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)
+                    else Modifier,
+                )
                 .then(
                     if (glassEnabled) {
-                        // Preserve the existing backdrop when glass is enabled.
                         Modifier.background(
                             Brush.verticalGradient(
                                 listOf(
                                     background,
-                                    primary.copy(alpha = 0.07f),
+                                    // Keep every stop opaque in the captured
+                                    // backdrop; alpha-only primary would punch a
+                                    // translucent band through the glass.
+                                    lerp(background, primary, 0.07f),
                                     background,
                                 ),
                             ),
                         )
                     } else {
-                        // In solid mode, gently darken the entire canvas without
-                        // changing any Cell color, transparency, or shape.
                         Modifier.background(lerp(background, Color.Black, 0.06f))
                     },
-                )
-                .then(
-                    if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)
-                    else Modifier,
                 ),
         )
 
@@ -230,8 +235,9 @@ internal fun ModernSettingsScaffold(
                     }
                     if (activeOverlayBackdrop != null) {
                         GuiPrismalFlatHeader(
-                            // Diagnostic: sample body capture directly to isolate merged backdrop.
-                            backdrop = screenLayer,
+                            // The recorded opaque background covers the crisp live
+                            // content while Prismal blurs its captured copy.
+                            backdrop = activeOverlayBackdrop,
                             modifier = Modifier.fillMaxWidth().zIndex(1f),
                             blurRadius = TOP_BAR_BLUR_RADIUS.dp,
                             overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
