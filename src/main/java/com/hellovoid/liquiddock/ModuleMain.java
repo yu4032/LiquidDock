@@ -204,8 +204,9 @@ public final class ModuleMain extends XposedModule {
      */
     @Override
     public boolean onHotReloading(@NonNull HotReloadingParam param) {
-        if (activeProcessLifecycle) {
-            Api101Bridge.log("[DC][HotReload] rejected: process owners have no teardown transaction");
+        if (activeProcessLifecycle || Api102HookRegistry.installedCount() != 0) {
+            Api101Bridge.log("[DC][HotReload] rejected: active owners or identified hooks"
+                    + " (hookCount=" + Api102HookRegistry.installedCount() + ")");
             return false;
         }
         param.setSavedInstanceState(loadedProcessName);
