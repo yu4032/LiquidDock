@@ -101,19 +101,6 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 
-// Only dense groups use native slider tracks. Prismal cards, steppers, switches,
-// navigation and the uniform glass header remain active and unchanged.
-private val LocalLightweightGlassSlider = staticCompositionLocalOf { false }
-
-@Composable
-internal fun GlassSliderGroup(sliderCount: Int, content: @Composable () -> Unit) {
-    val lightweight = LocalLightweightGlassSlider.current ||
-        GuiGlassControlDensityPolicy.useLightweightTrack(sliderCount)
-    CompositionLocalProvider(LocalLightweightGlassSlider provides lightweight) {
-        content()
-    }
-}
-
 @Composable
 internal fun ModernSettingsScaffold(
     title: String,
@@ -970,7 +957,6 @@ internal fun SliderPreference(
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
-    val lightweight = LocalLightweightGlassSlider.current
     val currentValue by rememberUpdatedState(value)
     var editingValue by remember(title) { mutableStateOf(false) }
     val intervals = (steps + 1).coerceAtLeast(1)
@@ -1009,7 +995,7 @@ internal fun SliderPreference(
                 }
             },
         )
-        if (backdrop != null && !lightweight) {
+        if (backdrop != null) {
             PrismalGlassSlider(
                 value = { currentValue },
                 onValueChange = { next ->
@@ -1064,9 +1050,8 @@ internal fun ModernGlassSlider(
     modifier: Modifier = Modifier,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
-    val lightweight = LocalLightweightGlassSlider.current
     val currentValue by rememberUpdatedState(value)
-    if (backdrop != null && !lightweight) {
+    if (backdrop != null) {
         PrismalGlassSlider(
             value = { currentValue },
             onValueChange = { next ->
