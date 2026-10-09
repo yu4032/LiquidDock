@@ -123,12 +123,15 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         quadBuffer.put(QUAD).position(0);
 
         float density = root.getResources().getDisplayMetrics().density;
-        Miuix307PrismalMaterial.Params optical = glassConfig != null
-                ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
+        ConfigReader reader = ConfigReader.load();
+        LiquidDockConfig.Glass opticalGlass = ScopedGlassOptics.resolve(
+                reader, glassConfig, ScopedGlassOptics.GBOARD);
+        Miuix307PrismalMaterial.Params optical = opticalGlass != null
+                ? Miuix307PrismalMaterial.fromConfig(opticalGlass, density)
                 : Miuix307PrismalMaterial.defaults(density);
         PrismalParams baseParams = Miuix307PrismalAdapter.toPortable(optical);
         ThirdPartyGlassAppearance appearance =
-                GboardGlassPreferences.resolveShared(ConfigReader.load(), glassConfig);
+                GboardGlassPreferences.resolveShared(reader, glassConfig);
         prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
         highlightProfile = appearance.highlightProfile;
         appliedBlur = appearance.blur;
@@ -150,7 +153,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
         PrismalParams next = ThirdPartyPrismalParams.apply(
                 Miuix307PrismalAdapter.toPortable(
-                        Miuix307PrismalMaterial.fromConfig(glass, density)), appearance);
+                        Miuix307PrismalMaterial.fromConfig(
+                                ScopedGlassOptics.resolve(ConfigReader.load(), glass,
+                                        ScopedGlassOptics.GBOARD), density)), appearance);
         boolean blurChanged = Float.compare(appliedBlur, appearance.blur) != 0;
         appliedBlur = appearance.blur;
         prismalParams = next;

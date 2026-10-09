@@ -137,6 +137,8 @@ private enum class Page(val titleRes: Int) {
     DialogCustomization(R.string.page_dialog_customization),
     ThirdPartyApps(R.string.page_third_party_apps),
     Gboard(R.string.page_gboard),
+    GboardAll(R.string.page_gboard),
+    DialogAll(R.string.page_dialog_customization),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
     LauncherHighlightsCompact(R.string.page_launcher_highlights_compact),
@@ -464,6 +466,21 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y, "背景缩放 Y", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE, "视差倍率", "%"),
 )
+/** Shared optical descriptors only; each scope keeps its own preferences and page. */
+internal data class ScopedOpticalDescriptor(
+    val config: ConfigKey<Int>,
+    val title: String,
+    val unit: String,
+    val summary: String,
+)
+
+internal val scopedOpticalDescriptors: List<ScopedOpticalDescriptor> by lazy {
+    val supported = ScopedGlassOptics.opticalKeys().mapTo(hashSetOf()) { it.name() }
+    liquidSpecs.filter { it.key in supported }.map {
+        ScopedOpticalDescriptor(it.config, it.title, it.unit, it.summary)
+    }
+}
+
 private val launcherHighlightSpecs = listOf(
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.SKY_HAZE, ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE, R.string.highlight_sky_haze, R.string.highlight_sky_haze_summary),
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.SPECULAR, ConfigSchema.LauncherHighlight.LARGE_SPECULAR, R.string.highlight_specular, R.string.highlight_specular_summary),
@@ -958,14 +975,24 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled)
                 Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.DialogCustomization -> DialogGlassSettingsPage(padding, prefs, masterEnabled)
+                Page.DialogCustomization -> DialogGlassSettingsPage(
+                padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.DialogAll) },
+            )
+            Page.DialogAll -> ScopedGlassSettingsPage(
+                padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
+            )
                 Page.ThirdPartyApps -> ThirdPartyAppsPage(
                     padding = padding,
                     prefs = prefs,
                     masterEnabled = masterEnabled,
                     openGboard = { navigateTo(Page.Gboard) },
                 )
-                Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
+                Page.Gboard -> GboardSettingsPage(
+                padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.GboardAll) },
+            )
+            Page.GboardAll -> ScopedGlassSettingsPage(
+                padding, prefs, masterEnabled, ScopedGlassOptics.GBOARD, "Gboard",
+            )
                 Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, ::navigateTo)
                 Page.LauncherHighlightsCompact -> LauncherHighlightTogglePage(

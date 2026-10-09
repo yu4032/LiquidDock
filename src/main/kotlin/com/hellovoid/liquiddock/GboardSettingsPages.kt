@@ -72,6 +72,7 @@ internal fun SearchboxSettingsPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
+    onOpenAll: () -> Unit = {},
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -240,6 +241,17 @@ internal fun SearchboxSettingsPage(
                 )
             }
         }
+        item { SmallTitle("独立参数") }
+        item {
+            GboardSettingsCard {
+                ArrowPreference(
+                    title = "全部参数",
+                    summary = "调整系统搜索专属的完整 Prismal 光学参数；未设置时继承全局",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = onOpenAll,
+                )
+            }
+        }
     }
 }
 
@@ -248,6 +260,7 @@ internal fun GboardSettingsPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
+    onOpenAll: () -> Unit = {},
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -455,6 +468,17 @@ internal fun GboardSettingsPage(
                     summary = "删除 Gboard 的颜色与模糊度覆盖，重新跟随全局液态玻璃参数",
                     enabled = controlsEnabled && hasAppearanceOverride,
                     onClick = { clearAppearanceOverrides() },
+                )
+            }
+        }
+        item { SmallTitle("独立参数") }
+        item {
+            GboardSettingsCard {
+                ArrowPreference(
+                    title = "全部参数",
+                    summary = "调整 Gboard 专属的完整 Prismal 光学参数；未设置时继承全局",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = onOpenAll,
                 )
             }
         }
