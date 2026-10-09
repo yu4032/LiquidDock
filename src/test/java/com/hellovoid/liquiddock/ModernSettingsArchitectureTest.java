@@ -249,6 +249,14 @@ public class ModernSettingsArchitectureTest {
         assertTrue(header.contains("foreground.height + overscanPx"));
         assertTrue(header.contains("glass.place(-overscanPx, -overscanPx)"));
         assertTrue(header.contains("foreground.place(0, 0)"));
+        // The physical top edge is opaque and theme-adaptive without adding
+        // another backdrop capture or moving the MIUIX toolbar.
+        assertTrue(header.contains("WindowInsets.statusBars.asPaddingValues().calculateTopPadding()"));
+        assertTrue(header.contains("statusBarHeight > 0.dp"));
+        assertTrue(header.contains("statusBarHeight + 12.dp"));
+        assertTrue(header.contains("0f to statusBarEdgeColor"));
+        assertTrue(header.contains("1f to statusBarEdgeColor.copy(alpha = 0f)"));
+        assertTrue(surfaces.contains("statusBarEdgeColor = if (background.luminance() < 0.5f) Color.Black else Color.White"));
         assertTrue(header.contains("refractionHeightPx = 0f"));
         assertTrue(header.contains("refractionAmountPx = 0f"));
         assertTrue(header.contains("depthEffect = false"));
