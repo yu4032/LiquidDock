@@ -233,6 +233,16 @@ final class Miuix307PassBlurBridge {
         setUpdatesEnabled(binding, true, force);
     }
 
+    /**
+     * Isolated Recents test: force an idempotent native update-flag transaction, bypassing
+     * the Java flag cache after a root/Recents lifecycle transition. No Surface rebind.
+     */
+    static void reassertWorkspaceUpdates(Binding binding) {
+        if (binding == null || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
+        if (LauncherGlassHomePresentationHook.isUnlockProducerBlocked()) return;
+        setUpdatesEnabled(binding, true, true);
+    }
+
     /** Workspace idle suspension and vendor-snapshot Dock suspension. */
     static void pauseUpdates(Binding binding) {
         if (binding == null) return;

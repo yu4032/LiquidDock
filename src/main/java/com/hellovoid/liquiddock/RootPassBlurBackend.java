@@ -184,8 +184,18 @@ final class RootPassBlurBackend {
         if (shuttingDown) return;
         Miuix307PassBlurBridge.Binding current = binding;
         if (current == null) return;
-        if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
-        else Miuix307PassBlurBridge.pauseUpdates(current);
+        if (enabled) {
+            if (bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
+                    && "recents-shared-root-live".equals(reason)) {
+                // Reassert the native flag once on Recents entry even if the Java cache says true.
+                // This never republishes the already-exported Surface binder.
+                Miuix307PassBlurBridge.reassertWorkspaceUpdates(current);
+            } else {
+                Miuix307PassBlurBridge.resumeUpdates(current);
+            }
+        } else {
+            Miuix307PassBlurBridge.pauseUpdates(current);
+        }
         MainHook.log(TAG + " updates=" + enabled + " reason=" + reason
                 + " domain=" + bindRequest.domain());
     }

@@ -147,6 +147,16 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(ui.contains("多任务操作按钮玻璃"));
     }
 
+    @Test public void recentsReassertsNativeUpdateStateWithoutProducerHotRebind() throws Exception {
+        String backend = read("RootPassBlurBackend.java");
+        String bridge = read("Miuix307PassBlurBridge.java");
+        assertTrue(backend.contains("recents-shared-root-live"));
+        assertTrue(backend.contains("Miuix307PassBlurBridge.reassertWorkspaceUpdates(current)"));
+        assertTrue(bridge.contains("static void reassertWorkspaceUpdates(Binding binding)"));
+        assertTrue(bridge.contains("setUpdatesEnabled(binding, true, true)"));
+        assertFalse(bridge.contains("setPassBlurSurface.invoke(transaction, binding.rootSurface, binding.producerSurface)"));
+    }
+
     @Test public void recentsUsesOnlyWorkspaceNativeProducerAndDoesNotHotRebindBinder()
             throws Exception {
         String request = read("PassBlurBindRequest.java");
