@@ -163,6 +163,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     // Launcher-specific Shell rotation settle policy intentionally stays above the root backend.
     private volatile long rotationSettleSerial;
+    private int debugReturnProgressEpoch;
+    private volatile long debugStaticPresents;
     private volatile boolean rotationSettlePending;
     private volatile int rotationSettleTargetRotation = -1;
 
@@ -253,6 +255,33 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     String diagnosticSessionId() {
         return "session#" + sessionId;
+    }
+
+    /**
+     * Passive HOME-return progress snapshots. Timed callbacks report counters only; they never
+     * affect producer updates, frame gates, wallpaper state, or capture/freeze decisions.
+     */
+    void traceRecentsReturnProgress(long returnSerial) {
+        if (shuttingDown || !workspaceSource || !MainHook.debugLogging) return;
+        View root = rootRef.get();
+        if (root == null) return;
+        int epoch = ++debugReturnProgressEpoch;
+        long startMs = SystemClock.uptimeMillis();
+        long[] checkpointsMs = {0L, 400L, 1000L, 2200L, 4000L};
+        for (long checkpoint : checkpointsMs) {
+            mainHandler.postDelayed(() -> {
+                if (shuttingDown || epoch != debugReturnProgressEpoch
+                        || !MainHook.debugLogging || rootRef.get() != root
+                        || !root.isAttachedToWindow()) return;
+                MainHook.log("[DC][WallpaperReturnTrace] frame-progress serial="
+                        + returnSerial + " ageMs=" + (SystemClock.uptimeMillis() - startMs)
+                        + " session=" + diagnosticSessionId()
+                        + " sceneGen=" + sceneGeneration
+                        + " rootSize=" + root.getWidth() + "x" + root.getHeight()
+                        + " staticPresents=" + debugStaticPresents
+                        + " source={" + sourceBackend.diagnosticSourceProgress() + "}");
+            }, checkpoint);
+        }
     }
 
     boolean ownsRoot(View root) {
@@ -1147,6 +1176,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
         sourceBackend.swapBuffers(output.eglSurface);
+        if (MainHook.debugLogging && workspaceSource) debugStaticPresents++;
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(

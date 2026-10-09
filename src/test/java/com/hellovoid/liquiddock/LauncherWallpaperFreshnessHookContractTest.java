@@ -158,6 +158,17 @@ public class LauncherWallpaperFreshnessHookContractTest {
         assertTrue(scene.contains("fresh-request returnSerial="));
         assertTrue(scene.contains("fresh-frame-consumed returnSerial="));
         assertTrue(scene.contains("diagnosticLastFrameGeneration != generation"));
+        String backend = Files.readString(MAIN.resolve("RootPassBlurBackend.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String registry = Files.readString(MAIN.resolve("LauncherGlassSessionRegistry.java"));
+        assertTrue(backend.contains("debugSourceArrivals"));
+        assertTrue(backend.contains("debugSourceLatches"));
+        assertTrue(backend.contains("debugNormalizedFrames"));
+        assertTrue(backend.contains("input.getTimestamp()"));
+        assertTrue(session.contains("staticPresents="));
+        assertTrue(session.contains("sourceBackend.diagnosticSourceProgress()"));
+        assertTrue(registry.contains("traceRecentsReturnProgressForAll"));
+        assertTrue(recents.contains("traceRecentsReturnProgressForAll(serial)"));
 
         // An observer must never become a new settle or capture authority.
         assertFalse(recents.contains("postDelayed("));

@@ -121,6 +121,7 @@ final class LauncherGlassRecentsHook {
                 }
 
                 LauncherGlassSceneController.setRecentsCoveredForAll(false);
+                LauncherGlassSessionRegistry.traceRecentsReturnProgressForAll(serial);
                 MainHook.log(TAG + " Recents HOME return "
                         + (wallpaperAuthorityArmed
                         ? "armed wallpaper authority"
