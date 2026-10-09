@@ -2354,12 +2354,18 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
     val decimalDp = spec.isDecimal
     val context = LocalContext.current
     val maxValue = remember(spec.key, context) { spec.max(context) }
-    val resetValue = spec.resetValue().coerceIn(spec.min.toFloat(), maxValue.toFloat())
-    val initial = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
-        prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
-    else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
-        .coerceIn(spec.min.toFloat(), maxValue.toFloat())
-    var value by remember(spec.key, maxValue) { mutableStateOf(initial) }
+    val resetValue = remember(spec.key, maxValue) {
+        spec.resetValue().coerceIn(spec.min.toFloat(), maxValue.toFloat())
+    }
+    // Reading the disk-backed preference on every drag/recomposition was wasteful:
+    // remember() already owns the initial state until this setting leaves composition.
+    var value by remember(spec.key, maxValue) {
+        val initial = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
+            prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
+        else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
+            .coerceIn(spec.min.toFloat(), maxValue.toFloat())
+        mutableStateOf(initial)
+    }
     var editingValue by remember(spec.key) { mutableStateOf(false) }
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
 
@@ -2377,10 +2383,12 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
         editor.apply()
     }
 
-    val displayValue = if (decimalDp) {
-        String.format(java.util.Locale.ROOT, "%.1f", value)
-    } else {
-        value.roundToInt().toString()
+    val displayValue = remember(value, decimalDp) {
+        if (decimalDp) {
+            String.format(java.util.Locale.ROOT, "%.1f", value)
+        } else {
+            value.roundToInt().toString()
+        }
     }
     val displayText = "$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}"
     val scaledValue = if (decimalDp) (value * 10f).roundToInt() else value.roundToInt()
