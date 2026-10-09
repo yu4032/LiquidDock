@@ -74,7 +74,6 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -156,9 +155,8 @@ internal fun ModernSettingsScaffold(
                 topBar = {
                     // MIUIX lays out the bar; Prismal draws its glass.
                     val headerContent: @Composable BoxScope.() -> Unit = {
-                        SmallTopAppBar(
+                        GuiUnclippedSmallTopAppBar(
                             title = title,
-                            color = Color.Transparent,
                             navigationIcon = {
                                 if (showBack) {
                                     Box(
@@ -231,6 +229,7 @@ internal fun ModernSettingsScaffold(
                             modifier = Modifier.fillMaxWidth().zIndex(1f),
                             blurRadius = TOP_BAR_BLUR_RADIUS.dp,
                             overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
+                            statusBarEdgeColor = if (background.luminance() < 0.5f) Color.Black else Color.White,
                             content = headerContent,
                         )
                     } else {
@@ -270,9 +269,9 @@ internal fun RestartScopesDialog(
     visible: Boolean,
     items: List<RestartScopeItem>,
     selected: Set<String>,
-    onToggle: (String) -> Unit,
+    onToggle: (String, Boolean) -> Unit,
     onDismiss: () -> Unit,
-    onRestart: () -> Unit,
+    onRestart: (Set<String>) -> Unit,
 ) {
     if (!visible) return
     val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
@@ -288,9 +287,11 @@ internal fun RestartScopesDialog(
         ModernSurface(
             modifier = Modifier
                 .padding(horizontal = 20.dp, vertical = 28.dp)
-                .widthIn(max = 520.dp),
+                .widthIn(max = 520.dp)
+                // Consume taps on the dialog panel without installing an
+                // interactive Prismal surface over its child switches/buttons.
+                .clickable(onClick = {}),
             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-            onClick = {},
         ) {
             Text(
                 text = "重启作用域",
@@ -312,11 +313,21 @@ internal fun RestartScopesDialog(
                     .verticalScroll(rememberScrollState()),
             ) {
                 items.forEachIndexed { index, item ->
-                    SwitchPreference(
-                        checked = item.id in selected,
-                        onCheckedChange = { onToggle(item.id) },
+                    // Prismal is visual only: the current selected set is
+                    // authoritative for both the switch and the row action.
+                    val checked = item.id in selected
+                    BasicComponent(
                         title = item.title,
                         summary = item.packageName,
+                        endActions = {
+                            RestartScopeToggle(
+                                scopeId = item.id,
+                                checked = checked,
+                                backdrop = backdrop,
+                                onToggle = onToggle,
+                            )
+                        },
+                        onClick = { onToggle(item.id, !checked) },
                     )
                     if (index != items.lastIndex) {
                         ModernListDivider()
@@ -339,7 +350,7 @@ internal fun RestartScopesDialog(
             ) {
                 if (backdrop != null) {
                     PrismalGlassButton(
-                        onClick = { if (selected.isNotEmpty()) onRestart() },
+                        onClick = { if (selected.isNotEmpty()) onRestart(selected.toSet()) },
                         backdrop = backdrop,
                         modifier = Modifier.alpha(if (selected.isNotEmpty()) 1f else 0.38f),
                         isInteractive = selected.isNotEmpty(),
@@ -366,7 +377,9 @@ internal fun RestartScopesDialog(
                             .clip(RoundedCornerShape(21.dp))
                             .background(Color(0xFFD73333))
                             .alpha(if (selected.isNotEmpty()) 1f else 0.38f)
-                            .clickable(enabled = selected.isNotEmpty(), onClick = onRestart)
+                            .clickable(enabled = selected.isNotEmpty()) {
+                                onRestart(selected.toSet())
+                            }
                             .padding(horizontal = 26.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -382,6 +395,41 @@ internal fun RestartScopesDialog(
     }
 }
 
+/**
+ * The restart dialog retains native Prismal toggle optics when glass is on.
+ * The spring gesture in PrismalAGSL remembers its original closures, so bridge
+ * both state and callbacks to their latest values instead of capturing the
+ * checkbox defaults from when the dialog first appeared.
+ */
+@Composable
+private fun RestartScopeToggle(
+    scopeId: String,
+    checked: Boolean,
+    backdrop: PrismalBackdrop?,
+    onToggle: (String, Boolean) -> Unit,
+) {
+    val currentId = rememberUpdatedState(scopeId)
+    val currentChecked = rememberUpdatedState(checked)
+    val currentToggle = rememberUpdatedState(onToggle)
+    val selectedProvider = remember { { currentChecked.value } }
+    val stableToggle: (Boolean) -> Unit = remember {
+        { next -> currentToggle.value(currentId.value, next) }
+    }
+
+    if (backdrop != null) {
+        PrismalGlassToggle(
+            selected = selectedProvider,
+            onSelect = stableToggle,
+            backdrop = backdrop,
+        )
+    } else {
+        top.yukonga.miuix.kmp.basic.Switch(
+            checked = checked,
+            onCheckedChange = stableToggle,
+        )
+    }
+}
+
 @Composable
 internal fun ModernBottomNavigation(
     labels: List<String>,
@@ -392,6 +440,10 @@ internal fun ModernBottomNavigation(
     val backdrop = LocalPrismalOverlayBackdrop.current
     val selected by rememberUpdatedState(selectedIndex)
     val onSelect by rememberUpdatedState(onSelected)
+    val stableSelectedIndex = remember { { selected } }
+    val stableTabChange: (Int) -> Unit = remember {
+        { index -> if (index != selected) onSelect(index) }
+    }
 
     Box(
         modifier = Modifier
@@ -408,10 +460,8 @@ internal fun ModernBottomNavigation(
         ) {
             if (backdrop != null) {
                 PrismalGlassBottomTabs(
-                    selectedTabIndex = { selected },
-                    onTabSelected = { index ->
-                        if (index != selected) onSelect(index)
-                    },
+                    selectedTabIndex = stableSelectedIndex,
+                    onTabSelected = stableTabChange,
                     backdrop = backdrop,
                     tabsCount = labels.size,
                     modifier = Modifier.fillMaxSize(),
@@ -830,6 +880,15 @@ internal fun SwitchPreference(
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
+    // Upstream Prismal remembers its gesture callbacks. Bridge them to the
+    // latest setting state instead of retaining values from first composition.
+    val selectedState = rememberUpdatedState(checked)
+    val enabledState = rememberUpdatedState(enabled)
+    val onChangedState = rememberUpdatedState(onCheckedChange)
+    val stableSelected = remember { { selectedState.value } }
+    val stableToggleChange: (Boolean) -> Unit = remember {
+        { next -> if (enabledState.value) onChangedState.value(next) }
+    }
     BasicComponent(
         title = title,
         summary = summary,
@@ -838,8 +897,8 @@ internal fun SwitchPreference(
         endActions = {
             if (backdrop != null) {
                 PrismalGlassToggle(
-                    selected = { checked },
-                    onSelect = { next -> if (enabled) onCheckedChange(next) },
+                    selected = stableSelected,
+                    onSelect = stableToggleChange,
                     backdrop = backdrop,
                 )
             } else {
@@ -983,6 +1042,15 @@ internal fun SliderPreference(
         return (valueRange.start + index * stepSize)
             .coerceIn(valueRange.start, valueRange.endInclusive)
     }
+    val sliderEnabledState = rememberUpdatedState(enabled)
+    val sliderCallbackState = rememberUpdatedState(onValueChange)
+    val quantizeState = rememberUpdatedState<(Float) -> Float>({ raw -> quantize(raw) })
+    val stableSliderValue = remember { { currentValue } }
+    val stableSliderChange: (Float) -> Unit = remember {
+        { next ->
+            if (sliderEnabledState.value) sliderCallbackState.value(quantizeState.value(next))
+        }
+    }
 
     Column {
         BasicComponent(
@@ -1012,10 +1080,8 @@ internal fun SliderPreference(
         )
         if (backdrop != null) {
             PrismalGlassSlider(
-                value = { currentValue },
-                onValueChange = { next ->
-                    if (enabled) onValueChange(quantize(next))
-                },
+                value = stableSliderValue,
+                onValueChange = stableSliderChange,
                 valueRange = valueRange,
                 visibilityThreshold = stepSize,
                 backdrop = backdrop,
@@ -1066,12 +1132,16 @@ internal fun ModernGlassSlider(
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
     val currentValue by rememberUpdatedState(value)
+    val sliderEnabledState = rememberUpdatedState(enabled)
+    val sliderCallbackState = rememberUpdatedState(onValueChange)
+    val stableSliderValue = remember { { currentValue } }
+    val stableSliderChange: (Float) -> Unit = remember {
+        { next -> if (sliderEnabledState.value) sliderCallbackState.value(next) }
+    }
     if (backdrop != null) {
         PrismalGlassSlider(
-            value = { currentValue },
-            onValueChange = { next ->
-                if (enabled) onValueChange(next)
-            },
+            value = stableSliderValue,
+            onValueChange = stableSliderChange,
             valueRange = valueRange,
             visibilityThreshold = visibilityThreshold,
             backdrop = backdrop,

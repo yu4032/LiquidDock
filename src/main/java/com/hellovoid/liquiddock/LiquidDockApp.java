@@ -123,6 +123,11 @@ public final class LiquidDockApp extends Application
         Log.i("LiquidDock", message);
     }
 
+    /** Settings-process diagnostics share the existing opt-in logging gate. */
+    void logScopedRestart(String detail) {
+        debugLog("LD_SCOPE_RESTART " + detail);
+    }
+
     public static XposedService service() { return service; }
 
     public static SharedPreferences remotePreferences(String group) {
