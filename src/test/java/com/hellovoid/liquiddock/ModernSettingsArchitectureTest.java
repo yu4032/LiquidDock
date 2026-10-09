@@ -298,6 +298,27 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void separateApplicationPagesExposeScopedFullOpticalSettings() throws Exception {
+        String shell = Files.readString(UI);
+        String gboard = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt"));
+        String search = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SearchboxSettingsActivity.kt"));
+        String dialog = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt"));
+        String page = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ScopedGlassSettingsPage.kt"));
+        assertTrue(shell.contains("Page.GboardAll -> ScopedGlassSettingsPage("));
+        assertTrue(shell.contains("Page.DialogAll -> ScopedGlassSettingsPage("));
+        assertTrue(gboard.contains("调整 Gboard 专属的完整 Prismal 光学参数"));
+        assertTrue(gboard.contains("调整系统搜索专属的完整 Prismal 光学参数"));
+        assertTrue(dialog.contains("调整桌面对话弹窗专属 Prismal 光学参数"));
+        assertTrue(search.contains("ScopedGlassOptics.SEARCHBOX"));
+        assertTrue(page.contains("ScopedGlassOptics.key(scope, d.config)"));
+        assertTrue(page.contains("恢复全部参数继承"));
+    }
+
+    @Test
     public void parameterRecompositionDoesNotRereadStoredInitialState() throws Exception {
         String ui = Files.readString(UI);
 
@@ -325,7 +346,8 @@ public class ModernSettingsArchitectureTest {
 
         // +/- and reset share Button's fallback and must have their own outline.
         assertTrue(surfaces.contains("val buttonShape = RoundedCornerShape(minHeight / 2)"));
-        assertTrue(surfaces.contains("val fillColor = lerp(colors.surface, colors.onSurface,"));
+        assertTrue(surfaces.contains("val fillColor = if (destructive) Color(0xFFD73333)"));
+        assertTrue(surfaces.contains("else lerp(colors.surface, colors.onSurface,"));
         assertTrue(surfaces.contains(".border(1.dp, outlineColor, buttonShape)"));
         assertTrue(surfaces.contains("else if (backdrop == null) 0.66f"));
 
