@@ -271,14 +271,19 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         Set<String> selected = Set.copyOf(scopes);
-        LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        boolean diagnostic = preferences.getBoolean(
+                com.hellovoid.liquiddock.config.ConfigSchema.Debug.LOGGING.name(),
+                com.hellovoid.liquiddock.config.ConfigSchema.Debug.LOGGING.runtimeFallback());
+        LiquidDockApp.syncToRemote(preferences);
+        if (diagnostic) android.util.Log.i("LD_SCOPE_RESTART", "UI_REQUEST|" + selected);
         new Thread(() -> {
             try {
                 Process p = new ProcessBuilder("su")
                         .redirectErrorStream(true)
                         .start();
                 try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                    os.writeBytes(HookScopeRestartShell.buildScript(selected));
+                    os.writeBytes(HookScopeRestartShell.buildScript(selected, diagnostic));
                     os.flush();
                 }
                 if (!p.waitFor(45, TimeUnit.SECONDS)) {
@@ -300,6 +305,8 @@ public class SettingsActivity extends AppCompatActivity {
                 }
                 Map<String, String> outcomes = HookScopeRestartShell.parseResults(
                         selected, stdout.toString());
+                if (diagnostic) android.util.Log.i("LD_SCOPE_RESTART",
+                        "UI_RESULT|" + outcomes);
                 // No confirmation dialog for successful restarts. Only surface
                 // real failures, especially when SystemUI did not respawn.
                 ArrayList<String> failed = new ArrayList<>();
@@ -319,9 +326,11 @@ public class SettingsActivity extends AppCompatActivity {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                if (diagnostic) android.util.Log.w("LD_SCOPE_RESTART", "UI_INTERRUPTED", e);
                 runOnUiThread(() -> Toast.makeText(this,
                         "作用域重启已中断", Toast.LENGTH_SHORT).show());
             } catch (Exception e) {
+                if (diagnostic) android.util.Log.e("LD_SCOPE_RESTART", "UI_FAILED", e);
                 runOnUiThread(() -> Toast.makeText(this,
                         "作用域重启失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
             }
