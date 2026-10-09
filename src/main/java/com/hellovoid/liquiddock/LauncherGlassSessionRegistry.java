@@ -53,6 +53,15 @@ final class LauncherGlassSessionRegistry {
         return session != null && !session.isShutdown() ? session : null;
     }
 
+    static synchronized void traceWallpaperReturnForAll(String phase, long serial) {
+        if (!MainHook.debugLogging) return;
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session != null && !session.isShutdown()) {
+                session.traceWallpaperReturn(phase, serial);
+            }
+        }
+    }
+
     /** Update existing root owners without acquiring new surfaces or reattaching nodes. */
     static synchronized void applyLiveGlassConfigToAll(LiquidDockConfig.Glass glassConfig) {
         for (java.util.Map.Entry<View, LauncherGlassSession> entry

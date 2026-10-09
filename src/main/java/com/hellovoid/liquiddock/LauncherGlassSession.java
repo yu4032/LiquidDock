@@ -151,6 +151,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile int rootHeight;
     private volatile int configRotation;
     private volatile long sceneGeneration = 1L;
+    private long traceReturnSerial;
+    private volatile long traceFrameCallbacks;
+    private volatile long traceFrameRejections;
+    private volatile long traceBackdropPrepared;
+    private volatile long traceStaticPresents;
     private volatile float appliedGlassBlur = Float.NaN;
     private volatile int passBlurCaptureScalePercent =
             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
@@ -283,6 +288,36 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     String diagnosticSessionId() {
         return "session#" + sessionId;
+    }
+
+    /** Debug-only, bounded Recents/HOME snapshots; no source or output changes. */
+    void traceWallpaperReturn(String phase, long serial) {
+        if (!MainHook.debugLogging || shuttingDown) return;
+        View root = rootRef.get();
+        if (root == null) return;
+        traceReturnSerial++;
+        final long fence = traceReturnSerial;
+        final long startMs = SystemClock.uptimeMillis();
+        for (long delayMs : new long[]{0L, 400L, 1200L, 2500L, 4500L, 7000L}) {
+            mainHandler.postDelayed(() -> {
+                if (!MainHook.debugLogging || shuttingDown || traceReturnSerial != fence
+                        || rootRef.get() != root) return;
+                MainHook.log("[DC][WallpaperZoomTrace] phase=" + phase
+                        + " serial=" + serial
+                        + " elapsedMs=" + (SystemClock.uptimeMillis() - startMs)
+                        + " session=" + diagnosticSessionId()
+                        + " root=" + root.getWidth() + "x" + root.getHeight()
+                        + " sceneGen=" + sceneGeneration
+                        + " rot=" + configRotation
+                        + " rotPending=" + rotationSettlePending
+                        + " recentsCovered=" + LauncherGlassSceneController.isRecentsCoveredByVendor()
+                        + " callbacks=" + traceFrameCallbacks
+                        + " rejected=" + traceFrameRejections
+                        + " backdrops=" + traceBackdropPrepared
+                        + " staticPresents=" + traceStaticPresents
+                        + " source={" + sourceBackend.traceFramePipeline() + "}");
+            }, delayMs);
+        }
     }
 
     boolean ownsRoot(View root) {
@@ -1011,6 +1046,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null) return;
+        if (MainHook.debugLogging) traceFrameCallbacks++;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
         // The Recents child uses this OES frame on the same GL thread, with its own geometry.
@@ -1019,7 +1055,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         RecentsCapsuleGlassSession child = recentsConsumer;
         if (child != null) child.onSharedSourceFrame(backend, frame);
         // HOME generation/rotation constraints are separate from the Recents GPU consumer.
-        if (frame.generation != sceneGeneration || rotationSettlePending) return;
+        if (frame.generation != sceneGeneration || rotationSettlePending) {
+            if (MainHook.debugLogging) traceFrameRejections++;
+            return;
+        }
         if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
 
         PrismalParams params = prismalParams;
@@ -1077,6 +1116,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             long backdropDoneNs = perf ? System.nanoTime() : 0L;
             backdropPrepared = true;
+            if (MainHook.debugLogging) traceBackdropPrepared++;
             outputRenderState.consumeForSourceRender();
             renderOutputs(true, true);
             if (perf) {
@@ -1189,6 +1229,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
         sourceBackend.swapBuffers(output.eglSurface);
+        if (MainHook.debugLogging) traceStaticPresents++;
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
