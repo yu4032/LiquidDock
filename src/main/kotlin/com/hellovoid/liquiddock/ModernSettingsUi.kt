@@ -40,6 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
@@ -155,9 +157,8 @@ internal fun ModernSettingsScaffold(
         ) {
             Scaffold(
                 containerColor = Color.Transparent,
-                topBar = {
-                    // MIUIX remains the layout shell, but Prismal alone draws
-                    // the uniform header blur from the shared screen source.
+                topBar             val density = LocalDensity.current
+            var headerHeight by remember { mutableStateOf(0.dp) }
                     val headerContent: @Composable BoxScope.() -> Unit = {
                         SmallTopAppBar(
                             title = title,
@@ -228,35 +229,34 @@ internal fun ModernSettingsScaffold(
                                 ),
                         )
                     }
+            Scaffold(
+                containerColor = Color.Transparent,
+                // Reserve the measured MIUIX bar's space, but draw its glass
+                // outside Scaffold after the body capture. This avoids relying
+                // on Scaffold's internal subcomposition placement order.
+                topBar = { Spacer(Modifier.height(headerHeight)) },
+            // Render above the recorded body as a true sibling overlay.
+            // This guarantees ordinary LazyColumn text cannot be drawn over
+            // the header after its Prismal shader has sampled screenLayer.
                     if (activeOverlayBackdrop != null) {
                         GuiPrismalFlatHeader(
                             backdrop = activeOverlayBackdrop,
-                            modifier = Modifier.fillMaxWidth().zIndex(1f),
+                            modifier = Modifier.fillMaxWidth().onSizeChanged { size ->
+                                headerHeight = with(density) { size.height.toDp() }
+                            },
                             blurRadius = TOP_BAR_BLUR_RADIUS.dp,
                             overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
                             content = headerContent,
                         )
                     } else {
                         Box(
-                            modifier = Modifier.fillMaxWidth().zIndex(1f).background(surface),
+                            modifier = Modifier.fillMaxWidth().onSizeChanged { size ->
+                                headerHeight = with(density) { size.height.toDp() }
+                            }.background(surface),
                             content = headerContent,
                         )
                     }
-                },
-                bottomBar = bottomBar,
-            ) { padding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(0f)
-                        .then(
-                            if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
-                            else Modifier,
-                        ),
-                ) {
-                    content(padding)
-                }
-            }
+
             overlay()
         }
     }
