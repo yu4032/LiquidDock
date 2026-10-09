@@ -415,7 +415,7 @@ private val passBlurRenderFpsSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_RENDER_FPS,
     "玻璃实时渲染刷新率上限（0 = Auto）",
     "fps",
-    summary = "限制除 Dock 外实时玻璃的最高刷新率；0 = 自动跟随可用源帧。工作区与已连接的 Launcher 玻璃实时生效；独立应用需按其作用域重启",
+    summary = "限制除 Dock 外实时玻璃的最高刷新率；0 = 自动跟随可用源帧。已加载的工作区、Launcher 玻璃及独立应用玻璃实时生效；首次加载缺失的 Hook 时才需重启对应作用域",
     dynamicMax = DisplayRefreshRatePolicy::maxSupportedRefreshRateHz,
 )
 private val liquidSpecs = listOf(
@@ -669,13 +669,13 @@ private val animationWorkspaceVisibilitySpec = IntSpec(
     ConfigSchema.Animation.WORKSPACE_VISIBILITY,
     "工作区玻璃显隐",
     "ms",
-    summary = "工作区玻璃淡入淡出时长；重启桌面后生效",
+    summary = "工作区玻璃淡入淡出时长；已加载的桌面 Hook 即时生效",
 )
 private val animationDockIconRevealSpec = IntSpec(
     ConfigSchema.Animation.DOCK_ICON_REVEAL,
     "Dock 图标玻璃恢复",
     "ms",
-    summary = "应用退出动画末尾的 Dock 图标玻璃恢复；重启桌面后生效",
+    summary = "应用退出动画末尾的 Dock 图标玻璃恢复；已加载的桌面 Hook 即时生效",
 )
 private val animationDockResizeSpec = IntSpec(
     ConfigSchema.Animation.DOCK_RESIZE,
@@ -687,25 +687,25 @@ private val animationPressInSpec = IntSpec(
     ConfigSchema.Animation.PRESS_IN,
     "按压进入",
     "ms",
-    summary = "LiquidDock 玻璃按下反馈速度；重启桌面后生效",
+    summary = "LiquidDock 玻璃按下反馈速度；已加载的桌面 Hook 即时生效",
 )
 private val animationPressOutSpec = IntSpec(
     ConfigSchema.Animation.PRESS_OUT,
     "按压释放",
     "ms",
-    summary = "LiquidDock 玻璃松手恢复速度；重启桌面后生效",
+    summary = "LiquidDock 玻璃松手恢复速度；已加载的桌面 Hook 即时生效",
 )
 private val animationShortcutDismissSpec = IntSpec(
     ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE,
     "快捷菜单退出渐隐",
     "ms",
-    summary = "桌面快捷菜单关闭时 LiquidDock 玻璃的快速淡出；重启桌面后生效",
+    summary = "桌面快捷菜单关闭时 LiquidDock 玻璃的快速淡出；已加载的桌面 Hook 即时生效",
 )
 private val animationSecurityCenterExitSpec = IntSpec(
     ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE,
     "安全中心退出渐隐",
     "ms",
-    summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock 淡出；重启安全中心后生效",
+    summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock 淡出；已加载的安全中心 Hook 即时生效",
 )
 private val animationSettingsPageSpec = IntSpec(
     ConfigSchema.Animation.SETTINGS_PAGE,
@@ -1799,7 +1799,7 @@ private fun RecentsPage(padding: PaddingValues, prefs: SharedPreferences, master
             prefs,
             ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING,
             "取消壁纸压暗",
-            "进入多任务时保留系统背景模糊与过渡动画，仅移除壁纸黑色压暗；重启桌面后生效",
+            "进入多任务时保留系统背景模糊与过渡动画，仅移除壁纸黑色压暗；已加载的桌面 Hook 即时生效",
             masterEnabled,
         )
     }
@@ -2222,21 +2222,21 @@ private fun GlassMenusPage(
             prefs,
             ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS,
             "应用顶部菜单液态玻璃",
-            "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；重启系统界面后生效",
+            "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；已有 Hook 时实时生效，首次加载失败则需重启系统界面",
             masterEnabled && liquidEnabled,
         )
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
             "桌面快捷菜单玻璃背景",
-            "替换长按桌面图标弹出的快捷菜单背景；关闭后保留系统原生材质，重启桌面后生效",
+            "替换长按桌面图标弹出的快捷菜单背景；关闭后恢复系统材质；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面",
             masterEnabled && liquidEnabled,
         )
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
             "快捷菜单深色模式适配",
-            "将快捷菜单文字和图标统一改为白色；关闭后保留系统原样，重启桌面后生效",
+            "将快捷菜单文字和图标统一改为白色；关闭后恢复系统原样；已有 Hook 时实时生效",
             masterEnabled && liquidEnabled,
         )
         ArrowPreference(
