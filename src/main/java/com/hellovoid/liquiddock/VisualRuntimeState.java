@@ -52,7 +52,16 @@ final class VisualRuntimeState {
 
         listener = (sharedPreferences, key) -> {
             boolean strokeStyleChanged = key == null || ConfigSchema.Dock.SQUIRCLE.name().equals(key)
-                    || ConfigSchema.Dock.FILL_DIFF.name().equals(key);
+                    || ConfigSchema.Dock.FILL_DIFF.name().equals(key)
+                    || ConfigSchema.Dock.SQUIRCLE_CONTROL_POINT.name().equals(key)
+                    || ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.name().equals(key)
+                    || ConfigSchema.Dock.SQUIRCLE_STROKE_OFFSET.name().equals(key)
+                    || ConfigSchema.Dock.FILL_DIFF_STROKE_WIDTH.name().equals(key)
+                    || ConfigSchema.Dock.STANDARD_STROKE_WIDTH.name().equals(key)
+                    || ConfigSchema.Dock.STROKE_RED.name().equals(key)
+                    || ConfigSchema.Dock.STROKE_GREEN.name().equals(key)
+                    || ConfigSchema.Dock.STROKE_BLUE.name().equals(key)
+                    || ConfigSchema.Dock.STROKE_ALPHA.name().equals(key);
             boolean dockShadowStyleChanged = key == null || ConfigSchema.Dock.SHADOW_RADIUS.name().equals(key)
                     || ConfigSchema.Dock.SHADOW_SIZE.name().equals(key)
                     || ConfigSchema.Dock.SHADOW_ALPHA.name().equals(key)
