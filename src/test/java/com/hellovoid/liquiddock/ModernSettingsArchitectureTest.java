@@ -84,6 +84,64 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void denseSettingsUseViewportBoundedLazyItemsWithoutReplacingPrismal() throws Exception {
+        String ui = Files.readString(UI);
+        String surfaces = Files.readString(SURFACES);
+
+        // Static architecture gate, not a frame-rate or runtime behavior assertion.
+        assertTrue(ui.contains("private fun DenseSettingsList("));
+        assertTrue(ui.contains("content: LazyListScope.() -> Unit"));
+        assertTrue(ui.contains("items(specs, key = { it.key })"));
+        assertTrue(ui.contains("item(key = \"stroke-colors-title\")"));
+        assertTrue(ui.contains(".weight(1f)"));
+        assertTrue(ui.contains("contentPadding = PaddingValues(vertical = 4.dp)"));
+        assertTrue(ui.contains("private fun SettingsList("));
+
+        assertTrue(surfaces.contains("PrismalGlassSlider("));
+        assertTrue(surfaces.contains("PrismalGlassStepper("));
+    }
+
+    @Test
+    public void chevronPageCellsRetainPrismalRippleWithoutGeometryMotion() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String navigationSurface = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
+
+        // Static architecture/API contract, not an inference about device frame times.
+        assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
+        assertTrue(surfaces.contains("staticPress = true,"));
+        assertTrue(surfaces.contains("GuiStaticPressPrismalSurface("));
+        assertTrue(surfaces.contains("onClick = onClick,"));
+        assertTrue(surfaces.contains("PrismalGlassSurface("));
+        assertTrue(surfaces.contains("internal fun ArrowPreference("));
+        assertTrue(surfaces.contains("imageVector = MiuixIcons.Basic.ArrowRight"));
+
+        assertTrue("original press highlight/ripple must be preserved",
+                navigationSurface.contains("PrismalPressRipple("));
+        assertTrue(navigationSurface.contains(".then(pressRipple.modifier)"));
+        assertTrue(navigationSurface.contains(".then(pressRipple.gestureModifier)"));
+        assertTrue(navigationSurface.contains("drawPrismalGlass("));
+        assertTrue(navigationSurface.contains("drawPrismalGlassTint("));
+        assertTrue(navigationSurface.contains("applyPrismalGlassEffects("));
+        assertTrue(navigationSurface.contains("role = Role.Button"));
+        assertFalse("navigation press may not transform the whole glass Cell",
+                navigationSurface.contains("layerBlock ="));
+        assertFalse(navigationSurface.contains("translationX ="));
+        assertFalse(navigationSurface.contains("scaleX ="));
+    }
+
+    @Test
+    public void parameterRecompositionDoesNotRereadStoredInitialState() throws Exception {
+        String ui = Files.readString(UI);
+
+        assertTrue(ui.contains("val resetValue = remember(spec.key, maxValue) {"));
+        assertTrue(ui.contains("var value by remember(spec.key, maxValue) {"));
+        assertTrue(ui.contains("val initial = (if (decimalDp && prefs.contains("));
+        assertTrue(ui.contains("val displayValue = remember(value, decimalDp) {"));
+        assertTrue(ui.contains("if (bounded == value) return"));
+    }
+
+    @Test
     public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
