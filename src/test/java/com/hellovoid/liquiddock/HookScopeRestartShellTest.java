@@ -34,6 +34,21 @@ public class HookScopeRestartShellTest {
     }
 
     @Test
+    public void restartTraceIsAbsentByDefaultAndExplicitlyOptIn() {
+        String plain = HookScopeRestartShell.buildScript(HookScopeRestartShell.ALLOWED);
+        String diagnostic = HookScopeRestartShell.buildScript(
+                HookScopeRestartShell.ALLOWED, true);
+        assertFalse(plain.contains("LD_SCOPE_RESTART"));
+        assertFalse(plain.contains("trace 'ROOT_DONE'"));
+        assertTrue(diagnostic.contains("LD_SCOPE_RESTART"));
+        assertTrue(diagnostic.contains("ROOT_START|pid=$"));
+        assertTrue(diagnostic.contains("STEP|com.android.systemui|pid="));
+        assertTrue(diagnostic.contains("STEP|com.miui.home|pid="));
+        assertTrue(diagnostic.contains("RESULT|$1|$2"));
+        assertTrue(diagnostic.contains("trace 'ROOT_DONE'"));
+    }
+
+    @Test
     public void allSelectedScopesRunBeforeSystemUiLocksTheScreen() {
         String script = HookScopeRestartShell.buildScript(HookScopeRestartShell.ALLOWED);
         // Check the generated shell commands, not the Java function definitions.
