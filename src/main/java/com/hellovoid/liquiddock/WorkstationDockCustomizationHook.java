@@ -2,21 +2,33 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Rect;
 import android.view.View;
+import java.util.ArrayList;
+import java.util.WeakHashMap;
 
 /** Workstation-only HotSeats item spacing; mode authority comes from WorkstationRuntimeState. */
 final class WorkstationDockCustomizationHook {
     private static volatile boolean dockEnabled;
     private static volatile int iconTopOffset;
     private static volatile int iconBottomOffset;
+    private static final WeakHashMap<View, Boolean> OBSERVED_RECYCLERS = new WeakHashMap<>();
     private WorkstationDockCustomizationHook() {}
 
     static void applyLiveConfig(LiquidDockConfig.Workstation config) {
         if (config == null) return;
         float scale = config.dimensionsDp
                 ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
+        int top = Math.round(config.iconTopOffset * scale);
+        int bottom = Math.round(config.iconBottomOffset * scale);
+        if (dockEnabled == config.dockEnabled
+                && iconTopOffset == top && iconBottomOffset == bottom) return;
         dockEnabled = config.dockEnabled;
-        iconTopOffset = Math.round(config.iconTopOffset * scale);
-        iconBottomOffset = Math.round(config.iconBottomOffset * scale);
+        iconTopOffset = top;
+        iconBottomOffset = bottom;
+        for (View recycler : new ArrayList<>(OBSERVED_RECYCLERS.keySet())) {
+            if (recycler == null || !recycler.isAttachedToWindow()) continue;
+            HookUtil.tryInvoke(recycler, "invalidateItemDecorations");
+            recycler.requestLayout();
+        }
     }
 
     static void install(ClassLoader classLoader, LiquidDockConfig.Workstation config) {
@@ -32,6 +44,8 @@ final class WorkstationDockCustomizationHook {
                     "getItemOffsets",
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object recycler = chain.getArg(2);
+                        if (recycler instanceof View) OBSERVED_RECYCLERS.put((View) recycler, Boolean.TRUE);
                         if (dockEnabled && WorkstationRuntimeState.isActive()) {
                             Rect out = (Rect) chain.getArg(0);
                             out.top += iconTopOffset;
