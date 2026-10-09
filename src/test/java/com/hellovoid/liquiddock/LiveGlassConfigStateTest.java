@@ -66,6 +66,20 @@ public class LiveGlassConfigStateTest {
     }
 
     @Test
+    public void dockStyleDetectsDpSidecarsAndDirectColorUpdates() {
+        assertTrue(VisualRuntimeState.matchesOptionChange(
+                ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.name() + "_tenths",
+                ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH));
+        assertTrue(VisualRuntimeState.matchesOptionChange(
+                ConfigSchema.Dock.SHADOW_Y.name() + "_tenths",
+                ConfigSchema.Dock.SHADOW_Y));
+        assertTrue(VisualRuntimeState.matchesOptionChange(
+                ConfigSchema.Dock.STROKE_RED.name(), ConfigSchema.Dock.STROKE_RED));
+        assertFalse(VisualRuntimeState.matchesOptionChange(
+                ConfigSchema.Dock.STROKE_RED.name(), ConfigSchema.Dock.STROKE_BLUE));
+    }
+
+    @Test
     public void recentsParametersAreLive() {
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name()));
