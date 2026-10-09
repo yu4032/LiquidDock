@@ -34,9 +34,9 @@ public final class ModuleMain extends XposedModule {
                 boolean wallpaperFlickerFixEnabled = config.b(
                         ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name(),
                         ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
-                if (enabled && liquidGlassEnabled && wallpaperFlickerFixEnabled) {
-                    WallpaperClientCompositionHook.install();
-                }
+                WallpaperClientCompositionHook.initialize(
+                        Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP),
+                        enabled && liquidGlassEnabled && wallpaperFlickerFixEnabled);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][WallpaperClientComposition] config gate failed", error);
             }
