@@ -627,9 +627,14 @@ internal fun ModernSurface(
 
     PrismalGlassSurface(
         backdrop = backdrop,
-        modifier = modifier.fillMaxWidth(),
+        // Keep the card's clickable semantics and standard touch indication,
+        // but don't pass onClick to PrismalGlassSurface: upstream creates a
+        // press-ripple motion layer which scales and translates the whole Cell.
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = { PrismalRoundedRectangle(24.dp) },
-        onClick = onClick,
+        onClick = null,
         blurRadius = 12.dp,
         tint = MiuixTheme.colorScheme.surface,
         tintAlpha = 0.24f,
