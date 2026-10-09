@@ -35,6 +35,9 @@ final class SystemUiGestureHandleFadeHook {
             ConcurrentHashMap.newKeySet();
     private static final ThreadLocal<Boolean> OWN_ALPHA_WRITE = new ThreadLocal<>();
 
+    private static final Api102HookDomain DOMAIN =
+            Api102HookDomain.forProcess("systemui.gesture.handle");
+
     private static final GestureHandleSystemUiSceneState SCENE =
             new GestureHandleSystemUiSceneState();
 
@@ -46,21 +49,22 @@ final class SystemUiGestureHandleFadeHook {
     static synchronized void install(ClassLoader classLoader) {
         if (installed || classLoader == null) return;
         try {
+            DOMAIN.begin();
             Class<?> navigationBarClass = Class.forName(NAVIGATION_BAR, false, classLoader);
 
             Method onInit = HookUtil.findMethodExact(
                     navigationBarClass, "onInit", new Class<?>[0]);
-            HookUtil.hook(onInit, chain -> {
+            DOMAIN.hook(onInit, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                captureNavigationBar(chain.getThisObject());
+                if (DOMAIN.isActive()) captureNavigationBar(chain.getThisObject());
                 return result;
             });
 
             Method onViewAttached = HookUtil.findMethodExact(
                     navigationBarClass, "onViewAttached", new Class<?>[0]);
-            HookUtil.hook(onViewAttached, chain -> {
+            DOMAIN.hook(onViewAttached, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                captureNavigationBar(chain.getThisObject());
+                if (DOMAIN.isActive()) captureNavigationBar(chain.getThisObject());
                 return result;
             });
 
@@ -68,26 +72,38 @@ final class SystemUiGestureHandleFadeHook {
                     navigationBarClass,
                     "onRecentsAnimationStateChanged",
                     new Class<?>[]{boolean.class});
-            HookUtil.hook(recentsAnimation, chain -> {
+            DOMAIN.hook(recentsAnimation, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 boolean running = args.length > 0
                         && args[0] instanceof Boolean
                         && (Boolean) args[0];
-                reconcileHiddenState(SCENE.onRecentsAnimationChanged(running));
+                if (DOMAIN.isActive()) reconcileHiddenState(SCENE.onRecentsAnimationChanged(running));
                 return result;
             });
 
+            DOMAIN.commit();
             installed = true;
-            GestureHandleRuntimeState.setListener(enabled -> reconcileHiddenState());
+            GestureHandleRuntimeState.setListener(enabled -> {
+                if (DOMAIN.isActive()) reconcileHiddenState();
+            });
         } catch (Throwable error) {
-            installed = false;
+            // If a framework unhook fails, keep the owner logically installed and BLOCKED:
+            // another install would otherwise create a second interception chain.
+            if (DOMAIN.state() == Api102HookDomain.State.INSTALLING
+                    || DOMAIN.state() == Api102HookDomain.State.BLOCKED) {
+                installed = !DOMAIN.abort();
+            } else if (DOMAIN.state() == Api102HookDomain.State.ACTIVE) {
+                installed = !DOMAIN.stop();
+            } else {
+                installed = false;
+            }
             Api101Bridge.log(TAG + " SystemUI-only hook unavailable", error);
         }
     }
 
     private static void captureNavigationBar(Object navigationBar) {
-        if (navigationBar == null) return;
+        if (navigationBar == null || !DOMAIN.isActive()) return;
         try {
             Object navBarView = HookUtil.getField(navigationBar, "mView");
             Context context = navBarView instanceof View
@@ -135,14 +151,14 @@ final class SystemUiGestureHandleFadeHook {
                     listenerClass,
                     "onTaskMovedToFront",
                     new Class<?>[]{ActivityManager.RunningTaskInfo.class});
-            HookUtil.hook(method, chain -> {
+            DOMAIN.hookDynamic(method, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 ActivityManager.RunningTaskInfo task =
                         args.length > 0 && args[0] instanceof ActivityManager.RunningTaskInfo
                                 ? (ActivityManager.RunningTaskInfo) args[0]
                                 : null;
-                updateTopTask(task);
+                if (DOMAIN.isActive()) updateTopTask(task);
                 return result;
             });
 
@@ -159,21 +175,21 @@ final class SystemUiGestureHandleFadeHook {
         try {
             Method shown = HookUtil.findMethodExact(
                     listenerClass, "onOverviewShown", new Class<?>[0]);
-            HookUtil.hook(shown, chain -> {
+            DOMAIN.hookDynamic(shown, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                reconcileHiddenState(SCENE.onOverviewShown());
+                if (DOMAIN.isActive()) reconcileHiddenState(SCENE.onOverviewShown());
                 return result;
             });
 
             Method connectionChanged = HookUtil.findMethodExact(
                     listenerClass, "onConnectionChanged", new Class<?>[]{boolean.class});
-            HookUtil.hook(connectionChanged, chain -> {
+            DOMAIN.hookDynamic(connectionChanged, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 boolean connected = args.length > 0
                         && args[0] instanceof Boolean
                         && (Boolean) args[0];
-                if (!connected) {
+                if (!connected && DOMAIN.isActive()) {
                     reconcileHiddenState(SCENE.onLauncherProxyDisconnected());
                 }
                 return result;
@@ -191,10 +207,10 @@ final class SystemUiGestureHandleFadeHook {
         try {
             Method setAlpha = HookUtil.findMethodExact(
                     handleClass, "setAlpha", new Class<?>[]{float.class, boolean.class});
-            HookUtil.hook(setAlpha, chain -> {
+            DOMAIN.hookDynamic(setAlpha, chain -> {
                 Object owner = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (!Boolean.TRUE.equals(OWN_ALPHA_WRITE.get())
+                if (DOMAIN.isActive() && !Boolean.TRUE.equals(OWN_ALPHA_WRITE.get())
                         && args.length >= 2
                         && args[0] instanceof Number) {
                     synchronized (LOCK) {
@@ -251,6 +267,7 @@ final class SystemUiGestureHandleFadeHook {
     }
 
     private static void reconcileHiddenState(boolean sceneShouldHide) {
+        if (!DOMAIN.isActive()) return;
         setHiddenRequested(GestureHandleRuntimeState.isEnabled() && sceneShouldHide);
     }
 
