@@ -8,6 +8,7 @@ import android.view.SurfaceControl;
 import android.view.View;
 import android.view.ViewGroup;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -38,13 +39,33 @@ final class SystemUiHandleMenuGlassHook {
 
     private static boolean installed;
     private static LiquidDockConfig.Glass glassConfig;
+    private static volatile boolean liveEnabled;
 
     private SystemUiHandleMenuGlassHook() {}
 
+    static void onLiveGlassConfigChanged(LiquidDockConfig config) {
+        if (config == null) return;
+        liveEnabled = config.enabled && config.glass.enabled
+                && config.glass.systemUiHandleMenuEnabled;
+        glassConfig = config.glass;
+        if (!liveEnabled) {
+            for (View root : new ArrayList<>(ACTIVE.keySet())) releaseRoot(root);
+            for (View root : new ArrayList<>(PENDING.keySet())) releaseRoot(root);
+            return;
+        }
+        for (Binding binding : new ArrayList<>(ACTIVE.values())) {
+            if (binding == null || binding.released) continue;
+            binding.glassConfig = config.glass;
+            if (binding.prismalSession != null) {
+                binding.prismalSession.applyLiveGlassConfig(config.glass);
+            }
+        }
+    }
+
     static void install(ClassLoader classLoader, LiquidDockConfig.Glass glass) {
-        if (installed || classLoader == null || glass == null
-                || !glass.enabled || !glass.systemUiHandleMenuEnabled) return;
+        if (installed || classLoader == null || glass == null) return;
         glassConfig = glass;
+        // One-time Hook registration; runtime callbacks are gated by liveEnabled.
 
         int installedCount = 0;
         try {
@@ -136,8 +157,7 @@ final class SystemUiHandleMenuGlassHook {
             SurfaceControl menuSurface,
             boolean trackNativeSurfaceAnimation) {
         LiquidDockConfig.Glass glass = glassConfig;
-        if (root == null || glass == null || !glass.enabled
-                || !glass.systemUiHandleMenuEnabled) return;
+        if (!liveEnabled || root == null || glass == null) return;
 
         releaseRoot(root);
         PendingBinding pending = new PendingBinding(
@@ -280,7 +300,7 @@ final class SystemUiHandleMenuGlassHook {
         final View target;
         final Drawable stockBackground;
         final int nativeBlurRadiusPx;
-        final LiquidDockConfig.Glass glassConfig;
+        LiquidDockConfig.Glass glassConfig;
         final SurfaceControl menuSurface;
         final boolean trackNativeSurfaceAnimation;
         final SystemUiHandleMenuSurfaceAnimationAuthority.AlphaListener alphaListener;
