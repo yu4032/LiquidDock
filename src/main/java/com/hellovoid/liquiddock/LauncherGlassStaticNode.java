@@ -31,7 +31,7 @@ final class LauncherGlassStaticNode {
     private final Matrix rootToGlobal = new Matrix();
     private final Matrix globalToRoot = new Matrix();
     private volatile LauncherGlassSession session;
-    private final LiquidDockConfig.Glass glassConfig;
+    private volatile LiquidDockConfig.Glass glassConfig;
     private volatile float nativeCornerRadiusPx;
     private volatile boolean disposed;
     private final LauncherGlassSuppressionState suppressionState =
@@ -84,6 +84,8 @@ final class LauncherGlassStaticNode {
             View materialHost, LauncherGlassDragState.Kind kind,
             float cornerRadiusPx, LiquidDockConfig.Glass glassConfig) {
         if (materialHost == null) return null;
+        LiquidDockConfig.Glass live = LiveGlassConfigState.currentGlass();
+        if (live != null) glassConfig = live;
         LauncherGlassDragState.Kind resolvedKind = kind != null
                 ? kind : LauncherGlassDragState.Kind.FOLDER;
         LauncherGlassNodeKind resolvedNodeKind = resolvedKind == LauncherGlassDragState.Kind.ICON
@@ -94,6 +96,7 @@ final class LauncherGlassStaticNode {
         LauncherGlassStaticNode existing = reference != null ? reference.get() : null;
         if (existing != null && !existing.disposed && existing.kind == resolvedKind
                 && existing.nodeKind == resolvedNodeKind) {
+            existing.glassConfig = glassConfig;
             existing.setNativeCornerRadiusPx(cornerRadiusPx);
             LauncherGlassSession live = existing.ensureLiveSession();
             if (live != null) live.registerStaticNode(existing);
@@ -114,11 +117,14 @@ final class LauncherGlassStaticNode {
             View materialHost, boolean smallFolder, float cornerRadiusPx,
             LiquidDockConfig.Glass glassConfig) {
         if (materialHost == null) return null;
+        LiquidDockConfig.Glass live = LiveGlassConfigState.currentGlass();
+        if (live != null) glassConfig = live;
         LauncherGlassNodeKind resolvedNodeKind = smallFolder
                 ? LauncherGlassNodeKind.SMALL_FOLDER : LauncherGlassNodeKind.LARGE_FOLDER;
         WeakReference<LauncherGlassStaticNode> reference = BY_MATERIAL.get(materialHost);
         LauncherGlassStaticNode existing = reference != null ? reference.get() : null;
         if (existing != null && !existing.disposed && existing.nodeKind == resolvedNodeKind) {
+            existing.glassConfig = glassConfig;
             existing.setNativeCornerRadiusPx(cornerRadiusPx);
             LauncherGlassSession live = existing.ensureLiveSession();
             if (live != null) live.registerStaticNode(existing);
@@ -141,6 +147,16 @@ final class LauncherGlassStaticNode {
         WeakReference<LauncherGlassStaticNode> reference = BY_MATERIAL.get(materialHost);
         LauncherGlassStaticNode node = reference != null ? reference.get() : null;
         return node != null && !node.disposed ? node : null;
+    }
+
+    /** Preserve node/session ownership while replacing per-component optical styles. */
+    static void applyLiveGlassConfigToAll(LiquidDockConfig.Glass glassConfig) {
+        synchronized (BY_MATERIAL) {
+            for (WeakReference<LauncherGlassStaticNode> ref : BY_MATERIAL.values()) {
+                LauncherGlassStaticNode node = ref.get();
+                if (node != null && !node.disposed) node.glassConfig = glassConfig;
+            }
+        }
     }
 
     View materialHost() { return materialRef.get(); }
