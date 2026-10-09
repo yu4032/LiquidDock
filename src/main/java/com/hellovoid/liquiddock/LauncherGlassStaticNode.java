@@ -159,7 +159,14 @@ final class LauncherGlassStaticNode {
             for (WeakReference<LauncherGlassStaticNode> ref : BY_MATERIAL.values()) {
                 LauncherGlassStaticNode node = ref.get();
                 if (node == null || node.disposed) continue;
+                GlassComponentStyle before = node.componentStyle();
                 node.glassConfig = glassConfig;
+                GlassComponentStyle after = node.componentStyle();
+                if (before.enabled == after.enabled
+                        && Float.compare(before.sizeOffsetDp, after.sizeOffsetDp) == 0
+                        && Float.compare(before.cornerRadiusDp, after.cornerRadiusDp) == 0) {
+                    continue; // Shader-only changes already use the lightweight scene-redraw path.
+                }
                 View material = node.materialRef.get();
                 if (material != null && material.isAttachedToWindow()) {
                     View root = material.getRootView();
