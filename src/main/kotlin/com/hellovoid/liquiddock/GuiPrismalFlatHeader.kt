@@ -2,8 +2,17 @@ package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateTopPadding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.Layout
@@ -23,6 +32,7 @@ import com.styropyr0.prismal.specular.PrismalSpecular
  * The glass slab extends beyond the screen's top and horizontal edges so
  * its specular rim/shadow are offscreen. Foreground MIUIX controls keep their
  * original measured placement, and the only visible edge is the bottom line.
+ * An opaque theme-color cap eases into the blurred status bar from the top.
  */
 @Composable
 internal fun GuiPrismalFlatHeader(
@@ -30,9 +40,11 @@ internal fun GuiPrismalFlatHeader(
     modifier: Modifier,
     blurRadius: Dp,
     overlayColor: Color,
+    statusBarEdgeColor: Color,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Layout(
         modifier = modifier,
         content = {
@@ -60,7 +72,27 @@ internal fun GuiPrismalFlatHeader(
                     onDrawSurface = { drawRect(overlayColor) },
                 ),
             )
-            Box(content = content)
+            Box {
+                if (statusBarHeight > 0.dp) {
+                    // The overscanned glass fades near the physical upper edge.
+                    // Cap only the upper status-bar region with a theme-neutral
+                    // opaque color; fade out before the app-bar title area.
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(statusBarHeight + 12.dp)
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to statusBarEdgeColor,
+                                    0.28f to statusBarEdgeColor,
+                                    1f to statusBarEdgeColor.copy(alpha = 0f),
+                                ),
+                            ),
+                    )
+                }
+                content()
+            }
         },
     ) { measurables, constraints ->
         // A glass-only overscan: never offset the title, actions or the
