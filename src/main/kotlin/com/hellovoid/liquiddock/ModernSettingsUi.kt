@@ -74,7 +74,6 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -156,9 +155,8 @@ internal fun ModernSettingsScaffold(
                 topBar = {
                     // MIUIX lays out the bar; Prismal draws its glass.
                     val headerContent: @Composable BoxScope.() -> Unit = {
-                        SmallTopAppBar(
+                        GuiUnclippedSmallTopAppBar(
                             title = title,
-                            color = Color.Transparent,
                             navigationIcon = {
                                 if (showBack) {
                                     Box(
