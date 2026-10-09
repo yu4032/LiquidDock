@@ -104,16 +104,13 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void clickableGlassCellsKeepNavigationWithoutPrismalPressScale() throws Exception {
+    public void navigationCardsKeepOriginalPrismalPressBehavior() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        // Click remains on the outer card; Prismal's onClick press motion layer
-        // must not be installed (it scales / translates the whole glass Cell).
-        assertTrue(surfaces.contains(
-                ".then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)"));
-        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(24.dp) },\n        onClick = null,"));
+        // Do not remove press/ripple feedback from hub cards when the reported
+        // unwanted effect is confined to switch rows on settings subpages.
+        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(24.dp) },\n        onClick = onClick,"));
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
-        assertTrue(surfaces.contains("ModernSurface("));
     }
 
     @Test
@@ -128,25 +125,20 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void listCellsRetainPrismalOpticsWithoutPressEnlargement() throws Exception {
+    public void switchSettingCellHasNoRowPressIndicationWhilePrismalControlStaysOriginal() throws Exception {
         String surfaces = Files.readString(SURFACES);
-        Path directory = Path.of("src/main/kotlin/com/hellovoid/liquiddock/guiglass");
-        String slider = Files.readString(directory.resolve("GuiFlatPrismalGlassSlider.kt"));
-        String toggle = Files.readString(directory.resolve("GuiFlatPrismalGlassToggle.kt"));
-
-        assertTrue(surfaces.contains("GuiFlatPrismalGlassSlider("));
-        assertTrue(surfaces.contains("GuiFlatPrismalGlassToggle("));
-        for (String control : new String[] {slider, toggle}) {
-            assertTrue("keep original Prismal optical shader effects",
-                    control.contains("drawPrismalGlass("));
-            assertTrue(control.contains("prismalLens("));
-            assertTrue(control.contains("PrismalSpecular.Ambient"));
-            assertTrue(control.contains("pressedScale = 1f,"));
-            assertFalse("press must not enlarge slider/toggle thumb",
-                    control.contains("pressedScale = 1.5f,"));
-            assertFalse("velocity must not stretch control during scrolling",
-                    control.contains("scaleX /= 1f -"));
-        }
+        int start = surfaces.indexOf("internal fun SwitchPreference(");
+        int end = surfaces.indexOf("internal fun parseNumericSettingInput(", start);
+        assertTrue(start > 0 && end > start);
+        String cell = surfaces.substring(start, end);
+        assertTrue(cell.contains("interactionSource = null,"));
+        assertTrue(cell.contains("indication = null,"));
+        assertTrue(cell.contains("onClick = { onCheckedChange(!checked) },"));
+        assertTrue(cell.contains("onClick = null,"));
+        assertTrue(cell.contains("PrismalGlassToggle("));
+        assertFalse(cell.contains("GuiFlatPrismalGlassToggle("));
+        assertTrue(surfaces.contains("PrismalGlassSlider("));
+        assertFalse(surfaces.contains("GuiFlatPrismalGlassSlider("));
     }
 
     @Test
