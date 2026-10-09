@@ -5,14 +5,22 @@ import android.view.View;
 
 /** Workstation-only HotSeats item spacing; mode authority comes from WorkstationRuntimeState. */
 final class WorkstationDockCustomizationHook {
+    private static volatile boolean dockEnabled;
+    private static volatile int iconTopOffset;
+    private static volatile int iconBottomOffset;
     private WorkstationDockCustomizationHook() {}
 
-    static void install(ClassLoader classLoader, LiquidDockConfig.Workstation config) {
-        if (!config.dockEnabled) return;
+    static void applyLiveConfig(LiquidDockConfig.Workstation config) {
+        if (config == null) return;
         float scale = config.dimensionsDp
                 ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
-        int iconTopOffset = Math.round(config.iconTopOffset * scale);
-        int iconBottomOffset = Math.round(config.iconBottomOffset * scale);
+        dockEnabled = config.dockEnabled;
+        iconTopOffset = Math.round(config.iconTopOffset * scale);
+        iconBottomOffset = Math.round(config.iconBottomOffset * scale);
+    }
+
+    static void install(ClassLoader classLoader, LiquidDockConfig.Workstation config) {
+        applyLiveConfig(config);
         try {
             Class<?> recyclerView = Class.forName(
                     "androidx.recyclerview.widget.RecyclerView", false, classLoader);
@@ -24,7 +32,7 @@ final class WorkstationDockCustomizationHook {
                     "getItemOffsets",
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        if (WorkstationRuntimeState.isActive()) {
+                        if (dockEnabled && WorkstationRuntimeState.isActive()) {
                             Rect out = (Rect) chain.getArg(0);
                             out.top += iconTopOffset;
                             out.bottom += iconBottomOffset;
