@@ -71,9 +71,6 @@ import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurDefaults
-import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -89,8 +86,8 @@ internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
 
-// Uniform header blur using a single capture of the actual scrolled page content.
-// Keep Prismal for its controls and backdrop lenses, not the header's screen sampling.
+// Flat header blur uses the same Prismal source as the bottom navigation.
+// Ordinary Compose text in the page body is captured by prismalGlassLayer.
 private const val TOP_BAR_BLUR_RADIUS = 14f
 private const val TOP_BAR_GLASS_TINT_ALPHA = 0.34f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
@@ -122,11 +119,8 @@ internal fun ModernSettingsScaffold(
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
-    // Both bars sample the same Prismal background + body recording.
-    // MIUIX retains its flat header blur effect, but records no second page layer.
-    val barBackdrop = remember(activeOverlayBackdrop) {
-        activeOverlayBackdrop?.let(::GuiPrismalMiuixBackdrop)
-    }
+    // Both bars read the original Prismal background + body layers; no
+    // separate MIUIX recorder or Prismal-to-MIUIX blur bridge is needed.
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -162,33 +156,9 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    // Miuix Scaffold paints body before topBar. The unified
-                    // Prismal source supplies the flat, non-refractive header blur.
-                    // Keep the header a uniform neutral rectangle.
-                    val headerModifier = if (barBackdrop != null) {
-                        Modifier
-                            .fillMaxWidth()
-                            .zIndex(1f)
-                            .textureBlur(
-                                backdrop = barBackdrop,
-                                shape = RectangleShape,
-                                blurRadius = TOP_BAR_BLUR_RADIUS,
-                                noiseCoefficient = 0f,
-                                colors = BlurDefaults.blurColors(
-                                    blendColors = listOf(
-                                        BlendColorEntry(
-                                            color = headerNeutralColor.copy(
-                                                alpha = TOP_BAR_GLASS_TINT_ALPHA,
-                                            ),
-                                        ),
-                                    ),
-                                    saturation = 1.35f,
-                                ),
-                            )
-                    } else {
-                        Modifier.fillMaxWidth().zIndex(1f).background(surface)
-                    }
-                    Box(modifier = headerModifier) {
+                    // MIUIX remains the layout shell, but Prismal alone draws
+                    // the uniform header blur from the shared screen source.
+                    val headerContent: @Composable BoxScope.() -> Unit = {
                         SmallTopAppBar(
                             title = title,
                             color = Color.Transparent,
@@ -256,6 +226,20 @@ internal fun ModernSettingsScaffold(
                                         alpha = TOP_BAR_BOTTOM_STROKE_ALPHA,
                                     ),
                                 ),
+                        )
+                    }
+                    if (activeOverlayBackdrop != null) {
+                        GuiPrismalFlatHeader(
+                            backdrop = activeOverlayBackdrop,
+                            modifier = Modifier.fillMaxWidth().zIndex(1f),
+                            blurRadius = TOP_BAR_BLUR_RADIUS.dp,
+                            overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
+                            content = headerContent,
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().zIndex(1f).background(surface),
+                            content = headerContent,
                         )
                     }
                 },
