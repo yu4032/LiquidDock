@@ -36,7 +36,7 @@ public class Api102HotReloadContractTest {
         assertTrue(owner.contains("DOMAIN.hook(method, chain ->"));
         assertTrue(owner.contains("DOMAIN.commit()"));
         assertTrue(owner.contains("DOMAIN.abort()"));
-        assertTrue(owner.contains("static boolean stopForFutureReload()"));
+        assertTrue(owner.contains("static synchronized boolean stopForFutureReload()"));
         assertTrue(owner.contains("DOMAIN.runActiveSideEffect(() -> onTransitionStep(step))"));
         assertTrue(domain.contains("ReentrantReadWriteLock(true)"));
         assertTrue(domain.contains("effectsBarrier.writeLock().tryLock("));
