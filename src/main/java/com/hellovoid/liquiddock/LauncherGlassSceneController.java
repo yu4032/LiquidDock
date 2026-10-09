@@ -154,6 +154,10 @@ final class LauncherGlassSceneController {
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
+    // Diagnostics only: suppress per-frame logs once scene/generation/acceptance is unchanged.
+    private long diagnosticLastFrameGeneration = Long.MIN_VALUE;
+    private State diagnosticLastFrameState;
+    private boolean diagnosticLastFrameAccepted;
 
     // Wallpaper semantics stay here rather than in the generic PassBlur Session. Only one
     // wallpaper-labelled producer pulse may be in flight for a root at a time; a newer content
@@ -417,7 +421,13 @@ final class LauncherGlassSceneController {
         boolean rotationWasPending = state.isRotationPresentationPending();
         boolean sceneAcceptsFrame = generation == state.generation()
                 && state.state() != State.COVERED && state.state() != State.DETACHED;
-        if (MainHook.debugLogging) {
+        if (MainHook.debugLogging
+                && (diagnosticLastFrameGeneration != generation
+                    || diagnosticLastFrameState != state.state()
+                    || diagnosticLastFrameAccepted != sceneAcceptsFrame)) {
+            diagnosticLastFrameGeneration = generation;
+            diagnosticLastFrameState = state.state();
+            diagnosticLastFrameAccepted = sceneAcceptsFrame;
             MainHook.log("[DC][WallpaperReturnTrace] fresh-frame-consumed returnSerial="
                     + LauncherGlassRecentsHook.diagnosticReturnSerial()
                     + " generation=" + generation + " current=" + state.generation()
