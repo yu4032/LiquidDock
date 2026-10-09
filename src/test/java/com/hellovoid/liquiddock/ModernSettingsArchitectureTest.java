@@ -84,19 +84,22 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void denseSettingsUseViewportBoundedLazyItemsWithoutReplacingPrismal() throws Exception {
+    public void denseSettingsScrollTheWholePageWithLazyMovingGlassCells() throws Exception {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
 
-        // Static architecture gate, not a frame-rate or runtime behavior assertion.
         assertTrue(ui.contains("private fun DenseSettingsList("));
         assertTrue(ui.contains("content: LazyListScope.() -> Unit"));
+        assertTrue(ui.contains("if (!summary.isNullOrBlank()) item(key = \"dense-page-summary\")"));
+        assertTrue(ui.contains("contentPadding = PaddingValues("));
+        assertTrue(ui.contains("verticalArrangement = Arrangement.spacedBy(10.dp)"));
         assertTrue(ui.contains("items(specs, key = { it.key })"));
         assertTrue(ui.contains("item(key = \"stroke-colors-title\")"));
-        assertTrue(ui.contains(".weight(1f)"));
-        assertTrue(ui.contains("contentPadding = PaddingValues(vertical = 4.dp)"));
+        assertTrue(ui.contains("SettingsCard {"));
         assertTrue(ui.contains("private fun SettingsList("));
-
+        // Each child is a lazy item with its own Prismal glass card, not a
+        // viewport-height static card enclosing an independently scrolling list.
+        assertFalse(ui.contains(".weight(1f)\n                .padding(horizontal = 14.dp)"));
         assertTrue(surfaces.contains("PrismalGlassSlider("));
         assertTrue(surfaces.contains("PrismalGlassStepper("));
     }
