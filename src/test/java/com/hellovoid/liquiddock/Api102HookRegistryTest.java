@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Method;
@@ -100,7 +101,7 @@ public class Api102HookRegistryTest {
                 (method, id, callback) -> oldHandle);
         Method method = Target.class.getDeclaredMethod("observed", int.class);
         registry.install(method, "stable", chain -> chain.proceed());
-        assertEquals(nextHandle, registry.replaceIdentified("stable", chain -> chain.proceed()));
+        assertSame(nextHandle, registry.replaceIdentified("stable", chain -> chain.proceed()));
         assertEquals(1, replacements.get());
         registry.rollback(List.of("stable"));
         assertEquals(List.of("new"), events);
