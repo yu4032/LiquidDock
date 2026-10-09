@@ -209,20 +209,20 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_ior" -> "折射率；越高，边缘弯曲越明显"
     "liquid_normal_strength" -> "控制表面起伏对折射与光照的影响"
     "liquid_dome" -> "控制玻璃表面的凸起程度"
-    "liquid_lens_refraction" -> "控制边缘折射位移倍率"
+    "liquid_lens_refraction" -> "控制边缘折射位移倍率；0 关闭透镜位移，其他玻璃光学效果仍保留"
     "liquid_chromatic" -> "控制红、绿、蓝通道分离形成的色散强度"
     "liquid_tint_alpha" -> "玻璃颜色乘色强度"
     "liquid_tint_r" -> "玻璃颜色 · 红"
     "liquid_tint_g" -> "玻璃颜色 · 绿"
     "liquid_tint_b" -> "玻璃颜色 · 蓝"
     "liquid_highlight_width" -> "控制边缘反射与高光带宽度"
-    "liquid_depth_effect" -> "控制折射方向向玻璃中心偏转的程度"
+    "liquid_depth_effect" -> "控制圆角处折射方向向中心偏转；直边不变，0 为关闭"
     "liquid_brightness" -> "整体输出亮度"
     "liquid_specular_sharp" -> "镜面高光锐度"
     "liquid_specular_strength" -> "双镜面高光强度"
     "liquid_rim_light" -> "边缘光强度"
     "liquid_caustics" -> "焦散强度"
-    "liquid_prismal_refraction_inset" -> "控制玻璃可见遮罩的内缩尺度；不直接增加折射位移"
+    "liquid_prismal_refraction_inset" -> "调整玻璃可见遮罩的内缩；20 为原轮廓，保留抗锯齿"
     "liquid_prismal_displacement_scale" -> "折射与视差位移总倍率"
     "liquid_prismal_height_transition_width" -> "控制玻璃表面从边缘到中心的高度过渡范围"
     "liquid_prismal_smin_smoothing" -> "控制圆角边界的平滑程度"
@@ -230,7 +230,7 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_fresnel_reflect" -> "控制随观察角度增强的边缘反射强度"
     "liquid_prismal_dispersion_r" -> "红色通道相对色散倍率"
     "liquid_prismal_dispersion_b" -> "蓝色通道相对色散倍率"
-    "liquid_prismal_vibrancy" -> "折射背景的色彩鲜艳度"
+    "liquid_prismal_vibrancy" -> "玻璃内背景的饱和度；100% 为原色，低于 100% 去饱和"
     "liquid_prismal_plain_highlight" -> "基础边缘高光"
     "liquid_os4_edge_width_px" -> "OS4 边缘带宽度，使用完整逻辑输出像素，不随下采样比例变化"
     "liquid_os4_reflect_offset_px" -> "OS4 沿 SDF 边缘法线采样背景的偏移；0 为自动"
@@ -419,7 +419,7 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.PRISMAL_FRESNEL_REFLECT, "菲涅尔反射", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_R, "红色散倍率", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_B, "蓝色散倍率", "%"),
-    IntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, "鲜艳度", "%"),
+    IntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, "色彩饱和度", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT, "基础高光", "%"),
     IntSpec(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX, "OS4 边缘带宽度", "px"),
     IntSpec(ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX, "OS4 反射偏移", "px"),

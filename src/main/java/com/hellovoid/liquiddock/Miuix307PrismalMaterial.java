@@ -223,7 +223,7 @@ final float chromaticAberration;
     static Params fromConfig(LiquidDockConfig.Glass glass, float density) {
         if (glass == null) return defaults(density);
         float d = Math.max(0.1f, density);
-        float lensScale = Math.max(0.25f, glass.lensRefraction);
+        float lensScale = Math.max(0f, glass.lensRefraction);
 
         return new Params(
                 glass.ior,
@@ -278,7 +278,9 @@ final float chromaticAberration;
 
     static float resolveLensDepth(float normalStrength, float manualDepth) {
         if (manualDepth > 0f) return clamp(manualDepth, 0f, 1f);
-        return clamp(normalStrength * 0.9f, 0f, 1f);
+        // Zero is neutral in the current single-edge shader; do not synthesize
+        // a center bend from normal strength when manual adjustment is disabled.
+        return 0f;
     }
 
     static float blurSigma(Params p) {
@@ -294,7 +296,7 @@ final float chromaticAberration;
                 p.heightTransitionWidthPx * (1f + 0.55f * clamp(p.liquidDome, 0f, 2f)), 1f);
         float lensPx = refractionHeight * 2f
                 * Math.abs(p.displacementScale) * Math.abs(p.lensRefractionScale);
-        return clamp(lensPx, 4f, Math.max(4f, minGlassDim * 0.85f));
+        return clamp(lensPx, 0f, Math.max(4f, minGlassDim * 0.85f));
     }
 
     private static float smoothstep(float edge0, float edge1, float x) {
