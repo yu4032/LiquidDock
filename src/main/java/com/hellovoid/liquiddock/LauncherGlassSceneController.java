@@ -172,6 +172,12 @@ final class LauncherGlassSceneController {
         displayRotation = readDisplayRotation(root);
     }
 
+    static synchronized void applyLiveGlassConfigForRoot(
+            View root, LiquidDockConfig.Glass glassConfig) {
+        LauncherGlassSceneController controller = BY_ROOT.get(root);
+        if (controller != null) controller.glassConfig = glassConfig;
+    }
+
     static synchronized LauncherGlassSceneController acquire(
             View root, LauncherGlassSession session, LiquidDockConfig.Glass glassConfig) {
         if (root == null || session == null) return null;
