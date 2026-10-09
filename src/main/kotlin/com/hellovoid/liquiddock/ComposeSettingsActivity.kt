@@ -1357,11 +1357,7 @@ private fun GridLandscapePage(
         stringResource(R.string.page_grid_landscape),
         "调整横屏桌面的间距与页面指示器位置。",
     ) {
-        items(landscapeSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && customGrid)
-            }
-        }
+        groupedIntSettings(landscapeSpecs, prefs, masterEnabled && customGrid)
     }
 }
 
@@ -1383,11 +1379,7 @@ private fun GridPortraitPage(
         stringResource(R.string.page_grid_portrait),
         "调整竖屏桌面的间距与页面指示器位置。",
     ) {
-        items(portraitSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && customGrid)
-            }
-        }
+        groupedIntSettings(portraitSpecs, prefs, masterEnabled && customGrid)
     }
 }
 
@@ -1548,11 +1540,7 @@ private fun DockGeometryPage(
         stringResource(R.string.page_dock_geometry),
         "调整 Dock 的尺寸、位置、圆角与图标间距。",
     ) {
-        items(dockSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && dockEnabled)
-            }
-        }
+        groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)
     }
 }
 
@@ -1806,11 +1794,7 @@ private fun LiquidSpecPage(
         title = "",
         summary = summary,
     ) {
-        items(specs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && liquidEnabled)
-            }
-        }
+        groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)
     }
 }
 
@@ -1909,48 +1893,66 @@ private fun GlassIconsPage(
             ),
         )
     }
-    SettingsList(
+    // Keep Prismal on every group, but avoid one massive offscreen blur
+    // layer containing every switch, slider and stepper on this page.
+    // The entire page still has only one LazyColumn as scroll owner.
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_glass_icons),
         "调整桌面图标、Dock 功能图标与多任务胶囊玻璃。",
     ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.ICON_GLASS,
-            "图标玻璃",
-            "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
-            masterEnabled && liquidEnabled,
-        ) { iconGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
-            "仅 Dock 功能图标玻璃",
-            "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
-            masterEnabled && liquidEnabled,
-        ) { functionalDockIconGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
-            "多任务操作按钮玻璃",
-            "将多任务界面的清除全部和设备互联胶囊背景替换为液态玻璃",
-            masterEnabled && liquidEnabled,
-        )
-        IntSetting(
-            prefs,
-            iconSizeOffsetSpec,
-            masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
-        )
-        IntSetting(
-            prefs,
-            iconCornerRadiusSpec,
-            masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
-        )
-        ArrowPreference(
-            stringResource(R.string.launcher_highlights_entry),
-            summary = stringResource(R.string.launcher_highlights_entry_summary),
-            enabled = masterEnabled && liquidEnabled,
-            onClick = { open(Page.LauncherHighlights) },
-        )
+        item(key = "icons-glass-toggles") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.ICON_GLASS,
+                    "图标玻璃",
+                    "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
+                    masterEnabled && liquidEnabled,
+                ) { iconGlass = it }
+                ModernListDivider()
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
+                    "仅 Dock 功能图标玻璃",
+                    "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
+                    masterEnabled && liquidEnabled,
+                ) { functionalDockIconGlass = it }
+                ModernListDivider()
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
+                    "多任务操作按钮玻璃",
+                    "将多任务界面的清除全部和设备互联胶囊背景替换为液态玻璃",
+                    masterEnabled && liquidEnabled,
+                )
+            }
+        }
+        item(key = "icons-glass-geometry") {
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    iconSizeOffsetSpec,
+                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+                )
+                ModernListDivider()
+                IntSetting(
+                    prefs,
+                    iconCornerRadiusSpec,
+                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+                )
+            }
+        }
+        item(key = "icons-glass-highlights") {
+            SettingsCard {
+                ArrowPreference(
+                    stringResource(R.string.launcher_highlights_entry),
+                    summary = stringResource(R.string.launcher_highlights_entry_summary),
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.LauncherHighlights) },
+                )
+            }
+        }
     }
 }
 
@@ -2282,6 +2284,27 @@ private fun AboutPage(
         item {
             SettingsCard {
                 ArrowPreference("第三方开源声明", summary = "依赖版本、用途与许可证文本链接", onClick = { openUrl(activity, "https://github.com/yu4032/LiquidDock/blob/main/THIRD_PARTY_NOTICES.md") })
+            }
+        }
+    }
+}
+
+/**
+ * Keep at most three numeric settings in one native Prismal glass surface.
+ * This avoids a separate blur/refraction GraphicsLayer per dense-list row,
+ * while each small group remains a LazyColumn item that scrolls with its
+ * border. Sliders, steppers, and their live setting callbacks are untouched.
+ */
+private fun LazyListScope.groupedIntSettings(
+    specs: List<IntSpec>,
+    prefs: SharedPreferences,
+    enabled: Boolean,
+) {
+    items(specs.chunked(3), key = { group -> "int-group:${group.first().key}" }) { group ->
+        SettingsCard {
+            group.forEachIndexed { index, spec ->
+                if (index > 0) ModernListDivider()
+                IntSetting(prefs, spec, enabled)
             }
         }
     }

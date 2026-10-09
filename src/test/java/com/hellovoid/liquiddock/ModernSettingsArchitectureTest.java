@@ -84,6 +84,21 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void groupedPrismalCardsBoundOffscreenLayersWithoutNestedScroll() throws Exception {
+        String ui = Files.readString(UI);
+        assertTrue(ui.contains("private fun LazyListScope.groupedIntSettings("));
+        assertTrue(ui.contains("items(specs.chunked(3), key = { group ->"));
+        assertTrue(ui.contains("group.forEachIndexed { index, spec ->"));
+        assertTrue(ui.contains("groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)"));
+        assertTrue(ui.contains("groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)"));
+        assertTrue(ui.contains("item(key = \"icons-glass-toggles\")"));
+        assertTrue(ui.contains("item(key = \"icons-glass-geometry\")"));
+        assertTrue(ui.contains("item(key = \"icons-glass-highlights\")"));
+        assertTrue(ui.contains("private fun GlassIconsPage("));
+        assertTrue(ui.contains("DenseSettingsList(\n        padding,\n        stringResource(R.string.page_glass_icons)"));
+    }
+
+    @Test
     public void denseSettingsScrollTheWholePageWithLazyMovingGlassCells() throws Exception {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
