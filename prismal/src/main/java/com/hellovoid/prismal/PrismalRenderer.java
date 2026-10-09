@@ -543,9 +543,16 @@ public final class PrismalRenderer implements AutoCloseable {
                                  PrismalInteractionState interactionState,
                                  boolean composite, float opacity) {
         highlights = highlights.withOs4EdgeReplacingLegacyEdge();
+        // The fragment shader renders a full-frame quad per glass node. Restrict its expensive
+        // refraction/highlight shading to the SDF silhouette with an AA guard. This preserves
+        // native-pixel edge fidelity at reduced backdrop capture density.
+        PrismalNodeScissor.Rect clip = PrismalNodeScissor.compute(
+                g, frameTarget.width, frameTarget.height);
+        if (clip == null) return;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
         GLES20.glViewport(0, 0, frameTarget.width, frameTarget.height);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glScissor(clip.x, clip.y, clip.width, clip.height);
         if (composite) {
             GLES20.glEnable(GLES20.GL_BLEND);
             GLES20.glBlendFuncSeparate(
@@ -611,6 +618,7 @@ public final class PrismalRenderer implements AutoCloseable {
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
         GLES20.glDisableVertexAttribArray(glassPositionLocation);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         GLES20.glDisable(GLES20.GL_BLEND);
     }
 
