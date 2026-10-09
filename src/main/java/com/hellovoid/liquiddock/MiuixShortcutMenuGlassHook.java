@@ -50,31 +50,29 @@ final class MiuixShortcutMenuGlassHook {
         // Runtime gates keep them inert until the GUI enables either feature.
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
-            {
-                installEarlyWorkspaceCaptureHook(classLoader, glassConfig);
-                installEarlyDockCaptureHook(classLoader, glassConfig);
-                HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
-                    Object[] args = chain.getArgs().toArray(new Object[0]);
-                    Object itemInfo = args.length > 0 ? args[0] : null;
-                    Object owner = chain.getThisObject();
-                    if (owner instanceof View) {
-                        View ownerView = (View) owner;
-                        View launcherRoot = ownerView.getRootView();
-                        if (itemInfo != null && popupGlassEnabled) {
-                            ShortcutPopupGlassCoordinator.prepareIfNeeded(
-                                    ownerView, launcherRoot, glassConfig);
-                        }
-                        Object result = chain.proceed(args);
-                        if (itemInfo == null) {
-                            launcherRoot.postOnAnimation(
-                                    () -> ShortcutPopupGlassCoordinator.cancelPending(
-                                            ownerView, launcherRoot));
-                        }
-                        return result;
+            installEarlyWorkspaceCaptureHook(classLoader, glassConfig);
+            installEarlyDockCaptureHook(classLoader, glassConfig);
+            HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object itemInfo = args.length > 0 ? args[0] : null;
+                Object owner = chain.getThisObject();
+                if (owner instanceof View) {
+                    View ownerView = (View) owner;
+                    View launcherRoot = ownerView.getRootView();
+                    if (itemInfo != null && popupGlassEnabled) {
+                        ShortcutPopupGlassCoordinator.prepareIfNeeded(
+                                ownerView, launcherRoot, glassConfig);
                     }
-                    return chain.proceed(args);
-                }, ITEM_INFO);
-            }
+                    Object result = chain.proceed(args);
+                    if (itemInfo == null) {
+                        launcherRoot.postOnAnimation(
+                                () -> ShortcutPopupGlassCoordinator.cancelPending(
+                                        ownerView, launcherRoot));
+                    }
+                    return result;
+                }
+                return chain.proceed(args);
+            }, ITEM_INFO);
 
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "show", chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -82,15 +80,13 @@ final class MiuixShortcutMenuGlassHook {
                 return result;
             });
 
-            {
-                HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
-                    Object menu = chain.getThisObject();
-                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);
-                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    releaseIfAlreadyDetached(menu);
-                    return result;
-                }, EDIT_STATE_CHANGE_REASON);
-            }
+            HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
+                Object menu = chain.getThisObject();
+                ShortcutPopupGlassCoordinator.beginDismissFade(menu);
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                releaseIfAlreadyDetached(menu);
+                return result;
+            }, EDIT_STATE_CHANGE_REASON);
 
             installed = true;
             MainHook.log(TAG + " hook installed popupGlass=" + popupGlassEnabled
