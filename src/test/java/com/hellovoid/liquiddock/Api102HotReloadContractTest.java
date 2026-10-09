@@ -40,6 +40,29 @@ public class Api102HotReloadContractTest {
     }
 
     @Test
+    public void legacyHookCreationTracksHandlesWithoutChangingPriorityOrIds() throws Exception {
+        String hooks = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/HookUtil.java"));
+        String registry = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Api102HookRegistry.java"));
+        assertTrue(hooks.contains("Api102HookRegistry.registerUnidentified("));
+        assertTrue(hooks.contains("hook(Constructor<?> ctor, XposedInterface.Hooker callback)"));
+        assertTrue(hooks.contains("hookWithPriority("));
+        assertTrue(hooks.contains(".setPriority(priority)"));
+        assertTrue(registry.contains("unnamedHandles.add(handle)"));
+        assertTrue(registry.contains("handles.size() + unnamedHandles.size()"));
+        String dock = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/DockBottomGeometryHook.java"));
+        String grid = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/HomeGridDbOrientationHook.java"));
+        assertFalse(dock.contains("Api101Bridge.module().hook("));
+        assertFalse(grid.contains("Api101Bridge.module().hook("));
+        assertTrue(dock.contains("HookUtil.hookWithPriority("));
+        assertTrue(grid.contains("HookUtil.hookWithPriority("));
+        assertTrue(registry.contains("return complete;"));
+    }
+
+    @Test
     public void api102HotReloadFailsClosedAfterAnyHookDomainStarts() throws Exception {
         String entry = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/ModuleMain.java"));
