@@ -38,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -74,9 +73,6 @@ import com.styropyr0.prismal.sources.rememberPrismalMergedSource
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
@@ -126,11 +122,8 @@ internal fun ModernSettingsScaffold(
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
-    // HyperIsland-style independent content source: one opaque page capture for
-    // the header, including standalone labels and nested Prismal card output.
-    // Do not merge the wallpaper/source layers for this uniform blur.
-    // Header and bottom capsule read the same already-recorded Prismal
-    // layers. No separate MIUIX full-page capture is created.
+    // Both bars sample the same Prismal background + body recording.
+    // MIUIX retains its flat header blur effect, but records no second page layer.
     val barBackdrop = remember(activeOverlayBackdrop) {
         activeOverlayBackdrop?.let(::GuiPrismalMiuixBackdrop)
     }
@@ -169,9 +162,9 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    // Miuix Scaffold paints body before topBar. The header samples
-                    // one fully recorded page source, not a merged Prismal lens source.
-                    // Keep this a solid rectangle with uniform blur and neutral tint.
+                    // Miuix Scaffold paints body before topBar. The unified
+                    // Prismal source supplies the flat, non-refractive header blur.
+                    // Keep the header a uniform neutral rectangle.
                     val headerModifier = if (barBackdrop != null) {
                         Modifier
                             .fillMaxWidth()
