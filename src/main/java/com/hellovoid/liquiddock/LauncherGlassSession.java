@@ -318,11 +318,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         passBlurCaptureScalePercent = glassConfig != null
                 ? glassConfig.passBlurCaptureScalePercent
                 : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
-        if (MainHook.debugLogging && workspaceSource) {
-            MainHook.log("[DC][WorkspaceQuality] opticsScale="
-                    + PassBlurQualityPolicy.workspaceOpticsScalePercent(
-                            true, passBlurCaptureScalePercent) + " reason=resolution-setting");
-        }
         passBlurRenderFps = glassConfig != null
                 ? glassConfig.passBlurRenderFps
                 : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
