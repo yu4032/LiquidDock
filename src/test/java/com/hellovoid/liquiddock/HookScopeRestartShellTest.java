@@ -25,7 +25,7 @@ public class HookScopeRestartShellTest {
         assertFalse(script.contains("restart_running com.android.systemui com.android.systemui"));
         assertFalse(script.contains("restart_running com.android.quicksearchbox com.android.quicksearchbox"));
         assertFalse(script.contains("am force-stop com.miui.securitycenter"));
-        assertTrue(script.contains("if [ \"$i\" -eq 15 ]"));
+        assertTrue(script.contains("if [ -z \"$before\" ]; then report \"$scope\" NOT_RUNNING"));
         assertTrue(script.contains("if ! kill -TERM $before"));
         assertTrue(script.contains("if kill -0 \"$old\""));
         assertTrue(script.contains("current=\"$(pidof \"$process\""));
