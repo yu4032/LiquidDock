@@ -241,6 +241,10 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
         assertTrue(header.contains("shape = { RectangleShape }"));
+        assertTrue("The header must not emit top/side specular rims",
+                header.contains("specular = null,"));
+        assertTrue("The header must not cast outer depth shadows",
+                header.contains("depthShadow = null,"));
         assertTrue(header.contains("refractionHeightPx = 0f"));
         assertTrue(header.contains("refractionAmountPx = 0f"));
         assertTrue(header.contains("depthEffect = false"));
