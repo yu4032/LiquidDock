@@ -58,6 +58,20 @@ final class Api102HookDomain {
         return id;
     }
 
+    /**
+     * Some vendor listeners only become discoverable after the owner has been activated.
+     * Track those handles in the same domain; no partial install may acquire an unowned handle.
+     */
+    synchronized String hookDynamic(Method method, XposedInterface.Hooker callback) {
+        if (state != State.ACTIVE) {
+            throw new IllegalStateException("domain is not active: " + domainName);
+        }
+        String id = Api102HookRegistry.stableId(domainName, method);
+        registry.install(method, id, callback);
+        ids.add(id);
+        return id;
+    }
+
     synchronized void commit() {
         if (state != State.INSTALLING || ids.isEmpty()) {
             throw new IllegalStateException("empty or non-installing domain: " + domainName);
