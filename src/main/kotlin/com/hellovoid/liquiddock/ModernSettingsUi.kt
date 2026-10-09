@@ -311,11 +311,21 @@ internal fun RestartScopesDialog(
                     .verticalScroll(rememberScrollState()),
             ) {
                 items.forEachIndexed { index, item ->
-                    SwitchPreference(
-                        checked = item.id in selected,
-                        onCheckedChange = { checked -> onToggle(item.id, checked) },
+                    // Process restarts need a strictly controlled input:
+                    // the animated PrismalGlassToggle has its own remembered
+                    // gesture state, so a thumb's visual position is not the
+                    // authoritative selected set at confirmation time.
+                    val checked = item.id in selected
+                    BasicComponent(
                         title = item.title,
                         summary = item.packageName,
+                        endActions = {
+                            top.yukonga.miuix.kmp.basic.Switch(
+                                checked = checked,
+                                onCheckedChange = { next -> onToggle(item.id, next) },
+                            )
+                        },
+                        onClick = { onToggle(item.id, !checked) },
                     )
                     if (index != items.lastIndex) {
                         ModernListDivider()
