@@ -5,6 +5,8 @@ import android.content.Intent;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -24,6 +26,7 @@ final class SystemUiKeyguardGoneSource {
 
     static void install(ClassLoader classLoader) {
         if (!INSTALLED.compareAndSet(false, true)) return;
+        List<String> installedIds = new ArrayList<>();
         try {
             Class<?> repositoryClass = Class.forName(REPOSITORY, false, classLoader);
             Class<?> stepClass = Class.forName(TRANSITION_STEP, false, classLoader);
@@ -32,7 +35,8 @@ final class SystemUiKeyguardGoneSource {
                 if (Modifier.isStatic(method.getModifiers())) continue;
                 if (!"emitTransition".equals(method.getName())) continue;
                 if (!containsParameter(method, stepClass)) continue;
-                HookUtil.hook(method, chain -> {
+                String hookId = Api102HookRegistry.stableId("systemui.keyguard.gone", method);
+                Api102HookRegistry.hookIdentified(method, hookId, chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object step = findStep(args, stepClass);
                     Object result = chain.proceed(args);
@@ -49,6 +53,7 @@ final class SystemUiKeyguardGoneSource {
                     }
                     return result;
                 });
+                installedIds.add(hookId);
                 hooked++;
             }
             if (hooked == 0) {
@@ -58,6 +63,7 @@ final class SystemUiKeyguardGoneSource {
             }
             Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED source installed hooks=" + hooked);
         } catch (Throwable error) {
+            Api102HookRegistry.rollbackIdentified(installedIds);
             INSTALLED.set(false);
             Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED source unavailable", error);
         }
