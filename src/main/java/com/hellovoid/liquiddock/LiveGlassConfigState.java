@@ -111,6 +111,11 @@ final class LiveGlassConfigState {
                     ConfigSchema.LauncherHighlight.LARGE_PLAIN_HIGHLIGHT.name(),
                     ConfigSchema.LauncherHighlight.LARGE_CAUSTICS.name(),
                     ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW.name())));
+    private static final Set<String> WORKSTATION_KEYS = Collections.unmodifiableSet(new HashSet<>(
+            Arrays.asList(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
+                    ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
+                    ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
+                    ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET.name())));
     private static final Set<String> POPUP_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
                     ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name())));
@@ -132,6 +137,7 @@ final class LiveGlassConfigState {
     private static Map<String, ?> lastGlass = Collections.emptyMap();
     private static Map<String, ?> lastRecents = Collections.emptyMap();
     private static Map<String, ?> lastPopup = Collections.emptyMap();
+    private static Map<String, ?> lastWorkstation = Collections.emptyMap();
     private static Map<String, ?> lastAnimation = Collections.emptyMap();
     private static volatile LiquidDockConfig.Glass currentGlass;
     private static volatile long generation;
@@ -151,6 +157,7 @@ final class LiveGlassConfigState {
         lastGlass = project(all, GLASS_KEYS);
         lastRecents = project(all, RECENTS_KEYS);
         lastPopup = project(all, POPUP_KEYS);
+        lastWorkstation = project(all, WORKSTATION_KEYS);
         lastAnimation = project(all, ANIMATION_KEYS);
         listener = (prefs, key) -> {
             if (!isLiveKey(key)) return;
@@ -174,9 +181,11 @@ final class LiveGlassConfigState {
     static boolean isLiveKey(String key) {
         if (key == null) return true; // bulk preference change
         if (GLASS_KEYS.contains(key) || RECENTS_KEYS.contains(key)
-                || POPUP_KEYS.contains(key) || ANIMATION_KEYS.contains(key)) return true;
-        return key.endsWith("_tenths")
-                && GLASS_KEYS.contains(key.substring(0, key.length() - "_tenths".length()));
+                || POPUP_KEYS.contains(key) || WORKSTATION_KEYS.contains(key)
+                || ANIMATION_KEYS.contains(key)) return true;
+        if (!key.endsWith("_tenths")) return false;
+        String stem = key.substring(0, key.length() - "_tenths".length());
+        return GLASS_KEYS.contains(stem) || WORKSTATION_KEYS.contains(stem);
     }
 
     private static void scheduleFrame() {
@@ -193,12 +202,15 @@ final class LiveGlassConfigState {
             Map<String, ?> glass = project(all, GLASS_KEYS);
             Map<String, ?> recents = project(all, RECENTS_KEYS);
             Map<String, ?> popup = project(all, POPUP_KEYS);
+            Map<String, ?> workstation = project(all, WORKSTATION_KEYS);
             Map<String, ?> animation = project(all, ANIMATION_KEYS);
             boolean glassChanged = !glass.equals(lastGlass);
             boolean recentsChanged = !recents.equals(lastRecents);
             boolean popupChanged = !popup.equals(lastPopup);
+            boolean workstationChanged = !workstation.equals(lastWorkstation);
             boolean animationChanged = !animation.equals(lastAnimation);
-            if (!glassChanged && !recentsChanged && !animationChanged && !popupChanged) return;
+            if (!glassChanged && !recentsChanged && !animationChanged
+                    && !popupChanged && !workstationChanged) return;
 
             LiquidDockConfig next = LiquidDockConfig.from(new ConfigReader(all));
             if (glassChanged) {
@@ -215,6 +227,12 @@ final class LiveGlassConfigState {
                 }
                 MainHook.log(TAG + " glass generation=" + generation
                         + " blur=" + next.glass.blur);
+            }
+            if (workstationChanged) {
+                lastWorkstation = workstation;
+                WorkstationDockCustomizationHook.applyLiveConfig(next.workstation);
+                WorkstationDockGeometryHook.applyLiveConfig(next.workstation);
+                MainHook.log(TAG + " workstation Dock geometry updated");
             }
             if (popupChanged) {
                 lastPopup = popup;
