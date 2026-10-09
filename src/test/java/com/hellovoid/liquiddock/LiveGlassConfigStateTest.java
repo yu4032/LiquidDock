@@ -77,6 +77,10 @@ public class LiveGlassConfigStateTest {
                 ConfigSchema.Dock.STROKE_RED.name(), ConfigSchema.Dock.STROKE_RED));
         assertFalse(VisualRuntimeState.matchesOptionChange(
                 ConfigSchema.Dock.STROKE_RED.name(), ConfigSchema.Dock.STROKE_BLUE));
+        assertTrue(VisualRuntimeState.matchesOptionChange(
+                ConfigSchema.Divider.WIDTH_DP.name(), ConfigSchema.Divider.WIDTH_DP));
+        assertTrue(VisualRuntimeState.matchesOptionChange(
+                ConfigSchema.Divider.ALPHA.name(), ConfigSchema.Divider.ALPHA));
     }
 
     @Test
