@@ -56,11 +56,12 @@ public class LiveGlassConfigStateTest {
     }
 
     @Test
-    public void hookInstallOnlyAndLegacyGlassKeysDoNotPretendToBeLive() {
-        assertFalse(LiveGlassConfigState.isLiveKey(
+    public void popupGlassPolicyIsLiveAfterOneTimeHookInstall() {
+        assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name()));
-        assertFalse(LiveGlassConfigState.isLiveKey(
+        assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name()));
+        // System-process wallpaper composition is owned outside the Launcher callback.
         assertFalse(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name()));
     }
