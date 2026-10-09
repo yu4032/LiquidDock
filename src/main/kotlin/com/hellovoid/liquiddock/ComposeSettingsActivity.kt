@@ -30,6 +30,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +64,11 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.window.WindowDialog
+
+// A single observer updates only the changed preference key; long slider pages
+// do not register listeners per control or re-read preferences on every frame.
+private val LocalSettingsPreferenceRevisions = staticCompositionLocalOf<Map<String, Int>> { emptyMap() }
 
 class ComposeSettingsActivity : SettingsActivity() {
 
@@ -67,7 +77,21 @@ class ComposeSettingsActivity : SettingsActivity() {
         enableEdgeToEdge()
         setContent {
             val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
-            MiuixTheme(controller = controller) { LiquidDockSettings(this) }
+            val preferences = remember { PreferenceManager.getDefaultSharedPreferences(this) }
+            val revisions = remember(preferences) { mutableStateMapOf<String, Int>() }
+            DisposableEffect(preferences) {
+                val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, changed ->
+                    if (changed != null) {
+                        val key = changed.removeSuffix("_tenths")
+                        revisions[key] = (revisions[key] ?: 0) + 1
+                    }
+                }
+                preferences.registerOnSharedPreferenceChangeListener(listener)
+                onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+            }
+            CompositionLocalProvider(LocalSettingsPreferenceRevisions provides revisions) {
+                MiuixTheme(controller = controller) { LiquidDockSettings(this) }
+            }
         }
     }
 }
@@ -113,6 +137,8 @@ private enum class Page(val titleRes: Int) {
     DialogCustomization(R.string.page_dialog_customization),
     ThirdPartyApps(R.string.page_third_party_apps),
     Gboard(R.string.page_gboard),
+    GboardAll(R.string.page_gboard),
+    DialogAll(R.string.page_dialog_customization),
     WidgetComponents(R.string.page_widget_components),
     LauncherHighlights(R.string.page_launcher_highlights),
     LauncherHighlightsCompact(R.string.page_launcher_highlights_compact),
@@ -195,7 +221,6 @@ private fun optionSummary(key: String): String = when (key) {
     "dock_divider_color_g" -> "分隔竖线颜色 · 绿"
     "dock_divider_color_b" -> "分隔竖线颜色 · 蓝"
     "dock_divider_alpha" -> "分隔竖线不透明度"
-    "workstation_dock_width_offset" -> "相对系统工作台 Dock 的原始长度增减；不会改变位置或普通 Dock"
     "workstation_grid_horizontal_offset" -> "整体平移工作台桌面图标区域，适用于当前实际网格列数；不继承普通桌面水平偏移"
     "workstation_all_apps_landscape_horizontal_offset" -> "直接设置工作台所有应用横屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_landscape_top_spacing" -> "直接设置工作台所有应用横屏图标区上间距；不叠加系统默认位置"
@@ -203,28 +228,27 @@ private fun optionSummary(key: String): String = when (key) {
     "workstation_all_apps_portrait_horizontal_offset" -> "直接设置工作台所有应用竖屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_top_spacing" -> "直接设置工作台所有应用竖屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_bottom_spacing" -> "直接设置工作台所有应用竖屏图标区下间距；不叠加系统默认位置"
-    "workstation_dock_icon_top_offset" -> "调整工作台 Dock 图标与容器顶部之间的距离"
-    "workstation_dock_icon_bottom_offset" -> "调整工作台 Dock 图标与容器底部之间的距离"
+    "workstation_dock_icon_top_offset" -> "通过图标顶部装饰偏移调整工作台 Dock 图标垂直位置；正值通常向下移动"
     "liquid_folder_corner_radius" -> "0 表示自动跟随 MIUI 原生圆角；大于 0 时同时覆盖桌面与拖动文件夹玻璃"
     "liquid_blur" -> "控制玻璃背景的模糊程度"
     "liquid_thickness" -> "控制虚拟玻璃厚度对折射效果的影响"
     "liquid_ior" -> "折射率；越高，边缘弯曲越明显"
     "liquid_normal_strength" -> "控制表面起伏对折射与光照的影响"
     "liquid_dome" -> "控制玻璃表面的凸起程度"
-    "liquid_lens_refraction" -> "控制边缘折射位移倍率"
+    "liquid_lens_refraction" -> "控制边缘折射位移倍率；0 关闭透镜位移，其他玻璃光学效果仍保留"
     "liquid_chromatic" -> "控制红、绿、蓝通道分离形成的色散强度"
     "liquid_tint_alpha" -> "玻璃颜色乘色强度"
     "liquid_tint_r" -> "玻璃颜色 · 红"
     "liquid_tint_g" -> "玻璃颜色 · 绿"
     "liquid_tint_b" -> "玻璃颜色 · 蓝"
     "liquid_highlight_width" -> "控制边缘反射与高光带宽度"
-    "liquid_depth_effect" -> "控制折射方向向玻璃中心偏转的程度"
+    "liquid_depth_effect" -> "控制圆角处折射方向向中心偏转；直边不变，0 为关闭"
     "liquid_brightness" -> "整体输出亮度"
     "liquid_specular_sharp" -> "镜面高光锐度"
     "liquid_specular_strength" -> "双镜面高光强度"
     "liquid_rim_light" -> "边缘光强度"
     "liquid_caustics" -> "焦散强度"
-    "liquid_prismal_refraction_inset" -> "控制玻璃可见遮罩的内缩尺度；不直接增加折射位移"
+    "liquid_prismal_refraction_inset" -> "调整玻璃可见遮罩的内缩；20 为原轮廓，保留抗锯齿"
     "liquid_prismal_displacement_scale" -> "折射与视差位移总倍率"
     "liquid_prismal_height_transition_width" -> "控制玻璃表面从边缘到中心的高度过渡范围"
     "liquid_prismal_smin_smoothing" -> "控制圆角边界的平滑程度"
@@ -232,7 +256,7 @@ private fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_fresnel_reflect" -> "控制随观察角度增强的边缘反射强度"
     "liquid_prismal_dispersion_r" -> "红色通道相对色散倍率"
     "liquid_prismal_dispersion_b" -> "蓝色通道相对色散倍率"
-    "liquid_prismal_vibrancy" -> "折射背景的色彩鲜艳度"
+    "liquid_prismal_vibrancy" -> "玻璃内背景的饱和度；100% 为原色，低于 100% 去饱和"
     "liquid_prismal_plain_highlight" -> "基础边缘高光"
     "liquid_os4_edge_width_px" -> "OS4 边缘带宽度，使用完整逻辑输出像素，不随下采样比例变化"
     "liquid_os4_reflect_offset_px" -> "OS4 沿 SDF 边缘法线采样背景的偏移；0 为自动"
@@ -316,10 +340,8 @@ private fun workstationSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> {
 
 private val workstationDockSpecs by lazy {
     workstationSpecsFor(
-        ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,
         ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
         ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
-        ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,
     )
 }
 private val workstationDesktopSpecs by lazy {
@@ -359,7 +381,6 @@ private fun ensureDividerDefaults(prefs: SharedPreferences) {
     e.apply()
 }
 private val workstationSpecs = listOf(
-    IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, "工作台 Dock 长度偏移"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS, "工作台 Dock 图标玻璃圆角", "dp"),
     IntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, "工作台桌面水平偏移"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, "所有应用 · 横屏水平间距"),
@@ -368,8 +389,7 @@ private val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, "所有应用 · 竖屏水平间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING, "所有应用 · 竖屏上间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, "所有应用 · 竖屏下间距"),
-    IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "工作台 Dock 图标上间距"),
-    IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET, "工作台 Dock 图标下间距"),
+    IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "工作台 Dock 图标垂直偏移"),
 )
 private val recentsBlurSpec = IntSpec(
     ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,
@@ -425,7 +445,7 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.PRISMAL_FRESNEL_REFLECT, "菲涅尔反射", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_R, "红色散倍率", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_B, "蓝色散倍率", "%"),
-    IntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, "鲜艳度", "%"),
+    IntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, "色彩饱和度", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT, "基础高光", "%"),
     IntSpec(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX, "OS4 边缘带宽度", "px"),
     IntSpec(ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX, "OS4 反射偏移", "px"),
@@ -446,6 +466,21 @@ private val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y, "背景缩放 Y", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE, "视差倍率", "%"),
 )
+/** Shared optical descriptors only; each scope keeps its own preferences and page. */
+internal data class ScopedOpticalDescriptor(
+    val config: ConfigKey<Int>,
+    val title: String,
+    val unit: String,
+    val summary: String,
+)
+
+internal val scopedOpticalDescriptors: List<ScopedOpticalDescriptor> by lazy {
+    val supported = ScopedGlassOptics.opticalKeys().mapTo(hashSetOf()) { it.name() }
+    liquidSpecs.filter { it.key in supported }.map {
+        ScopedOpticalDescriptor(it.config, it.title, it.unit, it.summary)
+    }
+}
+
 private val launcherHighlightSpecs = listOf(
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.SKY_HAZE, ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE, R.string.highlight_sky_haze, R.string.highlight_sky_haze_summary),
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.SPECULAR, ConfigSchema.LauncherHighlight.LARGE_SPECULAR, R.string.highlight_specular, R.string.highlight_specular_summary),
@@ -594,7 +629,7 @@ private val dockEntries = listOf(
 )
 
 private val workstationEntries = listOf(
-    HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "Dock 长度、图标玻璃圆角与上下间距"),
+    HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "Dock 图标垂直偏移与玻璃圆角"),
     HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "按当前网格列数整体调整工作台桌面水平位置"),
     HubEntry(Page.WorkstationAppsLandscape, R.string.page_workstation_apps_landscape, "所有应用横屏水平与上下间距"),
     HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
@@ -688,7 +723,8 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
     var uiGlassEnabled by remember {
         mutableStateOf(uiPrefs.getBoolean(SETTINGS_UI_GLASS_ENABLED, true))
     }
-    var masterEnabled by remember {
+    val masterRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Core.ENABLED.name()] ?: 0
+    var masterEnabled by remember(masterRevision) {
         mutableStateOf(
             prefs.getBoolean(
                 ConfigSchema.Core.ENABLED.name(),
@@ -873,7 +909,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.WorkstationDock -> WorkstationSpecPage(
                     padding, prefs, masterEnabled, workstationDockSpecs,
-                    "工作台 Dock 的尺寸与图标位置参数",
+                    "工作台 Dock 图标位置与玻璃圆角参数",
                 )
                 Page.WorkstationDesktop -> WorkstationSpecPage(
                     padding, prefs, masterEnabled, workstationDesktopSpecs,
@@ -939,14 +975,24 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled)
                 Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.DialogCustomization -> DialogGlassSettingsPage(padding, prefs, masterEnabled)
+                Page.DialogCustomization -> DialogGlassSettingsPage(
+                padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.DialogAll) },
+            )
+            Page.DialogAll -> ScopedGlassSettingsPage(
+                padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
+            )
                 Page.ThirdPartyApps -> ThirdPartyAppsPage(
                     padding = padding,
                     prefs = prefs,
                     masterEnabled = masterEnabled,
                     openGboard = { navigateTo(Page.Gboard) },
                 )
-                Page.Gboard -> GboardSettingsPage(padding, prefs, masterEnabled)
+                Page.Gboard -> GboardSettingsPage(
+                padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.GboardAll) },
+            )
+            Page.GboardAll -> ScopedGlassSettingsPage(
+                padding, prefs, masterEnabled, ScopedGlassOptics.GBOARD, "Gboard",
+            )
                 Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                 Page.LauncherHighlights -> LauncherHighlightsPage(padding, ::navigateTo)
                 Page.LauncherHighlightsCompact -> LauncherHighlightTogglePage(
@@ -1226,7 +1272,8 @@ private fun GridPage(
     masterEnabled: Boolean,
     open: (Page) -> Unit,
 ) {
-    var customGrid by remember {
+    val customGridRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Grid.ENABLED.name()] ?: 0
+    var customGrid by remember(customGridRevision) {
         mutableStateOf(
             prefs.getBoolean(
                 ConfigSchema.Grid.ENABLED.name(),
@@ -1288,7 +1335,20 @@ private fun GridBasicsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
 ) {
-    var customGrid by remember {
+    val context = LocalContext.current
+    var gridCheckPending by remember { mutableStateOf(false) }
+    var gridWarning by remember { mutableStateOf<String?>(null) }
+    // Cancel an in-flight request when the user leaves the page: late Launcher
+    // replies must never write a grid value behind the user's back.
+    val gridCheck = remember { arrayOfNulls<GridWidget4x2PreflightClient.Request>(1) }
+    DisposableEffect(prefs) {
+        onDispose {
+            gridCheck[0]?.cancel()
+            gridCheck[0] = null
+        }
+    }
+    val customGridRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Grid.ENABLED.name()] ?: 0
+    var customGrid by remember(customGridRevision) {
         mutableStateOf(
             prefs.getBoolean(
                 ConfigSchema.Grid.ENABLED.name(),
@@ -1328,7 +1388,58 @@ private fun GridBasicsPage(
             "控制自定义行列数是否参与布局；重启桌面后生效",
             masterEnabled,
         ) { customGrid = it }
-        gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+        gridDimensionSpecs.forEach { spec ->
+            IntSetting(
+                prefs,
+                spec,
+                masterEnabled && customGrid && !gridCheckPending,
+                beforeSave = { proposed, commit ->
+                    val current = prefs.getInt(spec.key, spec.default)
+                    val target = proposed.roundToInt()
+                    if (!GridWidget4x2PreflightPolicy.needsCheck(current, target)) {
+                        commit()
+                    } else if (!gridCheckPending) {
+                        gridCheckPending = true
+                        val token = prefs.getString(
+                            WidgetComponentStore.DISCOVERY_TOKEN_KEY, "",
+                        ).orEmpty()
+                        gridCheck[0] = GridWidget4x2PreflightClient.start(
+                            context, token,
+                        ) { status ->
+                            gridCheckPending = false
+                            gridCheck[0] = null
+                            when (status) {
+                                GridWidget4x2PreflightClient.CLEAR -> {
+                                    // A concurrent config change invalidates this check.
+                                    if (prefs.getInt(spec.key, spec.default) == current &&
+                                        prefs.getBoolean(
+                                            ConfigSchema.Core.ENABLED.name(),
+                                            ConfigSchema.Core.ENABLED.uiDefault(),
+                                        ) && prefs.getBoolean(
+                                            ConfigSchema.Grid.ENABLED.name(),
+                                            ConfigSchema.Grid.ENABLED.uiDefault(),
+                                        )
+                                    ) {
+                                        commit()
+                                    }
+                                }
+                                GridWidget4x2PreflightClient.BLOCKED ->
+                                    gridWarning = "检测到桌面存在 4×2 小组件（旋转后可能为 2×4）。行数或列数不能降低到 4 以下，请先调整或移除对应小组件。本次修改未保存。"
+                                else ->
+                                    gridWarning = "无法确认桌面是否存在 4×2 小组件。请保持桌面进程运行，确认 LSPosed 服务可用后重试。本次修改未保存。"
+                            }
+                        }
+                    }
+                },
+            )
+        }
+        if (gridCheckPending) {
+            Text(
+                "正在检查桌面 4×2 小组件，确认安全前不会保存行列数……",
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                fontSize = 13.sp,
+            )
+        }
         BooleanSetting(
             prefs,
             ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
@@ -1336,6 +1447,32 @@ private fun GridBasicsPage(
             "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
             masterEnabled && customGrid,
         )
+    }
+    WindowDialog(
+        show = gridWarning != null,
+        title = "网格尺寸无法修改",
+        onDismissRequest = { gridWarning = null },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Text(gridWarning.orEmpty(), fontSize = 15.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                // Same large action height/padding as the Restart Scopes dialog.
+                Button(
+                    onClick = { gridWarning = null },
+                    minWidth = 164.dp,
+                    minHeight = 42.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                ) {
+                    Text("知道了")
+                }
+            }
+        }
     }
 }
 
@@ -1357,11 +1494,7 @@ private fun GridLandscapePage(
         stringResource(R.string.page_grid_landscape),
         "调整横屏桌面的间距与页面指示器位置。",
     ) {
-        items(landscapeSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && customGrid)
-            }
-        }
+        groupedIntSettings(landscapeSpecs, prefs, masterEnabled && customGrid)
     }
 }
 
@@ -1383,11 +1516,7 @@ private fun GridPortraitPage(
         stringResource(R.string.page_grid_portrait),
         "调整竖屏桌面的间距与页面指示器位置。",
     ) {
-        items(portraitSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && customGrid)
-            }
-        }
+        groupedIntSettings(portraitSpecs, prefs, masterEnabled && customGrid)
     }
 }
 
@@ -1548,11 +1677,7 @@ private fun DockGeometryPage(
         stringResource(R.string.page_dock_geometry),
         "调整 Dock 的尺寸、位置、圆角与图标间距。",
     ) {
-        items(dockSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && dockEnabled)
-            }
-        }
+        groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)
     }
 }
 
@@ -1725,7 +1850,8 @@ private fun LiquidPage(
     masterEnabled: Boolean,
     open: (Page) -> Unit,
 ) {
-    var liquidGlass by remember {
+    val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
+    var liquidGlass by remember(liquidRevision) {
         mutableStateOf(
             prefs.getBoolean(
                 ConfigSchema.Glass.ENABLED.name(),
@@ -1806,11 +1932,7 @@ private fun LiquidSpecPage(
         title = "",
         summary = summary,
     ) {
-        items(specs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && liquidEnabled)
-            }
-        }
+        groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)
     }
 }
 
@@ -1909,48 +2031,66 @@ private fun GlassIconsPage(
             ),
         )
     }
-    SettingsList(
+    // Keep Prismal on every group, but avoid one massive offscreen blur
+    // layer containing every switch, slider and stepper on this page.
+    // The entire page still has only one LazyColumn as scroll owner.
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_glass_icons),
         "调整桌面图标、Dock 功能图标与多任务胶囊玻璃。",
     ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.ICON_GLASS,
-            "图标玻璃",
-            "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
-            masterEnabled && liquidEnabled,
-        ) { iconGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
-            "仅 Dock 功能图标玻璃",
-            "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
-            masterEnabled && liquidEnabled,
-        ) { functionalDockIconGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
-            "多任务操作按钮玻璃",
-            "将多任务界面的清除全部和设备互联胶囊背景替换为液态玻璃",
-            masterEnabled && liquidEnabled,
-        )
-        IntSetting(
-            prefs,
-            iconSizeOffsetSpec,
-            masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
-        )
-        IntSetting(
-            prefs,
-            iconCornerRadiusSpec,
-            masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
-        )
-        ArrowPreference(
-            stringResource(R.string.launcher_highlights_entry),
-            summary = stringResource(R.string.launcher_highlights_entry_summary),
-            enabled = masterEnabled && liquidEnabled,
-            onClick = { open(Page.LauncherHighlights) },
-        )
+        item(key = "icons-glass-toggles") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.ICON_GLASS,
+                    "图标玻璃",
+                    "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
+                    masterEnabled && liquidEnabled,
+                ) { iconGlass = it }
+                ModernListDivider()
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
+                    "仅 Dock 功能图标玻璃",
+                    "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
+                    masterEnabled && liquidEnabled,
+                ) { functionalDockIconGlass = it }
+                ModernListDivider()
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
+                    "多任务操作按钮玻璃",
+                    "将多任务界面的清除全部和设备互联胶囊背景替换为液态玻璃",
+                    masterEnabled && liquidEnabled,
+                )
+            }
+        }
+        item(key = "icons-glass-geometry") {
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    iconSizeOffsetSpec,
+                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+                )
+                ModernListDivider()
+                IntSetting(
+                    prefs,
+                    iconCornerRadiusSpec,
+                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+                )
+            }
+        }
+        item(key = "icons-glass-highlights") {
+            SettingsCard {
+                ArrowPreference(
+                    stringResource(R.string.launcher_highlights_entry),
+                    summary = stringResource(R.string.launcher_highlights_entry_summary),
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.LauncherHighlights) },
+                )
+            }
+        }
     }
 }
 
@@ -2225,15 +2365,54 @@ private fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterE
 
 @Composable
 private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
+    var confirmDefaultReset by rememberSaveable { mutableStateOf(false) }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader("预设", "默认配置、JSON 备份与恢复") }
         item { SmallTitle("预设") }
-        item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关", onClick = { applyDefaultPreset(activity) }) } }
+        item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关（需确认）", onClick = { confirmDefaultReset = true }) } }
         item { SmallTitle("备份与应用") }
         item {
             SettingsCard {
                 ArrowPreference("导出当前参数", summary = "保存为 LiquidDock JSON", onClick = activity::launchExport)
                 ArrowPreference("导入参数", summary = "校验并恢复参数；完成后自动重启桌面", onClick = activity::launchImport)
+            }
+        }
+    }
+    WindowDialog(
+        show = confirmDefaultReset,
+        title = "确认恢复默认配置",
+        onDismissRequest = { confirmDefaultReset = false },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("将覆盖当前内置配置与开关并重启桌面。该操作不能直接撤销，建议先导出 JSON 备份。")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = { confirmDefaultReset = false },
+                    modifier = Modifier.weight(1f),
+                    minHeight = 42.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                ) {
+                    Text("取消")
+                }
+                Button(
+                    onClick = {
+                        confirmDefaultReset = false
+                        applyDefaultPreset(activity)
+                    },
+                    modifier = Modifier.weight(1f),
+                    minHeight = 42.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                    destructive = true,
+                ) {
+                    Text("恢复默认", color = androidx.compose.ui.graphics.Color.White)
+                }
             }
         }
     }
@@ -2282,6 +2461,27 @@ private fun AboutPage(
         item {
             SettingsCard {
                 ArrowPreference("第三方开源声明", summary = "依赖版本、用途与许可证文本链接", onClick = { openUrl(activity, "https://github.com/yu4032/LiquidDock/blob/main/THIRD_PARTY_NOTICES.md") })
+            }
+        }
+    }
+}
+
+/**
+ * Keep at most three numeric settings in one native Prismal glass surface.
+ * This avoids a separate blur/refraction GraphicsLayer per dense-list row,
+ * while each small group remains a LazyColumn item that scrolls with its
+ * border. Sliders, steppers, and their live setting callbacks are untouched.
+ */
+private fun LazyListScope.groupedIntSettings(
+    specs: List<IntSpec>,
+    prefs: SharedPreferences,
+    enabled: Boolean,
+) {
+    items(specs.chunked(3), key = { group -> "int-group:${group.first().key}" }) { group ->
+        SettingsCard {
+            group.forEachIndexed { index, spec ->
+                if (index > 0) ModernListDivider()
+                IntSetting(prefs, spec, enabled)
             }
         }
     }
@@ -2367,7 +2567,8 @@ internal fun BooleanSetting(
     enabled: Boolean = true, default: Boolean = config.uiDefault(), onChanged: (Boolean) -> Unit = {},
 ) {
     val key = config.name()
-    var value by remember(key) { mutableStateOf(prefs.getBoolean(key, default)) }
+    val revision = LocalSettingsPreferenceRevisions.current[key] ?: 0
+    var value by remember(key, revision) { mutableStateOf(prefs.getBoolean(key, default)) }
     SwitchPreference(
         checked = value,
         onCheckedChange = { value = it; prefs.edit().putBoolean(key, it).apply(); onChanged(it) },
@@ -2378,7 +2579,12 @@ internal fun BooleanSetting(
 }
 
 @Composable
-private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride: Boolean? = null) {
+private fun IntSetting(
+    prefs: SharedPreferences,
+    spec: IntSpec,
+    enabledOverride: Boolean? = null,
+    beforeSave: ((Float, () -> Unit) -> Unit)? = null,
+) {
     val decimalDp = spec.isDecimal
     val context = LocalContext.current
     val maxValue = remember(spec.key, context) { spec.max(context) }
@@ -2387,12 +2593,22 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
     }
     // Reading the disk-backed preference on every drag/recomposition was wasteful:
     // remember() already owns the initial state until this setting leaves composition.
+    val storedRevision = LocalSettingsPreferenceRevisions.current[spec.key] ?: 0
     var value by remember(spec.key, maxValue) {
         val initial = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
             prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
         else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
             .coerceIn(spec.min.toFloat(), maxValue.toFloat())
         mutableStateOf(initial)
+    }
+    LaunchedEffect(spec.key, maxValue, storedRevision) {
+        // Reread only the externally changed key; normal drag recomposition is pure state.
+        if (storedRevision > 0) {
+            value = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
+                prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
+            else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
+                .coerceIn(spec.min.toFloat(), maxValue.toFloat())
+        }
     }
     var editingValue by remember(spec.key) { mutableStateOf(false) }
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
@@ -2405,10 +2621,13 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
         }
         val bounded = next.coerceIn(spec.min.toFloat(), maxValue.toFloat())
         if (bounded == value) return // already persisted this quantized value
-        value = bounded
-        val editor = prefs.edit().putInt(spec.key, value.roundToInt())
-        if (decimalDp) editor.putInt("${spec.key}_tenths", (value * 10f).roundToInt())
-        editor.apply()
+        val persist = {
+            value = bounded
+            val editor = prefs.edit().putInt(spec.key, bounded.roundToInt())
+            if (decimalDp) editor.putInt("${spec.key}_tenths", (bounded * 10f).roundToInt())
+            editor.apply()
+        }
+        if (beforeSave != null) beforeSave(bounded, persist) else persist()
     }
 
     val displayValue = remember(value, decimalDp) {
@@ -2466,6 +2685,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
                 minWidth = 56.dp,
                 minHeight = 36.dp,
                 insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                prismalNumericAction = true,
             ) {
                 Text("重置")
             }
@@ -2499,4 +2719,6 @@ private fun applyDefaultPreset(activity: ComposeSettingsActivity) {
     PresetManager.applyDefault(prefs.edit())
     Toast.makeText(activity, "默认配置已应用", Toast.LENGTH_LONG).show()
     activity.restartLauncher()
+    // Destroy remembered page/slider state after applying a new full preset.
+    activity.recreate()
 }

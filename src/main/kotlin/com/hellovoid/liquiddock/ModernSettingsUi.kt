@@ -62,9 +62,7 @@ import com.styropyr0.prismal.PrismalGlassSurface
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
-import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
-import com.styropyr0.prismal.components.PrismalGlassToggle
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -93,6 +91,11 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+private val LocalTouchPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+private val LocalFrozenPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+// Cheap, static approximation of the existing Prismal cells. This flag never
+// gives a body component access to the live header/footer capture layers.
+private val LocalStaticGlassChrome = staticCompositionLocalOf { false }
 
 @Composable
 internal fun ModernSettingsScaffold(
@@ -115,7 +118,16 @@ internal fun ModernSettingsScaffold(
     // PrismalGlassSurface's tint applies BlendMode.Hue before its alpha overlay.
     // A neutral surface fill avoids recoloring green/other content behind the bar.
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
-    val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
+    // Keep continuous Prismal sampling for top bar actions/header and bottom
+    // capsule. Body cells use frozen chrome, while numeric stepper/reset retain
+    // native Prismal and sliders/toggles sample only during touch.
+    val surfaceBackdrop: PrismalBackdrop? = null
+    // Touch-gated controls use the original background sample, but their
+    // render nodes only attach during active gestures. No third capture layer.
+    val touchBackdrop = if (glassEnabled) backgroundLayer else null
+    // Real native Prismal material is rendered once and cached per body cell;
+    // the top/footer still use the original live merged sources.
+    val frozenBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
     // Header and bottom navigation share the captured background + content.
     Box(modifier = Modifier.fillMaxSize()) {
@@ -149,6 +161,9 @@ internal fun ModernSettingsScaffold(
         CompositionLocalProvider(
             LocalPrismalSurfaceBackdrop provides surfaceBackdrop,
             LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
+            LocalTouchPrismalBackdrop provides touchBackdrop,
+            LocalFrozenPrismalBackdrop provides frozenBackdrop,
+            LocalStaticGlassChrome provides glassEnabled,
         ) {
             Scaffold(
                 containerColor = Color.Transparent,
@@ -274,7 +289,9 @@ internal fun RestartScopesDialog(
     onRestart: (Set<String>) -> Unit,
 ) {
     if (!visible) return
-    val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
+    // Restart dialog is body chrome. It must not sample the header/footer
+    // backdrop or install Prismal's per-control gesture/shader pipeline.
+    val backdrop = LocalPrismalSurfaceBackdrop.current
 
     BoxWithConstraints(
         modifier = Modifier
@@ -323,7 +340,7 @@ internal fun RestartScopesDialog(
                             RestartScopeToggle(
                                 scopeId = item.id,
                                 checked = checked,
-                                backdrop = backdrop,
+                                backdrop = LocalTouchPrismalBackdrop.current,
                                 onToggle = onToggle,
                             )
                         },
@@ -417,7 +434,7 @@ private fun RestartScopeToggle(
     }
 
     if (backdrop != null) {
-        PrismalGlassToggle(
+        GuiOnTouchPrismalToggle(
             selected = selectedProvider,
             onSelect = stableToggle,
             backdrop = backdrop,
@@ -629,26 +646,63 @@ internal fun ModernSurface(
     contentPadding: PaddingValues = PaddingValues(18.dp),
     onClick: (() -> Unit)? = null,
     staticPress: Boolean = false,
+    // Static list cells can skip the costly edge lens while retaining native
+    // Prismal blur, tint, specular, outline, and press feedback.
+    edgeRefraction: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
+    val frozenBackdrop = LocalFrozenPrismalBackdrop.current
+    val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
     val cardShape = RoundedCornerShape(24.dp)
-    // Subtle neutral lift + rim distinguish cards from near-black Monet backgrounds.
+    // Match the Prismal neutral wash/rim with static Compose gradients.
+    // No RenderEffect, backdrop evaluation or per-cell offscreen shader.
     val solidCardColor = if (darkTheme) lerp(colors.surface, colors.onSurface, 0.08f) else colors.surface
     val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
     if (backdrop == null) {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .clip(cardShape)
-                .background(solidCardColor)
-                .border(1.dp, cardStroke, cardShape)
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                .padding(contentPadding),
-            content = content,
-        )
+        if (staticChrome && frozenBackdrop != null) {
+            // Replay one GPU layer with full original Prismal blur, lens and
+            // specular; children and click highlights are NOT cached.
+            Box(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .clip(cardShape)
+                    .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            ) {
+                GuiFrozenPrismalChrome(
+                    backdrop = frozenBackdrop,
+                    shape = { PrismalRoundedRectangle(24.dp) },
+                    modifier = Modifier.matchParentSize(),
+                    blurRadius = 12.dp,
+                    refractionHeightPx = 16f,
+                    refractionAmountPx = 21f,
+                    chromaticAberration = 0.28f,
+                    tint = colors.surface,
+                    tintAlpha = 0.24f,
+                    saturation = 1.32f,
+                    depthEffect = true,
+                    surfaceColor = if (darkTheme) Color.White.copy(alpha = 0.055f)
+                        else Color.Unspecified,
+                )
+                Column(
+                    modifier = Modifier.padding(contentPadding),
+                    content = content,
+                )
+            }
+        } else {
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .clip(cardShape)
+                    .background(solidCardColor)
+                    .border(1.dp, cardStroke, cardShape)
+                    .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                    .padding(contentPadding),
+                content = content,
+            )
+        }
         return
     }
 
@@ -657,6 +711,9 @@ internal fun ModernSurface(
         .fillMaxWidth()
         .then(if (darkTheme) Modifier.border(1.dp, cardStroke, cardShape) else Modifier)
     val darkGlassWash = if (darkTheme) Color.White.copy(alpha = 0.055f) else Color.Unspecified
+    val lensHeightPx = if (edgeRefraction) 16f else 0f
+    val lensAmountPx = if (edgeRefraction) 21f else 0f
+    val lensDispersion = if (edgeRefraction) 0.28f else 0f
 
     val cardContent: @Composable BoxScope.() -> Unit = {
         Column(
@@ -676,9 +733,9 @@ internal fun ModernSurface(
             tint = MiuixTheme.colorScheme.surface,
             tintAlpha = 0.24f,
             saturation = 1.32f,
-            refractionHeightPx = 16f,
-            refractionAmountPx = 21f,
-            chromaticAberration = 0.28f,
+            refractionHeightPx = lensHeightPx,
+            refractionAmountPx = lensAmountPx,
+            chromaticAberration = lensDispersion,
             depthEffect = true,
             surfaceColor = darkGlassWash,
             content = cardContent,
@@ -693,9 +750,9 @@ internal fun ModernSurface(
             tint = MiuixTheme.colorScheme.surface,
             tintAlpha = 0.24f,
             saturation = 1.32f,
-            refractionHeightPx = 16f,
-            refractionAmountPx = 21f,
-            chromaticAberration = 0.28f,
+            refractionHeightPx = lensHeightPx,
+            refractionAmountPx = lensAmountPx,
+            chromaticAberration = lensDispersion,
             depthEffect = true,
             surfaceColor = darkGlassWash,
             content = cardContent,
@@ -795,32 +852,65 @@ internal fun Button(
     minWidth: Dp = 0.dp,
     minHeight: Dp = 36.dp,
     insideMargin: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+    destructive: Boolean = false,
+    // Only small numeric reset actions opt into native Prismal. Other body
+    // buttons keep their static cached/solid performance path.
+    prismalNumericAction: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current ?: LocalPrismalOverlayBackdrop.current
+    // This generic action is inside the scrolling page. Top-bar actions
+    // are rendered separately by ModernTopActionButton with Prismal.
+    val backdrop = if (prismalNumericAction) {
+        LocalTouchPrismalBackdrop.current
+    } else {
+        LocalPrismalSurfaceBackdrop.current
+    }
+    val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
     val resolved = modifier
         .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
-        // Solid +/- and reset buttons need a visible boundary even when disabled.
+        // Solid fallback actions need a visible boundary even when disabled.
+        // Numeric +/- and reset opt into native Prismal when GUI glass is on.
         .alpha(if (enabled) 1f else if (backdrop == null) 0.66f else 0.42f)
 
     if (backdrop == null) {
         val buttonShape = RoundedCornerShape(minHeight / 2)
-        val fillColor = lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
-        val outlineColor = colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
-        Row(
+        val frozenBackdrop = LocalFrozenPrismalBackdrop.current
+        val fillColor = if (destructive) Color(0xFFD73333)
+            else lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
+        val outlineColor = if (destructive) Color.White.copy(alpha = 0.16f)
+            else colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
+        Box(
             modifier = resolved
                 .height(minHeight)
                 .clip(buttonShape)
-                .background(fillColor, buttonShape)
+                .then(if (!destructive && staticChrome && frozenBackdrop != null) Modifier
+                    else Modifier.background(fillColor, buttonShape))
                 .border(1.dp, outlineColor, buttonShape)
-                .clickable(enabled = enabled, onClick = onClick)
-                .padding(insideMargin),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
+                .clickable(enabled = enabled, onClick = onClick),
+            contentAlignment = Alignment.Center,
         ) {
-            content()
+            if (!destructive && staticChrome && frozenBackdrop != null) {
+                GuiFrozenPrismalChrome(
+                    backdrop = frozenBackdrop,
+                    shape = { PrismalRoundedRectangle(minHeight / 2) },
+                    modifier = Modifier.matchParentSize(),
+                    blurRadius = 7.dp,
+                    refractionHeightPx = 9f,
+                    refractionAmountPx = 12f,
+                    tint = colors.surface,
+                    tintAlpha = 0.20f,
+                    depthEffect = false,
+                )
+            }
+            Row(
+                modifier = Modifier.padding(insideMargin),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                content()
+            }
         }
         return
     }
@@ -836,8 +926,8 @@ internal fun Button(
         refractionAmount = 12.dp,
         pressLift = 0.dp,
         contentPadding = insideMargin,
-        tint = MiuixTheme.colorScheme.surface,
-        tintAlpha = 0.20f,
+        tint = if (destructive) Color(0xFFD73333) else MiuixTheme.colorScheme.surface,
+        tintAlpha = if (destructive) 0.92f else 0.20f,
         depthEffect = false,
         depthShadow = null,
     ) {
@@ -879,7 +969,7 @@ internal fun SwitchPreference(
     enabled: Boolean = true,
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    val backdrop = LocalTouchPrismalBackdrop.current
     // Upstream Prismal remembers its gesture callbacks. Bridge them to the
     // latest setting state instead of retaining values from first composition.
     val selectedState = rememberUpdatedState(checked)
@@ -896,10 +986,11 @@ internal fun SwitchPreference(
         insideMargin = insideMargin,
         endActions = {
             if (backdrop != null) {
-                PrismalGlassToggle(
+                GuiOnTouchPrismalToggle(
                     selected = stableSelected,
                     onSelect = stableToggleChange,
                     backdrop = backdrop,
+                    enabled = enabled,
                 )
             } else {
                 top.yukonga.miuix.kmp.basic.Switch(
@@ -1030,7 +1121,7 @@ internal fun SliderPreference(
     endActions: @Composable (() -> Unit)? = null,
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
     var editingValue by remember(title) { mutableStateOf(false) }
     val intervals = (steps + 1).coerceAtLeast(1)
@@ -1079,12 +1170,13 @@ internal fun SliderPreference(
             },
         )
         if (backdrop != null) {
-            PrismalGlassSlider(
+            GuiOnTouchPrismalSlider(
                 value = stableSliderValue,
                 onValueChange = stableSliderChange,
                 valueRange = valueRange,
                 visibilityThreshold = stepSize,
                 backdrop = backdrop,
+                enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 18.dp, end = 18.dp, bottom = 14.dp)
@@ -1130,7 +1222,7 @@ internal fun ModernGlassSlider(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
     val sliderEnabledState = rememberUpdatedState(enabled)
     val sliderCallbackState = rememberUpdatedState(onValueChange)
@@ -1139,12 +1231,13 @@ internal fun ModernGlassSlider(
         { next -> if (sliderEnabledState.value) sliderCallbackState.value(next) }
     }
     if (backdrop != null) {
-        PrismalGlassSlider(
+        GuiOnTouchPrismalSlider(
             value = stableSliderValue,
             onValueChange = stableSliderChange,
             valueRange = valueRange,
             visibilityThreshold = visibilityThreshold,
             backdrop = backdrop,
+            enabled = enabled,
             modifier = modifier.alpha(if (enabled) 1f else 0.42f),
         )
     } else {
@@ -1168,7 +1261,9 @@ internal fun ModernGlassStepper(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    // The ordinary body surface backdrop is intentionally null. Restore
+    // native Prismal +/- through the same glass-only source used by sliders.
+    val backdrop = LocalTouchPrismalBackdrop.current
     if (backdrop != null) {
         PrismalGlassStepper(
             value = value,

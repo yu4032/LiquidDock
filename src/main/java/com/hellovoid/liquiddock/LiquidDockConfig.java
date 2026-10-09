@@ -351,7 +351,9 @@ final class LiquidDockConfig {
             normalStrength = c.i(ConfigSchema.Glass.NORMAL_STRENGTH.name(),
                     ConfigSchema.Glass.NORMAL_STRENGTH.runtimeFallback()) / 100f;
             dome = c.i(ConfigSchema.Glass.DOME.name(), ConfigSchema.Glass.DOME.runtimeFallback()) / 100f;
-            lensRefraction = c.f(ConfigSchema.Glass.LENS_REFRACTION.name(), 1.3f);
+            lensRefraction = clamp(c.f(ConfigSchema.Glass.LENS_REFRACTION.name(), 1.3f),
+                    ConfigSchema.Glass.LENS_REFRACTION.minInt(),
+                    ConfigSchema.Glass.LENS_REFRACTION.maxInt());
     depthEffect = c.i(ConfigSchema.Glass.DEPTH_EFFECT.name(),
             ConfigSchema.Glass.DEPTH_EFFECT.runtimeFallback()) / 100f;
     highlightWidth = c.i(ConfigSchema.Glass.HIGHLIGHT_WIDTH.name(),

@@ -43,7 +43,7 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue(dialog.contains("onClick = { onToggle(item.id, !checked) }"));
         assertTrue(dialog.contains("val checked = item.id in selected"));
         assertTrue(dialog.contains("RestartScopeToggle("));
-        assertTrue(dialog.contains("PrismalGlassToggle("));
+        assertTrue(dialog.contains("GuiOnTouchPrismalToggle("));
         assertTrue(dialog.contains("selected = selectedProvider,"));
         assertTrue(dialog.contains("onSelect = stableToggle,"));
         assertTrue(dialog.contains("val currentChecked = rememberUpdatedState(checked)"));

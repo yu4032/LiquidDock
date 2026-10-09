@@ -16,17 +16,19 @@ public final class ConfigCodec {
             out.put(key.name(), exportValue(key, preferences));
         }
         ThirdPartyGlassConfigCodec.exportInto(preferences, out);
+        ScopedGlassConfigCodec.exportInto(preferences, out);
         return out;
     }
 
     public static LinkedHashMap<String, Object> importValues(Map<String, ?> jsonValues) {
         LinkedHashMap<String, Object> out = new LinkedHashMap<>();
-        importMandatoryGridMigrationFlags(jsonValues, out);
+        importPresentGridMigrationFlags(jsonValues, out);
         for (ConfigKey<?> key : ConfigSchema.all()) {
             if (!isDirectlyImportable(key) || !jsonValues.containsKey(key.name())) continue;
             importValue(key, jsonValues.get(key.name()), out);
         }
         ThirdPartyGlassConfigCodec.importInto(jsonValues, out);
+        ScopedGlassConfigCodec.importInto(jsonValues, out);
         importLegacyHorizontalMargins(jsonValues, out);
         importPreAxisLegacyMargins(jsonValues, out);
         importLegacyWorkstationAllAppsOffsets(jsonValues, out);
@@ -51,12 +53,18 @@ public final class ConfigCodec {
         return key.exportMode() != ConfigKey.ExportMode.NEVER;
     }
 
-    private static void importMandatoryGridMigrationFlags(Map<String, ?> jsonValues,
-                                                            Map<String, Object> out) {
-        out.put(ConfigSchema.Grid.MARGINS_DP.name(), booleanValue(
-                jsonValues.get(ConfigSchema.Grid.MARGINS_DP.name())));
-        out.put(ConfigSchema.Grid.MARGINS_OFFSET.name(), booleanValue(
-                jsonValues.get(ConfigSchema.Grid.MARGINS_OFFSET.name())));
+    private static void importPresentGridMigrationFlags(Map<String, ?> jsonValues,
+                                                         Map<String, Object> out) {
+        // A partial or historical backup must not silently disable current grid geometry.
+        // Only explicit values in the incoming JSON are permitted to override these keys.
+        if (jsonValues.containsKey(ConfigSchema.Grid.MARGINS_DP.name())) {
+            out.put(ConfigSchema.Grid.MARGINS_DP.name(), booleanValue(
+                    jsonValues.get(ConfigSchema.Grid.MARGINS_DP.name())));
+        }
+        if (jsonValues.containsKey(ConfigSchema.Grid.MARGINS_OFFSET.name())) {
+            out.put(ConfigSchema.Grid.MARGINS_OFFSET.name(), booleanValue(
+                    jsonValues.get(ConfigSchema.Grid.MARGINS_OFFSET.name())));
+        }
     }
 
     private static void importValue(ConfigKey<?> key, Object value, Map<String, Object> out) {

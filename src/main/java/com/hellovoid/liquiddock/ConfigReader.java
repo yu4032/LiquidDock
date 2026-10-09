@@ -53,6 +53,14 @@ public class ConfigReader {
     /** Content identity for deciding whether a long-lived injected runtime must refresh. */
     int snapshotHash() { return prefs.hashCode(); }
 
+    /** Copy-on-write overlay for one app's independent optics, never mutating global config. */
+    ConfigReader withOverrides(Map<String, Object> updates) {
+        if (updates == null || updates.isEmpty()) return this;
+        HashMap<String, Object> combined = new HashMap<>(prefs);
+        combined.putAll(updates);
+        return new ConfigReader(combined);
+    }
+
     public boolean has(String key) { return prefs.containsKey(key); }
 
     public String s(String key, String def) {

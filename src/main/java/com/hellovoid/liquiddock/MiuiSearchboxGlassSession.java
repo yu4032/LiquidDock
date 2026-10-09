@@ -99,8 +99,10 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         quadBuffer.put(QUAD).position(0);
 
         float density = root.getResources().getDisplayMetrics().density;
-        Miuix307PrismalMaterial.Params optical = glassConfig != null
-                ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
+        LiquidDockConfig.Glass scopedGlass = ScopedGlassOptics.resolve(
+                ConfigReader.load(), glassConfig, ScopedGlassOptics.SEARCHBOX);
+        Miuix307PrismalMaterial.Params optical = scopedGlass != null
+                ? Miuix307PrismalMaterial.fromConfig(scopedGlass, density)
                 : Miuix307PrismalMaterial.defaults(density);
         PrismalParams baseParams = Miuix307PrismalAdapter.toPortable(optical);
         prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
@@ -138,7 +140,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
         PrismalParams next = ThirdPartyPrismalParams.apply(
                 Miuix307PrismalAdapter.toPortable(
-                        Miuix307PrismalMaterial.fromConfig(glass, density)), appearance);
+                        Miuix307PrismalMaterial.fromConfig(
+                                ScopedGlassOptics.resolve(ConfigReader.load(), glass,
+                                        ScopedGlassOptics.SEARCHBOX), density)), appearance);
         boolean blurChanged = Float.compare(appliedBlur, appearance.blur) != 0;
         appliedBlur = appearance.blur;
         prismalParams = next;

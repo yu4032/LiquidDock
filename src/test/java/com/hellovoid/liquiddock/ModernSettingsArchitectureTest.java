@@ -30,10 +30,32 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentsPage.kt");
     private static final Path GBOARD = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt");
+    private static final Path SEARCHBOX_PAGE = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SearchboxSettingsPage.kt");
     private static final Path DIALOG_GLASS = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt");
     private static final Path SIDE_SLIDE = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/SideSlideHoldSetting.kt");
+
+    @Test
+    public void dangerousGridEditsAreCheckedBeforePersistenceAndDisplayLargeWarning() throws Exception {
+        String gui = Files.readString(UI);
+        String bridge = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/LauncherManualDiscoveryBridge.java"));
+        String client = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/GridWidget4x2PreflightClient.java"));
+
+        assertTrue(gui.contains("GridWidget4x2PreflightPolicy.needsCheck(current, target)"));
+        assertTrue(gui.contains("GridWidget4x2PreflightClient.start("));
+        assertTrue(gui.contains("GridWidget4x2PreflightClient.CLEAR ->"));
+        assertTrue(gui.contains("gridCheck[0]?.cancel()"));
+        assertTrue(gui.contains("beforeSave: ((Float, () -> Unit) -> Unit)? = null"));
+        assertTrue(gui.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
+        assertTrue(gui.contains("minWidth = 164.dp"));
+        assertTrue(gui.contains("minHeight = 42.dp"));
+        assertTrue(bridge.contains("new String[]{\"container\", \"spanX\", \"spanY\"}"));
+        assertTrue(client.contains("private static final long TIMEOUT_MS = 4500L"));
+    }
 
     @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
@@ -84,6 +106,82 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void topAndBottomKeepLivePrismalButBodyGlassesSampleOnlyOnTouch() throws Exception {
+        String ui = Files.readString(SURFACES);
+        String slider = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        String toggle = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
+
+        assertTrue(ui.contains("val surfaceBackdrop: PrismalBackdrop? = null"));
+        assertTrue(ui.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
+        assertTrue(ui.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
+        assertTrue(ui.contains("GuiPrismalFlatHeader("));
+        assertTrue(ui.contains("PrismalGlassBottomTabs("));
+        assertTrue(ui.contains("GuiOnTouchPrismalSlider("));
+        assertTrue(ui.contains("GuiOnTouchPrismalToggle("));
+        assertTrue(ui.contains("val backdrop = LocalPrismalSurfaceBackdrop.current"));
+        assertTrue(slider.contains("if (sampling) Modifier.prismalGlassLayer(trackBackdrop) else Modifier"));
+        assertTrue(toggle.contains("if (samplingEnabled) Modifier.prismalGlassLayer(trackBackdrop) else Modifier"));
+        assertTrue(slider.contains("if (sampling) Modifier.drawPrismalGlass("));
+        assertTrue(toggle.contains("if (samplingEnabled) Modifier.drawPrismalGlass("));
+        assertTrue(slider.contains("onDragStarted = {"));
+        assertTrue(toggle.contains("onDragStarted = { sampling = true }"));
+        assertTrue(slider.contains("val sampling = enabled && (isDragging || isTrackPressed)"));
+        assertTrue(toggle.contains("val samplingEnabled = enabled && sampling"));
+        assertTrue(slider.contains("if (enabled) dampedDragAnimation.modifier else Modifier"));
+        assertTrue(toggle.contains("if (enabled) dampedDragAnimation.modifier else Modifier"));
+    }
+
+    @Test
+    public void staticGuiReplaysRealCachedPrismalUnderLiveSettingsContent() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String ui = Files.readString(UI);
+        String frozen = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiFrozenPrismalChrome.kt"));
+        assertTrue(surfaces.contains("LocalFrozenPrismalBackdrop provides frozenBackdrop"));
+        assertTrue(surfaces.contains("GuiFrozenPrismalChrome("));
+        assertTrue(surfaces.contains("refractionHeightPx = 16f,"));
+        assertTrue(surfaces.contains("refractionAmountPx = 21f,"));
+        assertTrue(surfaces.contains("chromaticAberration = 0.28f,"));
+        assertTrue(frozen.contains("val layer = rememberGraphicsLayer()"));
+        assertTrue(frozen.contains("layer.record(dimensions)"));
+        assertTrue(frozen.contains("drawLayer(layer)"));
+        assertTrue(frozen.contains("PrismalGlassSurface("));
+        assertTrue(frozen.contains("onClick = null,"));
+        assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(ui.contains("private fun GlassIconsPage("));
+    }
+
+    @Test
+    public void workstationDockGuiOmitsBrokenControlsButKeepsTheirConfigSchema() throws Exception {
+        String ui = Files.readString(UI);
+        assertTrue(ui.contains("工作台 Dock 图标垂直偏移"));
+        assertFalse(ui.contains("工作台 Dock 图标上间距"));
+        assertFalse(ui.contains("工作台 Dock 图标下间距"));
+        assertFalse(ui.contains("工作台 Dock 长度偏移"));
+        assertTrue(ui.contains("ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,"));
+        assertFalse(ui.contains("IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,"));
+        assertFalse(ui.contains("IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,"));
+    }
+
+    @Test
+    public void groupedPrismalCardsBoundOffscreenLayersWithoutNestedScroll() throws Exception {
+        String ui = Files.readString(UI);
+        assertTrue(ui.contains("private fun LazyListScope.groupedIntSettings("));
+        assertTrue(ui.contains("items(specs.chunked(3), key = { group ->"));
+        assertTrue(ui.contains("group.forEachIndexed { index, spec ->"));
+        assertTrue(ui.contains("groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)"));
+        assertTrue(ui.contains("groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)"));
+        assertTrue(ui.contains("item(key = \"icons-glass-toggles\")"));
+        assertTrue(ui.contains("item(key = \"icons-glass-geometry\")"));
+        assertTrue(ui.contains("item(key = \"icons-glass-highlights\")"));
+        assertTrue(ui.contains("private fun GlassIconsPage("));
+        assertTrue(ui.contains("DenseSettingsList(\n        padding,\n        stringResource(R.string.page_glass_icons)"));
+    }
+
+    @Test
     public void denseSettingsScrollTheWholePageWithLazyMovingGlassCells() throws Exception {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
@@ -100,7 +198,7 @@ public class ModernSettingsArchitectureTest {
         // Each child is a lazy item with its own Prismal glass card, not a
         // viewport-height static card enclosing an independently scrolling list.
         assertFalse(ui.contains(".weight(1f)\n                .padding(horizontal = 14.dp)"));
-        assertTrue(surfaces.contains("PrismalGlassSlider("));
+        assertTrue(surfaces.contains("GuiOnTouchPrismalSlider("));
         assertTrue(surfaces.contains("PrismalGlassStepper("));
     }
 
@@ -175,6 +273,66 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void singlePreferenceObserverRefreshesOnlyChangedControls() throws Exception {
+        String ui = Files.readString(UI);
+        assertTrue(ui.contains("LocalSettingsPreferenceRevisions"));
+        assertTrue(ui.contains("preferences.registerOnSharedPreferenceChangeListener(listener)"));
+        assertTrue(ui.contains("preferences.unregisterOnSharedPreferenceChangeListener(listener)"));
+        assertTrue(ui.contains("val revision = LocalSettingsPreferenceRevisions.current[key]"));
+        assertTrue(ui.contains("LaunchedEffect(spec.key, maxValue, storedRevision)"));
+        assertTrue(ui.contains("var value by remember(spec.key, maxValue)"));
+    }
+
+    @Test
+    public void scopedGlassCellsStaySeparatedAndResetActionsAreCenteredEqually() throws Exception {
+        String scoped = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ScopedGlassSettingsPage.kt"));
+        String ui = Files.readString(UI);
+        assertTrue(scoped.contains("verticalArrangement = Arrangement.spacedBy(8.dp)"));
+        assertTrue(ui.contains("horizontalArrangement = Arrangement.spacedBy(12.dp)"));
+        assertTrue(ui.contains("modifier = Modifier.weight(1f)"));
+        assertTrue(ui.contains("minHeight = 42.dp"));
+        assertTrue(ui.contains("destructive = true"));
+    }
+
+    @Test
+    public void defaultPresetRequiresConfirmationAndRecreatesSettingsState() throws Exception {
+        String ui = Files.readString(UI);
+        assertTrue(ui.contains("confirmDefaultReset = true"));
+        assertTrue(ui.contains("WindowDialog("));
+        assertTrue(ui.contains("确认恢复默认配置"));
+        assertTrue(ui.contains("activity.recreate()"));
+    }
+
+    @Test
+    public void widgetDirectoryDoesNotComposeAllGroupsInOneLazyItem() throws Exception {
+        String catalog = Files.readString(WIDGET_COMPONENTS);
+        assertTrue(catalog.contains("groups.chunked(6).forEach"));
+        assertTrue(catalog.contains("item(key = \"widget-groups:"));
+    }
+
+    @Test
+    public void separateApplicationPagesExposeScopedFullOpticalSettings() throws Exception {
+        String shell = Files.readString(UI);
+        String gboard = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt"));
+        String search = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SearchboxSettingsActivity.kt"));
+        String dialog = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt"));
+        String page = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ScopedGlassSettingsPage.kt"));
+        assertTrue(shell.contains("Page.GboardAll -> ScopedGlassSettingsPage("));
+        assertTrue(shell.contains("Page.DialogAll -> ScopedGlassSettingsPage("));
+        assertTrue(gboard.contains("调整 Gboard 专属的完整 Prismal 光学参数"));
+        assertTrue(Files.readString(SEARCHBOX_PAGE).contains("调整系统搜索专属的完整 Prismal 光学参数"));
+        assertTrue(dialog.contains("调整桌面对话弹窗专属 Prismal 光学参数"));
+        assertTrue(search.contains("ScopedGlassOptics.SEARCHBOX"));
+        assertTrue(page.contains("ScopedGlassOptics.key(scope, d.config)"));
+        assertTrue(page.contains("恢复全部参数继承"));
+    }
+
+    @Test
     public void parameterRecompositionDoesNotRereadStoredInitialState() throws Exception {
         String ui = Files.readString(UI);
 
@@ -202,7 +360,8 @@ public class ModernSettingsArchitectureTest {
 
         // +/- and reset share Button's fallback and must have their own outline.
         assertTrue(surfaces.contains("val buttonShape = RoundedCornerShape(minHeight / 2)"));
-        assertTrue(surfaces.contains("val fillColor = lerp(colors.surface, colors.onSurface,"));
+        assertTrue(surfaces.contains("val fillColor = if (destructive) Color(0xFFD73333)"));
+        assertTrue(surfaces.contains("else lerp(colors.surface, colors.onSurface,"));
         assertTrue(surfaces.contains(".border(1.dp, outlineColor, buttonShape)"));
         assertTrue(surfaces.contains("else if (backdrop == null) 0.66f"));
 
@@ -229,8 +388,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassButton"));
         assertTrue(source.contains("PrismalGlassBottomTabs"));
         assertTrue(source.contains("PrismalGlassBottomTab"));
-        assertTrue(source.contains("PrismalGlassToggle"));
-        assertTrue(source.contains("PrismalGlassSlider"));
+        assertTrue(source.contains("GuiOnTouchPrismalToggle"));
+        assertTrue(source.contains("GuiOnTouchPrismalSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
         assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 14f"));
         assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
@@ -457,6 +616,20 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void numericStepperAndResetKeepNativePrismalWhileOtherCellsStayStatic() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String ui = Files.readString(UI);
+        assertTrue(surfaces.contains("val surfaceBackdrop: PrismalBackdrop? = null"));
+        assertTrue(surfaces.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
+        assertTrue(surfaces.contains("val backdrop = if (prismalNumericAction) {"));
+        assertTrue(surfaces.contains("prismalNumericAction: Boolean = false"));
+        assertTrue(surfaces.contains("val backdrop = LocalTouchPrismalBackdrop.current\n    if (backdrop != null) {\n        PrismalGlassStepper("));
+        assertTrue(surfaces.contains("PrismalGlassButton("));
+        assertTrue(ui.contains("prismalNumericAction = true,"));
+        assertTrue(ui.contains("ModernGlassStepper("));
+    }
+
+    @Test
     public void prismalSliderObservesExternalStepperAndResetUpdates() throws Exception {
         String surfaces = Files.readString(SURFACES);
         assertTrue(surfaces.contains("val currentValue by rememberUpdatedState(value)"));
@@ -599,6 +772,7 @@ public class ModernSettingsArchitectureTest {
         String compose = Files.readString(UI);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
+        String searchPage = Files.readString(SEARCHBOX_PAGE);
         String widgetCatalog = Files.readString(WIDGET_COMPONENTS);
         String widgetDetail = Files.readString(WIDGET_DETAIL);
         String dialog = Files.readString(DIALOG_GLASS);
@@ -607,7 +781,7 @@ public class ModernSettingsArchitectureTest {
 
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
-                .matcher(compose + "\n" + gboard + "\n" + search + "\n"
+                .matcher(compose + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
@@ -617,7 +791,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(configRefs.contains("ConfigSchema.Glass.PRISMAL_SHOW_NORMALS"));
 
         assertTrue(countDistinctRefs(gboard, "GboardGlassPreferences") >= 11);
-        assertTrue(countDistinctRefs(gboard, "MiuiSearchboxGlassPreferences") >= 7);
+        assertTrue(countDistinctRefs(searchPage, "MiuiSearchboxGlassPreferences") >= 7);
         assertTrue(countDistinctRefs(widgetCatalog + "\n" + widgetDetail, "WidgetComponentStore") >= 15);
     }
 

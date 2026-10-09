@@ -26,7 +26,7 @@ public final class PrismalSampling {
         float lensPx = clamp(
                 refractionHeight * 2f * Math.abs(p.displacementScale)
                         * Math.abs(p.lensRefractionScale),
-                4f,
+                0f,
                 Math.max(4f, Math.min(width, height) * 0.85f));
         float lens = lensPx * 1.45f * 1.12f;
         float parallax = 29f * 0.052f * Math.abs(p.displacementScale)

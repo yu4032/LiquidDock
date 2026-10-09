@@ -363,7 +363,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> DOME = integer(
                 "liquid_dome", 130, 130, 100, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LENS_REFRACTION = dp(
-                "liquid_lens_refraction", 1, 1, 12, 0, 60, ConfigKey.ExportMode.ALWAYS);
+                "liquid_lens_refraction", 1, 1, 12, 0, 8, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_SCALE = integer(
                 "liquid_capture_scale", 50, 50, 50, 10, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PASSBLUR_CAPTURE_SCALE = integer(

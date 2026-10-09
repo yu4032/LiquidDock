@@ -13,10 +13,34 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("#extension GL_OES_standard_derivatives : enable"));
         assertTrue(patched.contains("float opticalEdgeScale = clamp(u_highlightWidth, 0.5, 3.0);"));
         assertTrue(patched.contains("float edgeAa = max(fwidth(distMask), 0.75);"));
-        assertTrue(patched.contains("smoothstep(-edgeAa, edgeAa, distMask)"));
+        assertTrue(patched.contains("float insetShiftPx = clamp((u_refractionInset - 20.0) * 0.25,"));
+        assertTrue(patched.contains("edgeAa - insetShiftPx, distMask)"));
+        assertFalse(patched.contains("smoothstep(-edgeAa, edgeAa, distMask)"));
         assertTrue(patched.contains("bandFracR * opticalEdgeScale"));
         assertTrue(patched.contains("0.09 * opticalEdgeScale"));
         assertTrue(patched.contains("tw * 0.42 * opticalEdgeScale"));
+    }
+
+    @Test
+    public void shadowSoftnessIsMonotonicAndKeepsTheShippedDefault() {
+        String patched = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
+        assertTrue(patched.contains("clamp(u_shadowSoftness / 20.0, 0.0, 1.0)"));
+        assertFalse(patched.contains("u_shadowSoftness > 1.0"));
+        float previous = -1f;
+        for (int saved = 0; saved <= 2000; saved++) {
+            float t = Math.min(1f, Math.max(0f, saved / 2000f));
+            float extent = 0.15f + (0.60f - 0.15f) * t;
+            assertTrue(extent >= previous);
+            previous = extent;
+            if (saved == 1000) org.junit.Assert.assertEquals(0.375f, extent, 0.00001f);
+        }
+    }
+
+    @Test
+    public void vibrancyWorksBelowNeutral100Percent() {
+        String patched = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
+        assertTrue(patched.contains("if (abs(sat - 1.0) <= 0.001) return rgb;"));
+        assertFalse(patched.contains("if (sat <= 1.001) return rgb;"));
     }
 
     @Test

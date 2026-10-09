@@ -135,29 +135,33 @@ internal fun WidgetComponentsPage(
             }
         } else {
             item { SmallTitle("已载入小组件") }
-            item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    Column {
-                        groups.forEachIndexed { index, (key, components) ->
-                            val first = components.first()
-                            val selectedCount = components.count { it.selectorKey() in selected }
-                            val source = if (first.isMaml()) "MAML" else "RemoteViews"
-                            val likelyCount = components.count(WidgetComponentRanking::isLikelyBackground)
-                            ArrowPreference(
-                                title = first.displayOwner(),
-                                summary = buildString {
-                                    append("$source · 已隐藏 $selectedCount / ${components.size}")
-                                    if (likelyCount > 0) append(" · 疑似背景 $likelyCount")
-                                },
-                                onClick = {
-                                    activity.startActivity(
-                                        Intent(activity, WidgetComponentDetailActivity::class.java)
-                                            .putExtra(WidgetComponentDetailActivity.EXTRA_WIDGET_KEY, key)
-                                    )
-                                },
-                            )
-                            if (index != groups.lastIndex) {
-                                ModernListDivider()
+            // Bound each LazyColumn item rather than composing every discovered provider
+            // into one giant card. Keep grouping and the exact node-navigation keys.
+            groups.chunked(6).forEach { batch ->
+                item(key = "widget-groups:${batch.first().key}") {
+                    Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                        Column {
+                            batch.forEachIndexed { index, (key, components) ->
+                                val first = components.first()
+                                val selectedCount = components.count { it.selectorKey() in selected }
+                                val source = if (first.isMaml()) "MAML" else "RemoteViews"
+                                val likelyCount = components.count(WidgetComponentRanking::isLikelyBackground)
+                                ArrowPreference(
+                                    title = first.displayOwner(),
+                                    summary = buildString {
+                                        append("$source · 已隐藏 $selectedCount / ${components.size}")
+                                        if (likelyCount > 0) append(" · 疑似背景 $likelyCount")
+                                    },
+                                    onClick = {
+                                        activity.startActivity(
+                                            Intent(activity, WidgetComponentDetailActivity::class.java)
+                                                .putExtra(WidgetComponentDetailActivity.EXTRA_WIDGET_KEY, key)
+                                        )
+                                    },
+                                )
+                                if (index != batch.lastIndex) {
+                                    ModernListDivider()
+                                }
                             }
                         }
                     }

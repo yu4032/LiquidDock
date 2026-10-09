@@ -37,6 +37,12 @@ public class PrismalOfficialParityV3Test {
     }
 
     @Test
+    public void manualDepthZeroLeavesCurrentSingleEdgeOpticsNeutral() {
+        assertEquals(0f, Miuix307PrismalMaterial.resolveLensDepth(1.15f, 0f), EPS);
+        assertEquals(0.5f, Miuix307PrismalMaterial.resolveLensDepth(1.15f, 0.5f), EPS);
+    }
+
+    @Test
     public void defaultConfigurationUsesBundledOpticalProfile() {
         Map<String, Object> p = PresetManager.defaultValues();
 
