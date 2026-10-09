@@ -42,7 +42,9 @@ final class SystemUiKeyguardGoneSource {
                     try {
                         // In-flight callbacks may finish after an uninstall request. Never
                         // publish a broadcast or mutate policy state for a stopped generation.
-                        if (step != null && DOMAIN.isActive()) onTransitionStep(step);
+                        if (step != null) {
+                            DOMAIN.runActiveSideEffect(() -> onTransitionStep(step));
+                        }
                     } catch (Throwable error) {
                         // Never let LiquidDock observation failures escape into SystemUI's keyguard
                         // transition path. Even diagnostic logging is best-effort only.
