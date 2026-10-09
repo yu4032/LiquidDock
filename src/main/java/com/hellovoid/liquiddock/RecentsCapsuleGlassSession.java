@@ -77,6 +77,7 @@ final class RecentsCapsuleGlassSession {
     private volatile boolean shuttingDown;
     private volatile boolean recentsVisible;
     private volatile boolean backdropPrepared;
+    private boolean firstSharedFrameReported;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean clearAllPresentationSignaled;
@@ -129,7 +130,12 @@ final class RecentsCapsuleGlassSession {
     void onRecentsShown() {
         if (shuttingDown) return;
         recentsVisible = true;
+        firstSharedFrameReported = false;
         workspaceSourceOwner.resumeRecentsSharedSource(this);
+    }
+
+    boolean isRecentsVisible() {
+        return recentsVisible && !shuttingDown;
     }
 
     void onRecentsHidden() {
@@ -209,6 +215,13 @@ final class RecentsCapsuleGlassSession {
                     prismalParams);
             backdropPrepared = true;
             renderCurrent();
+            if (MainHook.debugLogging && !firstSharedFrameReported) {
+                firstSharedFrameReported = true;
+                MainHook.log(TAG + " first shared frame rendered gen=" + frame.generation
+                        + " size=" + frame.logicalWidth + "x" + frame.logicalHeight
+                        + " outputs=" + (clearAllOutput != null) + "/"
+                        + (worldOutput != null));
+            }
         } catch (Throwable error) {
             notifyFailure(error);
         }

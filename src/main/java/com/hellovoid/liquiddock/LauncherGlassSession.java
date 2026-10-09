@@ -255,6 +255,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (recentsConsumer == child) recentsConsumer = null;
     }
 
+    boolean hasVisibleRecentsConsumer() {
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        return !shuttingDown && child != null && child.isRecentsVisible();
+    }
+
     void resumeRecentsSharedSource(RecentsCapsuleGlassSession child) {
         if (shuttingDown || recentsConsumer != child || sourceBackend.isShutdown()) return;
         // The SceneController pauses this *same* producer when Recents covers Workspace.
@@ -1009,6 +1014,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 || frame.generation != sceneGeneration || rotationSettlePending) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
+        // The Recents child uses this OES frame on the same GL thread, with its own geometry.
+        // Never reject its frame because Workspace static-output geometry is temporarily stale
+        // or a HOME-only Prismal parameter is unavailable during the Recents transition.
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        if (child != null) child.onSharedSourceFrame(backend, frame);
+        if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
+
         PrismalParams params = prismalParams;
         if (params == null) return;
         OutputState currentOutput = staticOutput;
@@ -1040,11 +1052,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             return;
         }
-        RecentsCapsuleGlassSession child = recentsConsumer;
-        if (child != null) child.onSharedSourceFrame(backend, frame);
-        // Recents owns the visible screen while covered; only its two capsules need shading.
-        if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
-
         boolean trace = MainHook.debugLogging && workspaceSource;
         if (trace) Trace.beginSection("LD.Workspace.SourceFrame");
         try {

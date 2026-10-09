@@ -379,7 +379,12 @@ final class LauncherGlassSceneController {
         state.onRootReady();
         if (layer == null) layer = LauncherGlassStaticLayer.acquire(root, session);
         applyLayerVisibility();
-        if (state.state() == State.COVERED
+        // Recents capsules share this exact root producer. A late Workspace root-ready event
+        // must not turn it off again after the capsule has resumed it for visible Recents.
+        // Folder / unlock / wallpaper-settle remain independent, stronger stop authorities.
+        boolean coveredWithoutSharedRecents = state.state() == State.COVERED
+                && !(recentsCovered && session.hasVisibleRecentsConsumer());
+        if (coveredWithoutSharedRecents || folderCovered
                 || (unlockTransitionPending
                     && LauncherGlassHomePresentationHook.isUnlockProducerBlocked())
                 || recentsWallpaperSettlePending) {

@@ -157,10 +157,16 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(registry.contains("static synchronized LauncherGlassSession existingRootSource"));
         assertTrue(workspace.contains("child.onSharedSourceFrame(backend, frame)"));
         assertTrue(workspace.contains("sourceBackend.setUpdatesEnabled(true, \"recents-shared-root-live\")"));
+        assertTrue(workspace.contains("child.onSharedSourceFrame(backend, frame)"));
+        assertTrue(workspace.contains("hasVisibleRecentsConsumer()"));
+        assertTrue(session.contains("boolean isRecentsVisible()"));
         assertTrue(session.contains("workspaceSourceOwner.detachRecentsConsumer(this)"));
         assertFalse(session.contains("sourceBackend.shutdown()"));
         assertFalse(session.contains("SetPassBlurSurface"));
         assertFalse(session.contains("new RootPassBlurBackend("));
         assertTrue(request.contains("RECENTS_CAPSULE_EXTRA_EXCLUSIONS"));
+        String controller = read("LauncherGlassSceneController.java");
+        assertTrue(controller.contains("coveredWithoutSharedRecents"));
+        assertTrue(controller.contains("session.hasVisibleRecentsConsumer()"));
     }
 }
