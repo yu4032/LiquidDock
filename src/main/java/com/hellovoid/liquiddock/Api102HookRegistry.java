@@ -10,10 +10,11 @@ import java.util.Map;
 import io.github.libxposed.api.XposedInterface;
 
 /**
- * Stage-one owner for API 102 hook IDs and handles. It owns only explicitly enrolled hooks.
+ * API 102 hook ledger. Explicitly named hooks are eligible for future replacement;
+ * legacy HookUtil/direct interceptors are counted but never implicitly replaced.
  *
  * <p>Do not infer hot-reload readiness from this registry: native producers, listeners,
- * receivers and other HookUtil/direct-hook callers are not enrolled yet. No retained HookHandle
+ * receivers and long-lived Android callbacks are not owned by this registry. No retained HookHandle
  * or Hooker may be transferred through HotReloadingParam saved instance state.</p>
  */
 final class Api102HookRegistry {
@@ -29,6 +30,9 @@ final class Api102HookRegistry {
 
     private final Installer installer;
     private final Map<String, XposedInterface.HookHandle> handles = new LinkedHashMap<>();
+    // Existing HookUtil callers can install multiple callbacks on the same Method. Retain each
+    // returned handle without assigning a fake ID or changing its installation semantics.
+    private final List<XposedInterface.HookHandle> unnamedHandles = new ArrayList<>();
 
     Api102HookRegistry(Installer installer) {
         if (installer == null) throw new IllegalArgumentException("installer");
@@ -68,6 +72,10 @@ final class Api102HookRegistry {
         return PROCESS.count();
     }
 
+    static void registerUnidentified(XposedInterface.HookHandle handle) {
+        PROCESS.trackUnidentified(handle);
+    }
+
     synchronized XposedInterface.HookHandle install(
             Method method, String id, XposedInterface.Hooker callback) {
         if (method == null || callback == null || id == null || id.isBlank()) {
@@ -104,7 +112,16 @@ final class Api102HookRegistry {
     }
 
     synchronized int count() {
-        return handles.size();
+        return handles.size() + unnamedHandles.size();
+    }
+
+    synchronized int unidentifiedCount() {
+        return unnamedHandles.size();
+    }
+
+    synchronized void trackUnidentified(XposedInterface.HookHandle handle) {
+        if (handle == null) throw new IllegalArgumentException("HookHandle");
+        unnamedHandles.add(handle);
     }
 
     synchronized List<String> idSnapshot() {
