@@ -104,20 +104,32 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void chevronPageCellsClickWithoutInteractivePrismalSurfaceScale() throws Exception {
+    public void chevronPageCellsRetainPrismalRippleWithoutGeometryMotion() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String navigationSurface = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
 
-        // Layout/API guard: only ModernFeatureCard reroutes page navigation to
-        // ordinary clickable, avoiding PrismalGlassSurface's animated press scale.
+        // Static architecture/API contract, not an inference about device frame times.
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
-        assertTrue(surfaces.contains(
-                "modifier = modifier.clickable(onClick = onClick),\n        onClick = null,"));
-        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(24.dp) },"));
-        assertTrue(surfaces.contains("PrismalGlassSurface("));
-        // The reusable surface remains interactive for other callers.
+        assertTrue(surfaces.contains("staticPress = true,"));
+        assertTrue(surfaces.contains("GuiStaticPressPrismalSurface("));
         assertTrue(surfaces.contains("onClick = onClick,"));
+        assertTrue(surfaces.contains("PrismalGlassSurface("));
         assertTrue(surfaces.contains("internal fun ArrowPreference("));
         assertTrue(surfaces.contains("imageVector = MiuixIcons.Basic.ArrowRight"));
+
+        assertTrue("original press highlight/ripple must be preserved",
+                navigationSurface.contains("PrismalPressRipple("));
+        assertTrue(navigationSurface.contains(".then(pressRipple.modifier)"));
+        assertTrue(navigationSurface.contains(".then(pressRipple.gestureModifier)"));
+        assertTrue(navigationSurface.contains("drawPrismalGlass("));
+        assertTrue(navigationSurface.contains("drawPrismalGlassTint("));
+        assertTrue(navigationSurface.contains("applyPrismalGlassEffects("));
+        assertTrue(navigationSurface.contains("role = Role.Button"));
+        assertFalse("navigation press may not transform the whole glass Cell",
+                navigationSurface.contains("layerBlock ="));
+        assertFalse(navigationSurface.contains("translationX ="));
+        assertFalse(navigationSurface.contains("scaleX ="));
     }
 
     @Test
