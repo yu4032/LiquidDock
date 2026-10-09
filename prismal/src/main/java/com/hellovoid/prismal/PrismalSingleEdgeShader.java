@@ -24,11 +24,16 @@ final class PrismalSingleEdgeShader {
                 // Keep straight edges translation-invariant. Only rounded corners allow a
                 // manual centerward bend; depth 0 preserves the current optical field.
                 vec2 lensDir = length(gradLens) > 1e-5 ? normalize(gradLens) : vec2(0.0);
-                vec2 radialDir = normalize(cKy + vec2(1e-4, 1e-4));
-                float cornerWeight = smoothstep(0.55, 0.95, abs(cKy.x) / max(halfSz.x, 1.0))
-                                   * smoothstep(0.55, 0.95, abs(cKy.y) / max(halfSz.y, 1.0));
-                vec2 bentDir = lensDir + radialDir * clamp(u_lensDepthEffect, 0.0, 1.0) * cornerWeight;
-                lensDir = length(bentDir) > 1e-5 ? normalize(bentDir) : vec2(0.0);
+                // The default 0 control skips the additional per-fragment corner math.
+                if (u_lensDepthEffect > 0.001) {
+                    float cornerWeight = smoothstep(0.55, 0.95, abs(cKy.x) / max(halfSz.x, 1.0))
+                                       * smoothstep(0.55, 0.95, abs(cKy.y) / max(halfSz.y, 1.0));
+                    if (cornerWeight > 0.0) {
+                        vec2 radialDir = normalize(cKy + vec2(1e-4, 1e-4));
+                        vec2 bentDir = lensDir + radialDir * clamp(u_lensDepthEffect, 0.0, 1.0) * cornerWeight;
+                        lensDir = length(bentDir) > 1e-5 ? normalize(bentDir) : vec2(0.0);
+                    }
+                }
             """;
 
     private static final String UPSTREAM_TRANSMITTED_BLOCK = """
