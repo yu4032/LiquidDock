@@ -20,7 +20,7 @@ final class GboardFloatingGlassCoordinator {
     private static final class State {
         final View popup;
         final GboardFloatingStructureResolver.Structure structure;
-        final LiquidDockConfig.Glass glassConfig;
+        LiquidDockConfig.Glass glassConfig;
         final ViewGroup keyboardArea;
         final boolean realtimeBackgroundSampling;
         final GboardFrozenBackdropMotionState frozenMotionState =
@@ -57,6 +57,28 @@ final class GboardFloatingGlassCoordinator {
     }
 
     private GboardFloatingGlassCoordinator() {}
+
+    static synchronized void onLiveConfigChanged(ConfigReader reader, LiquidDockConfig config) {
+        if (reader == null || config == null) return;
+        ThirdPartyGlassAppearance appearance = GboardGlassPreferences.resolveShared(reader, config.glass);
+        boolean enabled = config.enabled && config.glass.enabled && appearance.enabled;
+        boolean realtime = GboardGlassPreferences.realtimeBackgroundSampling(reader);
+        for (State state : new java.util.ArrayList<>(STATES.values())) {
+            if (state == null || state.released) continue;
+            if (!enabled) {
+                release(state);
+            } else if (state.realtimeBackgroundSampling != realtime) {
+                // The frozen/live producer policy is a session-lifetime choice.
+                // Transfer ownership through the existing safe shutdown/acquire path.
+                release(state);
+                onShown(state.popup, state.structure, config.glass, realtime);
+            } else {
+                state.glassConfig = config.glass;
+                if (state.session != null) state.session.applyLiveGlassConfig(config.glass, appearance);
+            }
+        }
+        GboardFloatingGlassHook.onLiveConfigChanged(enabled);
+    }
 
     static synchronized void onShown(
             View popup,
