@@ -39,6 +39,10 @@ final class Api102HookRegistry {
         this.installer = installer;
     }
 
+    static Api102HookRegistry processRegistry() {
+        return PROCESS;
+    }
+
     static String stableId(String domain, Executable executable) {
         if (domain == null || domain.isBlank() || executable == null) {
             throw new IllegalArgumentException("domain/executable");
