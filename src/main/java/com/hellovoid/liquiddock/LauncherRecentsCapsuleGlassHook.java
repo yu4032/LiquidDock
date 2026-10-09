@@ -50,6 +50,11 @@ final class LauncherRecentsCapsuleGlassHook {
         if (decorations != null) scheduleBinding(decorations);
     }
 
+    static void onRecentsHidden() {
+        Binding binding = activeBinding;
+        if (binding != null) binding.onRecentsHidden();
+    }
+
     static void onRecentsShown() {
         if (!GlassRuntimeState.isRecentsCapsuleEnabled()) return;
         Binding binding = activeBinding;
@@ -259,6 +264,10 @@ final class LauncherRecentsCapsuleGlassHook {
 
         void onRecentsShown() {
             if (!released && !prismalFailed) session.onRecentsShown();
+        }
+
+        void onRecentsHidden() {
+            if (!released) session.onRecentsHidden();
         }
 
         private RecentsCapsuleGlassSinkView installSink(

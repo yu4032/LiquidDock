@@ -17,8 +17,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Dedicated realtime Prismal scene shared by the two Recents action capsules. */
-final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
+/** Two Recents Prismal outputs sharing the Workspace root producer and EGL render thread. */
+final class RecentsCapsuleGlassSession {
     enum Target { CLEAR_ALL, WORLD }
 
     interface Listener {
@@ -27,7 +27,6 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private static final String TAG = "[DC][RecentsCapsule]";
-    private static final long GENERATION = 1L;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -68,6 +67,7 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
 
     private final Handler mainHandler;
     private final Listener listener;
+    private final LauncherGlassSession workspaceSourceOwner;
     private final RootPassBlurBackend sourceBackend;
     private final FloatBuffer quadBuffer;
     private final PrismalParams prismalParams;
@@ -75,6 +75,7 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
 
     private volatile GeometrySet geometry;
     private volatile boolean shuttingDown;
+    private volatile boolean recentsVisible;
     private volatile boolean backdropPrepared;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
@@ -105,34 +106,34 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
         launcherHighlightProfile = glassConfig != null
                 ? glassConfig.launcherHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
-        int scalePercent = glassConfig != null
-                ? glassConfig.passBlurCaptureScalePercent
-                : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
-        int renderFps = glassConfig != null
-                ? glassConfig.passBlurRenderFps
-                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
-        sourceBackend = new RootPassBlurBackend(
-                sourceRoot,
-                PassBlurBindRequest.recentsCapsule(sourceRoot),
-                scalePercent,
-                renderFps,
-                this,
-                "LiquidDock-RecentsCapsule-EGL");
+        workspaceSourceOwner = LauncherGlassSessionRegistry.existingRootSource(sourceRoot);
+        if (workspaceSourceOwner == null) {
+            throw new IllegalStateException(
+                    "No Workspace root source: keep vendor Recents capsule backgrounds");
+        }
+        sourceBackend = workspaceSourceOwner.attachRecentsConsumer(this);
+        if (sourceBackend == null) {
+            throw new IllegalStateException(
+                    "Workspace source unavailable/busy: keep vendor Recents capsules");
+        }
     }
 
     void requestInitialCapture() {
-        if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
+        // Sinks may attach before Recents is visible. Never start the root producer early.
+        if (!shuttingDown && LauncherGlassSceneController.isRecentsCoveredByVendor()) {
+            onRecentsShown();
+        }
     }
 
-    /**
-     * Recents visibility is a real live-source authority. Workspace coverage may have toggled the
-     * same root's SurfaceControl update flag off, so reassert continuous updates after the vendor
-     * show boundary and request a generation-fenced frame before presenting new motion.
-     */
+    /** Resume the one Workspace-owned native source after Recents coverage pauses it. */
     void onRecentsShown() {
         if (shuttingDown) return;
-        sourceBackend.setUpdatesEnabled(true, "recents-capsule-visible");
-        sourceBackend.requestFresh(GENERATION);
+        recentsVisible = true;
+        workspaceSourceOwner.resumeRecentsSharedSource(this);
+    }
+
+    void onRecentsHidden() {
+        recentsVisible = false;
     }
 
     void updateGeometry(GeometrySet next) {
@@ -191,9 +192,9 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    @Override public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
-        if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION) return;
+    /** Called only on the shared Workspace source render thread; normalizedTextureId is local. */
+    void onSharedSourceFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
+        if (shuttingDown || !recentsVisible || backend != sourceBackend || frame == null) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -213,8 +214,8 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    @Override public void onTerminalFailure(long generation, Throwable error) {
-        if (!shuttingDown && generation == GENERATION) notifyFailure(error);
+    void onSharedSourceFailure(Throwable error) {
+        if (!shuttingDown) notifyFailure(error);
     }
 
     private void renderCurrent() {
@@ -283,6 +284,8 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
+        recentsVisible = false;
+        workspaceSourceOwner.detachRecentsConsumer(this);
         boolean queued = sourceBackend.postToRenderThread(() -> {
             releaseOutput(clearAllOutput);
             releaseOutput(worldOutput);
@@ -294,11 +297,17 @@ final class RecentsCapsuleGlassSession implements RootPassBlurBackend.Consumer {
             }
             if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
             compositeProgram = 0;
-        compositePositionLocation = compositeUvLocation = -1;
-        compositeTextureLocation = compositeCropRectLocation = -1;
-            sourceBackend.shutdown();
+            compositePositionLocation = compositeUvLocation = -1;
+            compositeTextureLocation = compositeCropRectLocation = -1;
+            // Native root source is owned by Workspace and remains bound for HOME.
         });
-        if (!queued) sourceBackend.shutdown();
+        if (!queued) {
+            // Owner may already be shutting down; never touch its EGL context on this thread.
+            if (clearAllOutput != null) clearAllOutput.surface.release();
+            if (worldOutput != null) worldOutput.surface.release();
+            clearAllOutput = null;
+            worldOutput = null;
+        }
     }
 
     private OutputState outputFor(Target target) {
