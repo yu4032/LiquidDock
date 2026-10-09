@@ -65,15 +65,16 @@ public final class ModuleMain extends XposedModule {
                 SystemUiKeyguardGoneSource.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
-                if (runtimeConfig.enabled && runtimeConfig.glass.enabled
-                        && runtimeConfig.glass.systemUiHandleMenuEnabled) {
-                    if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
-                        SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
-                    } else {
-                        Api101Bridge.log(
-                                "[DC][SystemUiHandleMenuGlass] surface animation authority unavailable; fail closed");
-                    }
+                // Install once regardless of initial preference. The hook's runtime gate
+                // stays inert until the user enables caption-menu glass.
+                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(runtimeConfig);
+                if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
+                    SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
+                } else {
+                    Api101Bridge.log(
+                            "[DC][SystemUiHandleMenuGlass] surface animation authority unavailable; fail closed");
                 }
+                ExternalGlassLiveConfigState.initialize(packageName);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] SystemUI integration init failed", error);
             }
