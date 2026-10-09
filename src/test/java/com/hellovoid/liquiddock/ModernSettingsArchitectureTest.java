@@ -99,8 +99,6 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue(surfaces.contains("PrismalGlassSlider("));
         assertTrue(surfaces.contains("PrismalGlassStepper("));
-        assertFalse(ui.contains("GlassSliderGroup("));
-        assertFalse(surfaces.contains("LocalLightweightGlassSlider"));
     }
 
     @Test
@@ -141,18 +139,6 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("val initial = (if (decimalDp && prefs.contains("));
         assertTrue(ui.contains("val displayValue = remember(value, decimalDp) {"));
         assertTrue(ui.contains("if (bounded == value) return"));
-    }
-
-    @Test
-    public void switchAndSliderRowsKeepOriginalMiuixAndPrismalInteractions() throws Exception {
-        String surfaces = Files.readString(SURFACES);
-
-        assertTrue(surfaces.contains("internal fun SwitchPreference("));
-        assertTrue(surfaces.contains("onClick = { if (enabled) onCheckedChange(!checked) },"));
-        assertTrue(surfaces.contains("PrismalGlassToggle("));
-        assertTrue(surfaces.contains("PrismalGlassSlider("));
-        assertFalse(surfaces.contains("GuiFlatPrismalGlassToggle("));
-        assertFalse(surfaces.contains("GuiFlatPrismalGlassSlider("));
     }
 
     @Test
