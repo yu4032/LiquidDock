@@ -155,109 +155,115 @@ internal fun ModernSettingsScaffold(
             LocalPrismalSurfaceBackdrop provides surfaceBackdrop,
             LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
         ) {
-            Scaffold(
-                containerColor = Color.Transparent,
-                topBar             val density = LocalDensity.current
+            val density = LocalDensity.current
             var headerHeight by remember { mutableStateOf(0.dp) }
-                    val headerContent: @Composable BoxScope.() -> Unit = {
-                        SmallTopAppBar(
-                            title = title,
-                            color = Color.Transparent,
-                            navigationIcon = {
-                                if (showBack) {
+            val headerContent: @Composable BoxScope.() -> Unit = {
+                SmallTopAppBar(
+                    title = title,
+                    color = Color.Transparent,
+                    navigationIcon = {
+                        if (showBack) {
+                            Box(
+                                modifier = Modifier.size(52.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (glassEnabled) {
+                                    PrismalGlassButton(
+                                        onClick = onBack,
+                                        backdrop = overlayBackdrop,
+                                        modifier = Modifier.size(40.dp),
+                                        height = 40.dp,
+                                        blurRadius = 7.dp,
+                                        refractionHeight = 9.dp,
+                                        refractionAmount = 12.dp,
+                                        pressLift = 2.dp,
+                                        contentPadding = PaddingValues(9.dp),
+                                        tint = Color.Unspecified,
+                                        surfaceColor = headerNeutralColor.copy(alpha = 0.20f),
+                                        useVibrancy = false,
+                                        saturation = 1f,
+                                        depthEffect = false,
+                                    ) {
+                                        Icon(
+                                            imageVector = MiuixIcons.Back,
+                                            contentDescription = backLabel,
+                                            tint = MiuixTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
+                                } else {
                                     Box(
-                                        modifier = Modifier.size(52.dp),
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .clickable(onClick = onBack),
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        if (glassEnabled) {
-                                            PrismalGlassButton(
-                                                onClick = onBack,
-                                                backdrop = overlayBackdrop,
-                                                modifier = Modifier.size(40.dp),
-                                                height = 40.dp,
-                                                blurRadius = 7.dp,
-                                                refractionHeight = 9.dp,
-                                                refractionAmount = 12.dp,
-                                                pressLift = 2.dp,
-                                                contentPadding = PaddingValues(9.dp),
-                                                tint = Color.Unspecified,
-                                                surfaceColor = headerNeutralColor.copy(alpha = 0.20f),
-                                                useVibrancy = false,
-                                                saturation = 1f,
-                                                depthEffect = false,
-                                            ) {
-                                                Icon(
-                                                    imageVector = MiuixIcons.Back,
-                                                    contentDescription = backLabel,
-                                                    tint = MiuixTheme.colorScheme.onSurface,
-                                                    modifier = Modifier.size(20.dp),
-                                                )
-                                            }
-                                        } else {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .clip(RoundedCornerShape(20.dp))
-                                                    .clickable(onClick = onBack),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                Icon(
-                                                    imageVector = MiuixIcons.Back,
-                                                    contentDescription = backLabel,
-                                                    tint = MiuixTheme.colorScheme.onSurface,
-                                                    modifier = Modifier.size(20.dp),
-                                                )
-                                            }
-                                        }
+                                        Icon(
+                                            imageVector = MiuixIcons.Back,
+                                            contentDescription = backLabel,
+                                            tint = MiuixTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(20.dp),
+                                        )
                                     }
                                 }
-                            },
-                            actions = actions,
-                            bottomContent = {
-                                Spacer(Modifier.height(TOP_BAR_ACTION_SHADOW_ROOM))
-                            },
-                        )
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(
-                                    MiuixTheme.colorScheme.onSurface.copy(
-                                        alpha = TOP_BAR_BOTTOM_STROKE_ALPHA,
-                                    ),
-                                ),
-                        )
-                    }
+                            }
+                        }
+                    },
+                    actions = actions,
+                    bottomContent = {
+                        Spacer(Modifier.height(TOP_BAR_ACTION_SHADOW_ROOM))
+                    },
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(
+                            MiuixTheme.colorScheme.onSurface.copy(
+                                alpha = TOP_BAR_BOTTOM_STROKE_ALPHA,
+                            ),
+                        ),
+                )
+            }
             Scaffold(
                 containerColor = Color.Transparent,
-                // Reserve the measured MIUIX bar's space, but draw its glass
-                // outside Scaffold after the body capture. This avoids relying
-                // on Scaffold's internal subcomposition placement order.
                 topBar = { Spacer(Modifier.height(headerHeight)) },
-            // Render above the recorded body as a true sibling overlay.
-            // This guarantees ordinary LazyColumn text cannot be drawn over
-            // the header after its Prismal shader has sampled screenLayer.
-                    if (activeOverlayBackdrop != null) {
-                        GuiPrismalFlatHeader(
-                            backdrop = activeOverlayBackdrop,
-                            modifier = Modifier.fillMaxWidth().onSizeChanged { size ->
-                                headerHeight = with(density) { size.height.toDp() }
-                            },
-                            blurRadius = TOP_BAR_BLUR_RADIUS.dp,
-                            overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
-                            content = headerContent,
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().onSizeChanged { size ->
-                                headerHeight = with(density) { size.height.toDp() }
-                            }.background(surface),
-                            content = headerContent,
-                        )
-                    }
-
-            overlay()
+                bottomBar = bottomBar,
+            ) { padding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(0f)
+                        .then(
+                            if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
+                            else Modifier,
+                        ),
+                ) {
+                    content(padding)
+                }
+            }
+            // Paint the sampled header after Scaffold's body, as an overlay sibling.
+            if (activeOverlayBackdrop != null) {
+                GuiPrismalFlatHeader(
+                    backdrop = activeOverlayBackdrop,
+                    modifier = Modifier.fillMaxWidth().onSizeChanged { size ->
+                        headerHeight = with(density) { size.height.toDp() }
+                    },
+                    blurRadius = TOP_BAR_BLUR_RADIUS.dp,
+                    overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
+                    content = headerContent,
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxWidth().onSizeChanged { size ->
+                        headerHeight = with(density) { size.height.toDp() }
+                    }.background(surface),
+                    content = headerContent,
+                )
+            }
+             overlay()
         }
     }
 }
