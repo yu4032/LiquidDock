@@ -334,7 +334,7 @@ public class ModernSettingsArchitectureTest {
         // not fix a backdrop coordinate or nested layer capture issue.
         assertTrue(pages.contains("LazyColumn("));
         assertTrue(pages.contains("ModernSectionLabel(\"状态\")"));
-        assertTrue(pages.contains("桌面布局与液态玻璃个性化设置"));
+        assertFalse("home subtitle was intentionally removed", pages.contains("桌面布局与液态玻璃个性化设置"));
         assertTrue(pages.contains("private fun HomePage("));
         assertTrue(pages.contains("internal fun PageHeader("));
     }
