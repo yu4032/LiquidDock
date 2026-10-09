@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -31,12 +32,24 @@ internal class GuiPrismalMiuixBackdrop(
     ) {
         // MIUIX's textureEffect records into a downscaled output buffer.
         // Prismal source coordinates remain in physical page pixels.
+        // DrawBackdropModifier records the source at a size reduced by
+        // downscaleFactor and supplies layout coordinates in full-resolution
+        // pixels. Compose's default scale pivot is the DrawScope CENTER: using
+        // it here shifts the sampled source across the header.
+        //
+        // PrismalBackdrop already translates its source by the consumer-to-
+        // layer offset; scaling around the top-left origin then preserves
+        // exactly the screen-space coordinates that MIUIX's textureBlur expects.
+        source.readSamplingState()
         if (downscaleFactor <= 1) {
             with(source) {
                 drawPrismalGlass(density, coordinates, layerBlock)
             }
         } else {
-            withTransform({ scale(1f / downscaleFactor, 1f / downscaleFactor) }) {
+            val invScale = 1f / downscaleFactor.toFloat()
+            withTransform({
+                scale(invScale, invScale, pivot = Offset.Zero)
+            }) {
                 with(source) {
                     drawPrismalGlass(density, coordinates, layerBlock)
                 }
