@@ -287,9 +287,11 @@ internal fun RestartScopesDialog(
         ModernSurface(
             modifier = Modifier
                 .padding(horizontal = 20.dp, vertical = 28.dp)
-                .widthIn(max = 520.dp),
+                .widthIn(max = 520.dp)
+                // Consume taps on the dialog panel without installing an
+                // interactive Prismal surface over its child switches/buttons.
+                .clickable(onClick = {}),
             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-            onClick = {},
         ) {
             Text(
                 text = "重启作用域",
