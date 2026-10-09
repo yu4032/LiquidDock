@@ -17,11 +17,6 @@ final class PassBlurQualityPolicy {
         return safePercent / 100f;
     }
 
-    /** Keep procedural SDF/refraction at native pixel density even if backdrop sampling is reduced. */
-    static int workspaceOpticsScalePercent(boolean workspace, int requestedPercent) {
-        return MAX_CAPTURE_SCALE_PERCENT;
-    }
-
     static float bridgeScale(boolean launcherWorkspace, int workspacePercent) {
         // HyperOS PassBlur scale participates in producer geometry/SurfaceTexture semantics;
         // it is not a safe pure-resolution control for strict behind-content correspondence.
