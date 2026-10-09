@@ -248,6 +248,11 @@ public class ModernSettingsArchitectureTest {
         assertTrue(adapter.contains("private val source: PrismalBackdrop"));
         assertTrue(adapter.contains("Backdrop"));
         assertTrue(adapter.contains("drawPrismalGlass(density, coordinates, layerBlock)"));
+        // MIUIX records into a downscaled header texture. A default center
+        // pivot samples the wrong region even with valid Prismal coordinates.
+        assertTrue(adapter.contains("source.readSamplingState()"));
+        assertTrue(adapter.contains("scale(invScale, invScale, pivot = Offset.Zero)"));
+        assertFalse(adapter.contains("scale(1f / downscaleFactor, 1f / downscaleFactor)"));
         assertFalse(adapter.contains("rememberGraphicsLayer("));
         assertFalse(adapter.contains("recordLayer("));
     }
