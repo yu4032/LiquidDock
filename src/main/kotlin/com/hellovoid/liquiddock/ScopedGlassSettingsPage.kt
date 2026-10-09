@@ -36,10 +36,11 @@ internal fun ScopedGlassSettingsPage(
     val basics = remember(scope) { basicScopeSpecs(scope) }
     val optics = scopedOpticalDescriptors
     val normalsKey = ScopedGlassOptics.normalsKey(scope)
-    val extras = if (scope == ScopedGlassOptics.DIALOG) emptyList()
-        else listOf(
-            "capture_scale_percent", "render_fps", "corner_radius_dp",
-        )
+    val extras = when (scope) {
+        ScopedGlassOptics.DIALOG -> emptyList()
+        ScopedGlassOptics.GBOARD -> listOf("capture_scale_percent", "render_fps")
+        else -> listOf("capture_scale_percent", "render_fps", "corner_radius_dp")
+    }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item(key = "scope-header") {
             PageHeader(
@@ -63,6 +64,14 @@ internal fun ScopedGlassSettingsPage(
                         edit.remove(normalsKey)
                         for (name in extras) {
                             edit.remove(profileOptionKey(scope, name))
+                        }
+                        if (scope != ScopedGlassOptics.DIALOG) {
+                            for (setting in profileHighlightSpecs) {
+                                edit.remove(profileOptionKey(scope, setting.field))
+                            }
+                            if (scope == ScopedGlassOptics.SEARCHBOX) {
+                                edit.remove(profileOptionKey(scope, "fresh_on_resume"))
+                            }
                         }
                         edit.apply()
                         resetGeneration++
@@ -149,14 +158,15 @@ internal fun ScopedGlassSettingsPage(
                         } else {
                             val key = profileOptionKey(scope, field)
                             var v by remember(key, resetGeneration) {
-                                mutableStateOf(prefs.getInt(key, -1).toFloat())
+                                // Imported profiles may store this documented FLOAT field.
+                                mutableStateOf((prefs.all[key] as? Number)?.toFloat() ?: -1f)
                             }
                             SliderPreference(
                                 value = v,
                                 onValueChange = {
                                     val next = it.roundToInt().coerceIn(-1, 400)
                                     v = next.toFloat()
-                                    prefs.edit().putInt(key, next).apply()
+                                    prefs.edit().putFloat(key, next.toFloat()).apply()
                                 },
                                 title = "独立圆角半径",
                                 summary = if (prefs.contains(key)) "−1 表示继承自动圆角"
@@ -170,9 +180,71 @@ internal fun ScopedGlassSettingsPage(
                     }
                 }
             }
+            item(key = "profile-highlights-heading") { SmallTitle("独立高光开关") }
+            for (setting in profileHighlightSpecs) {
+                item(key = "highlight-${setting.field}") {
+                    SettingsCard {
+                        val key = profileOptionKey(scope, setting.field)
+                        val inherited = prefs.getBoolean(
+                            setting.global.name(), setting.global.uiDefault(),
+                        )
+                        var checked by remember(key, resetGeneration) {
+                            mutableStateOf(prefs.getBoolean(key, inherited))
+                        }
+                        SwitchPreference(
+                            checked = checked,
+                            onCheckedChange = {
+                                checked = it
+                                prefs.edit().putBoolean(key, it).apply()
+                            },
+                            title = setting.title,
+                            summary = if (prefs.contains(key)) "独立设置" else "继承全局高光配置",
+                            enabled = enabled,
+                        )
+                    }
+                }
+            }
+            if (scope == ScopedGlassOptics.SEARCHBOX) {
+                item(key = "search-refresh") {
+                    SettingsCard {
+                        val key = profileOptionKey(scope, "fresh_on_resume")
+                        var checked by remember(key, resetGeneration) {
+                            mutableStateOf(prefs.getBoolean(key, true))
+                        }
+                        SwitchPreference(
+                            checked = checked,
+                            onCheckedChange = {
+                                checked = it
+                                prefs.edit().putBoolean(key, it).apply()
+                            },
+                            title = "重新进入搜索时刷新背景",
+                            summary = if (prefs.contains(key)) "独立设置" else "继承搜索默认策略",
+                            enabled = enabled,
+                        )
+                    }
+                }
+            }
         }
     }
 }
+
+private data class ProfileHighlightSpec(
+    val field: String,
+    val title: String,
+    val global: ConfigKey<Boolean>,
+)
+
+private val profileHighlightSpecs = listOf(
+    ProfileHighlightSpec("highlight_sky_haze", "天空泛光", ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE),
+    ProfileHighlightSpec("highlight_specular", "镜面高光", ConfigSchema.LauncherHighlight.LARGE_SPECULAR),
+    ProfileHighlightSpec("highlight_lit_rim", "受光边缘", ConfigSchema.LauncherHighlight.LARGE_LIT_RIM),
+    ProfileHighlightSpec("highlight_opposite_rim", "背光边缘", ConfigSchema.LauncherHighlight.LARGE_OPPOSITE_RIM),
+    ProfileHighlightSpec("highlight_corner_rim", "圆角边缘", ConfigSchema.LauncherHighlight.LARGE_CORNER_RIM),
+    ProfileHighlightSpec("highlight_face_sheen", "表面柔光", ConfigSchema.LauncherHighlight.LARGE_FACE_SHEEN),
+    ProfileHighlightSpec("highlight_plain", "基础高光", ConfigSchema.LauncherHighlight.LARGE_PLAIN_HIGHLIGHT),
+    ProfileHighlightSpec("highlight_caustics", "焦散高光", ConfigSchema.LauncherHighlight.LARGE_CAUSTICS),
+    ProfileHighlightSpec("highlight_press_glow", "按压泛光", ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW),
+)
 
 private data class BasicScopeSpec(
     val key: String,
