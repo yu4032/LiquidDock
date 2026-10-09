@@ -5,6 +5,7 @@ import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.os.Trace;
 import android.view.Display;
 import android.view.Surface;
@@ -174,6 +175,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeTextureLocation = -1;
     private int compositeCropRectLocation = -1;
     private volatile boolean backdropPrepared;
+    // One bounded recovery request per transient output/producer geometry mismatch.
+    private long lastGeometryMismatchRefreshMs;
 
     // Debug-only aggregate timings. UI and render counters are single-thread owned.
     private long uiPerfWindowStartNs;
@@ -988,6 +991,35 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (root == null || !root.isAttachedToWindow()) return;
         PrismalParams params = prismalParams;
         if (params == null) return;
+        OutputState currentOutput = staticOutput;
+        int windowWidth = currentOutput != null ? currentOutput.width : 0;
+        int windowHeight = currentOutput != null ? currentOutput.height : 0;
+        String mismatch = WorkspaceFrameGeometryPolicy.mismatch(
+                frame.logicalWidth, frame.logicalHeight, frame.rotation,
+                rootWidth, rootHeight, configRotation, windowWidth, windowHeight);
+        if (mismatch != null) {
+            // The source and TextureView change dimensions on different threads. Never
+            // overwrite current root geometry from a stale source callback or rasterize
+            // the old logical coordinates into a newer window (perceived magnification).
+            MainHook.log(TAG + " [WorkspaceGeometry] stale frame rejected reason=" + mismatch
+                    + " frame=" + frame.logicalWidth + "x" + frame.logicalHeight
+                    + " rot=" + frame.rotation
+                    + " root=" + rootWidth + "x" + rootHeight
+                    + " rot=" + configRotation
+                    + " output=" + windowWidth + "x" + windowHeight
+                    + " scene=" + frame.generation);
+            long now = SystemClock.uptimeMillis();
+            if (now - lastGeometryMismatchRefreshMs >= 180L) {
+                lastGeometryMismatchRefreshMs = now;
+                mainHandler.post(() -> {
+                    if (shuttingDown || rootRef.get() != root || !root.isAttachedToWindow()) return;
+                    // Reconcile the actual ViewRoot before obtaining another source buffer.
+                    syncSceneOnUiThread();
+                    LauncherGlassSceneController.requestFreshForRoot(root);
+                });
+            }
+            return;
+        }
         boolean trace = MainHook.debugLogging && workspaceSource;
         if (trace) Trace.beginSection("LD.Workspace.SourceFrame");
         try {
@@ -995,8 +1027,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             long perfStartNs = perf ? System.nanoTime() : 0L;
             long backdropStartNs = perfStartNs;
             ensureLauncherGl();
-            rootWidth = frame.logicalWidth;
-            rootHeight = frame.logicalHeight;
+            // UI pre-draw owns rootWidth/rootHeight. Never regress them to capture-time
+            // dimensions on this render-thread callback.
             sourceBackend.makePbufferCurrent();
             if (trace) Trace.beginSection("LD.Workspace.Backdrop");
             try {
