@@ -227,7 +227,12 @@ final class LauncherGlassRecentsHook {
             // wallpaper target.
             HookUtil.hookMethod(localWallpaper, "setTo", new Class<?>[]{wallpaperParam}, chain -> {
                 long serial = WALLPAPER_SETTLE.pendingSerial();
+                if (MainHook.debugLogging) {
+                    trace("local-setTo target=" + describeParam(chain.getArg(0))
+                            + " pendingSerial=" + serial);
+                }
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                trace("local-setTo-applied pendingSerial=" + serial);
                 if (serial > 0L) {
                     cancelWallpaperSettle(serial, "local-wallpaper-setTo");
                 }
@@ -236,6 +241,11 @@ final class LauncherGlassRecentsHook {
 
             HookUtil.hookMethod(localWallpaper, "animTo", new Class<?>[]{wallpaperParam}, chain -> {
                 long serial = WALLPAPER_SETTLE.pendingSerial();
+                if (MainHook.debugLogging) {
+                    trace("local-animTo target=" + describeParam(chain.getArg(0))
+                            + " pendingSerial=" + serial
+                            + " owner=" + identity(chain.getThisObject()));
+                }
                 Long previous = LOCAL_WALLPAPER_SERIAL.get();
                 if (serial > 0L) LOCAL_WALLPAPER_SERIAL.set(serial);
                 try {
@@ -253,6 +263,15 @@ final class LauncherGlassRecentsHook {
                     new Class<?>[]{String.class, float.class}, chain -> {
                         Long serial = LOCAL_WALLPAPER_SERIAL.get();
                         Object type = chain.getArg(0);
+                        if (MainHook.debugLogging && "zoom".equals(String.valueOf(type))) {
+                            String target = String.valueOf(chain.getArg(1));
+                            synchronized (DIAGNOSTIC_ZOOM_TARGETS) {
+                                DIAGNOSTIC_ZOOM_TARGETS.put(chain.getThisObject(), target);
+                            }
+                            trace("local-zoom-retarget spring=" + identity(chain.getThisObject())
+                                    + " target=" + target + " scopedSerial=" + serial
+                                    + " running=" + queryRunning(chain.getThisObject()));
+                        }
                         if (serial != null && serial > 0L && "zoom".equals(String.valueOf(type))
                                 && WALLPAPER_SETTLE.armCompletionAuthority(serial)) {
                             synchronized (LOCAL_SPRING_SERIALS) {
@@ -275,12 +294,39 @@ final class LauncherGlassRecentsHook {
                         synchronized (LOCAL_SPRING_SERIALS) {
                             serial = LOCAL_SPRING_SERIALS.remove(chain.getThisObject());
                         }
+                        String target;
+                        synchronized (DIAGNOSTIC_ZOOM_TARGETS) {
+                            target = DIAGNOSTIC_ZOOM_TARGETS.remove(chain.getThisObject());
+                        }
+                        if (target != null) {
+                            trace("local-spring-frame-terminal spring="
+                                    + identity(chain.getThisObject())
+                                    + " target=" + target + " scopedSerial=" + serial);
+                        }
                         if (serial != null) {
                             releaseWallpaperSettle(serial, "local-wallpaper-spring-end");
                         }
                         return result;
                     });
             MainHook.log(TAG + " LocalWallpaperElement spring-end authority installed");
+            try {
+                HookUtil.hookMethod(multiSpring, "cancel", new Class<?>[0], chain -> {
+                    Object animation = chain.getThisObject();
+                    String target;
+                    synchronized (DIAGNOSTIC_ZOOM_TARGETS) {
+                        target = DIAGNOSTIC_ZOOM_TARGETS.remove(animation);
+                    }
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    if (target != null) {
+                        trace("local-spring-cancel spring=" + identity(animation)
+                                + " priorTarget=" + target);
+                    }
+                    return result;
+                });
+            } catch (Throwable error) {
+                trace("local-cancel-observer-unavailable error="
+                        + error.getClass().getSimpleName());
+            }
         } catch (Throwable error) {
             MainHook.log(TAG + " Local wallpaper settle authority unavailable: " + error);
         }
@@ -296,7 +342,12 @@ final class LauncherGlassRecentsHook {
             HookUtil.hookMethod(systemWallpaper, "setTo",
                     new Class<?>[]{wallpaperParam}, chain -> {
                         long serial = WALLPAPER_SETTLE.pendingSerial();
+                        if (MainHook.debugLogging) {
+                            trace("system-setTo target=" + describeParam(chain.getArg(0))
+                                    + " pendingSerial=" + serial);
+                        }
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        trace("system-setTo-applied pendingSerial=" + serial);
                         if (serial > 0L) {
                             cancelWallpaperSettle(serial, "system-wallpaper-setTo");
                         }
@@ -306,6 +357,11 @@ final class LauncherGlassRecentsHook {
             HookUtil.hookMethod(systemWallpaper, "animTo",
                     new Class<?>[]{wallpaperParam}, chain -> {
                         long serial = WALLPAPER_SETTLE.pendingSerial();
+                        if (MainHook.debugLogging) {
+                            trace("system-animTo target=" + describeParam(chain.getArg(0))
+                                    + " pendingSerial=" + serial
+                                    + " owner=" + identity(chain.getThisObject()));
+                        }
                         boolean armed = serial > 0L && armSystemDrawEnd(serial);
                         if (armed && !WALLPAPER_SETTLE.armCompletionAuthority(serial)) {
                             rollbackSystemDrawEnd(serial);
@@ -354,6 +410,8 @@ final class LauncherGlassRecentsHook {
             Long queued = SYSTEM_DRAW_END_SERIALS.pollFirst();
             serial = queued == null ? -1L : queued;
         }
+        trace("system-draw-frame-end queuedSerial=" + serial
+                + " pendingSerial=" + WALLPAPER_SETTLE.pendingSerial());
         if (serial > 0L) {
             releaseWallpaperSettle(serial, "system-wallpaper-draw-end");
         }
@@ -402,6 +460,7 @@ final class LauncherGlassRecentsHook {
         LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
         MainHook.log(TAG + " Recents wallpaper settle cancelled reason=" + reason
                 + " serial=" + serial);
+        trace("settle-cancelled serial=" + serial + " reason=" + reason);
         return true;
     }
 
@@ -415,5 +474,6 @@ final class LauncherGlassRecentsHook {
         LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
         MainHook.log(TAG + " Recents wallpaper settled authority=" + authority
                 + " serial=" + serial);
+        trace("settle-confirmed serial=" + serial + " authority=" + authority);
     }
 }
