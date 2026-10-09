@@ -84,8 +84,8 @@ final class LauncherGlassStaticNode {
             View materialHost, LauncherGlassDragState.Kind kind,
             float cornerRadiusPx, LiquidDockConfig.Glass glassConfig) {
         if (materialHost == null) return null;
-        LiquidDockConfig.Glass live = LiveGlassConfigState.currentGlass();
-        if (live != null) glassConfig = live;
+        LiquidDockConfig.Glass latestGlass = LiveGlassConfigState.currentGlass();
+        if (latestGlass != null) glassConfig = latestGlass;
         LauncherGlassDragState.Kind resolvedKind = kind != null
                 ? kind : LauncherGlassDragState.Kind.FOLDER;
         LauncherGlassNodeKind resolvedNodeKind = resolvedKind == LauncherGlassDragState.Kind.ICON
@@ -117,8 +117,8 @@ final class LauncherGlassStaticNode {
             View materialHost, boolean smallFolder, float cornerRadiusPx,
             LiquidDockConfig.Glass glassConfig) {
         if (materialHost == null) return null;
-        LiquidDockConfig.Glass live = LiveGlassConfigState.currentGlass();
-        if (live != null) glassConfig = live;
+        LiquidDockConfig.Glass latestGlass = LiveGlassConfigState.currentGlass();
+        if (latestGlass != null) glassConfig = latestGlass;
         LauncherGlassNodeKind resolvedNodeKind = smallFolder
                 ? LauncherGlassNodeKind.SMALL_FOLDER : LauncherGlassNodeKind.LARGE_FOLDER;
         WeakReference<LauncherGlassStaticNode> reference = BY_MATERIAL.get(materialHost);
