@@ -47,7 +47,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
@@ -119,17 +118,13 @@ internal fun ModernSettingsScaffold(
     val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White
     val surfaceBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
-    // Both bars read the original Prismal background + body layers; no
-    // separate MIUIX recorder or Prismal-to-MIUIX blur bridge is needed.
+    // Header and bottom navigation share the captured background + content.
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                // Capture must wrap the actual painted background. Putting
-                // background() before prismalGlassLayer() records an EMPTY Box:
-                // its drawContent() excludes the outer background modifier.
-                // The merged backdrop then lacks an opaque base, allowing
-                // sharp page text underneath the glass to show through.
+                // The capture modifier must wrap background() so the sampled
+                // backdrop is opaque and covers unblurred content underneath.
                 .then(
                     if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)
                     else Modifier,
@@ -140,9 +135,7 @@ internal fun ModernSettingsScaffold(
                             Brush.verticalGradient(
                                 listOf(
                                     background,
-                                    // Keep every stop opaque in the captured
-                                    // backdrop; alpha-only primary would punch a
-                                    // translucent band through the glass.
+                                    // Keep the captured gradient opaque.
                                     lerp(background, primary, 0.07f),
                                     background,
                                 ),
@@ -161,8 +154,7 @@ internal fun ModernSettingsScaffold(
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    // MIUIX remains the layout shell, but Prismal alone draws
-                    // the uniform header blur from the shared screen source.
+                    // MIUIX lays out the bar; Prismal draws its glass.
                     val headerContent: @Composable BoxScope.() -> Unit = {
                         SmallTopAppBar(
                             title = title,
@@ -235,8 +227,6 @@ internal fun ModernSettingsScaffold(
                     }
                     if (activeOverlayBackdrop != null) {
                         GuiPrismalFlatHeader(
-                            // The recorded opaque background covers the crisp live
-                            // content while Prismal blurs its captured copy.
                             backdrop = activeOverlayBackdrop,
                             modifier = Modifier.fillMaxWidth().zIndex(1f),
                             blurRadius = TOP_BAR_BLUR_RADIUS.dp,
@@ -625,10 +615,8 @@ internal fun ModernSurface(
         )
     }
     if (onClick == null || staticPress) {
-        // Ordinary settings Cells and chevron navigation Cells use the same
-        // shadowless Prismal glass optics. The chevron retains press ripple,
-        // but has no scale/parallax layerBlock (PR #293).
-        // Only other interactive surfaces keep stock PrismalGlassSurface.
+        // Noninteractive and navigation Cells omit the recaptured depth shadow.
+        // Navigation retains its ripple without scale/parallax.
         GuiStaticPressPrismalSurface(
             backdrop = backdrop,
             modifier = glassCardModifier,
