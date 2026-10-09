@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -1324,9 +1325,7 @@ private fun GridBasicsPage(
             "控制自定义行列数是否参与布局；重启桌面后生效",
             masterEnabled,
         ) { customGrid = it }
-        GlassSliderGroup(gridDimensionSpecs.size + 1) {
-            gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
-        }
+        gridDimensionSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
         BooleanSetting(
             prefs,
             ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
@@ -1347,16 +1346,16 @@ private fun GridLandscapePage(
         ConfigSchema.Grid.ENABLED.name(),
         ConfigSchema.Grid.ENABLED.uiDefault(),
     )
-    SettingsList(
+    val landscapeSpecs = gridSpecs.filter {
+        it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y"
+    }
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_grid_landscape),
         "调整横屏桌面的间距与页面指示器位置。",
     ) {
-        val landscapeSpecs = gridSpecs.filter {
-            it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y"
-        }
-        GlassSliderGroup(landscapeSpecs.size) {
-            landscapeSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+        items(landscapeSpecs, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && customGrid)
         }
     }
 }
@@ -1371,16 +1370,16 @@ private fun GridPortraitPage(
         ConfigSchema.Grid.ENABLED.name(),
         ConfigSchema.Grid.ENABLED.uiDefault(),
     )
-    SettingsList(
+    val portraitSpecs = gridSpecs.filter {
+        it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y"
+    }
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_grid_portrait),
         "调整竖屏桌面的间距与页面指示器位置。",
     ) {
-        val portraitSpecs = gridSpecs.filter {
-            it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y"
-        }
-        GlassSliderGroup(portraitSpecs.size) {
-            portraitSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
+        items(portraitSpecs, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && customGrid)
         }
     }
 }
@@ -1537,13 +1536,13 @@ private fun DockGeometryPage(
         ConfigSchema.Dock.ENABLED.name(),
         ConfigSchema.Dock.ENABLED.uiDefault(),
     )
-    SettingsList(
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_dock_geometry),
         "调整 Dock 的尺寸、位置、圆角与图标间距。",
     ) {
-        GlassSliderGroup(dockSpecs.size) {
-            dockSpecs.forEach { IntSetting(prefs, it, masterEnabled && dockEnabled) }
+        items(dockSpecs, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && dockEnabled)
         }
     }
 }
@@ -1552,13 +1551,15 @@ private fun DockGeometryPage(
 private fun DividerPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
     val legacyDefault = remember { hasLegacyDividerConfig(prefs) }
     var enabled by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Divider.ENABLED.name(), legacyDefault)) }
-    SettingsList(padding, stringResource(R.string.page_divider)) {
-        BooleanSetting(prefs, ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线", "独立于 Dock 尺寸、模糊和单位开关；宽度与偏移固定使用 dp", masterEnabled, default = legacyDefault) {
-            enabled = it
-            if (it) ensureDividerDefaults(prefs)
+    DenseSettingsList(padding, stringResource(R.string.page_divider)) {
+        item(key = "divider-enabled") {
+            BooleanSetting(prefs, ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线", "独立于 Dock 尺寸、模糊和单位开关；宽度与偏移固定使用 dp", masterEnabled, default = legacyDefault) {
+                enabled = it
+                if (it) ensureDividerDefaults(prefs)
+            }
         }
-        GlassSliderGroup(dividerSpecs.size) {
-            dividerSpecs.forEach { IntSetting(prefs, it, masterEnabled && enabled) }
+        items(dividerSpecs, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && enabled)
         }
     }
 }
@@ -1635,13 +1636,13 @@ private fun WorkstationSpecPage(
         ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
         ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault(),
     )
-    SettingsList(
+    DenseSettingsList(
         padding = padding,
         title = "",
         summary = summary,
     ) {
-        GlassSliderGroup(specs.size) {
-            specs.forEach { IntSetting(prefs, it, masterEnabled && enabled) }
+        items(specs, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && enabled)
         }
     }
 }
@@ -1785,13 +1786,13 @@ private fun LiquidSpecPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
-    SettingsList(
+    DenseSettingsList(
         padding = padding,
         title = "",
         summary = summary,
     ) {
-        GlassSliderGroup(specs.size) {
-            specs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
+        items(specs, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && liquidEnabled)
         }
     }
 }
@@ -1806,30 +1807,38 @@ private fun LiquidSamplingPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
-    SettingsList(
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_liquid_sampling),
         "调整背景缩放、PassBlur 渲染分辨率与实时刷新上限。采样保护区由渲染器自动计算。",
     ) {
-        GlassSliderGroup(liquidSamplingSpecs.size + 2) {
-            liquidSamplingSpecs.forEach { IntSetting(prefs, it, masterEnabled && liquidEnabled) }
+        items(liquidSamplingSpecs, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && liquidEnabled)
+        }
+        item(key = passBlurCaptureScaleSpec.key) {
             IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
+        }
+        item(key = passBlurRenderFpsSpec.key) {
             IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidEnabled)
         }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Dock.FRAME_SYNC,
-            stringResource(R.string.dock_frame_sync),
-            stringResource(R.string.dock_frame_sync_summary),
-            masterEnabled && liquidEnabled,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
-            "表面法线可视化",
-            "以颜色显示玻璃表面法线方向，用于检查折射、曲面与光照响应",
-            masterEnabled && liquidEnabled,
-        )
+        item(key = ConfigSchema.Dock.FRAME_SYNC.name()) {
+            BooleanSetting(
+                prefs,
+                ConfigSchema.Dock.FRAME_SYNC,
+                stringResource(R.string.dock_frame_sync),
+                stringResource(R.string.dock_frame_sync_summary),
+                masterEnabled && liquidEnabled,
+            )
+        }
+        item(key = ConfigSchema.Glass.PRISMAL_SHOW_NORMALS.name()) {
+            BooleanSetting(
+                prefs,
+                ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
+                "表面法线可视化",
+                "以颜色显示玻璃表面法线方向，用于检查折射、曲面与光照响应",
+                masterEnabled && liquidEnabled,
+            )
+        }
     }
 }
 
@@ -2122,24 +2131,29 @@ private fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, masterE
     var dockStroke by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_ENABLED.name(), ConfigSchema.Dock.STROKE_ENABLED.uiDefault())) }
     var squircle by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SQUIRCLE.name(), ConfigSchema.Dock.SQUIRCLE.uiDefault())) }
     var fillDiff by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.FILL_DIFF.name(), ConfigSchema.Dock.FILL_DIFF.uiDefault())) }
-    SettingsList(padding, "描边") {
-        BooleanSetting(prefs, ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边", "控制 Dock 边框与灯光", masterEnabled) { dockStroke = it }
-        BooleanSetting(prefs, ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线", "iPad 风格连续圆角", masterEnabled) { squircle = it }
-        BooleanSetting(prefs, ConfigSchema.Dock.FILL_DIFF, "Fill-Diff 描边", "通过填充与挖空获得清晰抗锯齿", masterEnabled) { fillDiff = it }
-        SmallTitle("描边背景色")
-        GlassSliderGroup(strokeSpecs.size) {
-            strokeSpecs.filter { it.section == IntSection.StrokeBackground }
-                .forEach { IntSetting(prefs, it, masterEnabled && dockStroke) }
-            SmallTitle("方圆形与线宽")
-            strokeSpecs.filter { it.section == IntSection.StrokeGeometry }.forEach {
-                val enabled = when (it.dependency) {
-                    "dock_stroke" -> dockStroke
-                    "squircle" -> squircle
-                    "fill_diff" -> fillDiff
-                    else -> true
-                }
-                IntSetting(prefs, it, masterEnabled && enabled)
+    DenseSettingsList(padding, "描边") {
+        item(key = "stroke-enabled") {
+            BooleanSetting(prefs, ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边", "控制 Dock 边框与灯光", masterEnabled) { dockStroke = it }
+        }
+        item(key = "stroke-squircle") {
+            BooleanSetting(prefs, ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线", "iPad 风格连续圆角", masterEnabled) { squircle = it }
+        }
+        item(key = "stroke-fill-diff") {
+            BooleanSetting(prefs, ConfigSchema.Dock.FILL_DIFF, "Fill-Diff 描边", "通过填充与挖空获得清晰抗锯齿", masterEnabled) { fillDiff = it }
+        }
+        item(key = "stroke-colors-title") { SmallTitle("描边背景色") }
+        items(strokeSpecs.filter { it.section == IntSection.StrokeBackground }, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && dockStroke)
+        }
+        item(key = "stroke-geometry-title") { SmallTitle("方圆形与线宽") }
+        items(strokeSpecs.filter { it.section == IntSection.StrokeGeometry }, key = { it.key }) { spec ->
+            val enabled = when (spec.dependency) {
+                "dock_stroke" -> dockStroke
+                "squircle" -> squircle
+                "fill_diff" -> fillDiff
+                else -> true
             }
+            IntSetting(prefs, spec, masterEnabled && enabled)
         }
     }
 }
@@ -2149,17 +2163,19 @@ private fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterE
     val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
     var dockShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SHADOW_ENABLED.name(), ConfigSchema.Dock.SHADOW_ENABLED.uiDefault())) }
     var strokeShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_SHADOW.name(), ConfigSchema.Dock.STROKE_SHADOW.uiDefault())) }
-    SettingsList(padding, "阴影") {
-        BooleanSetting(prefs, ConfigSchema.Dock.SHADOW_ENABLED, "整个 Dock 下方阴影", "跟随 Dock 长宽、高度和圆角", masterEnabled && dockEnabled) { dockShadow = it }
-        BooleanSetting(prefs, ConfigSchema.Dock.STROKE_SHADOW, "描边阴影", "描边下方的柔和阴影", masterEnabled && dockEnabled) { strokeShadow = it }
-        GlassSliderGroup(shadowSpecs.size) {
-            shadowSpecs.forEach {
-                IntSetting(prefs, it, masterEnabled && dockEnabled && when (it.dependency) {
-                    "dock_shadow" -> dockShadow
-                    "stroke_shadow" -> strokeShadow
-                    else -> true
-                })
-            }
+    DenseSettingsList(padding, "阴影") {
+        item(key = "dock-shadow-enabled") {
+            BooleanSetting(prefs, ConfigSchema.Dock.SHADOW_ENABLED, "整个 Dock 下方阴影", "跟随 Dock 长宽、高度和圆角", masterEnabled && dockEnabled) { dockShadow = it }
+        }
+        item(key = "stroke-shadow-enabled") {
+            BooleanSetting(prefs, ConfigSchema.Dock.STROKE_SHADOW, "描边阴影", "描边下方的柔和阴影", masterEnabled && dockEnabled) { strokeShadow = it }
+        }
+        items(shadowSpecs, key = { it.key }) { spec ->
+            IntSetting(prefs, spec, masterEnabled && dockEnabled && when (spec.dependency) {
+                "dock_shadow" -> dockShadow
+                "stroke_shadow" -> strokeShadow
+                else -> true
+            })
         }
     }
 }
@@ -2223,6 +2239,50 @@ private fun AboutPage(
         item {
             SettingsCard {
                 ArrowPreference("第三方开源声明", summary = "依赖版本、用途与许可证文本链接", onClick = { openUrl(activity, "https://github.com/yu4032/LiquidDock/blob/main/THIRD_PARTY_NOTICES.md") })
+            }
+        }
+    }
+}
+
+@Composable
+/**
+ * Single Prismal glass card with independently composed, lazily measured controls.
+ *
+ * The old SettingsList() has just two LazyColumn entries: the header and an entire
+ * eagerly composed SettingsCard. With dozens of Prismal sliders this still kept
+ * every off-screen slider's GraphicsLayer, sampling source and animation alive.
+ * Restrict the card to the visible viewport and let this inner LazyColumn
+ * dispose off-screen slider trees while preserving upstream Prismal effects.
+ *
+ * Simple pages continue using SettingsList() to retain their previous layout.
+ */
+@Composable
+private fun DenseSettingsList(
+    padding: PaddingValues,
+    title: String,
+    summary: String? = null,
+    content: LazyListScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(
+                top = padding.calculateTopPadding() + 8.dp,
+                bottom = padding.calculateBottomPadding() + 28.dp,
+            ),
+    ) {
+        PageHeader(title, summary)
+        ModernSurface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 14.dp),
+            contentPadding = PaddingValues(vertical = 4.dp),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                content()
             }
         }
     }
@@ -2311,7 +2371,7 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
             nextValue.roundToInt().toFloat()
         }
         val bounded = next.coerceIn(spec.min.toFloat(), maxValue.toFloat())
-        if (bounded == value) return // avoid redundant SharedPreferences writes per drag pixel
+        if (bounded == value) return // already persisted this quantized value
         value = bounded
         val editor = prefs.edit().putInt(spec.key, value.roundToInt())
         if (decimalDp) editor.putInt("${spec.key}_tenths", (value * 10f).roundToInt())
