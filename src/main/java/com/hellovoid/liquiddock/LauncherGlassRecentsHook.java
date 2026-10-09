@@ -1,11 +1,13 @@
 package com.hellovoid.liquiddock;
 
+import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import java.util.WeakHashMap;
 
 /** Uses HyperOS semantic Recents and wallpaper-animation boundaries instead of wall-clock delays. */
 final class LauncherGlassRecentsHook {
     private static final String TAG = "[DC][GlassScene]";
+    private static final String TRACE_TAG = "[DC][WallpaperReturnTrace]";
     private static final String RECENTS_DISPATCHER =
             "com.miui.home.recents.RecentsServiceDispatcher";
     private static final String LOCAL_WALLPAPER =
@@ -24,6 +26,10 @@ final class LauncherGlassRecentsHook {
     private static final ThreadLocal<Long> LOCAL_WALLPAPER_SERIAL = new ThreadLocal<>();
     private static final WeakHashMap<Object, Long> LOCAL_SPRING_SERIALS = new WeakHashMap<>();
     private static final ArrayDeque<Long> SYSTEM_DRAW_END_SERIALS = new ArrayDeque<>();
+    // Debug-only tracking: never grants wallpaper settle authority.
+    private static final WeakHashMap<Object, String> DIAGNOSTIC_ZOOM_TARGETS =
+            new WeakHashMap<>();
+    private static volatile long diagnosticReturnSerial = -1L;
 
     private static boolean installed;
 
@@ -33,9 +39,13 @@ final class LauncherGlassRecentsHook {
         if (installed || config == null || !config.enabled || !config.glass.enabled) return;
         LauncherRecentsCapsuleGlassHook.install(classLoader);
         installWallpaperSettleAuthority(classLoader);
+        installStateManagerDiagnostic(classLoader);
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
                 long staleReturn = WALLPAPER_SETTLE.pendingSerial();
+                trace("recents-show previousReturn=" + diagnosticReturnSerial
+                        + " pendingSerial=" + staleReturn);
+                diagnosticReturnSerial = -1L;
                 WALLPAPER_SETTLE.onRecentsShown();
                 if (staleReturn > 0L) discardWallpaperAuthorities(staleReturn);
                 LauncherGlassSceneController.setRecentsCoveredForAll(true);
@@ -59,6 +69,10 @@ final class LauncherGlassRecentsHook {
                 // from inside onRecentViewHide(), so arming afterwards can miss the real start.
                 final long supersededSerial = WALLPAPER_SETTLE.pendingSerial();
                 final long serial = WALLPAPER_SETTLE.onReturnStarted();
+                diagnosticReturnSerial = serial;
+                trace("recents-hide-start serial=" + serial
+                        + " covered=" + recentsCovered
+                        + " workstation=" + workstationMode);
                 if (supersededSerial > 0L) {
                     discardWallpaperAuthorities(supersededSerial);
                     MainHook.log(TAG + " Recents wallpaper return superseded oldSerial="
@@ -81,6 +95,8 @@ final class LauncherGlassRecentsHook {
                 // freshness indefinitely.
                 boolean wallpaperAuthorityArmed =
                         WALLPAPER_SETTLE.hasCompletionAuthority(serial);
+                trace("recents-hide-vendor-return serial=" + serial
+                        + " authorityArmed=" + wallpaperAuthorityArmed);
                 if (!wallpaperAuthorityArmed) {
                     cancelWallpaperSettle(serial, "no-vendor-wallpaper-authority");
                 }
@@ -124,6 +140,80 @@ final class LauncherGlassRecentsHook {
      * LocalWallpaperElement owns a HyperSpringAnimation, while SystemWallpaperElement delegates the
      * spring to miui.wallpaper.animation. Each path therefore uses its own vendor completion event.
      */
+
+    /**
+     * Observe the two known semantic paths from the frozen Launcher 4.50 decompilation.
+     * These hooks report event ordering only. They never change the vendor dispatch result.
+     */
+    private static void installStateManagerDiagnostic(ClassLoader loader) {
+        try {
+            Class<?> eventClass = Class.forName(
+                    "com.miui.home.recents.event.Event", false, loader);
+            Method eventType = eventClass.getMethod("getType");
+            for (String owner : new String[]{
+                    "com.miui.home.recents.anim.StateManager$RecentState",
+                    "com.miui.home.recents.anim.StateManager$IdleState"}) {
+                try {
+                    HookUtil.hookMethod(loader, owner, "handleEvent", chain -> {
+                        if (MainHook.debugLogging) {
+                            try {
+                                Object event = chain.getArg(0);
+                                int type = ((Number) eventType.invoke(event)).intValue();
+                                if (type == 6203 || type == 7013) {
+                                    trace("state-event type=" + type + " owner=" + owner
+                                            + " event=" + describeParam(event));
+                                }
+                            } catch (Throwable error) {
+                                trace("state-event-read-error owner=" + owner
+                                        + " error=" + error.getClass().getSimpleName());
+                            }
+                        }
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }, "com.miui.home.recents.event.Event");
+                    trace("state-observer-installed owner=" + owner);
+                } catch (Throwable error) {
+                    trace("state-observer-unavailable owner=" + owner
+                            + " error=" + error.getClass().getSimpleName());
+                }
+            }
+        } catch (Throwable error) {
+            trace("state-observer-unavailable error=" + error.getClass().getSimpleName());
+        }
+    }
+
+    static long diagnosticReturnSerial() {
+        return diagnosticReturnSerial;
+    }
+
+    private static String identity(Object object) {
+        return object == null ? "null" : Integer.toHexString(System.identityHashCode(object));
+    }
+
+    private static String describeParam(Object object) {
+        if (object == null) return "null";
+        try {
+            return String.valueOf(object).replace((char) 10, ' ');
+        } catch (Throwable ignored) {
+            return object.getClass().getSimpleName();
+        }
+    }
+
+    private static String queryRunning(Object animation) {
+        if (animation == null) return "unknown";
+        try {
+            Method method = animation.getClass().getMethod("isRunning");
+            return String.valueOf(method.invoke(animation));
+        } catch (Throwable ignored) {
+            return "unknown";
+        }
+    }
+
+    private static void trace(String message) {
+        if (MainHook.debugLogging) {
+            MainHook.log(TRACE_TAG + " returnSerial=" + diagnosticReturnSerial + " " + message);
+        }
+    }
+
     private static void installWallpaperSettleAuthority(ClassLoader classLoader) {
         try {
             Class<?> wallpaperParam = Class.forName(WALLPAPER_PARAM, false, classLoader);
