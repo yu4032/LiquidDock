@@ -102,6 +102,35 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void pageEntryZoomDoesNotRegressAndCellsAvoidRecapturedDepthShadows() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String cards = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
+
+        // PR #293: a chevron Cell always takes the static-geometry Prismal
+        // renderer even while its AGSL click ripple and navigation remain.
+        assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
+        assertTrue(surfaces.contains("staticPress = true,"));
+        assertTrue(surfaces.contains("if (onClick == null || staticPress) {"));
+        assertTrue(surfaces.contains("GuiStaticPressPrismalSurface("));
+        assertTrue(cards.contains("PrismalPressRipple("));
+        assertTrue(cards.contains(".then(pressRipple?.modifier ?: Modifier)"));
+        assertTrue(cards.contains(".then(pressRipple?.gestureModifier ?: Modifier)"));
+        assertFalse(cards.contains("layerBlock ="));
+        assertFalse(cards.contains("scaleX ="));
+        assertFalse(cards.contains("translationX ="));
+
+        // The bottom bar still records normal page text and glass optics.
+        // Avoid capturing default PrismalDepthShadow twice on Settings Cells,
+        // which produces broad gradient bands behind the refractive capsule.
+        assertTrue(cards.contains("depthShadow = null,"));
+        assertTrue(cards.contains("specular"));
+        assertTrue(cards.contains("applyPrismalGlassEffects("));
+        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+    }
+
+    @Test
     public void chevronPageCellsRetainPrismalRippleWithoutGeometryMotion() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String navigationSurface = Files.readString(Path.of(
