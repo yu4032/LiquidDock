@@ -142,6 +142,36 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void solidActionsAndDarkCellsHaveDistinctLayeringWithoutReplacingPrismal() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String navSurface = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
+
+        // Static material and architecture guards, not device-level contrast metrics.
+        assertTrue(surfaces.contains("val solidCardColor = if (darkTheme)"));
+        assertTrue(surfaces.contains("lerp(colors.surface, colors.onSurface, 0.08f)"));
+        assertTrue(surfaces.contains(".background(solidCardColor)"));
+        assertTrue(surfaces.contains(".border(1.dp, cardStroke, cardShape)"));
+        assertTrue(surfaces.contains("val glassCardModifier = modifier"));
+        assertTrue(surfaces.contains("darkGlassWash"));
+        assertTrue(surfaces.contains("surfaceColor = darkGlassWash"));
+
+        // +/- and reset share Button's fallback and must have their own outline.
+        assertTrue(surfaces.contains("val buttonShape = RoundedCornerShape(minHeight / 2)"));
+        assertTrue(surfaces.contains("val fillColor = lerp(colors.surface, colors.onSurface,"));
+        assertTrue(surfaces.contains(".border(1.dp, outlineColor, buttonShape)"));
+        assertTrue(surfaces.contains("else if (backdrop == null) 0.66f"));
+
+        // Glass still uses the original renderer and the navigational ripple.
+        assertTrue(surfaces.contains("PrismalGlassSurface("));
+        assertTrue(navSurface.contains("PrismalPressRipple("));
+        assertTrue(navSurface.contains("drawPrismalGlassTint(tint, tintAlpha)"));
+        assertTrue(navSurface.contains("surfaceColor.isSpecified"));
+        assertFalse(navSurface.contains("scaleX ="));
+        assertFalse(navSurface.contains("translationX ="));
+    }
+
+    @Test
     public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
@@ -385,23 +415,23 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void disabledGlassUsesSolidDarkerCanvasWithoutRecoloringCells() throws Exception {
+    public void disabledGlassKeepsSolidCanvasAndUsesThemeAwareCellContrast() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        // Glass-on keeps its Prismal wallpaper gradient. Glass-off instead paints
-        // a uniform opaque canvas, slightly darker than the Miuix background.
+        // The desktop still uses one static opaque background in solid mode,
+        // and glass-on retains the original wallpaper gradient/source layers.
         assertTrue(surfaces.contains("if (glassEnabled) {"));
         assertTrue(surfaces.contains("Brush.verticalGradient("));
         assertTrue(surfaces.contains("Modifier.background(lerp(background, Color.Black, 0.06f))"));
         assertTrue(surfaces.contains("if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)"));
         assertTrue(surfaces.contains("if (backdrop == null)"));
 
-        // The non-glass Cell stays exactly the pre-adjustment surface, not an
-        // outlined, shadowed, or tinted substitute.
-        assertTrue(surfaces.contains(".background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))"));
-        assertTrue(surfaces.contains(".clip(RoundedCornerShape(24.dp))"));
-        assertFalse(surfaces.contains("val cardStroke ="));
-        assertFalse(surfaces.contains("val cardFill ="));
+        // Updated UI contract: dynamic dark-theme Cells intentionally have a
+        // subtle fill/rim separation, without any drop shadow or shader fallback.
+        assertTrue(surfaces.contains("val solidCardColor = if (darkTheme)"));
+        assertTrue(surfaces.contains(".background(solidCardColor)"));
+        assertTrue(surfaces.contains(".border(1.dp, cardStroke, cardShape)"));
+        assertTrue(surfaces.contains(".clip(cardShape)"));
         assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
         assertTrue(surfaces.contains("PrismalGlassSurface("));
         assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
