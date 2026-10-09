@@ -106,6 +106,9 @@ public final class PrismalRenderer implements AutoCloseable {
     private boolean glassTexturesBound;
     private final PrismalFrameTarget frameTarget = new PrismalFrameTarget();
 
+    // Reused by the GL thread; do not allocate one clip rect for every icon per frame.
+    private final PrismalNodeScissor.Rect nodeScissor =
+            new PrismalNodeScissor.Rect(0, 0, 0, 0);
     private int sourceTexture;
     private int sourceFramebuffer;
     private int blurTextureH;
@@ -549,13 +552,13 @@ public final class PrismalRenderer implements AutoCloseable {
         // The fragment shader renders a full-frame quad per glass node. Restrict its expensive
         // refraction/highlight shading to the SDF silhouette with an AA guard. This preserves
         // native-pixel edge fidelity at reduced backdrop capture density.
-        PrismalNodeScissor.Rect clip = PrismalNodeScissor.compute(
-                g, frameTarget.width, frameTarget.height);
-        if (clip == null) return;
+        if (!PrismalNodeScissor.computeInto(
+                g, frameTarget.width, frameTarget.height, nodeScissor)) return;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
         GLES20.glViewport(0, 0, frameTarget.width, frameTarget.height);
         GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glScissor(clip.x, clip.y, clip.width, clip.height);
+        GLES20.glScissor(nodeScissor.x, nodeScissor.y,
+                nodeScissor.width, nodeScissor.height);
         if (composite) {
             GLES20.glEnable(GLES20.GL_BLEND);
             GLES20.glBlendFuncSeparate(
