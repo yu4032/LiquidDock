@@ -62,9 +62,9 @@ import com.styropyr0.prismal.PrismalGlassSurface
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
-import com.styropyr0.prismal.components.PrismalGlassSlider
+import com.hellovoid.liquiddock.guiglass.GuiFlatPrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
-import com.styropyr0.prismal.components.PrismalGlassToggle
+import com.hellovoid.liquiddock.guiglass.GuiFlatPrismalGlassToggle
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -827,7 +827,7 @@ internal fun SwitchPreference(
         insideMargin = insideMargin,
         endActions = {
             if (backdrop != null) {
-                PrismalGlassToggle(
+                GuiFlatPrismalGlassToggle(
                     selected = { checked },
                     onSelect = { next -> if (enabled) onCheckedChange(next) },
                     backdrop = backdrop,
@@ -1001,7 +1001,7 @@ internal fun SliderPreference(
             },
         )
         if (backdrop != null) {
-            PrismalGlassSlider(
+            GuiFlatPrismalGlassSlider(
                 value = { currentValue },
                 onValueChange = { next ->
                     if (enabled) onValueChange(quantize(next))
@@ -1057,7 +1057,7 @@ internal fun ModernGlassSlider(
     val backdrop = LocalPrismalSurfaceBackdrop.current
     val currentValue by rememberUpdatedState(value)
     if (backdrop != null) {
-        PrismalGlassSlider(
+        GuiFlatPrismalGlassSlider(
             value = { currentValue },
             onValueChange = { next ->
                 if (enabled) onValueChange(next)
