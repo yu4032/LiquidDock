@@ -95,10 +95,11 @@ final class Api102HookRegistry {
     synchronized void rollback(List<String> ids) {
         if (ids == null) return;
         for (int i = ids.size() - 1; i >= 0; i--) {
-            XposedInterface.HookHandle handle = handles.remove(ids.get(i));
+            XposedInterface.HookHandle handle = handles.get(ids.get(i));
             if (handle == null) continue;
             try {
                 handle.unhook();
+                handles.remove(ids.get(i));
             } catch (Throwable error) {
                 // A failed removal must not mask the initial vendor-install failure.
                 Api101Bridge.log("[DC][API102] identified-hook rollback failed id="
