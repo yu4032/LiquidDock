@@ -76,9 +76,8 @@ final class HomeGridDbOrientationHook {
             hookScope(transform, TRANSFORM_DEPTH);
             hookCommittedLayoutSync(cellLayout, config);
 
-            Api101Bridge.module().hook(getCellCountX)
-                    .setPriority(XposedInterface.PRIORITY_HIGHEST)
-                    .intercept(chain -> {
+            HookUtil.hookWithPriority(getCellCountX, XposedInterface.PRIORITY_HIGHEST,
+                    chain -> {
                         Object result = chain.proceed();
                         if (!(result instanceof Integer)
                                 || !isOrientationPredicateScope()
@@ -149,9 +148,8 @@ final class HomeGridDbOrientationHook {
     }
 
     private static void hookScope(Method method, ThreadLocal<Integer> scope) {
-        Api101Bridge.module().hook(method)
-                .setPriority(XposedInterface.PRIORITY_HIGHEST)
-                .intercept(chain -> {
+        HookUtil.hookWithPriority(method, XposedInterface.PRIORITY_HIGHEST,
+                    chain -> {
                     enter(scope);
                     try {
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
