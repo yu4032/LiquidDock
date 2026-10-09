@@ -399,6 +399,14 @@ final class LauncherGlassSceneController {
     }
 
     private void requestFreshBackdrop(long generation) {
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][WallpaperReturnTrace] fresh-request returnSerial="
+                    + LauncherGlassRecentsHook.diagnosticReturnSerial()
+                    + " generation=" + generation + " current=" + state.generation()
+                    + " scene=" + state.state()
+                    + " presentationPending=" + isPresentationPending()
+                    + " recentsCovered=" + recentsCovered);
+        }
         if (isPresentationPending()) return;
         if (state.state() == State.COVERED || generation != state.generation()) return;
         deferInFlightWallpaperPulse();
@@ -407,6 +415,16 @@ final class LauncherGlassSceneController {
 
     private void onFreshFrameReady(long generation) {
         boolean rotationWasPending = state.isRotationPresentationPending();
+        boolean sceneAcceptsFrame = generation == state.generation()
+                && state.state() != State.COVERED && state.state() != State.DETACHED;
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][WallpaperReturnTrace] fresh-frame-consumed returnSerial="
+                    + LauncherGlassRecentsHook.diagnosticReturnSerial()
+                    + " generation=" + generation + " current=" + state.generation()
+                    + " accepted=" + sceneAcceptsFrame + " scene=" + state.state()
+                    + " homePending=" + homeTransitionPending
+                    + " wallpaperSettlePending=" + recentsWallpaperSettlePending);
+        }
         state.onFreshFrameReady(generation);
         applyLayerVisibility();
         if (rotationWasPending && !state.isRotationPresentationPending()) {
@@ -503,6 +521,12 @@ final class LauncherGlassSceneController {
     }
 
     private void setRecentsWallpaperSettlePending(boolean pending) {
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][WallpaperReturnTrace] settle-barrier returnSerial="
+                    + LauncherGlassRecentsHook.diagnosticReturnSerial()
+                    + " old=" + recentsWallpaperSettlePending + " new=" + pending
+                    + " scene=" + state.state());
+        }
         boolean wasPending = isSourceBlockingPresentationPending();
         recentsWallpaperSettlePending = pending;
         onSourceBlockingPresentationPendingChanged(
@@ -589,6 +613,12 @@ final class LauncherGlassSceneController {
     }
 
     private void setRecentsCovered(boolean covered) {
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][WallpaperReturnTrace] recents-coverage returnSerial="
+                    + LauncherGlassRecentsHook.diagnosticReturnSerial()
+                    + " old=" + recentsCovered + " new=" + covered
+                    + " scene=" + state.state());
+        }
         if (recentsCovered == covered) return;
         recentsCovered = covered;
         if (covered) {
