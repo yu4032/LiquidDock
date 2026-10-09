@@ -15,6 +15,14 @@ final class ShortcutPopupGlassCoordinator {
 
     private ShortcutPopupGlassCoordinator() {}
 
+    /** Existing popup sessions otherwise keep the optical config captured at construction. */
+    static synchronized void onLiveGlassConfigChanged(LiquidDockConfig.Glass glassConfig) {
+        State state = current;
+        if (glassConfig == null || state == null || state.released) return;
+        state.glassConfig = glassConfig;
+        if (state.session != null) state.session.applyLiveGlassConfig(glassConfig);
+    }
+
     static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
         prepareInternal(captureRoot, glassConfig, false, null, "prepare-replace");
     }
@@ -89,6 +97,8 @@ final class ShortcutPopupGlassCoordinator {
             View earlyOwner,
             String replaceReason) {
         releaseLocked(replaceReason);
+        LiquidDockConfig.Glass latest = LiveGlassConfigState.currentGlass();
+        if (latest != null) glassConfig = latest;
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
         State state = new State(captureRoot, glassConfig, early, earlyOwner);
@@ -382,7 +392,7 @@ final class ShortcutPopupGlassCoordinator {
 
     private static final class State {
         final WeakReference<View> captureRootRef;
-        final LiquidDockConfig.Glass glassConfig;
+        LiquidDockConfig.Glass glassConfig;
         final boolean early;
         final boolean dockEarly;
         final Class<?> earlyAuthorityClass;
