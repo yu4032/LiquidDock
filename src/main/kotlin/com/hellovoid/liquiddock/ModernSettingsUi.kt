@@ -269,9 +269,9 @@ internal fun RestartScopesDialog(
     visible: Boolean,
     items: List<RestartScopeItem>,
     selected: Set<String>,
-    onToggle: (String) -> Unit,
+    onToggle: (String, Boolean) -> Unit,
     onDismiss: () -> Unit,
-    onRestart: () -> Unit,
+    onRestart: (Set<String>) -> Unit,
 ) {
     if (!visible) return
     val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current
@@ -313,7 +313,7 @@ internal fun RestartScopesDialog(
                 items.forEachIndexed { index, item ->
                     SwitchPreference(
                         checked = item.id in selected,
-                        onCheckedChange = { onToggle(item.id) },
+                        onCheckedChange = { checked -> onToggle(item.id, checked) },
                         title = item.title,
                         summary = item.packageName,
                     )
@@ -338,7 +338,7 @@ internal fun RestartScopesDialog(
             ) {
                 if (backdrop != null) {
                     PrismalGlassButton(
-                        onClick = { if (selected.isNotEmpty()) onRestart() },
+                        onClick = { if (selected.isNotEmpty()) onRestart(selected.toSet()) },
                         backdrop = backdrop,
                         modifier = Modifier.alpha(if (selected.isNotEmpty()) 1f else 0.38f),
                         isInteractive = selected.isNotEmpty(),
@@ -365,7 +365,9 @@ internal fun RestartScopesDialog(
                             .clip(RoundedCornerShape(21.dp))
                             .background(Color(0xFFD73333))
                             .alpha(if (selected.isNotEmpty()) 1f else 0.38f)
-                            .clickable(enabled = selected.isNotEmpty(), onClick = onRestart)
+                            .clickable(enabled = selected.isNotEmpty()) {
+                                onRestart(selected.toSet())
+                            }
                             .padding(horizontal = 26.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
