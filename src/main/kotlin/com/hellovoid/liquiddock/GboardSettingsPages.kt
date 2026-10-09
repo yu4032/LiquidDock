@@ -473,7 +473,10 @@ private fun GboardValueSlider(
     unit: String = "",
 ) {
     val rounded = value.roundToInt().coerceIn(0, max)
-    SliderPreference(
+    // Five appearance controls share the enclosing glass card; avoid five extra
+    // per-slider Prismal track/merged backdrop pipelines.
+    GlassSliderGroup(5) {
+        SliderPreference(
         value = rounded.toFloat(),
         onValueChange = {
             val next = it.roundToInt().coerceIn(0, max)
@@ -487,7 +490,8 @@ private fun GboardValueSlider(
         valueRange = 0f..max.toFloat(),
         steps = (max - 1).coerceAtLeast(0),
         insideMargin = PaddingValues(16.dp, 16.dp, 16.dp, 2.dp),
-    )
+        )
+    }
 }
 
 @Composable
