@@ -373,6 +373,12 @@ final class LauncherGlassSceneController {
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
     }
 
+    /** Recents capsules use this same producer, regardless of Workspace layer visibility. */
+    private boolean keepSourceLiveDuringRecents() {
+        return WorkstationProducerPolicy.keepSharedSourceLiveForRecents(
+                recentsCovered, GlassRuntimeState.isRecentsCapsuleEnabled(), folderCovered);
+    }
+
     void onRootReady() {
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
@@ -383,7 +389,7 @@ final class LauncherGlassSceneController {
         // must not turn it off again after the capsule has resumed it for visible Recents.
         // Folder / unlock / wallpaper-settle remain independent, stronger stop authorities.
         boolean coveredWithoutSharedRecents = state.state() == State.COVERED
-                && !(recentsCovered && session.hasVisibleRecentsConsumer());
+                && !keepSourceLiveDuringRecents();
         if (coveredWithoutSharedRecents || folderCovered
                 || (unlockTransitionPending
                     && LauncherGlassHomePresentationHook.isUnlockProducerBlocked())
@@ -556,7 +562,11 @@ final class LauncherGlassSceneController {
             deferInFlightWallpaperPulse();
             state.onGenerationInvalidated();
             applyLayerVisibility();
-            session.suspendWorkspaceProducer();
+            // Recents wallpaper barrier gates presentation but must not stop the shared source.
+            // Unlock and folder continue to use their independent hard capture gates.
+            if (!("recents-wallpaper".equals(reason) && keepSourceLiveDuringRecents())) {
+                session.suspendWorkspaceProducer();
+            }
             MainHook.log(TAG + " presentation pending reason=" + reason
                     + " generation=" + state.generation());
             return;
@@ -600,7 +610,7 @@ final class LauncherGlassSceneController {
             if (folderCovered) state.setHardCovered(true);
             else state.setCovered(true);
             applyLayerVisibility();
-            session.suspendWorkspaceProducer();
+            if (!keepSourceLiveDuringRecents()) session.suspendWorkspaceProducer();
             return;
         }
         if (folderCovered) {

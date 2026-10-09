@@ -157,6 +157,9 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(registry.contains("static synchronized LauncherGlassSession existingRootSource"));
         assertTrue(workspace.contains("child.onSharedSourceFrame(backend, frame)"));
         assertTrue(workspace.contains("sourceBackend.setUpdatesEnabled(true, \"recents-shared-root-live\")"));
+        assertTrue(workspace.contains("child.onSharedSourceUnavailable(error)"));
+        assertTrue(session.contains("onSharedSourceUnavailable(Throwable error)"));
+        assertTrue(capsule.contains("native fallback during transient shared source loss"));
         assertTrue(workspace.contains("child.onSharedSourceFrame(backend, frame)"));
         assertTrue(workspace.contains("hasVisibleRecentsConsumer()"));
         assertTrue(session.contains("boolean isRecentsVisible()"));
@@ -167,6 +170,6 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(request.contains("RECENTS_CAPSULE_EXTRA_EXCLUSIONS"));
         String controller = read("LauncherGlassSceneController.java");
         assertTrue(controller.contains("coveredWithoutSharedRecents"));
-        assertTrue(controller.contains("session.hasVisibleRecentsConsumer()"));
+        assertTrue(controller.contains("keepSourceLiveDuringRecents()"));
     }
 }

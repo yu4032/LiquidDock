@@ -23,6 +23,7 @@ final class RecentsCapsuleGlassSession {
 
     interface Listener {
         void onFirstFramePresented(Target target);
+        void onSourceUnavailable(Throwable error);
         void onFailure(Throwable error);
     }
 
@@ -76,6 +77,7 @@ final class RecentsCapsuleGlassSession {
     private volatile GeometrySet geometry;
     private volatile boolean shuttingDown;
     private volatile boolean recentsVisible;
+    private volatile boolean sourceUnavailable;
     private volatile boolean backdropPrepared;
     private boolean firstSharedFrameReported;
     private volatile int logicalWidth;
@@ -202,6 +204,11 @@ final class RecentsCapsuleGlassSession {
     void onSharedSourceFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || !recentsVisible || backend != sourceBackend || frame == null) return;
         try {
+            if (sourceUnavailable) {
+                sourceUnavailable = false;
+                clearAllPresentationSignaled = false;
+                worldPresentationSignaled = false;
+            }
             ensureGl();
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
@@ -227,6 +234,22 @@ final class RecentsCapsuleGlassSession {
         }
     }
 
+    /** Bind exhaustion may recover on a later root generation. Preserve capsule EGL outputs. */
+    void onSharedSourceUnavailable(Throwable error) {
+        if (shuttingDown || sourceUnavailable) return;
+        sourceUnavailable = true;
+        backdropPrepared = false;
+        clearAllPresentationSignaled = false;
+        worldPresentationSignaled = false;
+        MainHook.log(TAG + " temporary shared source unavailable: " + error);
+        mainHandler.post(() -> {
+            if (!shuttingDown && sourceUnavailable && listener != null) {
+                listener.onSourceUnavailable(error);
+            }
+        });
+    }
+
+    /** Owner destruction is permanent; unlike source bind exhaustion it closes the consumer. */
     void onSharedSourceFailure(Throwable error) {
         if (!shuttingDown) notifyFailure(error);
     }

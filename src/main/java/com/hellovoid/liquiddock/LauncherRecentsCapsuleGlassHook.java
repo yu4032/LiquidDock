@@ -353,6 +353,17 @@ final class LauncherRecentsCapsuleGlassHook {
             MainHook.log(TAG + " Prismal presented target=" + target);
         }
 
+        @Override public void onSourceUnavailable(Throwable error) {
+            if (released || prismalFailed) return;
+            clearAllPrismalPresented = false;
+            worldPrismalPresented = false;
+            if (clearAllSink != null) clearAllSink.conceal();
+            if (worldSink != null) worldSink.conceal();
+            restoreStockBackground();
+            applyNativeFallback();
+            MainHook.log(TAG + " native fallback during transient shared source loss");
+        }
+
         @Override public void onFailure(Throwable error) {
             if (released || prismalFailed) return;
             prismalFailed = true;

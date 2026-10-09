@@ -1010,8 +1010,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
-        if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != sceneGeneration || rotationSettlePending) return;
+        if (shuttingDown || backend != sourceBackend || frame == null) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
         // The Recents child uses this OES frame on the same GL thread, with its own geometry.
@@ -1019,6 +1018,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // or a HOME-only Prismal parameter is unavailable during the Recents transition.
         RecentsCapsuleGlassSession child = recentsConsumer;
         if (child != null) child.onSharedSourceFrame(backend, frame);
+        // HOME generation/rotation constraints are separate from the Recents GPU consumer.
+        if (frame.generation != sceneGeneration || rotationSettlePending) return;
         if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
 
         PrismalParams params = prismalParams;
@@ -1124,7 +1125,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         MainHook.log(TAG + " source backend failed closed " + debugLabel()
                 + " generation=" + generation + ": " + error);
         RecentsCapsuleGlassSession child = recentsConsumer;
-        if (child != null) child.onSharedSourceFailure(error);
+        // Native source failure can recover when a fresh root endpoint appears; do not
+        // irreversibly destroy the Recents consumer on a transient bind exhaustion.
+        if (child != null) child.onSharedSourceUnavailable(error);
         Runnable listener = terminalFailureListener;
         if (listener != null) {
             mainHandler.post(() -> {
