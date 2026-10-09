@@ -19,10 +19,30 @@ public class SecurityCenterSettingsRestartContractTest {
 
         assertTrue(compose.contains("R.string.action_restart_scopes"));
         assertTrue(compose.contains("RestartScopesDialog("));
-        assertTrue(compose.contains("activity.restartHookScopes(selected)"));
+        assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
         assertFalse(compose.contains("activity.restartSecurityCenterAndLauncher()"));
         assertFalse(compose.contains("activity.restartSystemUi()"));
         assertFalse(compose.contains("activity.restartPackageProcess("));
+    }
+
+    @Test
+    public void restartDialogSubmitsCurrentSelectionAndUsesIdempotentToggleState() throws Exception {
+        String compose = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String dialog = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt"));
+
+        assertTrue(compose.contains("onToggle = { id, checked ->"));
+        assertTrue(compose.contains("selectedRestartScopes + id"));
+        assertTrue(compose.contains("selectedRestartScopes - id"));
+        assertTrue(compose.contains("onRestart = { confirmedSelection ->"));
+        assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
+        assertTrue(compose.contains("UI_TOGGLE|$id|checked=$checked|selected=$selectedRestartScopes"));
+        assertTrue(dialog.contains("onToggle: (String, Boolean) -> Unit"));
+        assertTrue(dialog.contains("onRestart: (Set<String>) -> Unit"));
+        assertTrue(dialog.contains("onCheckedChange = { checked -> onToggle(item.id, checked) }"));
+        assertTrue(dialog.contains("onRestart(selected.toSet())"));
+        assertFalse(dialog.contains("onCheckedChange = { onToggle(item.id) }"));
     }
 
     @Test
@@ -75,7 +95,7 @@ public class SecurityCenterSettingsRestartContractTest {
         assertFalse(activity.contains(".setTitle(\"作用域重启结果\")"));
         assertTrue(activity.contains("以下作用域未能完成重启"));
         assertTrue(compose.contains("Page.AnimationSystem -> setOf(\"com.android.systemui\")"));
-        assertTrue(compose.contains("activity.restartHookScopes(selected)"));
+        assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
     }
 
     @Test
