@@ -24,12 +24,27 @@ public class Api102HotReloadContractTest {
     }
 
     @Test
+    public void keyguardPilotUsesNamedHooksAndRollsBackOnPartialInstall() throws Exception {
+        String owner = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/SystemUiKeyguardGoneSource.java"));
+        String registry = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Api102HookRegistry.java"));
+        assertTrue(owner.contains("Api102HookRegistry.stableId("));
+        assertTrue(owner.contains("Api102HookRegistry.hookIdentified("));
+        assertTrue(owner.contains("Api102HookRegistry.rollbackIdentified(installedIds)"));
+        assertTrue(registry.contains(".setId(id)"));
+        assertTrue(registry.contains("handle.unhook()"));
+        assertTrue(registry.contains("duplicate API 102 hook id"));
+        assertFalse(registry.contains("replaceHook("));
+    }
+
+    @Test
     public void api102HotReloadFailsClosedAfterAnyHookDomainStarts() throws Exception {
         String entry = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/ModuleMain.java"));
         assertTrue(entry.contains("onHotReloading(@NonNull HotReloadingParam param)"));
         assertTrue(entry.contains("onHotReloaded(@NonNull HotReloadedParam param)"));
-        assertTrue(entry.contains("if (activeProcessLifecycle)"));
+        assertTrue(entry.contains("if (activeProcessLifecycle || Api102HookRegistry.installedCount() != 0)"));
         assertTrue(entry.contains("return false;"));
         assertTrue(entry.contains("param.setSavedInstanceState(loadedProcessName)"));
         assertTrue(entry.contains("Api101Bridge.init(this)"));
