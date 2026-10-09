@@ -123,6 +123,9 @@ public final class ModuleMain extends XposedModule {
                 if (!ThirdPartyGlassAdapterRegistry.install(packageName, classLoader)) {
                     Api101Bridge.log("[DC][ThirdPartyGlass] adapter install failed package=" + packageName);
                 }
+                // This scope is not the Launcher: give its already-open renderers their own
+                // Remote Preferences observer, regardless of initially enabled appearance.
+                ExternalGlassLiveConfigState.initialize(packageName);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][ThirdPartyGlass] init failed package=" + packageName, error);
             }
