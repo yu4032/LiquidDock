@@ -40,7 +40,10 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue(compose.contains("UI_TOGGLE|$id|checked=$checked|selected=$selectedRestartScopes"));
         assertTrue(dialog.contains("onToggle: (String, Boolean) -> Unit"));
         assertTrue(dialog.contains("onRestart: (Set<String>) -> Unit"));
-        assertTrue(dialog.contains("onCheckedChange = { checked -> onToggle(item.id, checked) }"));
+        assertTrue(dialog.contains("onCheckedChange = { next -> onToggle(item.id, next) }"));
+        assertTrue(dialog.contains("onClick = { onToggle(item.id, !checked) }"));
+        assertTrue(dialog.contains("val checked = item.id in selected"));
+        assertTrue(dialog.contains("top.yukonga.miuix.kmp.basic.Switch("));
         assertTrue(dialog.contains("onRestart(selected.toSet())"));
         assertFalse(dialog.contains("onCheckedChange = { onToggle(item.id) }"));
     }
