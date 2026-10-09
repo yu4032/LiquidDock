@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -101,6 +102,9 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+// Bottom navigation samples the same complete content capture as the header.
+// Keep overlayBackdrop for buttons/dialogs; only the tab bar needs this source.
+private val LocalBottomNavigationBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 
 @Composable
 internal fun ModernSettingsScaffold(
@@ -136,6 +140,12 @@ internal fun ModernSettingsScaffold(
     } else {
         null
     }
+    // The MIUIX layer above records the entire page, including final nested
+    // component output. Adapt it once for Prismal instead of recording another
+    // full-screen layer or using the partial backgroundLayer + screenLayer blend.
+    val bottomNavigationBackdrop = remember(barBackdrop) {
+        barBackdrop?.let(::GuiFullPagePrismalBackdrop)
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -167,6 +177,7 @@ internal fun ModernSettingsScaffold(
         CompositionLocalProvider(
             LocalPrismalSurfaceBackdrop provides surfaceBackdrop,
             LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
+            LocalBottomNavigationBackdrop provides bottomNavigationBackdrop,
         ) {
             Scaffold(
                 containerColor = Color.Transparent,
@@ -281,6 +292,13 @@ internal fun ModernSettingsScaffold(
                         .then(
                             if (barBackdrop != null) Modifier.layerBackdrop(barBackdrop)
                             else Modifier,
+                        )
+                        .then(
+                            if (bottomNavigationBackdrop != null) {
+                                Modifier.onGloballyPositioned {
+                                    bottomNavigationBackdrop.onSourcePlaced()
+                                }
+                            } else Modifier,
                         ),
                 ) {
                     content(padding)
@@ -421,7 +439,7 @@ internal fun ModernBottomNavigation(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
 ) {
-    val backdrop = LocalPrismalOverlayBackdrop.current
+    val backdrop = LocalBottomNavigationBackdrop.current ?: LocalPrismalOverlayBackdrop.current
     val selected by rememberUpdatedState(selectedIndex)
     val onSelect by rememberUpdatedState(onSelected)
 
