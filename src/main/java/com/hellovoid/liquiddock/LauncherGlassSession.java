@@ -1099,18 +1099,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         OutputState output = staticOutput;
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
                 || output.width <= 0 || output.height <= 0) return;
-        // Background source and Gaussian blur may stay at reduced resolution. Procedural
-        // Workspace optics remain native-resolution; per-node scissor avoids full-screen shading.
-        int opticsScale = PassBlurQualityPolicy.workspaceOpticsScalePercent(
-                workspaceSource, passBlurCaptureScalePercent);
-        boolean reduced = opticsScale < 100;
-        if (reduced) {
-            sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrameAtScale(opticsScale);
-        } else {
-            sourceBackend.makeCurrent(output.eglSurface);
-            prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
-        }
+        // Background capture and blur remain downsampled, while procedural refraction
+        // renders directly into the native-resolution window. The Prismal node scissor
+        // limits expensive shading to occupied glass bounds.
+        sourceBackend.makeCurrent(output.eglSurface);
+        prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
         StaticNodeState[] snapshot = staticNodeStateSnapshot;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
@@ -1126,8 +1119,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
-        if (reduced) presentFull(prismalRenderer.outputTexture(), output);
-        else sourceBackend.swapBuffers(output.eglSurface);
+        sourceBackend.swapBuffers(output.eglSurface);
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
