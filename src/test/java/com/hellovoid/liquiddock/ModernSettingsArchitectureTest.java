@@ -277,9 +277,12 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
         assertTrue(surfaces.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
         assertTrue(surfaces.contains("val backdrop = LocalPrismalOverlayBackdrop.current"));
-        // Diagnostic: header samples recorded body directly; bottom tabs retain merged source.
-        assertTrue(surfaces.contains("backdrop = screenLayer,"));
-        assertFalse(surfaces.contains("backdrop = activeOverlayBackdrop,"));
+        assertTrue(surfaces.contains("backdrop = activeOverlayBackdrop,"));
+        // Recording must wrap the painted background, not capture an empty Box.
+        int capture = surfaces.indexOf("Modifier.prismalGlassLayer(backgroundLayer)");
+        int paint = surfaces.indexOf("Brush.verticalGradient(");
+        assertTrue("Opaque background must be drawn inside its Prismal capture", capture >= 0 && paint > capture);
+        assertTrue(surfaces.contains("lerp(background, primary, 0.07f)"));
         assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
         assertTrue(header.contains("PrismalBackdrop"));
         assertFalse(surfaces.contains("rememberLayerBackdrop {"));
