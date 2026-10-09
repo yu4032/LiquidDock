@@ -60,6 +60,25 @@ public class SecurityCenterSettingsRestartContractTest {
     }
 
     @Test
+    public void systemUiAlwaysRequestsVerifiedRestartWithoutSuccessPopup() throws Exception {
+        String activity = Files.readString(
+                MAIN.resolve("java/com/hellovoid/liquiddock/SettingsActivity.java"));
+        String shell = Files.readString(
+                MAIN.resolve("java/com/hellovoid/liquiddock/HookScopeRestartShell.java"));
+        String compose = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+
+        assertTrue(shell.contains("restart_systemui"));
+        assertTrue(shell.contains("kill -KILL $before_ui"));
+        assertTrue(shell.contains("report com.android.systemui RESTARTED"));
+        assertTrue(activity.contains("HookScopeRestartShell.parseResults("));
+        assertFalse(activity.contains(".setTitle(\"作用域重启结果\")"));
+        assertTrue(activity.contains("以下作用域未能完成重启"));
+        assertTrue(compose.contains("Page.AnimationSystem -> setOf(\"com.android.systemui\")"));
+        assertTrue(compose.contains("activity.restartHookScopes(selected)"));
+    }
+
+    @Test
     public void restartDialogIsScrollableAndUsesCenteredRedConfirmButton() throws Exception {
         String ui = Files.readString(
                 MAIN.resolve("kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt"));
