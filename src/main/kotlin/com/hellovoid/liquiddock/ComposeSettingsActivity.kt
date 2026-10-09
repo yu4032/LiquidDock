@@ -195,7 +195,6 @@ private fun optionSummary(key: String): String = when (key) {
     "dock_divider_color_g" -> "分隔竖线颜色 · 绿"
     "dock_divider_color_b" -> "分隔竖线颜色 · 蓝"
     "dock_divider_alpha" -> "分隔竖线不透明度"
-    "workstation_dock_width_offset" -> "相对系统工作台 Dock 的原始长度增减；不会改变位置或普通 Dock"
     "workstation_grid_horizontal_offset" -> "整体平移工作台桌面图标区域，适用于当前实际网格列数；不继承普通桌面水平偏移"
     "workstation_all_apps_landscape_horizontal_offset" -> "直接设置工作台所有应用横屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_landscape_top_spacing" -> "直接设置工作台所有应用横屏图标区上间距；不叠加系统默认位置"
@@ -203,8 +202,7 @@ private fun optionSummary(key: String): String = when (key) {
     "workstation_all_apps_portrait_horizontal_offset" -> "直接设置工作台所有应用竖屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_top_spacing" -> "直接设置工作台所有应用竖屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_bottom_spacing" -> "直接设置工作台所有应用竖屏图标区下间距；不叠加系统默认位置"
-    "workstation_dock_icon_top_offset" -> "调整工作台 Dock 图标与容器顶部之间的距离"
-    "workstation_dock_icon_bottom_offset" -> "调整工作台 Dock 图标与容器底部之间的距离"
+    "workstation_dock_icon_top_offset" -> "通过图标顶部装饰偏移调整工作台 Dock 图标垂直位置；正值通常向下移动"
     "liquid_folder_corner_radius" -> "0 表示自动跟随 MIUI 原生圆角；大于 0 时同时覆盖桌面与拖动文件夹玻璃"
     "liquid_blur" -> "控制玻璃背景的模糊程度"
     "liquid_thickness" -> "控制虚拟玻璃厚度对折射效果的影响"
@@ -316,10 +314,8 @@ private fun workstationSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> {
 
 private val workstationDockSpecs by lazy {
     workstationSpecsFor(
-        ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,
         ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
         ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
-        ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,
     )
 }
 private val workstationDesktopSpecs by lazy {
@@ -359,7 +355,6 @@ private fun ensureDividerDefaults(prefs: SharedPreferences) {
     e.apply()
 }
 private val workstationSpecs = listOf(
-    IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, "工作台 Dock 长度偏移"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS, "工作台 Dock 图标玻璃圆角", "dp"),
     IntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, "工作台桌面水平偏移"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, "所有应用 · 横屏水平间距"),
@@ -368,8 +363,7 @@ private val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, "所有应用 · 竖屏水平间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING, "所有应用 · 竖屏上间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, "所有应用 · 竖屏下间距"),
-    IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "工作台 Dock 图标上间距"),
-    IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET, "工作台 Dock 图标下间距"),
+    IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "工作台 Dock 图标垂直偏移"),
 )
 private val recentsBlurSpec = IntSpec(
     ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,
@@ -594,7 +588,7 @@ private val dockEntries = listOf(
 )
 
 private val workstationEntries = listOf(
-    HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "Dock 长度、图标玻璃圆角与上下间距"),
+    HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "Dock 图标垂直偏移与玻璃圆角"),
     HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "按当前网格列数整体调整工作台桌面水平位置"),
     HubEntry(Page.WorkstationAppsLandscape, R.string.page_workstation_apps_landscape, "所有应用横屏水平与上下间距"),
     HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
@@ -873,7 +867,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.WorkstationDock -> WorkstationSpecPage(
                     padding, prefs, masterEnabled, workstationDockSpecs,
-                    "工作台 Dock 的尺寸与图标位置参数",
+                    "工作台 Dock 图标位置与玻璃圆角参数",
                 )
                 Page.WorkstationDesktop -> WorkstationSpecPage(
                     padding, prefs, masterEnabled, workstationDesktopSpecs,
