@@ -51,16 +51,16 @@ final class VisualRuntimeState {
         if (nextPrefs == null) return;
 
         listener = (sharedPreferences, key) -> {
-            boolean strokeStyleChanged = ConfigSchema.Dock.SQUIRCLE.name().equals(key)
+            boolean strokeStyleChanged = key == null || ConfigSchema.Dock.SQUIRCLE.name().equals(key)
                     || ConfigSchema.Dock.FILL_DIFF.name().equals(key);
-            boolean dockShadowStyleChanged = ConfigSchema.Dock.SHADOW_RADIUS.name().equals(key)
+            boolean dockShadowStyleChanged = key == null || ConfigSchema.Dock.SHADOW_RADIUS.name().equals(key)
                     || ConfigSchema.Dock.SHADOW_SIZE.name().equals(key)
                     || ConfigSchema.Dock.SHADOW_ALPHA.name().equals(key)
                     || ConfigSchema.Dock.SHADOW_Y.name().equals(key);
-            boolean strokeShadowStyleChanged =
-                    ConfigSchema.Dock.STROKE_SHADOW_RADIUS.name().equals(key)
+            boolean strokeShadowStyleChanged = key == null
+                    || ConfigSchema.Dock.STROKE_SHADOW_RADIUS.name().equals(key)
                     || ConfigSchema.Dock.STROKE_SHADOW_ALPHA.name().equals(key);
-            if (!ConfigSchema.Core.ENABLED.name().equals(key)
+            if (key != null && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.SHADOW_ENABLED.name().equals(key)
