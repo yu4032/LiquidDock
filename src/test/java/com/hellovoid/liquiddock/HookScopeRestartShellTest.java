@@ -34,22 +34,34 @@ public class HookScopeRestartShellTest {
     }
 
     @Test
-    public void multiScopeRestartAlwaysFinishesOtherHookProcessesBeforeOpeningHome() {
+    public void allSelectedScopesRunBeforeSystemUiLocksTheScreen() {
         String script = HookScopeRestartShell.buildScript(HookScopeRestartShell.ALLOWED);
-        int home = script.indexOf("\\nold_home=");
-        int systemUi = script.indexOf("\\nrestart_systemui\\n");
+        // Check the generated shell commands, not the Java function definitions.
         int security = script.indexOf(
-                "\\nrestart_running com.miui.securitycenter com.miui.securitycenter:ui");
+                "\nrestart_running com.miui.securitycenter com.miui.securitycenter:ui");
         int gboard = script.indexOf(
-                "\\nrestart_running com.google.android.inputmethod.latin ");
+                "\nrestart_running com.google.android.inputmethod.latin ");
         int search = script.indexOf(
-                "\\nrestart_running com.android.quicksearchbox ");
-        assertTrue(home > 0);
-        assertTrue(systemUi > 0 && systemUi < home);
-        assertTrue(security > 0 && security < home);
-        assertTrue(gboard > 0 && gboard < home);
-        assertTrue(search > 0 && search < home);
+                "\nrestart_running com.android.quicksearchbox ");
+        int home = script.indexOf("\nold_home=");
+        int systemUi = script.indexOf("\nrestart_systemui\n");
+        assertTrue(security > 0);
+        assertTrue(gboard > security);
+        assertTrue(search > gboard);
+        assertTrue(home > search);
+        assertTrue("SystemUI must run LAST because it returns to lockscreen",
+                systemUi > home);
         assertTrue(script.contains("am start -a android.intent.action.MAIN "));
+        assertTrue(script.indexOf("\nexit 0\n") > systemUi);
+    }
+
+    @Test
+    public void withoutSelectedSystemUiNoLockscreenRestartIsIssued() {
+        String script = HookScopeRestartShell.buildScript(Set.of(
+                HookScopeRestartShell.HOME,
+                HookScopeRestartShell.SECURITY_CENTER));
+        assertTrue(script.contains("\nold_home="));
+        assertFalse(script.contains("\nrestart_systemui\n"));
     }
 
     @Test
