@@ -51,24 +51,24 @@ final class VisualRuntimeState {
         if (nextPrefs == null) return;
 
         listener = (sharedPreferences, key) -> {
-            boolean strokeStyleChanged = key == null || ConfigSchema.Dock.SQUIRCLE.name().equals(key)
-                    || ConfigSchema.Dock.FILL_DIFF.name().equals(key)
-                    || ConfigSchema.Dock.SQUIRCLE_CONTROL_POINT.name().equals(key)
-                    || ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH.name().equals(key)
-                    || ConfigSchema.Dock.SQUIRCLE_STROKE_OFFSET.name().equals(key)
-                    || ConfigSchema.Dock.FILL_DIFF_STROKE_WIDTH.name().equals(key)
-                    || ConfigSchema.Dock.STANDARD_STROKE_WIDTH.name().equals(key)
-                    || ConfigSchema.Dock.STROKE_RED.name().equals(key)
-                    || ConfigSchema.Dock.STROKE_GREEN.name().equals(key)
-                    || ConfigSchema.Dock.STROKE_BLUE.name().equals(key)
-                    || ConfigSchema.Dock.STROKE_ALPHA.name().equals(key);
-            boolean dockShadowStyleChanged = key == null || ConfigSchema.Dock.SHADOW_RADIUS.name().equals(key)
-                    || ConfigSchema.Dock.SHADOW_SIZE.name().equals(key)
-                    || ConfigSchema.Dock.SHADOW_ALPHA.name().equals(key)
-                    || ConfigSchema.Dock.SHADOW_Y.name().equals(key);
+            boolean strokeStyleChanged = key == null || matchesOptionChange(key, ConfigSchema.Dock.SQUIRCLE)
+                    || matchesOptionChange(key, ConfigSchema.Dock.FILL_DIFF)
+                    || matchesOptionChange(key, ConfigSchema.Dock.SQUIRCLE_CONTROL_POINT)
+                    || matchesOptionChange(key, ConfigSchema.Dock.SQUIRCLE_STROKE_WIDTH)
+                    || matchesOptionChange(key, ConfigSchema.Dock.SQUIRCLE_STROKE_OFFSET)
+                    || matchesOptionChange(key, ConfigSchema.Dock.FILL_DIFF_STROKE_WIDTH)
+                    || matchesOptionChange(key, ConfigSchema.Dock.STANDARD_STROKE_WIDTH)
+                    || matchesOptionChange(key, ConfigSchema.Dock.STROKE_RED)
+                    || matchesOptionChange(key, ConfigSchema.Dock.STROKE_GREEN)
+                    || matchesOptionChange(key, ConfigSchema.Dock.STROKE_BLUE)
+                    || matchesOptionChange(key, ConfigSchema.Dock.STROKE_ALPHA);
+            boolean dockShadowStyleChanged = key == null || matchesOptionChange(key, ConfigSchema.Dock.SHADOW_RADIUS)
+                    || matchesOptionChange(key, ConfigSchema.Dock.SHADOW_SIZE)
+                    || matchesOptionChange(key, ConfigSchema.Dock.SHADOW_ALPHA)
+                    || matchesOptionChange(key, ConfigSchema.Dock.SHADOW_Y);
             boolean strokeShadowStyleChanged = key == null
-                    || ConfigSchema.Dock.STROKE_SHADOW_RADIUS.name().equals(key)
-                    || ConfigSchema.Dock.STROKE_SHADOW_ALPHA.name().equals(key);
+                    || matchesOptionChange(key, ConfigSchema.Dock.STROKE_SHADOW_RADIUS)
+                    || matchesOptionChange(key, ConfigSchema.Dock.STROKE_SHADOW_ALPHA);
             if (key != null && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_ENABLED.name().equals(key)
@@ -226,6 +226,13 @@ final class VisualRuntimeState {
         if (transition.mirrorVisibilityChanged) {
             runOnMain(() -> DockMirrorShortcutHook.onRuntimeVisibilityChanged());
         }
+    }
+
+    /** Compose's DP_TENTHS storage updates the sidecar rather than the primary key. */
+    static boolean matchesOptionChange(String changedKey,
+            com.hellovoid.liquiddock.config.ConfigKey<?> option) {
+        return changedKey != null && (option.name().equals(changedKey)
+                || (option.name() + "_tenths").equals(changedKey));
     }
 
     private static void runOnMain(Runnable action) {
