@@ -27,6 +27,10 @@ final class Miuix307PassBlurBridge {
     private static final long FORCE_REFRESH_MIN_INTERVAL_MS = 50L;
     private static final long FORCE_REFRESH_ERROR_LOG_MIN_MS = 5000L;
     private static long lastForceRefreshErrorLogMs;
+    // One vendor SetPassBlurSurface slot exists per Launcher root SurfaceControl.
+    // Workspace and Recents capsules keep separate GPU consumers, so ownership must hand off.
+    private static final PassBlurRootOwnerState LAUNCHER_ROOT_OWNER =
+            new PassBlurRootOwnerState();
 
     static final class Binding {
         final SurfaceControl rootSurface;
@@ -41,6 +45,7 @@ final class Miuix307PassBlurBridge {
         final int surfaceSequenceId;
         final int rootLayerId;
         final PassBlurDomain domain;
+        final String[] exclusions;
         boolean bound = true;
         boolean updatesEnabled = true;
         volatile boolean workspaceTransitionFrameSync;
@@ -58,7 +63,8 @@ final class Miuix307PassBlurBridge {
                 int viewRootIdentity,
                 int surfaceSequenceId,
                 int rootLayerId,
-                PassBlurDomain domain) {
+                PassBlurDomain domain,
+                String[] exclusions) {
             this.rootSurface = rootSurface;
             this.producerSurface = producerSurface;
             this.setPassBlurSurface = setPassBlurSurface;
@@ -71,12 +77,13 @@ final class Miuix307PassBlurBridge {
             this.surfaceSequenceId = surfaceSequenceId;
             this.rootLayerId = rootLayerId;
             this.domain = domain;
+            this.exclusions = exclusions.clone();
         }
     }
 
     private Miuix307PassBlurBridge() {}
 
-    static Binding bind(PassBlurBindRequest request, Surface producerSurface) {
+    static synchronized Binding bind(PassBlurBindRequest request, Surface producerSurface) {
         if (request == null || request.host() == null || producerSurface == null) return null;
         View materialHost = request.host();
         PassBlurDomain domain = request.domain();
@@ -177,7 +184,11 @@ final class Miuix307PassBlurBridge {
                     viewRootIdentity,
                     surfaceSequenceId,
                     rootLayerId,
-                    domain);
+                    domain,
+                    exclusions);
+            if (isSharedLauncherBinding(binding)) {
+                LAUNCHER_ROOT_OWNER.claim(rootLayerId, binding);
+            }
 
             MainHook.log(TAG + " PassBlur producer bound scale=" + scale
                     + " requestedScale=" + request.requestedScale()
@@ -251,8 +262,44 @@ final class Miuix307PassBlurBridge {
         host.postOnAnimation(() -> schedulePauseUpdates(host, binding, framesLeft - 1));
     }
 
-    private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
+    private static synchronized void setUpdatesEnabled(
+            Binding binding, boolean enabled, boolean force) {
         if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
+
+        if (isSharedLauncherBinding(binding)) {
+            Object currentOwner = LAUNCHER_ROOT_OWNER.owner(binding.rootLayerId);
+            if (!enabled && currentOwner != binding) {
+                // A stale capsule/Workspace must not pause the other root consumer.
+                binding.updatesEnabled = false;
+                return;
+            }
+            if (enabled && currentOwner != binding) {
+                // The native SetPassBlurSurface slot was overwritten by the other domain.
+                // Merely toggling setUpdateTextureFlag cannot deliver buffers to this OES input.
+                try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                    binding.setMiBlurWinExc.invoke(
+                            transaction, binding.rootSurface, (Object) binding.exclusions);
+                    binding.setPassBlurSurface.invoke(
+                            transaction, binding.rootSurface, binding.producerSurface);
+                    binding.setUpdateTextureFlag.invoke(
+                            transaction, binding.rootSurface, Boolean.TRUE,
+                            Float.valueOf(binding.scale));
+                    transaction.apply();
+                    LAUNCHER_ROOT_OWNER.claim(binding.rootLayerId, binding);
+                    binding.updatesEnabled = true;
+                    MainHook.log(TAG + " launcher root producer handoff from="
+                            + ownerDomain(currentOwner) + " to=" + binding.domain
+                            + " layerId=" + binding.rootLayerId
+                            + " surfaceSeq=" + binding.surfaceSequenceId);
+                } catch (Throwable error) {
+                    MainHook.log(TAG + " launcher root producer handoff failed domain="
+                            + binding.domain + " layerId=" + binding.rootLayerId
+                            + " error=" + error);
+                }
+                return;
+            }
+        }
+
         if (!force && binding.updatesEnabled == enabled) return;
         if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
             GboardPassBlurContinuousAuthority.setUpdatesEnabled(
@@ -326,6 +373,7 @@ final class Miuix307PassBlurBridge {
 
     static void renewForceRefresh(Binding binding) {
         if (binding == null || !binding.bound || !binding.updatesEnabled) return;
+        if (isSharedLauncherBinding(binding) && !ownsSharedLauncherRoot(binding)) return;
         boolean dock = binding.domain == PassBlurDomain.DOCK;
         boolean gboard = binding.domain == PassBlurDomain.GBOARD_FLOATING;
         boolean workspace = binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
@@ -354,8 +402,17 @@ final class Miuix307PassBlurBridge {
         }
     }
 
-    static void unbind(Binding binding) {
+    static synchronized void unbind(Binding binding) {
         if (binding == null || !binding.bound) return;
+        boolean sharedLauncher = isSharedLauncherBinding(binding);
+        if (sharedLauncher && !LAUNCHER_ROOT_OWNER.isOwner(binding.rootLayerId, binding)) {
+            // A superseded root binding cannot clear the newer domain's native producer.
+            binding.bound = false;
+            binding.updatesEnabled = false;
+            MainHook.log(TAG + " inactive launcher root producer retired domain="
+                    + binding.domain + " layerId=" + binding.rootLayerId);
+            return;
+        }
         if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
             SecurityCenterPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
@@ -392,7 +449,25 @@ final class Miuix307PassBlurBridge {
             binding.bound = false;
             binding.updatesEnabled = false;
             MainHook.log(TAG + " PassBlur unbind failed: " + error);
+        } finally {
+            if (sharedLauncher) {
+                LAUNCHER_ROOT_OWNER.release(binding.rootLayerId, binding);
+            }
         }
+    }
+
+    private static boolean isSharedLauncherBinding(Binding binding) {
+        return binding != null && binding.rootLayerId >= 0
+                && (binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
+                    || binding.domain == PassBlurDomain.RECENTS_CAPSULE);
+    }
+
+    private static synchronized boolean ownsSharedLauncherRoot(Binding binding) {
+        return LAUNCHER_ROOT_OWNER.isOwner(binding.rootLayerId, binding);
+    }
+
+    private static String ownerDomain(Object owner) {
+        return owner instanceof Binding ? String.valueOf(((Binding) owner).domain) : "none";
     }
 
     static int surfaceLayerId(SurfaceControl surface) {
