@@ -393,7 +393,7 @@ final class LauncherGlassSceneController {
         if (coveredWithoutSharedRecents || folderCovered
                 || (unlockTransitionPending
                     && LauncherGlassHomePresentationHook.isUnlockProducerBlocked())
-                || recentsWallpaperSettlePending) {
+                || (recentsWallpaperSettlePending && !keepSourceLiveDuringRecents())) {
             session.suspendWorkspaceProducer();
         }
         if (bootstrapPosted) return;

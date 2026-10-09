@@ -313,7 +313,10 @@ final class RecentsCapsuleGlassSession {
             worldPresentationSignaled = true;
         }
         mainHandler.post(() -> {
-            if (!shuttingDown && listener != null) listener.onFirstFramePresented(target);
+            // Do not reveal an obsolete GPU frame after native source loss.
+            if (!shuttingDown && !sourceUnavailable && listener != null) {
+                listener.onFirstFramePresented(target);
+            }
         });
     }
 
