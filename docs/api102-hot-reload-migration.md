@@ -49,6 +49,20 @@
 
 ---
 
+## 第四阶段：首个 owner-scoped 安装与停止事务（2026-10-09）
+
+为避免“保存了 HookHandle 就能热重载”的误判，新增 **`Api102HookDomain`**，把低风险的 SystemUI GONE 锁屏完成观察器改为按域安装。
+
+- `IDLE → INSTALLING → ACTIVE`：只有全部目标方法 Hook 安装完成，才允许产生观察器副作用。缺失目标方法或中途抛异常时，`abort()` 按逆序回滚本域句柄。
+- `ACTIVE → BLOCKED → IDLE`：`stop()` 先通过 `volatile` 状态关闭观察器回调副作用，再逆序 `unhook`。所有句柄撤销成功后允许后续重新安装；失败时留在 `BLOCKED`，禁止第二次安装和意外重复广播。支持之后重复调用 `stop()` 尝试清理残余句柄。
+- 每个 Hook 的稳定 ID 含功能域、声明类、方法及参数。事务只撤销本域句柄，不会删除其他功能域或现有匿名 Hook。新实例也不得从旧代 saved state 携带 HookHandle。
+- `SystemUiKeyguardGoneSource.stopForFutureReload()` 目前只是**孤立 owner 的预备接口**，不在 `ModuleMain.onHotReloading()` 中调用，也没有关闭 `autoHotReload=false` 的门禁。除了该观察 Hook，SystemUI 还拥有手势白条监听和玻璃相关 owner。
+- 新增 `Api102HookDomainTest`，在 JVM 使用假 HookHandle 注入重复安装、部分安装失败、撤销失败、重试清理和不同 owner 并存。通过 CI 只说明 JVM 事务及编译成立；真机热替换仍需补充 in-flight invocation barrier 和完整的 SystemUI 资源关闭流程。
+
+**热更新判断**：本阶段只完成一个 owner 的幂等停止/重启基础，不声称全进程可热重载。若未来需要严格保证 `stop()` 返回后绝无先前进入的回调完成广播，还必须增加受控的在途回调隔离/排空机制；当前只是关闭状态位并在副作用前检查。
+
+---
+
 ## 后续真正热重载的必要条件
 
 1. **分域 Hook 所有权与具名迁移**。基础全局句柄登记已建立；下一步按 owner 逐一把匿名 Hook 迁为明确且不冲突的稳定 ID，同时提供安装/回滚事务、priority 保持和安全停止流程。不是所有 Hook 都能直接按 method signature 命名：多个合法拦截器会共享同一个目标方法。
