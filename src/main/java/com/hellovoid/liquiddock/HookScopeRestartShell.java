@@ -68,6 +68,30 @@ final class HookScopeRestartShell {
         script.append("  report \"$scope\" FAILED\n");
         script.append("}\n");
 
+        // SystemUI is a persistent system process: TERM is not a reliable
+        // restart trigger on HyperOS. Use a targeted KILL and wait for a
+        // different live PID, independent of which settings page invoked it.
+        script.append("restart_systemui() {\n");
+        script.append("  before_ui=\"$(pidof com.android.systemui 2>/dev/null || true)\"\n");
+        script.append("  if [ -z \"$before_ui\" ]; then report com.android.systemui FAILED; return; fi\n");
+        script.append("  if ! kill -KILL $before_ui 2>/dev/null; then report com.android.systemui FAILED; return; fi\n");
+        script.append("  i=0\n");
+        script.append("  while [ \"$i\" -lt 80 ]; do\n");
+        script.append("    after_ui=\"$(pidof com.android.systemui 2>/dev/null || true)\"\n");
+        script.append("    old_alive=0\n");
+        script.append("    for old in $before_ui; do\n");
+        script.append("      if kill -0 \"$old\" 2>/dev/null; then old_alive=1; break; fi\n");
+        script.append("    done\n");
+        script.append("    if [ \"$old_alive\" -eq 0 ] && [ -n \"$after_ui\" ]; then\n");
+        script.append("      for fresh in $after_ui; do\n");
+        script.append("        case \" $before_ui \" in *\" $fresh \"*) ;; *) report com.android.systemui RESTARTED; return ;; esac\n");
+        script.append("      done\n");
+        script.append("    fi\n");
+        script.append("    sleep 0.1; i=$((i+1))\n");
+        script.append("  done\n");
+        script.append("  report com.android.systemui FAILED\n");
+        script.append("}\n");
+
         for (String scope : ORDER) {
             if (!selected.contains(scope)) continue;
             if (HOME.equals(scope)) {
@@ -89,7 +113,7 @@ final class HookScopeRestartShell {
                 script.append("else report com.miui.home FAILED; fi\n");
                 script.append("fi\n");
             } else if (SYSTEM_UI.equals(scope)) {
-                script.append("restart_running com.android.systemui com.android.systemui\n");
+                script.append("restart_systemui\n");
             } else if (SECURITY_CENTER.equals(scope)) {
                 // Only :ui installs LiquidDock's Security Center hook.
                 script.append("restart_running com.miui.securitycenter com.miui.securitycenter:ui\n");
