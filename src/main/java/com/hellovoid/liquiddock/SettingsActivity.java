@@ -32,13 +32,6 @@ import com.hellovoid.liquiddock.config.ConfigMigration;
 
 public class SettingsActivity extends AppCompatActivity {
     private static final int WIDGET_HIDDEN_BACKUP_MAX_BYTES = 1024 * 1024;
-    private static final Set<String> RESTARTABLE_HOOK_SCOPES = Set.of(
-            "com.miui.home",
-            "com.android.systemui",
-            "com.miui.securitycenter",
-            "com.google.android.inputmethod.latin",
-            "com.android.quicksearchbox");
-
     private final ActivityResultLauncher<String> exportConfigLauncher =
         registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"),
             uri -> { if (uri != null) exportCurrentParameters(uri); });
