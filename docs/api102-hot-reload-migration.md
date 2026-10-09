@@ -26,7 +26,7 @@
 
 - 基于域标识 + 目标二进制类名 + 方法名 + 参数类型生成稳定 ID（区分同名重载）。仅用于目标进程内的 Hook 身份；跨代 saved state 不传递类、句柄或回调。
 - 通过 API 102 的 `hook(method).setId(id).intercept(...)` 取得、登记 `HookHandle`；重复 ID 必须在调用框架前拒绝。安装中途失败时按逆序撤销已安装句柄，`unhook` 失败的句柄继续留在登记簿，避免产生第二份重复回调。
-- 以 fake `HookHandle` 单元测试验证 ID 稳定性、重载隔离、重复安装和失败回滚。该试点不使用 `replaceHook`，没有重新安装 active SystemUI 的能力。
+- 以 fake `HookHandle` 单元测试验证 ID 稳定性、重载隔离、重复安装和失败回滚。登记器还提供独立的 `replaceIdentified()` 原子替换原语，并测试替换成功后只保留新句柄、失败时保留旧句柄供回滚；**此原语目前只用于单元测试，不在活跃进程执行**。
 - `ModuleMain.onHotReloading` 除原先的 domain ownership gate 外，还要求登记簿中没有任何已安装句柄；**`autoHotReload=false` 不变**。
 - 未迁入所有普通 HookUtil / 直接 hook 调用，没有注册 SystemUI 手势白条 / menu 的 receiver、View listener 和 Session，因此不能把这一步解释为全进程 reload-ready。
 
