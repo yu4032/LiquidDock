@@ -189,6 +189,7 @@ final class LiveGlassConfigState {
                     Miuix307ZeroCopyRenderer.requestDockSceneRefresh();
                     LauncherGlassStaticNode.applyLiveGlassConfigToAll(next.glass);
                     LauncherGlassSessionRegistry.applyLiveGlassConfigToAll(next.glass);
+                    ShortcutPopupGlassCoordinator.onLiveGlassConfigChanged(next.glass);
                     MiuixLauncherStaticGlassHook.onLiveGlassConfigChanged(next.glass);
                 }
                 MainHook.log(TAG + " glass generation=" + generation
