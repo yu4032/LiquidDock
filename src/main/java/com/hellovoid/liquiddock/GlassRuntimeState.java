@@ -43,7 +43,7 @@ final class GlassRuntimeState {
         largeFolderEnabled = initialLargeFolderEnabled;
         if (nextPrefs == null) return;
         listener = (sharedPreferences, key) -> {
-            if (!ConfigSchema.Glass.ENABLED.name().equals(key)
+            if (key != null && !ConfigSchema.Glass.ENABLED.name().equals(key)
                     && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.ICON_GLASS.name().equals(key)
                     && !ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name().equals(key)
