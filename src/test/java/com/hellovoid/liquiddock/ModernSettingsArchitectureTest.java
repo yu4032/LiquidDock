@@ -100,9 +100,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("GuiOnTouchPrismalToggle("));
         assertTrue(ui.contains("val backdrop = LocalPrismalSurfaceBackdrop.current"));
         assertTrue(slider.contains("if (sampling) Modifier.prismalGlassLayer(trackBackdrop) else Modifier"));
-        assertTrue(toggle.contains("if (sampling) Modifier.prismalGlassLayer(trackBackdrop) else Modifier"));
+        assertTrue(toggle.contains("if (samplingEnabled) Modifier.prismalGlassLayer(trackBackdrop) else Modifier"));
         assertTrue(slider.contains("if (sampling) Modifier.drawPrismalGlass("));
-        assertTrue(toggle.contains("if (sampling) Modifier.drawPrismalGlass("));
+        assertTrue(toggle.contains("if (samplingEnabled) Modifier.drawPrismalGlass("));
         assertTrue(slider.contains("onDragStarted = {"));
         assertTrue(toggle.contains("onDragStarted = { sampling = true }"));
         assertTrue(slider.contains("val sampling = enabled && (isDragging || isTrackPressed)"));
