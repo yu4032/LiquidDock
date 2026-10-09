@@ -49,8 +49,8 @@
     <string name="dock_frame_sync_summary">使Dock玻璃背景与屏幕刷新同步，改善高刷新率下背景更新不跟手的问题；开关即时生效</string>
     <string name="option_off">关闭</string>
     <string name="workstation_customization">自定义工作台</string>
-    <string name="workstation_customization_summary">工作台使用独立的 Dock 几何、桌面水平偏移与所有应用横竖屏间距；适配当前实际网格列数，重启桌面生效</string>
-    <string name="recents_header_summary">调整任务卡片后方的系统壁纸模糊程度；修改后重启桌面生效。</string>
+    <string name="workstation_customization_summary">已加载的工作台 Dock 图标垂直偏移可即时更新；桌面与所有应用间距适配当前实际网格列数；Dock 图标玻璃圆角和布局调整仍需重启桌面生效</string>
+    <string name="recents_header_summary">调整任务卡片后方的系统壁纸模糊程度；桌面 Hook 已加载时即时生效。</string>
     <string name="liquid_enable">启用液态玻璃</string>
     <string name="liquid_enable_summary">关闭会立即移除当前玻璃效果；重新启用后部分场景需重启桌面生效</string>
     <string name="liquid_security_center_glass_enable">安全中心侧边栏玻璃</string>
@@ -61,7 +61,7 @@
     <string name="liquid_material_blur">HyperOS 高级材质</string>
     <string name="liquid_dynamic_capture">动态应用持续捕获</string>
     <string name="liquid_dynamic_capture_summary">游戏或视频中 Dock 展开时持续刷新；Dock 收起后立即停止</string>
-    <string name="liquid_header_summary">组件开关可即时调整；部分光学与性能参数需按项目说明重启桌面生效。</string>
+    <string name="liquid_header_summary">组件开关与光学参数在已加载的 Hook 中可实时更新；新增未安装的 Hook 或结构性设置仍需重启对应作用域。</string>
     <string name="page_launcher_highlights">图标、文件夹与小组件高光</string>
     <string name="launcher_highlights_entry">图标、文件夹与小组件高光层</string>
     <string name="launcher_highlights_entry_summary">控制工作区图标、文件夹与小组件玻璃使用的高光层</string>

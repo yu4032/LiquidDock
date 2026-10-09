@@ -143,7 +143,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
         assertTrue(settings.contains("桌面快捷菜单玻璃背景"));
-        assertTrue(settings.contains("重启桌面后生效"));
+        assertTrue(settings.contains("已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面"));
     }
 
     @Test public void shortcutMenuDarkModeHasDedicatedDefaultOffSettingInMenuPage() throws Exception {
