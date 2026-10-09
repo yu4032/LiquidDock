@@ -984,12 +984,6 @@ private fun HomePage(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            PageHeader(
-                stringResource(R.string.app_name),
-                "桌面布局与液态玻璃个性化设置",
-            )
-        }
-        item {
             ModernSectionLabel("状态")
             SettingsCard {
                 BooleanSetting(
