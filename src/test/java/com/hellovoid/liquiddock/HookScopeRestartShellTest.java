@@ -34,6 +34,21 @@ public class HookScopeRestartShellTest {
     }
 
     @Test
+    public void systemUiUsesDirectKillAndRequiresNewPidInsteadOfOnlyTermination() {
+        String script = HookScopeRestartShell.buildScript(Set.of(HookScopeRestartShell.SYSTEM_UI));
+        assertTrue(script.contains("restart_systemui() {"));
+        assertTrue(script.contains("restart_systemui\n"));
+        assertTrue(script.contains("before_ui=\"$(pidof com.android.systemui"));
+        assertTrue(script.contains("if ! kill -KILL $before_ui"));
+        assertTrue(script.contains("after_ui=\"$(pidof com.android.systemui"));
+        assertTrue(script.contains("old_alive"));
+        assertTrue(script.contains("report com.android.systemui RESTARTED"));
+        assertTrue(script.contains("report com.android.systemui FAILED"));
+        assertFalse(script.contains("restart_running com.android.systemui com.android.systemui"));
+        assertFalse(script.contains("am force-stop com.android.systemui"));
+    }
+
+    @Test
     public void noProcessDoesNotCountAsRestartedAndMissingResultIsFailure() {
         Set<String> selected = Set.of(
                 HookScopeRestartShell.HOME,
