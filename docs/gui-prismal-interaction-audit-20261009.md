@@ -29,12 +29,12 @@ Scope: full settings shell and shared Prismal control adapters, plus widget deta
 - Removed unused Kotlin imports in existing GUI files.
 - Kept PR's scoped root restart verification and opt-in `LD_SCOPE_RESTART` diagnostics **temporarily**; the prior one-ID trace shows they were not the source of the glass-only failure. Reevaluate simplification after device confirmation, rather than removing useful diagnostic evidence prematurely.
 - Did not modify upstream PrismalAGSL, introduce bitmap/screen capture, or add a new UI gesture framework.
-- PR #296 stays Draft.
+- Code was audited before merge; device-only interaction and performance checks remain open follow-ups.
 
-## Device/CI acceptance before merge
+## Verification record and follow-up device checks
 
 1. Build/test the final head commit (not intermediate builds).
 2. With GUI glass **on**, open restart dialog from a child page, explicitly enable all five, confirm `UI_TOGGLE` and `UI_REQUEST` have all IDs; repeat with one disabled. Compare glass **off**.
 3. Monitor PID changes; SystemUI last and expected lockscreen transition when selected.
 4. Repeated switch taps, rapid sliders and stepper + slider adjustments, rapid bottom tabs, Back and Restart buttons, long list scrolling and top status-bar colors in both themes.
-5. Follow up on any P1/P2 watch items only after reproducing a failure; clean temporary diagnostic code before eventual merge.
+5. Follow up on any P1/P2 watch items only after reproducing a failure. Opt-in diagnostics remain available to distinguish GUI selection from process execution; remove them later only when a replacement validation path exists.

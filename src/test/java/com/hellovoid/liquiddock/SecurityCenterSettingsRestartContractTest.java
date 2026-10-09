@@ -48,7 +48,7 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue(dialog.contains("onSelect = stableToggle,"));
         assertTrue(dialog.contains("val currentChecked = rememberUpdatedState(checked)"));
         assertTrue(dialog.contains("val currentToggle = rememberUpdatedState(onToggle)"));
-        // The ordinary switch stays as the non-glass fallback.
+        // Prismal is retained for glass-on mode; MIUIX is the non-glass fallback.
         assertTrue(dialog.contains("top.yukonga.miuix.kmp.basic.Switch("));
         // Interactive PrismalGlassSurface on the parent installs a whole-panel
         // gesture modifier which may consume taps intended for its children.
@@ -76,7 +76,7 @@ public class SecurityCenterSettingsRestartContractTest {
     }
 
     @Test
-    public void batchRestartKeepsLauncherBeforeSecurityCenterAndNeverForceStopsSecurityCenter() throws Exception {
+    public void batchRestartTargetsOnlySecurityCenterUiWithoutForceStoppingItsPackage() throws Exception {
         String activity = Files.readString(
                 MAIN.resolve("java/com/hellovoid/liquiddock/SettingsActivity.java"));
 
