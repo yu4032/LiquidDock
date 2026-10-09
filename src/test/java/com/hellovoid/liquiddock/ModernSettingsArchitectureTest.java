@@ -142,6 +142,36 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void solidActionsAndDarkCellsHaveDistinctLayeringWithoutReplacingPrismal() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String navSurface = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
+
+        // Static material and architecture guards, not device-level contrast metrics.
+        assertTrue(surfaces.contains("val solidCardColor = if (darkTheme)"));
+        assertTrue(surfaces.contains("lerp(colors.surface, colors.onSurface, 0.08f)"));
+        assertTrue(surfaces.contains(".background(solidCardColor)"));
+        assertTrue(surfaces.contains(".border(1.dp, cardStroke, cardShape)"));
+        assertTrue(surfaces.contains("val glassCardModifier = modifier"));
+        assertTrue(surfaces.contains("darkGlassWash"));
+        assertTrue(surfaces.contains("surfaceColor = darkGlassWash"));
+
+        // +/- and reset share Button's fallback and must have their own outline.
+        assertTrue(surfaces.contains("val buttonShape = RoundedCornerShape(minHeight / 2)"));
+        assertTrue(surfaces.contains("val fillColor = lerp(colors.surface, colors.onSurface,"));
+        assertTrue(surfaces.contains(".border(1.dp, outlineColor, buttonShape)"));
+        assertTrue(surfaces.contains("else if (backdrop == null) 0.66f"));
+
+        // Glass still uses the original renderer and the navigational ripple.
+        assertTrue(surfaces.contains("PrismalGlassSurface("));
+        assertTrue(navSurface.contains("PrismalPressRipple("));
+        assertTrue(navSurface.contains("drawPrismalGlassTint(tint, tintAlpha)"));
+        assertTrue(navSurface.contains("surfaceColor.isSpecified"));
+        assertFalse(navSurface.contains("scaleX ="));
+        assertFalse(navSurface.contains("translationX ="));
+    }
+
+    @Test
     public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
