@@ -84,6 +84,21 @@
 
 ---
 
+## 第六阶段：SystemUI 手势白条的 Hook 所有权和配置监听代际隔离（2026-10-09）
+
+本阶段将 `SystemUiGestureHandleFadeHook` 的三处固定 Hook（NavigationBar 初始化、附着、Recents 动画）和运行时发现的 TaskStack / LauncherProxy / 原生 handle-alpha Hook 全部归入独立的 `Api102HookDomain("systemui.gesture.handle")`。域启动采用 `begin → hook → commit`，运行时额外目标采用 `hookDynamic()`，句柄登记与既有 SystemUI 锁屏 observer 相互独立。原拦截行为与视觉隐藏时机未主动改变。
+
+重要限制：
+- 运行时动态 Hook 可能存在同类多个方法。如果 LauncherProxy 的后续方法未能 Hook，不能删除前一个方法已安装的标记然后重新挂载；本阶段提前解析两个方法签名、并在部分安装成功时保留类标记，避免重复拦截。
+- **具名/可计数不是完整停止能力。** 不能在 native alpha setter 尚有在途调用、动画目标值仍被覆盖、或旧 HOME_HANDLES 尚未恢复时直接调用 `DOMAIN.stop()`。因此本阶段没有对整个手势白条 owner 暴露热重载停止入口，也没有由 `ModuleMain` 触发停止。
+- 新增纯 JVM 的 `Api102ListenerEpoch`，`GestureHandleRuntimeState` 每次 `initialize()` 都先失效旧代，再注册新代；旧偏好回调及已进入主线程队列的 UI 通知在 epoch 不匹配时不执行。主线程 listener 实际调用与 `shutdownForFutureReload()` 由相同对象 monitor 序列化；`unregister` 失败返回 false，不可以宣告释放成功。
+- `GestureHandleSystemUiSceneState.resetForFutureReload()` 提供新的重建前状态清理原语；还未关联 native handle-alpha 归还，故不能单独作为 complete stop。
+- JVM 单测覆盖跨代旧通知失效、动态 Hook 在域激活后的登记和停止、场景复位。没有在真机执行重载实验。
+
+下一阶段：为 native alpha writes 建立“在途调用排空 + 所有 HOME_HANDLES 恢复 vendor 目标 + 重置场景/类缓存 + 动态 hooks 与 prefs 统一清理”的事务，**且必须满足 Android 主线程原生 UI 调用约束**；测试完成再开放该 owner 的安全停止。SystemUi HandleMenu 的 EGL 渲染线程和 Surface 仍单独阻断全 SystemUI 热重载。
+
+---
+
 ## 后续真正热重载的必要条件
 
 1. **分域 Hook 所有权与具名迁移**。基础全局句柄登记已建立；下一步按 owner 逐一把匿名 Hook 迁为明确且不冲突的稳定 ID，同时提供安装/回滚事务、priority 保持和安全停止流程。不是所有 Hook 都能直接按 method signature 命名：多个合法拦截器会共享同一个目标方法。
