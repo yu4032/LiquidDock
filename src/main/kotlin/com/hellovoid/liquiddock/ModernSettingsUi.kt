@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -609,6 +610,7 @@ internal fun ModernSurface(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(18.dp),
     onClick: (() -> Unit)? = null,
+    staticPress: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
@@ -625,23 +627,45 @@ internal fun ModernSurface(
         return
     }
 
-    PrismalGlassSurface(
-        backdrop = backdrop,
-        modifier = modifier.fillMaxWidth(),
-        shape = { PrismalRoundedRectangle(24.dp) },
-        onClick = onClick,
-        blurRadius = 12.dp,
-        tint = MiuixTheme.colorScheme.surface,
-        tintAlpha = 0.24f,
-        saturation = 1.32f,
-        refractionHeightPx = 16f,
-        refractionAmountPx = 21f,
-        chromaticAberration = 0.28f,
-        depthEffect = true,
-    ) {
+    val cardContent: @Composable BoxScope.() -> Unit = {
         Column(
             modifier = Modifier.padding(contentPadding),
             content = content,
+        )
+    }
+    if (staticPress && onClick != null) {
+        // Chevron navigation Cells retain Prismal press ripple/specular effects,
+        // but not the scale + parallax layerBlock of an interactive glass surface.
+        GuiStaticPressPrismalSurface(
+            backdrop = backdrop,
+            modifier = modifier.fillMaxWidth(),
+            shape = { PrismalRoundedRectangle(24.dp) },
+            onClick = onClick,
+            blurRadius = 12.dp,
+            tint = MiuixTheme.colorScheme.surface,
+            tintAlpha = 0.24f,
+            saturation = 1.32f,
+            refractionHeightPx = 16f,
+            refractionAmountPx = 21f,
+            chromaticAberration = 0.28f,
+            depthEffect = true,
+            content = cardContent,
+        )
+    } else {
+        PrismalGlassSurface(
+            backdrop = backdrop,
+            modifier = modifier.fillMaxWidth(),
+            shape = { PrismalRoundedRectangle(24.dp) },
+            onClick = onClick,
+            blurRadius = 12.dp,
+            tint = MiuixTheme.colorScheme.surface,
+            tintAlpha = 0.24f,
+            saturation = 1.32f,
+            refractionHeightPx = 16f,
+            refractionAmountPx = 21f,
+            chromaticAberration = 0.28f,
+            depthEffect = true,
+            content = cardContent,
         )
     }
 }
@@ -657,6 +681,7 @@ internal fun ModernFeatureCard(
     ModernSurface(
         modifier = modifier,
         onClick = onClick,
+        staticPress = true,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
