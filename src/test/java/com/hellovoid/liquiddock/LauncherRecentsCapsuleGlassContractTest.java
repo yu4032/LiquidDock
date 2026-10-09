@@ -152,6 +152,7 @@ public class LauncherRecentsCapsuleGlassContractTest {
         String request = read("PassBlurBindRequest.java");
         String session = read("RecentsCapsuleGlassSession.java");
         String workspace = read("LauncherGlassSession.java");
+        String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         String registry = read("LauncherGlassSessionRegistry.java");
         assertTrue(session.contains("LauncherGlassSessionRegistry.existingRootSource"));
         assertTrue(registry.contains("static synchronized LauncherGlassSession existingRootSource"));
