@@ -34,6 +34,25 @@ public class HookScopeRestartShellTest {
     }
 
     @Test
+    public void multiScopeRestartAlwaysFinishesOtherHookProcessesBeforeOpeningHome() {
+        String script = HookScopeRestartShell.buildScript(HookScopeRestartShell.ALLOWED);
+        int home = script.indexOf("\\nold_home=");
+        int systemUi = script.indexOf("\\nrestart_systemui\\n");
+        int security = script.indexOf(
+                "\\nrestart_running com.miui.securitycenter com.miui.securitycenter:ui");
+        int gboard = script.indexOf(
+                "\\nrestart_running com.google.android.inputmethod.latin ");
+        int search = script.indexOf(
+                "\\nrestart_running com.android.quicksearchbox ");
+        assertTrue(home > 0);
+        assertTrue(systemUi > 0 && systemUi < home);
+        assertTrue(security > 0 && security < home);
+        assertTrue(gboard > 0 && gboard < home);
+        assertTrue(search > 0 && search < home);
+        assertTrue(script.contains("am start -a android.intent.action.MAIN "));
+    }
+
+    @Test
     public void systemUiUsesDirectKillAndRequiresNewPidInsteadOfOnlyTermination() {
         String script = HookScopeRestartShell.buildScript(Set.of(HookScopeRestartShell.SYSTEM_UI));
         assertTrue(script.contains("restart_systemui() {"));
