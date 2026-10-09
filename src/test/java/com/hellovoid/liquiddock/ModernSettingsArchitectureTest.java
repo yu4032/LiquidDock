@@ -616,6 +616,20 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void numericStepperAndResetKeepNativePrismalWhileOtherCellsStayStatic() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String ui = Files.readString(UI);
+        assertTrue(surfaces.contains("val surfaceBackdrop: PrismalBackdrop? = null"));
+        assertTrue(surfaces.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
+        assertTrue(surfaces.contains("val backdrop = if (prismalNumericAction) {"));
+        assertTrue(surfaces.contains("prismalNumericAction: Boolean = false"));
+        assertTrue(surfaces.contains("val backdrop = LocalTouchPrismalBackdrop.current\n    if (backdrop != null) {\n        PrismalGlassStepper("));
+        assertTrue(surfaces.contains("PrismalGlassButton("));
+        assertTrue(ui.contains("prismalNumericAction = true,"));
+        assertTrue(ui.contains("ModernGlassStepper("));
+    }
+
+    @Test
     public void prismalSliderObservesExternalStepperAndResetUpdates() throws Exception {
         String surfaces = Files.readString(SURFACES);
         assertTrue(surfaces.contains("val currentValue by rememberUpdatedState(value)"));

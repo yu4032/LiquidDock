@@ -852,11 +852,18 @@ internal fun Button(
     minHeight: Dp = 36.dp,
     insideMargin: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
     destructive: Boolean = false,
+    // Only small numeric reset actions opt into native Prismal. Other body
+    // buttons keep their static cached/solid performance path.
+    prismalNumericAction: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
     // This generic action is inside the scrolling page. Top-bar actions
     // are rendered separately by ModernTopActionButton with Prismal.
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    val backdrop = if (prismalNumericAction) {
+        LocalTouchPrismalBackdrop.current
+    } else {
+        LocalPrismalSurfaceBackdrop.current
+    }
     val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
@@ -1252,7 +1259,9 @@ internal fun ModernGlassStepper(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    // The ordinary body surface backdrop is intentionally null. Restore
+    // native Prismal +/- through the same glass-only source used by sliders.
+    val backdrop = LocalTouchPrismalBackdrop.current
     if (backdrop != null) {
         PrismalGlassStepper(
             value = value,
