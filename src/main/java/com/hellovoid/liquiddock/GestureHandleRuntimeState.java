@@ -45,9 +45,9 @@ final class GestureHandleRuntimeState {
                         ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name(),
                         ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.runtimeFallback());
 
-        if (nextPreferences == null) return;
         final long generation = EPOCH.activate();
         activeGeneration = generation;
+        if (nextPreferences == null) return;
         preferenceListener = (sharedPreferences, key) -> {
             if (!EPOCH.isCurrent(generation)) return;
             if (!ConfigSchema.Core.ENABLED.name().equals(key)
