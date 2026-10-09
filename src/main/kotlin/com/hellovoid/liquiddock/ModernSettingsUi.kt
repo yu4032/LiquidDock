@@ -231,6 +231,7 @@ internal fun ModernSettingsScaffold(
                             modifier = Modifier.fillMaxWidth().zIndex(1f),
                             blurRadius = TOP_BAR_BLUR_RADIUS.dp,
                             overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA),
+                            statusBarEdgeColor = if (background.luminance() < 0.5f) Color.Black else Color.White,
                             content = headerContent,
                         )
                     } else {
