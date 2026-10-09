@@ -57,6 +57,9 @@ final class ExternalGlassLiveConfigState {
                 GboardFloatingGlassCoordinator.onLiveConfigChanged(reader, config);
             } else if ("com.android.quicksearchbox".equals(target)) {
                 MiuiSearchboxGlassHook.onLiveConfigChanged(reader, config);
+            } else if (SecurityCenterProcessPolicy.PACKAGE.equals(target)) {
+                SecurityCenterGlassHook.onLiveGlassConfigChanged(config);
+                AnimationRuntimeState.configure(config.animation);
             }
         } catch (Throwable error) {
             Api101Bridge.log("[DC][ExternalLiveConfig] update failed target="
