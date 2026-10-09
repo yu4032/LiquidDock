@@ -102,9 +102,6 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
-// Bottom navigation samples the same complete content capture as the header.
-// Keep overlayBackdrop for buttons/dialogs; only the tab bar needs this source.
-private val LocalBottomNavigationBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 
 @Composable
 internal fun ModernSettingsScaffold(
@@ -132,19 +129,10 @@ internal fun ModernSettingsScaffold(
     // HyperIsland-style independent content source: one opaque page capture for
     // the header, including standalone labels and nested Prismal card output.
     // Do not merge the wallpaper/source layers for this uniform blur.
-    val barBackdrop = if (glassEnabled && isRuntimeShaderSupported()) {
-        rememberLayerBackdrop {
-            drawRect(surface)
-            drawContent()
-        }
-    } else {
-        null
-    }
-    // The MIUIX layer above records the entire page, including final nested
-    // component output. Adapt it once for Prismal instead of recording another
-    // full-screen layer or using the partial backgroundLayer + screenLayer blend.
-    val bottomNavigationBackdrop = remember(barBackdrop) {
-        barBackdrop?.let(::GuiFullPagePrismalBackdrop)
+    // Header and bottom capsule read the same already-recorded Prismal
+    // layers. No separate MIUIX full-page capture is created.
+    val barBackdrop = remember(activeOverlayBackdrop) {
+        activeOverlayBackdrop?.let(::GuiPrismalMiuixBackdrop)
     }
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -177,7 +165,6 @@ internal fun ModernSettingsScaffold(
         CompositionLocalProvider(
             LocalPrismalSurfaceBackdrop provides surfaceBackdrop,
             LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
-            LocalBottomNavigationBackdrop provides bottomNavigationBackdrop,
         ) {
             Scaffold(
                 containerColor = Color.Transparent,
@@ -289,17 +276,7 @@ internal fun ModernSettingsScaffold(
                             if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
                             else Modifier,
                         )
-                        .then(
-                            if (barBackdrop != null) Modifier.layerBackdrop(barBackdrop)
-                            else Modifier,
-                        )
-                        .then(
-                            if (bottomNavigationBackdrop != null) {
-                                Modifier.onGloballyPositioned {
-                                    bottomNavigationBackdrop.onSourcePlaced()
-                                }
-                            } else Modifier,
-                        ),
+,
                 ) {
                     content(padding)
                 }
@@ -439,7 +416,7 @@ internal fun ModernBottomNavigation(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
 ) {
-    val backdrop = LocalBottomNavigationBackdrop.current ?: LocalPrismalOverlayBackdrop.current
+    val backdrop = LocalPrismalOverlayBackdrop.current
     val selected by rememberUpdatedState(selectedIndex)
     val onSelect by rememberUpdatedState(onSelected)
 
