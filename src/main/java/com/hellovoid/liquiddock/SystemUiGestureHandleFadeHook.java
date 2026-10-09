@@ -172,17 +172,20 @@ final class SystemUiGestureHandleFadeHook {
     private static void ensureLauncherProxyListenerHook(Class<?> listenerClass) {
         if (listenerClass == null
                 || !HOOKED_LAUNCHER_PROXY_LISTENER_CLASSES.add(listenerClass)) return;
+        boolean someInstalled = false;
         try {
+            // Resolve BOTH signatures before installing either; vendor changes must not leave
+            // half an overview listener without being recorded by its owner.
             Method shown = HookUtil.findMethodExact(
                     listenerClass, "onOverviewShown", new Class<?>[0]);
+            Method connectionChanged = HookUtil.findMethodExact(
+                    listenerClass, "onConnectionChanged", new Class<?>[]{boolean.class});
             DOMAIN.hookDynamic(shown, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 if (DOMAIN.isActive()) reconcileHiddenState(SCENE.onOverviewShown());
                 return result;
             });
-
-            Method connectionChanged = HookUtil.findMethodExact(
-                    listenerClass, "onConnectionChanged", new Class<?>[]{boolean.class});
+            someInstalled = true;
             DOMAIN.hookDynamic(connectionChanged, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
@@ -194,9 +197,12 @@ final class SystemUiGestureHandleFadeHook {
                 }
                 return result;
             });
+            someInstalled = true;
 
         } catch (Throwable error) {
-            HOOKED_LAUNCHER_PROXY_LISTENER_CLASSES.remove(listenerClass);
+            // A successful first hook already owns the class. Do not erase the class marker
+            // and retry a second registration when the next method is unavailable.
+            if (!someInstalled) HOOKED_LAUNCHER_PROXY_LISTENER_CLASSES.remove(listenerClass);
             Api101Bridge.log(TAG + " native overview authority unavailable class="
                     + listenerClass.getName(), error);
         }
