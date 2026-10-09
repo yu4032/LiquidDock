@@ -102,6 +102,35 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void pageEntryZoomDoesNotRegressAndCellsAvoidRecapturedDepthShadows() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String cards = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
+
+        // PR #293: a chevron Cell always takes the static-geometry Prismal
+        // renderer even while its AGSL click ripple and navigation remain.
+        assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
+        assertTrue(surfaces.contains("staticPress = true,"));
+        assertTrue(surfaces.contains("if (onClick == null || staticPress) {"));
+        assertTrue(surfaces.contains("GuiStaticPressPrismalSurface("));
+        assertTrue(cards.contains("PrismalPressRipple("));
+        assertTrue(cards.contains(".then(pressRipple?.modifier ?: Modifier)"));
+        assertTrue(cards.contains(".then(pressRipple?.gestureModifier ?: Modifier)"));
+        assertFalse(cards.contains("layerBlock ="));
+        assertFalse(cards.contains("scaleX ="));
+        assertFalse(cards.contains("translationX ="));
+
+        // The bottom bar still records normal page text and glass optics.
+        // Avoid capturing default PrismalDepthShadow twice on Settings Cells,
+        // which produces broad gradient bands behind the refractive capsule.
+        assertTrue(cards.contains("depthShadow = null,"));
+        assertTrue(cards.contains("specular"));
+        assertTrue(cards.contains("applyPrismalGlassEffects("));
+        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+    }
+
+    @Test
     public void chevronPageCellsRetainPrismalRippleWithoutGeometryMotion() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String navigationSurface = Files.readString(Path.of(
@@ -118,8 +147,9 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue("original press highlight/ripple must be preserved",
                 navigationSurface.contains("PrismalPressRipple("));
-        assertTrue(navigationSurface.contains(".then(pressRipple.modifier)"));
-        assertTrue(navigationSurface.contains(".then(pressRipple.gestureModifier)"));
+        assertTrue(navigationSurface.contains(".then(pressRipple?.modifier ?: Modifier)"));
+        assertTrue(navigationSurface.contains(".then(pressRipple?.gestureModifier ?: Modifier)"));
+        assertTrue(navigationSurface.contains("if (onClick != null) PrismalPressRipple("));
         assertTrue(navigationSurface.contains("drawPrismalGlass("));
         assertTrue(navigationSurface.contains("drawPrismalGlassTint("));
         assertTrue(navigationSurface.contains("applyPrismalGlassEffects("));
@@ -175,9 +205,12 @@ public class ModernSettingsArchitectureTest {
     public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
+        String header = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalFlatHeader.kt"));
 
         assertTrue(build.contains("com.github.styropyr0:PrismalAGSL:v1.0.4"));
-        assertTrue(build.contains("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4"));
+        assertTrue(build.contains("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4"));
+        assertFalse("no unused MIUIX blur implementation", build.contains("miuix-blur-android"));
         assertTrue(source.contains("PrismalGlassSurface"));
         assertTrue(source.contains("PrismalGlassButton"));
         assertTrue(source.contains("PrismalGlassBottomTabs"));
@@ -185,47 +218,74 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassToggle"));
         assertTrue(source.contains("PrismalGlassSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
-
         assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 14f"));
         assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
-        assertTrue(source.contains("blurRadius = TOP_BAR_BLUR_RADIUS"));
-        assertTrue(source.contains("rememberLayerBackdrop {"));
-        assertTrue(source.contains(".textureBlur("));
-        assertTrue(source.contains("Modifier.layerBackdrop(barBackdrop)"));
-        assertFalse(source.contains(".progressiveTextureBlur("));
-        assertFalse(source.contains("ProgressiveBlur.Top.copy("));
-        assertFalse(source.contains("drawPlainPrismalGlass("));
-
+        assertTrue(source.contains("blurRadius = TOP_BAR_BLUR_RADIUS.dp"));
+        assertTrue(source.contains("GuiPrismalFlatHeader("));
+        assertFalse(source.contains(".textureBlur("));
+        assertFalse(source.contains("rememberLayerBackdrop("));
+        assertFalse(source.contains("GuiPrismalMiuixBackdrop"));
         assertTrue(source.contains("SmallTopAppBar("));
         assertTrue(source.contains("title = title"));
         assertTrue(source.contains("imageVector = MiuixIcons.Back"));
         assertTrue(source.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
+        assertTrue(header.contains("drawPrismalGlass("));
+        assertTrue(header.contains("applyPrismalGlassEffects("));
     }
+
     @Test
     public void uniformGlassHeaderHasNoRefractiveRimOrGradient() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String header = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalFlatHeader.kt"));
 
-        assertTrue(surfaces.contains("val headerModifier = if (barBackdrop != null)"));
-        assertTrue(surfaces.contains(".textureBlur("));
-        assertTrue(surfaces.contains("shape = RectangleShape"));
-        assertTrue(surfaces.contains("blurRadius = TOP_BAR_BLUR_RADIUS"));
-        assertTrue(surfaces.contains("noiseCoefficient = 0f"));
+        assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
+        assertTrue(header.contains("shape = { RectangleShape }"));
+        assertTrue(header.contains("refractionHeightPx = 0f"));
+        assertTrue(header.contains("refractionAmountPx = 0f"));
+        assertTrue(header.contains("depthEffect = false"));
+        assertTrue(header.contains("chromaticAberration = 0f"));
+        assertTrue(header.contains("blurRadiusPx = with(density) { blurRadius.toPx() }"));
         assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
+        assertFalse(surfaces.contains(".textureBlur("));
         assertFalse(surfaces.contains(".progressiveTextureBlur("));
-        assertFalse(surfaces.contains("TOP_BAR_PROGRESSIVE_BLUR"));
     }
 
     @Test
     public void headerGlassPreservesBackdropHueWithoutPrismalHueTint() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String header = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalFlatHeader.kt"));
 
         assertTrue(surfaces.contains("val headerNeutralColor = if (surface.luminance() < 0.5f) Color.Black else Color.White"));
-        assertTrue(surfaces.contains("BlendColorEntry("));
-        assertTrue(surfaces.contains("color = headerNeutralColor.copy("));
-        assertTrue(surfaces.contains("alpha = TOP_BAR_GLASS_TINT_ALPHA"));
-        assertTrue(surfaces.contains("saturation = 1.35f"));
+        assertTrue(surfaces.contains("overlayColor = headerNeutralColor.copy(alpha = TOP_BAR_GLASS_TINT_ALPHA)"));
+        assertTrue(header.contains("useVibrancy = false"));
+        assertTrue(header.contains("saturation = 1.35f"));
+        assertTrue(header.contains("drawRect(overlayColor)"));
         assertTrue(surfaces.contains("tint = Color.Unspecified"));
         assertTrue(surfaces.contains("surfaceColor = headerNeutralColor.copy(alpha = 0.20f)"));
+    }
+
+    @Test
+    public void bothBarsShareTheOriginalPrismalBackdropWithoutSecondRecording() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String header = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalFlatHeader.kt"));
+
+        assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
+        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(backgroundLayer)"));
+        assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
+        assertTrue(surfaces.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
+        assertTrue(surfaces.contains("val backdrop = LocalPrismalOverlayBackdrop.current"));
+        assertTrue(surfaces.contains("backdrop = activeOverlayBackdrop,"));
+        // Static architecture audit; actual modifier capture order is validated
+        // by real rendering rather than prohibited source-order inference.
+        assertTrue(surfaces.contains("lerp(background, primary, 0.07f)"));
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(header.contains("PrismalBackdrop"));
+        assertFalse(surfaces.contains("rememberLayerBackdrop {"));
+        assertFalse(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertFalse(surfaces.contains("GuiPrismalMiuixBackdrop"));
     }
 
     @Test
@@ -256,26 +316,30 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void headerSamplesEntireScrolledContentLayerBehindGlass() throws Exception {
+    public void headerSamplesSharedPrismalScreenLayerAndKeepsUniformBlur() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String pages = Files.readString(UI);
+        String header = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalFlatHeader.kt"));
 
-        // API-level architecture guard only: actual render completeness is a
-        // device-level visual contract, not something source inspection proves.
         assertTrue(surfaces.contains("rememberPrismalMergedSource(backgroundLayer, screenLayer)"));
-        assertTrue(surfaces.contains("val barBackdrop = if (glassEnabled && isRuntimeShaderSupported())"));
-        assertTrue(surfaces.contains("rememberLayerBackdrop {\n            drawRect(surface)\n            drawContent()"));
-        assertTrue(surfaces.contains("backdrop = barBackdrop"));
-        assertTrue(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
-        assertTrue(surfaces.contains("Box(modifier = headerModifier)"));
+        assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
+        assertTrue(surfaces.contains("content = headerContent"));
         assertTrue(surfaces.contains(".zIndex(0f)"));
+        assertFalse(surfaces.contains(".textureBlur("));
+        assertFalse(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
         assertFalse(surfaces.contains("CompositingStrategy.Offscreen"));
-        assertFalse(surfaces.contains(".graphicsLayer {"));
+        assertTrue(header.contains("drawPrismalGlass("));
 
+        // Regular Compose labels are descendants of the captured scaffold body,
+        // not separate Prismal widgets. Changing their composable type would
+        // not fix a backdrop coordinate or nested layer capture issue.
         assertTrue(pages.contains("LazyColumn("));
         assertTrue(pages.contains("ModernSectionLabel(\"状态\")"));
-        assertTrue(pages.contains("桌面布局与液态玻璃个性化设置"));
+        assertFalse("home subtitle was intentionally removed", pages.contains("桌面布局与液态玻璃个性化设置"));
+        assertTrue(pages.contains("private fun HomePage("));
+        assertTrue(pages.contains("internal fun PageHeader("));
     }
 
     @Test
