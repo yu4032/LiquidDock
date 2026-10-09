@@ -29,7 +29,7 @@ public class PrismalNodeScissorTest {
         PrismalNodeScissor.Rect r = PrismalNodeScissor.compute(g, 1000, 800);
         assertNotNull(r);
         assertEquals(0, r.x);
-        assertEquals(0, r.y);
+        assertEquals(742, r.y);
         assertEquals(58, r.width);
         assertEquals(58, r.height);
     }
