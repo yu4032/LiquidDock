@@ -313,10 +313,7 @@ internal fun RestartScopesDialog(
                     .verticalScroll(rememberScrollState()),
             ) {
                 items.forEachIndexed { index, item ->
-                    // Process restarts need a strictly controlled input:
-                    // the animated PrismalGlassToggle has its own remembered
-                    // gesture state, so a thumb's visual position is not the
-                    // authoritative selected set at confirmation time.
+                    // Only the controlled selection determines which process restarts.
                     val checked = item.id in selected
                     BasicComponent(
                         title = item.title,
@@ -405,6 +402,10 @@ internal fun ModernBottomNavigation(
     val backdrop = LocalPrismalOverlayBackdrop.current
     val selected by rememberUpdatedState(selectedIndex)
     val onSelect by rememberUpdatedState(onSelected)
+    val stableSelectedIndex = remember { { selected } }
+    val stableTabChange: (Int) -> Unit = remember {
+        { index -> if (index != selected) onSelect(index) }
+    }
 
     Box(
         modifier = Modifier
@@ -421,10 +422,8 @@ internal fun ModernBottomNavigation(
         ) {
             if (backdrop != null) {
                 PrismalGlassBottomTabs(
-                    selectedTabIndex = { selected },
-                    onTabSelected = { index ->
-                        if (index != selected) onSelect(index)
-                    },
+                    selectedTabIndex = stableSelectedIndex,
+                    onTabSelected = stableTabChange,
                     backdrop = backdrop,
                     tabsCount = labels.size,
                     modifier = Modifier.fillMaxSize(),
@@ -843,6 +842,15 @@ internal fun SwitchPreference(
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
+    // Upstream Prismal remembers its gesture callbacks. Bridge them to the
+    // latest setting state instead of retaining values from first composition.
+    val selectedState = rememberUpdatedState(checked)
+    val enabledState = rememberUpdatedState(enabled)
+    val onChangedState = rememberUpdatedState(onCheckedChange)
+    val stableSelected = remember { { selectedState.value } }
+    val stableToggleChange: (Boolean) -> Unit = remember {
+        { next -> if (enabledState.value) onChangedState.value(next) }
+    }
     BasicComponent(
         title = title,
         summary = summary,
@@ -851,8 +859,8 @@ internal fun SwitchPreference(
         endActions = {
             if (backdrop != null) {
                 PrismalGlassToggle(
-                    selected = { checked },
-                    onSelect = { next -> if (enabled) onCheckedChange(next) },
+                    selected = stableSelected,
+                    onSelect = stableToggleChange,
                     backdrop = backdrop,
                 )
             } else {
@@ -996,6 +1004,15 @@ internal fun SliderPreference(
         return (valueRange.start + index * stepSize)
             .coerceIn(valueRange.start, valueRange.endInclusive)
     }
+    val sliderEnabledState = rememberUpdatedState(enabled)
+    val sliderCallbackState = rememberUpdatedState(onValueChange)
+    val quantizeState = rememberUpdatedState<(Float) -> Float>({ raw -> quantize(raw) })
+    val stableSliderValue = remember { { currentValue } }
+    val stableSliderChange: (Float) -> Unit = remember {
+        { next ->
+            if (sliderEnabledState.value) sliderCallbackState.value(quantizeState.value(next))
+        }
+    }
 
     Column {
         BasicComponent(
@@ -1025,10 +1042,8 @@ internal fun SliderPreference(
         )
         if (backdrop != null) {
             PrismalGlassSlider(
-                value = { currentValue },
-                onValueChange = { next ->
-                    if (enabled) onValueChange(quantize(next))
-                },
+                value = stableSliderValue,
+                onValueChange = stableSliderChange,
                 valueRange = valueRange,
                 visibilityThreshold = stepSize,
                 backdrop = backdrop,
@@ -1079,12 +1094,16 @@ internal fun ModernGlassSlider(
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
     val currentValue by rememberUpdatedState(value)
+    val sliderEnabledState = rememberUpdatedState(enabled)
+    val sliderCallbackState = rememberUpdatedState(onValueChange)
+    val stableSliderValue = remember { { currentValue } }
+    val stableSliderChange: (Float) -> Unit = remember {
+        { next -> if (sliderEnabledState.value) sliderCallbackState.value(next) }
+    }
     if (backdrop != null) {
         PrismalGlassSlider(
-            value = { currentValue },
-            onValueChange = { next ->
-                if (enabled) onValueChange(next)
-            },
+            value = stableSliderValue,
+            onValueChange = stableSliderChange,
             valueRange = valueRange,
             visibilityThreshold = visibilityThreshold,
             backdrop = backdrop,

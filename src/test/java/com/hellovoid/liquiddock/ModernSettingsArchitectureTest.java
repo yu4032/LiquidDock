@@ -105,6 +105,17 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void prismalGesturesReadLatestStateThroughStableBridges() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        assertTrue(surfaces.contains("val stableSelected = remember { { selectedState.value } }"));
+        assertTrue(surfaces.contains("onSelect = stableToggleChange,"));
+        assertTrue(surfaces.contains("val stableSliderChange: (Float) -> Unit = remember {"));
+        assertTrue(surfaces.contains("onValueChange = stableSliderChange,"));
+        assertTrue(surfaces.contains("val stableSelectedIndex = remember { { selected } }"));
+        assertTrue(surfaces.contains("onTabSelected = stableTabChange,"));
+    }
+
+    @Test
     public void pageEntryZoomDoesNotRegressAndCellsAvoidRecapturedDepthShadows() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String cards = Files.readString(Path.of(
