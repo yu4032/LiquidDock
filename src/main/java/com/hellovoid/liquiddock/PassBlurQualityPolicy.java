@@ -17,9 +17,9 @@ final class PassBlurQualityPolicy {
         return safePercent / 100f;
     }
 
+    /** Keep procedural SDF/refraction at native pixel density even if backdrop sampling is reduced. */
     static int workspaceOpticsScalePercent(boolean workspace, int requestedPercent) {
-        return workspace ? Math.max(MIN_CAPTURE_SCALE_PERCENT,
-                Math.min(MAX_CAPTURE_SCALE_PERCENT, requestedPercent)) : MAX_CAPTURE_SCALE_PERCENT;
+        return MAX_CAPTURE_SCALE_PERCENT;
     }
 
     static float bridgeScale(boolean launcherWorkspace, int workspacePercent) {
