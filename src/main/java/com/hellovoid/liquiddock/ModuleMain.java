@@ -96,6 +96,7 @@ public final class ModuleMain extends XposedModule {
                         runtimeConfig.enabled,
                         runtimeConfig.glass.enabled,
                         runtimeConfig.glass.securityCenterEnabled);
+                ExternalGlassLiveConfigState.initialize(packageName);
                 if (!SecurityCenterPassBlurContinuousAuthority.install()) {
                     Api101Bridge.log(
                             "[DC][SecurityCenterGlass] continuous PassBlur authority unavailable; fail closed");
