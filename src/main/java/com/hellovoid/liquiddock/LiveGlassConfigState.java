@@ -111,6 +111,9 @@ final class LiveGlassConfigState {
                     ConfigSchema.LauncherHighlight.LARGE_PLAIN_HIGHLIGHT.name(),
                     ConfigSchema.LauncherHighlight.LARGE_CAUSTICS.name(),
                     ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW.name())));
+    private static final Set<String> POPUP_KEYS = Collections.unmodifiableSet(new HashSet<>(
+            Arrays.asList(ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
+                    ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name())));
     private static final Set<String> RECENTS_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name(),
                     ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name())));
@@ -128,6 +131,7 @@ final class LiveGlassConfigState {
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
     private static Map<String, ?> lastGlass = Collections.emptyMap();
     private static Map<String, ?> lastRecents = Collections.emptyMap();
+    private static Map<String, ?> lastPopup = Collections.emptyMap();
     private static Map<String, ?> lastAnimation = Collections.emptyMap();
     private static volatile LiquidDockConfig.Glass currentGlass;
     private static volatile long generation;
@@ -146,6 +150,7 @@ final class LiveGlassConfigState {
         Map<String, ?> all = snapshot(remote);
         lastGlass = project(all, GLASS_KEYS);
         lastRecents = project(all, RECENTS_KEYS);
+        lastPopup = project(all, POPUP_KEYS);
         lastAnimation = project(all, ANIMATION_KEYS);
         listener = (prefs, key) -> {
             if (!isLiveKey(key)) return;
@@ -169,7 +174,7 @@ final class LiveGlassConfigState {
     static boolean isLiveKey(String key) {
         if (key == null) return true; // bulk preference change
         if (GLASS_KEYS.contains(key) || RECENTS_KEYS.contains(key)
-                || ANIMATION_KEYS.contains(key)) return true;
+                || POPUP_KEYS.contains(key) || ANIMATION_KEYS.contains(key)) return true;
         return key.endsWith("_tenths")
                 && GLASS_KEYS.contains(key.substring(0, key.length() - "_tenths".length()));
     }
@@ -187,11 +192,13 @@ final class LiveGlassConfigState {
             Map<String, ?> all = snapshot(prefs);
             Map<String, ?> glass = project(all, GLASS_KEYS);
             Map<String, ?> recents = project(all, RECENTS_KEYS);
+            Map<String, ?> popup = project(all, POPUP_KEYS);
             Map<String, ?> animation = project(all, ANIMATION_KEYS);
             boolean glassChanged = !glass.equals(lastGlass);
             boolean recentsChanged = !recents.equals(lastRecents);
+            boolean popupChanged = !popup.equals(lastPopup);
             boolean animationChanged = !animation.equals(lastAnimation);
-            if (!glassChanged && !recentsChanged && !animationChanged) return;
+            if (!glassChanged && !recentsChanged && !animationChanged && !popupChanged) return;
 
             LiquidDockConfig next = LiquidDockConfig.from(new ConfigReader(all));
             if (glassChanged) {
@@ -208,6 +215,11 @@ final class LiveGlassConfigState {
                 }
                 MainHook.log(TAG + " glass generation=" + generation
                         + " blur=" + next.glass.blur);
+            }
+            if (popupChanged) {
+                lastPopup = popup;
+                MiuixShortcutMenuGlassHook.onLivePreferences(new ConfigReader(all));
+                MainHook.log(TAG + " shortcut popup policy updated");
             }
             if (recentsChanged) {
                 lastRecents = recents;
