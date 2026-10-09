@@ -20,6 +20,20 @@
 - 现有 Remote Preferences 机制与配置即时生效能力保持原样。**设置项热更新 ≠ APK/Hooks 无重启热重载**。
 - 必须经过 CI 构建和目标机 API 102 框架验证；没有设备证据就不能修改 `autoHotReload`。
 
+## 第二阶段：HookHandle 所有权登记试点（2026-10-09）
+
+已新增 `Api102HookRegistry`，并将只读的 `SystemUiKeyguardGoneSource` 方法 Hook 迁入首个**明确命名 Hook ID** 的试点。
+
+- 基于域标识 + 目标二进制类名 + 方法名 + 参数类型生成稳定 ID（区分同名重载）。仅用于目标进程内的 Hook 身份；跨代 saved state 不传递类、句柄或回调。
+- 通过 API 102 的 `hook(method).setId(id).intercept(...)` 取得、登记 `HookHandle`；重复 ID 必须在调用框架前拒绝。安装中途失败时按逆序撤销已安装句柄，`unhook` 失败的句柄继续留在登记簿，避免产生第二份重复回调。
+- 以 fake `HookHandle` 单元测试验证 ID 稳定性、重载隔离、重复安装和失败回滚。该试点不使用 `replaceHook`，没有重新安装 active SystemUI 的能力。
+- `ModuleMain.onHotReloading` 除原先的 domain ownership gate 外，还要求登记簿中没有任何已安装句柄；**`autoHotReload=false` 不变**。
+- 未迁入所有普通 HookUtil / 直接 hook 调用，没有注册 SystemUI 手势白条 / menu 的 receiver、View listener 和 Session，因此不能把这一步解释为全进程 reload-ready。
+
+后续应先制定不可重复的显式 Hook ID 分配表和按 domain 卸载事务，再给更多没有图形生命周期的 owner 接入。**不要**在未能释放 Android 资源前使用 `replaceHook` 覆盖旧 callbacks：HookHandle 的替换与外部 listeners 的脱钩是两件事。
+
+---
+
 ## 后续真正热重载的必要条件
 
 1. **统一 Hook 所有权**。集中登记全部 `HookHandle`，包括 `HookUtil` 封装之外的直接 `Api101Bridge.module().hook`；为每个逻辑 Hook 指定稳定 ID 和优先级，支持原子 `replaceHook`，禁止重复注册。注意同一目标方法可能挂多个不同 hook，ID 不能仅靠 method signature 推导。
