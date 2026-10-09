@@ -105,6 +105,7 @@ final class SystemUiKeyguardGoneSource {
     }
 
     private static void onTransitionStep(Object step) {
+        if (!DOMAIN.isActive()) return;
         String from = token(read(step, "getFrom", "from"));
         String to = token(read(step, "getTo", "to"));
         String state = token(read(step, "getTransitionState", "transitionState"));
@@ -116,6 +117,7 @@ final class SystemUiKeyguardGoneSource {
             return;
         }
         if (!GONE_FINISHED_SENT.compareAndSet(false, true)) return;
+        if (!DOMAIN.isActive()) return;
         publishFinished(from);
     }
 
@@ -135,6 +137,7 @@ final class SystemUiKeyguardGoneSource {
     }
 
     private static void publishFinished(String from) {
+        if (!DOMAIN.isActive()) return;
         HookUtil.InvocationResult<Object> applicationResult =
                 HookUtil.tryInvokeActivityThreadCurrentApplication();
         Object application = applicationResult.succeeded() ? applicationResult.value() : null;
