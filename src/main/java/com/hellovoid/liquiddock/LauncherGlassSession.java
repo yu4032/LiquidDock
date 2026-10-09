@@ -1203,24 +1203,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentFull(int sceneTexture, OutputState output) {
-        sourceBackend.makeCurrent(output.eglSurface);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-        GLES20.glViewport(0, 0, output.width, output.height);
-        GLES20.glDisable(GLES20.GL_BLEND);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glClearColor(0f, 0f, 0f, 0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        GLES20.glUseProgram(compositeProgram);
-        bindQuad(compositePositionLocation, compositeUvLocation);
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-        GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        unbindQuad(compositePositionLocation, compositeUvLocation);
-        sourceBackend.swapBuffers(output.eglSurface);
-    }
-
     private void present(
             int sceneTexture,
             LauncherGlassGeometry.Snapshot geometry,
