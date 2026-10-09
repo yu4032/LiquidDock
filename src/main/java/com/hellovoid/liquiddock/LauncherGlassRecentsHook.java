@@ -33,6 +33,7 @@ final class LauncherGlassRecentsHook {
         if (installed || config == null || !config.enabled || !config.glass.enabled) return;
         LauncherRecentsCapsuleGlassHook.install(classLoader);
         installWallpaperSettleAuthority(classLoader);
+        installNativeWallpaperGestureTrace(classLoader);
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
                 long staleReturn = WALLPAPER_SETTLE.pendingSerial();
@@ -127,6 +128,35 @@ final class LauncherGlassRecentsHook {
      * LocalWallpaperElement owns a HyperSpringAnimation, while SystemWallpaperElement delegates the
      * spring to miui.wallpaper.animation. Each path therefore uses its own vendor completion event.
      */
+    /** Read-only OEM event trace; no animation modification or native transactions. */
+    private static void installNativeWallpaperGestureTrace(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.recents.anim.StateManager",
+                    "sendEvent", chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        if (MainHook.debugLogging && args.length > 0 && args[0] != null) {
+                            try {
+                                java.lang.reflect.Method getType =
+                                        args[0].getClass().getMethod("getType");
+                                Object eventType = getType.invoke(args[0]);
+                                if (eventType instanceof Number) {
+                                    int eventId = ((Number) eventType).intValue();
+                                    if (eventId == 6203 || eventId == 7013 || eventId == 7012
+                                            || eventId == 6103 || eventId == 7005) {
+                                        MainHook.log("[DC][WallpaperZoomTrace] OEM event="
+                                                + eventId + " before sendEvent");
+                                    }
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                        return chain.proceed(args);
+                    });
+            MainHook.log(TAG + " OEM wallpaper gesture trace installed");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " OEM wallpaper gesture trace unavailable: " + error);
+        }
+    }
+
     private static void installWallpaperSettleAuthority(ClassLoader classLoader) {
         try {
             Class<?> wallpaperParam = Class.forName(WALLPAPER_PARAM, false, classLoader);
