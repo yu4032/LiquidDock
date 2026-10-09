@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -231,9 +232,24 @@ internal fun GuiOnTouchPrismalToggle(
                         val progress = dampedDragAnimation.pressProgress
                         drawRect(Color.White.copy(alpha = 1f - progress))
                     }
-                ) else Modifier.clip(PrismalCapsule()).background(Color.White)
+                ) else Modifier
                 )
                 .size(40.dp, 24.dp)
-        )
+        ) {
+            if (!samplingEnabled) {
+                // Reuse one recorded Prismal surface while not interacting.
+                GuiFrozenPrismalChrome(
+                    backdrop = underlayBackdrop,
+                    shape = { PrismalCapsule() },
+                    modifier = Modifier.matchParentSize(),
+                    blurRadius = 8.dp,
+                    refractionHeightPx = with(density) { 4.dp.toPx() },
+                    refractionAmountPx = with(density) { 6.dp.toPx() },
+                    chromaticAberration = 0.28f,
+                    surfaceColor = Color.White.copy(alpha = 0.75f),
+                    depthEffect = false,
+                )
+            }
+        }
     }
 }
