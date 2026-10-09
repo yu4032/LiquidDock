@@ -30,6 +30,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/WidgetComponentsPage.kt");
     private static final Path GBOARD = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt");
+    private static final Path SEARCHBOX_PAGE = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SearchboxSettingsPage.kt");
     private static final Path DIALOG_GLASS = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt");
     private static final Path SIDE_SLIDE = Path.of(
@@ -311,7 +313,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(shell.contains("Page.GboardAll -> ScopedGlassSettingsPage("));
         assertTrue(shell.contains("Page.DialogAll -> ScopedGlassSettingsPage("));
         assertTrue(gboard.contains("调整 Gboard 专属的完整 Prismal 光学参数"));
-        assertTrue(gboard.contains("调整系统搜索专属的完整 Prismal 光学参数"));
+        assertTrue(Files.readString(SEARCHBOX_PAGE).contains("调整系统搜索专属的完整 Prismal 光学参数"));
         assertTrue(dialog.contains("调整桌面对话弹窗专属 Prismal 光学参数"));
         assertTrue(search.contains("ScopedGlassOptics.SEARCHBOX"));
         assertTrue(page.contains("ScopedGlassOptics.key(scope, d.config)"));
@@ -744,6 +746,7 @@ public class ModernSettingsArchitectureTest {
         String compose = Files.readString(UI);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
+        String searchPage = Files.readString(SEARCHBOX_PAGE);
         String widgetCatalog = Files.readString(WIDGET_COMPONENTS);
         String widgetDetail = Files.readString(WIDGET_DETAIL);
         String dialog = Files.readString(DIALOG_GLASS);
@@ -752,7 +755,7 @@ public class ModernSettingsArchitectureTest {
 
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
-                .matcher(compose + "\n" + gboard + "\n" + search + "\n"
+                .matcher(compose + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
@@ -762,7 +765,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(configRefs.contains("ConfigSchema.Glass.PRISMAL_SHOW_NORMALS"));
 
         assertTrue(countDistinctRefs(gboard, "GboardGlassPreferences") >= 11);
-        assertTrue(countDistinctRefs(gboard, "MiuiSearchboxGlassPreferences") >= 7);
+        assertTrue(countDistinctRefs(searchPage, "MiuiSearchboxGlassPreferences") >= 7);
         assertTrue(countDistinctRefs(widgetCatalog + "\n" + widgetDetail, "WidgetComponentStore") >= 15);
     }
 

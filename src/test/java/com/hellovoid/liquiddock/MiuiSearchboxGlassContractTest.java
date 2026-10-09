@@ -29,7 +29,7 @@ public class MiuiSearchboxGlassContractTest {
         String authority = read(MAIN.resolve("MiuiSearchboxPassBlurContinuousAuthority.java"));
         String material = read(MAIN.resolve("MiuiSearchboxVendorMaterial.java"));
         String settings = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GboardSettingsPages.kt"));
+                "src/main/kotlin/com/hellovoid/liquiddock/SearchboxSettingsPage.kt"));
         String scope = Files.readString(Path.of("src/main/resources/META-INF/xposed/scope.list"));
 
         assertTrue(scope.contains("com.android.quicksearchbox"));
