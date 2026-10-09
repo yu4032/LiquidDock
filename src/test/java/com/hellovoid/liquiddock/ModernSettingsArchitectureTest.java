@@ -229,6 +229,40 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void bottomTabsSampleTheSameFullPageLayerAsHeader() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String adapter = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiFullPagePrismalBackdrop.kt"));
+
+        // Static wiring/API guard; an on-device run is still needed to verify
+        // rendered capture completeness, scrolling and tab animation timing.
+        assertTrue(surfaces.contains("rememberLayerBackdrop {"));
+        assertTrue(surfaces.contains("drawRect(surface)\n            drawContent()"));
+        assertTrue(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
+        assertTrue(surfaces.contains("barBackdrop?.let(::GuiFullPagePrismalBackdrop)"));
+        assertTrue(surfaces.contains(
+                "LocalBottomNavigationBackdrop provides bottomNavigationBackdrop"));
+        assertTrue(surfaces.contains("bottomNavigationBackdrop.onSourcePlaced()"));
+        assertTrue(surfaces.contains(
+                "val backdrop = LocalBottomNavigationBackdrop.current ?: LocalPrismalOverlayBackdrop.current"));
+        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(surfaces.contains("PrismalGlassBottomTab("));
+
+        assertTrue(adapter.contains("class GuiFullPagePrismalBackdrop("));
+        assertTrue(adapter.contains("private val source: LayerBackdrop"));
+        assertTrue(adapter.contains("PrismalBackdrop"));
+        assertTrue(adapter.contains("readSamplingState()"));
+        assertTrue(adapter.contains("drawBackdrop("));
+        assertTrue(adapter.contains("downscaleFactor = 1"));
+        assertTrue(adapter.contains("layerBlock = layerBlock"));
+        assertFalse("do not invent a second source recorder",
+                adapter.contains("rememberGraphicsLayer("));
+        assertFalse(adapter.contains("recordLayer("));
+        assertFalse(adapter.contains("Bitmap"));
+        assertFalse(adapter.contains("PixelCopy"));
+    }
+
+    @Test
     public void bottomTabSelectionUsesNativeCapsuleClippedHitTargets() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
