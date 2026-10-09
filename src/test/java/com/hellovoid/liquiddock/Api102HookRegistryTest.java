@@ -77,6 +77,64 @@ public class Api102HookRegistryTest {
     }
 
     @Test
+    public void replacingAnIdentifiedHookKeepsOnlyTheNewLiveHandle() throws Exception {
+        List<String> events = new ArrayList<>();
+        AtomicInteger replacements = new AtomicInteger();
+        XposedInterface.HookHandle nextHandle = fakeHandle("new", events, false);
+        XposedInterface.HookHandle oldHandle = (XposedInterface.HookHandle)
+                Proxy.newProxyInstance(
+                        XposedInterface.HookHandle.class.getClassLoader(),
+                        new Class<?>[]{XposedInterface.HookHandle.class},
+                        (proxy, method, args) -> {
+                            if ("replaceHook".equals(method.getName())) {
+                                replacements.incrementAndGet();
+                                return nextHandle;
+                            }
+                            if ("unhook".equals(method.getName())) {
+                                events.add("old");
+                                return null;
+                            }
+                            return null;
+                        });
+        Api102HookRegistry registry = new Api102HookRegistry(
+                (method, id, callback) -> oldHandle);
+        Method method = Target.class.getDeclaredMethod("observed", int.class);
+        registry.install(method, "stable", chain -> chain.proceed());
+        assertEquals(nextHandle, registry.replaceIdentified("stable", chain -> chain.proceed()));
+        assertEquals(1, replacements.get());
+        registry.rollback(List.of("stable"));
+        assertEquals(List.of("new"), events);
+        assertEquals(0, registry.count());
+        assertThrows(IllegalStateException.class,
+                () -> registry.replaceIdentified("absent", chain -> chain.proceed()));
+    }
+
+    @Test
+    public void failedAtomicReplacementKeepsOldHandleAvailableForRollback() throws Exception {
+        List<String> events = new ArrayList<>();
+        XposedInterface.HookHandle old = (XposedInterface.HookHandle)
+                Proxy.newProxyInstance(
+                        XposedInterface.HookHandle.class.getClassLoader(),
+                        new Class<?>[]{XposedInterface.HookHandle.class},
+                        (proxy, method, args) -> {
+                            if ("replaceHook".equals(method.getName())) {
+                                throw new IllegalStateException("failed replacement");
+                            }
+                            if ("unhook".equals(method.getName())) events.add("old");
+                            return null;
+                        });
+        Api102HookRegistry registry = new Api102HookRegistry(
+                (method, id, callback) -> old);
+        Method method = Target.class.getDeclaredMethod("observed", int.class);
+        registry.install(method, "stable", chain -> chain.proceed());
+        assertThrows(IllegalStateException.class,
+                () -> registry.replaceIdentified("stable", chain -> chain.proceed()));
+        assertEquals(1, registry.count());
+        registry.rollback(List.of("stable"));
+        assertEquals(List.of("old"), events);
+    }
+
+    @Test
     public void rollbackRunsInReverseOrderAndPreservesUnremovedHandles() throws Exception {
         List<String> events = new ArrayList<>();
         Api102HookRegistry registry = new Api102HookRegistry(
