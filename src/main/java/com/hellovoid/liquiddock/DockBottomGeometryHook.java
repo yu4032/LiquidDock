@@ -42,9 +42,8 @@ final class DockBottomGeometryHook {
             final Class<?> gridController = resolvedGridController;
             Method getter = HookUtil.findMethodExact(
                     deviceConfig, "getHotSeatsMarginBottom", new Class<?>[0]);
-            Api101Bridge.module().hook(getter)
-                    .setPriority(XposedInterface.PRIORITY_HIGHEST)
-                    .intercept(chain -> {
+            HookUtil.hookWithPriority(getter, XposedInterface.PRIORITY_HIGHEST,
+                    chain -> {
                         HookUtil.InvocationResult<Object> controllerResult = gridController != null
                                 ? HookUtil.tryInvokeStatic(gridController, "getInstance")
                                 : null;
@@ -86,9 +85,8 @@ final class DockBottomGeometryHook {
             Class<?> hotSeats = Class.forName(HOT_SEATS, false, classLoader);
             Method attached = HookUtil.findMethodExact(
                     hotSeats, "onAttachedToWindow", new Class<?>[0]);
-            Api101Bridge.module().hook(attached)
-                    .setPriority(XposedInterface.PRIORITY_HIGHEST)
-                    .intercept(chain -> {
+            HookUtil.hookWithPriority(attached, XposedInterface.PRIORITY_HIGHEST,
+                    chain -> {
                         Object result = chain.proceed();
                         Object owner = chain.getThisObject();
                         if (!(owner instanceof View) || !hotSeats.isInstance(owner)) return result;
