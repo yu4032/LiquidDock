@@ -50,6 +50,14 @@ final class HookScopeRestartShell {
         script.append("    for old in $before; do\n");
         script.append("      if kill -0 \"$old\" 2>/dev/null; then old_alive=1; break; fi\n");
         script.append("    done\n");
+        // SIGTERM may be ignored; escalate once, after checking the PID still
+        // belongs to the exact selected process (never an unrelated package).
+        script.append("    if [ \"$i\" -eq 15 ] && [ \"$old_alive\" -ne 0 ]; then\n");
+        script.append("      current=\"$(pidof \"$process\" 2>/dev/null || true)\"\n");
+        script.append("      for old in $before; do\n");
+        script.append("        case \" $current \" in *\" $old \"*) kill -KILL \"$old\" 2>/dev/null || true ;; esac\n");
+        script.append("      done\n");
+        script.append("    fi\n");
         script.append("    if [ \"$old_alive\" -eq 0 ]; then\n");
         script.append("      if [ -n \"$after\" ]; then report \"$scope\" RESTARTED; ");
         script.append("else report \"$scope\" STOPPED; fi\n");
