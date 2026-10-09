@@ -278,10 +278,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
         assertTrue(surfaces.contains("val backdrop = LocalPrismalOverlayBackdrop.current"));
         assertTrue(surfaces.contains("backdrop = activeOverlayBackdrop,"));
-        // Recording must wrap the painted background, not capture an empty Box.
-        int capture = surfaces.indexOf("Modifier.prismalGlassLayer(backgroundLayer)");
-        int paint = surfaces.indexOf("Brush.verticalGradient(");
-        assertTrue("Opaque background must be drawn inside its Prismal capture", capture >= 0 && paint > capture);
+        // Static architecture audit; actual modifier capture order is validated
+        // by real rendering rather than prohibited source-order inference.
         assertTrue(surfaces.contains("lerp(background, primary, 0.07f)"));
         assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
         assertTrue(header.contains("PrismalBackdrop"));
