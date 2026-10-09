@@ -35,7 +35,7 @@ internal fun GuiStaticPressPrismalSurface(
     backdrop: PrismalBackdrop,
     modifier: Modifier,
     shape: () -> Shape,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     blurRadius: Dp,
     tint: Color,
     tintAlpha: Float,
@@ -49,8 +49,8 @@ internal fun GuiStaticPressPrismalSurface(
 ) {
     val density = LocalDensity.current
     val animationScope = rememberCoroutineScope()
-    val pressRipple = remember(animationScope) {
-        PrismalPressRipple(animationScope = animationScope)
+    val pressRipple = remember(animationScope, onClick != null) {
+        if (onClick != null) PrismalPressRipple(animationScope = animationScope) else null
     }
 
     Box(
@@ -58,6 +58,11 @@ internal fun GuiStaticPressPrismalSurface(
             .drawPrismalGlass(
                 backdrop = backdrop,
                 shape = shape,
+                // Default PrismalDepthShadow is re-captured into the bottom
+                // capsule and its soft gradient shows visible color stepping
+                // after a second blur/refraction pass. Preserve the specular
+                // edge, native lens, tint and outline; skip only this shadow.
+                depthShadow = null,
                 effects = {
                     applyPrismalGlassEffects(
                         density = density,
@@ -80,14 +85,18 @@ internal fun GuiStaticPressPrismalSurface(
                     if (surfaceColor.isSpecified) drawRect(surfaceColor)
                 },
             )
-            .clickable(
-                interactionSource = null,
-                indication = null,
-                role = Role.Button,
-                onClick = onClick,
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = null,
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
+                } else Modifier,
             )
-            .then(pressRipple.modifier)
-            .then(pressRipple.gestureModifier),
+            .then(pressRipple?.modifier ?: Modifier)
+            .then(pressRipple?.gestureModifier ?: Modifier),
         content = content,
     )
 }
