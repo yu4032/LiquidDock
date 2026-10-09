@@ -151,12 +151,23 @@ final class LauncherGlassStaticNode {
 
     /** Preserve node/session ownership while replacing per-component optical styles. */
     static void applyLiveGlassConfigToAll(LiquidDockConfig.Glass glassConfig) {
+        // Component size/corner offsets are applied when captureGeometry() runs on pre-draw.
+        // An optical-only scene redraw would retain the previous geometry snapshot.
+        // Invalidate each distinct stable root once so that geometry is re-collected.
+        java.util.HashSet<View> dirtyRoots = new java.util.HashSet<>();
         synchronized (BY_MATERIAL) {
             for (WeakReference<LauncherGlassStaticNode> ref : BY_MATERIAL.values()) {
                 LauncherGlassStaticNode node = ref.get();
-                if (node != null && !node.disposed) node.glassConfig = glassConfig;
+                if (node == null || node.disposed) continue;
+                node.glassConfig = glassConfig;
+                View material = node.materialRef.get();
+                if (material != null && material.isAttachedToWindow()) {
+                    View root = material.getRootView();
+                    if (root != null && root.isAttachedToWindow()) dirtyRoots.add(root);
+                }
             }
         }
+        for (View root : dirtyRoots) root.postInvalidateOnAnimation();
     }
 
     View materialHost() { return materialRef.get(); }
