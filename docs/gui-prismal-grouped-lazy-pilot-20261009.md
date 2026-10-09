@@ -19,3 +19,10 @@ The user reports significantly faster scrolling with GUI glass off. In the uploa
 - Compare GPU p50/p90/p95, CPU/total frame p50/p90, `GrVkTextureRenderTarget` scratch count/bytes, and visible jank. Stronger evidence requires Perfetto GPU FrameTimeline.
 - Check toggles, dependent slider availability, numeric entry, reset/stepper, page-entry arrow, long-list border scrolling, bottom-tab gestures, header blur and dark mode. If a group causes local overdraw or a large visual regression, revert that group only.
 - Keep this isolated branch/PR unmerged pending on-device A/B confirmation.
+
+## Experiment B — turn off LIST CELL edge-lens (after grouped pilot)
+
+- Only `SettingsCard` and `ModernFeatureCard` set `ModernSurface(edgeRefraction = false)`. Dialogs and unrelated `ModernSurface` callers keep the original lens default.
+- Both the static/ripple and interactive render paths set their lens height **and** amount to zero for those cells, so PrismalAGSL `applyPrismalGlassEffects` does not add `prismalLens`; chromatic aberration is also set to zero on that branch.
+- The cell still uses the native Prismal blur, vibrancy, tint, contour/specular, round shape and click ripple. Glass sliders, toggles, steppers, buttons, header, and bottom navigation are **unchanged**.
+- Compare experiment A (grouped only, CI #7664) to experiment B (grouped + lensless list cells, next CI), on the same mixed/dense page and identical gesture, recording GPU p50/p90/p95 and cached render targets, and inspecting the visual rim. The savings may be limited because the 12dp blur and source compositing remain.

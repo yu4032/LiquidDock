@@ -84,6 +84,25 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void listCellsSkipLensShaderButKeepPrismalBlurAndInteractiveControls() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+        String ui = Files.readString(UI);
+        assertTrue(surfaces.contains("edgeRefraction: Boolean = true,"));
+        assertTrue(surfaces.contains("val lensHeightPx = if (edgeRefraction) 16f else 0f"));
+        assertTrue(surfaces.contains("val lensAmountPx = if (edgeRefraction) 21f else 0f"));
+        assertTrue(surfaces.contains("val lensDispersion = if (edgeRefraction) 0.28f else 0f"));
+        assertTrue(surfaces.contains("refractionHeightPx = lensHeightPx,"));
+        assertTrue(surfaces.contains("refractionAmountPx = lensAmountPx,"));
+        assertTrue(surfaces.contains("chromaticAberration = lensDispersion,"));
+        assertTrue(surfaces.contains("blurRadius = 12.dp,"));
+        assertTrue(surfaces.contains("edgeRefraction = false,"));
+        assertTrue(ui.contains("edgeRefraction = false,"));
+        assertTrue(surfaces.contains("PrismalGlassSlider("));
+        assertTrue(surfaces.contains("PrismalGlassStepper("));
+        assertTrue(surfaces.contains("PrismalGlassButton("));
+    }
+
+    @Test
     public void groupedPrismalCardsBoundOffscreenLayersWithoutNestedScroll() throws Exception {
         String ui = Files.readString(UI);
         assertTrue(ui.contains("private fun LazyListScope.groupedIntSettings("));

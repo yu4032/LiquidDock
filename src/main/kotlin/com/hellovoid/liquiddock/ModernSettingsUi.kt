@@ -629,6 +629,9 @@ internal fun ModernSurface(
     contentPadding: PaddingValues = PaddingValues(18.dp),
     onClick: (() -> Unit)? = null,
     staticPress: Boolean = false,
+    // Static list cells can skip the costly edge lens while retaining native
+    // Prismal blur, tint, specular, outline, and press feedback.
+    edgeRefraction: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
@@ -657,6 +660,9 @@ internal fun ModernSurface(
         .fillMaxWidth()
         .then(if (darkTheme) Modifier.border(1.dp, cardStroke, cardShape) else Modifier)
     val darkGlassWash = if (darkTheme) Color.White.copy(alpha = 0.055f) else Color.Unspecified
+    val lensHeightPx = if (edgeRefraction) 16f else 0f
+    val lensAmountPx = if (edgeRefraction) 21f else 0f
+    val lensDispersion = if (edgeRefraction) 0.28f else 0f
 
     val cardContent: @Composable BoxScope.() -> Unit = {
         Column(
@@ -676,9 +682,9 @@ internal fun ModernSurface(
             tint = MiuixTheme.colorScheme.surface,
             tintAlpha = 0.24f,
             saturation = 1.32f,
-            refractionHeightPx = 16f,
-            refractionAmountPx = 21f,
-            chromaticAberration = 0.28f,
+            refractionHeightPx = lensHeightPx,
+            refractionAmountPx = lensAmountPx,
+            chromaticAberration = lensDispersion,
             depthEffect = true,
             surfaceColor = darkGlassWash,
             content = cardContent,
@@ -693,9 +699,9 @@ internal fun ModernSurface(
             tint = MiuixTheme.colorScheme.surface,
             tintAlpha = 0.24f,
             saturation = 1.32f,
-            refractionHeightPx = 16f,
-            refractionAmountPx = 21f,
-            chromaticAberration = 0.28f,
+            refractionHeightPx = lensHeightPx,
+            refractionAmountPx = lensAmountPx,
+            chromaticAberration = lensDispersion,
             depthEffect = true,
             surfaceColor = darkGlassWash,
             content = cardContent,
@@ -715,6 +721,7 @@ internal fun ModernFeatureCard(
         modifier = modifier,
         onClick = onClick,
         staticPress = true,
+        edgeRefraction = false,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
