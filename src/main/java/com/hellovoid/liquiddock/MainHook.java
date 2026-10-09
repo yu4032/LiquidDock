@@ -48,6 +48,10 @@ public class MainHook {
         }
         order.advance(LauncherInstallSequence.Stage.DOCK_FOUNDATION);
 
+        // Keep the GUI's 4x2 widget preflight available even when no Dock or
+        // widget host has finished inflating. SetupViews registers a live receiver.
+        LauncherManualDiscoveryBridge.installGridPreflightRegistration(classLoader);
+
         // Independent of the visual owner: filter only the vendor Dock recommendation source.
         DockRecentAppBlacklistHook.install(classLoader);
 

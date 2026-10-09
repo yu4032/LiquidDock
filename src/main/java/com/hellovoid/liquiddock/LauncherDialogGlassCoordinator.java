@@ -68,8 +68,10 @@ final class LauncherDialogGlassCoordinator {
         }
 
         Binding binding = new Binding(dialog, decor, glassConfig, source);
-        binding.appearance = LauncherDialogGlassPreferences.resolve(
-                ConfigReader.load(), glassConfig);
+        ConfigReader reader = ConfigReader.load();
+        binding.scopedGlassConfig = ScopedGlassOptics.resolve(
+                reader, glassConfig, ScopedGlassOptics.DIALOG);
+        binding.appearance = LauncherDialogGlassPreferences.resolve(reader, glassConfig);
         BINDINGS.put(dialog, binding);
         View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
@@ -483,7 +485,8 @@ final class LauncherDialogGlassCoordinator {
             binding.appearance = appearance;
         }
         session.setPrismalParams(LauncherDialogGlassPreferences.material(
-                binding.glassConfig,
+                binding.scopedGlassConfig != null
+                        ? binding.scopedGlassConfig : binding.glassConfig,
                 appearance,
                 root.getResources().getDisplayMetrics().density,
                 effectiveDim));
@@ -607,6 +610,7 @@ final class LauncherDialogGlassCoordinator {
         WeakReference<View> panelRef = new WeakReference<>(null);
         WeakReference<View> dimBgRef = new WeakReference<>(null);
         final LiquidDockConfig.Glass glassConfig;
+        LiquidDockConfig.Glass scopedGlassConfig;
         final String source;
         LauncherGlassSession dialogSession;
         LauncherGlassSinkView sink;

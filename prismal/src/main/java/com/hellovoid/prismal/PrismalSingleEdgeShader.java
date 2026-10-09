@@ -21,10 +21,19 @@ final class PrismalSingleEdgeShader {
             """;
 
     private static final String EDGE_NORMAL_LENS_DIRECTION = """
-                // A straight Dock edge must have one translation-invariant refraction direction.
-                // Keep the transmitted lens on the local SDF normal instead of biasing it toward
-                // the center of an extremely wide glass rectangle.
+                // Keep straight edges translation-invariant. Only rounded corners allow a
+                // manual centerward bend; depth 0 preserves the current optical field.
                 vec2 lensDir = length(gradLens) > 1e-5 ? normalize(gradLens) : vec2(0.0);
+                // The default 0 control skips the additional per-fragment corner math.
+                if (u_lensDepthEffect > 0.001) {
+                    float cornerWeight = smoothstep(0.55, 0.95, abs(cKy.x) / max(halfSz.x, 1.0))
+                                       * smoothstep(0.55, 0.95, abs(cKy.y) / max(halfSz.y, 1.0));
+                    if (cornerWeight > 0.0) {
+                        vec2 radialDir = normalize(cKy + vec2(1e-4, 1e-4));
+                        vec2 bentDir = lensDir + radialDir * clamp(u_lensDepthEffect, 0.0, 1.0) * cornerWeight;
+                        lensDir = length(bentDir) > 1e-5 ? normalize(bentDir) : vec2(0.0);
+                    }
+                }
             """;
 
     private static final String UPSTREAM_TRANSMITTED_BLOCK = """
@@ -58,6 +67,14 @@ final class PrismalSingleEdgeShader {
                 vec2 baseOffset = edgeRefractionUv;
             """;
 
+    private static final String UPSTREAM_FALLOFF =
+            "float dropLens = pow(smoothstep(refractionHeight, 0.0, edgeDist), 0.82);";
+    private static final String CONFIGURABLE_FALLOFF = """
+            // 400% retains the original 0.82 exponent, with a responsive full GUI range.
+            float edgeFalloffPower = max(0.02, max(u_edgeRefractionFalloff, 0.0) * 0.205);
+            float dropLens = pow(smoothstep(refractionHeight, 0.0, edgeDist), edgeFalloffPower);
+            """;
+
     private static final String UPSTREAM_CHROMA_DIRECTION =
             "vec2 dispDir = length(pPx) > 1e-3 ? normalize(pPx) : vec2(0.0, 1.0);";
     private static final String TEXTURE_CHROMA_DIRECTION =
@@ -84,6 +101,11 @@ final class PrismalSingleEdgeShader {
                 UPSTREAM_TRANSMITTED_BLOCK,
                 SINGLE_EDGE_TRANSMITTED_BLOCK,
                 "Prismal transmitted-refraction block");
+        corrected = replaceExactlyOnce(
+                corrected,
+                UPSTREAM_FALLOFF,
+                CONFIGURABLE_FALLOFF,
+                "Prismal edge falloff");
         corrected = replaceExactlyOnce(
                 corrected,
                 UPSTREAM_CHROMA_DIRECTION,

@@ -7,6 +7,12 @@ public final class PrismalOpticalEdgeShader {
     private static final String EDGE_DISTANCE = "float edgeDist = -distMask;";
     private static final String OPACITY =
             "float opacity = 1.0 - smoothstep(-inset * 0.5, 0.0, distMask);";
+    private static final String VIBRANCY_NEUTRAL =
+            "if (sat <= 1.001) return rgb;";
+    private static final String SHADOW_EXTENT =
+            "float shadowExt = mix(0.15, 0.60, u_shadowSoftness > 1.0\n"
+            + "        ? clamp(u_shadowSoftness / 20.0, 0.0, 1.0)\n"
+            + "        : clamp(u_shadowSoftness, 0.0, 1.0));";
     private static final String OUTWARD =
             "vec2 outward = (length(gradLens) > 1e-4) ? normalize(gradLens) : vec2(0.0, 1.0);";
     private static final String REFLECTION_MIX = "color = mix(color, reflSample, reflW);";
@@ -54,6 +60,8 @@ public final class PrismalOpticalEdgeShader {
         requireSingle(source, EDGE_DISTANCE);
         requireSingle(source, OPACITY);
         requireSingle(source, OUTWARD);
+        requireSingle(source, VIBRANCY_NEUTRAL);
+        requireSingle(source, SHADOW_EXTENT);
         requireSingle(source, REFLECTION_MIX);
         requireSingle(source, PLAIN_HIGHLIGHT_ADD);
         return source
@@ -74,8 +82,20 @@ public final class PrismalOpticalEdgeShader {
                         + "    float os4EdgeT = clamp(edgeDist / max(os4EdgeWidthPx, 1.0), 0.0, 1.0);\n"
                         + "    float os4EdgeMask = os4EdgeBand(edgeDist, os4EdgeWidthPx, edgeAa)\n"
                         + "            * step(0.5, u_os4EdgeEnabled);")
-                .replace(OPACITY,
-                        "float opacity = 1.0 - smoothstep(-edgeAa, edgeAa, distMask);")
+                .replace(OPACITY, """
+                        // Preserve the shipped 20px default and derivative AA. Other inset values
+                        // shift the silhouette inward/outward, bounded for small glass surfaces.
+                        float insetShiftPx = clamp((u_refractionInset - 20.0) * 0.25,
+                                -minDim * 0.05, minDim * 0.12);
+                        float opacity = 1.0 - smoothstep(-edgeAa - insetShiftPx,
+                                edgeAa - insetShiftPx, distMask);
+                        """)
+                .replace(VIBRANCY_NEUTRAL,
+                        "if (abs(sat - 1.0) <= 0.001) return rgb;")
+                .replace(SHADOW_EXTENT, """
+                        // 0..20 (GUI 0..2000) is continuous; default 1000 (10.0) remains 0.375.
+                        float shadowExt = mix(0.15, 0.60, clamp(u_shadowSoftness / 20.0, 0.0, 1.0));
+                        """)
                 .replace(OUTWARD, OUTWARD + "\n"
                         + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0),\n"
                         + "            halfSz, crMask, u_sminSmoothing);\n"

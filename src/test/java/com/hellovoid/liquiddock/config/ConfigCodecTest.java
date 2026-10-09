@@ -124,6 +124,21 @@ public class ConfigCodecTest {
     }
 
     @Test
+    public void partialImportCannotDisableAbsentGridMarginFlags() {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put(ConfigSchema.Glass.PRISMAL_VIBRANCY.name(), 180);
+        Map<String, Object> imported = ConfigCodec.importValues(json);
+        assertEquals(180, imported.get(ConfigSchema.Glass.PRISMAL_VIBRANCY.name()));
+        assertFalse(imported.containsKey(ConfigSchema.Grid.MARGINS_DP.name()));
+        assertFalse(imported.containsKey(ConfigSchema.Grid.MARGINS_OFFSET.name()));
+
+        json.put(ConfigSchema.Grid.MARGINS_DP.name(), false);
+        imported = ConfigCodec.importValues(json);
+        assertEquals(false, imported.get(ConfigSchema.Grid.MARGINS_DP.name()));
+        assertFalse(imported.containsKey(ConfigSchema.Grid.MARGINS_OFFSET.name()));
+    }
+
+    @Test
     public void importClampsIntegersToExistingRanges() {
         Map<String, Object> json = new HashMap<>();
         json.put("liquid_capture_power_limit_fps", 100);
