@@ -85,6 +85,31 @@ public class LiveGlassConfigStateTest {
     }
 
     @Test
+    public void workstationDockSettingsAreLiveButGridTopologyIsNot() {
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name() + "_tenths"));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name() + "_tenths"));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name()));
+        assertFalse(LiveGlassConfigState.isLiveKey(ConfigSchema.Grid.ROWS.name()));
+        assertFalse(LiveGlassConfigState.isLiveKey(ConfigSchema.Grid.COLUMNS.name()));
+    }
+
+    @Test
+    public void otherAppScopesRouteOnlyGlassRelevantKeys() {
+        assertTrue(ExternalGlassLiveConfigState.isRelevantKey(
+                ConfigSchema.Glass.BLUR.name()));
+        assertTrue(ExternalGlassLiveConfigState.isRelevantKey(
+                GboardGlassPreferences.TINT_ALPHA_KEY));
+        assertTrue(ExternalGlassLiveConfigState.isRelevantKey(
+                MiuiSearchboxGlassPreferences.ENABLED_KEY));
+        assertTrue(ExternalGlassLiveConfigState.isRelevantKey(null));
+        assertFalse(ExternalGlassLiveConfigState.isRelevantKey(
+                ConfigSchema.Grid.ROWS.name()));
+    }
+
+    @Test
     public void recentsParametersAreLive() {
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name()));
