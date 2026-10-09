@@ -190,6 +190,11 @@ final class GlassRuntimeState {
                 MiuixLauncherStaticGlassHook.onRuntimeWidgetGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] widget glass ownership released");
             });
+        } else if (!before.widget && isWidgetEnabled()) {
+            runOnMain(() -> {
+                MiuixLauncherStaticGlassHook.onRuntimeWidgetGlassEnabled();
+                MainHook.log("[DC][GlassRuntime] widget glass ownership restored");
+            });
         }
         if (transition.widgetDarkContentChanged) {
             runOnMain(() -> {
