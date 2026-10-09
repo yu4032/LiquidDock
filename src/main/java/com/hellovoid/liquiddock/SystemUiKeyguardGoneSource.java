@@ -24,7 +24,7 @@ final class SystemUiKeyguardGoneSource {
 
     private SystemUiKeyguardGoneSource() {}
 
-    static void install(ClassLoader classLoader) {
+    static synchronized void install(ClassLoader classLoader) {
         if (!INSTALLED.compareAndSet(false, true)) return;
         try {
             DOMAIN.begin();
