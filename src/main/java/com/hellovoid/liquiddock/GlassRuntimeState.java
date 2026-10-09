@@ -209,12 +209,16 @@ final class GlassRuntimeState {
                 MiuixFolderGlassHook.onRuntimeSmallFolderGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] small-folder glass ownership released");
             });
+        } else if (!before.smallFolder && isSmallFolderEnabled()) {
+            runOnMain(() -> MiuixFolderGlassHook.onRuntimeFolderGlassEnabled(true));
         }
         if (transition.largeFolderRelease) {
             runOnMain(() -> {
                 MiuixFolderGlassHook.onRuntimeLargeFolderGlassDisabled();
                 MainHook.log("[DC][GlassRuntime] large-folder glass ownership released");
             });
+        } else if (!before.largeFolder && isLargeFolderEnabled()) {
+            runOnMain(() -> MiuixFolderGlassHook.onRuntimeFolderGlassEnabled(false));
         }
     }
 
