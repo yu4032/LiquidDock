@@ -69,6 +69,14 @@ final class VisualRuntimeState {
             boolean strokeShadowStyleChanged = key == null
                     || matchesOptionChange(key, ConfigSchema.Dock.STROKE_SHADOW_RADIUS)
                     || matchesOptionChange(key, ConfigSchema.Dock.STROKE_SHADOW_ALPHA);
+            boolean dividerStyleChanged = key == null
+                    || matchesOptionChange(key, ConfigSchema.Divider.WIDTH_DP)
+                    || matchesOptionChange(key, ConfigSchema.Divider.HEIGHT_SCALE)
+                    || matchesOptionChange(key, ConfigSchema.Divider.Y_OFFSET_DP)
+                    || matchesOptionChange(key, ConfigSchema.Divider.COLOR_RED)
+                    || matchesOptionChange(key, ConfigSchema.Divider.COLOR_GREEN)
+                    || matchesOptionChange(key, ConfigSchema.Divider.COLOR_BLUE)
+                    || matchesOptionChange(key, ConfigSchema.Divider.ALPHA);
             if (key != null && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.ENABLED.name().equals(key)
                     && !ConfigSchema.Dock.STROKE_ENABLED.name().equals(key)
@@ -79,7 +87,8 @@ final class VisualRuntimeState {
                     && !ConfigSchema.Dock.FRAME_SYNC.name().equals(key)
                     && !strokeStyleChanged
                     && !dockShadowStyleChanged
-                    && !strokeShadowStyleChanged) return;
+                    && !strokeShadowStyleChanged
+                    && !dividerStyleChanged) return;
 
             boolean nextCoreEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Core.ENABLED.name(),
@@ -113,6 +122,9 @@ final class VisualRuntimeState {
                     DockNativeShadowBridge.refreshConfig();
                     DockShadowOwnership.onRuntimeDockShadowEnabled();
                 });
+            }
+            if (dividerStyleChanged) {
+                runOnMain(DockDividerHook::refreshInstalledFromCurrentConfig);
             }
         };
         nextPrefs.registerOnSharedPreferenceChangeListener(listener);
@@ -221,7 +233,9 @@ final class VisualRuntimeState {
             });
         }
         if (transition.dividerDisabled) {
-            runOnMain(() -> DockDividerHook.onRuntimeDividerDisabled());
+            runOnMain(DockDividerHook::onRuntimeDividerDisabled);
+        } else if (!before.divider && isDividerEnabled()) {
+            runOnMain(DockDividerHook::refreshInstalledFromCurrentConfig);
         }
         if (transition.mirrorVisibilityChanged) {
             runOnMain(() -> DockMirrorShortcutHook.onRuntimeVisibilityChanged());
