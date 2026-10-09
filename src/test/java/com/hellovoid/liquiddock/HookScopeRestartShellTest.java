@@ -28,6 +28,9 @@ public class HookScopeRestartShellTest {
         assertTrue(script.contains("if [ -z \"$before\" ]; then report \"$scope\" NOT_RUNNING"));
         assertTrue(script.contains("if ! kill -TERM $before"));
         assertTrue(script.contains("if kill -0 \"$old\""));
+        assertTrue(script.contains("current=\\\"$(pidof \\\"$process\\\""));
+        assertTrue(script.contains("kill -KILL \\\"$old\\\""));
+        assertTrue(script.contains("if [ \\\"$i\\\" -eq 15 ]"));
     }
 
     @Test
