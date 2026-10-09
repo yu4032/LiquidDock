@@ -81,7 +81,7 @@ final class SystemUiKeyguardGoneSource {
      * Standalone owner teardown primitive. Not wired to global hot reload: the rest of SystemUI
      * still owns other hooks, preference listeners and potentially GL-backed material sessions.
      */
-    static boolean stopForFutureReload() {
+    static synchronized boolean stopForFutureReload() {
         if (!INSTALLED.get()) return true;
         boolean released = DOMAIN.stop();
         if (released) {
