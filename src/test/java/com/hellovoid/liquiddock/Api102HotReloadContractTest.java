@@ -37,7 +37,11 @@ public class Api102HotReloadContractTest {
         assertTrue(owner.contains("DOMAIN.commit()"));
         assertTrue(owner.contains("DOMAIN.abort()"));
         assertTrue(owner.contains("static boolean stopForFutureReload()"));
-        assertTrue(owner.contains("if (step != null && DOMAIN.isActive())"));
+        assertTrue(owner.contains("DOMAIN.runActiveSideEffect(() -> onTransitionStep(step))"));
+        assertTrue(domain.contains("ReentrantReadWriteLock(true)"));
+        assertTrue(domain.contains("effectsBarrier.writeLock().tryLock("));
+        assertTrue(domain.contains("STOP_DRAIN_TIMEOUT_MS"));
+        assertTrue(domain.contains("if (!drained) return false"));
         assertTrue(owner.contains("if (!DOMAIN.isActive()) return;"));
         assertTrue(domain.contains("state = State.BLOCKED"));
         assertTrue(domain.contains("boolean clean = registry.rollback("));
