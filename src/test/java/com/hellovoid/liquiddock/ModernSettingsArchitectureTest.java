@@ -460,7 +460,8 @@ public class ModernSettingsArchitectureTest {
     public void prismalSliderObservesExternalStepperAndResetUpdates() throws Exception {
         String surfaces = Files.readString(SURFACES);
         assertTrue(surfaces.contains("val currentValue by rememberUpdatedState(value)"));
-        assertTrue(surfaces.contains("value = { currentValue }"));
+        assertTrue(surfaces.contains("val stableSliderValue = remember { { currentValue } }"));
+        assertTrue(surfaces.contains("value = stableSliderValue,"));
     }
 
     @Test
