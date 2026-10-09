@@ -25,6 +25,10 @@ final class MiuixLauncherStaticGlassHook {
 
     private MiuixLauncherStaticGlassHook() {}
 
+    static void onLiveGlassConfigChanged(LiquidDockConfig.Glass config) {
+        installedGlassConfig = config;
+    }
+
     static void onRuntimeGlassDisabled() {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
             if (isWidgetHost(host)) {
