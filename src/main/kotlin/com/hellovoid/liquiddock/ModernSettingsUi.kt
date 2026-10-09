@@ -851,6 +851,7 @@ internal fun Button(
     minWidth: Dp = 0.dp,
     minHeight: Dp = 36.dp,
     insideMargin: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+    destructive: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
     // This generic action is inside the scrolling page. Top-bar actions
@@ -867,19 +868,21 @@ internal fun Button(
     if (backdrop == null) {
         val buttonShape = RoundedCornerShape(minHeight / 2)
         val frozenBackdrop = LocalFrozenPrismalBackdrop.current
-        val fillColor = lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
-        val outlineColor = colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
+        val fillColor = if (destructive) Color(0xFFD73333)
+            else lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
+        val outlineColor = if (destructive) Color.White.copy(alpha = 0.16f)
+            else colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
         Box(
             modifier = resolved
                 .height(minHeight)
                 .clip(buttonShape)
-                .then(if (staticChrome && frozenBackdrop != null) Modifier
+                .then(if (!destructive && staticChrome && frozenBackdrop != null) Modifier
                     else Modifier.background(fillColor, buttonShape))
                 .border(1.dp, outlineColor, buttonShape)
                 .clickable(enabled = enabled, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            if (staticChrome && frozenBackdrop != null) {
+            if (!destructive && staticChrome && frozenBackdrop != null) {
                 GuiFrozenPrismalChrome(
                     backdrop = frozenBackdrop,
                     shape = { PrismalRoundedRectangle(minHeight / 2) },
@@ -914,8 +917,8 @@ internal fun Button(
         refractionAmount = 12.dp,
         pressLift = 0.dp,
         contentPadding = insideMargin,
-        tint = MiuixTheme.colorScheme.surface,
-        tintAlpha = 0.20f,
+        tint = if (destructive) Color(0xFFD73333) else MiuixTheme.colorScheme.surface,
+        tintAlpha = if (destructive) 0.92f else 0.20f,
         depthEffect = false,
         depthShadow = null,
     ) {

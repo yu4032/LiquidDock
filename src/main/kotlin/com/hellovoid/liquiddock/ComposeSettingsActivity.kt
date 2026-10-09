@@ -2366,15 +2366,26 @@ private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) 
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(onClick = { confirmDefaultReset = false }, minWidth = 72.dp) {
+                Button(
+                    onClick = { confirmDefaultReset = false },
+                    minWidth = 132.dp,
+                    minHeight = 42.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                ) {
                     Text("取消")
                 }
                 androidx.compose.foundation.layout.Spacer(Modifier.padding(horizontal = 5.dp))
-                Button(onClick = {
-                    confirmDefaultReset = false
-                    applyDefaultPreset(activity)
-                }, minWidth = 72.dp) {
-                    Text("恢复默认")
+                Button(
+                    onClick = {
+                        confirmDefaultReset = false
+                        applyDefaultPreset(activity)
+                    },
+                    minWidth = 132.dp,
+                    minHeight = 42.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                    destructive = true,
+                ) {
+                    Text("恢复默认", color = androidx.compose.ui.graphics.Color.White)
                 }
             }
         }
