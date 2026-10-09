@@ -1099,8 +1099,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         OutputState output = staticOutput;
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
                 || output.width <= 0 || output.height <= 0) return;
-        // The resolution slider controls both backdrop density and Workspace optics, including
-        // stationary frames. At 100% the shared batch can draw straight into its RGBA window.
+        // Background source and Gaussian blur may stay at reduced resolution. Procedural
+        // Workspace optics remain native-resolution; per-node scissor avoids full-screen shading.
         int opticsScale = PassBlurQualityPolicy.workspaceOpticsScalePercent(
                 workspaceSource, passBlurCaptureScalePercent);
         boolean reduced = opticsScale < 100;
