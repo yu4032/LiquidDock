@@ -148,6 +148,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile int rootHeight;
     private volatile int configRotation;
     private volatile long sceneGeneration = 1L;
+    private volatile float appliedGlassBlur = Float.NaN;
     private volatile int passBlurCaptureScalePercent =
             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
     private volatile int passBlurRenderFps = PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
@@ -294,19 +295,23 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || glassConfig == null) return;
         boolean qualityChanged = passBlurCaptureScalePercent != glassConfig.passBlurCaptureScalePercent
                 || passBlurRenderFps != glassConfig.passBlurRenderFps;
+        boolean blurChanged = Float.compare(appliedGlassBlur, glassConfig.blur) != 0;
         applyGlassConfig(glassConfig);
-        if (qualityChanged) {
-            sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
+        if (qualityChanged) sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
+        if (qualityChanged || blurChanged) {
+            // Gaussian blur lives in the prepared backdrop, not only in final uniforms.
+            // Request a new producer frame without replacing the EGL / PassBlur owner.
             View root = rootRef.get();
             if (root != null) LauncherGlassSceneController.requestFreshForRoot(root);
         } else {
-            requestStaticRedraw();
+            requestSceneRedraw();
         }
     }
 
     private void applyGlassConfig(LiquidDockConfig.Glass glassConfig) {
         View root = rootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
+        appliedGlassBlur = glassConfig != null ? glassConfig.blur : Float.NaN;
         passBlurCaptureScalePercent = glassConfig != null
                 ? glassConfig.passBlurCaptureScalePercent
                 : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
