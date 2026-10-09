@@ -22,6 +22,50 @@ public class LiveGlassConfigStateTest {
     }
 
     @Test
+    public void completeOpticalFamiliesAndComponentGeometryAreRoutedLive() {
+        assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.PRISMAL_SHOW_NORMALS.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.PRISMAL_SHADOW_SOFTNESS.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Glass.WIDGET_CORNER_RADIUS.name() + "_tenths"));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Glass.SMALL_FOLDER_SIZE_OFFSET.name() + "_tenths"));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.LauncherHighlight.LARGE_SPECULAR.name()));
+    }
+
+    @Test
+    public void alreadyInstalledLauncherAnimationTimingsUpdateWithoutHookReload() {
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.WORKSPACE_VISIBILITY.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.PRESS_IN.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.PRESS_OUT.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE.name()));
+        assertFalse(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.SETTINGS_PAGE.name()));
+
+        Map<String, Object> values = new HashMap<>();
+        values.put(ConfigSchema.Animation.PRESS_IN.name(), 125);
+        values.put(ConfigSchema.Animation.PRESS_OUT.name(), 210);
+        AnimationRuntimeState.configure(LiquidDockConfig.from(new ConfigReader(values)).animation);
+        assertEquals(125, AnimationRuntimeState.pressInDurationMs());
+        assertEquals(210, AnimationRuntimeState.pressOutDurationMs());
+    }
+
+    @Test
+    public void hookInstallOnlyAndLegacyGlassKeysDoNotPretendToBeLive() {
+        assertFalse(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name()));
+        assertFalse(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name()));
+        assertFalse(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name()));
+    }
+
+    @Test
     public void recentsParametersAreLive() {
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name()));
