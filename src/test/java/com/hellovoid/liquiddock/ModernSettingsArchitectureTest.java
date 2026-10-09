@@ -84,6 +84,30 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void topAndBottomKeepLivePrismalButBodyGlassesSampleOnlyOnTouch() throws Exception {
+        String ui = Files.readString(SURFACES);
+        String slider = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        String toggle = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
+
+        assertTrue(ui.contains("val surfaceBackdrop: PrismalBackdrop? = null"));
+        assertTrue(ui.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
+        assertTrue(ui.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
+        assertTrue(ui.contains("GuiPrismalFlatHeader("));
+        assertTrue(ui.contains("PrismalGlassBottomTabs("));
+        assertTrue(ui.contains("GuiOnTouchPrismalSlider("));
+        assertTrue(ui.contains("GuiOnTouchPrismalToggle("));
+        assertTrue(ui.contains("val backdrop = LocalPrismalSurfaceBackdrop.current"));
+        assertTrue(slider.contains("if (sampling) Modifier.prismalGlassLayer(trackBackdrop) else Modifier"));
+        assertTrue(toggle.contains("if (sampling) Modifier.prismalGlassLayer(trackBackdrop) else Modifier"));
+        assertTrue(slider.contains("if (sampling) Modifier.drawPrismalGlass("));
+        assertTrue(toggle.contains("if (sampling) Modifier.drawPrismalGlass("));
+        assertTrue(slider.contains("onDragStarted = {"));
+        assertTrue(toggle.contains("onDragStarted = { sampling = true }"));
+    }
+
+    @Test
     public void listCellsSkipLensShaderButKeepPrismalBlurAndInteractiveControls() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String ui = Files.readString(UI);
@@ -97,7 +121,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("blurRadius = 12.dp,"));
         assertTrue(surfaces.contains("edgeRefraction = false,"));
         assertTrue(ui.contains("edgeRefraction = false,"));
-        assertTrue(surfaces.contains("PrismalGlassSlider("));
+        assertTrue(surfaces.contains("GuiOnTouchPrismalSlider("));
         assertTrue(surfaces.contains("PrismalGlassStepper("));
         assertTrue(surfaces.contains("PrismalGlassButton("));
     }
@@ -134,7 +158,7 @@ public class ModernSettingsArchitectureTest {
         // Each child is a lazy item with its own Prismal glass card, not a
         // viewport-height static card enclosing an independently scrolling list.
         assertFalse(ui.contains(".weight(1f)\n                .padding(horizontal = 14.dp)"));
-        assertTrue(surfaces.contains("PrismalGlassSlider("));
+        assertTrue(surfaces.contains("GuiOnTouchPrismalSlider("));
         assertTrue(surfaces.contains("PrismalGlassStepper("));
     }
 
@@ -263,8 +287,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(source.contains("PrismalGlassButton"));
         assertTrue(source.contains("PrismalGlassBottomTabs"));
         assertTrue(source.contains("PrismalGlassBottomTab"));
-        assertTrue(source.contains("PrismalGlassToggle"));
-        assertTrue(source.contains("PrismalGlassSlider"));
+        assertTrue(source.contains("GuiOnTouchPrismalToggle"));
+        assertTrue(source.contains("GuiOnTouchPrismalSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
         assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 14f"));
         assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));

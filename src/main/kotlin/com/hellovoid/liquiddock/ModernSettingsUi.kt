@@ -62,9 +62,7 @@ import com.styropyr0.prismal.PrismalGlassSurface
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
-import com.styropyr0.prismal.components.PrismalGlassSlider
 import com.styropyr0.prismal.components.PrismalGlassStepper
-import com.styropyr0.prismal.components.PrismalGlassToggle
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
@@ -93,6 +91,7 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
 private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+private val LocalTouchPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 // Cheap, static approximation of the existing Prismal cells. This flag never
 // gives a body component access to the live header/footer capture layers.
 private val LocalStaticGlassChrome = staticCompositionLocalOf { false }
@@ -121,6 +120,9 @@ internal fun ModernSettingsScaffold(
     // Keep live Prismal sampling ONLY for top bar actions/header and bottom
     // capsule. All body cells, dialogs and numeric controls remain static.
     val surfaceBackdrop: PrismalBackdrop? = null
+    // Touch-gated controls use the original background sample, but their
+    // render nodes only attach during active gestures. No third capture layer.
+    val touchBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
     // Header and bottom navigation share the captured background + content.
     Box(modifier = Modifier.fillMaxSize()) {
@@ -154,6 +156,7 @@ internal fun ModernSettingsScaffold(
         CompositionLocalProvider(
             LocalPrismalSurfaceBackdrop provides surfaceBackdrop,
             LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
+            LocalTouchPrismalBackdrop provides touchBackdrop,
             LocalStaticGlassChrome provides glassEnabled,
         ) {
             Scaffold(
@@ -331,7 +334,7 @@ internal fun RestartScopesDialog(
                             RestartScopeToggle(
                                 scopeId = item.id,
                                 checked = checked,
-                                backdrop = backdrop,
+                                backdrop = LocalTouchPrismalBackdrop.current,
                                 onToggle = onToggle,
                             )
                         },
@@ -425,7 +428,7 @@ private fun RestartScopeToggle(
     }
 
     if (backdrop != null) {
-        PrismalGlassToggle(
+        GuiOnTouchPrismalToggle(
             selected = selectedProvider,
             onSelect = stableToggle,
             backdrop = backdrop,
@@ -929,7 +932,7 @@ internal fun SwitchPreference(
     enabled: Boolean = true,
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    val backdrop = LocalTouchPrismalBackdrop.current
     // Upstream Prismal remembers its gesture callbacks. Bridge them to the
     // latest setting state instead of retaining values from first composition.
     val selectedState = rememberUpdatedState(checked)
@@ -946,7 +949,7 @@ internal fun SwitchPreference(
         insideMargin = insideMargin,
         endActions = {
             if (backdrop != null) {
-                PrismalGlassToggle(
+                GuiOnTouchPrismalToggle(
                     selected = stableSelected,
                     onSelect = stableToggleChange,
                     backdrop = backdrop,
@@ -1080,7 +1083,7 @@ internal fun SliderPreference(
     endActions: @Composable (() -> Unit)? = null,
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
     var editingValue by remember(title) { mutableStateOf(false) }
     val intervals = (steps + 1).coerceAtLeast(1)
@@ -1129,7 +1132,7 @@ internal fun SliderPreference(
             },
         )
         if (backdrop != null) {
-            PrismalGlassSlider(
+            GuiOnTouchPrismalSlider(
                 value = stableSliderValue,
                 onValueChange = stableSliderChange,
                 valueRange = valueRange,
@@ -1180,7 +1183,7 @@ internal fun ModernGlassSlider(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
     val sliderEnabledState = rememberUpdatedState(enabled)
     val sliderCallbackState = rememberUpdatedState(onValueChange)
@@ -1189,7 +1192,7 @@ internal fun ModernGlassSlider(
         { next -> if (sliderEnabledState.value) sliderCallbackState.value(next) }
     }
     if (backdrop != null) {
-        PrismalGlassSlider(
+        GuiOnTouchPrismalSlider(
             value = stableSliderValue,
             onValueChange = stableSliderChange,
             valueRange = valueRange,
