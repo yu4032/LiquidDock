@@ -2310,7 +2310,9 @@ private fun IntSetting(prefs: SharedPreferences, spec: IntSpec, enabledOverride:
         } else {
             nextValue.roundToInt().toFloat()
         }
-        value = next.coerceIn(spec.min.toFloat(), maxValue.toFloat())
+        val bounded = next.coerceIn(spec.min.toFloat(), maxValue.toFloat())
+        if (bounded == value) return // avoid redundant SharedPreferences writes per drag pixel
+        value = bounded
         val editor = prefs.edit().putInt(spec.key, value.roundToInt())
         if (decimalDp) editor.putInt("${spec.key}_tenths", (value * 10f).roundToInt())
         editor.apply()
