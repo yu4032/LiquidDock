@@ -14,8 +14,9 @@ import com.styropyr0.prismal.effects.applyPrismalGlassEffects
 
 /**
  * Flat Prismal header that samples the captured background and page content.
- * No refraction, vibrancy hue shift, or touch handling: MIUIX owns the
- * foreground app bar, and its buttons retain their independent Prismal effects.
+ * No rim, drop shadow, refraction or hue shift: the settings Scaffold
+ * draws its only visible boundary as a thin bottom divider. MIUIX owns the
+ * foreground app bar and buttons retain their own Prismal glass effects.
  */
 @Composable
 internal fun GuiPrismalFlatHeader(
@@ -30,6 +31,11 @@ internal fun GuiPrismalFlatHeader(
         modifier = modifier.drawPrismalGlass(
             backdrop = backdrop,
             shape = { RectangleShape },
+            // Prismal's defaults emit a highlight rim and drop shadow on
+            // all four edges, including the screen's top and sides.
+            // This header should have ONLY the explicit bottom divider.
+            specular = null,
+            depthShadow = null,
             effects = {
                 applyPrismalGlassEffects(
                     density = density,
