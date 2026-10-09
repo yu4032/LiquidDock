@@ -289,6 +289,21 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         });
     }
 
+    /** Optical-only updates reuse the prepared PassBlur backdrop and existing EGL outputs. */
+    void applyLiveGlassConfig(LiquidDockConfig.Glass glassConfig) {
+        if (shuttingDown || glassConfig == null) return;
+        boolean qualityChanged = passBlurCaptureScalePercent != glassConfig.passBlurCaptureScalePercent
+                || passBlurRenderFps != glassConfig.passBlurRenderFps;
+        applyGlassConfig(glassConfig);
+        if (qualityChanged) {
+            sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
+            View root = rootRef.get();
+            if (root != null) LauncherGlassSceneController.requestFreshForRoot(root);
+        } else {
+            requestStaticRedraw();
+        }
+    }
+
     private void applyGlassConfig(LiquidDockConfig.Glass glassConfig) {
         View root = rootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
