@@ -307,30 +307,23 @@ public class SettingsActivity extends AppCompatActivity {
                 }
                 Map<String, String> outcomes = HookScopeRestartShell.parseResults(
                         selected, stdout.toString());
-                StringBuilder resultText = new StringBuilder();
+                // No confirmation dialog for successful restarts. Only surface
+                // real failures, especially when SystemUI did not respawn.
+                ArrayList<String> failed = new ArrayList<>();
                 for (Map.Entry<String, String> outcome : outcomes.entrySet()) {
-                    if (resultText.length() > 0) resultText.append('\n');
-                    resultText.append(restartScopeDisplayName(outcome.getKey())).append("：");
-                    switch (outcome.getValue()) {
-                        case HookScopeRestartShell.RESTARTED:
-                            resultText.append("已检测到新进程");
-                            break;
-                        case HookScopeRestartShell.STOPPED:
-                            resultText.append("旧进程已退出，等待系统按需重新启动");
-                            break;
-                        case HookScopeRestartShell.NOT_RUNNING:
-                            resultText.append("原本未运行，未执行重启");
-                            break;
-                        default:
-                            resultText.append("重启失败或未确认进程退出");
-                            break;
+                    boolean isSystemUi = HookScopeRestartShell.SYSTEM_UI.equals(outcome.getKey());
+                    String state = outcome.getValue();
+                    if (HookScopeRestartShell.FAILED.equals(state)
+                            || (isSystemUi && !HookScopeRestartShell.RESTARTED.equals(state))) {
+                        failed.add(restartScopeDisplayName(outcome.getKey()));
                     }
                 }
-                runOnUiThread(() -> new androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("作用域重启结果")
-                        .setMessage(resultText.toString())
-                        .setPositiveButton("确定", null)
-                        .show());
+                if (!failed.isEmpty()) {
+                    runOnUiThread(() -> Toast.makeText(
+                            this,
+                            "以下作用域未能完成重启：" + String.join("、", failed),
+                            Toast.LENGTH_LONG).show());
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 runOnUiThread(() -> Toast.makeText(this,
