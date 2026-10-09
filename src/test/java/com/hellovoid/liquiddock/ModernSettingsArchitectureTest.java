@@ -241,10 +241,14 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
         assertTrue(header.contains("shape = { RectangleShape }"));
-        assertTrue("The header must not emit top/side specular rims",
-                header.contains("specular = null,"));
-        assertTrue("The header must not cast outer depth shadows",
-                header.contains("depthShadow = null,"));
+        assertTrue("Preserve Prismal optics instead of weakening upper-status-bar material",
+                header.contains("specular = { PrismalSpecular.Default }"));
+        assertTrue(header.contains("depthShadow = { PrismalDepthShadow.Default }"));
+        assertTrue("Only the glass slab extends past the viewport", header.contains("val overscanPx = 24.dp.roundToPx()"));
+        assertTrue(header.contains("foreground.width + overscanPx * 2"));
+        assertTrue(header.contains("foreground.height + overscanPx"));
+        assertTrue(header.contains("glass.place(-overscanPx, -overscanPx)"));
+        assertTrue(header.contains("foreground.place(0, 0)"));
         assertTrue(header.contains("refractionHeightPx = 0f"));
         assertTrue(header.contains("refractionAmountPx = 0f"));
         assertTrue(header.contains("depthEffect = false"));
