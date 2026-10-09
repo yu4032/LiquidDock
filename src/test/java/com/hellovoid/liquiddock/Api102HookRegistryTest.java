@@ -136,6 +136,28 @@ public class Api102HookRegistryTest {
     }
 
     @Test
+    public void legacyMultiHooksRemainSeparateAndBlockHotReloadReadiness() throws Exception {
+        List<String> events = new ArrayList<>();
+        Api102HookRegistry registry = new Api102HookRegistry(
+                (method, id, callback) -> fakeHandle(id, events, false));
+        Method method = Target.class.getDeclaredMethod("observed", int.class);
+        // Legacy callers may install more than one callback for the same target.
+        registry.trackUnidentified(fakeHandle("legacy-first", events, false));
+        registry.trackUnidentified(fakeHandle("legacy-second", events, false));
+        assertEquals(2, registry.unidentifiedCount());
+        assertEquals(2, registry.count());
+        assertTrue(registry.idSnapshot().isEmpty());
+        registry.install(method, "identified", chain -> chain.proceed());
+        assertEquals(3, registry.count());
+        assertTrue(registry.rollback(List.of("identified")));
+        assertEquals(2, registry.count());
+        assertEquals(2, registry.unidentifiedCount());
+        assertEquals(List.of("identified"), events);
+        assertThrows(IllegalArgumentException.class,
+                () -> registry.trackUnidentified(null));
+    }
+
+    @Test
     public void rollbackRunsInReverseOrderAndPreservesUnremovedHandles() throws Exception {
         List<String> events = new ArrayList<>();
         Api102HookRegistry registry = new Api102HookRegistry(
@@ -147,7 +169,7 @@ public class Api102HookRegistryTest {
         registry.install(method, "last", cb);
 
         // A failed unhook must remain registered to block duplicate installation.
-        registry.rollback(List.of("first", "stuck", "last"));
+        assertFalse(registry.rollback(List.of("first", "stuck", "last")));
         assertEquals(Arrays.asList("last", "stuck", "first"), events);
         assertEquals(List.of("stuck"), registry.idSnapshot());
         assertThrows(IllegalStateException.class, () -> registry.install(method, "stuck", cb));
