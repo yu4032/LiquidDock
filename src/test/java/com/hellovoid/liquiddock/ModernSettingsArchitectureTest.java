@@ -415,23 +415,23 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void disabledGlassUsesSolidDarkerCanvasWithoutRecoloringCells() throws Exception {
+    public void disabledGlassKeepsSolidCanvasAndUsesThemeAwareCellContrast() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        // Glass-on keeps its Prismal wallpaper gradient. Glass-off instead paints
-        // a uniform opaque canvas, slightly darker than the Miuix background.
+        // The desktop still uses one static opaque background in solid mode,
+        // and glass-on retains the original wallpaper gradient/source layers.
         assertTrue(surfaces.contains("if (glassEnabled) {"));
         assertTrue(surfaces.contains("Brush.verticalGradient("));
         assertTrue(surfaces.contains("Modifier.background(lerp(background, Color.Black, 0.06f))"));
         assertTrue(surfaces.contains("if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)"));
         assertTrue(surfaces.contains("if (backdrop == null)"));
 
-        // The non-glass Cell stays exactly the pre-adjustment surface, not an
-        // outlined, shadowed, or tinted substitute.
-        assertTrue(surfaces.contains(".background(MiuixTheme.colorScheme.surface.copy(alpha = 0.94f))"));
-        assertTrue(surfaces.contains(".clip(RoundedCornerShape(24.dp))"));
-        assertFalse(surfaces.contains("val cardStroke ="));
-        assertFalse(surfaces.contains("val cardFill ="));
+        // Updated UI contract: dynamic dark-theme Cells intentionally have a
+        // subtle fill/rim separation, without any drop shadow or shader fallback.
+        assertTrue(surfaces.contains("val solidCardColor = if (darkTheme)"));
+        assertTrue(surfaces.contains(".background(solidCardColor)"));
+        assertTrue(surfaces.contains(".border(1.dp, cardStroke, cardShape)"));
+        assertTrue(surfaces.contains(".clip(cardShape)"));
         assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
         assertTrue(surfaces.contains("PrismalGlassSurface("));
         assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
