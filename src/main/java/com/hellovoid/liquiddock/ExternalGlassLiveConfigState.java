@@ -60,6 +60,8 @@ final class ExternalGlassLiveConfigState {
             } else if (SecurityCenterProcessPolicy.PACKAGE.equals(target)) {
                 SecurityCenterGlassHook.onLiveGlassConfigChanged(config);
                 AnimationRuntimeState.configure(config.animation);
+            } else if ("com.android.systemui".equals(target)) {
+                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(config);
             }
         } catch (Throwable error) {
             Api101Bridge.log("[DC][ExternalLiveConfig] update failed target="
