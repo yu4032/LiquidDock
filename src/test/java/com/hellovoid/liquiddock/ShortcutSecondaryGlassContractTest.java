@@ -117,10 +117,12 @@ public class ShortcutSecondaryGlassContractTest {
         String coordinator = Files.readString(MAIN.resolve("ShortcutPopupGlassCoordinator.java"));
         String layer = SourceContractText.read(MAIN.resolve("ShortcutPopupGlassLayer.java"));
 
-        assertTrue(hook.contains(
-                "Object menu = chain.getThisObject();\n"
-                        + "                    ShortcutPopupGlassCoordinator.beginDismissFade(menu);\n"
-                        + "                    Object result = chain.proceed"));
+        // The permanent dismiss interceptor should fade before delegating to MIUI;
+        // indentation must not be part of the runtime contract.
+        int menuGet = hook.indexOf("Object menu = chain.getThisObject();");
+        int fade = hook.indexOf("ShortcutPopupGlassCoordinator.beginDismissFade(menu);", menuGet);
+        int proceed = hook.indexOf("Object result = chain.proceed", fade);
+        assertTrue(menuGet >= 0 && fade > menuGet && proceed > fade);
         assertTrue(coordinator.contains("static synchronized void beginDismissFade(Object menu)"));
         assertTrue(coordinator.contains("layer.fadeOutFast()"));
         assertFalse(layer.contains("FAST_DISMISS_FADE_MS"));
