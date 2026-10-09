@@ -785,18 +785,28 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 visible = showRestartScopes,
                 items = restartScopeItems,
                 selected = selectedRestartScopes,
-                onToggle = { id ->
-                    selectedRestartScopes = if (id in selectedRestartScopes) {
-                        selectedRestartScopes - id
-                    } else {
+                onToggle = { id, checked ->
+                    selectedRestartScopes = if (checked) {
                         selectedRestartScopes + id
+                    } else {
+                        selectedRestartScopes - id
+                    }
+                    if (prefs.getBoolean(
+                            ConfigSchema.Debug.LOGGING.name(),
+                            ConfigSchema.Debug.LOGGING.runtimeFallback(),
+                        )
+                    ) {
+                        (activity.application as LiquidDockApp).logScopedRestart(
+                            "UI_TOGGLE|$id|checked=$checked|selected=$selectedRestartScopes",
+                        )
                     }
                 },
                 onDismiss = { showRestartScopes = false },
-                onRestart = {
-                    val selected = selectedRestartScopes
+                onRestart = { confirmedSelection ->
                     showRestartScopes = false
-                    activity.restartHookScopes(selected)
+                    // Submit the exact selection visible in the dialog, not a
+                    // separately captured parent-page restart snapshot.
+                    activity.restartHookScopes(confirmedSelection.toSet())
                 },
             )
         },
