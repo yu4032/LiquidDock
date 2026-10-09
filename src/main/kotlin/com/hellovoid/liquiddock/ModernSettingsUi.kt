@@ -275,8 +275,7 @@ internal fun ModernSettingsScaffold(
                         .then(
                             if (glassEnabled) Modifier.prismalGlassLayer(screenLayer)
                             else Modifier,
-                        )
-,
+                        ),
                 ) {
                     content(padding)
                 }
