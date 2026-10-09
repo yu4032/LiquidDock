@@ -36,12 +36,25 @@ final class HookScopeRestartShell {
     private HookScopeRestartShell() {}
 
     static String buildScript(Set<String> selected) {
+        return buildScript(selected, false);
+    }
+
+    static String buildScript(Set<String> selected, boolean diagnostic) {
         if (selected == null || selected.isEmpty() || !ALLOWED.containsAll(selected)) {
             throw new IllegalArgumentException("Unsupported restart scope selection");
         }
 
         StringBuilder script = new StringBuilder();
-        script.append("report() { printf 'LDRESTART|%s|%s\\n' \"$1\" \"$2\"; }\n");
+        if (diagnostic) {
+            // One logcat event for every shell milestone, even if launching
+            // HOME backgrounds/kills the Settings activity or its su process.
+            // The app's existing Debug.LOGGING switch gates this entirely.
+            script.append("trace() { /system/bin/log -p i -t LD_SCOPE_RESTART \"$1\" 2>/dev/null || true; }\n");
+            script.append("trace \"ROOT_START|pid=$|ppid=$PPID|uid=$(id -u)\"\n");
+        }
+        script.append("report() { printf 'LDRESTART|%s|%s\\n' \"$1\" \"$2\"; ");
+        if (diagnostic) script.append("trace \"RESULT|$1|$2\"; ");
+        script.append("}\n");
         script.append("restart_running() {\n");
         script.append("  scope=\"$1\"; process=\"$2\"\n");
         script.append("  before=\"$(pidof \"$process\" 2>/dev/null || true)\"\n");
@@ -98,6 +111,12 @@ final class HookScopeRestartShell {
 
         for (String scope : ORDER) {
             if (!selected.contains(scope)) continue;
+            if (diagnostic) {
+                String process = SECURITY_CENTER.equals(scope)
+                        ? "com.miui.securitycenter:ui" : scope;
+                script.append("trace \"STEP|" + scope + "|pid=$(pidof " + process
+                        + " 2>/dev/null || true)\"\n");
+            }
             if (HOME.equals(scope)) {
                 script.append("old_home=\"$(pidof com.miui.home 2>/dev/null || true)\"\n");
                 script.append("if ! am force-stop com.miui.home >/dev/null 2>&1; then\n");
@@ -129,6 +148,7 @@ final class HookScopeRestartShell {
                 script.append("com.android.quicksearchbox\n");
             }
         }
+        if (diagnostic) script.append("trace 'ROOT_DONE'\n");
         script.append("exit 0\n");
         return script.toString();
     }
