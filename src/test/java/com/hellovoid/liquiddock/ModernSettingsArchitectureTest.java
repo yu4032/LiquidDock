@@ -104,6 +104,30 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void clickableGlassCellsKeepNavigationWithoutPrismalPressScale() throws Exception {
+        String surfaces = Files.readString(SURFACES);
+
+        // Click remains on the outer card; Prismal's onClick press motion layer
+        // must not be installed (it scales / translates the whole glass Cell).
+        assertTrue(surfaces.contains(
+                ".then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)"));
+        assertTrue(surfaces.contains("shape = { PrismalRoundedRectangle(24.dp) },\n        onClick = null,"));
+        assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
+        assertTrue(surfaces.contains("ModernSurface("));
+    }
+
+    @Test
+    public void parameterRecompositionDoesNotRereadStoredInitialState() throws Exception {
+        String ui = Files.readString(UI);
+
+        assertTrue(ui.contains("val resetValue = remember(spec.key, maxValue) {"));
+        assertTrue(ui.contains("var value by remember(spec.key, maxValue) {"));
+        assertTrue(ui.contains("val initial = (if (decimalDp && prefs.contains("));
+        assertTrue(ui.contains("val displayValue = remember(value, decimalDp) {"));
+        assertTrue(ui.contains("if (bounded == value) return"));
+    }
+
+    @Test
     public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
         String build = Files.readString(BUILD);
