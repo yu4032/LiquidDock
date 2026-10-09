@@ -1186,9 +1186,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             LauncherGlassGeometry.Snapshot geometry = node != null ? node.geometry : null;
             if (node == null || geometry == null) continue;
             sourceBackend.makePbufferCurrent();
-            prismalRenderer.beginGlassFrameAtScale(
-                    PassBlurQualityPolicy.workspaceOpticsScalePercent(
-                            workspaceSource, passBlurCaptureScalePercent));
+            // Drag outputs already use native-sized optical FBOs; backdrop sampling
+            // quality is configured independently on RootPassBlurBackend.
+            prismalRenderer.beginGlassFrame();
             PrismalGeometry prismalGeometry = new PrismalGeometry(
                     rootWidth, rootHeight, geometry.centerX, geometry.centerY,
                     geometry.width, geometry.height, geometry.cornerRadius);
