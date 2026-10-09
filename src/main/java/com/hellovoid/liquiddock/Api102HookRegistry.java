@@ -64,8 +64,8 @@ final class Api102HookRegistry {
         return PROCESS.install(method, id, callback);
     }
 
-    static void rollbackIdentified(List<String> ids) {
-        PROCESS.rollback(ids);
+    static boolean rollbackIdentified(List<String> ids) {
+        return PROCESS.rollback(ids);
     }
 
     static int installedCount() {
@@ -129,8 +129,9 @@ final class Api102HookRegistry {
     }
 
     /** Reverse order matches stack-like installation and safely cleans partial installs. */
-    synchronized void rollback(List<String> ids) {
-        if (ids == null) return;
+    synchronized boolean rollback(List<String> ids) {
+        if (ids == null) return true;
+        boolean complete = true;
         for (int i = ids.size() - 1; i >= 0; i--) {
             XposedInterface.HookHandle handle = handles.get(ids.get(i));
             if (handle == null) continue;
@@ -138,10 +139,13 @@ final class Api102HookRegistry {
                 handle.unhook();
                 handles.remove(ids.get(i));
             } catch (Throwable error) {
-                // A failed removal must not mask the initial vendor-install failure.
+                // Keep the handle in the ledger and the feature in installed state. Retrying
+                // registration after a failed unhook would duplicate callbacks.
+                complete = false;
                 Api101Bridge.log("[DC][API102] identified-hook rollback failed id="
                         + ids.get(i), error);
             }
         }
+        return complete;
     }
 }
