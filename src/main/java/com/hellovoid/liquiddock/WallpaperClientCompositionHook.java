@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
+import android.content.SharedPreferences;
 import android.view.SurfaceControl;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -21,8 +23,36 @@ final class WallpaperClientCompositionHook {
     private static boolean attempted;
     private static boolean installed;
     private static Method getNameMethod;
+    private static volatile boolean liveEnabled;
+    private static SharedPreferences preferences;
+    private static SharedPreferences.OnSharedPreferenceChangeListener listener;
 
     private WallpaperClientCompositionHook() {}
+
+    /** Delayed one-time system Hook installation when the user enables this option. */
+    static synchronized void initialize(SharedPreferences next, boolean initialEnabled) {
+        if (preferences != null && listener != null) {
+            preferences.unregisterOnSharedPreferenceChangeListener(listener);
+        }
+        preferences = next;
+        liveEnabled = initialEnabled;
+        if (initialEnabled) install();
+        listener = (prefs, key) -> {
+            if (key != null
+                    && !ConfigSchema.Core.ENABLED.name().equals(key)
+                    && !ConfigSchema.Glass.ENABLED.name().equals(key)
+                    && !ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name().equals(key)) return;
+            boolean enabled = prefs.getBoolean(ConfigSchema.Core.ENABLED.name(),
+                    ConfigSchema.Core.ENABLED.runtimeFallback())
+                    && prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(),
+                    ConfigSchema.Glass.ENABLED.runtimeFallback())
+                    && prefs.getBoolean(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name(),
+                    ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
+            liveEnabled = enabled;
+            if (enabled) install();
+        };
+        if (next != null) next.registerOnSharedPreferenceChangeListener(listener);
+    }
 
     static synchronized boolean install() {
         if (attempted) return installed;
@@ -50,7 +80,7 @@ final class WallpaperClientCompositionHook {
                         && args[0] instanceof SurfaceControl
                         && args[2] instanceof Number) {
                     SurfaceControl surface = (SurfaceControl) args[0];
-                    if (shouldForceClient(surface)) {
+                    if (liveEnabled && shouldForceClient(surface)) {
                         float dtdx = ((Number) args[2]).floatValue();
                         args[2] = Float.valueOf(dtdx + SHEAR_EPSILON);
                     }
