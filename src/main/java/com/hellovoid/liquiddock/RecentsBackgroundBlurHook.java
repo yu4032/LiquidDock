@@ -19,16 +19,23 @@ final class RecentsBackgroundBlurHook {
     private static final ThreadLocal<Boolean> RECENTS_TARGET_SCOPE = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> RECENTS_DIMMING_SCOPE = new ThreadLocal<>();
     private static boolean installed;
+    private static volatile int liveBlurPercent;
+    private static volatile boolean liveDisableDimming;
+
+    static void onLiveConfigChanged(LiquidDockConfig.Recents config) {
+        if (config == null) return;
+        liveBlurPercent = config.backgroundBlurPercent;
+        liveDisableDimming = config.disableWallpaperDimming;
+    }
 
     private RecentsBackgroundBlurHook() {}
 
     static boolean install(ClassLoader classLoader, LiquidDockConfig config) {
         if (installed) return true;
         if (config == null || !config.enabled) return false;
-        int percent = config.recents.backgroundBlurPercent;
-        boolean disableDimming = config.recents.disableWallpaperDimming;
+        onLiveConfigChanged(config.recents);
         try {
-            installTargetInterceptor(classLoader, percent);
+            installTargetInterceptor(classLoader);
             installSynchronousTargetScope(classLoader, "fastBlurWhenEnterRecents",
                     "com.miui.home.launcher.Launcher",
                     "com.miui.home.launcher.LauncherState", boolean.class);
@@ -37,15 +44,19 @@ final class RecentsBackgroundBlurHook {
             installSynchronousTargetScope(classLoader, "fastBlurWhenEnterMultiWindowMode",
                     "com.miui.home.launcher.Launcher", boolean.class);
             installGestureRatioHook(classLoader,
-                    "fastBlurWhenDontUseNoBlurTypeWhenRecents", percent);
+                    "fastBlurWhenDontUseNoBlurTypeWhenRecents");
             installGestureRatioHook(classLoader,
-                    "fastBlurWhenUseCompleteRecentsBlur", percent);
-            if (disableDimming) {
+                    "fastBlurWhenUseCompleteRecentsBlur");
+            // Install once even when initially disabled so GUI toggles can change behavior.
+            // Failure of the optional dimming path must not disable strength interception.
+            try {
                 installRecentsDimmingOverride(classLoader);
+            } catch (Throwable error) {
+                MainHook.log(TAG + " optional dimming hooks unavailable: " + error);
             }
             installed = true;
-            MainHook.log(TAG + " hooks installed strength=" + percent + "%"
-                    + " wallpaperDimming=" + (disableDimming ? "off" : "vendor"));
+            MainHook.log(TAG + " hooks installed strength=" + liveBlurPercent + "%"
+                    + " wallpaperDimming=" + (liveDisableDimming ? "off" : "vendor"));
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " hooks unavailable: " + error);
@@ -53,13 +64,13 @@ final class RecentsBackgroundBlurHook {
         }
     }
 
-    private static void installTargetInterceptor(ClassLoader loader, int percent) {
+    private static void installTargetInterceptor(ClassLoader loader) {
         HookUtil.hookMethod(loader, BLUR_UTILS, "fastBlur", chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             if (Boolean.TRUE.equals(RECENTS_TARGET_SCOPE.get())
                     && args.length > 0 && args[0] instanceof Number
                     && ((Number) args[0]).floatValue() > 0f) {
-                args[0] = RecentsBlurPolicy.ratioFromPercent(percent);
+                args[0] = RecentsBlurPolicy.ratioFromPercent(liveBlurPercent);
             }
             return chain.proceed(args);
         }, float.class, Window.class, boolean.class);
@@ -88,7 +99,7 @@ final class RecentsBackgroundBlurHook {
             constructor.setAccessible(true);
             HookUtil.hook(constructor, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (Boolean.TRUE.equals(RECENTS_DIMMING_SCOPE.get())
+                if (liveDisableDimming && Boolean.TRUE.equals(RECENTS_DIMMING_SCOPE.get())
                         && args.length >= 3
                         && args[1] instanceof Number
                         && args[2] instanceof Number) {
@@ -139,12 +150,12 @@ final class RecentsBackgroundBlurHook {
     }
 
     private static void installGestureRatioHook(
-            ClassLoader loader, String methodName, int percent) {
+            ClassLoader loader, String methodName) {
         HookUtil.hookMethod(loader, BLUR_UTILS, methodName, chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             if (args.length > 1 && args[1] instanceof Number) {
                 args[1] = RecentsBlurPolicy.scaleGestureRatio(
-                        ((Number) args[1]).floatValue(), percent);
+                        ((Number) args[1]).floatValue(), liveBlurPercent);
             }
             return chain.proceed(args);
         }, "com.miui.home.launcher.Launcher", float.class, boolean.class);
