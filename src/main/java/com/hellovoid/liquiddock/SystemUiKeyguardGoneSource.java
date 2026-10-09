@@ -63,8 +63,9 @@ final class SystemUiKeyguardGoneSource {
             }
             Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED source installed hooks=" + hooked);
         } catch (Throwable error) {
-            Api102HookRegistry.rollbackIdentified(installedIds);
-            INSTALLED.set(false);
+            if (Api102HookRegistry.rollbackIdentified(installedIds)) {
+                INSTALLED.set(false);
+            }
             Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED source unavailable", error);
         }
     }
