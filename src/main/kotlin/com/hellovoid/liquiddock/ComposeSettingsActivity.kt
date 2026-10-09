@@ -2244,7 +2244,6 @@ private fun AboutPage(
     }
 }
 
-@Composable
 /**
  * Single Prismal glass card with independently composed, lazily measured controls.
  *
