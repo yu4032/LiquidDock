@@ -135,6 +135,15 @@ public class ModernSettingsArchitectureTest {
         assertTrue(cell.contains("indication = null,"));
         assertTrue(cell.contains("onClick = { onCheckedChange(!checked) },"));
         assertTrue(cell.contains("onClick = null,"));
+        assertTrue("row itself must not capture switch thumb presses",
+                cell.contains("BasicComponent(\n        enabled = enabled,"));
+        assertFalse("no overlapping full-cell clickable",
+                cell.contains("BasicComponent(\n        modifier = Modifier.clickable("));
+        assertTrue("left title/summary area is the independent clickable region",
+                cell.contains(".fillMaxWidth()\n                .clickable("));
+        assertTrue("original title and summary typography retained",
+                cell.contains("MiuixTheme.textStyles.headline1.fontSize"));
+        assertTrue(cell.contains("MiuixTheme.textStyles.body2.fontSize"));
         assertTrue(cell.contains("PrismalGlassToggle("));
         assertFalse(cell.contains("GuiFlatPrismalGlassToggle("));
         assertTrue(surfaces.contains("PrismalGlassSlider("));
