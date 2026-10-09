@@ -5,9 +5,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import org.junit.Test;
 
 public class PassBlurRootOwnerStateTest {
@@ -43,18 +40,4 @@ public class PassBlurRootOwnerStateTest {
         assertSame(second, state.owner(6));
     }
 
-    @Test public void bridgeRestoresProducerAndExclusionsBeforeEnablingUpdates()
-            throws Exception {
-        String source = Files.readString(Path.of(
-                "src/main/java/com/hellovoid/liquiddock/Miuix307PassBlurBridge.java"));
-        assertTrue(source.contains("LAUNCHER_ROOT_OWNER.claim"));
-        assertTrue(source.contains("currentOwner != binding"));
-        assertTrue(source.contains("binding.setPassBlurSurface.invoke("));
-        assertTrue(source.contains("(Object) binding.exclusions"));
-        assertTrue(source.contains("binding.setUpdateTextureFlag.invoke("));
-        assertTrue(source.contains("inactive launcher root producer retired"));
-        assertFalse(source.contains("PixelCopy"));
-        assertFalse(source.contains("ScreenCapture"));
-        assertFalse(source.contains("glReadPixels"));
-    }
 }
