@@ -24,6 +24,8 @@ final class LauncherGlassSessionRegistry {
     static synchronized LauncherGlassSession acquire(
             View materialHost, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled()) return null;
+        LiquidDockConfig.Glass liveGlass = LiveGlassConfigState.currentGlass();
+        if (liveGlass != null) glassConfig = liveGlass;
         View root = resolveStableRoot(materialHost);
         if (root == null) return null;
         LauncherGlassSession current = SESSIONS.get(root);
@@ -43,6 +45,17 @@ final class LauncherGlassSessionRegistry {
                 LauncherGlassSceneController.acquire(root, created, glassConfig);
         if (controller != null) controller.onRootReady();
         return created;
+    }
+
+    /** Update existing root owners without acquiring new surfaces or reattaching nodes. */
+    static synchronized void applyLiveGlassConfigToAll(LiquidDockConfig.Glass glassConfig) {
+        for (java.util.Map.Entry<View, LauncherGlassSession> entry
+                : new ArrayList<>(SESSIONS.entrySet())) {
+            LauncherGlassSession session = entry.getValue();
+            if (session == null || session.isShutdown()) continue;
+            LauncherGlassSceneController.applyLiveGlassConfigForRoot(entry.getKey(), glassConfig);
+            session.applyLiveGlassConfig(glassConfig);
+        }
     }
 
     static View resolveStableRoot(View materialHost) {

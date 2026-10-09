@@ -588,6 +588,18 @@ final class MiuixFolderGlassHook {
         throw new NoSuchFieldException(name);
     }
 
+    /** Restore already-observed folder materials after enabling a live glass toggle. */
+    static void onRuntimeFolderGlassEnabled(boolean smallFolder) {
+        LiquidDockConfig.Glass current = LiveGlassConfigState.currentGlass();
+        if (current == null || !GlassRuntimeState.isEnabled()) return;
+        for (ViewGroup icon : new ArrayList<>(FOLDER_ATTACH_LISTENERS.keySet())) {
+            if (icon != null && icon.isAttachedToWindow()
+                    && isSmallFolderIcon(icon) == smallFolder) {
+                attachFromFolderIcon(icon, current);
+            }
+        }
+    }
+
     static void onRuntimeSmallFolderGlassDisabled() {
         releaseFolderStyleOwnership(true);
     }

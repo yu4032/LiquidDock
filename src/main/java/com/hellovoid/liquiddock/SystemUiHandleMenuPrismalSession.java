@@ -55,9 +55,9 @@ final class SystemUiHandleMenuPrismalSession {
     private final HandlerThread renderThread;
     private final Handler renderHandler;
     private final FloatBuffer quadBuffer;
-    private final PrismalParams prismalParams;
-    private final PrismalHighlightProfile highlightProfile;
-    private final PassBlurFrameRateLimiter sourceFrameLimiter;
+    private volatile PrismalParams prismalParams;
+    private volatile PrismalHighlightProfile highlightProfile;
+    private volatile PassBlurFrameRateLimiter sourceFrameLimiter;
     private final float[] textureMatrix = new float[16];
 
     private volatile boolean shuttingDown;
@@ -150,6 +150,27 @@ final class SystemUiHandleMenuPrismalSession {
         renderThread = new HandlerThread("LiquidDock-SystemUiHandleMenu-Prismal");
         renderThread.start();
         renderHandler = new Handler(renderThread.getLooper());
+    }
+
+    void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
+        if (shuttingDown || config == null) return;
+        float density = host.getResources().getDisplayMetrics().density;
+        PrismalParams next = Miuix307PrismalAdapter.toPortable(
+                Miuix307PrismalMaterial.fromConfig(config, density));
+        prismalParams = next;
+        highlightProfile = config.largeSurfaceHighlightProfile;
+        sourceFrameLimiter = new PassBlurFrameRateLimiter(
+                DisplayRefreshRatePolicy.clampRequestedFps(
+                        host.getContext(), config.passBlurRenderFps));
+        renderHandler.post(() -> {
+            if (shuttingDown || !isEglReady() || !sourceFrameReady
+                    || outputEglSurface == EGL14.EGL_NO_SURFACE) return;
+            try {
+                renderGlass(); // normalized source frame is already GPU-resident
+            } catch (Throwable error) {
+                fail(error);
+            }
+        });
     }
 
     void start(int width, int height) {

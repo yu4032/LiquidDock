@@ -25,6 +25,10 @@ final class MiuixLauncherStaticGlassHook {
 
     private MiuixLauncherStaticGlassHook() {}
 
+    static void onLiveGlassConfigChanged(LiquidDockConfig.Glass config) {
+        installedGlassConfig = config;
+    }
+
     static void onRuntimeGlassDisabled() {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
             if (isWidgetHost(host)) {
@@ -67,6 +71,17 @@ final class MiuixLauncherStaticGlassHook {
         DockGlassItemRegistry.unregister(host);
         LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
         if (node != null && node.kind() == LauncherGlassDragState.Kind.ICON) node.dispose();
+    }
+
+    /** Rebind observed widget hosts immediately after a live enable (no new Hook install). */
+    static void onRuntimeWidgetGlassEnabled() {
+        LiquidDockConfig.Glass latest = installedGlassConfig;
+        if (latest == null || !GlassRuntimeState.isWidgetEnabled()) return;
+        for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
+            if (isWidgetHost(host) && host.isAttachedToWindow()) {
+                scheduleBind(host, LauncherGlassDragState.Kind.WIDGET, latest, 0);
+            }
+        }
     }
 
     static void onRuntimeWidgetGlassDisabled() {

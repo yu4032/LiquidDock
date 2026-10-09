@@ -52,8 +52,16 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final RootPassBlurBackend sourceBackend;
     private final MiuiSearchboxSnapshotState snapshotState = new MiuiSearchboxSnapshotState();
     private final FloatBuffer quadBuffer;
-    private final PrismalParams prismalParams;
-    private final PrismalHighlightProfile highlightProfile;
+    private volatile PrismalParams prismalParams;
+    private volatile PrismalHighlightProfile highlightProfile;
+    private volatile float appliedBlur;
+    private volatile int requestedQualityScale;
+    private volatile int requestedQualityFps;
+    private int appliedQualityScale;
+    private int appliedQualityFps;
+    private int lastNormalizedTexture;
+    private int lastPhysicalWidth;
+    private int lastPhysicalHeight;
     private final float cornerRadius;
 
     private volatile MiuiSearchboxGlassGeometry geometry;
@@ -96,6 +104,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 : Miuix307PrismalMaterial.defaults(density);
         PrismalParams baseParams = Miuix307PrismalAdapter.toPortable(optical);
         prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
+        appliedBlur = appearance != null ? appearance.blur : optical.blurRadiusPx;
         highlightProfile = appearance != null
                 ? appearance.highlightProfile
                 : (glassConfig != null
@@ -111,6 +120,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 : (glassConfig != null
                     ? glassConfig.passBlurRenderFps
                     : PassBlurQualityPolicy.DEFAULT_RENDER_FPS);
+        requestedQualityScale = appliedQualityScale = scalePercent;
+        requestedQualityFps = appliedQualityFps = renderFps;
         sourceBackend = new RootPassBlurBackend(
                 sourceRoot,
                 PassBlurBindRequest.miuiSearchbox(sourceRoot),
@@ -120,8 +131,49 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 "LiquidDock-MiuiSearchbox-EGL");
     }
 
+    void applyLiveGlassConfig(LiquidDockConfig.Glass glass,
+                              ThirdPartyGlassAppearance appearance) {
+        if (shuttingDown || glass == null || appearance == null) return;
+        View root = rootRef.get();
+        float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
+        PrismalParams next = ThirdPartyPrismalParams.apply(
+                Miuix307PrismalAdapter.toPortable(
+                        Miuix307PrismalMaterial.fromConfig(glass, density)), appearance);
+        boolean blurChanged = Float.compare(appliedBlur, appearance.blur) != 0;
+        appliedBlur = appearance.blur;
+        prismalParams = next;
+        highlightProfile = appearance.highlightProfile;
+        requestedQualityScale = appearance.captureScalePercent;
+        requestedQualityFps = appearance.renderFps;
+        sourceBackend.postToRenderThread(() -> {
+            if (shuttingDown) return;
+            if (blurChanged && backdropPrepared && lastNormalizedTexture > 0
+                    && lastPhysicalWidth > 0 && lastPhysicalHeight > 0
+                    && prismalRenderer != null) {
+                try {
+                    sourceBackend.makePbufferCurrent();
+                    prismalRenderer.prepareBackdrop(
+                            lastNormalizedTexture, lastPhysicalWidth, lastPhysicalHeight,
+                            logicalWidth, logicalHeight, next);
+                } catch (Throwable error) {
+                    notifyFailure("live-blur", error);
+                    return;
+                }
+            }
+            renderCurrent();
+        });
+        // Searchbox uses a one-shot capture. Apply capture density/FPS on its next
+        // requestFreshCapture; no behind-overlay resampling in the visible session.
+    }
+
     void requestFreshCapture() {
         if (shuttingDown) return;
+        if (appliedQualityScale != requestedQualityScale
+                || appliedQualityFps != requestedQualityFps) {
+            appliedQualityScale = requestedQualityScale;
+            appliedQualityFps = requestedQualityFps;
+            sourceBackend.setQuality(appliedQualityScale, appliedQualityFps);
+        }
         backdropPrepared = false;
         swapSucceeded = false;
         presentationSignaled = false;
@@ -214,6 +266,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             logicalHeight = frame.logicalHeight;
             updateGeometry();
             sourceBackend.makePbufferCurrent();
+            lastNormalizedTexture = frame.normalizedTextureId;
+            lastPhysicalWidth = frame.physicalWidth;
+            lastPhysicalHeight = frame.physicalHeight;
             prismalRenderer.prepareBackdrop(
                     frame.normalizedTextureId,
                     frame.physicalWidth,

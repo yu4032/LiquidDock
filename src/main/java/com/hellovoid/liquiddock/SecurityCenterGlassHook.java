@@ -29,6 +29,16 @@ final class SecurityCenterGlassHook {
 
     private SecurityCenterGlassHook() {}
 
+    static void onLiveGlassConfigChanged(LiquidDockConfig config) {
+        if (config == null) return;
+        final SecurityCenterGlassCoordinator current;
+        synchronized (LOCK) {
+            installedConfig = config;
+            current = coordinator;
+        }
+        if (current != null) current.applyLiveGlassConfig(config.glass);
+    }
+
     static void install(ClassLoader classLoader, LiquidDockConfig initialConfig) {
         if (classLoader == null || initialConfig == null) return;
         synchronized (LOCK) {

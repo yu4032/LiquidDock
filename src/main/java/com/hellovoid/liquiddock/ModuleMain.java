@@ -34,9 +34,9 @@ public final class ModuleMain extends XposedModule {
                 boolean wallpaperFlickerFixEnabled = config.b(
                         ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name(),
                         ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
-                if (enabled && liquidGlassEnabled && wallpaperFlickerFixEnabled) {
-                    WallpaperClientCompositionHook.install();
-                }
+                WallpaperClientCompositionHook.initialize(
+                        Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP),
+                        enabled && liquidGlassEnabled && wallpaperFlickerFixEnabled);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][WallpaperClientComposition] config gate failed", error);
             }
@@ -65,15 +65,16 @@ public final class ModuleMain extends XposedModule {
                 SystemUiKeyguardGoneSource.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
-                if (runtimeConfig.enabled && runtimeConfig.glass.enabled
-                        && runtimeConfig.glass.systemUiHandleMenuEnabled) {
-                    if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
-                        SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
-                    } else {
-                        Api101Bridge.log(
-                                "[DC][SystemUiHandleMenuGlass] surface animation authority unavailable; fail closed");
-                    }
+                // Install once regardless of initial preference. The hook's runtime gate
+                // stays inert until the user enables caption-menu glass.
+                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(runtimeConfig);
+                if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
+                    SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
+                } else {
+                    Api101Bridge.log(
+                            "[DC][SystemUiHandleMenuGlass] surface animation authority unavailable; fail closed");
                 }
+                ExternalGlassLiveConfigState.initialize(packageName);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC] SystemUI integration init failed", error);
             }
@@ -96,6 +97,7 @@ public final class ModuleMain extends XposedModule {
                         runtimeConfig.enabled,
                         runtimeConfig.glass.enabled,
                         runtimeConfig.glass.securityCenterEnabled);
+                ExternalGlassLiveConfigState.initialize(packageName);
                 if (!SecurityCenterPassBlurContinuousAuthority.install()) {
                     Api101Bridge.log(
                             "[DC][SecurityCenterGlass] continuous PassBlur authority unavailable; fail closed");
@@ -123,6 +125,9 @@ public final class ModuleMain extends XposedModule {
                 if (!ThirdPartyGlassAdapterRegistry.install(packageName, classLoader)) {
                     Api101Bridge.log("[DC][ThirdPartyGlass] adapter install failed package=" + packageName);
                 }
+                // This scope is not the Launcher: give its already-open renderers their own
+                // Remote Preferences observer, regardless of initially enabled appearance.
+                ExternalGlassLiveConfigState.initialize(packageName);
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][ThirdPartyGlass] init failed package=" + packageName, error);
             }
@@ -154,6 +159,8 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.dock.shadowEnabled,
                     runtimeConfig.dock.strokeShadow,
                     runtimeConfig.divider.enabled);
+            LiveGlassConfigState.initialize(
+                    Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP), runtimeConfig);
             DockMirrorShortcutHook.install(classLoader);
             DockNativeShadowBridge.install(classLoader, runtimeConfig.dock);
             Launcher450IconSizeHook.install(classLoader,

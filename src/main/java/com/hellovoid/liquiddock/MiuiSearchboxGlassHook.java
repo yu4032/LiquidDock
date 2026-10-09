@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.WeakHashMap;
 
 /** Replaces only the stable SearchActivityBackground blur layer with LiquidDock Prismal glass. */
@@ -22,9 +23,34 @@ final class MiuiSearchboxGlassHook {
     private static final String SEARCHBOX_PACKAGE = "com.android.quicksearchbox";
 
     private static final WeakHashMap<ViewGroup, State> STATES = new WeakHashMap<>();
+    private static final WeakHashMap<Activity, Boolean> OBSERVED_ACTIVITIES = new WeakHashMap<>();
+    private static Class<?> observedBackgroundClass;
+    private static Method observedBlurEnabledMethod;
     private static boolean installed;
 
     private MiuiSearchboxGlassHook() {}
+
+    /** Live update within Searchbox's own process; never recapture an already-visible overlay. */
+    static void onLiveConfigChanged(ConfigReader reader, LiquidDockConfig config) {
+        if (reader == null || config == null) return;
+        ThirdPartyGlassAppearance appearance =
+                MiuiSearchboxGlassPreferences.resolve(reader, config.glass);
+        boolean enabled = config.enabled && config.glass.enabled && appearance.enabled;
+        synchronized (STATES) {
+            for (State state : new ArrayList<>(STATES.values())) {
+                if (state == null || state.disposed) continue;
+                if (!enabled) state.dispose(true);
+                else state.session.applyLiveGlassConfig(config.glass, appearance);
+            }
+        }
+        if (enabled && observedBackgroundClass != null && observedBlurEnabledMethod != null) {
+            for (Activity activity : new ArrayList<>(OBSERVED_ACTIVITIES.keySet())) {
+                if (activity != null && !activity.isFinishing()) {
+                    attach(activity, observedBackgroundClass, observedBlurEnabledMethod);
+                }
+            }
+        }
+    }
 
     private static final class State implements View.OnAttachStateChangeListener,
             MiuiSearchboxGlassSession.Listener {
@@ -153,12 +179,15 @@ final class MiuiSearchboxGlassHook {
             Method nightBlur = backgroundClass.getDeclaredMethod("getBlurStyleNightMode");
             Method addBlur = blurTransitionClass.getDeclaredMethod("addBlur", View.class);
             Method blurEnabledMethod = backgroundClass.getMethod("setBlurEnabled", Boolean.TYPE);
+            observedBackgroundClass = backgroundClass;
+            observedBlurEnabledMethod = blurEnabledMethod;
 
             HookUtil.hook(setupContentView, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 Object owner = chain.getThisObject();
                 if (owner instanceof Activity) {
+                    OBSERVED_ACTIVITIES.put((Activity) owner, Boolean.TRUE);
                     attach((Activity) owner, backgroundClass, blurEnabledMethod);
                 }
                 return result;
@@ -169,6 +198,7 @@ final class MiuiSearchboxGlassHook {
                 Object result = chain.proceed(args);
                 Object owner = chain.getThisObject();
                 if (owner != null && owner.getClass() == activityClass) {
+                    OBSERVED_ACTIVITIES.put((Activity) owner, Boolean.TRUE);
                     refreshActivity((Activity) owner, backgroundClass);
                 }
                 return result;

@@ -16,7 +16,10 @@ public class SystemUiHandleMenuGlassContractTest {
     public void sharedRealtimeCapCoversHandleMenuAfterOesDrain() throws Exception {
         String session = Files.readString(
                 Path.of("src/main/java/com/hellovoid/liquiddock/SystemUiHandleMenuPrismalSession.java"));
-        assertTrue(session.contains("private final PassBlurFrameRateLimiter sourceFrameLimiter;"));
+        // Live FPS overrides replace the limiter without reinitializing the producer.
+        assertTrue(session.contains("private volatile PassBlurFrameRateLimiter sourceFrameLimiter;"));
+        assertTrue(session.contains("void applyLiveGlassConfig(LiquidDockConfig.Glass config)"));
+        assertTrue(session.contains("sourceFrameLimiter = new PassBlurFrameRateLimiter("));
         assertTrue(session.contains("glassConfig.passBlurRenderFps"));
         assertTrue(session.contains("DisplayRefreshRatePolicy.clampRequestedFps("));
         assertTrue(session.contains("texture.updateTexImage();"));
@@ -184,7 +187,12 @@ public class SystemUiHandleMenuGlassContractTest {
         String schema = Files.readString(
                 Path.of("src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
 
-        assertTrue(module.contains("runtimeConfig.glass.systemUiHandleMenuEnabled"));
+        // Register the hook once and keep it inert until the live runtime policy enables glass.
+        assertTrue(module.contains("SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(runtimeConfig)"));
+        assertTrue(module.contains("ExternalGlassLiveConfigState.initialize(packageName)"));
+        String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
+        assertTrue(hook.contains("config.glass.systemUiHandleMenuEnabled"));
+        assertTrue(hook.contains("if (!liveEnabled || root == null || glass == null) return;"));
         assertTrue(module.contains("SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass)"));
         assertTrue(config.contains("systemUiHandleMenuEnabled"));
         assertTrue(schema.contains("SYSTEMUI_HANDLE_MENU_GLASS = bool("));

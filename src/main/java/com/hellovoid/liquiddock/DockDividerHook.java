@@ -20,6 +20,9 @@ final class DockDividerHook {
             new WeakHashMap<>();
     private static final WeakHashMap<View, PendingGeometry> pendingGeometry =
             new WeakHashMap<>();
+    // Retain weak references to all bound lines (even when disabled) so a GUI
+    // enable or style edit can refresh existing views without waiting for RecyclerView bind.
+    private static final WeakHashMap<View, Boolean> observedLines = new WeakHashMap<>();
 
     private static int channel(int v) { return Math.max(0, Math.min(v, 255)); }
 
@@ -35,6 +38,9 @@ final class DockDividerHook {
                         View line = contentResult.succeeded() && contentResult.value() instanceof View
                                 ? (View) contentResult.value() : null;
                         if (line == null) return result;
+                        synchronized (observedLines) {
+                            observedLines.put(line, Boolean.TRUE);
+                        }
 
                         LiquidDockConfig.Divider cfg = LiquidDockConfig.load().divider;
                         if (!VisualRuntimeState.isDividerEnabled() || !cfg.enabled) {
@@ -204,6 +210,29 @@ final class DockDividerHook {
             return;
         }
         applyDivider(line, cfg, false);
+    }
+
+    /** Restores the vendor baseline before recomputing geometry (legacy offsets are additive). */
+    static void refreshInstalledFromCurrentConfig() {
+        LiquidDockConfig.Divider config;
+        try {
+            config = LiquidDockConfig.load().divider;
+        } catch (Throwable error) {
+            MainHook.log("[DC][Divider] live style read failed: " + error);
+            return;
+        }
+        ArrayList<View> bound;
+        synchronized (observedLines) {
+            bound = new ArrayList<>(observedLines.keySet());
+        }
+        for (View line : bound) {
+            if (line == null) continue;
+            releaseDivider(line);
+            if (line.isAttachedToWindow() && VisualRuntimeState.isDividerEnabled()
+                    && config.enabled) {
+                applyDivider(line, config, true);
+            }
+        }
     }
 
     static void onRuntimeDividerDisabled() {

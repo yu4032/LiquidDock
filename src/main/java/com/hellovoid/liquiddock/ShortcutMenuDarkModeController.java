@@ -27,6 +27,12 @@ final class ShortcutMenuDarkModeController {
     private static final WeakHashMap<View, ViewTreeObserver.OnGlobalLayoutListener> LISTENERS =
             new WeakHashMap<>();
     private static final WeakHashMap<Drawable, Boolean> ICON_TINT_CACHE = new WeakHashMap<>();
+    // Restore each view's actual vendor style on a live toggle rather than hardcoding black.
+    private static final WeakHashMap<View, ColorStateList> ORIGINAL_TEXT_COLORS = new WeakHashMap<>();
+    private static final WeakHashMap<TextView, ColorStateList> ORIGINAL_COMPOUND_TINTS =
+            new WeakHashMap<>();
+    private static final WeakHashMap<ImageView, ColorStateList> ORIGINAL_IMAGE_TINTS =
+            new WeakHashMap<>();
 
     private ShortcutMenuDarkModeController() {}
 
@@ -50,18 +56,47 @@ final class ShortcutMenuDarkModeController {
         });
     }
 
-    private static synchronized void detach(View root) {
+    static synchronized void detach(View root) {
+        if (root == null) return;
         ViewTreeObserver.OnGlobalLayoutListener listener = LISTENERS.remove(root);
-        if (listener == null) return;
-        ViewTreeObserver observer = root.getViewTreeObserver();
-        if (observer.isAlive()) {
-            observer.removeOnGlobalLayoutListener(listener);
+        if (listener != null) {
+            ViewTreeObserver observer = root.getViewTreeObserver();
+            if (observer.isAlive()) observer.removeOnGlobalLayoutListener(listener);
+        }
+        restoreVendorColors(root);
+    }
+
+    private static void restoreVendorColors(View view) {
+        if (view instanceof TextView) {
+            TextView tv = (TextView) view;
+            ColorStateList text = ORIGINAL_TEXT_COLORS.remove(tv);
+            if (text != null) tv.setTextColor(text);
+            if (ORIGINAL_COMPOUND_TINTS.containsKey(tv)) {
+                tv.setCompoundDrawableTintList(ORIGINAL_COMPOUND_TINTS.remove(tv));
+            }
+        }
+        if (view instanceof ImageView) {
+            ImageView image = (ImageView) view;
+            if (ORIGINAL_IMAGE_TINTS.containsKey(image)) {
+                image.setImageTintList(ORIGINAL_IMAGE_TINTS.remove(image));
+            }
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                restoreVendorColors(group.getChildAt(i));
+            }
         }
     }
 
     private static void applyDarkMode(View view) {
         if (view instanceof TextView) {
             TextView textView = (TextView) view;
+            if (!ORIGINAL_TEXT_COLORS.containsKey(textView)) {
+                ORIGINAL_TEXT_COLORS.put(textView, textView.getTextColors());
+                ORIGINAL_COMPOUND_TINTS.put(
+                        textView, textView.getCompoundDrawableTintList());
+            }
             textView.setTextColor(Color.WHITE);
             textView.setCompoundDrawableTintList(WHITE_TINT);
         }
@@ -69,6 +104,9 @@ final class ShortcutMenuDarkModeController {
             ImageView imageView = (ImageView) view;
             Drawable drawable = imageView.getDrawable();
             if (shouldTintIcon(drawable)) {
+                if (!ORIGINAL_IMAGE_TINTS.containsKey(imageView)) {
+                    ORIGINAL_IMAGE_TINTS.put(imageView, imageView.getImageTintList());
+                }
                 imageView.setImageTintList(WHITE_TINT);
             }
         }

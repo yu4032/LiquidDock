@@ -33,6 +33,9 @@ final class Miuix307ZeroCopyRenderer {
         if (materialHost == null || host == null || glassConfig == null
                 || workstationConfig == null) return false;
 
+        LiquidDockConfig.Glass liveGlass = LiveGlassConfigState.currentGlass();
+        if (liveGlass != null) glassConfig = liveGlass;
+
         // This is the first zero-copy boundary that owns a real Launcher View. Install the
         // app-to-home icon handoff hooks here so they use the target Launcher ClassLoader rather
         // than being skipped by MainHook's successful 307 early return.
@@ -105,6 +108,8 @@ final class Miuix307ZeroCopyRenderer {
     }
 
     static void sync(LiquidDockConfig.Glass glassConfig, int blurRadiusPx) {
+        LiquidDockConfig.Glass live = LiveGlassConfigState.currentGlass();
+        if (live != null) glassConfig = live;
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null && glassConfig != null) {
             gpuBackdrop.setGlassConfig(glassConfig);
