@@ -53,6 +53,9 @@ final class SystemUiHandleMenuGlassHook {
             for (View root : new ArrayList<>(PENDING.keySet())) releaseRoot(root);
             return;
         }
+        for (PendingBinding pending : new ArrayList<>(PENDING.values())) {
+            if (pending != null && !pending.released) pending.glass = config.glass;
+        }
         for (Binding binding : new ArrayList<>(ACTIVE.values())) {
             if (binding == null || binding.released) continue;
             binding.glassConfig = config.glass;
@@ -177,7 +180,7 @@ final class SystemUiHandleMenuGlassHook {
     private static final class PendingBinding implements View.OnAttachStateChangeListener,
             View.OnLayoutChangeListener {
         final View root;
-        final LiquidDockConfig.Glass glass;
+        LiquidDockConfig.Glass glass;
         final SurfaceControl menuSurface;
         final boolean waitForNativeSurfaceScale;
         boolean released;
