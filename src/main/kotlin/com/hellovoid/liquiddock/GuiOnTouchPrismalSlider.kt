@@ -121,7 +121,7 @@ internal fun GuiOnTouchPrismalSlider(
                 animationScope = animationScope,
                 initialValue = value(),
                 valueRange = valueRange,
-                visibilityThreshold = 0.001f, // Must finish closer than the 0.005f commit gate.
+                visibilityThreshold = visibilityThreshold.coerceAtMost(0.001f), // Precise settle.
                 initialScale = 1f,
                 pressedScale = 1.5f,
                 onDragStarted = {
