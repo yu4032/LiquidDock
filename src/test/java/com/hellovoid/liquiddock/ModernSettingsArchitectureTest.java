@@ -773,6 +773,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void redesignedGuiRetainsTheOriginalUserFacingPreferenceReferences() throws Exception {
         String compose = Files.readString(UI);
+        String optionSpecs = Files.readString(OPTION_SPECS);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -784,7 +785,7 @@ public class ModernSettingsArchitectureTest {
 
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
-                .matcher(compose + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
+                .matcher(compose + "\n" + optionSpecs + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
