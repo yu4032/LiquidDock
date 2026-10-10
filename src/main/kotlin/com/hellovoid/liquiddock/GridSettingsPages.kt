@@ -156,6 +156,7 @@ internal fun GridBasicsPage(
                 prefs,
                 spec,
                 masterEnabled && customGrid && !gridCheckPending,
+                steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context)),
                 beforeSave = { proposed, commit ->
                     val current = prefs.getInt(spec.key, spec.default)
                     val target = proposed.roundToInt()
