@@ -78,6 +78,9 @@
 
 第五批 [PR #313](https://github.com/yu4032/LiquidDock/pull/313) 已合并：十个 Glass 页面迁出到 `GlassSettingsPages.kt`，原 Activity **1646 → 1198** 行。此批仅移动文件和调整必要声明可见性，CI 已通过。
 
-独立修复 [PR #314](https://github.com/yu4032/LiquidDock/pull/314)（待合并及实机确认）：Prismal 滑块连续拖动、松手弹簧吸附不变；右侧数值跨过合法整数、0.1 或离散档位即保存，重复档位去重；Miuix 滑条同样实时写入。Grid 风险尺寸先经过 4×2 widget 预检，失败不保存。**这是行为变更**，取代此前“拖动仅预览、回弹结束保存”的旧契约；快速连续拖动、阻断回滚、热更新延迟仍需真机测试。
+独立修复 [PR #314](https://github.com/yu4032/LiquidDock/pull/314)（CI 通过、冲突整合后已合并；仍待实机验证）：Prismal 滑块连续拖动、松手弹簧吸附不变；右侧数值跨过合法整数、0.1 或离散档位即保存，重复档位去重；Miuix 滑条同样实时写入。Grid 风险尺寸先经过 4×2 widget 预检，失败不保存。**这是行为变更**，取代此前“拖动仅预览、回弹结束保存”的旧契约；快速连续拖动、阻断回滚、热更新延迟仍需真机测试。
+
+
+**第六批（进行中、未合并）**：`refactor/gui-auxiliary-pages-20261010` 以整合后的 `main@7be4f71` 为基线。仅将 `StrokePage`、`ShadowPage` 迁入 `DockDecorationSettingsPages.kt`，并将 `SecurityCenterSidebarPage`、`DataPage`、`AboutPage` 连同私有 URL 打开和默认配置恢复 helper 迁入 `SettingsUtilityPages.kt`。主 Activity **1209 → 987 行**；5 个 Composable 和相关 ConfigSchema 引用均完整保留。数据备份、默认重置红色按钮、侧滑设置及诊断日志功能不应改变。独立 CI 与设备验收是合并门槛。
 
 风险界限：GUI 的文件拆分不触及 PassBlur/EGL、渲染 producer、LSPosed Hook。所有编译和静态检查结果必须与实机验收区别记录，完成后更新 TODO 状态。
