@@ -467,7 +467,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：已完成只读风险定位，尚未重构。** 当前单一文件职责集中：`ComposeSettingsActivity.kt` 约 2725 行，`Miuix307PassBlurTextureView.java` 2086 行，`LauncherGlassSession.java` 1436 行，`Launcher450SideSlideHoldHook.java` 1219 行；Java 生产源码大量聚集在根包。详细路径与门槛见 [维护性审计](docs/maintainability-audit-20261010.md)。
+**状态：GUI 结构拆分进行中，其他领域仍待重构。** `main` 已合并 [#309](https://github.com/yu4032/LiquidDock/pull/309)（规格分离）和 [#310](https://github.com/yu4032/LiquidDock/pull/310)（动画页面），`ComposeSettingsActivity.kt` 已从 2725 降到 2166 行。当前 [#311](https://github.com/yu4032/LiquidDock/pull/311) 将 Dock/Divider/Workstation/Recents 七个页面继续拆出，分支文件为 1902 行，CI 已通过、**尚待本批实机验收与合并**。`Miuix307PassBlurTextureView.java` 2086 行、`LauncherGlassSession.java` 1436 行、`Launcher450SideSlideHoldHook.java` 1219 行仍为独立后续任务；Java 生产源码大量聚集在根包。详情见 [维护性审计](docs/maintainability-audit-20261010.md)。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
@@ -475,7 +475,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 3. PassBlur：先封装不可变几何快照和 GL 资源 owner；不改变 producer/frame sync/rotation/壁纸 generation/错误恢复时序。
 4. 包结构：按域渐进搬迁；必须审核 Xposed 注入、R8、反射二进制名及测试，禁止自动批量移动所有类。
 
-验收门槛：每批独立 PR、CI 测试、源代码 diff/配置键比对；Hook/图形/手势相关变更再实机验证。**本 TODO 更新仅是文档，不声称问题已修复。**
+验收门槛：每批独立 PR、CI 测试、源代码 diff/配置键比对；GUI 涉及配置写入、触摸控制或 Prismal 视觉时仍需实机确认；Hook/图形/手势相关变更尤其必须实测。**不要将“源码移动和编译成功”记作全部维护性问题已修复。**
 
 ---
 
