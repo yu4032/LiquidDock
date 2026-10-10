@@ -111,7 +111,7 @@
 - 检查 `liquid_edge_band`、`liquid_highlight_alpha`、`liquid_recents_prearm_distance`：当前没有可见 GUI 控件；仍须验证配置链是否仅有声明、预设或历史兼容用途，再决定删除键或保留迁移。
 - 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
 - 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
-- 本项不包括 GUI 滑条拖动掉帧优化；高频 SharedPreferences → API101 Remote Preferences 更新需另行性能测量，确保最后一次更改可靠落盘。已确认存在 source-listener 增量同步路径，不能无证据宣称每次滑动都重新写全量配置。
+- GUI 滑条已从“松手后写入”调整为**右侧显示值每跨一个合法档位就实时写入**（独立分支，待 CI/实机验证），依靠同档位去重避免无意义的每帧写入。涉及 SharedPreferences → API101 Remote Preferences 的实际热更新延迟、连续拖动帧率和最终落盘可靠性仍需实测；不能声称每次写入都会全量同步或已完成性能优化。4×2 网格安全预检仍优先于不安全档位的写入。
 
 ---
 
