@@ -86,4 +86,27 @@ public class Miuix307MaterialHandoffContractTest {
                 hook.contains("suppressVendorGpuBlur(background);\n"
                         + "                suppressVendorMaterialBody(background"));
     }
+    @Test
+    public void dockPredrawPerfettoInstrumentationKeepsProducerAndMappingAuthorities()
+            throws Exception {
+        // An architecture guard only: wall-clock gains still require an actual device trace.
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+
+        assertTrue(view.contains("boolean tracing = Trace.isEnabled()"));
+        assertTrue(view.contains("LD.Dock.GeometryPreDraw"));
+        assertTrue(view.contains("LD.Dock.ProducerGeometry"));
+        assertTrue(view.contains("LD.Dock.ReadSurfaceGeometry"));
+        assertTrue(view.contains("LD.Dock.BackdropMapping"));
+        assertTrue(view.contains("LD.Dock.UiSceneFingerprint"));
+        assertTrue(view.contains("if (tracing) Trace.beginSection("));
+        assertTrue(view.contains("if (tracing) Trace.endSection()"));
+        assertTrue(view.contains("refreshProducerGeometryInPlace();"));
+        assertTrue(view.contains("updateBackdropMapping();"));
+        assertTrue(view.contains("readSurfaceGeometry(materialHost)"));
+        assertTrue(view.contains("dockCompositor.refreshUiSceneIfNeeded("));
+        assertTrue(view.contains("producerRecovery.hasFreshFrame()"));
+        assertTrue(view.contains("backdropSnapshot = new BackdropSnapshot("));
+        assertFalse(view.contains("Thread.sleep("));
+    }
+
 }
