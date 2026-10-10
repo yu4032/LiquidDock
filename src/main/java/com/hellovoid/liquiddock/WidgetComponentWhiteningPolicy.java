@@ -20,6 +20,17 @@ final class WidgetComponentWhiteningPolicy {
                         && WidgetComponentStore.ACTION_CLEAR_IMAGE.equals(descriptor.action);
     }
 
+    /** Treat different actions on the same exact widget node as one mutually exclusive target. */
+    static boolean sameNode(WidgetComponentStore.Descriptor first,
+                            WidgetComponentStore.Descriptor second) {
+        return first != null && second != null
+                && first.isRemoteViews() && second.isRemoteViews()
+                && first.owner.equals(second.owner)
+                && first.className.equals(second.className)
+                && first.name.equals(second.name)
+                && first.hierarchyPath.equals(second.hierarchyPath);
+    }
+
     static List<WidgetComponentStore.Descriptor> selectors(
             Set<String> encoded, String provider) {
         if (provider == null || encoded == null || encoded.isEmpty()) return List.of();
