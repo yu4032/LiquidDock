@@ -15,7 +15,7 @@ public final class DiscreteSliderSteps {
     /** Keep tick rendering bounded: thousands of dp/ms values remain snap-to-unit
      * controls without allocating thousands of native Slider tick positions. */
     public static int forStoragePrecision(int min, int max, boolean tenths) {
-        long intervals = (long) (max - min) * (tenths ? 10L : 1L);
+        long intervals = ((long) max - min) * (tenths ? 10L : 1L);
         return intervals >= 2L && intervals <= 64L ? (int) intervals - 1 : 0;
     }
 
