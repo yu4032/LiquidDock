@@ -317,6 +317,17 @@ final class RootPassBlurBackend {
         return bindEpoch.get();
     }
 
+    /** Passive eligibility report; no rebind and no native transactions. */
+    private boolean skipStallRecovery(String reason, long observedArrivals, long observedEpoch) {
+        if (MainHook.debugLogging) {
+            MainHook.log(TAG + " [StallProbe] action=skip reason=" + reason
+                    + " arrivals=" + sourceArrivalSerial + " armedArrivals=" + observedArrivals
+                    + " epoch=" + bindEpoch.get() + " armedEpoch=" + observedEpoch
+                    + " current=" + traceFramePipeline());
+        }
+        return false;
+    }
+
     /**
      * Isolated Recents-stall recovery experiment, modeled on successful rotation rollover.
      * Unlike a cached update-flag toggle this replaces the SurfaceTexture + producer Surface.
@@ -324,22 +335,42 @@ final class RootPassBlurBackend {
      */
     boolean recoverStalledSource(long observedArrivals, long observedEpoch) {
         if (shuttingDown || bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE) {
-            return false;
+            return skipStallRecovery("shutdown-or-domain", observedArrivals, observedEpoch);
         }
         View root = rootRef.get();
         Miuix307PassBlurBridge.Binding current = binding;
-        if (root == null || !root.isAttachedToWindow() || current == null) return false;
+        if (root == null || !root.isAttachedToWindow() || current == null) {
+            return skipStallRecovery("root-detached-or-unbound", observedArrivals, observedEpoch);
+        }
         RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
         if (endpoint == null || !endpoint.isValid()
-                || !RootPassBlurEndpointBridge.sameGeneration(current, endpoint)) return false;
-
+                || !RootPassBlurEndpointBridge.sameGeneration(current, endpoint)) {
+            return skipStallRecovery("root-endpoint-changed", observedArrivals, observedEpoch);
+        }
         long now = android.os.SystemClock.uptimeMillis();
+        if (!RootPassBlurEndpointBridge.isBindingValid(current)) {
+            return skipStallRecovery("binding-invalid", observedArrivals, observedEpoch);
+        }
+        if (state.isRebindPending()) {
+            return skipStallRecovery("rebind-pending", observedArrivals, observedEpoch);
+        }
+        if (sourceArrivalSerial != observedArrivals) {
+            return skipStallRecovery("frames-progressed", observedArrivals, observedEpoch);
+        }
+        if (bindEpoch.get() != observedEpoch) {
+            return skipStallRecovery("epoch-changed", observedArrivals, observedEpoch);
+        }
+        if (now < nextStallRolloverAllowedMs) {
+            return skipStallRecovery("cooldown", observedArrivals, observedEpoch);
+        }
         if (!PassBlurSourceStallRecoveryPolicy.shouldRollover(
                 RootPassBlurEndpointBridge.isBindingValid(current),
                 state.isRebindPending(),
                 sourceArrivalSerial, observedArrivals,
                 bindEpoch.get(), observedEpoch,
-                now, nextStallRolloverAllowedMs)) return false;
+                now, nextStallRolloverAllowedMs)) {
+            return skipStallRecovery("policy-rejected", observedArrivals, observedEpoch);
+        }
 
         // Arm cooldown *before* issuing asynchronous native teardown; one attempt per event.
         nextStallRolloverAllowedMs = now + 20_000L;
@@ -347,6 +378,11 @@ final class RootPassBlurBackend {
         MainHook.log(TAG + " Recents source-stall full producer rollover accepted=" + accepted
                 + " rootLayer=" + current.rootLayerId + " oldBindEpoch=" + observedEpoch
                 + " lastArrivals=" + observedArrivals);
+        if (MainHook.debugLogging) {
+            MainHook.log(TAG + " [StallProbe] action=attempt accepted=" + accepted
+                    + " oldLayer=" + current.rootLayerId
+                    + " oldEpoch=" + observedEpoch + " current=" + traceFramePipeline());
+        }
         return accepted;
     }
 

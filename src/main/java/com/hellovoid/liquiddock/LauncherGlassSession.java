@@ -281,13 +281,51 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         final long observedArrivals = sourceBackend.sourceArrivalSerial();
         final long observedEpoch = sourceBackend.sourceBindEpoch();
         final View watchedRoot = rootRef.get();
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][StallProbe] armed session=" + diagnosticSessionId()
+                    + " arrivals=" + observedArrivals + " epoch=" + observedEpoch
+                    + " sceneGen=" + sceneGeneration
+                    + " recentsVisible=" + child.isRecentsVisible()
+                    + " source={" + sourceBackend.traceFramePipeline() + "}");
+        }
         mainHandler.postDelayed(() -> {
-            if (shuttingDown || rotationSettlePending || rootRef.get() != watchedRoot
-                    || watchedRoot == null || !watchedRoot.isAttachedToWindow()
-                    || !GlassRuntimeState.isRecentsCapsuleEnabled()
-                    || LauncherGlassHomePresentationHook.isUnlockProducerBlocked()
-                    || LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) return;
-            sourceBackend.recoverStalledSource(observedArrivals, observedEpoch);
+            String blocked = shuttingDown ? "session-shutdown"
+                    : rootRef.get() != watchedRoot ? "root-replaced"
+                    : watchedRoot == null || !watchedRoot.isAttachedToWindow() ? "root-detached"
+                    : rotationSettlePending ? "rotation-pending"
+                    : recentsConsumer != child || !child.isRecentsVisible() ? "recents-no-longer-visible"
+                    : !GlassRuntimeState.isRecentsCapsuleEnabled() ? "capsule-disabled"
+                    : LauncherGlassHomePresentationHook.isUnlockProducerBlocked()
+                        || LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
+                        ? "unlock-blocked" : null;
+            if (blocked != null) {
+                if (MainHook.debugLogging) {
+                    MainHook.log("[DC][StallProbe] action=skip stage=timer reason=" + blocked
+                            + " arrivals=" + sourceBackend.sourceArrivalSerial()
+                            + " armedArrivals=" + observedArrivals
+                            + " epoch=" + sourceBackend.sourceBindEpoch()
+                            + " armedEpoch=" + observedEpoch);
+                }
+                return;
+            }
+            boolean accepted = sourceBackend.recoverStalledSource(observedArrivals, observedEpoch);
+            if (!MainHook.debugLogging) return;
+            MainHook.log("[DC][StallProbe] action=checked accepted=" + accepted
+                    + " recentsVisible=" + child.isRecentsVisible()
+                    + " source={" + sourceBackend.traceFramePipeline() + "}");
+            if (!accepted) return;
+            mainHandler.postDelayed(() -> {
+                if (!shuttingDown && rootRef.get() == watchedRoot) {
+                    MainHook.log("[DC][StallProbe] action=post-rollover elapsedMs=1000 source={"
+                            + sourceBackend.traceFramePipeline() + "}");
+                }
+            }, 1000L);
+            mainHandler.postDelayed(() -> {
+                if (!shuttingDown && rootRef.get() == watchedRoot) {
+                    MainHook.log("[DC][StallProbe] action=post-rollover elapsedMs=3000 source={"
+                            + sourceBackend.traceFramePipeline() + "}");
+                }
+            }, 3000L);
         }, RECENTS_SOURCE_STALL_CHECK_MS);
     }
 
