@@ -20,7 +20,7 @@
 
 **最新阶段：[#321](https://github.com/yu4032/LiquidDock/pull/321) 已合并至 main，Perfetto 分段诊断可用；每帧 O(N) 扫描仍未消除，待实机量化。** 原分支 `perf/workspace-prescan-tracing-20261010` 在 `LauncherGlassSession` 内仅当 `Trace.isEnabled()` 时采样 `SceneSync / DragNodes / StaticNodes / SourceReconcile`，以及 drag/static candidate 与真实 geometry read 数。此轮没有 dirty cache、没有额外 per-frame log/file write，也未完成真机性能测量。量化步骤见 [Workspace 扫描 Perfetto 指南](docs/workspace-ui-node-scan-perfetto-20261010.md)。
 
-**当前独立低风险改动（待 CI/实机）**：`perf/workspace-geometry-bounds-scratch-20261010` 为 `LauncherGlassBoundsPolicy` 加入 `applyInto()`，让 `LauncherGlassStaticNode` 利用原有 `geometryPoints[8]` 暂存边界，避免静态玻璃一次有效几何捕获中由 `apply()` 创建的 `float[4]`。原有调用 API 保留，数值计算与 1px 边界规则不变；这是分配优化候选，**不等于已减少节点扫描或改善 FPS**。详见 [Perfetto/分配审查](docs/workspace-ui-node-scan-perfetto-20261010.md)。
+**低风险分配改动（[#322](https://github.com/yu4032/LiquidDock/pull/322) 已通过 CI 和实机并合并）**：`perf/workspace-geometry-bounds-scratch-20261010` 为 `LauncherGlassBoundsPolicy` 加入 `applyInto()`，让 `LauncherGlassStaticNode` 利用原有 `geometryPoints[8]` 暂存边界，避免静态玻璃一次有效几何捕获中由 `apply()` 创建的 `float[4]`。原有调用 API 保留，数值计算与 1px 边界规则不变；这一处 `float[4]` 分配已在 main 中消除；**仍不等于已减少节点扫描或改善 FPS**。详见 [Perfetto/分配审查](docs/workspace-ui-node-scan-perfetto-20261010.md)。
 
 `LauncherGlassSession` 当前在 Launcher root 的 `OnPreDrawListener` 中每帧执行 `syncSceneOnUiThread()`。
 
@@ -61,6 +61,8 @@
 - PrismalAGSL v1.0.4 没有可直接代替现有 MIUIX WindowDialog 的原生 modal，**不可声称是 Prismal 原生窗口动画**；仅是匹配其 spring 手感。已根据用户确认合并 #318；后续多机型的 GPU/布局抖动属于持续回归观察，不是尚待合并的门槛。
 
 ### P1-B · Dock PassBlur geometry polling
+
+**本轮状态：已增加 Perfetto 分段归因，待 CI/实机采样，未取消每帧轮询。** 分支 `perf/dock-predraw-stage-tracing-20261010` 对 `ProducerGeometry / ReadSurfaceGeometry / BackdropMapping / UiSceneFingerprint` 增加 `Trace.isEnabled()` gated sections，完整路径见 [Dock pre-draw Perfetto 指南](docs/dock-predraw-perfetto-20261010.md)。不改变采样、rebind、force-refresh 帧同步或投影规则，也不能声称已解决性能瓶颈。
 
 `Miuix307PassBlurTextureView` 当前 root pre-draw 每帧：
 
