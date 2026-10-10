@@ -18,6 +18,7 @@ final class LauncherWidgetBackgroundController {
             LauncherMamlBackgroundRuleExecutor.claim(host);
         }
         LauncherWidgetComponentSelectionExecutor.claim(host);
+        LauncherWidgetWhiteningExecutor.claim(host);
     }
 
     static void claimLoadedMamlRoot(View host, Object root) {
@@ -31,6 +32,7 @@ final class LauncherWidgetBackgroundController {
         if (host == null) return;
         // User MAML claims observe the state after bundled compatibility rules have run. Restore
         // them first, then let the bundled rule executor restore the provider's real mShow value.
+        LauncherWidgetWhiteningExecutor.release(host);
         LauncherWidgetComponentSelectionExecutor.release(host);
         if (isMamlHost(host)) {
             LauncherMamlBackgroundRuleExecutor.release(host);
