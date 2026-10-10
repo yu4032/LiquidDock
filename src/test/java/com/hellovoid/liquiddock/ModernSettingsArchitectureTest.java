@@ -900,7 +900,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(passBlurView.contains("combineAutoGuardAndUserExtra("));
         assertFalse(passBlurView.contains("topSamplingExtraPx"));
         assertTrue(passBlurView.contains("PrismalSampling.requiredGuardPx("));
-        assertTrue(ui.contains("采样保护区由渲染器自动计算"));
+        assertTrue(Files.readString(GLASS_PAGES).contains("采样保护区由渲染器自动计算"));
         assertFalse(ui.contains("\"liquid_edge_band\" ->"));
         assertFalse(ui.contains("\"liquid_highlight_alpha\" ->"));
         assertFalse(ui.contains("\"liquid_recents_prearm_distance\" ->"));
