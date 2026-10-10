@@ -2,27 +2,21 @@ package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -48,7 +42,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -60,8 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.PrismalGlassSurface
-import com.styropyr0.prismal.components.PrismalGlassBottomTab
-import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import com.styropyr0.prismal.components.PrismalGlassButton
 import com.styropyr0.prismal.components.PrismalGlassStepper
 import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
@@ -90,9 +81,9 @@ private const val TOP_BAR_GLASS_TINT_ALPHA = 0.34f
 private val TOP_BAR_ACTION_SHADOW_ROOM = 10.dp
 private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 
-private val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
-private val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
-private val LocalTouchPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+internal val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+internal val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
+internal val LocalTouchPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 private val LocalFrozenPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 // Cheap, static approximation of the existing Prismal cells. This flag never
 // gives a body component access to the live header/footer capture layers.
@@ -274,322 +265,8 @@ internal fun ModernSettingsScaffold(
     }
 }
 
-internal data class RestartScopeItem(
-    val id: String,
-    val title: String,
-    val packageName: String,
-)
-
-@Composable
-internal fun RestartScopesDialog(
-    visible: Boolean,
-    items: List<RestartScopeItem>,
-    selected: Set<String>,
-    onToggle: (String, Boolean) -> Unit,
-    onDismiss: () -> Unit,
-    onRestart: (Set<String>) -> Unit,
-) {
-    if (!visible) return
-    // Restart dialog is body chrome. It must not sample the header/footer
-    // backdrop or install Prismal's per-control gesture/shader pipeline.
-    val backdrop = LocalPrismalSurfaceBackdrop.current
-
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.30f))
-            .clickable(onClick = onDismiss),
-        contentAlignment = Alignment.Center,
-    ) {
-        val listMaxHeight = (maxHeight - 240.dp).coerceAtLeast(120.dp)
-        ModernSurface(
-            modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 28.dp)
-                .widthIn(max = 520.dp)
-                // Consume taps on the dialog panel without installing an
-                // interactive Prismal surface over its child switches/buttons.
-                .clickable(onClick = {}),
-            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-        ) {
-            Text(
-                text = "重启作用域",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MiuixTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "选择需要重新加载 Hook 的进程作用域。",
-                modifier = Modifier.padding(top = 5.dp, bottom = 10.dp),
-                fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = listMaxHeight)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                items.forEachIndexed { index, item ->
-                    // Prismal is visual only: the current selected set is
-                    // authoritative for both the switch and the row action.
-                    val checked = item.id in selected
-                    BasicComponent(
-                        title = item.title,
-                        summary = item.packageName,
-                        endActions = {
-                            RestartScopeToggle(
-                                scopeId = item.id,
-                                checked = checked,
-                                backdrop = LocalTouchPrismalBackdrop.current,
-                                onToggle = onToggle,
-                            )
-                        },
-                        onClick = { onToggle(item.id, !checked) },
-                    )
-                    if (index != items.lastIndex) {
-                        ModernListDivider()
-                    }
-                }
-            }
-
-            Text(
-                text = "System Framework（system）需要重启设备，因此不在此列表。",
-                modifier = Modifier.padding(top = 10.dp),
-                fontSize = 11.sp,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.52f),
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (backdrop != null) {
-                    PrismalGlassButton(
-                        onClick = { if (selected.isNotEmpty()) onRestart(selected.toSet()) },
-                        backdrop = backdrop,
-                        modifier = Modifier.alpha(if (selected.isNotEmpty()) 1f else 0.38f),
-                        isInteractive = selected.isNotEmpty(),
-                        height = 42.dp,
-                        blurRadius = 7.dp,
-                        refractionHeight = 9.dp,
-                        refractionAmount = 12.dp,
-                        pressLift = 0.dp,
-                        contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
-                        tint = Color(0xFFD73333),
-                        tintAlpha = 0.92f,
-                        depthEffect = false,
-                        depthShadow = null,
-                    ) {
-                        Text(
-                            text = "重启",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(21.dp))
-                            .background(Color(0xFFD73333))
-                            .alpha(if (selected.isNotEmpty()) 1f else 0.38f)
-                            .clickable(enabled = selected.isNotEmpty()) {
-                                onRestart(selected.toSet())
-                            }
-                            .padding(horizontal = 26.dp, vertical = 11.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "重启",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * The restart dialog retains native Prismal toggle optics when glass is on.
- * The spring gesture in PrismalAGSL remembers its original closures, so bridge
- * both state and callbacks to their latest values instead of capturing the
- * checkbox defaults from when the dialog first appeared.
- */
-@Composable
-private fun RestartScopeToggle(
-    scopeId: String,
-    checked: Boolean,
-    backdrop: PrismalBackdrop?,
-    onToggle: (String, Boolean) -> Unit,
-) {
-    val currentId = rememberUpdatedState(scopeId)
-    val currentChecked = rememberUpdatedState(checked)
-    val currentToggle = rememberUpdatedState(onToggle)
-    val selectedProvider = remember { { currentChecked.value } }
-    val stableToggle: (Boolean) -> Unit = remember {
-        { next -> currentToggle.value(currentId.value, next) }
-    }
-
-    if (backdrop != null) {
-        GuiOnTouchPrismalToggle(
-            selected = selectedProvider,
-            onSelect = stableToggle,
-            backdrop = backdrop,
-        )
-    } else {
-        top.yukonga.miuix.kmp.basic.Switch(
-            checked = checked,
-            onCheckedChange = stableToggle,
-        )
-    }
-}
-
-@Composable
-internal fun ModernBottomNavigation(
-    labels: List<String>,
-    icons: List<ImageVector>,
-    selectedIndex: Int,
-    onSelected: (Int) -> Unit,
-) {
-    val backdrop = LocalPrismalOverlayBackdrop.current
-    val selected by rememberUpdatedState(selectedIndex)
-    val onSelect by rememberUpdatedState(onSelected)
-    val stableSelectedIndex = remember { { selected } }
-    val stableTabChange: (Int) -> Unit = remember {
-        { index -> if (index != selected) onSelect(index) }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .widthIn(max = 560.dp)
-                .fillMaxWidth()
-                .height(64.dp),
-        ) {
-            if (backdrop != null) {
-                PrismalGlassBottomTabs(
-                    selectedTabIndex = stableSelectedIndex,
-                    onTabSelected = stableTabChange,
-                    backdrop = backdrop,
-                    tabsCount = labels.size,
-                    modifier = Modifier.fillMaxSize(),
-                    tintDropletContent = false,
-                ) {
-                    // Prismal renders tab content twice: once visibly and once in a
-                    // hidden recording layer for the droplet lens. Rendering text
-                    // there creates a second, refracted copy while long-pressing.
-                    // Keep the native capsule hit targets / spring gestures empty.
-                    labels.indices.forEach { index ->
-                        PrismalGlassBottomTab(
-                            onClick = {
-                                if (index != selected) onSelect(index)
-                            },
-                        ) {}
-                    }
-                }
-                // Draw labels and icons once above the droplet, without a second
-                // pointer target: touches still reach Prismal's capsule tabs.
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    labels.forEachIndexed { index, label ->
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(
-                                2.dp, Alignment.CenterVertically,
-                            ),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            ModernTabContents(label, icons[index], index == selected)
-                        }
-                    }
-                }
-            } else {
-                val fallbackShape = RoundedCornerShape(30.dp)
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(fallbackShape)
-                        .background(
-                            color = MiuixTheme.colorScheme.surface.copy(alpha = 0.96f),
-                            shape = fallbackShape,
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-                            shape = fallbackShape,
-                        )
-                        .padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    labels.forEachIndexed { index, label ->
-                        val active = index == selected
-                        val shape = RoundedCornerShape(28.dp)
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clip(shape)
-                                .background(
-                                    if (active) MiuixTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                    else Color.Transparent,
-                                    shape = shape,
-                                )
-                                .clickable(
-                                    interactionSource = null,
-                                    indication = null,
-                                ) {
-                                    if (index != selected) onSelect(index)
-                                },
-                            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            ModernTabContents(label, icons[index], active)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModernTabContents(label: String, icon: ImageVector, active: Boolean) {
-    val contentColor = if (active) {
-        MiuixTheme.colorScheme.primary
-    } else {
-        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
-    }
-    Icon(
-        imageVector = icon,
-        contentDescription = label,
-        tint = contentColor,
-        modifier = Modifier.size(21.dp),
-    )
-    Text(
-        text = label,
-        color = contentColor,
-        fontSize = 11.sp,
-        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
+// Restart scopes live in SettingsRestartScopesDialog.kt; bottom navigation
+// lives in SettingsBottomNavigation.kt with its single-pass glyph policy.
 
 @Composable
 internal fun ModernTopActionButton(

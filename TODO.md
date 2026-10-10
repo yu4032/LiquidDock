@@ -112,6 +112,7 @@
 - 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
 - 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
 - GUI 滑条从“松手后写入”调整为**右侧数值每跨一个合法档位就实时写入**（#314，待实机确认）。同档位去重，避免无意义的每帧写入。SharedPreferences → API101 Remote Preferences 的延迟、拖动帧率和最终落盘可靠性仍需实测；4×2 网格预检继续优先于风险档位的写入。
+- **Prismal GUI 底栏视觉完整性**：现有原生玻璃背景、胶囊形变和拖动回弹有效，但 native `PrismalGlassBottomTab` 内容为空，外置图文单遍绘制规避了历史长按重影；目前失去原生图文的按压缩放、拖动中即时高亮和镜片内内容折射。详见 [审查报告](docs/gui-prismal-bottom-navigation-audit-20261010.md)。保持不重影优先；先分离导航/视觉权责，再以独立小 PR 验证单份图文的高亮/形变，后续另行研究镜片，绝不把完整图文重复放回两层。
 
 ---
 
@@ -467,7 +468,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 架构抽离分阶段推进，仍非全部完成。** [#309](https://github.com/yu4032/LiquidDock/pull/309)–[#314](https://github.com/yu4032/LiquidDock/pull/314) 已合并到 `main`；其中 #314 是滑条显示值实时写入的行为改动，仍需设备回归。第六批 [#315](https://github.com/yu4032/LiquidDock/pull/315) 将描边、阴影、数据、许可和侧栏页面迁出，CI 通过但仍未合并；第七批 `refactor/gui-navigation-controls-extraction-20261010` 叠在 #315 之上，将 route/菜单声明迁到 `SettingsNavigationModel.kt`，公共控件、滑条热更新和 keyed revision Local 迁到 `SettingsControls.kt`，主 Activity **984 → 536 行**（分支统计）。这只改变文件归属与跨文件声明可见性，未删除功能；第七批 [CI #38036812829](https://github.com/yu4032/LiquidDock/actions/runs/38036812829) 已通过编译、单元测试和 Debug APK 构建，**尚待实机验收、尚未合并**。图形/EGL/Hook 大类另行治理，详见 [维护性审计](docs/maintainability-audit-20261010.md)。
+**状态：GUI 架构拆分持续进行，图形与 Hook 大类仍为独立任务。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#316](https://github.com/yu4032/LiquidDock/pull/316) 已合并到 `main`；主 Activity 已降到约 **536 行**，但 `ModernSettingsUi.kt` 仍存在高耦合界面职责。当前第八批 `refactor/gui-prismal-bottom-navigation-20261010` 仅将原有 Prismal 底栏和重启作用域弹窗迁入独立文件（保留交互行为），并出具 [底栏光学审查](docs/gui-prismal-bottom-navigation-audit-20261010.md)，**分支尚需 CI 和实机验收**。#314 滑条显示值实时写入属于行为改动，仍需设备回归。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
