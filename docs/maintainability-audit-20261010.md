@@ -76,11 +76,8 @@
 - [#311](https://github.com/yu4032/LiquidDock/pull/311)：Dock、Divider、Workstation、Recents 七个页面独立，2166 → 1902 行；CI 通过，已合并。
 - [#312](https://github.com/yu4032/LiquidDock/pull/312)：Grid 五个页面独立；**同时包含之后补充的滑条连续拖动、预览最近合法精度、松手吸附再提交的行为修复**，所以不能将整个 PR 声称为纯结构性调整。当前合并后主 Activity 为 **1646 行**（最初从 Grid 迁移时的 1630 行是中间快照）。
 
-分支内进行中（未合并，待 CI 和独立实机验证）：
+第五批 [PR #313](https://github.com/yu4032/LiquidDock/pull/313) 已合并：十个 Glass 页面迁出到 `GlassSettingsPages.kt`，原 Activity **1646 → 1198** 行。此批仅移动文件和调整必要声明可见性，CI 已通过。
 
-- `refactor/gui-glass-pages-20261010`：迁移 `LiquidPage`、`LiquidSpecPage`、`LiquidSamplingPage`、`GlassComponentsPage`、`GlassIconsPage`、`GlassWidgetsPage`、`GlassFoldersPage`、`GlassMenusPage`、`LauncherHighlightsPage`、`LauncherHighlightTogglePage` 至 `GlassSettingsPages.kt`。
-- 主 Activity **1646 → 1198 行**；除文件归属与 `private → internal`（hub/入口）外，不修改已实现的 Prismal 列表、组件启用依赖、配置保存、帧同步开关和光学参数。
-- 需确认 ConfigSchema 引用、Composable 数量、源码契约测试迁移；真实设备检查玻璃主开关、图标/小组件/文件夹、快捷菜单入口、高光分组、采样和 GUI 连续滑条。
-- 保留 `ModernSettingsArchitectureTest` 等 source-level 检查但更新其文件所有权；长期目标是转为 API/行为测试，而非再加一个“巨型 Activity 必须包含字符串”的约束。
+独立修复 [PR #314](https://github.com/yu4032/LiquidDock/pull/314)（待合并及实机确认）：Prismal 滑块连续拖动、松手弹簧吸附不变；右侧数值跨过合法整数、0.1 或离散档位即保存，重复档位去重；Miuix 滑条同样实时写入。Grid 风险尺寸先经过 4×2 widget 预检，失败不保存。**这是行为变更**，取代此前“拖动仅预览、回弹结束保存”的旧契约；快速连续拖动、阻断回滚、热更新延迟仍需真机测试。
 
 风险界限：GUI 的文件拆分不触及 PassBlur/EGL、渲染 producer、LSPosed Hook。所有编译和静态检查结果必须与实机验收区别记录，完成后更新 TODO 状态。

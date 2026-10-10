@@ -111,7 +111,7 @@
 - 检查 `liquid_edge_band`、`liquid_highlight_alpha`、`liquid_recents_prearm_distance`：当前没有可见 GUI 控件；仍须验证配置链是否仅有声明、预设或历史兼容用途，再决定删除键或保留迁移。
 - 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
 - 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
-- 本项不包括 GUI 滑条拖动掉帧优化；高频 SharedPreferences → API101 Remote Preferences 更新需另行性能测量，确保最后一次更改可靠落盘。已确认存在 source-listener 增量同步路径，不能无证据宣称每次滑动都重新写全量配置。
+- GUI 滑条从“松手后写入”调整为**右侧数值每跨一个合法档位就实时写入**（#314，待实机确认）。同档位去重，避免无意义的每帧写入。SharedPreferences → API101 Remote Preferences 的延迟、拖动帧率和最终落盘可靠性仍需实测；4×2 网格预检继续优先于风险档位的写入。
 
 ---
 
@@ -467,7 +467,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 分批重构进行中；非 GUI 领域仍待治理。** [#309](https://github.com/yu4032/LiquidDock/pull/309)（设置规格）、[#310](https://github.com/yu4032/LiquidDock/pull/310)（动画页面）、[#311](https://github.com/yu4032/LiquidDock/pull/311)（Dock/工作台）、[#312](https://github.com/yu4032/LiquidDock/pull/312)（Grid 与滑条提交边界修复）均已合并入 `main`。主 Activity 当前 **1646 行**；其中 #312 的滑条手感和提交时序改动不能归为纯文件移动。当前分支 `refactor/gui-glass-pages-20261010` 将十个 Liquid/组件/高光页面迁至 `GlassSettingsPages.kt`，Activity 分支为 **1198 行**，需独立 CI 与实机回归后才能合并。`Miuix307PassBlurTextureView.java`、`LauncherGlassSession.java`、`Launcher450SideSlideHoldHook.java` 等复杂 runtime 类仍待单独处理；详情见 [维护性审计](docs/maintainability-audit-20261010.md)。
+**状态：GUI 文件拆分与交互修复分批进行。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#313](https://github.com/yu4032/LiquidDock/pull/313) 已合并到 `main`；主 Activity 为 1198 行（第五批合并后）。[#314](https://github.com/yu4032/LiquidDock/pull/314) 的滑条实时写入修复在本分支等待合并与实机验证：同档位去重，Grid 4×2 风险档位仍需预检。图形和 Hook 大类尚未纳入这些 GUI 文件移动，详见 [维护性审计](docs/maintainability-audit-20261010.md)。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
