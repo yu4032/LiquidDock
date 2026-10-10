@@ -467,7 +467,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 文件拆分与交互修复持续进行。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#314](https://github.com/yu4032/LiquidDock/pull/314) 均已合并入 `main`；其中 #314 是滑条实时保存的行为变更，仍须真机复核热更新与 Grid 安全拒绝路径。当前第六批 `refactor/gui-auxiliary-pages-20261010` 将描边、阴影、安全中心侧栏、默认配置/JSON 管理和许可页拆至两个文件，主 Activity 从 **1209 → 987 行**；**此分支尚未合并**。后续还需拆分导航/生命周期与公共控件，并单独治理图形/Hook 大类；详见 [维护性审计](docs/maintainability-audit-20261010.md)。
+**状态：GUI 架构抽离分阶段推进，仍非全部完成。** [#309](https://github.com/yu4032/LiquidDock/pull/309)–[#314](https://github.com/yu4032/LiquidDock/pull/314) 已合并到 `main`；其中 #314 是滑条显示值实时写入的行为改动，仍需设备回归。第六批 [#315](https://github.com/yu4032/LiquidDock/pull/315) 将描边、阴影、数据、许可和侧栏页面迁出，CI 通过但仍未合并；第七批 `refactor/gui-navigation-controls-extraction-20261010` 叠在 #315 之上，将 route/菜单声明迁到 `SettingsNavigationModel.kt`，公共控件、滑条热更新和 keyed revision Local 迁到 `SettingsControls.kt`，主 Activity **984 → 536 行**（分支统计）。这只改变文件归属与跨文件声明可见性，未删除功能；第七批 [CI #38036812829](https://github.com/yu4032/LiquidDock/actions/runs/38036812829) 已通过编译、单元测试和 Debug APK 构建，**尚待实机验收、尚未合并**。图形/EGL/Hook 大类另行治理，详见 [维护性审计](docs/maintainability-audit-20261010.md)。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。

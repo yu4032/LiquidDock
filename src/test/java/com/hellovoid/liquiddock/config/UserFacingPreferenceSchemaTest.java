@@ -68,6 +68,8 @@ public class UserFacingPreferenceSchemaTest {
     public void composeSettingsPersistsOnlyThroughConfigKeyBackedControls() throws Exception {
         String source = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String controls = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsControls.kt"));
 
         String specs = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt"));
@@ -76,19 +78,19 @@ public class UserFacingPreferenceSchemaTest {
         assertTrue("integer settings must carry ConfigKey metadata",
                 specs.contains("val config: ConfigKey<Int>"));
         assertTrue("boolean settings must accept ConfigKey<Boolean>",
-                source.contains("prefs: SharedPreferences, config: ConfigKey<Boolean>"));
+                controls.contains("prefs: SharedPreferences, config: ConfigKey<Boolean>"));
         assertFalse("no unused generic string-setting helper should remain",
-                source.contains("private fun StringDropdown("));
+                (source + controls).contains("private fun StringDropdown("));
         assertFalse("raw boolean setting APIs are forbidden",
-                source.contains("RawBooleanSetting("));
+                (source + controls).contains("RawBooleanSetting("));
         assertFalse("string settings must not accept an untyped persisted key",
-                source.contains("key: String, title: String, default: String"));
+                (source + controls).contains("key: String, title: String, default: String"));
         assertFalse("settings must not write literal boolean keys directly",
-                source.contains("prefs.edit().putBoolean(\""));
+                (source + controls).contains("prefs.edit().putBoolean(\""));
         assertFalse("settings must not write literal integer keys directly",
-                source.contains("prefs.edit().putInt(\""));
+                (source + controls).contains("prefs.edit().putInt(\""));
         assertFalse("settings must not write literal string keys directly",
-                source.contains("prefs.edit().putString(\""));
+                (source + controls).contains("prefs.edit().putString(\""));
         assertTrue("settings must expose the single default configuration",
                 utility.contains("\"应用默认配置\""));
         assertFalse("settings must not expose a second tuned/default preset",
