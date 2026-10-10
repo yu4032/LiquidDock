@@ -252,54 +252,7 @@ private val animationEntries = listOf(
     HubEntry(Page.AnimationGui, R.string.page_animation_gui, "设置页面切换时长"),
 )
 
-private val animationWorkspaceVisibilitySpec = IntSpec(
-    ConfigSchema.Animation.WORKSPACE_VISIBILITY,
-    "工作区玻璃显隐",
-    "ms",
-    summary = "工作区玻璃淡入淡出时长；已加载的桌面 Hook 即时生效",
-)
-private val animationDockIconRevealSpec = IntSpec(
-    ConfigSchema.Animation.DOCK_ICON_REVEAL,
-    "Dock 图标玻璃恢复",
-    "ms",
-    summary = "应用退出动画末尾的 Dock 图标玻璃恢复；已加载的桌面 Hook 即时生效",
-)
-private val animationDockResizeSpec = IntSpec(
-    ConfigSchema.Animation.DOCK_RESIZE,
-    "Dock 尺寸变化",
-    "ms",
-    summary = "LiquidDock 顺滑尺寸动画的时长；需关闭系统 Dock 尺寸过渡并开启 LiquidDock 顺滑尺寸动画；重启桌面后生效",
-)
-private val animationPressInSpec = IntSpec(
-    ConfigSchema.Animation.PRESS_IN,
-    "按压进入",
-    "ms",
-    summary = "LiquidDock 玻璃按下反馈速度；已加载的桌面 Hook 即时生效",
-)
-private val animationPressOutSpec = IntSpec(
-    ConfigSchema.Animation.PRESS_OUT,
-    "按压释放",
-    "ms",
-    summary = "LiquidDock 玻璃松手恢复速度；已加载的桌面 Hook 即时生效",
-)
-private val animationShortcutDismissSpec = IntSpec(
-    ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE,
-    "快捷菜单退出渐隐",
-    "ms",
-    summary = "桌面快捷菜单关闭时 LiquidDock 玻璃的快速淡出；已加载的桌面 Hook 即时生效",
-)
-private val animationSecurityCenterExitSpec = IntSpec(
-    ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE,
-    "安全中心退出渐隐",
-    "ms",
-    summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock 淡出；已加载的安全中心 Hook 即时生效",
-)
-private val animationSettingsPageSpec = IntSpec(
-    ConfigSchema.Animation.SETTINGS_PAGE,
-    "GUI 页面切换",
-    "ms",
-    summary = "设置页面滑动与淡入淡出；下一次页面切换立即生效，无需重启",
-)
+// Animation option specs live in SettingsOptionSpecs.kt.
 
 @Composable
 private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
@@ -751,106 +704,7 @@ private fun AnimationPage(
     )
 }
 
-@Composable
-private fun AnimationWorkspacePage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val dockCustomizationEnabled = prefs.getBoolean(
-        ConfigSchema.Dock.ENABLED.name(),
-        ConfigSchema.Dock.ENABLED.uiDefault(),
-    )
-    val systemResizeEnabled = prefs.getBoolean(
-        ConfigSchema.Dock.RESIZE_ANIMATION.name(),
-        ConfigSchema.Dock.RESIZE_ANIMATION.uiDefault(),
-    )
-    val smoothResizeEnabled = prefs.getBoolean(
-        ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(),
-        ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault(),
-    )
-    SettingsList(
-        padding,
-        stringResource(R.string.page_animation_workspace),
-        "调整工作区与 Dock 的玻璃过渡动画。",
-    ) {
-        IntSetting(prefs, animationWorkspaceVisibilitySpec, masterEnabled)
-        IntSetting(prefs, animationDockIconRevealSpec, masterEnabled)
-        IntSetting(
-            prefs,
-            animationDockResizeSpec,
-            masterEnabled && dockCustomizationEnabled && !systemResizeEnabled && smoothResizeEnabled,
-        )
-    }
-}
-
-@Composable
-private fun AnimationInteractionPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    SettingsList(
-        padding,
-        stringResource(R.string.page_animation_interaction),
-        "玻璃按下与释放反馈独立调节；0 ms 表示立即完成。",
-    ) {
-        IntSetting(prefs, animationPressInSpec, masterEnabled)
-        IntSetting(prefs, animationPressOutSpec, masterEnabled)
-    }
-}
-
-@Composable
-private fun AnimationPopupsPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    SettingsList(
-        padding,
-        stringResource(R.string.page_animation_popups),
-        "调整快捷菜单与安全中心玻璃的退出渐隐。",
-    ) {
-        IntSetting(prefs, animationShortcutDismissSpec, masterEnabled)
-        IntSetting(prefs, animationSecurityCenterExitSpec, masterEnabled)
-    }
-}
-
-@Composable
-private fun AnimationSystemPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    SettingsList(
-        padding,
-        stringResource(R.string.page_animation_system),
-        "系统界面联动单独放置，避免与普通玻璃动画混在同一页。",
-    ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
-            "桌面/多任务隐藏手势小白条",
-            "进入桌面或多任务后隐藏手势手柄，离开后交还系统原生显示时序；开关即时生效，首次安装此版本需重启系统界面",
-            masterEnabled,
-        )
-    }
-}
-
-@Composable
-private fun AnimationGuiPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    SettingsList(
-        padding,
-        stringResource(R.string.page_animation_gui),
-        "调整设置页面的切换动画。",
-    ) {
-        IntSetting(prefs, animationSettingsPageSpec, masterEnabled)
-    }
-}
+// Animation leaf pages live in AnimationSettingsPages.kt.
 
 @Composable
 private fun GridPage(
@@ -2103,7 +1957,7 @@ private fun DenseSettingsList(
 }
 
 @Composable
-private fun SettingsList(
+internal fun SettingsList(
     padding: PaddingValues,
     title: String,
     summary: String? = null,
@@ -2166,7 +2020,7 @@ internal fun BooleanSetting(
 }
 
 @Composable
-private fun IntSetting(
+internal fun IntSetting(
     prefs: SharedPreferences,
     spec: IntSpec,
     enabledOverride: Boolean? = null,
