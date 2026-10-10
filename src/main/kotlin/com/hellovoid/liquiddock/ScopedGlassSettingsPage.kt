@@ -180,6 +180,7 @@ internal fun ScopedGlassSettingsPage(
                                 summary = if (prefs.contains(key)) "−1 表示继承自动圆角"
                                     else "继承自动圆角",
                                 valueText = "${v.roundToInt()} dp",
+                                valueTextForPreview = { "${it.roundToInt()} dp" },
                                 enabled = enabled,
                                 valueRange = -1f..400f,
                                 steps = 400,
@@ -337,8 +338,9 @@ private fun ScopedGlassSlider(
     val overridden = prefs.contains(key) || prefs.contains("${key}_tenths")
     val min = fallback.minInt().toFloat()
     val max = fallback.maxInt().toFloat()
-    val multiplier = if (decimal) 10 else 1
-    val intervals = ((max - min) * multiplier).roundToInt().coerceAtLeast(1)
+    val nativeSteps = DiscreteSliderSteps.forStoragePrecision(
+        requireNotNull(fallback.minInt()), requireNotNull(fallback.maxInt()), decimal,
+    )
     SliderPreference(
         value = v.coerceIn(min, max),
         onValueChange = { raw ->
@@ -355,8 +357,15 @@ private fun ScopedGlassSlider(
         valueText = if (decimal) String.format(java.util.Locale.ROOT, "%.1f", v) +
             (if (unit.isBlank()) "" else " $unit")
             else "${v.roundToInt()}" + (if (unit.isBlank()) "" else " $unit"),
+        valueTextForPreview = { nearest ->
+            val shown = if (decimal) String.format(java.util.Locale.ROOT, "%.1f", nearest)
+                else nearest.roundToInt().toString()
+            shown + (if (unit.isBlank()) "" else " $unit")
+        },
         enabled = enabled,
         valueRange = min..max,
-        steps = (intervals - 1).coerceAtLeast(0),
+        // Large optical ranges snap without generating hundreds of UI tick positions.
+        steps = nativeSteps,
+        snapIncrement = if (decimal) 0.1f else 1f,
     )
 }

@@ -316,6 +316,7 @@ internal fun GboardValueSlider(
         title = title,
         summary = "未单独设置时继承全局液态玻璃",
         valueText = "$rounded${if (unit.isBlank()) "" else " $unit"}",
+        valueTextForPreview = { "${it.roundToInt()}${if (unit.isBlank()) "" else " $unit"}" },
         enabled = enabled,
         valueRange = 0f..max.toFloat(),
         steps = (max - 1).coerceAtLeast(0),

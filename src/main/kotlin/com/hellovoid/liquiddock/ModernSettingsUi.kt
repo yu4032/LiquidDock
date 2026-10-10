@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -1115,24 +1116,25 @@ internal fun SliderPreference(
     title: String,
     summary: String? = null,
     valueText: String = "",
+    valueTextForPreview: ((Float) -> String)? = null,
     enabled: Boolean = true,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int = 0,
+    snapIncrement: Float = 0f,
     endActions: @Composable (() -> Unit)? = null,
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
     val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
     var editingValue by remember(title) { mutableStateOf(false) }
+    var previewValue by remember(title) { mutableStateOf<Float?>(null) }
     val intervals = (steps + 1).coerceAtLeast(1)
     val stepSize = ((valueRange.endInclusive - valueRange.start) / intervals)
         .takeIf { it > 0f } ?: 0.01f
-    fun quantize(raw: Float): Float {
-        if (steps <= 0) return raw.coerceIn(valueRange.start, valueRange.endInclusive)
-        val index = ((raw - valueRange.start) / stepSize).roundToInt()
-        return (valueRange.start + index * stepSize)
-            .coerceIn(valueRange.start, valueRange.endInclusive)
-    }
+    fun quantize(raw: Float): Float = DiscreteSliderSteps.snap(
+        raw, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
+    )
+    val motionThreshold = if (steps > 0 || snapIncrement <= 0f) stepSize else snapIncrement
     val sliderEnabledState = rememberUpdatedState(enabled)
     val sliderCallbackState = rememberUpdatedState(onValueChange)
     val quantizeState = rememberUpdatedState<(Float) -> Float>({ raw -> quantize(raw) })
@@ -1142,6 +1144,11 @@ internal fun SliderPreference(
             if (sliderEnabledState.value) sliderCallbackState.value(quantizeState.value(next))
         }
     }
+    // Miuix is controlled by a continuous, visual-only draft during touch.
+    // The preference callback runs once, after release, at the nearest stop.
+    var nativeDragging by remember { mutableStateOf(false) }
+    var nativeDraft by remember { mutableFloatStateOf(value) }
+    val shownValueText = previewValue?.let { valueTextForPreview?.invoke(it) } ?: valueText
 
     Column {
         BasicComponent(
@@ -1154,9 +1161,9 @@ internal fun SliderPreference(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (valueText.isNotBlank()) {
+                    if (shownValueText.isNotBlank()) {
                         Text(
-                            text = valueText,
+                            text = shownValueText,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable(enabled = enabled) { editingValue = true }
@@ -1174,8 +1181,11 @@ internal fun SliderPreference(
                 value = stableSliderValue,
                 onValueChange = stableSliderChange,
                 valueRange = valueRange,
-                visibilityThreshold = stepSize,
+                visibilityThreshold = motionThreshold,
                 backdrop = backdrop,
+                steps = steps,
+                snapIncrement = snapIncrement,
+                onValuePreview = { previewValue = it },
                 enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1184,12 +1194,24 @@ internal fun SliderPreference(
             )
         } else {
             top.yukonga.miuix.kmp.basic.Slider(
-                value = currentValue,
+                value = if (nativeDragging) nativeDraft else currentValue,
                 onValueChange = { next ->
-                    if (enabled) onValueChange(quantize(next))
+                    if (enabled) {
+                        nativeDraft = next
+                        nativeDragging = true
+                        previewValue = quantizeState.value(next)
+                    }
+                },
+                onValueChangeFinished = {
+                    if (nativeDragging) {
+                        val released = nativeDraft
+                        nativeDragging = false
+                        sliderCallbackState.value(quantizeState.value(released))
+                        previewValue = null
+                    }
                 },
                 valueRange = valueRange,
-                steps = steps,
+                steps = 0, // Native track stays continuous until finger release.
                 enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1197,8 +1219,9 @@ internal fun SliderPreference(
             )
         }
     }
+    val inputStep = if (steps > 0 || snapIncrement <= 0f) stepSize else snapIncrement
     val integerOnly = valueRange.start % 1f == 0f &&
-        valueRange.endInclusive % 1f == 0f && stepSize % 1f == 0f
+        valueRange.endInclusive % 1f == 0f && inputStep % 1f == 0f
     NumericSettingInputDialog(
         visible = editingValue,
         title = title,
@@ -1207,7 +1230,7 @@ internal fun SliderPreference(
         integerOnly = integerOnly,
         onDismiss = { editingValue = false },
         onConfirm = { next ->
-            onValueChange(next)
+            onValueChange(quantize(next))
             editingValue = false
         },
     )
@@ -1221,15 +1244,24 @@ internal fun ModernGlassSlider(
     visibilityThreshold: Float,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    steps: Int = 0,
+    snapIncrement: Float = 0f,
+    onValuePreview: (Float?) -> Unit = {},
 ) {
     val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
     val sliderEnabledState = rememberUpdatedState(enabled)
     val sliderCallbackState = rememberUpdatedState(onValueChange)
+    val previewCallbackState = rememberUpdatedState(onValuePreview)
+    val stableSliderPreview: (Float?) -> Unit = remember {
+        { next -> previewCallbackState.value(next) }
+    }
     val stableSliderValue = remember { { currentValue } }
     val stableSliderChange: (Float) -> Unit = remember {
         { next -> if (sliderEnabledState.value) sliderCallbackState.value(next) }
     }
+    var nativeDragging by remember { mutableStateOf(false) }
+    var nativeDraft by remember { mutableFloatStateOf(value) }
     if (backdrop != null) {
         GuiOnTouchPrismalSlider(
             value = stableSliderValue,
@@ -1238,15 +1270,37 @@ internal fun ModernGlassSlider(
             visibilityThreshold = visibilityThreshold,
             backdrop = backdrop,
             enabled = enabled,
+            steps = steps,
+            snapIncrement = snapIncrement,
+            onValuePreview = stableSliderPreview,
             modifier = modifier.alpha(if (enabled) 1f else 0.42f),
         )
     } else {
         top.yukonga.miuix.kmp.basic.Slider(
-            value = currentValue,
+            value = if (nativeDragging) nativeDraft else currentValue,
             onValueChange = { next ->
-                if (enabled) onValueChange(next)
+                if (enabled) {
+                    nativeDraft = next
+                    nativeDragging = true
+                    previewCallbackState.value(DiscreteSliderSteps.snap(
+                        next, valueRange.start, valueRange.endInclusive,
+                        steps, snapIncrement,
+                    ))
+                }
+            },
+            onValueChangeFinished = {
+                if (nativeDragging) {
+                    val nearest = DiscreteSliderSteps.snap(
+                        nativeDraft, valueRange.start, valueRange.endInclusive,
+                        steps, snapIncrement,
+                    )
+                    nativeDragging = false
+                    sliderCallbackState.value(nearest)
+                    previewCallbackState.value(null)
+                }
             },
             valueRange = valueRange,
+            steps = 0, // Apply quantization only after release, not on pointer movement.
             enabled = enabled,
             modifier = modifier,
         )

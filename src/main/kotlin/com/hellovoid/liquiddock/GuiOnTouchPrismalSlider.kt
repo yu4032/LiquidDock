@@ -12,13 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -50,16 +51,19 @@ import com.styropyr0.prismal.specular.PrismalSpecular
 import com.styropyr0.prismal.interactive.PrismalSpringMotion
 import com.styropyr0.prismal.depth.PrismalDepthInset
 import com.styropyr0.prismal.depth.PrismalDepthShadow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlin.math.abs
 
 /**
  * Glass-styled slider with a refracting thumb and damped drag physics.
  *
  * @param value Current value provider (read on each frame during drag).
- * @param onValueChange Called when the value changes.
+ * @param onValueChange Called only after the native Prismal release spring settles.
  * @param valueRange Allowed value range.
- * @param visibilityThreshold Minimum change delta before [onValueChange] fires.
+ * @param visibilityThreshold Legacy spring threshold; precise post-release settling uses 0.001f.
  * @param backdrop Source sampled through the track and thumb glass.
  */
 @Composable
@@ -72,7 +76,10 @@ internal fun GuiOnTouchPrismalSlider(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     adaptiveLuminance: Boolean = false,
-    luminance: () -> Float = { 0.5f }
+    luminance: () -> Float = { 0.5f },
+    steps: Int = 0,
+    snapIncrement: Float = 0f,
+    onValuePreview: (Float?) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val isLightTheme = !isSystemInDarkTheme()
@@ -97,57 +104,98 @@ internal fun GuiOnTouchPrismalSlider(
         val animationScope = rememberCoroutineScope()
         var didDrag by remember { mutableStateOf(false) }
         var isDragging by remember { mutableStateOf(false) }
+        var isSettling by remember { mutableStateOf(false) }
         var isTrackPressed by remember { mutableStateOf(false) }
-        val sampling = enabled && (isDragging || isTrackPressed)
-        var lastReportedValue by remember { mutableFloatStateOf(value()) }
+        val sampling = enabled && (isDragging || isTrackPressed || isSettling)
+        val commitState = rememberUpdatedState(onValueChange)
+        val previewState = rememberUpdatedState(onValuePreview)
+        var lastPreview by remember { mutableStateOf<Float?>(null) }
+        val releaseJob = remember { arrayOfNulls<Job>(1) }
         val trackWidthState = remember { mutableIntStateOf(0) }
         trackWidthState.intValue = trackWidth
         val dampedDragAnimation = remember(
             animationScope,
             valueRange.start,
             valueRange.endInclusive,
+            steps,
+            snapIncrement,
         ) {
             PrismalSpringMotion(
                 animationScope = animationScope,
                 initialValue = value(),
                 valueRange = valueRange,
-                visibilityThreshold = visibilityThreshold,
+                visibilityThreshold = visibilityThreshold.coerceAtMost(0.001f), // Precise settle.
                 initialScale = 1f,
                 pressedScale = 1.5f,
                 onDragStarted = {
+                    releaseJob[0]?.cancel()
+                    isSettling = false
                     isDragging = true
                     didDrag = false
+                    lastPreview = null
+                    previewState.value(null)
                 },
                 onDragStopped = {
                     isDragging = false
                     if (didDrag) {
-                        lastReportedValue = targetValue
-                        onValueChange(targetValue)
+                        // Prismal already calls release() after this callback. Its
+                        // existing value spring and release-scale spring provide
+                        // the settle animation; no competing custom animator.
+                        val nearest = DiscreteSliderSteps.snap(
+                            targetValue, valueRange.start, valueRange.endInclusive,
+                            steps, snapIncrement,
+                        )
+                        if (lastPreview != nearest) {
+                            lastPreview = nearest
+                            previewState.value(nearest)
+                        }
+                        isSettling = true
+                        updateValue(nearest)
+                        val motion = this
+                        releaseJob[0]?.cancel()
+                        releaseJob[0] = animationScope.launch {
+                            snapshotFlow { motion.value }
+                                .first { abs(it - nearest) <= 0.005f }
+                            if (!isDragging) {
+                                // Business logic, preflight and preference writes
+                                // run only after the thumb reaches its snapped stop.
+                                commitState.value(nearest)
+                                lastPreview = null
+                                previewState.value(null)
+                                isSettling = false
+                            }
+                        }
                     }
                 },
                 onDrag = { _, dragAmount ->
                     val width = trackWidthState.intValue
                     if (width == 0) return@PrismalSpringMotion
-                    if (!didDrag) {
-                        didDrag = dragAmount.x != 0f
-                    }
+                    if (!didDrag) didDrag = dragAmount.x != 0f
                     val delta =
                         (valueRange.endInclusive - valueRange.start) * (dragAmount.x / width.toFloat())
                     val nextValue = (
-                            if (isLtr) targetValue + delta
-                            else targetValue - delta
-                            ).fastCoerceIn(valueRange.start, valueRange.endInclusive)
+                        if (isLtr) targetValue + delta else targetValue - delta
+                    ).fastCoerceIn(valueRange.start, valueRange.endInclusive)
+                    // The thumb tracks the raw position. Only the nearby value
+                    // label is discretized during touch; no configuration writes.
                     updateValue(nextValue)
-                    if (abs(nextValue - lastReportedValue) >= visibilityThreshold) {
-                        lastReportedValue = nextValue
-                        onValueChange(nextValue)
+                    val preview = DiscreteSliderSteps.snap(
+                        nextValue, valueRange.start, valueRange.endInclusive,
+                        steps, snapIncrement,
+                    )
+                    if (preview != lastPreview) {
+                        lastPreview = preview
+                        previewState.value(preview)
                     }
                 }
             )
         }
+        DisposableEffect(dampedDragAnimation) {
+            onDispose { releaseJob[0]?.cancel() }
+        }
         var motionFrame by remember { mutableIntStateOf(0) }
-        // Touch-only live sampling stays dormant between gestures.
-        // The frozen thumb retains its own spring layer after the live sampling ends.
+        // Sampling is bounded to touch and the post-release settle; the frozen
+        // thumb retains its spring without moving the sampled background.
         LaunchedEffect(dampedDragAnimation, sampling) {
             if (sampling) {
                 snapshotFlow { dampedDragAnimation.animationSnapshot() }
@@ -157,11 +205,28 @@ internal fun GuiOnTouchPrismalSlider(
         LaunchedEffect(dampedDragAnimation) {
             snapshotFlow { value() }
                 .collectLatest { current ->
-                    lastReportedValue = current
-                    if (!isDragging && dampedDragAnimation.targetValue != current) {
+                    if (!isDragging && !isSettling && dampedDragAnimation.targetValue != current) {
                         dampedDragAnimation.updateValue(current)
                     }
                 }
+        }
+        // Also reconcile the committed value when settling ends without a
+        // preference change (for example a blocked 4×2 widget preflight).
+        LaunchedEffect(isSettling, dampedDragAnimation) {
+            if (!isSettling && !isDragging && !isTrackPressed &&
+                dampedDragAnimation.targetValue != value()
+            ) {
+                dampedDragAnimation.updateValue(value())
+            }
+        }
+
+        // A blocked widget preflight disables the row/column slider while waiting.
+        // Immediately return its thumb to the last committed value, not the
+        // tentative 2/3-column stop that has not passed safety validation.
+        LaunchedEffect(enabled, dampedDragAnimation, steps, snapIncrement) {
+            if (!enabled && !isSettling && (steps > 0 || snapIncrement > 0f)) {
+                dampedDragAnimation.updateValue(value())
+            }
         }
 
         // No track GraphicsLayer recording while the thumb is idle.
@@ -177,6 +242,10 @@ internal fun GuiOnTouchPrismalSlider(
                     .then(if (enabled) Modifier.pointerInput(animationScope, trackWidth, valueRange, isLtr) {
                         detectTapGestures(
                             onPress = {
+                                releaseJob[0]?.cancel()
+                                isSettling = false
+                                lastPreview = null
+                                previewState.value(null)
                                 isTrackPressed = true
                                 try { tryAwaitRelease() } finally { isTrackPressed = false }
                             },
@@ -187,8 +256,26 @@ internal fun GuiOnTouchPrismalSlider(
                                 (if (isLtr) valueRange.start + delta
                                 else valueRange.endInclusive - delta)
                                     .coerceIn(valueRange)
-                            dampedDragAnimation.animateToValue(targetValue)
-                            onValueChange(targetValue)
+                            val snapped = DiscreteSliderSteps.snap(
+                                targetValue, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
+                            )
+                            releaseJob[0]?.cancel()
+                            lastPreview = snapped
+                            previewState.value(snapped)
+                            isSettling = true
+                            // A track tap also uses Prismal's native press/value/
+                            // release springs, then commits after visual arrival.
+                            dampedDragAnimation.animateToValue(snapped)
+                            releaseJob[0] = animationScope.launch {
+                                snapshotFlow { dampedDragAnimation.value }
+                                    .first { abs(it - snapped) <= 0.005f }
+                                if (!isDragging) {
+                                    commitState.value(snapped)
+                                    lastPreview = null
+                                    previewState.value(null)
+                                    isSettling = false
+                                }
+                            }
                             },
                         )
                     } else Modifier)
@@ -277,9 +364,8 @@ internal fun GuiOnTouchPrismalSlider(
                                 alpha = progress
                             )
                         },
-                        // Live glass samples in the original, unscaled thumb coordinates.
-                        // Applying spring scale on the outer parent graphicsLayer would
-                        // also distort the backdrop source transform.
+                        // Keep the live spring inside the optical renderer: scaling
+                        // the parent graphicsLayer would misalign the glass backdrop.
                         layerBlock = {
                             scaleX = dampedDragAnimation.scaleX
                             scaleY = dampedDragAnimation.scaleY
@@ -301,8 +387,8 @@ internal fun GuiOnTouchPrismalSlider(
                     GuiFrozenPrismalChrome(
                         backdrop = underlayBackdrop,
                         shape = { PrismalCapsule() },
-                        // Transform the already-recorded frozen glass only.
-                        // It keeps the spring settling without resampling a shifted backdrop.
+                        // Reuse the main-branch #307 fix: transform only the frozen
+                        // cached thumb, never the live source/backdrop coordinate space.
                         modifier = Modifier.matchParentSize().graphicsLayer {
                             val velocity = dampedDragAnimation.velocity / 10f
                             scaleX = dampedDragAnimation.scaleX /
