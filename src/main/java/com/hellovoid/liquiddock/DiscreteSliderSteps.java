@@ -19,7 +19,7 @@ public final class DiscreteSliderSteps {
         return intervals >= 2L && intervals <= 64L ? (int) intervals - 1 : 0;
     }
 
-    /** Quantize touch positions to the actual persisted precision, even for wide
+    /** Quantize numeric previews and release targets to persisted precision, even for wide
      * ranges where drawing every native Slider tick would be prohibitively costly. */
     public static float snapToIncrement(float raw, float min, float max, float increment) {
         float bounded = Math.max(min, Math.min(max, raw));
