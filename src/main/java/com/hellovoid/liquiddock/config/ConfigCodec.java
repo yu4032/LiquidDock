@@ -3,7 +3,7 @@ package com.hellovoid.liquiddock.config;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Pure transformations between preference writes and the historical JSON value contract. */
+/** Pure transformations between current-schema preference values and JSON. */
 public final class ConfigCodec {
     private ConfigCodec() {}
 

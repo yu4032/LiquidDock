@@ -71,7 +71,7 @@ Debug 与 Release 都启用 optimization/R8。不要假设 debug APK 保留原�
 
 1. 主配置先登记到 `ConfigSchema`；
 2. 不再维护历史 SharedPreferences 迁移；新增配置只登记到当前 schema；
-3. JSON shape / alias 由 `ConfigCodec` 管理；
+3. 当前 JSON 导入导出由 `ConfigCodec` 管理；不维护历史键 alias；
 4. 默认配置由 `PresetManager` 管理；
 5. runtime 通过 `ConfigReader` -> `LiquidDockConfig`；
 6. 可热切换视觉状态进入对应 runtime state；

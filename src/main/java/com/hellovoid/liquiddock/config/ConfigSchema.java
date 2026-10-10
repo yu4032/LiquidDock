@@ -5,8 +5,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The persisted configuration contract.  Values intentionally retain the distinct defaults
- * used by the UI, injected runtime, and historical export format.
+ * The current persisted configuration contract. UI, runtime, and JSON export defaults
+ * may differ intentionally; no legacy key migrations are performed.
  */
 public final class ConfigSchema {
     private ConfigSchema() {}
