@@ -14,7 +14,11 @@
 
 当前最高价值的性能债务集中在“稳定态仍按帧执行”的路径。原则是优先把 `O(frame)` 工作降为 `O(event)`，而不是简单加节流或固定延迟。
 
+本阶段仅建立可靠的性能测量窗口，不把 Perfetto 埋点当作 CPU 优化；后续以 stable/paging/drag/unlock 的 p95 与节点计数对比决定 dirty-node 策略。
+
 ### P1-A · Launcher Workspace glass per-frame node scan
+
+**最新阶段：已补充分段 Perfetto 诊断，尚未减少每帧扫描。** 分支 `perf/workspace-prescan-tracing-20261010` 在 `LauncherGlassSession` 内仅当 `Trace.isEnabled()` 时采样 `SceneSync / DragNodes / StaticNodes / SourceReconcile`，以及 drag/static candidate 与真实 geometry read 数。此轮没有 dirty cache、没有额外 per-frame log/file write，也未完成真机性能测量。量化步骤见 [Workspace 扫描 Perfetto 指南](docs/workspace-ui-node-scan-perfetto-20261010.md)。
 
 `LauncherGlassSession` 当前在 Launcher root 的 `OnPreDrawListener` 中每帧执行 `syncSceneOnUiThread()`。
 
