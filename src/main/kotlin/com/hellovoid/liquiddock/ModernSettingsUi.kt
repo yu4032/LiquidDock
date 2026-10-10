@@ -1118,6 +1118,7 @@ internal fun SliderPreference(
     enabled: Boolean = true,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int = 0,
+    snapIncrement: Float = 0f,
     endActions: @Composable (() -> Unit)? = null,
     insideMargin: PaddingValues = ModernPreferenceMargin,
 ) {
@@ -1127,12 +1128,10 @@ internal fun SliderPreference(
     val intervals = (steps + 1).coerceAtLeast(1)
     val stepSize = ((valueRange.endInclusive - valueRange.start) / intervals)
         .takeIf { it > 0f } ?: 0.01f
-    fun quantize(raw: Float): Float {
-        if (steps <= 0) return raw.coerceIn(valueRange.start, valueRange.endInclusive)
-        val index = ((raw - valueRange.start) / stepSize).roundToInt()
-        return (valueRange.start + index * stepSize)
-            .coerceIn(valueRange.start, valueRange.endInclusive)
-    }
+    fun quantize(raw: Float): Float = DiscreteSliderSteps.snap(
+        raw, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
+    )
+    val motionThreshold = if (steps > 0 || snapIncrement <= 0f) stepSize else snapIncrement
     val sliderEnabledState = rememberUpdatedState(enabled)
     val sliderCallbackState = rememberUpdatedState(onValueChange)
     val quantizeState = rememberUpdatedState<(Float) -> Float>({ raw -> quantize(raw) })
@@ -1174,8 +1173,9 @@ internal fun SliderPreference(
                 value = stableSliderValue,
                 onValueChange = stableSliderChange,
                 valueRange = valueRange,
-                visibilityThreshold = stepSize,
+                visibilityThreshold = motionThreshold,
                 backdrop = backdrop,
+                snapIncrement = snapIncrement,
                 enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1197,8 +1197,9 @@ internal fun SliderPreference(
             )
         }
     }
+    val inputStep = if (steps > 0 || snapIncrement <= 0f) stepSize else snapIncrement
     val integerOnly = valueRange.start % 1f == 0f &&
-        valueRange.endInclusive % 1f == 0f && stepSize % 1f == 0f
+        valueRange.endInclusive % 1f == 0f && inputStep % 1f == 0f
     NumericSettingInputDialog(
         visible = editingValue,
         title = title,
@@ -1207,7 +1208,7 @@ internal fun SliderPreference(
         integerOnly = integerOnly,
         onDismiss = { editingValue = false },
         onConfirm = { next ->
-            onValueChange(next)
+            onValueChange(quantize(next))
             editingValue = false
         },
     )
