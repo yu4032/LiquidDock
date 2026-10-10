@@ -108,3 +108,11 @@
 **下一证据门槛**：真机采样 static/paging/drag/unlock，并比较静态节点总数与真实 capture 数及各阶段 p95，确认哪条链是 UI 线程瓶颈，再设计完整 dirty-node 失效覆盖范围。操作见 [Workspace Perfetto 测量方案](workspace-ui-node-scan-perfetto-20261010.md)。Perfetto 的存在不证明优化已完成。
 
 - [CI #38044043722](https://github.com/yu4032/LiquidDock/actions/runs/38044043722) 已通过完整 Gradle 单元测试、Debug APK 和仓库安全检查。静态源审计发现 `LauncherGlassStaticNode.captureGeometry` 调用 `LauncherGlassBoundsPolicy.apply` 时会分配新 `float[4]`；这是潜在后续分配优化候选，不可在尚未有帧性能测量时宣称消除此处数组可解决整体掉帧。
+
+
+## 11. Workspace 静态边界数组复用（独立小批次，2026-10-10）
+
+- PR #321 已根据用户确认合并到 `main@8433b12b`，Perfetto 分阶段埋点保留，UI pre-draw static / drag 仍按帧访问。
+- 新 `perf/workspace-geometry-bounds-scratch-20261010` 分支：`LauncherGlassBoundsPolicy.applyInto()` 将原有边界四值写入调用方现有 `geometryPoints[8]`，避免 `LauncherGlassStaticNode.captureGeometry()` 每次调用 `apply()` 额外生成一个 `float[4]`，不增加节点常驻数组。原 `apply()` 及其他调用者不变。
+- 新增数值边界单元测试：正负 offset、极端内缩 1px 矫正、浮点 NaN / 无穷 offset、逆序输入、scratch 尾部不被修改和目标数组尺寸不合法时报错。**此优化只减少可确定的临时分配，无法取代 P1-A 按帧遍历和 Perfetto 实机数据**。
+- 与 GUI PR #319 / #320 无依赖；尚待 CI / 真机稳定桌面、图标、文件夹、小组件、发射代理回归，未经设备验收前不合并。
