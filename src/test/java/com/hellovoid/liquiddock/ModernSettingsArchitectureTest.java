@@ -30,6 +30,10 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/DockDecorationSettingsPages.kt");
     private static final Path UTILITY_PAGES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/SettingsUtilityPages.kt");
+    private static final Path NAVIGATION_MODEL = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SettingsNavigationModel.kt");
+    private static final Path CONTROLS = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SettingsControls.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
     private static final Path SEARCHBOX = Path.of(
@@ -79,7 +83,7 @@ public class ModernSettingsArchitectureTest {
         String prismal = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
         String ui = Files.readString(SURFACES);
-        String activity = Files.readString(UI);
+        String activity = Files.readString(CONTROLS);
         assertTrue(prismal.contains("onValuePreview: (Float?) -> Unit = {}"));
         assertTrue(prismal.contains("previewState.value(preview)"));
         assertTrue(prismal.contains("commitState.value(nearest)"));
@@ -111,7 +115,7 @@ public class ModernSettingsArchitectureTest {
 
     @Test
     public void dangerousGridEditsAreCheckedBeforePersistenceAndDisplayLargeWarning() throws Exception {
-        String gui = Files.readString(UI);
+        String gui = Files.readString(CONTROLS);
         String grid = Files.readString(GRID_PAGES);
         String bridge = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/LauncherManualDiscoveryBridge.java"));
@@ -153,7 +157,8 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
         String source = Files.readString(UI);
-        assertTrue(source.contains(
+        String routes = Files.readString(NAVIGATION_MODEL);
+        assertTrue(routes.contains(
                 "ROOT_PAGES = listOf(Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub)"));
         assertTrue(source.contains("var navigationStack by rememberSaveable"));
         assertTrue(source.contains("fun navigateTo(target: Page)"));
@@ -164,13 +169,14 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void heavySettingsUseDedicatedHubAndPartitionStructures() throws Exception {
         String source = Files.readString(UI);
+        String routes = Files.readString(NAVIGATION_MODEL);
 
         assertTrue(Files.readString(GRID_PAGES).contains("gridEntries.forEach"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("dockEntries.forEach"));
         assertTrue(Files.readString(GLASS_PAGES).contains("liquidEntries.forEach"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("workstationEntries.forEach"));
-        assertTrue(source.contains("animationEntries"));
-        assertTrue(source.contains("highlightEntries"));
+        assertTrue(routes.contains("animationEntries"));
+        assertTrue(routes.contains("highlightEntries"));
 
         assertFalse("old all-in-one liquid list must stay removed",
                 source.contains("liquidSpecs.forEach"));
@@ -265,7 +271,7 @@ public class ModernSettingsArchitectureTest {
 
     @Test
     public void groupedPrismalCardsBoundOffscreenLayersWithoutNestedScroll() throws Exception {
-        String ui = Files.readString(UI);
+        String ui = Files.readString(CONTROLS);
         assertTrue(ui.contains("internal fun LazyListScope.groupedIntSettings("));
         assertTrue(ui.contains("items(specs.chunked(3), key = { group ->"));
         assertTrue(ui.contains("group.forEachIndexed { index, spec ->"));
@@ -280,7 +286,7 @@ public class ModernSettingsArchitectureTest {
 
     @Test
     public void denseSettingsScrollTheWholePageWithLazyMovingGlassCells() throws Exception {
-        String ui = Files.readString(UI);
+        String ui = Files.readString(CONTROLS);
         String surfaces = Files.readString(SURFACES);
 
         assertTrue(ui.contains("internal fun DenseSettingsList("));
@@ -372,12 +378,13 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void singlePreferenceObserverRefreshesOnlyChangedControls() throws Exception {
         String ui = Files.readString(UI);
+        String controls = Files.readString(CONTROLS);
         assertTrue(ui.contains("LocalSettingsPreferenceRevisions"));
         assertTrue(ui.contains("preferences.registerOnSharedPreferenceChangeListener(listener)"));
         assertTrue(ui.contains("preferences.unregisterOnSharedPreferenceChangeListener(listener)"));
-        assertTrue(ui.contains("val revision = LocalSettingsPreferenceRevisions.current[key]"));
-        assertTrue(ui.contains("LaunchedEffect(spec.key, maxValue, storedRevision)"));
-        assertTrue(ui.contains("var value by remember(spec.key, maxValue)"));
+        assertTrue(controls.contains("val revision = LocalSettingsPreferenceRevisions.current[key]"));
+        assertTrue(controls.contains("LaunchedEffect(spec.key, maxValue, storedRevision)"));
+        assertTrue(controls.contains("var value by remember(spec.key, maxValue)"));
     }
 
     @Test
@@ -431,7 +438,7 @@ public class ModernSettingsArchitectureTest {
 
     @Test
     public void parameterRecompositionDoesNotRereadStoredInitialState() throws Exception {
-        String ui = Files.readString(UI);
+        String ui = Files.readString(CONTROLS);
 
         assertTrue(ui.contains("val resetValue = remember(spec.key, maxValue) {"));
         assertTrue(ui.contains("var value by remember(spec.key, maxValue) {"));
@@ -647,7 +654,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(pages.contains("ModernSectionLabel(\"状态\")"));
         assertFalse("home subtitle was intentionally removed", pages.contains("桌面布局与液态玻璃个性化设置"));
         assertTrue(pages.contains("private fun HomePage("));
-        assertTrue(pages.contains("internal fun PageHeader("));
+        assertTrue(Files.readString(CONTROLS).contains("internal fun PageHeader("));
     }
 
     @Test
@@ -715,7 +722,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void numericStepperAndResetKeepNativePrismalWhileOtherCellsStayStatic() throws Exception {
         String surfaces = Files.readString(SURFACES);
-        String ui = Files.readString(UI);
+        String ui = Files.readString(CONTROLS);
         assertTrue(surfaces.contains("val surfaceBackdrop: PrismalBackdrop? = null"));
         assertTrue(surfaces.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
         assertTrue(surfaces.contains("val backdrop = if (prismalNumericAction) {"));
@@ -736,12 +743,12 @@ public class ModernSettingsArchitectureTest {
 
     @Test
     public void appearanceAndMoreRootNavigationStayUserFacingAndFocused() throws Exception {
-        String source = Files.readString(UI);
+        String source = Files.readString(NAVIGATION_MODEL);
         String zh = Files.readString(STRINGS_ZH);
 
         assertTrue(zh.contains("<string name=\"tab_glass\">外观</string>"));
         assertTrue(source.contains(
-                "private val moreEntries = listOf(\n"
+                "internal val moreEntries = listOf(\n"
                         + "    HubEntry(Page.Data, R.string.page_data, \"默认配置、导入与导出\"),\n"
                         + "    HubEntry(Page.About, R.string.page_about, \"第三方开源项目与许可\"),\n"
                         + ")"));
@@ -874,6 +881,8 @@ public class ModernSettingsArchitectureTest {
         String glassPages = Files.readString(GLASS_PAGES);
         String decorationPages = Files.readString(DOCK_DECORATION_PAGES);
         String utilityPages = Files.readString(UTILITY_PAGES);
+        String controls = Files.readString(CONTROLS);
+        String navigation = Files.readString(NAVIGATION_MODEL);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -888,6 +897,7 @@ public class ModernSettingsArchitectureTest {
                 .matcher(compose + "\n" + optionSpecs + "\n" + animationPages + "\n"
                         + dockWorkstationPages + "\n" + gridPages + "\n" + glassPages + "\n"
                         + decorationPages + "\n" + utilityPages + "\n"
+                        + controls + "\n" + navigation + "\n"
                         + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
