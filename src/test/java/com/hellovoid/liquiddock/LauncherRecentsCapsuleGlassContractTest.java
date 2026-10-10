@@ -165,7 +165,7 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(workspace.contains("sourceBackend.setUpdatesEnabled(true, \"recents-shared-root-live\")"));
         assertTrue(workspace.contains("child.onSharedSourceUnavailable(error)"));
         assertTrue(session.contains("onSharedSourceUnavailable(Throwable error)"));
-        assertTrue(capsule.contains("native fallback during transient shared source loss"));
+        assertTrue(capsule.contains("temporary source loss; capsules remain transparent"));
         assertTrue(workspace.contains("child.onSharedSourceFrame(backend, frame)"));
         assertTrue(workspace.contains("hasVisibleRecentsConsumer()"));
         assertTrue(session.contains("boolean isRecentsVisible()"));
