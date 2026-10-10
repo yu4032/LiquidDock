@@ -1,6 +1,6 @@
 # LiquidDock Hook / Listener Map
 
-本文档记录当前 `main`（更新于 2026-10-03，v2.6.1 发布后的主线）的主要 Hook、listener、reflection 和 runtime ownership 边界。
+本文档记录 LiquidDock 的主要 Hook、listener、reflection 和 runtime ownership 边界（原逐项核验于 2026-10-03）。**2026-10-10 源码基线为 `main` / `versionName=2.6.4`**；此次只修正版本标识，未重新完成全部 Hook 的设备级核验。新增或更改的时序以当前源码、契约测试和真实设备记录为准；见 [TODO.md](TODO.md) 与 [可维护性审计](docs/maintainability-audit-20261010.md)。
 
 当前 Xposed scope：
 

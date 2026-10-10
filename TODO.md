@@ -1,14 +1,16 @@
 # LiquidDock TODO FOR AGENT
 
-当前主线：**v2.6.1 发布后的 main / HyperOS 3.0.307+ / Launcher 4.50 / libxposed API 101**（更新于 2026-10-03）。
+基准：**2026-10-10 `main`（`67d596d`）/ `build.gradle.kts` 中 `versionName=2.6.4` / HyperOS 3 平板、Launcher 4.50 适配主线 / libxposed API 101**。`versionName` 是源码构建版本，不等于已发布 Release 版本。
 
 自由网格、横竖屏位置记忆、挤压循环/事务保护和 PR #275 的图标/小组件规划器路由已落地。下面的性能与兼容性条目仍是待验证或待优化事项，不代表上述功能尚未实现。
 
-本文件只记录当前生产代码仍存在的工程债务、兼容性风险和未完成收口。已经落地并通过真机/CI 验证的修复不再保留为 active TODO。
+本文件只把**未完成**的优化、兼容性验证和维护工作列为 active TODO；已验证的阶段成果归入文末“已完成 / 防回归”。状态区分：`源码已证实`、`部分完成`、`待测量`、`待真机验证`，不把静态检查等同于 CI/真机验收。详细证据与风险分层见 [2026-10-10 维护性审计](docs/maintainability-audit-20261010.md)。
+
+维护原则：不从 TODO 反推代码；文档过时先核对源码；不为了减少代码行数合并具有不同 source authority / EGL 生命周期的玻璃 Session；不删有导入导出、迁移、预设或运行时消费的隐藏配置键。
 
 ## P1 · Runtime performance hot paths
 
-**状态：已完成静态热点审计，尚未系统优化。**
+**状态：部分完成，稳定态 CPU 热点仍待量化。** GL program location 缓存和 Dock scratch 数组复用已经落地，详见文末完成项；目前重点是避免稳定帧重复扫描几何与节点。
 
 当前最高价值的性能债务集中在“稳定态仍按帧执行”的路径。原则是优先把 `O(frame)` 工作降为 `O(event)`，而不是简单加节流或固定延迟。
 
@@ -18,7 +20,7 @@
 
 稳定态仍会：
 
-- 复制 drag/static node 集合；
+- 读取 drag/static node 快照数组；
 - 遍历全部 Workspace glass node；
 - 对 drag sink 执行 `syncFromMaterial()`；
 - 对 static node 执行 `captureGeometry()`；
@@ -27,7 +29,7 @@
 - 检查 root rotation；
 - 调用 source backend `reconcileRoot()`。
 
-图标/文件夹/Widget glass 数量增加时，UI 线程成本近似随 node 数量线性增长；在 120Hz 设备上尤其值得优化。
+图标/文件夹/Widget glass 数量增加时，UI 线程成本近似随 node 数量线性增长；在 120/165Hz 等高刷新率设备上尤其值得优化。
 
 目标：
 
@@ -69,11 +71,7 @@
 
 即使最终判定 geometry 未变化，上述前置工作已经发生。
 
-第一步低风险收口：
-
-- 缓存稳定的 `Field/Method` 解析结果；
-- 避免每帧重新 lookup / `setAccessible`；
-- 只在 ViewRoot identity 变化时重新解析。
+已具备 `Field/Method` 缓存字段与 ViewRoot 缓存，不能再把“首次引入反射成员缓存”作为待开发功能。下一步应**量化** `readSurfaceGeometry()` 与 `updateBackdropMapping()` 在稳定帧的成本，验证 ViewRoot 变化时缓存失效是否完整，再考虑用可靠的真实事件缩小轮询范围。
 
 最终目标：
 
@@ -87,64 +85,21 @@
 
 禁止用轮询间隔或 fixed-delay 代替真实 geometry authority。
 
-### P1-C · GL program location caching
+### P1-C · GL primitive deduplication（location caching 已完成）
+**状态：仅重复工具方法待整理。** 对 `LauncherGlassSession`、`RootPassBlurBackend`、`Miuix307PassBlurTextureView`、`ShortcutPopupGlassSession`、`GboardFloatingGlassSession`、`MiuiSearchboxGlassSession`、`RecentsCapsuleGlassSession`、`SecurityCenterGlassSession` 和 `SystemUiHandleMenuPrismalSession` 的源码核验发现，attribute/uniform location 已在 program 建立时获取并缓存；**不要再执行“每帧查询迁出”的旧任务**。
 
-当前多个 production session 在 render loop 中重复调用：
+剩余可选工作：在逐个核对 GL context ownership、shader/attribute 契约、释放语义后，提取无状态 `compileShader/createProgram/bindQuad/unbindQuad` 等基础 helper。禁止合并不同 Session 的 source/recovery 生命周期；任何提取都必须有回归测试。
 
-- `glGetAttribLocation(program, "aPosition")`；
-- `glGetAttribLocation(program, "aUv")`；
-- `glGetUniformLocation(program, "uTexture")`；
-- `glGetUniformLocation(program, "uCropRect")`；
-- 其它 normalize/composite uniform 查询。
+### P1-D · DockGlassCompositor stable-frame scan / dirty fast path
 
-受影响路径包括但不限于：
+**状态：部分完成。** `DockGlassCompositor` 现已保留 `uiFingerprintScratch`、`proxyFingerprintScratch`、`animationSampleScratch` 与 `sceneItemScratch`，不会在每次 refresh 无条件重建这些数组/列表；容量扩张时仍可能分配。
 
-- `LauncherGlassSession`；
-- `RootPassBlurBackend`；
-- `Miuix307PassBlurTextureView`；
-- `ShortcutPopupGlassSession`；
-- `GboardFloatingGlassSession`；
-- `MiuiSearchboxGlassSession`；
-- `RecentsCapsuleGlassSession`；
-- `SecurityCenterGlassSession`；
-- `SystemUiHandleMenuPrismalSession`。
+`refreshUiSceneIfNeeded()` 当前仍在判定 fingerprint 不变之前遍历 `cached`，计算每个 Dock item 的 UI / 动画 / proxy 指纹。因此剩余问题是稳定帧的扫描成本，而非“每帧创建 long[]”：
 
-目标：
-
-- program link 成功后一次性解析 attribute/uniform location；
-- program 生命周期内直接复用 cached int；
-- draw loop 禁止重新 `glGet*Location`；
-- 后续结合公共 GL primitive 收口 `compileShader/createProgram/bindQuad/unbindQuad` 重复。
-
-这是低风险、高确定性的优化，优先于大规模 GL 架构重写。
-
-### P1-D · DockGlassCompositor stable-frame allocations
-
-`DockGlassCompositor.refreshUiSceneIfNeeded()` 当前即使最终场景未变化，也可能先：
-
-- 按 icon 数量分配 `long[] uiFingerprints`；
-- 分配 `long[] proxyFingerprints`；
-- 分配 `DockIconAnimationState.Sample[]`；
-- 遍历全部 Dock item；
-- 每个 item 计算 parent-chain UI fingerprint；
-- 构造临时输出 `ArrayList`。
-
-目标：
-
-- 充分利用 `DockGlassItemRegistry.revision()`；
-- 如果 registry revision、output geometry、workstation state 均未变化且没有 active icon animation/proxy，直接 stable fast-path return；
-- scratch arrays / sample storage 尽量复用；
-- 只有真正 dirty 的 item 重新 capture geometry；
-- 稳定 Dock 不应持续制造短命数组/列表对象。
-
-必须保持：
-
-- Dock resize/recenter；
-- icon add/remove/reorder；
-- drag/floating proxy；
-- opacity animation；
-- workstation radius；
-- output-root transform。
+- 先用 Perfetto / trace 对比有无动画、不同 Dock icon 数量下的真实 UI-thread 成本；
+- 研究 revision、output geometry 与动画状态驱动的 fast-path，确保没有遗漏 parent-chain translation、visibility、drag/proxy、resize/recenter；
+- dirty 的 item 才重新采样 geometry；保持 workstation radius、output-root transform 和 source freshness 不变；
+- 不要盲目缓存可变的 vendor View 状态。
 
 ---
 
@@ -156,8 +111,7 @@
 - 检查 `liquid_edge_band`、`liquid_highlight_alpha`、`liquid_recents_prearm_distance`：当前没有可见 GUI 控件；仍须验证配置链是否仅有声明、预设或历史兼容用途，再决定删除键或保留迁移。
 - 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
 - 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
-- 四边 `SAMPLING_EXTRA_TOP/BOTTOM/LEFT/RIGHT` 的 GUI、schema、预设、运行时读取与手动补偿算法已在 PR #290 完全退役；`ConfigMigration` 在升级时清除遗留值。仅保留 `PrismalSampling.requiredGuardPx` 自动保护区及 GPU 纹理上限裁剪。后续仅需维护自动光学 guard/纹理裁剪测试，不重新引入手动控制。
-- 本项不包括 GUI 滑条拖动掉帧优化；高频 SharedPreferences → Remote Preferences 更新另行性能分析，确保最终值可靠落盘。
+- 本项不包括 GUI 滑条拖动掉帧优化；高频 SharedPreferences → API101 Remote Preferences 更新需另行性能测量，确保最后一次更改可靠落盘。已确认存在 source-listener 增量同步路径，不能无证据宣称每次滑动都重新写全量配置。
 
 ---
 
@@ -244,33 +198,14 @@ Dialog 生命周期短，因此优先级低于 Workspace/Dock。
 
 
 
-**状态：部分完成。**
+## P2 · WidgetGridSizing state ownership / dimensions
 
-`WidgetGridSizing` 当前仍有 process-static：
+**状态：部分完成；旧 TODO 描述已过时。** 当前 `WidgetGridSizing` 的 process-static 开关名为 `customGridEnabled`，通过 `setCustomGridEnabled()` 控制；`isSupportedSpec(spanX, spanY)` 只检查跨度为正值，并无“仅支持 1×1 / 2×1 / 2×2 / 4×2”的硬编码白名单；`gridRect()` 还依据实际 `xs/ys` 数组做边界校验。
 
-```java
-private static volatile boolean widgetAdaptationEnabled;
-```
-
-并且只显式识别：
-
-- 1×1；
-- 2×1；
-- 2×2；
-- 4×2。
-
-后续目标：
-
-- 把 adaptation enable 交给明确的 install/runtime owner；
-- 收口 widget type 判定；
-- 建立集中式 Widget spec registry；
-- 让 `WidgetGridSizing` 只保留纯 geometry/allocation 计算。
-
-不变量：
-
-- 只调整最终 allocation/frame；
-- MIUI placement / occupancy 继续权威；
-- 不重新接管 occupied matrix。
+待办：
+- 明确 `customGridEnabled` 的 install/runtime owner 与重载/退出时序，避免陈旧 process-static 状态；
+- 如确需类型注册表，应先证明现有正跨度 + 实际网格边界不足，不能为了重构重新引入 widget 类型白名单；
+- 保持 CellLayout/MIUI occupancy 权威，只调整最终 allocation/frame；测试旋转、边界与组件居中。 
 
 ---
 
@@ -471,10 +406,11 @@ liquid_shortcut_popup_dark_text
 
 `RuntimeBehaviorTestPolicyContractTest` 已建立 production-source-reader default deny。
 
-当前 `LEGACY_SOURCE_DEBT` 仍为 10 项：
+当前 `LEGACY_SOURCE_DEBT` 为 **11 项**（以 `RuntimeBehaviorTestPolicyContractTest` 的源码集合为准）：
 
 - `GlassConfigGenerationContractTest.java`
 - `Miuix307EdgeOverscanContractTest.java`
+- `PrismalCompositeHotPathContractTest.java`
 - `PrismalModuleBoundaryContractTest.java`
 - `PrismalOfficialParityV3Test.java`
 - `RestartBoundSettingsContractTest.java`
@@ -482,7 +418,6 @@ liquid_shortcut_popup_dark_text
 - `WidgetComponentDiscoveryContractTest.java`
 - `WidgetComponentSelectionContractTest.java`
 - `WidgetMamlRenderTreeDiscoveryContractTest.java`
-- `WorkspaceDropRuleHookContractTest.java`
 - `WorkstationAllAppsHookContractTest.java`
 
 逐项处理：
@@ -491,7 +426,7 @@ liquid_shortcut_popup_dark_text
 - runtime behavior -> typed state/policy test；
 - obsolete -> 删除。
 
-该列表只能减少。
+该列表只能减少。另有 allowlist 内的源码字符串断言（如 `ModernSettingsArchitectureTest`）；它们适合限制静态结构，但不能替代真实状态/交互测试。GUI 拆文件时优先调整测试以检查等价行为，不能为了测试通过保留巨型文件。
 
 ---
 
@@ -516,7 +451,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P2 · Documentation automation
 
-本轮已经重新同步根文档与当前 main，并把历史 superpowers 文档标记为归档。
+2026-10-10 发现多个技术文档仍把 2026-10-03 / v2.6.1 写成当前主线。本文档已与当日源码重新核对关键事实；其他技术文档仅更正可核实的版本元数据，未做逐项 runtime 复验。`docs/superpowers/*` 属于历史方案，不可直接当作当前规范。
 
 后续可以增加轻量 CI：
 
@@ -530,7 +465,27 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ---
 
+## P1 · Code maintainability / regression-safe refactor
+
+**状态：已完成只读风险定位，尚未重构。** 当前单一文件职责集中：`ComposeSettingsActivity.kt` 约 2725 行，`Miuix307PassBlurTextureView.java` 2086 行，`LauncherGlassSession.java` 1436 行，`Launcher450SideSlideHoldHook.java` 1219 行；Java 生产源码大量聚集在根包。详细路径与门槛见 [维护性审计](docs/maintainability-audit-20261010.md)。
+
+优先顺序：
+1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
+2. Gesture：将 `GestureState` 的 DOWN/reset/取消/commit 定义为可测试的状态转换，覆盖连续手势、vendor handoff、代际取消。
+3. PassBlur：先封装不可变几何快照和 GL 资源 owner；不改变 producer/frame sync/rotation/壁纸 generation/错误恢复时序。
+4. 包结构：按域渐进搬迁；必须审核 Xposed 注入、R8、反射二进制名及测试，禁止自动批量移动所有类。
+
+验收门槛：每批独立 PR、CI 测试、源代码 diff/配置键比对；Hook/图形/手势相关变更再实机验证。**本 TODO 更新仅是文档，不声称问题已修复。**
+
+---
+
 # 已完成并只需防回归
+
+## 近期已落地的优化（非完整性能验收）
+
+- **GL program location caching**：主要 Render Session 在 EGL program 初始化后缓存 attribute/uniform location；后续只考虑复用无状态 GL helper，不再把 location 查询当作持续逐帧热点。
+- **Dock scratch 复用**：`DockGlassCompositor` 已用复用数组/列表减少短命对象；稳定态 O(N) 扫描仍列于 P1-D。
+- **自动采样保护区**：四边 `SAMPLING_EXTRA_TOP/BOTTOM/LEFT/RIGHT` 的手动补偿配置已退役，保留自动保护区及纹理上限裁剪；不要恢复无效 GUI 控件。
 
 ## MainHook composition refactor
 
