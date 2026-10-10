@@ -104,6 +104,7 @@ final class LauncherGlassRecentsHook {
                     return result;
                 }
 
+                LauncherRecentsCapsuleGlassHook.onRecentsHidden();
                 LauncherGlassSceneController.setRecentsCoveredForAll(false);
                 MainHook.log(TAG + " Recents HOME return "
                         + (wallpaperAuthorityArmed

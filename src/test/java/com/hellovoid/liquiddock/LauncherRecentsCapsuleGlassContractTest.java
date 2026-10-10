@@ -86,7 +86,9 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(sink.contains("setFocusable(false)"));
         assertTrue(sink.contains("session.attachOutput(targetId"));
         assertTrue(session.contains("RootPassBlurBackend"));
-        assertTrue(session.contains("PassBlurBindRequest.recentsCapsule"));
+        assertTrue(session.contains("workspaceSourceOwner.attachRecentsConsumer(this)"));
+        assertFalse(session.contains("new RootPassBlurBackend("));
+        assertFalse(session.contains("PassBlurBindRequest.recentsCapsule"));
         assertTrue(session.contains("Miuix307PrismalMaterial.fromConfig"));
         assertTrue(session.contains("Miuix307PrismalAdapter.toPortable"));
         assertTrue(session.contains("PrismalRenderer"));
@@ -106,21 +108,26 @@ public class LauncherRecentsCapsuleGlassContractTest {
 
         assertTrue(recents.contains("LauncherRecentsCapsuleGlassHook.onRecentsShown()"));
         assertTrue(capsule.contains("binding.onRecentsShown()"));
-        assertTrue(session.contains(
-                "sourceBackend.setUpdatesEnabled(true, \"recents-capsule-visible\")"));
-        assertTrue(session.contains("sourceBackend.requestFresh(GENERATION)"));
+        assertTrue(session.contains("workspaceSourceOwner.resumeRecentsSharedSource(this)"));
+        assertTrue(recents.contains("LauncherRecentsCapsuleGlassHook.onRecentsHidden()"));
+        assertFalse(session.contains("sourceBackend.setUpdatesEnabled("));
+        assertFalse(session.contains("sourceBackend.requestFresh("));
         assertTrue(bridge.contains("binding.domain == PassBlurDomain.RECENTS_CAPSULE"));
     }
 
-    @Test public void nativeBlurStaysUntilPrismalActuallyPresents() throws Exception {
+    @Test public void enabledCapsulesStayTransparentUntilFirstGpuFrameAndOnFailures() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
-        assertTrue(capsule.contains("MiBlurBridge.applyPassWindowBlur"));
-        assertTrue(capsule.contains("MiBlurBridge.clearPassWindowBlur"));
-        assertTrue(capsule.contains("onFirstFramePresented"));
-        assertTrue(capsule.contains("clearNativeFallback"));
+        assertTrue(capsule.contains("takeOverTransparentBackgrounds()"));
+        assertFalse(capsule.contains("MiBlurBridge.clearPassWindowBlur"));
+        assertFalse(capsule.contains("MiBlurBridge.applyPassWindowBlur"));
+        assertFalse(capsule.contains("applyNativeFallback()"));
+        assertTrue(capsule.contains("capsules remain transparent"));
+        assertTrue(capsule.contains("onSourceUnavailable"));
+        assertTrue(capsule.contains("onFailure"));
+        assertTrue(capsule.contains("if (!GlassRuntimeState.isRecentsCapsuleEnabled()) restoreStockBackground()"));
     }
 
-    @Test public void stockBackgroundIsRemovedOnlyAfterPrismalPresentationAndNativeContentRemains() throws Exception {
+    @Test public void stockBackgroundIsRemovedAtTakeoverAndNativeContentRemains() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         assertTrue(capsule.contains("clearAllStockBackground"));
         assertTrue(capsule.contains("worldStockBackground"));
@@ -144,13 +151,38 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(ui.contains("多任务操作按钮玻璃"));
     }
 
-    @Test public void recentsHasDedicatedPassBlurDomainAndNeverSharesHomeCoverageState() throws Exception {
-        String domain = read("PassBlurDomain.java");
+    @Test public void cleanPatchExcludesExperimentalStallWatchdog() throws Exception {
+        String workspace = read("LauncherGlassSession.java");
+        String recents = read("LauncherGlassRecentsHook.java");
+        assertFalse(workspace.contains("RECENTS_SOURCE_STALL_CHECK_MS"));
+        assertFalse(workspace.contains("sourceBackend.recoverStalledSource("));
+        assertFalse(recents.contains("installNativeWallpaperGestureTrace("));
+    }
+
+    @Test public void recentsUsesOnlyWorkspaceNativeProducerAndDoesNotHotRebindBinder()
+            throws Exception {
         String request = read("PassBlurBindRequest.java");
         String session = read("RecentsCapsuleGlassSession.java");
-        assertTrue(domain.contains("RECENTS_CAPSULE"));
-        assertTrue(request.contains("recentsCapsule"));
-        assertFalse(session.contains("LauncherGlassSessionRegistry"));
-        assertFalse(session.contains("setRecentsCovered"));
+        String workspace = read("LauncherGlassSession.java");
+        String capsule = read("LauncherRecentsCapsuleGlassHook.java");
+        String registry = read("LauncherGlassSessionRegistry.java");
+        assertTrue(session.contains("LauncherGlassSessionRegistry.existingRootSource"));
+        assertTrue(registry.contains("static synchronized LauncherGlassSession existingRootSource"));
+        assertTrue(workspace.contains("child.onSharedSourceFrame(backend, frame)"));
+        assertTrue(workspace.contains("sourceBackend.setUpdatesEnabled(true, \"recents-shared-root-live\")"));
+        assertTrue(workspace.contains("child.onSharedSourceUnavailable(error)"));
+        assertTrue(session.contains("onSharedSourceUnavailable(Throwable error)"));
+        assertTrue(capsule.contains("temporary source loss; capsules remain transparent"));
+        assertTrue(workspace.contains("child.onSharedSourceFrame(backend, frame)"));
+        assertTrue(workspace.contains("hasVisibleRecentsConsumer()"));
+        assertTrue(session.contains("boolean isRecentsVisible()"));
+        assertTrue(session.contains("workspaceSourceOwner.detachRecentsConsumer(this)"));
+        assertFalse(session.contains("sourceBackend.shutdown()"));
+        assertFalse(session.contains("SetPassBlurSurface"));
+        assertFalse(session.contains("new RootPassBlurBackend("));
+        assertTrue(request.contains("RECENTS_CAPSULE_EXTRA_EXCLUSIONS"));
+        String controller = read("LauncherGlassSceneController.java");
+        assertTrue(controller.contains("coveredWithoutSharedRecents"));
+        assertTrue(controller.contains("keepSourceLiveDuringRecents()"));
     }
 }

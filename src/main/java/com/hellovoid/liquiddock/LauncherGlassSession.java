@@ -120,6 +120,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final Handler mainHandler;
     private final FloatBuffer quadBuffer;
     private final RootPassBlurBackend sourceBackend;
+    // One GL-thread source for Workspace and its two Recents capsule outputs.
+    private volatile RecentsCapsuleGlassSession recentsConsumer;
     private final LauncherGlassScrollProjectionState workspaceScrollProjection =
             new LauncherGlassScrollProjectionState();
     // UI-thread scratch. Root-to-global is common to every Workspace node in one pre-draw, so
@@ -238,6 +240,34 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     boolean isShutdown() {
         return shuttingDown;
+    }
+
+    /** A Recents child shares this session's native producer, EGL context and render thread. */
+    synchronized RootPassBlurBackend attachRecentsConsumer(RecentsCapsuleGlassSession child) {
+        if (shuttingDown || !workspaceSource || child == null
+                || (recentsConsumer != null && recentsConsumer != child)) return null;
+        recentsConsumer = child;
+        MainHook.log("[DC][RecentsCapsule] shared Workspace root PassBlur source attached");
+        return sourceBackend;
+    }
+
+    synchronized void detachRecentsConsumer(RecentsCapsuleGlassSession child) {
+        if (recentsConsumer == child) recentsConsumer = null;
+    }
+
+    boolean hasVisibleRecentsConsumer() {
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        return !shuttingDown && child != null && child.isRecentsVisible();
+    }
+
+    void resumeRecentsSharedSource(RecentsCapsuleGlassSession child) {
+        if (shuttingDown || recentsConsumer != child || sourceBackend.isShutdown()) return;
+        // The SceneController pauses this *same* producer when Recents covers Workspace.
+        // Resume it after coverage, without creating or re-publishing a Surface binder.
+        sourceBackend.requestFresh(sceneGeneration, false);
+        sourceBackend.setUpdatesEnabled(true, "recents-shared-root-live");
+        MainHook.log("[DC][RecentsCapsule] shared source resumed generation="
+                + sceneGeneration);
     }
 
     boolean ensureLiveDragSource() {
@@ -980,10 +1010,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
-        if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != sceneGeneration || rotationSettlePending) return;
+        if (shuttingDown || backend != sourceBackend || frame == null) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
+        // The Recents child uses this OES frame on the same GL thread, with its own geometry.
+        // Never reject its frame because Workspace static-output geometry is temporarily stale
+        // or a HOME-only Prismal parameter is unavailable during the Recents transition.
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        if (child != null) child.onSharedSourceFrame(backend, frame);
+        // HOME generation/rotation constraints are separate from the Recents GPU consumer.
+        if (frame.generation != sceneGeneration || rotationSettlePending) return;
+        if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
+
         PrismalParams params = prismalParams;
         if (params == null) return;
         OutputState currentOutput = staticOutput;
@@ -1086,6 +1124,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || generation != sceneGeneration) return;
         MainHook.log(TAG + " source backend failed closed " + debugLabel()
                 + " generation=" + generation + ": " + error);
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        // Native source failure can recover when a fresh root endpoint appears; do not
+        // irreversibly destroy the Recents consumer on a transient bind exhaustion.
+        if (child != null) child.onSharedSourceUnavailable(error);
         Runnable listener = terminalFailureListener;
         if (listener != null) {
             mainHandler.post(() -> {
@@ -1291,6 +1333,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         MainHook.log(TAG + " shutdown " + debugLabel());
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        recentsConsumer = null;
+        if (child != null) child.onSharedSourceFailure(
+                new IllegalStateException("Workspace source owner shut down"));
         WorkspaceTransitionFrameSyncState.Decision frameSyncReset = transitionFrameSync.reset();
         if (frameSyncReset.disable) {
             sourceBackend.setTransitionFrameSyncEnabled(false, "launcher-shutdown");
