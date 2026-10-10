@@ -1547,6 +1547,11 @@ internal fun IntSetting(
     val scaledValue = if (decimalDp) (value * 10f).roundToInt() else value.roundToInt()
     val scaledMin = if (decimalDp) spec.min * 10 else spec.min
     val scaledMax = if (decimalDp) maxValue * 10 else maxValue
+    val sliderSteps = if (steps > 0) steps else
+        DiscreteSliderSteps.forStoragePrecision(spec.min, maxValue, decimalDp)
+    // Storage precision and thumb position must agree. Large ranges avoid
+    // native tick allocation but still snap the floating-point Prismal track.
+    val snapIncrement = if (decimalDp) 0.1f else 1f
 
     Column(modifier = Modifier.fillMaxWidth()) {
         BasicComponent(
@@ -1572,7 +1577,8 @@ internal fun IntSetting(
             onValueChange = ::save,
             valueRange = spec.min.toFloat()..maxValue.toFloat(),
             visibilityThreshold = if (decimalDp) 0.1f else 1f,
-            steps = steps,
+            steps = sliderSteps,
+            snapIncrement = snapIncrement,
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
