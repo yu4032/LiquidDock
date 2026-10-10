@@ -2,9 +2,7 @@ package com.hellovoid.liquiddock;
 
 import androidx.annotation.NonNull;
 
-import com.hellovoid.liquiddock.config.ConfigMigration;
 import com.hellovoid.liquiddock.config.ConfigSchema;
-import com.hellovoid.liquiddock.config.LegacyConfigMigration;
 
 import io.github.libxposed.api.XposedModule;
 
@@ -135,10 +133,6 @@ public final class ModuleMain extends XposedModule {
         }
         if (!LAUNCHER_PACKAGE.equals(packageName)) return;
         try {
-            LegacyConfigMigration.migrateAtProcessStart();
-            ConfigMigration.migrateAtProcessStart();
-            // Legacy migration can introduce the debug preference during this same Launcher start.
-            refreshDebugLogging();
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);

@@ -39,8 +39,7 @@ public class ConfigReader {
             }
             Api101Bridge.log("API101 Remote Preferences are empty; using defaults");
         } catch (Throwable error) {
-            // Runtime config loading is deliberately read-only. One-time pre-API101
-            // migration runs explicitly at the package-ready compatibility boundary.
+            // Runtime config loading is deliberately read-only.
             Api101Bridge.log("API101 Remote Preferences unavailable; using defaults", error);
         }
         return Collections.emptyMap();
