@@ -43,10 +43,12 @@ internal fun SideSlideHoldSetting(
     SliderPreference(
         value = secondStageDistancePx.toFloat(),
         onValueChange = { raw ->
-            val rounded = ((raw / 5f).toInt() * 5).coerceIn(
-                SideSlideHoldFeatureConfig.MIN_SECOND_STAGE_DISTANCE_PX,
-                SideSlideHoldFeatureConfig.MAX_SECOND_STAGE_DISTANCE_PX,
-            )
+            val rounded = DiscreteSliderSteps.snapToIncrement(
+                raw,
+                SideSlideHoldFeatureConfig.MIN_SECOND_STAGE_DISTANCE_PX.toFloat(),
+                SideSlideHoldFeatureConfig.MAX_SECOND_STAGE_DISTANCE_PX.toFloat(),
+                5f,
+            ).toInt()
             secondStageDistancePx = rounded
             prefs.edit().putInt(distanceKey, rounded).apply()
         },
