@@ -210,11 +210,11 @@ private fun WidgetComponentTypePage(
                 SwitchPreference(
                     checked = whiteMode,
                     onCheckedChange = onWhiteModeChanged,
-                    title = "部件白化 · 深色适配",
+                    title = "切换部件白化页面",
                     summary = if (isMaml) {
                         "MAML 使用脚本绘制，暂不支持按精确节点白化"
                     } else {
-                        "仅在小组件玻璃启用后对白色文字和图像生效；独立于隐藏规则，重启桌面生效"
+                        "勾选后进入白化部件选择页面；取消勾选返回隐藏部件选择页面，不会清除已保存的规则"
                     },
                     enabled = !isMaml,
                 )
