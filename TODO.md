@@ -230,6 +230,15 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
+## 12. MAML precise widget foreground adaptation
+
+**状态：待技术核验 / 真机验证。**
+
+RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；MAML 内部元素仍由脚本直接绘制，不使用宿主 View 的全局颜色滤镜代替精确节点适配。
+需要先确认 Launcher 4.50 MAML Text/Image/Shape 可逆颜色 API 与动态表达式更新时序，再决定是否扩展。
+
+---
+
 # Validation queue
 
 ## GUI PR acceptance

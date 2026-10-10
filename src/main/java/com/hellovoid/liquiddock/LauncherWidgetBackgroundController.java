@@ -8,6 +8,8 @@ final class LauncherWidgetBackgroundController {
 
     static void claim(View host) {
         if (host == null) return;
+        // Release color claims before any provider material/background changes.
+        LauncherWidgetWhiteningExecutor.release(host);
         LauncherManualDiscoveryBridge.ensureRegistered(host.getContext());
         // Discovery must observe provider-owned properties before LiquidDock clears the vendor
         // material. In particular Calendar's direct RemoteViews root owns the background that the
@@ -31,6 +33,7 @@ final class LauncherWidgetBackgroundController {
         if (host == null) return;
         // User MAML claims observe the state after bundled compatibility rules have run. Restore
         // them first, then let the bundled rule executor restore the provider's real mShow value.
+        LauncherWidgetWhiteningExecutor.release(host);
         LauncherWidgetComponentSelectionExecutor.release(host);
         if (isMamlHost(host)) {
             LauncherMamlBackgroundRuleExecutor.release(host);

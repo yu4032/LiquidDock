@@ -22,6 +22,8 @@ public final class WidgetComponentStore {
     public static final String DISCOVERY_TOKEN_KEY = "widget_discovery_token";
     public static final String DISCOVERY_REQUEST_KEY = "widget_discovery_request";
     public static final String SELECTION_KEY = "widget_hidden_components";
+    /** Exact-node white foreground choices, separate from hiding rules. */
+    public static final String WHITE_SELECTION_KEY = "widget_white_components";
 
     private static final String REMOTE = "R"; // retired coarse selector, parse-only rejection marker
     public static final String REMOTE_V2 = "R2";

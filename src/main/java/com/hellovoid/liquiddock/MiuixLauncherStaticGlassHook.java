@@ -98,11 +98,16 @@ final class MiuixLauncherStaticGlassHook {
     static void onRuntimeWidgetDarkContentChanged(boolean enabled) {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
             if (!isWidgetHost(host)) continue;
+            LauncherWidgetWhiteningExecutor.release(host);
             if (enabled && host.isAttachedToWindow()
                     && LauncherGlassHierarchy.isWorkspace(host)) {
                 LauncherWidgetDarkContentAdapter.apply(host);
             } else {
                 LauncherWidgetDarkContentAdapter.release(host);
+            }
+            if (host.isAttachedToWindow() && GlassRuntimeState.isWidgetEnabled()
+                    && LauncherGlassHierarchy.isWorkspace(host)) {
+                LauncherWidgetWhiteningExecutor.claim(host);
             }
         }
     }
@@ -515,6 +520,8 @@ final class MiuixLauncherStaticGlassHook {
             } else {
                 LauncherWidgetDarkContentAdapter.release(host);
             }
+            // Exact whiten overrides the optional generic dark-neutral text pass.
+            LauncherWidgetWhiteningExecutor.claim(host);
         }
     }
 

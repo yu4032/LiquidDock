@@ -73,6 +73,20 @@ public class WidgetHiddenRulesBackupTest {
         assertEquals(1, prefs.commitCount());
     }
 
+    @Test public void importingHideRulesRemovesWhiteConflictInOneCommit() {
+        String imageWhite = "R2\tcom.example/.Clock\timage\ticon\tandroid.widget.ImageView\t0/1";
+        String sameImageHide = "R2\tcom.example/.Clock\thide\ticon\tandroid.widget.ImageView\t0/1";
+        String otherWhite = "R2\tcom.example/.Clock\timage\tother\tandroid.widget.ImageView\t0/2";
+        TestSharedPreferences prefs = new TestSharedPreferences(Map.of(
+                WidgetComponentStore.WHITE_SELECTION_KEY, Set.of(imageWhite, otherWhite)));
+        assertTrue(WidgetHiddenRulesBackup.replaceSelections(prefs, Set.of(sameImageHide)));
+        assertEquals(Set.of(sameImageHide),
+                prefs.getStringSet(WidgetComponentStore.SELECTION_KEY, Set.of()));
+        assertEquals(Set.of(otherWhite),
+                prefs.getStringSet(WidgetComponentStore.WHITE_SELECTION_KEY, Set.of()));
+        assertEquals(1, prefs.commitCount());
+    }
+
     private static Class<?> codecClass() {
         try {
             return Class.forName("com.hellovoid.liquiddock.WidgetHiddenRulesBackup");
