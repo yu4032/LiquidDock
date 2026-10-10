@@ -78,4 +78,6 @@
 
 - 第四批（分支 `refactor/gui-grid-settings-pages-20261010`，以 #311 为父）：五个 Grid 页面整体迁出到 `GridSettingsPages.kt`，主 Activity **1902 → 1630 行**；保留 4×2 小组件预检、不确定性拒绝保存、离开页面取消请求、晚到结果复核与原有大按钮警告。仅 `gridEntries` 和跨文件共享的偏好 revision provider 改为 Kotlin `internal`。需检查 CI 和真机，**不要将此分支直接认作主线已完成**。
 
+- **滑条预览与提交边界（#312 后续修复，待实机验收）**：Prismal 拖动时滑块目标位置保持连续浮点运动；数值标签由 `onValuePreview` 使用最近的合法精度（整数、0.1 或显式档位）实时显示，但预览不触发 `SharedPreferences`、配置热更新、Widget 4×2 预检。松手后交给原生 `PrismalSpringMotion` 回弹，吸附到位才执行一次原有业务提交，并清除预览。Miuix 原生滑条通过连续 `nativeDraft` 与 `onValueChangeFinished` 实现相同的预览/提交分离。加减、重置和手工输入仍直接提交，不经过拖动预览。此交互变更不是仅移动代码，须专门实机检查滑块手感、数值同步与预检拒绝后的回滚。
+
 阶段性边界：各批次均没有重新实现 UI、修改持久化键、引入额外采样或触动 PassBlur/GL/Hook。后续仍须继续拆分主 Activity 内的 Glass/Data 等页面，检查 GUI 来源测试对特定源文件的耦合，并在视觉/行为验证之后才合并。不能将文件行数下降解释为 FPS 或 GPU 占用改善。
