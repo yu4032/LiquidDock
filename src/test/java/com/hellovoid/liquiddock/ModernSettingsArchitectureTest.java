@@ -349,7 +349,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(cards.contains("specular"));
         assertTrue(cards.contains("applyPrismalGlassEffects("));
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
-        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(Files.readString(BOTTOM_NAV).contains("PrismalGlassBottomTabs("));
     }
 
     @Test
@@ -841,7 +841,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains(".clip(cardShape)"));
         assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
         assertTrue(surfaces.contains("PrismalGlassSurface("));
-        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(Files.readString(BOTTOM_NAV).contains("PrismalGlassBottomTabs("));
     }
 
     @Test
