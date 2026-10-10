@@ -1116,6 +1116,7 @@ internal fun SliderPreference(
     title: String,
     summary: String? = null,
     valueText: String = "",
+    valueTextForPreview: ((Float) -> String)? = null,
     enabled: Boolean = true,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int = 0,
@@ -1126,6 +1127,7 @@ internal fun SliderPreference(
     val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
     var editingValue by remember(title) { mutableStateOf(false) }
+    var previewValue by remember(title) { mutableStateOf<Float?>(null) }
     val intervals = (steps + 1).coerceAtLeast(1)
     val stepSize = ((valueRange.endInclusive - valueRange.start) / intervals)
         .takeIf { it > 0f } ?: 0.01f
@@ -1146,6 +1148,7 @@ internal fun SliderPreference(
     // The preference callback runs once, after release, at the nearest stop.
     var nativeDragging by remember { mutableStateOf(false) }
     var nativeDraft by remember { mutableFloatStateOf(value) }
+    val shownValueText = previewValue?.let { valueTextForPreview?.invoke(it) } ?: valueText
 
     Column {
         BasicComponent(
@@ -1158,9 +1161,9 @@ internal fun SliderPreference(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (valueText.isNotBlank()) {
+                    if (shownValueText.isNotBlank()) {
                         Text(
-                            text = valueText,
+                            text = shownValueText,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable(enabled = enabled) { editingValue = true }
@@ -1182,6 +1185,7 @@ internal fun SliderPreference(
                 backdrop = backdrop,
                 steps = steps,
                 snapIncrement = snapIncrement,
+                onValuePreview = { previewValue = it },
                 enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1195,6 +1199,7 @@ internal fun SliderPreference(
                     if (enabled) {
                         nativeDraft = next
                         nativeDragging = true
+                        previewValue = quantizeState.value(next)
                     }
                 },
                 onValueChangeFinished = {
@@ -1202,6 +1207,7 @@ internal fun SliderPreference(
                         val released = nativeDraft
                         nativeDragging = false
                         sliderCallbackState.value(quantizeState.value(released))
+                        previewValue = null
                     }
                 },
                 valueRange = valueRange,
@@ -1240,11 +1246,16 @@ internal fun ModernGlassSlider(
     modifier: Modifier = Modifier,
     steps: Int = 0,
     snapIncrement: Float = 0f,
+    onValuePreview: (Float?) -> Unit = {},
 ) {
     val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
     val sliderEnabledState = rememberUpdatedState(enabled)
     val sliderCallbackState = rememberUpdatedState(onValueChange)
+    val previewCallbackState = rememberUpdatedState(onValuePreview)
+    val stableSliderPreview: (Float?) -> Unit = remember {
+        { next -> previewCallbackState.value(next) }
+    }
     val stableSliderValue = remember { { currentValue } }
     val stableSliderChange: (Float) -> Unit = remember {
         { next -> if (sliderEnabledState.value) sliderCallbackState.value(next) }
@@ -1261,6 +1272,7 @@ internal fun ModernGlassSlider(
             enabled = enabled,
             steps = steps,
             snapIncrement = snapIncrement,
+            onValuePreview = stableSliderPreview,
             modifier = modifier.alpha(if (enabled) 1f else 0.42f),
         )
     } else {
@@ -1270,6 +1282,10 @@ internal fun ModernGlassSlider(
                 if (enabled) {
                     nativeDraft = next
                     nativeDragging = true
+                    previewCallbackState.value(DiscreteSliderSteps.snap(
+                        next, valueRange.start, valueRange.endInclusive,
+                        steps, snapIncrement,
+                    ))
                 }
             },
             onValueChangeFinished = {
@@ -1280,6 +1296,7 @@ internal fun ModernGlassSlider(
                     )
                     nativeDragging = false
                     sliderCallbackState.value(nearest)
+                    previewCallbackState.value(null)
                 }
             },
             valueRange = valueRange,
