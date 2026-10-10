@@ -320,7 +320,9 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(hook.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name()"));
 
         // UI is reached through the lightweight glass menus page.
-        assertTrue(settings.contains("DialogCustomization(R.string.page_dialog_customization)"));
+        String navigation = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsNavigationModel.kt"));
+        assertTrue(navigation.contains("DialogCustomization(R.string.page_dialog_customization)"));
         assertTrue(glassPages.contains("internal fun GlassMenusPage("));
         assertTrue(glassPages.contains("onClick = { open(Page.DialogCustomization) }"));
         assertTrue(dialogPage.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
