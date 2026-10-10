@@ -62,7 +62,7 @@
 
 ### P1-B · Dock PassBlur geometry polling
 
-**本轮状态：已增加 Perfetto 分段归因，待 CI/实机采样，未取消每帧轮询。** 分支 `perf/dock-predraw-stage-tracing-20261010` 对 `ProducerGeometry / ReadSurfaceGeometry / BackdropMapping / UiSceneFingerprint` 增加 `Trace.isEnabled()` gated sections，完整路径见 [Dock pre-draw Perfetto 指南](docs/dock-predraw-perfetto-20261010.md)。不改变采样、rebind、force-refresh 帧同步或投影规则，也不能声称已解决性能瓶颈。
+**本轮状态：已增加 Perfetto 分段归因，[CI #38047653519](https://github.com/yu4032/LiquidDock/actions/runs/38047653519) 通过，待实机采样，未取消每帧轮询。** 分支 `perf/dock-predraw-stage-tracing-20261010` 对 `ProducerGeometry / ReadSurfaceGeometry / BackdropMapping / UiSceneFingerprint` 增加 `Trace.isEnabled()` gated sections，完整路径见 [Dock pre-draw Perfetto 指南](docs/dock-predraw-perfetto-20261010.md)。不改变采样、rebind、force-refresh 帧同步或投影规则，也不能声称已解决性能瓶颈。
 
 `Miuix307PassBlurTextureView` 当前 root pre-draw 每帧：
 

@@ -124,4 +124,4 @@
 - 本分支 `perf/dock-predraw-stage-tracing-20261010` 基于该主线，围绕 `Miuix307PassBlurTextureView.installGeometryObserver` 的 `OnPreDrawListener` 新增 `Trace.isEnabled()` 控制的 `LD.Dock.GeometryPreDraw / ProducerGeometry / BackdropMapping`，并细分 `ReadSurfaceGeometry` 和 `UiSceneFingerprint` 两段。
 - **测量而不是优化声明**：原有 UI 线程更新、反射缓存、BufferGeometry rebind、Dock 场景指纹、UV crop、Prismal optical source freshness、GL producer 交换及 force-refresh 租约均未改时序。没有新增截图或 per-frame 同步磁盘日志。
 - 现存消耗分两类：root/Surface 状态轮询与 `DockGlassCompositor` 的图标指纹遍历。尚无设备实测 p95 数据；下一步根据 [Dock Perfetto 方案](dock-predraw-perfetto-20261010.md) 对稳定态与动画、工作台/旋转场景分别归因，后续才逐项设计明确的失效边界。不能凭函数调用频率推断主因。
-- 本 PR CI 与设备验证待完成；维持和 GUI #319/#320 的分支隔离。
+- [CI #38047653519](https://github.com/yu4032/LiquidDock/actions/runs/38047653519) 已通过单元测试、Debug APK 和安全检查；设备 Perfetto 数据仍待采集。维持和 GUI #319/#320 的分支隔离。

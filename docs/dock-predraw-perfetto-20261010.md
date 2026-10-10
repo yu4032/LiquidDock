@@ -1,6 +1,6 @@
 # Dock PassBlur pre-draw stage attribution — Perfetto
 
-**Status:** Instrumentation-only change on `perf/dock-predraw-stage-tracing-20261010`. No geometry cache, redraw throttling or claimed frame-rate improvement. Source baseline: merged `main@089c76b2` (P1-A Workspace bounds optimization already accepted).
+**Status:** Instrumentation-only change on `perf/dock-predraw-stage-tracing-20261010`, [CI #38047653519](https://github.com/yu4032/LiquidDock/actions/runs/38047653519) successful; on-device profiling outstanding. No geometry cache, redraw throttling or claimed frame-rate improvement. Source baseline: merged `main@089c76b2` (P1-A Workspace bounds optimization already accepted).
 
 ## What this measures
 
