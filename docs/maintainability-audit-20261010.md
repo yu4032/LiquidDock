@@ -67,19 +67,20 @@
 
 ## 7. GUI 结构重构进度（2026-10-10）
 
-已进入 `main`、经用户确认实机有效：
+以 GitHub 合并状态、源码及验收反馈为准，不把文件迁移视为渲染性能优化。
 
-- [PR #309](https://github.com/yu4032/LiquidDock/pull/309)：`IntSpec`、分组规格和光学描述符迁到 `SettingsOptionSpecs.kt`；主 Activity **2725 → 2312** 行，CI [#38022079774](https://github.com/yu4032/LiquidDock/actions/runs/38022079774) 成功；已合并。
-- [PR #310](https://github.com/yu4032/LiquidDock/pull/310)：五个 Animation leaf pages 与八个 animation option spec 独立；主 Activity **2312 → 2166** 行，CI [#38022729294](https://github.com/yu4032/LiquidDock/actions/runs/38022729294) 成功；已合并。
+已合并至 `main`：
 
-第四批重构验收记录（下列状态描述为合并前的阶段快照；实际合并状态以 PR 为准）：
+- [#309](https://github.com/yu4032/LiquidDock/pull/309)：参数规格抽离到 `SettingsOptionSpecs.kt`，原 Activity 2725 → 2312 行；CI 通过、用户确认有效。
+- [#310](https://github.com/yu4032/LiquidDock/pull/310)：Animation 五个叶页面单独成文件，2312 → 2166 行；CI 通过、用户确认有效。
+- [#311](https://github.com/yu4032/LiquidDock/pull/311)：Dock、Divider、Workstation、Recents 七个页面独立，2166 → 1902 行；CI 通过，已合并。
+- [#312](https://github.com/yu4032/LiquidDock/pull/312)：Grid 五个页面独立；**同时包含之后补充的滑条连续拖动、预览最近合法精度、松手吸附再提交的行为修复**，所以不能将整个 PR 声称为纯结构性调整。当前合并后主 Activity 为 **1646 行**（最初从 Grid 迁移时的 1630 行是中间快照）。
 
-- [PR #311](https://github.com/yu4032/LiquidDock/pull/311)：七个 Dock、Divider、Workstation、Recents leaf pages 迁移至 `DockWorkstationSettingsPages.kt`；主 Activity 分支现为 **1902 行**。代码与逻辑逐字保持等价，所需 `private → internal` 可见性例外已记录；CI [#38023359767](https://github.com/yu4032/LiquidDock/actions/runs/38023359767) 的单元测试、Debug/R8 构建和产物上传成功；需单独实机验收。
+分支内进行中（未合并，待 CI 和独立实机验证）：
 
-- 第四批（分支 `refactor/gui-grid-settings-pages-20261010`，以 #311 为父）：五个 Grid 页面整体迁出到 `GridSettingsPages.kt`，主 Activity **1902 → 1630 行**；保留 4×2 小组件预检、不确定性拒绝保存、离开页面取消请求、晚到结果复核与原有大按钮警告。仅 `gridEntries` 和跨文件共享的偏好 revision provider 改为 Kotlin `internal`。需检查 CI 和真机，**不要将此分支直接认作主线已完成**。
+- `refactor/gui-glass-pages-20261010`：迁移 `LiquidPage`、`LiquidSpecPage`、`LiquidSamplingPage`、`GlassComponentsPage`、`GlassIconsPage`、`GlassWidgetsPage`、`GlassFoldersPage`、`GlassMenusPage`、`LauncherHighlightsPage`、`LauncherHighlightTogglePage` 至 `GlassSettingsPages.kt`。
+- 主 Activity **1646 → 1198 行**；除文件归属与 `private → internal`（hub/入口）外，不修改已实现的 Prismal 列表、组件启用依赖、配置保存、帧同步开关和光学参数。
+- 需确认 ConfigSchema 引用、Composable 数量、源码契约测试迁移；真实设备检查玻璃主开关、图标/小组件/文件夹、快捷菜单入口、高光分组、采样和 GUI 连续滑条。
+- 保留 `ModernSettingsArchitectureTest` 等 source-level 检查但更新其文件所有权；长期目标是转为 API/行为测试，而非再加一个“巨型 Activity 必须包含字符串”的约束。
 
-- **滑条预览与提交边界（#312 后续修复，待实机验收）**：Prismal 拖动时滑块目标位置保持连续浮点运动；数值标签由 `onValuePreview` 使用最近的合法精度（整数、0.1 或显式档位）实时显示，但预览不触发 `SharedPreferences`、配置热更新、Widget 4×2 预检。松手后交给原生 `PrismalSpringMotion` 回弹，吸附到位才执行一次原有业务提交，并清除预览。Miuix 原生滑条通过连续 `nativeDraft` 与 `onValueChangeFinished` 实现相同的预览/提交分离。加减、重置和手工输入仍直接提交，不经过拖动预览。此交互变更不是仅移动代码，须专门实机检查滑块手感、数值同步与预检拒绝后的回滚。
-
-用户可见文案收敛：网格降为 3 行/列时仍先做 4×2 小组件安全预检，警告只说明检测到 4×2 小组件及修改未保存，不再额外解释旋转后的 2×4 形态；这只改变提示文本，不改变布局合法性、失败闭合、预检接口与弹窗按钮样式。
-
-阶段性边界：各批次均没有重新实现 UI、修改持久化键、引入额外采样或触动 PassBlur/GL/Hook。后续仍须继续拆分主 Activity 内的 Glass/Data 等页面，检查 GUI 来源测试对特定源文件的耦合，并在视觉/行为验证之后才合并。不能将文件行数下降解释为 FPS 或 GPU 占用改善。
+风险界限：GUI 的文件拆分不触及 PassBlur/EGL、渲染 producer、LSPosed Hook。所有编译和静态检查结果必须与实机验收区别记录，完成后更新 TODO 状态。
