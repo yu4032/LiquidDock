@@ -1,5 +1,12 @@
 package com.hellovoid.liquiddock
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -9,7 +16,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -17,12 +23,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -50,11 +58,24 @@ internal fun RestartScopesDialog(
     onDismiss: () -> Unit,
     onRestart: (Set<String>) -> Unit,
 ) {
-    if (!visible) return
     // Restart dialog is body chrome. It must not sample the header/footer
     // backdrop or install Prismal's per-control gesture/shader pipeline.
     val backdrop = LocalPrismalSurfaceBackdrop.current
-
+    // The scrim fades without changing backdrop ownership; only the panel
+    // receives the spring scale (never scale the complete fullscreen scrim).
+    val panelScale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.94f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "restart-panel-scale",
+    )
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(190)),
+        exit = fadeOut(tween(170)),
+    ) {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -67,6 +88,7 @@ internal fun RestartScopesDialog(
             modifier = Modifier
                 .padding(horizontal = 20.dp, vertical = 28.dp)
                 .widthIn(max = 520.dp)
+                .graphicsLayer { scaleX = panelScale; scaleY = panelScale }
                 // Consume taps on the dialog panel without installing an
                 // interactive Prismal surface over its child switches/buttons.
                 .clickable(onClick = {}),
@@ -171,6 +193,7 @@ internal fun RestartScopesDialog(
                 }
             }
         }
+    }
     }
 }
 

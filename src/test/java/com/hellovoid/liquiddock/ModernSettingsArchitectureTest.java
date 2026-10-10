@@ -410,7 +410,7 @@ public class ModernSettingsArchitectureTest {
     public void defaultPresetRequiresConfirmationAndRecreatesSettingsState() throws Exception {
         String ui = Files.readString(UI);
         assertTrue(Files.readString(UTILITY_PAGES).contains("confirmDefaultReset = true"));
-        assertTrue(Files.readString(UTILITY_PAGES).contains("WindowDialog("));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("AnimatedSettingsWindowDialog("));
         assertTrue(Files.readString(UTILITY_PAGES).contains("确认恢复默认配置"));
         assertTrue(Files.readString(UTILITY_PAGES).contains("activity.recreate()"));
     }
@@ -621,9 +621,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
         assertTrue(bottom.contains("labels.indices.forEach { index ->"));
-        assertTrue(bottom.contains("ModernTabContents(label, icons[index], index == selected)"));
+        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
-        assertFalse(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
+        assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
         assertTrue(bottom.contains("indication = null"));
         assertFalse(bottom.contains("Modifier.matchParentSize()\n                    .padding(4.dp)"));
     }
@@ -674,9 +674,9 @@ public class ModernSettingsArchitectureTest {
         String bottom = Files.readString(BOTTOM_NAV);
         assertTrue(bottom.contains("labels.indices.forEach { index ->"));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
-        assertTrue(bottom.contains(") {}"));
-        assertTrue(bottom.contains("ModernTabContents(label, icons[index], index == selected)"));
-        assertFalse(bottom.contains("LocalPrismalBottomTabHighlightedIndex"));
+        assertTrue(bottom.contains("SideEffect {"));
+        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
+        assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex"));
         assertTrue(bottom.contains("tintDropletContent = false"));
     }
 
@@ -853,7 +853,7 @@ public class ModernSettingsArchitectureTest {
         String sideSlide = Files.readString(SIDE_SLIDE);
 
         assertTrue(surfaces.contains("internal fun NumericSettingInputDialog("));
-        assertTrue(surfaces.contains("WindowDialog("));
+        assertTrue(surfaces.contains("AnimatedSettingsWindowDialog("));
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.TextField("));
         assertTrue(surfaces.contains("keyboardActions = KeyboardActions("));
         assertTrue(surfaces.contains(".clickable(enabled = enabled) { editingValue = true }"));
@@ -964,6 +964,50 @@ public class ModernSettingsArchitectureTest {
                 .matcher(source);
         while (matcher.find()) refs.add(matcher.group());
         return refs.size();
+    }
+
+    @Test
+    public void glassSettingsDialogsUseMeasuredSpringMotionWithoutExtraSampling() throws Exception {
+        String motion = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsDialogMotion.kt"));
+        String reset = Files.readString(UTILITY_PAGES);
+        String grid = Files.readString(GRID_PAGES);
+        String numeric = Files.readString(SURFACES);
+        String restart = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt"));
+
+        assertTrue(reset.contains("AnimatedSettingsWindowDialog("));
+        assertTrue(grid.contains("AnimatedSettingsWindowDialog("));
+        assertTrue(numeric.contains("AnimatedSettingsWindowDialog("));
+        assertTrue(motion.contains("WindowDialog("));
+        assertTrue(motion.contains("show || transition.currentState || transition.isRunning"));
+        assertTrue(motion.contains("Spring.DampingRatioNoBouncy"));
+        assertTrue(motion.contains("scaleX = panelScale"));
+        assertTrue(motion.contains("translationY = panelOffset"));
+        assertTrue(restart.contains("AnimatedVisibility("));
+        assertTrue(restart.contains("enter = fadeIn("));
+        assertTrue(restart.contains("exit = fadeOut("));
+        assertTrue(restart.contains("graphicsLayer { scaleX = panelScale; scaleY = panelScale }"));
+        assertTrue(restart.contains("GuiOnTouchPrismalToggle("));
+        assertFalse(motion.contains("rememberPrismalGlassLayer"));
+        assertFalse(motion.contains("PixelCopy"));
+    }
+
+    @Test
+    public void prismalBottomTabsBridgeDragIndexWithoutDuplicatingVisibleGlyphs() throws Exception {
+        String bottom = Files.readString(BOTTOM_NAV);
+        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("PrismalGlassBottomTab("));
+        assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
+        assertTrue(bottom.contains("if (index == 0) {"));
+        assertTrue(bottom.contains("SideEffect {"));
+        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
+        assertTrue(bottom.contains("draggingCandidate = highlightedIndex.intValue != selected"));
+        assertTrue(bottom.contains("val contentColor by animateColorAsState("));
+        assertTrue(bottom.contains("val contentScale by animateFloatAsState("));
+        assertTrue(bottom.contains("tintDropletContent = false"));
+        assertFalse(bottom.contains("rememberPrismalGlassLayer("));
+        assertFalse(bottom.contains("drawPrismalGlass("));
     }
 
 }

@@ -16,19 +16,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.styropyr0.prismal.components.LocalPrismalBottomTabHighlightedIndex
 import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import top.yukonga.miuix.kmp.basic.Icon
@@ -48,6 +58,13 @@ internal fun ModernBottomNavigation(
     val backdrop = LocalPrismalOverlayBackdrop.current
     val selected by rememberUpdatedState(selectedIndex)
     val onSelect by rememberUpdatedState(onSelected)
+    // Read the upstream drag candidate from inside the actual native tab
+    // CompositionLocal. Outside siblings cannot observe that local directly.
+    // Report only the index, never duplicate glyphs into the hidden sampler.
+    val highlightedIndex = remember { mutableIntStateOf(selectedIndex) }
+    LaunchedEffect(selectedIndex) {
+        highlightedIndex.intValue = selectedIndex
+    }
     val stableSelectedIndex = remember { { selected } }
     val stableTabChange: (Int) -> Unit = remember {
         { index -> if (index != selected) onSelect(index) }
@@ -84,7 +101,20 @@ internal fun ModernBottomNavigation(
                             onClick = {
                                 if (index != selected) onSelect(index)
                             },
-                        ) {}
+                        ) {
+                            // The upstream body is composed twice (visible and
+                            // hidden recording pass). Only the first tab needs
+                            // to report the shared candidate; no glyph is added.
+                            if (index == 0) {
+                                val highlighted = LocalPrismalBottomTabHighlightedIndex.current
+                                val currentCandidate = highlighted().coerceIn(0, labels.lastIndex)
+                                SideEffect {
+                                    if (highlightedIndex.intValue != currentCandidate) {
+                                        highlightedIndex.intValue = currentCandidate
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 // Draw labels and icons once above the droplet, without a second
@@ -105,7 +135,13 @@ internal fun ModernBottomNavigation(
                             ),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            ModernTabContents(label, icons[index], index == selected)
+                            ModernTabContents(
+                                label = label,
+                                icon = icons[index],
+                                active = index == highlightedIndex.intValue,
+                                draggingCandidate = highlightedIndex.intValue != selected &&
+                                    index == highlightedIndex.intValue,
+                            )
                         }
                     }
                 }
@@ -159,17 +195,36 @@ internal fun ModernBottomNavigation(
 }
 
 @Composable
-private fun ModernTabContents(label: String, icon: ImageVector, active: Boolean) {
-    val contentColor = if (active) {
-        MiuixTheme.colorScheme.primary
-    } else {
-        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
-    }
+private fun ModernTabContents(
+    label: String,
+    icon: ImageVector,
+    active: Boolean,
+    draggingCandidate: Boolean = false,
+) {
+    val contentColor by animateColorAsState(
+        targetValue = if (active) {
+            MiuixTheme.colorScheme.primary
+        } else {
+            MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
+        },
+        animationSpec = tween(130),
+        label = "bottom-tab-glyph-color",
+    )
+    val contentScale by animateFloatAsState(
+        targetValue = if (draggingCandidate) 1.05f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "bottom-tab-glyph-scale",
+    )
     Icon(
         imageVector = icon,
         contentDescription = label,
         tint = contentColor,
-        modifier = Modifier.size(21.dp),
+        modifier = Modifier
+            .size(21.dp)
+            .graphicsLayer { scaleX = contentScale; scaleY = contentScale },
     )
     Text(
         text = label,
@@ -178,6 +233,10 @@ private fun ModernTabContents(label: String, icon: ImageVector, active: Boolean)
         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.graphicsLayer {
+            scaleX = contentScale
+            scaleY = contentScale
+        },
     )
 }
 

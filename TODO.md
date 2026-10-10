@@ -49,6 +49,11 @@
 - fresh generation / source authority；
 - 不重新引入固定时间 capture pump。
 
+### P1-D · GUI 玻璃弹窗动画验收
+
+- [#318](https://github.com/yu4032/LiquidDock/pull/318) 的数值输入、默认恢复、Grid 安全提醒和重启作用域弹窗增加进出场动画；使用 Compose spring/tween 尽量延续 Prismal 的动效语言，但不替换 MIUIX 窗口的键盘与焦点管线，也不新增采样层。验收：正常打开/取消关闭、快速重入、系统返回键、输入法焦点、弹窗重启操作与底栏拖动无冲突。
+- PrismalAGSL v1.0.4 没有可直接代替现有 MIUIX WindowDialog 的原生 modal，**不可声称是 Prismal 原生窗口动画**；仅是匹配其 spring 手感。确认 GPU/布局不会因弹窗动画额外抖动后再合并。
+
 ### P1-B · Dock PassBlur geometry polling
 
 `Miuix307PassBlurTextureView` 当前 root pre-draw 每帧：
@@ -112,7 +117,7 @@
 - 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
 - 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
 - GUI 滑条从“松手后写入”调整为**右侧数值每跨一个合法档位就实时写入**（#314，待实机确认）。同档位去重，避免无意义的每帧写入。SharedPreferences → API101 Remote Preferences 的延迟、拖动帧率和最终落盘可靠性仍需实测；4×2 网格预检继续优先于风险档位的写入。
-- **Prismal GUI 底栏视觉完整性**：现有原生玻璃背景、胶囊形变和拖动回弹有效，但 native `PrismalGlassBottomTab` 内容为空，外置图文单遍绘制规避了历史长按重影；目前失去原生图文的按压缩放、拖动中即时高亮和镜片内内容折射。详见 [审查报告](docs/gui-prismal-bottom-navigation-audit-20261010.md)。保持不重影优先；先分离导航/视觉权责，再以独立小 PR 验证单份图文的高亮/形变，后续另行研究镜片，绝不把完整图文重复放回两层。
+- **Prismal GUI 底栏视觉完整性**：已确认原生胶囊模糊/折射/回弹运行，文字因历史重影问题采用单份 overlay。[#318](https://github.com/yu4032/LiquidDock/pull/318) 尝试桥接 native `LocalPrismalBottomTabHighlightedIndex` 的拖动中即时高亮和轻缩放，需真机确认长按、快速拖动及切页不闪烁/不重影。**仍未恢复**胶囊对图文字形的实际镜片折射，也尚未桥接原生按压比例 `LocalPrismalBottomTabScale`（上游为 internal）；后续不能简单重复图文或修改上游。详见 [审查报告](docs/gui-prismal-bottom-navigation-audit-20261010.md)。
 
 ---
 
@@ -468,7 +473,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 架构拆分持续进行，图形与 Hook 大类仍为独立任务。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#316](https://github.com/yu4032/LiquidDock/pull/316) 已合并到 `main`；主 Activity 已降到约 **536 行**，但 `ModernSettingsUi.kt` 仍存在高耦合界面职责。当前第八批 `refactor/gui-prismal-bottom-navigation-20261010` 仅将原有 Prismal 底栏和重启作用域弹窗迁入独立文件（保留交互行为），并出具 [底栏光学审查](docs/gui-prismal-bottom-navigation-audit-20261010.md)，**分支尚需 CI 和实机验收**。#314 滑条显示值实时写入属于行为改动，仍需设备回归。
+**状态：GUI 模块拆分已完成八批，交互动画独立推进。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#317](https://github.com/yu4032/LiquidDock/pull/317) 已并入 `main`，其中 #317 的 Prismal 底栏与重启弹窗拆分经用户实机验证。当前 [#318](https://github.com/yu4032/LiquidDock/pull/318) 在独立分支为三类 MIUIX 弹窗和重启作用域弹窗增加 spring/fade 过渡，并以原生 Tab 的拖动候选状态桥接单份图文的高亮与轻缩放，**尚待 CI 与实机验收，不得记为已发布效果**。主 Activity 约 536 行；GPU/Hook 大类另列维护任务。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
