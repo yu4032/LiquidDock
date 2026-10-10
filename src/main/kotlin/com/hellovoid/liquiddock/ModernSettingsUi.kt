@@ -1222,6 +1222,7 @@ internal fun ModernGlassSlider(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
     steps: Int = 0,
+    snapIncrement: Float = 0f,
 ) {
     val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
@@ -1240,13 +1241,18 @@ internal fun ModernGlassSlider(
             backdrop = backdrop,
             enabled = enabled,
             steps = steps,
+            snapIncrement = snapIncrement,
             modifier = modifier.alpha(if (enabled) 1f else 0.42f),
         )
     } else {
         top.yukonga.miuix.kmp.basic.Slider(
             value = currentValue,
             onValueChange = { next ->
-                if (enabled) onValueChange(next)
+                if (enabled) onValueChange(
+                    DiscreteSliderSteps.snap(
+                        next, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
+                    ),
+                )
             },
             valueRange = valueRange,
             steps = steps,
