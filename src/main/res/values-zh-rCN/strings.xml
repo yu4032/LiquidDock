@@ -112,6 +112,6 @@
     <string name="page_launcher_highlights_compact">图标与小文件夹高光</string>
     <string name="page_launcher_highlights_large">小组件与大文件夹高光</string>
     <string name="action_restart_scopes">重启作用域</string>
-    <string name="settings_glass_effect">设置界面玻璃效果</string>
+    <string name="settings_glass_effect">IOS玻璃效果</string>
     <string name="settings_glass_effect_summary">控制设置界面的玻璃背景、控件与底栏效果；关闭后立即切换为普通界面，不影响桌面和其他 Hook 功能</string>
 </resources>

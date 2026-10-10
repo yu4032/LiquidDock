@@ -81,11 +81,9 @@ public class RuntimeBehaviorTestPolicyContractTest {
      * make the gate green. When one of these tests is migrated, remove its entry in the same change.
      */
     private static final Set<String> LEGACY_SOURCE_DEBT = Set.of(
-            "GlassConfigGenerationContractTest.java",
             "Miuix307EdgeOverscanContractTest.java",
             "PrismalCompositeHotPathContractTest.java",
             "PrismalModuleBoundaryContractTest.java",
-            "PrismalOfficialParityV3Test.java",
             "RestartBoundSettingsContractTest.java",
             "WidgetBackgroundRankingUiContractTest.java",
             "WidgetComponentDiscoveryContractTest.java",

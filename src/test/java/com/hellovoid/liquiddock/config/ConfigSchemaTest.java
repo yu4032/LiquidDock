@@ -95,13 +95,9 @@ public class ConfigSchemaTest {
     }
 
     @Test
-    public void legacyGridImportAliasesRemainKnownButAreNeverExported() {
-        assertEquals("grid_landscape_margin_horizontal",
-                ConfigSchema.Grid.LEGACY_LANDSCAPE_HORIZONTAL_MARGIN.name());
-        assertEquals(ConfigKey.ExportMode.NEVER,
-                ConfigSchema.Grid.LEGACY_LANDSCAPE_HORIZONTAL_MARGIN.exportMode());
-        assertEquals("grid_margin_left", ConfigSchema.Grid.LEGACY_MARGIN_LEFT.name());
-        assertEquals(ConfigKey.ExportMode.NEVER, ConfigSchema.Grid.LEGACY_MARGIN_LEFT.exportMode());
+    public void currentGridEnableKeyHasNoEightByFourAlias() {
+        assertEquals("grid_enabled", ConfigSchema.Grid.ENABLED.name());
+        assertEquals(ConfigKey.ExportMode.ALWAYS, ConfigSchema.Grid.ENABLED.exportMode());
     }
 
     @Test
@@ -145,9 +141,7 @@ public class ConfigSchemaTest {
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, 0, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, 0, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, 0, 0, 240);
-        assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_VERTICAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, 0, 0, 240);
-        assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_VERTICAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, 0, -48, 48);
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET, 0, -48, 48);
     }

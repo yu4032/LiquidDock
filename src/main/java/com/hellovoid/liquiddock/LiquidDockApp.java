@@ -6,7 +6,7 @@ import android.util.Log;
 
 import androidx.preference.PreferenceManager;
 
-import com.hellovoid.liquiddock.config.ConfigMigration;
+import com.hellovoid.liquiddock.config.PresetManager;
 import com.hellovoid.liquiddock.config.ConfigSchema;
 
 import java.util.Map;
@@ -27,10 +27,6 @@ public final class LiquidDockApp extends Application
     public void onCreate() {
         super.onCreate();
         localPreferences = PreferenceManager.getDefaultSharedPreferences(this);
-        // Upgrade the app-local authority before XposedService can synchronously bind and seed
-        // Remote Preferences. Otherwise a stale local store can overwrite the Launcher's freshly
-        // migrated API101 store during reconciliation.
-        ConfigMigration.migrate(this, localPreferences);
         ensureWidgetDiscoveryToken();
         localPreferences.registerOnSharedPreferenceChangeListener(this);
         XposedServiceHelper.registerListener(this);
@@ -85,7 +81,7 @@ public final class LiquidDockApp extends Application
         }
 
         // Discovery token/request are transport metadata, not user config. Ignore them when
-        // deciding whether an otherwise-empty local store should pull a legacy-migrated config.
+        // deciding whether an otherwise-empty local store should pull current remote config.
         if (!hasLocalConfig && remoteAll != null && !remoteAll.isEmpty()) {
             String token = localPreferences.getString(WidgetComponentStore.DISCOVERY_TOKEN_KEY, null);
             String request = localPreferences.getString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, null);
@@ -107,6 +103,17 @@ public final class LiquidDockApp extends Application
             }
             // Publish retained/generated discovery metadata back down after pulling config.
             syncToRemote(localPreferences);
+        } else if (!hasLocalConfig) {
+            // Both stores are empty: initialize only the current preset after checking remote.
+            // Seeding in onCreate() would overwrite already-saved runtime preferences.
+            reconciling = true;
+            try {
+                PresetManager.applyDefault(localPreferences.edit());
+            } finally {
+                reconciling = false;
+            }
+            syncToRemote(localPreferences);
+            debugLog("initialized current default profile");
         } else if (localAll != null && !localAll.isEmpty()) {
             syncToRemote(localPreferences);
             debugLog("seeded API101 Remote Preferences from local UI prefs");

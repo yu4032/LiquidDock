@@ -99,7 +99,7 @@ HOME 返回时序不再跨进程转交给 SystemUI；它由 Launcher 4.50 自己
 | `gboard.floating` | `com.google.android.inputmethod.latin` | Gboard floating keyboard + toolbar |
 | `miui.searchbox` | `com.android.quicksearchbox` | MIUI Search main background |
 
-第三方进程不运行 Launcher migration / `MainHook`，只加载自己的 adapter。
+第三方进程不执行 Launcher 的 `MainHook`，只加载自己的 adapter；当前版本不执行旧配置迁移。
 
 ---
 

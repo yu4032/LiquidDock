@@ -10,7 +10,6 @@ import java.util.Set;
 /** Runtime config reader backed by API101 Remote Preferences. */
 public class ConfigReader {
     public static final String REMOTE_GROUP = "config";
-    private static final String ZERO_COPY_PIPELINE_KEY = "liquid_miuix_307_pipeline";
 
     private final Map<String, ?> prefs;
 
@@ -39,8 +38,7 @@ public class ConfigReader {
             }
             Api101Bridge.log("API101 Remote Preferences are empty; using defaults");
         } catch (Throwable error) {
-            // Runtime config loading is deliberately read-only. One-time pre-API101
-            // migration runs explicitly at the package-ready compatibility boundary.
+            // Runtime config loading is deliberately read-only.
             Api101Bridge.log("API101 Remote Preferences unavailable; using defaults", error);
         }
         return Collections.emptyMap();
@@ -107,10 +105,6 @@ public class ConfigReader {
     }
 
     public boolean b(String key, boolean def) {
-        // release/1.3.0 retires the Bitmap/screen-capture glass backend. Keep the persisted
-        // compatibility key readable for old configs, but it can no longer opt back into the
-        // retired path: liquid glass always enters the 307 PassBlur/OES pipeline.
-        if (ZERO_COPY_PIPELINE_KEY.equals(key)) return true;
         Object value = prefs.get(key);
         if (value instanceof Boolean) return (Boolean) value;
         if (value instanceof String) return Boolean.parseBoolean((String) value);

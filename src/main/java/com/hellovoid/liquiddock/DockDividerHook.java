@@ -76,46 +76,19 @@ final class DockDividerHook {
         captureOriginalState(line);
         float density = line.getResources().getDisplayMetrics().density;
 
-        if (cfg.explicitMode) {
-            // Explicit mode: zero is a literal width/height/color value.
-            lp.width = Math.max(0, Math.round(cfg.widthDp * density));
-        } else if (cfg.widthDp != 0f) {
-            lp.width = Math.round(cfg.widthDp * density);
-        }
-
-        boolean heightNeedsParent = cfg.explicitMode || cfg.heightPercent != 0f;
-        if (heightNeedsParent) {
-            int parentH = parentHeight(line);
-            if (parentH > 0) {
-                int targetH = Math.max(0,
-                        Math.round(parentH * cfg.heightPercent / 100f));
-                lp.topMargin = (parentH - targetH) / 2
-                        + Math.round(cfg.yOffsetDp * density);
-                lp.height = targetH;
-            } else if (allowDeferredGeometry) {
-                scheduleGeometryAfterLayout(line);
-            }
-        } else if (cfg.yOffsetDp != 0f) {
-            // Legacy height=0 means keep MIUI's own height; offset that native geometry once.
-            lp.topMargin += Math.round(cfg.yOffsetDp * density);
+        lp.width = Math.max(0, Math.round(cfg.widthDp * density));
+        int parentH = parentHeight(line);
+        if (parentH > 0) {
+            int targetH = Math.max(0, Math.round(parentH * cfg.heightPercent / 100f));
+            lp.topMargin = (parentH - targetH) / 2
+                    + Math.round(cfg.yOffsetDp * density);
+            lp.height = targetH;
+        } else if (allowDeferredGeometry) {
+            scheduleGeometryAfterLayout(line);
         }
         line.setLayoutParams(lp);
-
-        if (cfg.explicitMode) {
-            line.setBackgroundColor(Color.argb(channel(cfg.alpha),
-                    channel(cfg.colorR), channel(cfg.colorG), channel(cfg.colorB)));
-        } else {
-            boolean hasColor = cfg.colorR != 0 || cfg.colorG != 0 || cfg.colorB != 0;
-            boolean hasAlpha = cfg.alpha != 0;
-            if (hasColor || hasAlpha) {
-                int color = Color.rgb(hasColor ? channel(cfg.colorR) : 255,
-                        hasColor ? channel(cfg.colorG) : 255,
-                        hasColor ? channel(cfg.colorB) : 255);
-                if (hasAlpha) color = Color.argb(channel(cfg.alpha),
-                        Color.red(color), Color.green(color), Color.blue(color));
-                line.setBackgroundColor(color);
-            }
-        }
+        line.setBackgroundColor(Color.argb(channel(cfg.alpha),
+                channel(cfg.colorR), channel(cfg.colorG), channel(cfg.colorB)));
     }
 
     private static void captureOriginalState(View line) {
@@ -212,7 +185,7 @@ final class DockDividerHook {
         applyDivider(line, cfg, false);
     }
 
-    /** Restores the vendor baseline before recomputing geometry (legacy offsets are additive). */
+    /** Restores vendor geometry before recomputing current divider properties. */
     static void refreshInstalledFromCurrentConfig() {
         LiquidDockConfig.Divider config;
         try {

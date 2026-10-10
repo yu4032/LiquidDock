@@ -34,7 +34,7 @@ system
 
 Launcher package ready 后依次完成：
 
-- legacy/current config migration；
+- 读取当前 Remote Preferences（不执行旧配置迁移）；
 - `LiquidDockConfig` snapshot；
 - animation/runtime state init；
 - Dock mirror shortcut；

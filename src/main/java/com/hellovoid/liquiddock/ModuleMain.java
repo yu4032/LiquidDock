@@ -2,9 +2,10 @@ package com.hellovoid.liquiddock;
 
 import androidx.annotation.NonNull;
 
-import com.hellovoid.liquiddock.config.ConfigMigration;
 import com.hellovoid.liquiddock.config.ConfigSchema;
-import com.hellovoid.liquiddock.config.LegacyConfigMigration;
+import com.hellovoid.liquiddock.config.PresetManager;
+
+import android.content.SharedPreferences;
 
 import io.github.libxposed.api.XposedModule;
 
@@ -135,10 +136,7 @@ public final class ModuleMain extends XposedModule {
         }
         if (!LAUNCHER_PACKAGE.equals(packageName)) return;
         try {
-            LegacyConfigMigration.migrateAtProcessStart();
-            ConfigMigration.migrateAtProcessStart();
-            // Legacy migration can introduce the debug preference during this same Launcher start.
-            refreshDebugLogging();
+            initializeCurrentProfileIfEmpty();
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
@@ -187,6 +185,19 @@ public final class ModuleMain extends XposedModule {
             DockBottomGeometryHook.install(classLoader);
         } catch (Throwable error) {
             Api101Bridge.errorAlways("[DC] API101 package init failed", error);
+        }
+    }
+
+    /** First-install initialization, never reinterpretation of prior persisted keys. */
+    private static void initializeCurrentProfileIfEmpty() {
+        try {
+            SharedPreferences remote = Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP);
+            if (remote != null && remote.getAll().isEmpty()) {
+                PresetManager.applyDefault(remote.edit());
+            }
+        } catch (Throwable error) {
+            // A storage failure must not block Launcher hooks: snapshot defaults still work.
+            Api101Bridge.log("[DC][Config] default profile initialization unavailable", error);
         }
     }
 
