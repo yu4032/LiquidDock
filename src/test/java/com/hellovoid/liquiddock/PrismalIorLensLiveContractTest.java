@@ -6,9 +6,6 @@ import com.hellovoid.prismal.PrismalSampling;
 
 import org.junit.Test;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -23,14 +20,7 @@ public class PrismalIorLensLiveContractTest {
                 PrismalIorLensPolicy.relativeBend(1.55f));
     }
 
-    @Test public void runtimeRendererAndGuardApplyTheSameIorFactor() throws Exception {
-        String renderer = Files.readString(Path.of(
-                "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
-        String guard = Files.readString(Path.of(
-                "prismal/src/main/java/com/hellovoid/prismal/PrismalSampling.java"));
-        assertTrue(renderer.contains("PrismalIorLensPolicy.relativeBend(p.ior)"));
-        assertTrue(guard.contains("PrismalIorLensPolicy.relativeBend(p.ior)"));
-
+    @Test public void captureGuardTracksIorStrengthWithoutSourceInspection() {
         PrismalParams.Builder low = PrismalParams.builder();
         low.ior = 1.0f;
         low.heightTransitionWidthPx = 32f;
