@@ -55,6 +55,7 @@ internal fun SideSlideHoldSetting(
         title = "第二段振动触发距离",
         summary = "与屏幕边缘的横向拖动距离；默认 240 px。调大可拉开与第一段系统返回振动的间隔",
         valueText = "$secondStageDistancePx px",
+        valueTextForPreview = { "${it.roundToInt()} px" },
         enabled = enabled && value,
         valueRange = SideSlideHoldFeatureConfig.MIN_SECOND_STAGE_DISTANCE_PX.toFloat()..
                 SideSlideHoldFeatureConfig.MAX_SECOND_STAGE_DISTANCE_PX.toFloat(),
