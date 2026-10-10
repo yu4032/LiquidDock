@@ -856,7 +856,12 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("AnimatedSettingsWindowDialog("));
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.TextField("));
         assertTrue(surfaces.contains("keyboardActions = KeyboardActions("));
-        assertTrue(surfaces.contains(".clickable(enabled = enabled) { editingValue = true }"));
+        // Both slider paths must use the fixed-width, single-line readout and preserve tap-to-edit.
+        assertTrue(surfaces.contains("private val SliderValueReadoutWidth = 92.dp"));
+        assertTrue(surfaces.contains(".width(SliderValueReadoutWidth)"));
+        assertTrue(surfaces.contains("maxLines = 1"));
+        assertTrue(surfaces.contains("onClick = { editingValue = true }"));
+        assertTrue(settings.contains("SliderValueReadout("));
         assertTrue(surfaces.contains("onConfirm = { next ->"));
         assertTrue(settings.contains("NumericSettingInputDialog("));
         assertTrue(settings.contains("save(next)"));

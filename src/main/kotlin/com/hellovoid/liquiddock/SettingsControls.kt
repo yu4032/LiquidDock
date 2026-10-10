@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock
 
 import android.content.SharedPreferences
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,7 +21,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -238,14 +235,10 @@ internal fun IntSetting(
             enabled = enabled,
             insideMargin = ModernPreferenceMargin,
             endActions = {
-                Text(
+                SliderValueReadout(
                     text = displayText,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = enabled) { editingValue = true }
-                        .padding(horizontal = 8.dp, vertical = 9.dp),
-                    fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    enabled = enabled,
+                    onClick = { editingValue = true },
                 )
             },
         )
