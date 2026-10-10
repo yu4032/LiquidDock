@@ -69,8 +69,10 @@ public class UserFacingPreferenceSchemaTest {
         String source = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
 
+        String specs = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt"));
         assertTrue("integer settings must carry ConfigKey metadata",
-                source.contains("val config: ConfigKey<Int>"));
+                specs.contains("val config: ConfigKey<Int>"));
         assertTrue("boolean settings must accept ConfigKey<Boolean>",
                 source.contains("prefs: SharedPreferences, config: ConfigKey<Boolean>"));
         assertFalse("no unused generic string-setting helper should remain",
