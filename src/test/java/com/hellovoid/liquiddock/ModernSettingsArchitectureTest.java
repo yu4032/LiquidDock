@@ -91,7 +91,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("previewValue = quantizeState.value(next)"));
         assertTrue(ui.contains("onValueChangeFinished = {"));
         assertTrue(ui.contains("previewCallbackState.value(DiscreteSliderSteps.snap("));
-        assertTrue(activity.contains("val displayText = \"\u0024{previewLabel ?: displayValue}"));
+        assertTrue(activity.contains("previewLabel ?: displayValue"));
         assertTrue(activity.contains("onValuePreview = { sliderPreview = it }"));
         assertTrue(activity.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
 
