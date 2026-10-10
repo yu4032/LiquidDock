@@ -467,7 +467,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 文件拆分与交互修复分批进行。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#313](https://github.com/yu4032/LiquidDock/pull/313) 已合并到 `main`；主 Activity 为 1198 行（第五批合并后）。[#314](https://github.com/yu4032/LiquidDock/pull/314) 的滑条实时写入修复在本分支等待合并与实机验证：同档位去重，Grid 4×2 风险档位仍需预检。图形和 Hook 大类尚未纳入这些 GUI 文件移动，详见 [维护性审计](docs/maintainability-audit-20261010.md)。
+**状态：GUI 文件拆分与交互修复持续进行。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#314](https://github.com/yu4032/LiquidDock/pull/314) 均已合并入 `main`；其中 #314 是滑条实时保存的行为变更，仍须真机复核热更新与 Grid 安全拒绝路径。当前第六批 `refactor/gui-auxiliary-pages-20261010` 将描边、阴影、安全中心侧栏、默认配置/JSON 管理和许可页拆至两个文件，主 Activity 从 **1209 → 987 行**；**此分支尚未合并**。后续还需拆分导航/生命周期与公共控件，并单独治理图形/Hook 大类；详见 [维护性审计](docs/maintainability-audit-20261010.md)。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
