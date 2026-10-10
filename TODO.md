@@ -473,7 +473,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 主 Activity 已基本收敛，公共界面代码继续按职责拆分。** [#309](https://github.com/yu4032/LiquidDock/pull/309)–[#318](https://github.com/yu4032/LiquidDock/pull/318) 已合并到 `main`，其中 #318 的 MIUIX 弹窗 spring/fade 过渡及底栏单份图文拖动高亮已通过用户设备验收。第九批 `refactor/gui-numeric-controls-20261010` 以合并后的 `main@c25a4c92` 为基线，拟将 `NumericSettingInputDialog`、`SliderPreference`、`ModernGlassSlider`、`ModernGlassStepper` 及输入解析函数迁入 `SettingsNumericControls.kt`，主 `ModernSettingsUi.kt` **1047 → 672 行**；新分支尚待 CI 与实机检查，没有改变实时写入、Min/Max、动画或安全预检。图形/EGL/Hook 类仍需独立治理，详见 [维护性审计](docs/maintainability-audit-20261010.md)。
+**状态：GUI 主 Activity 已基本收敛，公共界面代码继续按职责拆分。** [#309](https://github.com/yu4032/LiquidDock/pull/309)–[#318](https://github.com/yu4032/LiquidDock/pull/318) 已合并到 `main`，其中 #318 的 MIUIX 弹窗 spring/fade 过渡及底栏单份图文拖动高亮已通过用户设备验收。第九批 `refactor/gui-numeric-controls-20261010` 以合并后的 `main@c25a4c92` 为基线，拟将 `NumericSettingInputDialog`、`SliderPreference`、`ModernGlassSlider`、`ModernGlassStepper` 及输入解析函数迁入 `SettingsNumericControls.kt`，主 `ModernSettingsUi.kt` **1047 → 672 行**；[CI #38041193754](https://github.com/yu4032/LiquidDock/actions/runs/38041193754) 已通过完整 Kotlin 编译、单元测试和 Debug APK 构建，仍待独立实机检查；本批没有改变实时写入、Min/Max、动画或安全预检。图形/EGL/Hook 类仍需独立治理，详见 [维护性审计](docs/maintainability-audit-20261010.md)。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
