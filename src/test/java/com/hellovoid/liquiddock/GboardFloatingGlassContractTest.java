@@ -242,11 +242,13 @@ public class GboardFloatingGlassContractTest {
 
     @Test public void gboardGuiLivesUnderGlassThirdPartyAppsAndHasIndependentAppearance() throws Exception {
         String settings = read(SETTINGS);
+        String navigation = read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsNavigationModel.kt"));
         String gboardSettings = read(GBOARD_SETTINGS);
         String preferences = read(MAIN.resolve("GboardGlassPreferences.java"));
         assertTrue(settings.contains("Page.ThirdPartyApps"));
         assertTrue(settings.contains("GboardSettingsPage"));
-        assertTrue(settings.contains("HubEntry(Page.ThirdPartyApps"));
+        assertTrue(navigation.contains("HubEntry(Page.ThirdPartyApps"));
         assertTrue(settings.contains("openGboard = { navigateTo(Page.Gboard) }"));
         assertTrue(gboardSettings.contains("Gboard"));
         assertTrue(gboardSettings.contains("启用悬浮键盘液态玻璃"));
