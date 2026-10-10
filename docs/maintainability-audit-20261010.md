@@ -97,3 +97,13 @@
 对照 PrismalAGSL v1.0.4 上游，**底栏并非“全部效果丢失”**：底层 native PrismalGlassBottomTabs 的基础模糊/折射、按压/拖动弹簧、边缘高光仍生效；但原生 Tab 子节点为空、图文以 sibling overlay 绘制，因此图文不参与原生 tab 按压缩放 / 拖动候选高亮 / droplet 对文本本身的折射。静止 droplet 的光学效果在 upstream 本身部分由 pressProgress 调节，静止表现相对平淡。该方案原为避免长按文字重影而刻意选择，不能简单回滚。详细证据、风险和独立修复路径见 [Prismal 底栏审查](gui-prismal-bottom-navigation-audit-20261010.md)。
 
 风险界限：GUI 的文件拆分不触及 PassBlur/EGL、渲染 producer、LSPosed Hook。所有编译和静态检查结果必须与实机验收区别记录，完成后更新 TODO 状态。
+
+
+## 8. GUI 提取与弹窗动效近期状态（2026-10-10，主线核对）
+
+- **#317 已合并**（`1913f1a`）：`SettingsBottomNavigation.kt` 独立 Prismal 原生底栏，`SettingsRestartScopesDialog.kt` 独立重启对话，设备验证通过。上一节“第八批待验证”为当时的历史状态。
+- **#318 已合并**（`c25a4c92`）：`SettingsDialogMotion.kt` 使用 Compose spring/tween 为 MIUIX 设置弹窗增加视觉过渡，重启面板加 fade/scale；底栏保持单层字形并读取原生候选 index 做高亮反馈。用户确认足够并要求清理合并，最终 CI [#38040666727](https://github.com/yu4032/LiquidDock/actions/runs/38040666727) 成功。此工作没有实现图文字形的原生 droplet 折射，也不应声称 Prismal v1.0.4 提供可直接替换的 modal。
+- **第九批（当前分支，CI 已通过 / 实机待验收）**：纯结构重构，将 `parseNumericSettingInput`、`NumericSettingInputDialog`、`SliderPreference`、`ModernGlassSlider`、`ModernGlassStepper` 原样搬迁至 `SettingsNumericControls.kt`。原 `ModernSettingsUi.kt` 1047 → 672 行（约减少 375 行）；四个 Composable 的函数体逐字保持，Prismal 连续拖动 / 松手弹簧、右侧数值实时写入、MIUIX fallback、数值输入验证、背景采样 authority、加减键重复操作以及 #318 弹窗动画入口均没有重写。
+- `ModernSettingsUi.kt` 余下职责是 Miuix/Prismal scaffold、TopAction、ModernSurface、FeatureCard、PreferenceButton、Switch 等。待第九批实机验收后，再考虑将基础 Surface/Cell 组件按实际依赖划分，避免一次迁走大量互相调用的资源。
+
+- 第九批首次 CI 编译成功但有一个旧源码路径断言失败；在不放宽断言的情况下改为读取 `SettingsNumericControls.kt`，并纠正旧的“预览不会写配置”注释。最终 [CI #38041193754](https://github.com/yu4032/LiquidDock/actions/runs/38041193754) 成功（834 项单元测试及 Debug APK 构建）。

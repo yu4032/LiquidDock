@@ -117,7 +117,7 @@
 - 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
 - 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
 - GUI 滑条从“松手后写入”调整为**右侧数值每跨一个合法档位就实时写入**（#314，待实机确认）。同档位去重，避免无意义的每帧写入。SharedPreferences → API101 Remote Preferences 的延迟、拖动帧率和最终落盘可靠性仍需实测；4×2 网格预检继续优先于风险档位的写入。
-- **Prismal GUI 底栏视觉完整性**：已确认原生胶囊模糊/折射/回弹运行，文字因历史重影问题采用单份 overlay。[#318](https://github.com/yu4032/LiquidDock/pull/318) 尝试桥接 native `LocalPrismalBottomTabHighlightedIndex` 的拖动中即时高亮和轻缩放，需真机确认长按、快速拖动及切页不闪烁/不重影。**仍未恢复**胶囊对图文字形的实际镜片折射，也尚未桥接原生按压比例 `LocalPrismalBottomTabScale`（上游为 internal）；后续不能简单重复图文或修改上游。详见 [审查报告](docs/gui-prismal-bottom-navigation-audit-20261010.md)。
+- **Prismal GUI 底栏视觉完整性**：已确认原生胶囊模糊/折射/回弹运行，文字因历史重影问题采用单份 overlay。[#318](https://github.com/yu4032/LiquidDock/pull/318) 已合并并经设备验收，桥接 native `LocalPrismalBottomTabHighlightedIndex` 的拖动中即时高亮和轻缩放，仍需关注更多机型的长按与快速拖动回归。**仍未恢复**胶囊对图文字形的实际镜片折射，也尚未桥接原生按压比例 `LocalPrismalBottomTabScale`（上游为 internal）；后续不能简单重复图文或修改上游。详见 [审查报告](docs/gui-prismal-bottom-navigation-audit-20261010.md)。
 
 ---
 
@@ -473,7 +473,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 模块拆分已完成八批，交互动画独立推进。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#317](https://github.com/yu4032/LiquidDock/pull/317) 已并入 `main`，其中 #317 的 Prismal 底栏与重启弹窗拆分经用户实机验证。当前 [#318](https://github.com/yu4032/LiquidDock/pull/318) 在独立分支为三类 MIUIX 弹窗和重启作用域弹窗增加 spring/fade 过渡，并以原生 Tab 的拖动候选状态桥接单份图文的高亮与轻缩放，**尚待 CI 与实机验收，不得记为已发布效果**。主 Activity 约 536 行；GPU/Hook 大类另列维护任务。
+**状态：GUI 主 Activity 已基本收敛，公共界面代码继续按职责拆分。** [#309](https://github.com/yu4032/LiquidDock/pull/309)–[#318](https://github.com/yu4032/LiquidDock/pull/318) 已合并到 `main`，其中 #318 的 MIUIX 弹窗 spring/fade 过渡及底栏单份图文拖动高亮已通过用户设备验收。第九批 `refactor/gui-numeric-controls-20261010` 以合并后的 `main@c25a4c92` 为基线，拟将 `NumericSettingInputDialog`、`SliderPreference`、`ModernGlassSlider`、`ModernGlassStepper` 及输入解析函数迁入 `SettingsNumericControls.kt`，主 `ModernSettingsUi.kt` **1047 → 672 行**；[CI #38041193754](https://github.com/yu4032/LiquidDock/actions/runs/38041193754) 已通过完整 Kotlin 编译、单元测试和 Debug APK 构建，仍待独立实机检查；本批没有改变实时写入、Min/Max、动画或安全预检。图形/EGL/Hook 类仍需独立治理，详见 [维护性审计](docs/maintainability-audit-20261010.md)。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
