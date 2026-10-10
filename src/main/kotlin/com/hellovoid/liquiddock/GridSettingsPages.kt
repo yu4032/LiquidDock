@@ -157,6 +157,13 @@ internal fun GridBasicsPage(
                 spec,
                 masterEnabled && customGrid && !gridCheckPending,
                 steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context)),
+                // Safe grid stops persist as their label changes. A transition
+                // below 4 must still wait for Launcher widget preflight on release.
+                previewWriteAllowed = { proposed ->
+                    !GridWidget4x2PreflightPolicy.needsCheck(
+                        prefs.getInt(spec.key, spec.default), proposed.roundToInt(),
+                    )
+                },
                 beforeSave = { proposed, commit ->
                     val current = prefs.getInt(spec.key, spec.default)
                     val target = proposed.roundToInt()
