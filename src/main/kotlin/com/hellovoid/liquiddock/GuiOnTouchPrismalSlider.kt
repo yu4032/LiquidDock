@@ -151,10 +151,12 @@ internal fun GuiOnTouchPrismalSlider(
                         rawNext, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
                     )
                     updateValue(nextValue)
-                    if ((steps > 0 || snapIncrement > 0f)
-                            && nextValue != lastReportedValue
-                        || (steps <= 0 && snapIncrement <= 0f)
-                            && abs(nextValue - lastReportedValue) >= visibilityThreshold) {
+                    val shouldReport = if (steps > 0 || snapIncrement > 0f) {
+                        nextValue != lastReportedValue
+                    } else {
+                        abs(nextValue - lastReportedValue) >= visibilityThreshold
+                    }
+                    if (shouldReport) {
                         lastReportedValue = nextValue
                         onValueChange(nextValue)
                     }
