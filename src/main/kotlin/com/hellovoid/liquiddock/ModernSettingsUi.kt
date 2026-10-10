@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -1141,6 +1142,10 @@ internal fun SliderPreference(
             if (sliderEnabledState.value) sliderCallbackState.value(quantizeState.value(next))
         }
     }
+    // Miuix is controlled by a continuous, visual-only draft during touch.
+    // The preference callback runs once, after release, at the nearest stop.
+    var nativeDragging by remember { mutableStateOf(false) }
+    var nativeDraft by remember { mutableFloatStateOf(value) }
 
     Column {
         BasicComponent(
@@ -1175,6 +1180,7 @@ internal fun SliderPreference(
                 valueRange = valueRange,
                 visibilityThreshold = motionThreshold,
                 backdrop = backdrop,
+                steps = steps,
                 snapIncrement = snapIncrement,
                 enabled = enabled,
                 modifier = Modifier
@@ -1184,12 +1190,22 @@ internal fun SliderPreference(
             )
         } else {
             top.yukonga.miuix.kmp.basic.Slider(
-                value = currentValue,
+                value = if (nativeDragging) nativeDraft else currentValue,
                 onValueChange = { next ->
-                    if (enabled) onValueChange(quantize(next))
+                    if (enabled) {
+                        nativeDraft = next
+                        nativeDragging = true
+                    }
+                },
+                onValueChangeFinished = {
+                    if (nativeDragging) {
+                        val released = nativeDraft
+                        nativeDragging = false
+                        sliderCallbackState.value(quantizeState.value(released))
+                    }
                 },
                 valueRange = valueRange,
-                steps = steps,
+                steps = 0, // Native track stays continuous until finger release.
                 enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1233,6 +1249,8 @@ internal fun ModernGlassSlider(
     val stableSliderChange: (Float) -> Unit = remember {
         { next -> if (sliderEnabledState.value) sliderCallbackState.value(next) }
     }
+    var nativeDragging by remember { mutableStateOf(false) }
+    var nativeDraft by remember { mutableFloatStateOf(value) }
     if (backdrop != null) {
         GuiOnTouchPrismalSlider(
             value = stableSliderValue,
@@ -1247,16 +1265,25 @@ internal fun ModernGlassSlider(
         )
     } else {
         top.yukonga.miuix.kmp.basic.Slider(
-            value = currentValue,
+            value = if (nativeDragging) nativeDraft else currentValue,
             onValueChange = { next ->
-                if (enabled) onValueChange(
-                    DiscreteSliderSteps.snap(
-                        next, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
-                    ),
-                )
+                if (enabled) {
+                    nativeDraft = next
+                    nativeDragging = true
+                }
+            },
+            onValueChangeFinished = {
+                if (nativeDragging) {
+                    val nearest = DiscreteSliderSteps.snap(
+                        nativeDraft, valueRange.start, valueRange.endInclusive,
+                        steps, snapIncrement,
+                    )
+                    nativeDragging = false
+                    sliderCallbackState.value(nearest)
+                }
             },
             valueRange = valueRange,
-            steps = steps,
+            steps = 0, // Apply quantization only after release, not on pointer movement.
             enabled = enabled,
             modifier = modifier,
         )
