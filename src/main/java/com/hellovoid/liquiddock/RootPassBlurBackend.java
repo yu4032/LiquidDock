@@ -68,6 +68,11 @@ final class RootPassBlurBackend {
     private volatile long sourceGeneration = -1L;
     private volatile long renderedGeneration = -1L;
     private volatile boolean requestedSingleFramePulse;
+    // Debug-only, render-thread counters readable without draining or copying any texture.
+    private volatile long debugSourceArrivals;
+    private volatile long debugSourceLatches;
+    private volatile long debugNormalizedFrames;
+    private volatile long debugLastInputTimestampNs;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private volatile int bufferWidth;
@@ -282,6 +287,20 @@ final class RootPassBlurBackend {
 
     boolean hasFreshFrame(long generation) {
         return state.hasFreshFrame(generation);
+    }
+
+    /** Observational readout, never an authorization to freeze or release the source. */
+    String diagnosticSourceProgress() {
+        Miuix307PassBlurBridge.Binding current = binding;
+        return "bound=" + (current != null && current.bound)
+                + " updatesEnabled=" + (current != null && current.updatesEnabled)
+                + " fresh=" + state.hasFreshFrame(state.requestedGeneration())
+                + " requestedGen=" + state.requestedGeneration()
+                + " sourceGen=" + sourceGeneration
+                + " arrivals=" + debugSourceArrivals
+                + " latches=" + debugSourceLatches
+                + " normalized=" + debugNormalizedFrames
+                + " inputTimestampNs=" + debugLastInputTimestampNs;
     }
 
     boolean isRebindPending() {
@@ -583,6 +602,9 @@ final class RootPassBlurBackend {
 
     private void onFrameAvailable(SurfaceTexture input) {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
+        if (MainHook.debugLogging && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+            debugSourceArrivals++;
+        }
         Miuix307PassBlurBridge.renewForceRefresh(binding);
         long generation = sourceGeneration;
         PassBlurSourceFrameGate gate = sourceFrameGate;
@@ -618,6 +640,10 @@ final class RootPassBlurBackend {
             if (trace) Trace.beginSection("LD.Workspace.Normalize");
             try {
                 frame = normalizeFrame(generation);
+                if (MainHook.debugLogging
+                        && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+                    debugNormalizedFrames++;
+                }
             } finally {
                 if (trace) Trace.endSection();
             }
@@ -636,6 +662,11 @@ final class RootPassBlurBackend {
         if (trace) Trace.beginSection("LD.Workspace.SourceLatch");
         try {
             input.updateTexImage();
+            if (MainHook.debugLogging
+                    && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+                debugSourceLatches++;
+                debugLastInputTimestampNs = input.getTimestamp();
+            }
             input.getTransformMatrix(textureMatrix);
         } finally {
             if (trace) Trace.endSection();

@@ -93,6 +93,16 @@ final class LauncherGlassSessionRegistry {
         }
     }
 
+    /** Passive Recents HOME source/output trace, with no capture policy side effects. */
+    static synchronized void traceRecentsReturnProgressForAll(long returnSerial) {
+        if (!MainHook.debugLogging) return;
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session != null && !session.isShutdown()) {
+                session.traceRecentsReturnProgress(returnSerial);
+            }
+        }
+    }
+
     /** Stop every existing Launcher PassBlur producer as soon as unlock presentation starts. */
     static synchronized void suspendForUnlockCapture() {
         int paused = 0;

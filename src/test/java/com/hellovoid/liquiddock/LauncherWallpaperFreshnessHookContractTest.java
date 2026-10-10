@@ -138,6 +138,45 @@ public class LauncherWallpaperFreshnessHookContractTest {
         // that the vendor Binder bridge wires both generation-supersession participants.
     }
 
+    @Test public void wallpaperReturnDiagnosticsStayObservationalAndDebugGated()
+            throws Exception {
+        String recents = Files.readString(MAIN.resolve("LauncherGlassRecentsHook.java"));
+        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+
+        assertTrue(recents.contains("installStateManagerDiagnostic(classLoader)"));
+        assertTrue(recents.contains("type == 6203 || type == 7013"));
+        assertTrue(recents.contains("local-zoom-retarget"));
+        assertTrue(recents.contains("local-spring-frame-terminal"));
+        assertTrue(recents.contains("local-spring-cancel"));
+        assertTrue(recents.contains("system-animTo target="));
+        assertTrue(recents.contains("callsite="));
+        assertTrue(recents.contains("diagnosticCallsite()"));
+        assertTrue(recents.contains("diagnosticEventDetail(event, type)"));
+        assertTrue(recents.contains("system-draw-frame-end"));
+        assertTrue(recents.contains("private static void trace(String message)"));
+        assertTrue(recents.contains("if (MainHook.debugLogging)"));
+        assertTrue(scene.contains("fresh-request returnSerial="));
+        assertTrue(scene.contains("fresh-frame-consumed returnSerial="));
+        assertTrue(scene.contains("diagnosticLastFrameGeneration != generation"));
+        String backend = Files.readString(MAIN.resolve("RootPassBlurBackend.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String registry = Files.readString(MAIN.resolve("LauncherGlassSessionRegistry.java"));
+        assertTrue(backend.contains("debugSourceArrivals"));
+        assertTrue(backend.contains("debugSourceLatches"));
+        assertTrue(backend.contains("debugNormalizedFrames"));
+        assertTrue(backend.contains("input.getTimestamp()"));
+        assertTrue(session.contains("staticPresents="));
+        assertTrue(session.contains("sourceBackend.diagnosticSourceProgress()"));
+        assertTrue(registry.contains("traceRecentsReturnProgressForAll"));
+        assertTrue(recents.contains("traceRecentsReturnProgressForAll(serial)"));
+
+        // An observer must never become a new settle or capture authority.
+        assertFalse(recents.contains("postDelayed("));
+        assertFalse(recents.contains("RECENTS_WALLPAPER_SETTLE_MS"));
+        assertFalse(recents.contains("ScreenCapture"));
+        assertFalse(recents.contains("PixelCopy"));
+    }
+
     @Test public void activeZeroCopyPipelineInstallsWallpaperBridge() throws Exception {
         String pipeline = Files.readString(MAIN.resolve("Miuix307MaterialPipeline.java"));
         assertTrue(pipeline.contains("LauncherWallpaperFreshnessHook.install(classLoader)"));

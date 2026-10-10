@@ -154,6 +154,10 @@ final class LauncherGlassSceneController {
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
+    // Diagnostics only: suppress per-frame logs once scene/generation/acceptance is unchanged.
+    private long diagnosticLastFrameGeneration = Long.MIN_VALUE;
+    private State diagnosticLastFrameState;
+    private boolean diagnosticLastFrameAccepted;
 
     // Wallpaper semantics stay here rather than in the generic PassBlur Session. Only one
     // wallpaper-labelled producer pulse may be in flight for a root at a time; a newer content
@@ -410,6 +414,14 @@ final class LauncherGlassSceneController {
     }
 
     private void requestFreshBackdrop(long generation) {
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][WallpaperReturnTrace] fresh-request returnSerial="
+                    + LauncherGlassRecentsHook.diagnosticReturnSerial()
+                    + " generation=" + generation + " current=" + state.generation()
+                    + " scene=" + state.state()
+                    + " presentationPending=" + isPresentationPending()
+                    + " recentsCovered=" + recentsCovered);
+        }
         if (isPresentationPending()) return;
         if (state.state() == State.COVERED || generation != state.generation()) return;
         deferInFlightWallpaperPulse();
@@ -418,6 +430,22 @@ final class LauncherGlassSceneController {
 
     private void onFreshFrameReady(long generation) {
         boolean rotationWasPending = state.isRotationPresentationPending();
+        boolean sceneAcceptsFrame = generation == state.generation()
+                && state.state() != State.COVERED && state.state() != State.DETACHED;
+        if (MainHook.debugLogging
+                && (diagnosticLastFrameGeneration != generation
+                    || diagnosticLastFrameState != state.state()
+                    || diagnosticLastFrameAccepted != sceneAcceptsFrame)) {
+            diagnosticLastFrameGeneration = generation;
+            diagnosticLastFrameState = state.state();
+            diagnosticLastFrameAccepted = sceneAcceptsFrame;
+            MainHook.log("[DC][WallpaperReturnTrace] fresh-frame-consumed returnSerial="
+                    + LauncherGlassRecentsHook.diagnosticReturnSerial()
+                    + " generation=" + generation + " current=" + state.generation()
+                    + " accepted=" + sceneAcceptsFrame + " scene=" + state.state()
+                    + " homePending=" + homeTransitionPending
+                    + " wallpaperSettlePending=" + recentsWallpaperSettlePending);
+        }
         state.onFreshFrameReady(generation);
         applyLayerVisibility();
         if (rotationWasPending && !state.isRotationPresentationPending()) {
@@ -514,6 +542,12 @@ final class LauncherGlassSceneController {
     }
 
     private void setRecentsWallpaperSettlePending(boolean pending) {
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][WallpaperReturnTrace] settle-barrier returnSerial="
+                    + LauncherGlassRecentsHook.diagnosticReturnSerial()
+                    + " old=" + recentsWallpaperSettlePending + " new=" + pending
+                    + " scene=" + state.state());
+        }
         boolean wasPending = isSourceBlockingPresentationPending();
         recentsWallpaperSettlePending = pending;
         onSourceBlockingPresentationPendingChanged(
@@ -604,6 +638,12 @@ final class LauncherGlassSceneController {
     }
 
     private void setRecentsCovered(boolean covered) {
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][WallpaperReturnTrace] recents-coverage returnSerial="
+                    + LauncherGlassRecentsHook.diagnosticReturnSerial()
+                    + " old=" + recentsCovered + " new=" + covered
+                    + " scene=" + state.state());
+        }
         if (recentsCovered == covered) return;
         recentsCovered = covered;
         if (covered) {
