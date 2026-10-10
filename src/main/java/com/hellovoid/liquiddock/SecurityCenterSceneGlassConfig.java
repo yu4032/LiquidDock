@@ -103,6 +103,10 @@ final class SecurityCenterSceneGlassConfig {
         return Scene.DOCK;
     }
 
+    boolean usesSelectiveOwnership() {
+        return !dock.enabled || !apps.enabled || !game.enabled || !video.enabled;
+    }
+
     boolean canPresent(int assistantType) {
         return dock.enabled || (assistantType == 4
                 ? apps.enabled : assistantType == 1 ? game.enabled : video.enabled);

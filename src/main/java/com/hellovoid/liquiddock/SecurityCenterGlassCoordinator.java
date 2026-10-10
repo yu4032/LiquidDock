@@ -254,6 +254,13 @@ final class SecurityCenterGlassCoordinator
         if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return;
 
         View previousTurbo = turboRef.get();
+        // Switching between Game and Video can reuse the same TurboLayout and even its
+        // carrier Views. Release any previously suppressed scene before a different type
+        // takes ownership; the all-enabled default path keeps the original handoff timing.
+        if (previousTurbo == turboLayout && assistantType != type
+                && sceneConfig.usesSelectiveOwnership()) {
+            hideAndRestoreVendor();
+        }
         if (previousTurbo != null && previousTurbo != turboLayout) {
             releasePanel(previousTurbo, "TurboLayout replaced");
         }
