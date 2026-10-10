@@ -795,6 +795,7 @@ internal fun SliderValueReadout(
     text: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    textAlpha: Float = 0.72f,
 ) {
     Box(
         modifier = Modifier
@@ -806,7 +807,7 @@ internal fun SliderValueReadout(
     ) {
         Text(
             text = text,
-            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            color = MiuixTheme.colorScheme.onSurface.copy(alpha = textAlpha),
             fontSize = 13.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -889,6 +890,7 @@ internal fun SliderPreference(
                             text = shownValueText,
                             enabled = enabled,
                             onClick = { editingValue = true },
+                            textAlpha = 0.66f,
                         )
                     }
                     endActions?.invoke()
