@@ -66,6 +66,17 @@ final class RootPassBlurBackend {
     private volatile PassBlurSourceFrameGate sourceFrameGate;
     private volatile boolean transitionFrameSyncEnabled;
     private volatile long sourceGeneration = -1L;
+    // Workspace-only passive diagnostics; gated by MainHook.debugLogging on the EGL thread.
+    private volatile long sourceArrivalSerial;
+    // UI-thread only: avoid rebind loops during a vendor compositor stall.
+    private long nextStallRolloverAllowedMs;
+    private volatile long traceSourceArrivals;
+    private volatile long traceSourceLatches;
+    private volatile long traceSourceTimestampNs;
+    private volatile long traceGatedArrivals;
+    private volatile long traceGenerationRejected;
+    private volatile long traceNormalized;
+    private volatile long traceDelivered;
     private volatile long renderedGeneration = -1L;
     private volatile boolean requestedSingleFramePulse;
     private volatile int logicalWidth;
@@ -135,6 +146,24 @@ final class RootPassBlurBackend {
             reconcileRoot();
             bindProducerWhenReady(0);
         }));
+    }
+
+    /** Passive frame-pipeline counters. Does not trigger capture, transactions or readback. */
+    String traceFramePipeline() {
+        Miuix307PassBlurBridge.Binding current = binding;
+        return "bound=" + (current != null && current.bound)
+                + " enabled=" + (current != null && current.updatesEnabled)
+                + " layerId=" + (current != null ? current.rootLayerId : -1)
+                + " sourceGen=" + sourceGeneration
+                + " requestedGen=" + state.requestedGeneration()
+                + " rebindPending=" + state.isRebindPending()
+                + " arrivals=" + traceSourceArrivals
+                + " latched=" + traceSourceLatches
+                + " gated=" + traceGatedArrivals
+                + " genRejected=" + traceGenerationRejected
+                + " normalized=" + traceNormalized
+                + " delivered=" + traceDelivered
+                + " timestampNs=" + traceSourceTimestampNs;
     }
 
     void requestFresh(long generation) {
@@ -278,6 +307,83 @@ final class RootPassBlurBackend {
             state.onQualityChanged();
             postToRenderThread(this::releaseNormalizedTarget);
         }
+    }
+
+    long sourceArrivalSerial() {
+        return sourceArrivalSerial;
+    }
+
+    long sourceBindEpoch() {
+        return bindEpoch.get();
+    }
+
+    /** Passive eligibility report; no rebind and no native transactions. */
+    private boolean skipStallRecovery(String reason, long observedArrivals, long observedEpoch) {
+        if (MainHook.debugLogging) {
+            MainHook.log(TAG + " [StallProbe] action=skip reason=" + reason
+                    + " arrivals=" + sourceArrivalSerial + " armedArrivals=" + observedArrivals
+                    + " epoch=" + bindEpoch.get() + " armedEpoch=" + observedEpoch
+                    + " current=" + traceFramePipeline());
+        }
+        return false;
+    }
+
+    /**
+     * Isolated Recents-stall recovery experiment, modeled on successful rotation rollover.
+     * Unlike a cached update-flag toggle this replaces the SurfaceTexture + producer Surface.
+     * The old native binding is cleared first, and its binder is never republished.
+     */
+    boolean recoverStalledSource(long observedArrivals, long observedEpoch) {
+        if (shuttingDown || bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE) {
+            return skipStallRecovery("shutdown-or-domain", observedArrivals, observedEpoch);
+        }
+        View root = rootRef.get();
+        Miuix307PassBlurBridge.Binding current = binding;
+        if (root == null || !root.isAttachedToWindow() || current == null) {
+            return skipStallRecovery("root-detached-or-unbound", observedArrivals, observedEpoch);
+        }
+        RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
+        if (endpoint == null || !endpoint.isValid()
+                || !RootPassBlurEndpointBridge.sameGeneration(current, endpoint)) {
+            return skipStallRecovery("root-endpoint-changed", observedArrivals, observedEpoch);
+        }
+        long now = android.os.SystemClock.uptimeMillis();
+        if (!RootPassBlurEndpointBridge.isBindingValid(current)) {
+            return skipStallRecovery("binding-invalid", observedArrivals, observedEpoch);
+        }
+        if (state.isRebindPending()) {
+            return skipStallRecovery("rebind-pending", observedArrivals, observedEpoch);
+        }
+        if (sourceArrivalSerial != observedArrivals) {
+            return skipStallRecovery("frames-progressed", observedArrivals, observedEpoch);
+        }
+        if (bindEpoch.get() != observedEpoch) {
+            return skipStallRecovery("epoch-changed", observedArrivals, observedEpoch);
+        }
+        if (now < nextStallRolloverAllowedMs) {
+            return skipStallRecovery("cooldown", observedArrivals, observedEpoch);
+        }
+        if (!PassBlurSourceStallRecoveryPolicy.shouldRollover(
+                RootPassBlurEndpointBridge.isBindingValid(current),
+                state.isRebindPending(),
+                sourceArrivalSerial, observedArrivals,
+                bindEpoch.get(), observedEpoch,
+                now, nextStallRolloverAllowedMs)) {
+            return skipStallRecovery("policy-rejected", observedArrivals, observedEpoch);
+        }
+
+        // Arm cooldown *before* issuing asynchronous native teardown; one attempt per event.
+        nextStallRolloverAllowedMs = now + 20_000L;
+        boolean accepted = requestRebind("recents-source-stalled-new-bufferqueue", null);
+        MainHook.log(TAG + " Recents source-stall full producer rollover accepted=" + accepted
+                + " rootLayer=" + current.rootLayerId + " oldBindEpoch=" + observedEpoch
+                + " lastArrivals=" + observedArrivals);
+        if (MainHook.debugLogging) {
+            MainHook.log(TAG + " [StallProbe] action=attempt accepted=" + accepted
+                    + " oldLayer=" + current.rootLayerId
+                    + " oldEpoch=" + observedEpoch + " current=" + traceFramePipeline());
+        }
+        return accepted;
     }
 
     boolean hasFreshFrame(long generation) {
@@ -583,12 +689,19 @@ final class RootPassBlurBackend {
 
     private void onFrameAvailable(SurfaceTexture input) {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
+        sourceArrivalSerial++;
+        if (MainHook.debugLogging && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+            traceSourceArrivals++;
+        }
         Miuix307PassBlurBridge.renewForceRefresh(binding);
         long generation = sourceGeneration;
         PassBlurSourceFrameGate gate = sourceFrameGate;
         boolean shouldRender = generation >= 0L && (gate == null || gate.shouldSchedule(
                 System.nanoTime(), renderedGeneration, generation));
         if (!shouldRender) {
+            if (MainHook.debugLogging && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+                traceGatedArrivals++;
+            }
             drainSourceFrameWithoutRender(input);
             return;
         }
@@ -611,17 +724,27 @@ final class RootPassBlurBackend {
             makePbufferCurrentUnchecked();
             latchSourceFrame(input);
             if (generation < 0L || generation != sourceGeneration
-                    || generation != state.requestedGeneration()) return;
+                    || generation != state.requestedGeneration()) {
+                if (MainHook.debugLogging
+                        && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+                    traceGenerationRejected++;
+                }
+                return;
+            }
             boolean trace = MainHook.debugLogging
                     && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
             RootPassBlurFrame frame;
             if (trace) Trace.beginSection("LD.Workspace.Normalize");
             try {
                 frame = normalizeFrame(generation);
+                if (trace) traceNormalized++;
             } finally {
                 if (trace) Trace.endSection();
             }
-            if (consumer != null) consumer.onFreshFrame(this, frame);
+            if (consumer != null) {
+                if (trace) traceDelivered++;
+                consumer.onFreshFrame(this, frame);
+            }
             if (generation == sourceGeneration && state.onFreshFrame(generation)) {
                 renderedGeneration = generation;
             }
@@ -636,6 +759,10 @@ final class RootPassBlurBackend {
         if (trace) Trace.beginSection("LD.Workspace.SourceLatch");
         try {
             input.updateTexImage();
+            if (trace) {
+                traceSourceLatches++;
+                traceSourceTimestampNs = input.getTimestamp();
+            }
             input.getTransformMatrix(textureMatrix);
         } finally {
             if (trace) Trace.endSection();

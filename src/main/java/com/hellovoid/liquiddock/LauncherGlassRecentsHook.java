@@ -3,7 +3,7 @@ package com.hellovoid.liquiddock;
 import java.util.ArrayDeque;
 import java.util.WeakHashMap;
 
-/** Uses HyperOS semantic Recents and wallpaper-animation boundaries instead of wall-clock delays. */
+/** Uses HyperOS semantic Recents and wallpaper-animation boundaries; diagnostics are read-only. */
 final class LauncherGlassRecentsHook {
     private static final String TAG = "[DC][GlassScene]";
     private static final String RECENTS_DISPATCHER =
@@ -33,6 +33,7 @@ final class LauncherGlassRecentsHook {
         if (installed || config == null || !config.enabled || !config.glass.enabled) return;
         LauncherRecentsCapsuleGlassHook.install(classLoader);
         installWallpaperSettleAuthority(classLoader);
+        installNativeWallpaperGestureTrace(classLoader);
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
                 long staleReturn = WALLPAPER_SETTLE.pendingSerial();
@@ -45,6 +46,7 @@ final class LauncherGlassRecentsHook {
                 // a separate live owner, so reclaim the root update flag only after vendor show
                 // handling has completed and any competing pause has already happened.
                 LauncherRecentsCapsuleGlassHook.onRecentsShown();
+                LauncherGlassSessionRegistry.traceWallpaperReturnForAll("recents-show", -1L);
                 return result;
             });
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewHide", chain -> {
@@ -104,7 +106,9 @@ final class LauncherGlassRecentsHook {
                     return result;
                 }
 
+                LauncherRecentsCapsuleGlassHook.onRecentsHidden();
                 LauncherGlassSceneController.setRecentsCoveredForAll(false);
+                LauncherGlassSessionRegistry.traceWallpaperReturnForAll("home-return", serial);
                 MainHook.log(TAG + " Recents HOME return "
                         + (wallpaperAuthorityArmed
                         ? "armed wallpaper authority"
@@ -124,6 +128,35 @@ final class LauncherGlassRecentsHook {
      * LocalWallpaperElement owns a HyperSpringAnimation, while SystemWallpaperElement delegates the
      * spring to miui.wallpaper.animation. Each path therefore uses its own vendor completion event.
      */
+    /** Read-only OEM event trace; no animation modification or native transactions. */
+    private static void installNativeWallpaperGestureTrace(ClassLoader classLoader) {
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.recents.anim.StateManager",
+                    "sendEvent", chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        if (MainHook.debugLogging && args.length > 0 && args[0] != null) {
+                            try {
+                                java.lang.reflect.Method getType =
+                                        args[0].getClass().getMethod("getType");
+                                Object eventType = getType.invoke(args[0]);
+                                if (eventType instanceof Number) {
+                                    int eventId = ((Number) eventType).intValue();
+                                    if (eventId == 6203 || eventId == 7013 || eventId == 7012
+                                            || eventId == 6103 || eventId == 7005) {
+                                        MainHook.log("[DC][WallpaperZoomTrace] OEM event="
+                                                + eventId + " before sendEvent");
+                                    }
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                        return chain.proceed(args);
+                    });
+            MainHook.log(TAG + " OEM wallpaper gesture trace installed");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " OEM wallpaper gesture trace unavailable: " + error);
+        }
+    }
+
     private static void installWallpaperSettleAuthority(ClassLoader classLoader) {
         try {
             Class<?> wallpaperParam = Class.forName(WALLPAPER_PARAM, false, classLoader);
@@ -146,6 +179,11 @@ final class LauncherGlassRecentsHook {
 
             HookUtil.hookMethod(localWallpaper, "animTo", new Class<?>[]{wallpaperParam}, chain -> {
                 long serial = WALLPAPER_SETTLE.pendingSerial();
+                if (MainHook.debugLogging) {
+                    MainHook.log("[DC][WallpaperZoomTrace] local animTo"
+                            + " serial=" + serial
+                            + " target=" + wallpaperParamTarget(chain.getArg(0)));
+                }
                 Long previous = LOCAL_WALLPAPER_SERIAL.get();
                 if (serial > 0L) LOCAL_WALLPAPER_SERIAL.set(serial);
                 try {
@@ -216,6 +254,11 @@ final class LauncherGlassRecentsHook {
             HookUtil.hookMethod(systemWallpaper, "animTo",
                     new Class<?>[]{wallpaperParam}, chain -> {
                         long serial = WALLPAPER_SETTLE.pendingSerial();
+                        if (MainHook.debugLogging) {
+                            MainHook.log("[DC][WallpaperZoomTrace] system animTo"
+                                    + " serial=" + serial
+                                    + " target=" + wallpaperParamTarget(chain.getArg(0)));
+                        }
                         boolean armed = serial > 0L && armSystemDrawEnd(serial);
                         if (armed && !WALLPAPER_SETTLE.armCompletionAuthority(serial)) {
                             rollbackSystemDrawEnd(serial);
@@ -257,8 +300,23 @@ final class LauncherGlassRecentsHook {
                 + serial);
     }
 
+    private static String wallpaperParamTarget(Object param) {
+        if (param == null) return "null";
+        try {
+            java.lang.reflect.Method method = param.getClass().getMethod("getZoomOut");
+            return "zoomOut=" + method.invoke(param);
+        } catch (Throwable ignored) {
+            // This method exists on some but not all Launcher builds; log the class if absent.
+            return param.getClass().getSimpleName();
+        }
+    }
+
     /** Called by the existing typed MIUI wallpaper callback bridge on vendor onDrawFrameEnd(). */
     static void onSystemWallpaperDrawFrameEnd() {
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][WallpaperZoomTrace] system wallpaper draw-end callback"
+                    + " pendingSerial=" + WALLPAPER_SETTLE.pendingSerial());
+        }
         long serial;
         synchronized (SYSTEM_DRAW_END_SERIALS) {
             Long queued = SYSTEM_DRAW_END_SERIALS.pollFirst();
