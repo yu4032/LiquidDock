@@ -111,6 +111,12 @@ final class RecentsCapsuleGlassSinkView extends TextureView
         syncFromTarget();
     }
 
+    void conceal() {
+        if (disposed) return;
+        presented = false;
+        syncFromTarget();
+    }
+
     void dispose() {
         if (disposed) return;
         disposed = true;
