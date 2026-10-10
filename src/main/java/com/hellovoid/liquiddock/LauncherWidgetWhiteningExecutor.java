@@ -53,7 +53,7 @@ final class LauncherWidgetWhiteningExecutor {
                             LauncherWidgetComponentDiscovery.resourceEntryName(target))) {
                 continue;
             }
-            if (WidgetComponentStore.TYPE_TEXT.equals(selector.componentType)
+            if (WidgetComponentStore.ACTION_HIDE_VIEW.equals(selector.action)
                     && target instanceof TextView) {
                 TextView text = (TextView) target;
                 ColorStateList original = text.getTextColors();
