@@ -68,7 +68,6 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.window.WindowDialog
 
 internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
@@ -722,7 +721,7 @@ internal fun NumericSettingInputDialog(
     val parsed = parseNumericSettingInput(
         entered.text, integerOnly, valueRange.start, valueRange.endInclusive,
     )
-    WindowDialog(
+    AnimatedSettingsWindowDialog(
         show = visible,
         title = title,
         onDismissRequest = onDismiss,
