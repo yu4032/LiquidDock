@@ -147,7 +147,8 @@ internal fun GuiOnTouchPrismalSlider(
         }
         var motionFrame by remember { mutableIntStateOf(0) }
         // The expensive motion-driven glass pass is completely dormant
-        // between gestures. Keep motion physics alive for value animations.
+        // between gestures. The thumb's outer graphicsLayer observes spring
+        // state directly, even after sampling stops and frozen chrome resumes.
         LaunchedEffect(dampedDragAnimation, sampling) {
             if (sampling) {
                 snapshotFlow { dampedDragAnimation.animationSnapshot() }
@@ -220,6 +221,13 @@ internal fun GuiOnTouchPrismalSlider(
                             (-size.width / 2f + trackWidth * dampedDragAnimation.progress)
                                 .fastCoerceIn(-size.width / 4f, trackWidth - size.width * 3f / 4f) *
                                     if (isLtr) 1f else -1f
+                        // Animate the whole thumb, including its frozen Prismal backing.
+                        // The spring keeps settling after the touch-only glass pass ends.
+                        val velocity = dampedDragAnimation.velocity / 10f
+                        scaleX = dampedDragAnimation.scaleX /
+                            (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
+                        scaleY = dampedDragAnimation.scaleY *
+                            (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                     }
                     .then(if (enabled) dampedDragAnimation.modifier else Modifier)
                     .then(if (sampling) Modifier.drawPrismalGlass(
@@ -276,13 +284,6 @@ internal fun GuiOnTouchPrismalSlider(
                                 radius = 4.dp * progress,
                                 alpha = progress
                             )
-                        },
-                        layerBlock = {
-                            scaleX = dampedDragAnimation.scaleX
-                            scaleY = dampedDragAnimation.scaleY
-                            val velocity = dampedDragAnimation.velocity / 10f
-                            scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
-                            scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
                         },
                         onDrawSurface = {
                             val progress = dampedDragAnimation.pressProgress

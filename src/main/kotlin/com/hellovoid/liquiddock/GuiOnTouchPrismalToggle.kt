@@ -160,6 +160,13 @@ internal fun GuiOnTouchPrismalToggle(
                     translationX =
                         if (isLtr) lerp(padding, padding + dragWidth, trackFraction)
                         else lerp(-padding, -(padding + dragWidth), trackFraction)
+                    // Preserve Prismal's press / velocity squish during spring
+                    // release; the static glass backing remains GPU-cached.
+                    val velocity = dampedDragAnimation.velocity / 50f
+                    scaleX = dampedDragAnimation.scaleX /
+                        (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
+                    scaleY = dampedDragAnimation.scaleY *
+                        (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                 }
                 .semantics { role = Role.Switch }
                 .then(if (enabled) dampedDragAnimation.modifier else Modifier)
@@ -217,13 +224,6 @@ internal fun GuiOnTouchPrismalToggle(
                             radius = 4.dp * progress,
                             alpha = progress
                         )
-                    },
-                    layerBlock = {
-                        scaleX = dampedDragAnimation.scaleX
-                        scaleY = dampedDragAnimation.scaleY
-                        val velocity = dampedDragAnimation.velocity / 50f
-                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
-                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
                     },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
