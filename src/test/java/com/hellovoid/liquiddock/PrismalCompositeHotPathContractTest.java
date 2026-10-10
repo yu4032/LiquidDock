@@ -33,6 +33,30 @@ public class PrismalCompositeHotPathContractTest {
     }
 
     @Test
+    public void workspacePreDrawProfilingUsesPerfettoWithoutDebugLogOrProducerChanges()
+            throws Exception {
+        // Existing audited static contract: the runtime still needs an on-device trace.
+        String source = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        assertTrue(source.contains("boolean tracing = Trace.isEnabled()"));
+        assertTrue(source.contains("LD.Workspace.SceneSync"));
+        assertTrue(source.contains("LD.Workspace.DragNodes"));
+        assertTrue(source.contains("LD.Workspace.StaticNodes"));
+        assertTrue(source.contains("LD.Workspace.SourceReconcile"));
+        assertTrue(source.contains("LD.Workspace.DragCandidates"));
+        assertTrue(source.contains("LD.Workspace.DragGeometryReads"));
+        assertTrue(source.contains("LD.Workspace.StaticCandidates"));
+        assertTrue(source.contains("LD.Workspace.StaticGeometryReads"));
+        assertTrue(source.contains("if (tracing) Trace.beginSection"));
+        assertTrue(source.contains("if (tracing) Trace.endSection"));
+        assertTrue(source.contains("syncSceneOnUiThreadInternal(tracing)"));
+        assertTrue(source.contains("sourceBackend.reconcileRoot()"));
+        assertTrue(source.contains("LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()"));
+        assertTrue(source.contains("transitionFrameSync.onPreDraw(geometryMotionChanged)"));
+        assertTrue(source.contains("outputRenderState.request(staticDirty, dragDirty)"));
+        assertFalse(source.contains("Thread.sleep("));
+    }
+
+    @Test
     public void securityCenterCompositeDoesNotPollGlErrorEveryPresent() throws Exception {
         String source = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
         assertFalse(source.contains("GLES20.glGetError()"));
