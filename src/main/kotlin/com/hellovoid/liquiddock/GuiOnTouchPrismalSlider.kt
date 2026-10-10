@@ -133,6 +133,7 @@ internal fun GuiOnTouchPrismalSlider(
                     isDragging = true
                     didDrag = false
                     lastPreview = null
+                    previewState.value(null)
                 },
                 onDragStopped = {
                     isDragging = false
@@ -243,6 +244,8 @@ internal fun GuiOnTouchPrismalSlider(
                             onPress = {
                                 releaseJob[0]?.cancel()
                                 isSettling = false
+                                lastPreview = null
+                                previewState.value(null)
                                 isTrackPressed = true
                                 try { tryAwaitRelease() } finally { isTrackPressed = false }
                             },
