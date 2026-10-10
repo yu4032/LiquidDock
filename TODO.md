@@ -1,6 +1,6 @@
 # LiquidDock TODO FOR AGENT
 
-基准：**2026-10-10 `main`（截至本轮核验 `c25a4c92`）/ `build.gradle.kts` 中 `versionName=2.6.4` / HyperOS 3 平板、Launcher 4.50 适配主线 / libxposed API 101**。`versionName` 是源码构建版本，不等于已发布 Release 版本。
+基准：**2026-10-10 `main`（截至本轮核验 `8433b12b`）/ `build.gradle.kts` 中 `versionName=2.6.4` / HyperOS 3 平板、Launcher 4.50 适配主线 / libxposed API 101**。`versionName` 是源码构建版本，不等于已发布 Release 版本。
 
 自由网格、横竖屏位置记忆、挤压循环/事务保护和 PR #275 的图标/小组件规划器路由已落地。下面的性能与兼容性条目仍是待验证或待优化事项，不代表上述功能尚未实现。
 
@@ -18,7 +18,9 @@
 
 ### P1-A · Launcher Workspace glass per-frame node scan
 
-**最新阶段：已补充分段 Perfetto 诊断、CI 通过，尚未减少每帧扫描，待实机测量。** 分支 `perf/workspace-prescan-tracing-20261010` 在 `LauncherGlassSession` 内仅当 `Trace.isEnabled()` 时采样 `SceneSync / DragNodes / StaticNodes / SourceReconcile`，以及 drag/static candidate 与真实 geometry read 数。此轮没有 dirty cache、没有额外 per-frame log/file write，也未完成真机性能测量。量化步骤见 [Workspace 扫描 Perfetto 指南](docs/workspace-ui-node-scan-perfetto-20261010.md)。
+**最新阶段：[#321](https://github.com/yu4032/LiquidDock/pull/321) 已合并至 main，Perfetto 分段诊断可用；每帧 O(N) 扫描仍未消除，待实机量化。** 原分支 `perf/workspace-prescan-tracing-20261010` 在 `LauncherGlassSession` 内仅当 `Trace.isEnabled()` 时采样 `SceneSync / DragNodes / StaticNodes / SourceReconcile`，以及 drag/static candidate 与真实 geometry read 数。此轮没有 dirty cache、没有额外 per-frame log/file write，也未完成真机性能测量。量化步骤见 [Workspace 扫描 Perfetto 指南](docs/workspace-ui-node-scan-perfetto-20261010.md)。
+
+**当前独立低风险改动（待 CI/实机）**：`perf/workspace-geometry-bounds-scratch-20261010` 为 `LauncherGlassBoundsPolicy` 加入 `applyInto()`，让 `LauncherGlassStaticNode` 利用原有 `geometryPoints[8]` 暂存边界，避免静态玻璃一次有效几何捕获中由 `apply()` 创建的 `float[4]`。原有调用 API 保留，数值计算与 1px 边界规则不变；这是分配优化候选，**不等于已减少节点扫描或改善 FPS**。详见 [Perfetto/分配审查](docs/workspace-ui-node-scan-perfetto-20261010.md)。
 
 `LauncherGlassSession` 当前在 Launcher root 的 `OnPreDrawListener` 中每帧执行 `syncSceneOnUiThread()`。
 
