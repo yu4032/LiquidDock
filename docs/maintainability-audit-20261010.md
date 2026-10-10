@@ -64,3 +64,14 @@
 3. 至少 `./gradlew testDebugUnitTest assembleDebug --stacktrace` 与现有安全门禁通过；若未运行则明确标记“未验证”。
 4. 渲染、手势、Launcher、SystemUI、SecurityCenter、Gboard、Searchbox 相关 PR 根据实际影响补真机回归；日志需按开关控制，不通过 debug 文件 I/O 伪造性能结果。
 5. 完成后同步更新 `TODO.md`：将已验证子项移至“完成 / 防回归”，保留尚未测量与未验证的风险。不得删除历史 evidence 文档。
+
+## 7. 后续结构批次（分支验证记录，尚未归入 main）
+
+以下是 **2026-10-10 的分支进度**，不是“已发布 / 已完成实机验收”的声明。
+
+- [PR #309](https://github.com/yu4032/LiquidDock/pull/309)：从 `ComposeSettingsActivity.kt` 迁出声明式 `IntSpec`、各领域设置规格与光学描述符，降至 2312 行；CI [#38022079774](https://github.com/yu4032/LiquidDock/actions/runs/38022079774) 通过。保留页面、导航、原始 Prismal、默认值与所有配置键；待实机验收。
+- [PR #310](https://github.com/yu4032/LiquidDock/pull/310)：以 #309 分支为基线进一步迁出 5 个 Animation leaf-page Composable 和 8 个动画参数规格。主 Activity 降至 2166 行。仅改变 Kotlin top-level 声明的 file owner / 必要 `internal` 可见性；动画入口、偏好行为及重启 scope 仍由原 owner 管理。
+- #310 的父分支关系必须保持为 #309；如果为了触发现有“仅对 main PR 生效”的 CI 而临时切换 PR base，检查完成后需要恢复。
+- 任何未通过的 CI 必须定位并在当前分支修复；通过 CI 不代表已验证 Android 真机交互、Prismal 绘制或重启作用域契约。
+
+下一批优先处理页面模块与导航的显式接口，而不是把 `IntSetting`、全局 Scaffold 或 PassBlur/EGL 直接改写。每一批都要有提取前后的声明等价性检查和现有 source-reader 测试的边界调整。
