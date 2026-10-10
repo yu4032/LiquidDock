@@ -1556,8 +1556,8 @@ internal fun IntSetting(
     val scaledMax = if (decimalDp) maxValue * 10 else maxValue
     val sliderSteps = if (steps > 0) steps else
         DiscreteSliderSteps.forStoragePrecision(spec.min, maxValue, decimalDp)
-    // Storage precision and thumb position must agree. Large ranges avoid
-    // native tick allocation but still snap the floating-point Prismal track.
+    // The thumb remains continuous while dragging; display and release targets
+    // use storage precision without allocating excessive native tick marks.
     val snapIncrement = if (decimalDp) 0.1f else 1f
 
     Column(modifier = Modifier.fillMaxWidth()) {
