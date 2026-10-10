@@ -80,6 +80,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     private final RootPassBlurBackend sourceBackend;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
+    private volatile PrismalParams[] sceneMaterials;
     private volatile SecurityCenterSceneGlassConfig sceneConfig;
     private volatile int assistantType;
 
@@ -129,6 +130,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
+        sceneMaterials = sceneMaterials(prismalParams, sceneConfig);
         int scalePercent = glassConfig != null
                 ? glassConfig.passBlurCaptureScalePercent
                 : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
@@ -159,12 +161,25 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 Miuix307PrismalMaterial.fromConfig(config, density),
                 SecurityCenterMaterialModePolicy.useShaderBlur());
         highlightProfile = config.largeSurfaceHighlightProfile;
+        sceneMaterials = sceneMaterials(prismalParams, scenes);
         FrameRequest request = frameRequest;
         if (request != null && cachedSourceFrame != null
                 && request.generation == cachedSourceFrame.generation) {
             requestCachedPresentation(request.generation);
         }
         // Capture density/FPS are applied when this semantic session is next established.
+    }
+
+    private static PrismalParams[] sceneMaterials(
+            PrismalParams inherited, SecurityCenterSceneGlassConfig scenes) {
+        SecurityCenterSceneGlassConfig.Scene[] kinds =
+                SecurityCenterSceneGlassConfig.Scene.values();
+        PrismalParams[] result = new PrismalParams[kinds.length];
+        for (SecurityCenterSceneGlassConfig.Scene kind : kinds) {
+            result[kind.ordinal()] = scenes == null
+                    ? inherited : scenes.style(kind).apply(inherited);
+        }
+        return result;
     }
 
     boolean ownsRoot(View root) {
@@ -470,8 +485,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.makePbufferCurrent();
             // Per-node color uniforms are cheap; an independent blur value requires one
             // additional backdrop blur pass only when the blur radius changes.
-            PrismalParams inherited = prismalParams;
-            SecurityCenterSceneGlassConfig scenes = sceneConfig;
+            PrismalParams[] materials = sceneMaterials;
             int sceneType = assistantType;
             float lastBlur = Float.NaN;
             for (int i = 0; i < request.frameGeometry.nodeCount(); i++) {
@@ -479,8 +493,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 SecurityCenterSceneGlassConfig.Scene kind =
                         SecurityCenterSceneGlassConfig.forOutput(
                                 request.sinks[i].materialRole(), sceneType);
-                PrismalParams material = scenes != null
-                        ? scenes.style(kind).apply(inherited) : inherited;
+                PrismalParams material = materials[kind.ordinal()];
                 sourceBackend.makePbufferCurrent();
                 if (Float.compare(lastBlur, material.blurRadiusPx) != 0) {
                     prismalRenderer.prepareBackdrop(
