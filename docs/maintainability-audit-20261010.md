@@ -67,21 +67,17 @@
 
 ## 7. GUI 结构重构进度（2026-10-10）
 
-已进入 `main`、经用户确认实机有效：
+以 GitHub 合并状态、源码及验收反馈为准，不把文件迁移视为渲染性能优化。
 
-- [PR #309](https://github.com/yu4032/LiquidDock/pull/309)：`IntSpec`、分组规格和光学描述符迁到 `SettingsOptionSpecs.kt`；主 Activity **2725 → 2312** 行，CI [#38022079774](https://github.com/yu4032/LiquidDock/actions/runs/38022079774) 成功；已合并。
-- [PR #310](https://github.com/yu4032/LiquidDock/pull/310)：五个 Animation leaf pages 与八个 animation option spec 独立；主 Activity **2312 → 2166** 行，CI [#38022729294](https://github.com/yu4032/LiquidDock/actions/runs/38022729294) 成功；已合并。
+已合并至 `main`：
 
-第四批重构验收记录（下列状态描述为合并前的阶段快照；实际合并状态以 PR 为准）：
+- [#309](https://github.com/yu4032/LiquidDock/pull/309)：参数规格抽离到 `SettingsOptionSpecs.kt`，原 Activity 2725 → 2312 行；CI 通过、用户确认有效。
+- [#310](https://github.com/yu4032/LiquidDock/pull/310)：Animation 五个叶页面单独成文件，2312 → 2166 行；CI 通过、用户确认有效。
+- [#311](https://github.com/yu4032/LiquidDock/pull/311)：Dock、Divider、Workstation、Recents 七个页面独立，2166 → 1902 行；CI 通过，已合并。
+- [#312](https://github.com/yu4032/LiquidDock/pull/312)：Grid 五个页面独立；**同时包含之后补充的滑条连续拖动、预览最近合法精度、松手吸附再提交的行为修复**，所以不能将整个 PR 声称为纯结构性调整。当前合并后主 Activity 为 **1646 行**（最初从 Grid 迁移时的 1630 行是中间快照）。
 
-- [PR #311](https://github.com/yu4032/LiquidDock/pull/311)：七个 Dock、Divider、Workstation、Recents leaf pages 迁移至 `DockWorkstationSettingsPages.kt`；主 Activity 分支现为 **1902 行**。代码与逻辑逐字保持等价，所需 `private → internal` 可见性例外已记录；CI [#38023359767](https://github.com/yu4032/LiquidDock/actions/runs/38023359767) 的单元测试、Debug/R8 构建和产物上传成功；需单独实机验收。
+第五批 [PR #313](https://github.com/yu4032/LiquidDock/pull/313) 已合并：十个 Glass 页面迁出到 `GlassSettingsPages.kt`，原 Activity **1646 → 1198** 行。此批仅移动文件和调整必要声明可见性，CI 已通过。
 
-- 第四批（分支 `refactor/gui-grid-settings-pages-20261010`，以 #311 为父）：五个 Grid 页面整体迁出到 `GridSettingsPages.kt`，主 Activity **1902 → 1630 行**；保留 4×2 小组件预检、不确定性拒绝保存、离开页面取消请求、晚到结果复核与原有大按钮警告。仅 `gridEntries` 和跨文件共享的偏好 revision provider 改为 Kotlin `internal`。需检查 CI 和真机，**不要将此分支直接认作主线已完成**。
+独立修复 [PR #314](https://github.com/yu4032/LiquidDock/pull/314)（待合并及实机确认）：Prismal 滑块连续拖动、松手弹簧吸附不变；右侧数值跨过合法整数、0.1 或离散档位即保存，重复档位去重；Miuix 滑条同样实时写入。Grid 风险尺寸先经过 4×2 widget 预检，失败不保存。**这是行为变更**，取代此前“拖动仅预览、回弹结束保存”的旧契约；快速连续拖动、阻断回滚、热更新延迟仍需真机测试。
 
-- **滑条预览与提交边界（#312 后续修复，待实机验收）**：Prismal 拖动时滑块目标位置保持连续浮点运动；数值标签由 `onValuePreview` 使用最近的合法精度（整数、0.1 或显式档位）实时显示，但预览不触发 `SharedPreferences`、配置热更新、Widget 4×2 预检。松手后交给原生 `PrismalSpringMotion` 回弹，吸附到位才执行一次原有业务提交，并清除预览。Miuix 原生滑条通过连续 `nativeDraft` 与 `onValueChangeFinished` 实现相同的预览/提交分离。加减、重置和手工输入仍直接提交，不经过拖动预览。此交互变更不是仅移动代码，须专门实机检查滑块手感、数值同步与预检拒绝后的回滚。
-
-**2026-10-10 后续修复（独立分支 `fix/gui-slider-live-value-commit-20261010`，尚待 CI/实机验收）**：右侧数字依旧由连续拖动位置取最近合法档位（整数、0.1 或显式 steps）；但从这一批起，**每次右侧数字变化就立即把对应合法档位写入 SharedPreferences / 已有 API101 热更新链路**，同档位的重复拖动不额外写入；滑块仍不在拖动阶段吸附，松手后仍使用 Prismal 原生弹簧。对原生 Miuix 滑条同样实施数值预览时实时保存。对于网格降到不安全的尺寸，**原有 4×2 Widget 预检必须成功才保存**；只允许通过 preflight-free 档位在拖动过程中实时提交，危险档位在松手后开始核验，失败不落盘。此变化修正了上面 #312 当时“预览不触发 SharedPreferences”的历史行为，因此上面的描述保留为旧版本基线，不能再作为后续最终契约。
-
-用户可见文案收敛：网格降为 3 行/列时仍先做 4×2 小组件安全预检，警告只说明检测到 4×2 小组件及修改未保存，不再额外解释旋转后的 2×4 形态；这只改变提示文本，不改变布局合法性、失败闭合、预检接口与弹窗按钮样式。
-
-阶段性边界：各批次均没有重新实现 UI、修改持久化键、引入额外采样或触动 PassBlur/GL/Hook。后续仍须继续拆分主 Activity 内的 Glass/Data 等页面，检查 GUI 来源测试对特定源文件的耦合，并在视觉/行为验证之后才合并。不能将文件行数下降解释为 FPS 或 GPU 占用改善。
+风险界限：GUI 的文件拆分不触及 PassBlur/EGL、渲染 producer、LSPosed Hook。所有编译和静态检查结果必须与实机验收区别记录，完成后更新 TODO 状态。
