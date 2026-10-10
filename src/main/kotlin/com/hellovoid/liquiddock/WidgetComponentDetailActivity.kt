@@ -157,8 +157,13 @@ private fun WidgetComponentDetailScreen(
                     val other = (if (whiteMode) selected else whitened).toMutableSet()
                     if (checked) {
                         changed.add(key)
-                        // Exact hide and white actions are mutually exclusive.
-                        other.remove(key)
+                        // An image node may have different selector actions for hiding
+                        // and whitening; clear the opposing action on the same exact node.
+                        other.removeAll { encoded ->
+                            WidgetComponentWhiteningPolicy.sameNode(
+                                WidgetComponentStore.parseSelector(encoded), descriptor,
+                            )
+                        }
                     } else {
                         changed.remove(key)
                     }
@@ -209,7 +214,7 @@ private fun WidgetComponentTypePage(
                     summary = if (isMaml) {
                         "MAML 使用脚本绘制，暂不支持按精确节点白化"
                     } else {
-                        "仅作用于选中的文字与图片；与隐藏规则独立，重启桌面生效"
+                        "仅在小组件玻璃启用后对白色文字和图像生效；独立于隐藏规则，重启桌面生效"
                     },
                     enabled = !isMaml,
                 )

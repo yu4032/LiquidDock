@@ -42,6 +42,21 @@ public class WidgetComponentWhiteningPolicyTest {
         assertFalse(WidgetComponentWhiteningPolicy.supports(maml));
     }
 
+    @Test public void conflictDetectionMatchesOneNodeEvenAcrossDifferentActions() {
+        WidgetComponentStore.Descriptor image = remote("com.example/.Clock",
+                WidgetComponentStore.ACTION_CLEAR_IMAGE, "android.widget.ImageView",
+                WidgetComponentStore.TYPE_IMAGE);
+        WidgetComponentStore.Descriptor hidden = remote("com.example/.Clock",
+                WidgetComponentStore.ACTION_HIDE_VIEW, "android.widget.ImageView",
+                WidgetComponentStore.TYPE_IMAGE);
+        WidgetComponentStore.Descriptor other = remote("com.example/.Other",
+                WidgetComponentStore.ACTION_HIDE_VIEW, "android.widget.ImageView",
+                WidgetComponentStore.TYPE_IMAGE);
+        assertTrue(WidgetComponentWhiteningPolicy.sameNode(image, hidden));
+        assertFalse(WidgetComponentWhiteningPolicy.sameNode(image, other));
+        assertFalse(WidgetComponentWhiteningPolicy.sameNode(null, image));
+    }
+
     @Test public void selectionUsesExistingExactIdentityAndNeverMatchesOtherProviders() {
         WidgetComponentStore.Descriptor a = remote("com.example/.Clock",
                 WidgetComponentStore.ACTION_HIDE_VIEW, "android.widget.TextView",
