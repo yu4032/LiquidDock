@@ -1221,6 +1221,7 @@ internal fun ModernGlassSlider(
     visibilityThreshold: Float,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    steps: Int = 0,
 ) {
     val backdrop = LocalTouchPrismalBackdrop.current
     val currentValue by rememberUpdatedState(value)
@@ -1238,6 +1239,7 @@ internal fun ModernGlassSlider(
             visibilityThreshold = visibilityThreshold,
             backdrop = backdrop,
             enabled = enabled,
+            steps = steps,
             modifier = modifier.alpha(if (enabled) 1f else 0.42f),
         )
     } else {
@@ -1247,6 +1249,7 @@ internal fun ModernGlassSlider(
                 if (enabled) onValueChange(next)
             },
             valueRange = valueRange,
+            steps = steps,
             enabled = enabled,
             modifier = modifier,
         )
