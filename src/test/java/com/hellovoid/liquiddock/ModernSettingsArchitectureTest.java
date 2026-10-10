@@ -199,7 +199,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("items(specs, key = { it.key })"));
         assertTrue(ui.contains("item(key = \"stroke-colors-title\")"));
         assertTrue(ui.contains("SettingsCard {"));
-        assertTrue(ui.contains("private fun SettingsList("));
+        assertTrue(ui.contains("internal fun SettingsList("));
         // Each child is a lazy item with its own Prismal glass card, not a
         // viewport-height static card enclosing an independently scrolling list.
         assertFalse(ui.contains(".weight(1f)\n                .padding(horizontal = 14.dp)"));
