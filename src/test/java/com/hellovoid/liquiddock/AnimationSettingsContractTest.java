@@ -18,6 +18,8 @@ public class AnimationSettingsContractTest {
             "kotlin/com/hellovoid/liquiddock/AnimationSettingsPages.kt");
     private static final Path OPTION_SPECS = MAIN.resolve(
             "kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt");
+    private static final Path DOCK_WORKSTATION_PAGES = MAIN.resolve(
+            "kotlin/com/hellovoid/liquiddock/DockWorkstationSettingsPages.kt");
 
     @Test
     public void animationSettingsAreSplitByOwningDomain() throws Exception {
@@ -58,10 +60,11 @@ public class AnimationSettingsContractTest {
         assertTrue(animationPage.contains(
                 "&& !systemResizeEnabled && smoothResizeEnabled"));
 
-        int dockStart = ui.indexOf("private fun DockBehaviorPage(");
-        int dockEnd = ui.indexOf("private fun DockGeometryPage(", dockStart);
+        String dockPages = Files.readString(DOCK_WORKSTATION_PAGES);
+        int dockStart = dockPages.indexOf("internal fun DockBehaviorPage(");
+        int dockEnd = dockPages.indexOf("internal fun DockGeometryPage(", dockStart);
         assertTrue(dockStart >= 0 && dockEnd > dockStart);
-        String dockPage = ui.substring(dockStart, dockEnd);
+        String dockPage = dockPages.substring(dockStart, dockEnd);
         assertTrue(dockPage.contains("ConfigSchema.Dock.RESIZE_ANIMATION"));
         assertTrue(dockPage.contains("ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION"));
         assertFalse("Dock behavior page keeps switches but must not duplicate the duration slider",
