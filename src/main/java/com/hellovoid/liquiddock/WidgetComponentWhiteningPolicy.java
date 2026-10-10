@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -29,6 +30,30 @@ final class WidgetComponentWhiteningPolicy {
                 && first.className.equals(second.className)
                 && first.name.equals(second.name)
                 && first.hierarchyPath.equals(second.hierarchyPath);
+    }
+
+    /** Give imported hide rules precedence over white rules targeting the same node. */
+    static Set<String> withoutHiddenNodes(Set<String> white, Set<String> hidden) {
+        if (white == null || white.isEmpty()) return Set.of();
+        if (hidden == null || hidden.isEmpty()) return new HashSet<>(white);
+        ArrayList<WidgetComponentStore.Descriptor> hiddenNodes = new ArrayList<>();
+        for (String key : hidden) {
+            WidgetComponentStore.Descriptor node = WidgetComponentStore.parseSelector(key);
+            if (node != null) hiddenNodes.add(node);
+        }
+        HashSet<String> retained = new HashSet<>();
+        for (String key : white) {
+            WidgetComponentStore.Descriptor whiteNode = WidgetComponentStore.parseSelector(key);
+            boolean conflict = false;
+            for (WidgetComponentStore.Descriptor hiddenNode : hiddenNodes) {
+                if (sameNode(whiteNode, hiddenNode)) {
+                    conflict = true;
+                    break;
+                }
+            }
+            if (!conflict) retained.add(key);
+        }
+        return retained;
     }
 
     static List<WidgetComponentStore.Descriptor> selectors(
