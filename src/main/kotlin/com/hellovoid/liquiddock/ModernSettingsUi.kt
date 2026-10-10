@@ -788,7 +788,7 @@ internal fun NumericSettingInputDialog(
 
 // Keep the right readout's measured width independent of the value's digit count.
 // Shared by numeric preferences and custom/third-party glass slider rows.
-private val SliderValueReadoutWidth = 104.dp
+private val SliderValueReadoutWidth = 92.dp
 
 @Composable
 internal fun SliderValueReadout(
