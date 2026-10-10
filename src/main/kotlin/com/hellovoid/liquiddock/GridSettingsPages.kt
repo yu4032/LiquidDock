@@ -188,7 +188,7 @@ internal fun GridBasicsPage(
                                     }
                                 }
                                 GridWidget4x2PreflightClient.BLOCKED ->
-                                    gridWarning = "检测到桌面存在 4×2 小组件（旋转后可能为 2×4）。行数或列数不能降低到 4 以下，请先调整或移除对应小组件。本次修改未保存。"
+                                    gridWarning = "检测到桌面存在 4×2 小组件。行数或列数不能降低到 4 以下，请先调整或移除对应小组件。本次修改未保存。"
                                 else ->
                                     gridWarning = "无法确认桌面是否存在 4×2 小组件。请保持桌面进程运行，确认 LSPosed 服务可用后重试。本次修改未保存。"
                             }
