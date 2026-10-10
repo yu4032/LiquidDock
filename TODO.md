@@ -95,7 +95,7 @@ Perfetto 分段诊断已经进入 main：
 
 ## 4. ConfigSchema dead-key audit
 
-**状态：待清理。**
+**状态：部分完成；剩余键仍需按实际消费链核验。**
 
 重新核对：
 
@@ -114,24 +114,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 5. Grid configuration migration
-
-**状态：未完成。**
-
-迁移：
-
-- `home_grid_8x4`
-- 新 grid enable key
-
-要求：
-
-- 新安装读取新键；
-- 老配置平滑迁移；
-- 后续删除旧读取路径。
-
----
-
-## 6. Geometry-only pre-draw observer review
+## 5. Geometry-only pre-draw observer review
 
 **状态：低优先级。**
 
@@ -151,7 +134,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 7. Debug logging I/O optimization
+## 6. Debug logging I/O optimization
 
 **状态：低优先级。**
 
@@ -171,7 +154,7 @@ Perfetto 分段诊断已经进入 main：
 
 # P3 · Architecture and compatibility
 
-## 8. RootPassBlur / glass session ownership audit
+## 7. RootPassBlur / glass session ownership audit
 
 **状态：持续维护。**
 
@@ -186,7 +169,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 9. Signed build / R8 regression coverage
+## 8. Signed build / R8 regression coverage
 
 **状态：保留。**
 
@@ -198,7 +181,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 10. libxposed API 102 migration
+## 9. libxposed API 102 migration
 
 **状态：待规划。**
 
@@ -222,7 +205,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 11. Settings i18n cleanup
+## 10. Settings i18n cleanup
 
 **状态：低优先级。**
 
@@ -276,6 +259,8 @@ Perfetto 分段诊断已经进入 main：
 - WorkspaceGridSizing 旧状态设计；
 - 第三方 profile schema 扩展；
 - ShortcutMenu dark-mode key 重命名；
-- 文档自动化建设。
+- 文档自动化建设；
+- 旧配置迁移链、旧网格键及旧 JSON 别名（改为 `grid_enabled`，不迁移旧值）；
+- 旧单位模式标记与旧文件夹合并开关。
 
 这些内容如需变化，应重新建立新的明确任务，而不是恢复旧 TODO。

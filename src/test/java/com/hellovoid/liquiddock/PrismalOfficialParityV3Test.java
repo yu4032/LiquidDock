@@ -6,8 +6,6 @@ import static org.junit.Assert.assertTrue;
 
 import com.hellovoid.liquiddock.config.PresetManager;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 
 import org.junit.Test;
@@ -91,16 +89,10 @@ public class PrismalOfficialParityV3Test {
     }
 
     @Test
-    public void currentSchemaDefaultsReplaceUnsupportedHistoricalGlassProfiles() throws Exception {
-        String migration = Files.readString(Path.of(
-                "src/main/java/com/hellovoid/liquiddock/config/ConfigMigration.java"));
-
-        assertTrue(migration.contains("GLASS_CONFIG_GENERATION"));
-        assertTrue(migration.contains("resetUnsupportedGlassConfigGeneration(preferences)"));
-        assertFalse(migration.contains("PRISMAL_OFFICIAL_PARITY_V3")
-                || migration.contains("PRISMAL_OFFICIAL_PARITY_V4")
-                || migration.contains("migratePrismalParityV2")
-                || migration.contains("migratePrismalOfficialParityV3")
-                || migration.contains("migratePrismalOfficialParityV4"));
+    public void currentProfileDoesNotWriteHistoricalGlassGenerationFlags() {
+        Map<String, Object> defaults = PresetManager.defaultValues();
+        assertEquals(155, defaults.get("liquid_ior"));
+        assertFalse(defaults.containsKey("liquid_glass_config_generation"));
+        assertFalse(defaults.containsKey("liquid_miuix_307_pipeline"));
     }
 }

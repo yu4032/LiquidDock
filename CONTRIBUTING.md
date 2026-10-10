@@ -70,7 +70,7 @@ Debug 与 Release 都启用 optimization/R8。不要假设 debug APK 保留原�
 新增或修改 persisted setting 时：
 
 1. 主配置先登记到 `ConfigSchema`；
-2. 历史 SharedPreferences 迁移放 `ConfigMigration` / `LegacyConfigMigration`；
+2. 不再维护历史 SharedPreferences 迁移；新增配置只登记到当前 schema；
 3. JSON shape / alias 由 `ConfigCodec` 管理；
 4. 默认配置由 `PresetManager` 管理；
 5. runtime 通过 `ConfigReader` -> `LiquidDockConfig`；

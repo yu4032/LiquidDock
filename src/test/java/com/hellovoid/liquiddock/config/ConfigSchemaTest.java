@@ -141,9 +141,7 @@ public class ConfigSchemaTest {
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, 0, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, 0, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, 0, 0, 240);
-        assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_VERTICAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, 0, 0, 240);
-        assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_VERTICAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, 0, -48, 48);
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET, 0, -48, 48);
     }

@@ -31,9 +31,8 @@ public class LoggingGateContractTest {
         assertTrue("package readiness must refresh the process debug gate",
                 source.contains("public void onPackageReady(@NonNull PackageReadyParam param) {\n"
                         + "        refreshDebugLogging();"));
-        assertTrue("Launcher must refresh the gate after legacy/config migration",
-                source.contains("ConfigMigration.migrateAtProcessStart();\n"
-                        + "            // Legacy migration can introduce the debug preference"));
+        assertFalse("Launcher must not run removed configuration migration",
+                source.contains("ConfigMigration.migrateAtProcessStart()"));
     }
 
     @Test public void directAndroidInfoAndErrorLogsStayInAuditedGatedOwners() throws Exception {
@@ -72,9 +71,7 @@ public class LoggingGateContractTest {
 
     @Test public void directAndroidWarnLogsAreOnlyExplicitOperationalFailures() throws Exception {
         Set<String> warningAllowlist = Set.of(
-                "LiquidDockApp.java",
-                "config/ConfigMigration.java",
-                "config/LegacyConfigMigration.java");
+                "LiquidDockApp.java");
         List<String> offenders = new ArrayList<>();
 
         try (Stream<Path> files = Files.walk(MAIN)) {
