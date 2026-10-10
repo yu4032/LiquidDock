@@ -1015,4 +1015,29 @@ public class ModernSettingsArchitectureTest {
         assertFalse(bottom.contains("drawPrismalGlass("));
     }
 
+
+    @Test
+    public void securityCenterSceneControlsUseSpacedSubpagesWithoutDenseOverview() throws Exception {
+        String main = Files.readString(UTILITY_PAGES);
+        String nav = Files.readString(NAVIGATION_MODEL);
+        String compose = Files.readString(UI);
+        String leaf = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SecurityCenterSceneSettingsPage.kt"));
+
+        assertTrue(main.contains("onClick = { open(scene.page) }"));
+        assertTrue(main.contains("verticalArrangement = Arrangement.spacedBy(10.dp)"));
+        assertTrue(main.contains("modifier = Modifier.padding(horizontal = 14.dp)"));
+        assertFalse(main.contains("groupedIntSettings("));
+        assertTrue(leaf.contains("DenseSettingsList("));
+        assertTrue(leaf.contains("BooleanSetting("));
+        assertTrue(leaf.contains("IntSetting(prefs, scene.specs.first()"));
+        assertTrue(leaf.contains("groupedIntSettings(scene.specs.drop(1)"));
+        for (String scene : new String[]{"SecurityCenterDock", "SecurityCenterAllApps",
+                "SecurityCenterGameToolbox", "SecurityCenterVideoToolbox"}) {
+            assertTrue(nav.contains(scene + "(R.string.page_security_center_"));
+            assertTrue(compose.contains("Page." + scene + ","));
+        }
+        assertTrue(compose.contains("SecurityCenterSceneSettingsPage("));
+    }
+
 }

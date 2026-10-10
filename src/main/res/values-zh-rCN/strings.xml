@@ -22,6 +22,11 @@
     <string name="page_recents">多任务</string>
     <string name="page_liquid">液态玻璃</string>
     <string name="page_security_center_sidebar">安全中心侧边栏</string>
+    <string name="page_security_center_dock">侧边 Dock</string>
+    <string name="page_security_center_all_apps">All Apps</string>
+    <string name="page_security_center_game_toolbox">游戏工具箱</string>
+    <string name="page_security_center_video_toolbox">视频工具箱</string>
+    <string name="security_center_sidebar_category_scenes">分场景玻璃</string>
     <string name="security_center_sidebar_header_summary">集中管理 Launcher 侧滑呼出与安全中心侧边栏材质；需要重新加载时，在右上角“重启作用域”中选择桌面与安全中心。</string>
     <string name="security_center_sidebar_category_gesture">侧滑呼出</string>
     <string name="security_center_sidebar_category_appearance">外观</string>

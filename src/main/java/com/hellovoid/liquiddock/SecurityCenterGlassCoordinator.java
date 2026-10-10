@@ -117,6 +117,7 @@ final class SecurityCenterGlassCoordinator
             new SecurityCenterMaterialOwnershipState();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile LiquidDockConfig.Glass glassConfig;
+    private volatile SecurityCenterSceneGlassConfig sceneConfig;
     private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
     private final int allAppsCornerRadiusResId;
     private final int gameToolboxCornerRadiusResId;
@@ -197,6 +198,7 @@ final class SecurityCenterGlassCoordinator
             int allAppsCornerRadiusResId,
             int gameToolboxCornerRadiusResId) {
         this.glassConfig = glassConfig;
+        this.sceneConfig = SecurityCenterSceneGlassConfig.read(ConfigReader.load());
         this.vendorMaterialBridge = vendorMaterialBridge;
         this.allAppsCornerRadiusResId = allAppsCornerRadiusResId;
         this.gameToolboxCornerRadiusResId = gameToolboxCornerRadiusResId;
@@ -207,8 +209,27 @@ final class SecurityCenterGlassCoordinator
     void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
         if (config == null) return;
         glassConfig = config;
+        SecurityCenterSceneGlassConfig next = SecurityCenterSceneGlassConfig.read(ConfigReader.load());
+        SecurityCenterSceneGlassConfig previous = sceneConfig;
+        sceneConfig = next;
+        if (previous != null && !previous.sameEnabled(next)) {
+            // A selection change must restore vendor-owned carriers before claiming a new
+            // subset. Color-only changes never tear down the PassBlur source or EGL session.
+            View turbo = turboRef.get();
+            View dock = dockRef.get();
+            View preview = abstractDockRef.get();
+            View toolbox = boxRef.get();
+            int type = assistantType;
+            releaseAll();
+            if (turbo != null && dock != null && next.canPresent(type)) {
+                bindAssistant(turbo, dock, preview, toolbox, type);
+            }
+            return;
+        }
         SecurityCenterGlassSession live = session;
-        if (live != null && !live.isShutdown()) live.applyLiveGlassConfig(config);
+        if (live != null && !live.isShutdown()) {
+            live.applyLiveGlassConfig(config, next, assistantType);
+        }
     }
 
     void bindGlobalDock(View turboLayout, View dockLayout) {
@@ -226,9 +247,20 @@ final class SecurityCenterGlassCoordinator
             View boxLayout,
             int type) {
         if (turboLayout == null || dockLayout == null || !supportedAssistant(type)) return;
+        if (!sceneConfig.canPresent(type)) {
+            releaseAll();
+            return;
+        }
         if (!SecurityCenterMaterialModePolicy.prepareBind(turboLayout)) return;
 
         View previousTurbo = turboRef.get();
+        // Switching between Game and Video can reuse the same TurboLayout and even its
+        // carrier Views. Release any previously suppressed scene before a different type
+        // takes ownership; the all-enabled default path keeps the original handoff timing.
+        if (previousTurbo == turboLayout && assistantType != type
+                && sceneConfig.usesSelectiveOwnership()) {
+            hideAndRestoreVendor();
+        }
         if (previousTurbo != null && previousTurbo != turboLayout) {
             releasePanel(previousTurbo, "TurboLayout replaced");
         }
@@ -243,6 +275,10 @@ final class SecurityCenterGlassCoordinator
         appsRef = new WeakReference<>(null);
         assistantType = type;
         appsLive = false;
+        SecurityCenterGlassSession existing = session;
+        if (existing != null && !existing.isShutdown()) {
+            existing.applyLiveGlassConfig(glassConfig, sceneConfig, type);
+        }
         observeTurboAttach(turboLayout);
 
         if (!SecurityCenterGlassRuntimeState.isEnabled()) {
@@ -502,7 +538,7 @@ final class SecurityCenterGlassCoordinator
         if (old != null) old.shutdown();
         cleanupRootObserverOnly();
 
-        session = new SecurityCenterGlassSession(root, glassConfig, this);
+        session = new SecurityCenterGlassSession(root, glassConfig, sceneConfig, assistantType, this);
         if (!policy.onSessionCreated(root, session)) {
             session.shutdown();
             session = null;
@@ -618,16 +654,25 @@ final class SecurityCenterGlassCoordinator
 
     private void setAuthorizedSinksForFrame(SecurityCenterGlassFrameGeometry frame) {
         boolean hasFrame = frame != null;
-        if (dockSink != null) dockSink.setAuthorizedVisible(hasFrame);
+        if (dockSink != null) {
+            dockSink.setAuthorizedVisible(hasFrame
+                    && sceneConfig.style(SecurityCenterSceneGlassConfig.Scene.DOCK).enabled);
+        }
         if (previewSink != null) {
             previewSink.setAuthorizedVisible(
-                    hasFrame && frame.previewGeometry() != null);
+                    hasFrame && frame.previewGeometry() != null
+                            && sceneConfig.style(SecurityCenterSceneGlassConfig.Scene.DOCK).enabled);
         }
         if (boxSink != null) {
-            boxSink.setAuthorizedVisible(hasFrame && frame.boxGeometry() != null);
+            SecurityCenterSceneGlassConfig.Scene boxScene = assistantType == ASSISTANT_GAME
+                    ? SecurityCenterSceneGlassConfig.Scene.GAME_TOOLBOX
+                    : SecurityCenterSceneGlassConfig.Scene.VIDEO_TOOLBOX;
+            boxSink.setAuthorizedVisible(hasFrame && frame.boxGeometry() != null
+                    && sceneConfig.style(boxScene).enabled);
         }
         if (appsSink != null) {
-            appsSink.setAuthorizedVisible(hasFrame && frame.appsGeometry() != null);
+            appsSink.setAuthorizedVisible(hasFrame && frame.appsGeometry() != null
+                    && sceneConfig.style(SecurityCenterSceneGlassConfig.Scene.ALL_APPS).enabled);
         }
     }
 
@@ -678,7 +723,12 @@ final class SecurityCenterGlassCoordinator
         try {
             if (firstHandoff) ownership.onCustomPresented();
             bridge.claimCustom(
-                    turbo, dock, abstractDockRef.get(), box, apps);
+                    turbo, dock, abstractDockRef.get(), box, apps,
+                    sceneConfig.style(SecurityCenterSceneGlassConfig.Scene.DOCK).enabled,
+                    sceneConfig.style(assistantType == ASSISTANT_GAME
+                            ? SecurityCenterSceneGlassConfig.Scene.GAME_TOOLBOX
+                            : SecurityCenterSceneGlassConfig.Scene.VIDEO_TOOLBOX).enabled,
+                    sceneConfig.style(SecurityCenterSceneGlassConfig.Scene.ALL_APPS).enabled);
             if (firstHandoff && session != null
                     && !session.requestSourceRebind("security-center-material-handoff")) {
                 log("PassBlur source rebind deferred after material handoff", null);

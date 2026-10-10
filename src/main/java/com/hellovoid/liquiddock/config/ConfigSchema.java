@@ -205,6 +205,80 @@ public final class ConfigSchema {
         private Divider() {}
     }
 
+    /** Independent Security Center scene controls. -1 inherits the global material channel. */
+    public static final class SecurityCenterScene {
+        public static final ConfigKey<Boolean> DOCK_ENABLED = bool(
+                "liquid_sc_dock_enabled", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_BLUR = integer(
+                "liquid_sc_dock_blur", -1, -1, -1, -1, 60,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_TINT_RED = integer(
+                "liquid_sc_dock_tint_r", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_TINT_GREEN = integer(
+                "liquid_sc_dock_tint_g", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_TINT_BLUE = integer(
+                "liquid_sc_dock_tint_b", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DOCK_TINT_ALPHA = integer(
+                "liquid_sc_dock_tint_alpha", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> ALL_APPS_ENABLED = bool(
+                "liquid_sc_all_apps_enabled", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_BLUR = integer(
+                "liquid_sc_all_apps_blur", -1, -1, -1, -1, 60,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_TINT_RED = integer(
+                "liquid_sc_all_apps_tint_r", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_TINT_GREEN = integer(
+                "liquid_sc_all_apps_tint_g", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_TINT_BLUE = integer(
+                "liquid_sc_all_apps_tint_b", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_TINT_ALPHA = integer(
+                "liquid_sc_all_apps_tint_alpha", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> GAME_TOOLBOX_ENABLED = bool(
+                "liquid_sc_game_toolbox_enabled", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> GAME_TOOLBOX_BLUR = integer(
+                "liquid_sc_game_toolbox_blur", -1, -1, -1, -1, 60,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> GAME_TOOLBOX_TINT_RED = integer(
+                "liquid_sc_game_toolbox_tint_r", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> GAME_TOOLBOX_TINT_GREEN = integer(
+                "liquid_sc_game_toolbox_tint_g", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> GAME_TOOLBOX_TINT_BLUE = integer(
+                "liquid_sc_game_toolbox_tint_b", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> GAME_TOOLBOX_TINT_ALPHA = integer(
+                "liquid_sc_game_toolbox_tint_alpha", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> VIDEO_TOOLBOX_ENABLED = bool(
+                "liquid_sc_video_toolbox_enabled", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> VIDEO_TOOLBOX_BLUR = integer(
+                "liquid_sc_video_toolbox_blur", -1, -1, -1, -1, 60,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> VIDEO_TOOLBOX_TINT_RED = integer(
+                "liquid_sc_video_toolbox_tint_r", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> VIDEO_TOOLBOX_TINT_GREEN = integer(
+                "liquid_sc_video_toolbox_tint_g", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> VIDEO_TOOLBOX_TINT_BLUE = integer(
+                "liquid_sc_video_toolbox_tint_b", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> VIDEO_TOOLBOX_TINT_ALPHA = integer(
+                "liquid_sc_video_toolbox_tint_alpha", -1, -1, -1, -1, 255,
+                ConfigKey.ExportMode.ALWAYS);
+
+        private SecurityCenterScene() {}
+    }
+
     public static final class Glass {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
@@ -618,6 +692,19 @@ public final class ConfigSchema {
                 Glass.PRISMAL_SHADOW_SOFTNESS, Glass.PRISMAL_TRANSMITTANCE,
                 Glass.PRISMAL_BACKDROP_SCALE_X, Glass.PRISMAL_BACKDROP_SCALE_Y,
                 Glass.PRISMAL_PARALLAX_SCALE, Glass.PRISMAL_SHOW_NORMALS);
+        add(keys,
+                SecurityCenterScene.DOCK_ENABLED, SecurityCenterScene.DOCK_BLUR,
+                SecurityCenterScene.DOCK_TINT_RED, SecurityCenterScene.DOCK_TINT_GREEN,
+                SecurityCenterScene.DOCK_TINT_BLUE, SecurityCenterScene.DOCK_TINT_ALPHA,
+                SecurityCenterScene.ALL_APPS_ENABLED, SecurityCenterScene.ALL_APPS_BLUR,
+                SecurityCenterScene.ALL_APPS_TINT_RED, SecurityCenterScene.ALL_APPS_TINT_GREEN,
+                SecurityCenterScene.ALL_APPS_TINT_BLUE, SecurityCenterScene.ALL_APPS_TINT_ALPHA,
+                SecurityCenterScene.GAME_TOOLBOX_ENABLED, SecurityCenterScene.GAME_TOOLBOX_BLUR,
+                SecurityCenterScene.GAME_TOOLBOX_TINT_RED, SecurityCenterScene.GAME_TOOLBOX_TINT_GREEN,
+                SecurityCenterScene.GAME_TOOLBOX_TINT_BLUE, SecurityCenterScene.GAME_TOOLBOX_TINT_ALPHA,
+                SecurityCenterScene.VIDEO_TOOLBOX_ENABLED, SecurityCenterScene.VIDEO_TOOLBOX_BLUR,
+                SecurityCenterScene.VIDEO_TOOLBOX_TINT_RED, SecurityCenterScene.VIDEO_TOOLBOX_TINT_GREEN,
+                SecurityCenterScene.VIDEO_TOOLBOX_TINT_BLUE, SecurityCenterScene.VIDEO_TOOLBOX_TINT_ALPHA);
         add(keys, Gboard.ENABLED, Gboard.BLUR, Gboard.TINT_RED, Gboard.TINT_GREEN,
                 Gboard.TINT_BLUE, Gboard.TINT_ALPHA);
         add(keys, LauncherHighlight.SKY_HAZE, LauncherHighlight.SPECULAR,
