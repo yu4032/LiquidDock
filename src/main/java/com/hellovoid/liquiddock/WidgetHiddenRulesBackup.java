@@ -66,8 +66,14 @@ final class WidgetHiddenRulesBackup {
 
     static boolean replaceSelections(SharedPreferences preferences, Set<String> selectors) {
         if (preferences == null || selectors == null) return false;
+        Set<String> white = preferences.getStringSet(
+                WidgetComponentStore.WHITE_SELECTION_KEY, Set.of());
+        Set<String> retainedWhite =
+                WidgetComponentWhiteningPolicy.withoutHiddenNodes(white, selectors);
         return preferences.edit()
                 .putStringSet(WidgetComponentStore.SELECTION_KEY, new HashSet<>(selectors))
+                .putStringSet(WidgetComponentStore.WHITE_SELECTION_KEY,
+                        new HashSet<>(retainedWhite))
                 .commit();
     }
 }
