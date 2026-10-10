@@ -22,6 +22,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/AnimationSettingsPages.kt");
     private static final Path DOCK_WORKSTATION_PAGES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/DockWorkstationSettingsPages.kt");
+    private static final Path GRID_PAGES = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/GridSettingsPages.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
     private static final Path SEARCHBOX = Path.of(
@@ -46,19 +48,20 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void dangerousGridEditsAreCheckedBeforePersistenceAndDisplayLargeWarning() throws Exception {
         String gui = Files.readString(UI);
+        String grid = Files.readString(GRID_PAGES);
         String bridge = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/LauncherManualDiscoveryBridge.java"));
         String client = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/GridWidget4x2PreflightClient.java"));
 
-        assertTrue(gui.contains("GridWidget4x2PreflightPolicy.needsCheck(current, target)"));
-        assertTrue(gui.contains("GridWidget4x2PreflightClient.start("));
-        assertTrue(gui.contains("GridWidget4x2PreflightClient.CLEAR ->"));
-        assertTrue(gui.contains("gridCheck[0]?.cancel()"));
+        assertTrue(grid.contains("GridWidget4x2PreflightPolicy.needsCheck(current, target)"));
+        assertTrue(grid.contains("GridWidget4x2PreflightClient.start("));
+        assertTrue(grid.contains("GridWidget4x2PreflightClient.CLEAR ->"));
+        assertTrue(grid.contains("gridCheck[0]?.cancel()"));
         assertTrue(gui.contains("beforeSave: ((Float, () -> Unit) -> Unit)? = null"));
         assertTrue(gui.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
-        assertTrue(gui.contains("minWidth = 164.dp"));
-        assertTrue(gui.contains("minHeight = 42.dp"));
+        assertTrue(grid.contains("minWidth = 164.dp"));
+        assertTrue(grid.contains("minHeight = 42.dp"));
         assertTrue(bridge.contains("new String[]{\"container\", \"spanX\", \"spanY\"}"));
         assertTrue(client.contains("private static final long TIMEOUT_MS = 4500L"));
     }
@@ -78,7 +81,7 @@ public class ModernSettingsArchitectureTest {
     public void heavySettingsUseDedicatedHubAndPartitionStructures() throws Exception {
         String source = Files.readString(UI);
 
-        assertTrue(source.contains("gridEntries.forEach"));
+        assertTrue(Files.readString(GRID_PAGES).contains("gridEntries.forEach"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("dockEntries.forEach"));
         assertTrue(source.contains("liquidEntries.forEach"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("workstationEntries.forEach"));
@@ -780,6 +783,7 @@ public class ModernSettingsArchitectureTest {
         String optionSpecs = Files.readString(OPTION_SPECS);
         String animationPages = Files.readString(ANIMATION_PAGES);
         String dockWorkstationPages = Files.readString(DOCK_WORKSTATION_PAGES);
+        String gridPages = Files.readString(GRID_PAGES);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -792,7 +796,7 @@ public class ModernSettingsArchitectureTest {
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
                 .matcher(compose + "\n" + optionSpecs + "\n" + animationPages + "\n"
-                        + dockWorkstationPages + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
+                        + dockWorkstationPages + "\n" + gridPages + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
