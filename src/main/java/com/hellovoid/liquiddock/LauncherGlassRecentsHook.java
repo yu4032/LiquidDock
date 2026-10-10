@@ -32,6 +32,7 @@ final class LauncherGlassRecentsHook {
     static void install(ClassLoader classLoader, LiquidDockConfig config) {
         if (installed || config == null || !config.enabled || !config.glass.enabled) return;
         LauncherRecentsCapsuleGlassHook.install(classLoader);
+        if (MainHook.debugLogging) LauncherPassBlurTransactionTrace.install();
         installWallpaperSettleAuthority(classLoader);
         installNativeWallpaperGestureTrace(classLoader);
         try {
