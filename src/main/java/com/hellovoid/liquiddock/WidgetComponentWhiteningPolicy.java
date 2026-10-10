@@ -1,8 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -15,10 +15,10 @@ final class WidgetComponentWhiteningPolicy {
 
     static boolean supports(WidgetComponentStore.Descriptor descriptor) {
         if (descriptor == null || !descriptor.isRemoteViews()) return false;
-        return WidgetComponentStore.TYPE_TEXT.equals(descriptor.componentType)
-                        && WidgetComponentStore.ACTION_HIDE_VIEW.equals(descriptor.action)
-                || WidgetComponentStore.TYPE_IMAGE.equals(descriptor.componentType)
-                        && WidgetComponentStore.ACTION_CLEAR_IMAGE.equals(descriptor.action);
+        return (WidgetComponentStore.TYPE_TEXT.equals(descriptor.componentType)
+                && WidgetComponentStore.ACTION_HIDE_VIEW.equals(descriptor.action))
+                || (WidgetComponentStore.TYPE_IMAGE.equals(descriptor.componentType)
+                && WidgetComponentStore.ACTION_CLEAR_IMAGE.equals(descriptor.action));
     }
 
     /** Treat different actions on the same exact widget node as one mutually exclusive target. */
