@@ -69,6 +69,12 @@ private fun WidgetComponentDetailScreen(
             prefs.getStringSet(WidgetComponentStore.SELECTION_KEY, emptySet())?.toSet().orEmpty()
         )
     }
+    var whitened by remember {
+        mutableStateOf(
+            prefs.getStringSet(WidgetComponentStore.WHITE_SELECTION_KEY, emptySet())?.toSet().orEmpty()
+        )
+    }
+    var whiteMode by rememberSaveable { mutableStateOf(false) }
     var showAllMaml by rememberSaveable { mutableStateOf(false) }
     var showAdvancedRemote by rememberSaveable { mutableStateOf(false) }
     var selectedType by rememberSaveable { mutableStateOf<String?>(null) }
@@ -88,6 +94,7 @@ private fun WidgetComponentDetailScreen(
     val owner = first?.displayOwner() ?: "小组件组件"
     val isMaml = first?.isMaml() == true
     val categoryVisible = when {
+        whiteMode -> components.filter { WidgetComponentWhiteningPolicy.supports(it) }
         isMaml && !showAllMaml -> components.filter { it.componentType != WidgetComponentStore.TYPE_INTERNAL }
         !isMaml && !showAdvancedRemote -> components.filter {
             it.componentType == WidgetComponentStore.TYPE_BACKGROUND ||
@@ -128,7 +135,9 @@ private fun WidgetComponentDetailScreen(
                 components = components,
                 typeGroups = typeGroups,
                 likelyBackgrounds = likelyBackgrounds,
-                selected = selected,
+                selected = if (whiteMode) whitened else selected,
+                whiteMode = whiteMode,
+                onWhiteModeChanged = { whiteMode = it; selectedType = null },
                 showAllMaml = showAllMaml,
                 onShowAllMaml = { showAllMaml = it },
                 showAdvancedRemote = showAdvancedRemote,
@@ -140,14 +149,29 @@ private fun WidgetComponentDetailScreen(
                 padding = padding,
                 type = selectedType!!,
                 components = currentTypeComponents,
-                selected = selected,
+                selected = if (whiteMode) whitened else selected,
+                whiteMode = whiteMode,
                 onSelectionChanged = { descriptor, checked ->
                     val key = descriptor.selectorKey()
-                    val next = selected.toMutableSet()
-                    if (checked) next.add(key) else next.remove(key)
-                    selected = next.toSet()
+                    val changed = (if (whiteMode) whitened else selected).toMutableSet()
+                    val other = (if (whiteMode) selected else whitened).toMutableSet()
+                    if (checked) {
+                        changed.add(key)
+                        // Exact hide and white actions are mutually exclusive.
+                        other.remove(key)
+                    } else {
+                        changed.remove(key)
+                    }
+                    if (whiteMode) {
+                        whitened = changed.toSet()
+                        selected = other.toSet()
+                    } else {
+                        selected = changed.toSet()
+                        whitened = other.toSet()
+                    }
                     prefs.edit()
                         .putStringSet(WidgetComponentStore.SELECTION_KEY, HashSet(selected))
+                        .putStringSet(WidgetComponentStore.WHITE_SELECTION_KEY, HashSet(whitened))
                         .apply()
                 },
             )
@@ -164,6 +188,8 @@ private fun WidgetComponentTypePage(
     typeGroups: Map<String, List<WidgetComponentStore.Descriptor>>,
     likelyBackgrounds: List<WidgetComponentStore.Descriptor>,
     selected: Set<String>,
+    whiteMode: Boolean,
+    onWhiteModeChanged: (Boolean) -> Unit,
     showAllMaml: Boolean,
     onShowAllMaml: (Boolean) -> Unit,
     showAdvancedRemote: Boolean,
@@ -172,6 +198,24 @@ private fun WidgetComponentTypePage(
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
+            ModernSurface(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+            ) {
+                SwitchPreference(
+                    checked = whiteMode,
+                    onCheckedChange = onWhiteModeChanged,
+                    title = "部件白化 · 深色适配",
+                    summary = if (isMaml) {
+                        "MAML 使用脚本绘制，暂不支持按精确节点白化"
+                    } else {
+                        "仅作用于选中的文字与图片；与隐藏规则独立，重启桌面生效"
+                    },
+                    enabled = !isMaml,
+                )
+            }
+        }
+        item {
             Text(
                 "组件类型 · ${components.size} 个可发现操作",
                 fontSize = 13.sp,
@@ -179,7 +223,7 @@ private fun WidgetComponentTypePage(
             )
         }
 
-        if (isMaml) {
+        if (isMaml && !whiteMode) {
             item {
                 ModernSurface(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -193,7 +237,7 @@ private fun WidgetComponentTypePage(
                     )
                 }
             }
-        } else {
+        } else if (!whiteMode) {
             item {
                 ModernSurface(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -209,7 +253,7 @@ private fun WidgetComponentTypePage(
             }
         }
 
-        if (likelyBackgrounds.isNotEmpty()) {
+        if (!whiteMode && likelyBackgrounds.isNotEmpty()) {
             item { SmallTitle("疑似底层背景") }
             item {
                 ModernSurface(
@@ -254,7 +298,8 @@ private fun WidgetComponentTypePage(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("当前没有可安全直接操作的背景或图像层")
+                        Text(if (whiteMode) "没有支持精确白化的文本或图片部件"
+                            else "当前没有可安全直接操作的背景或图像层")
                         if (!isMaml) {
                             Text("可开启“高级整节点隐藏”查看文本、容器和其他节点。", fontSize = 13.sp)
                         }
@@ -280,7 +325,7 @@ private fun WidgetComponentTypePage(
                             ArrowPreference(
                                 title = componentTypeTitle(type),
                                 summary = buildString {
-                                    append("已选择 $selectedCount / ${group.size}")
+                                    append("${if (whiteMode) "已白化" else "已选择"} $selectedCount / ${group.size}")
                                     if (likelyCount > 0) append(" · 疑似背景 $likelyCount")
                                 },
                                 onClick = { onOpenType(type) },
@@ -302,6 +347,7 @@ private fun WidgetExactNodePage(
     type: String,
     components: List<WidgetComponentStore.Descriptor>,
     selected: Set<String>,
+    whiteMode: Boolean,
     onSelectionChanged: (WidgetComponentStore.Descriptor, Boolean) -> Unit,
 ) {
     val isMaml = components.firstOrNull()?.isMaml() == true
@@ -310,6 +356,7 @@ private fun WidgetExactNodePage(
         item {
             Text(
                 when {
+                    whiteMode -> "白化只改变当前精确路径文字或图片的前景色；不改变背景与其他节点。"
                     isMaml -> "MAML 元素按名称或精确渲染路径隐藏；路径或类型变化时不会回退误命中。"
                     type == WidgetComponentStore.TYPE_BACKGROUND ->
                         "仅移除 View.background，不隐藏 View 与子内容。"
@@ -334,7 +381,8 @@ private fun WidgetExactNodePage(
                             SwitchPreference(
                                 checked = key in selected,
                                 onCheckedChange = { checked -> onSelectionChanged(descriptor, checked) },
-                                title = exactNodeTitle(descriptor),
+                                title = if (whiteMode) "白化 · ${descriptor.name.ifEmpty { "(无资源 ID)" }}"
+                                    else exactNodeTitle(descriptor),
                                 summary = exactNodeSummary(descriptor),
                             )
                             if (index != group.lastIndex) {
