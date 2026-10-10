@@ -118,8 +118,7 @@ public class LauncherRecentsCapsuleGlassContractTest {
     @Test public void enabledCapsulesStayTransparentUntilFirstGpuFrameAndOnFailures() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         assertTrue(capsule.contains("takeOverTransparentBackgrounds()"));
-        assertTrue(capsule.contains("MiBlurBridge.clearPassWindowBlur(clearAll)"));
-        assertTrue(capsule.contains("MiBlurBridge.clearPassWindowBlur(world)"));
+        assertFalse(capsule.contains("MiBlurBridge.clearPassWindowBlur"));
         assertFalse(capsule.contains("MiBlurBridge.applyPassWindowBlur"));
         assertFalse(capsule.contains("applyNativeFallback()"));
         assertTrue(capsule.contains("capsules remain transparent"));

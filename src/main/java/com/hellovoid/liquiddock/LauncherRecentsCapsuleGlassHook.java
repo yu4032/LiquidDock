@@ -317,13 +317,12 @@ final class LauncherRecentsCapsuleGlassHook {
         }
 
         private void takeOverTransparentBackgrounds() {
-            // OEM blur is deliberately NOT used as a fallback while this switch is enabled.
-            // Clear any previous native state only at takeover, never on each frame/show.
-            MiBlurBridge.clearPassWindowBlur(clearAll);
-            MiBlurBridge.clearPassWindowBlur(world);
+            // Never activate OR clear OEM PassBlur from this feature. Both operations
+            // can modify native root PassBlur state (including 0.25-scale transactions).
+            // We own the two capsule backgrounds only; the vendor content stays interactive.
             clearAll.setBackground(null);
             world.setBackground(null);
-            MainHook.log(TAG + " transparent capsule ownership; native blur disabled");
+            MainHook.log(TAG + " transparent capsule ownership; no native blur fallback");
         }
 
         @Override public void onFirstFramePresented(RecentsCapsuleGlassSession.Target target) {
