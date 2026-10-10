@@ -8,6 +8,8 @@ import java.util.Map;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class ConfigLoadPolicyTest {
     @After
@@ -25,6 +27,22 @@ public class ConfigLoadPolicyTest {
 
         assertArrayEquals(new int[]{0, 0, 0, 0}, WidgetGridSizing.gridRect(
                 0, 0, 1, 1, new int[]{0}, new int[]{0}, 100, 100, 0, 0));
+    }
+
+    @Test
+    public void removedGridKeyDoesNotEnableCurrentGrid() {
+        Map<String, Object> old = new HashMap<>();
+        old.put("home_grid_8x4", true);
+        old.put("dock_divider_width_dp", 10);
+        LiquidDockConfig config = LiquidDockConfig.from(new ConfigReader(old));
+        assertFalse(config.grid.enabled);
+        assertFalse(config.divider.enabled);
+
+        old.put("grid_enabled", true);
+        old.put("dock_divider_enabled", true);
+        config = LiquidDockConfig.from(new ConfigReader(old));
+        assertTrue(config.grid.enabled);
+        assertTrue(config.divider.enabled);
     }
 
     @Test

@@ -198,35 +198,21 @@ final class LiquidDockConfig {
 
     /** Divider customization is independent from Dock geometry and unit switches. */
     static final class Divider {
-        final boolean enabled, explicitMode;
+        final boolean enabled;
         final float widthDp, heightPercent, yOffsetDp;
         final int colorR, colorG, colorB, alpha;
 
         Divider(ConfigReader c) {
-            boolean hasLegacyConfig = c.has("dock_divider_width_dp")
-                    || c.has("dock_divider_height_scale")
-                    || c.has("dock_divider_y_offset")
-                    || c.has("dock_divider_color_r")
-                    || c.has("dock_divider_color_g")
-                    || c.has("dock_divider_color_b")
-                    || c.has("dock_divider_alpha");
-            explicitMode = c.has("dock_divider_enabled");
-            enabled = c.b("dock_divider_enabled", hasLegacyConfig);
-
-            // Historical storage is tenths of dp. Normalize it here so the Hook only
-            // sees real dp and never knows about dock_dimensions_dp. Missing fields must
-            // stay zero in legacy mode because zero meant "do not override system".
-            float widthDefault = explicitMode ? 10f : 0f;
-            float heightDefault = explicitMode ? 60f : 0f;
-            int colorDefault = explicitMode ? 255 : 0;
-            int alphaDefault = explicitMode ? 128 : 0;
-            widthDp = Math.max(0f, c.f("dock_divider_width_dp", widthDefault) / 10f);
-            heightPercent = clamp(c.f("dock_divider_height_scale", heightDefault), 0f, 100f);
-            yOffsetDp = c.f("dock_divider_y_offset", 0) / 10f;
-            colorR = channel(c.i("dock_divider_color_r", colorDefault));
-            colorG = channel(c.i("dock_divider_color_g", colorDefault));
-            colorB = channel(c.i("dock_divider_color_b", colorDefault));
-            alpha = channel(c.i("dock_divider_alpha", alphaDefault));
+            enabled = c.b(ConfigSchema.Divider.ENABLED.name(),
+                    ConfigSchema.Divider.ENABLED.uiDefault());
+            // The current divider keys store width and Y in raw tenths of dp.
+            widthDp = Math.max(0f, c.f(ConfigSchema.Divider.WIDTH_DP.name(), 10f) / 10f);
+            heightPercent = clamp(c.f(ConfigSchema.Divider.HEIGHT_SCALE.name(), 60f), 0f, 100f);
+            yOffsetDp = c.f(ConfigSchema.Divider.Y_OFFSET_DP.name(), 0f) / 10f;
+            colorR = channel(c.i(ConfigSchema.Divider.COLOR_RED.name(), 255));
+            colorG = channel(c.i(ConfigSchema.Divider.COLOR_GREEN.name(), 255));
+            colorB = channel(c.i(ConfigSchema.Divider.COLOR_BLUE.name(), 255));
+            alpha = channel(c.i(ConfigSchema.Divider.ALPHA.name(), 128));
         }
     }
 

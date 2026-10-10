@@ -183,9 +183,8 @@ public final class ConfigSchema {
     }
 
     public static final class Divider {
-        // Explicit-versus-legacy runtime defaults are conditional and deliberately not flattened.
-        // Divider width/Y are historical raw tenths-of-dp integers in JSON, not DP_TENTHS
-        // sidecar values; DIRECT preserves the old import clamps and export representation.
+        // Divider width/Y are current raw tenths-of-dp integers in JSON and preferences.
+        // DIRECT preserves the storage contract without a DP_TENTHS sidecar.
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "dock_divider_enabled", false, null, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> WIDTH_DP = integer(
