@@ -116,3 +116,12 @@
 - 新 `perf/workspace-geometry-bounds-scratch-20261010` 分支：`LauncherGlassBoundsPolicy.applyInto()` 将原有边界四值写入调用方现有 `geometryPoints[8]`，避免 `LauncherGlassStaticNode.captureGeometry()` 每次调用 `apply()` 额外生成一个 `float[4]`，不增加节点常驻数组。原 `apply()` 及其他调用者不变。
 - 新增数值边界单元测试：正负 offset、极端内缩 1px 矫正、浮点 NaN / 无穷 offset、逆序输入、scratch 尾部不被修改和目标数组尺寸不合法时报错。**此优化只减少可确定的临时分配，无法取代 P1-A 按帧遍历和 Perfetto 实机数据**。
 - 与 GUI PR #319 / #320 无依赖；尚待 CI / 真机稳定桌面、图标、文件夹、小组件、发射代理回归，未经设备验收前不合并。
+
+
+## 12. Dock P1-B 每帧几何归因（2026-10-10，独立诊断批次）
+
+- #322 Workspace 静态节点边界缓冲复用已由用户实机验收，合并至 `main@089c76b2`。仅减少一次局部 `float[4]` 分配，并不代替 P1-A 的后续事件驱动分析。
+- 本分支 `perf/dock-predraw-stage-tracing-20261010` 基于该主线，围绕 `Miuix307PassBlurTextureView.installGeometryObserver` 的 `OnPreDrawListener` 新增 `Trace.isEnabled()` 控制的 `LD.Dock.GeometryPreDraw / ProducerGeometry / BackdropMapping`，并细分 `ReadSurfaceGeometry` 和 `UiSceneFingerprint` 两段。
+- **测量而不是优化声明**：原有 UI 线程更新、反射缓存、BufferGeometry rebind、Dock 场景指纹、UV crop、Prismal optical source freshness、GL producer 交换及 force-refresh 租约均未改时序。没有新增截图或 per-frame 同步磁盘日志。
+- 现存消耗分两类：root/Surface 状态轮询与 `DockGlassCompositor` 的图标指纹遍历。尚无设备实测 p95 数据；下一步根据 [Dock Perfetto 方案](dock-predraw-perfetto-20261010.md) 对稳定态与动画、工作台/旋转场景分别归因，后续才逐项设计明确的失效边界。不能凭函数调用频率推断主因。
+- [CI #38047653519](https://github.com/yu4032/LiquidDock/actions/runs/38047653519) 已通过单元测试、Debug APK 和安全检查；设备 Perfetto 数据仍待采集。维持和 GUI #319/#320 的分支隔离。

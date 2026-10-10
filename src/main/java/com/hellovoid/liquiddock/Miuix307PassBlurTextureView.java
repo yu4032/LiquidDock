@@ -15,6 +15,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -1287,8 +1288,25 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
         if (observer == null || !observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
-            refreshProducerGeometryInPlace();
-            updateBackdropMapping();
+            // Perfetto app slices do not depend on disk-backed LiquidDock debug logging.
+            boolean tracing = Trace.isEnabled();
+            if (tracing) Trace.beginSection("LD.Dock.GeometryPreDraw");
+            try {
+                if (tracing) Trace.beginSection("LD.Dock.ProducerGeometry");
+                try {
+                    refreshProducerGeometryInPlace();
+                } finally {
+                    if (tracing) Trace.endSection();
+                }
+                if (tracing) Trace.beginSection("LD.Dock.BackdropMapping");
+                try {
+                    updateBackdropMapping();
+                } finally {
+                    if (tracing) Trace.endSection();
+                }
+            } finally {
+                if (tracing) Trace.endSection();
+            }
             return true;
         };
         observer.addOnPreDrawListener(listener);
@@ -1313,7 +1331,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         SurfaceTexture input = inputSurfaceTexture;
         if (materialHost == null || input == null) return;
 
-        ProducerGeometry geometry = readSurfaceGeometry(materialHost);
+        boolean tracing = Trace.isEnabled();
+        if (tracing) Trace.beginSection("LD.Dock.ReadSurfaceGeometry");
+        ProducerGeometry geometry;
+        try {
+            geometry = readSurfaceGeometry(materialHost);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
         if (geometry == null || geometry.rootSurface == null || !geometry.rootSurface.isValid()) return;
         if (!binding.rootSurface.isValid()
                 || !isSameSurface(binding.rootSurface, geometry.rootSurface)) {
@@ -1479,8 +1504,15 @@ final class Miuix307PassBlurTextureView extends TextureView
         float nextDockUvBottom = insets.bottom / (float) sampleHeight;
         float nextDockUvWidth = visibleWidth / (float) sampleWidth;
         float nextDockUvHeight = visibleHeight / (float) sampleHeight;
-        boolean dockSceneChanged = dockCompositor.refreshUiSceneIfNeeded(
-                sampleWidth, sampleHeight, insets.left, insets.top, 1f, 1f);
+        boolean tracing = Trace.isEnabled();
+        if (tracing) Trace.beginSection("LD.Dock.UiSceneFingerprint");
+        boolean dockSceneChanged;
+        try {
+            dockSceneChanged = dockCompositor.refreshUiSceneIfNeeded(
+                    sampleWidth, sampleHeight, insets.left, insets.top, 1f, 1f);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
 
         BackdropSnapshot currentSnapshot = backdropSnapshot;
         boolean unchanged = currentSnapshot != null
