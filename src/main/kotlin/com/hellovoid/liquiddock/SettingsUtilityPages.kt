@@ -27,7 +27,6 @@ import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.config.PresetManager
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.window.WindowDialog
 
 // Independent sidebar, data import/export and license pages. These share only
 // the existing settings chrome; restoration still uses the original dialog and
@@ -85,7 +84,7 @@ internal fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity)
             }
         }
     }
-    WindowDialog(
+    AnimatedSettingsWindowDialog(
         show = confirmDefaultReset,
         title = "确认恢复默认配置",
         onDismissRequest = { confirmDefaultReset = false },
