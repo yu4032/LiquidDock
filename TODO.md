@@ -1,159 +1,141 @@
 # LiquidDock TODO FOR AGENT
 
-基准：**2026-10-10 `main`（截至本轮核验 `8433b12b`）/ `build.gradle.kts` 中 `versionName=2.6.4` / HyperOS 3 平板、Launcher 4.50 适配主线 / libxposed API 101**。`versionName` 是源码构建版本，不等于已发布 Release 版本。
+基准：**2026-10-10 `main` / HyperOS 3 平板 / Launcher 4.50 / libxposed API 101**。
 
-自由网格、横竖屏位置记忆、挤压循环/事务保护和 PR #275 的图标/小组件规划器路由已落地。下面的性能与兼容性条目仍是待验证或待优化事项，不代表上述功能尚未实现。
+本文件只记录当前仍需要代码、验证或设计决策的事项。
+已经完成的功能、历史探索、已确认不继续推进的方向不再保留在 active TODO。
 
-本文件只把**未完成**的优化、兼容性验证和维护工作列为 active TODO；已验证的阶段成果归入文末“已完成 / 防回归”。状态区分：`源码已证实`、`部分完成`、`待测量`、`待真机验证`，不把静态检查等同于 CI/真机验收。详细证据与风险分层见 [2026-10-10 维护性审计](docs/maintainability-audit-20261010.md)。
+原则：
 
-维护原则：不从 TODO 反推代码；文档过时先核对源码；不为了减少代码行数合并具有不同 source authority / EGL 生命周期的玻璃 Session；不删有导入导出、迁移、预设或运行时消费的隐藏配置键。
-
-## P1 · Runtime performance hot paths
-
-**状态：部分完成，稳定态 CPU 热点仍待量化。** GL program location 缓存和 Dock scratch 数组复用已经落地，详见文末完成项；目前重点是避免稳定帧重复扫描几何与节点。
-
-“稳定态仍按帧执行”路径：优先把 `O(frame)` 工作降为 `O(event)`，而不是简单加节流或固定延迟。
-
-本阶段仅建立可靠的性能测量窗口，不把 Perfetto 埋点当作 CPU 优化；后续以 stable/paging/drag/unlock 的 p95 与节点计数对比决定 dirty-node 策略。
-
-### P1-A · Launcher Workspace glass per-frame node scan
-
-**最新阶段：[#321](https://github.com/yu4032/LiquidDock/pull/321) 已合并至 main，Perfetto 分段诊断可用；每帧 O(N) 扫描仍未消除，待实机量化。** 原分支 `perf/workspace-prescan-tracing-20261010` 在 `LauncherGlassSession` 内仅当 `Trace.isEnabled()` 时采样 `SceneSync / DragNodes / StaticNodes / SourceReconcile`，以及 drag/static candidate 与真实 geometry read 数。此轮没有 dirty cache、没有额外 per-frame log/file write，也未完成真机性能测量。量化步骤见 [Workspace 扫描 Perfetto 指南](docs/workspace-ui-node-scan-perfetto-20261010.md)。
-
-**当前独立低风险改动（待 CI/实机）**：`perf/workspace-geometry-bounds-scratch-20261010` 为 `LauncherGlassBoundsPolicy` 加入 `applyInto()`，让 `LauncherGlassStaticNode` 利用原有 `geometryPoints[8]` 暂存边界，避免静态玻璃一次有效几何捕获中由 `apply()` 创建的 `float[4]`。原有调用 API 保留，数值计算与 1px 边界规则不变；这是分配优化候选，**不等于已减少节点扫描或改善 FPS**。详见 [Perfetto/分配审查](docs/workspace-ui-node-scan-perfetto-20261010.md)。
-
-`LauncherGlassSession` 当前在 Launcher root 的 `OnPreDrawListener` 中每帧执行 `syncSceneOnUiThread()`。
-
-稳定态仍会：
-
-- 读取 drag/static node 快照数组；
-- 遍历全部 Workspace glass node；
-- 对 drag sink 执行 `syncFromMaterial()`；
-- 对 static node 执行 `captureGeometry()`；
-- 对每个 static node 做 ancestor visibility/alpha 检查；
-- 调用 `transformMatrixToGlobal()`、矩阵 invert/map；
-- 检查 root rotation；
-- 调用 source backend `reconcileRoot()`。
-
-图标/文件夹/Widget glass 数量增加时，UI 线程成本近似随 node 数量线性增长；在 120/165Hz 等高刷新率设备上尤其值得优化。
-
-目标：
-
-- 建立 explicit dirty-node / dirty-scene 模型；
-- layout / attach / detach / visibility / scale / translation / drag / proxy 等真实事件只标记对应 node dirty；
-- Workspace scroll 继续使用现有 scroll projection，而不是为每个 node 重算完整全局矩阵；
-- 下一帧只更新 dirty node；
-- 完全静止的 Workspace 应接近 `O(1)` UI-thread bookkeeping，而不是 `O(N)` node scan。
-
-必须保持：
-
-- HOME spring scaling；
-- Workspace paging；
-- drag/proxy geometry；
-- icon/folder/widget visibility；
-- current-page reconciliation；
-- fresh generation / source authority；
-- 不重新引入固定时间 capture pump。
-
-### P1-D · GUI 玻璃弹窗动画验收（已完成基本验收，仅持续防回归）
-
-- [#318](https://github.com/yu4032/LiquidDock/pull/318) 的数值输入、默认恢复、Grid 安全提醒和重启作用域弹窗增加进出场动画；使用 Compose spring/tween 尽量延续 Prismal 的动效语言，但不替换 MIUIX 窗口的键盘与焦点管线，也不新增采样层。验收：正常打开/取消关闭、快速重入、系统返回键、输入法焦点、弹窗重启操作与底栏拖动无冲突。
-- PrismalAGSL v1.0.4 没有可直接代替现有 MIUIX WindowDialog 的原生 modal，**不可声称是 Prismal 原生窗口动画**；仅是匹配其 spring 手感。已根据用户确认合并 #318；后续多机型的 GPU/布局抖动属于持续回归观察，不是尚待合并的门槛。
-
-### P1-B · Dock PassBlur geometry polling
-
-`Miuix307PassBlurTextureView` 当前 root pre-draw 每帧：
-
-1. `refreshProducerGeometryInPlace()`；
-2. `updateBackdropMapping()`。
-
-其中 `readSurfaceGeometry()` 会反复读取/反射 ViewRoot / Surface 状态，包括：
-
-- `mSurfaceSize`；
-- `getSurfaceControl()`；
-- config rotation；
-
-`updateBackdropMapping()` 还会：
-
-- 读取 `mWinFrameInScreen`；
-- `getLocationOnScreen()`；
-- 重新计算 sampling insets / UV mapping；
-- 调用 `DockGlassCompositor.refreshUiSceneIfNeeded()`。
-
-即使最终判定 geometry 未变化，上述前置工作已经发生。
-
-已具备 `Field/Method` 缓存字段与 ViewRoot 缓存，不能再把“首次引入反射成员缓存”作为待开发功能。下一步应**量化** `readSurfaceGeometry()` 与 `updateBackdropMapping()` 在稳定帧的成本，验证 ViewRoot 变化时缓存失效是否完整，再考虑用可靠的真实事件缩小轮询范围。
-
-最终目标：
-
-- surface/root replacement；
-- rotation；
-- size/layout；
-- Dock geometry/reflow；
-- window-frame change
-
-这些真实事件标记 geometry dirty，再在下一帧统一 reconcile。
-
-禁止用轮询间隔或 fixed-delay 代替真实 geometry authority。
-
-### P1-C · GL primitive deduplication（location caching 已完成）
-**状态：仅重复工具方法待整理。** 对 `LauncherGlassSession`、`RootPassBlurBackend`、`Miuix307PassBlurTextureView`、`ShortcutPopupGlassSession`、`GboardFloatingGlassSession`、`MiuiSearchboxGlassSession`、`RecentsCapsuleGlassSession`、`SecurityCenterGlassSession` 和 `SystemUiHandleMenuPrismalSession` 的源码核验发现，attribute/uniform location 已在 program 建立时获取并缓存；**不要再执行“每帧查询迁出”的旧任务**。
-
-剩余可选工作：在逐个核对 GL context ownership、shader/attribute 契约、释放语义后，提取无状态 `compileShader/createProgram/bindQuad/unbindQuad` 等基础 helper。禁止合并不同 Session 的 source/recovery 生命周期；任何提取都必须有回归测试。
-
-### P1-D · DockGlassCompositor stable-frame scan / dirty fast path
-
-**状态：部分完成。** `DockGlassCompositor` 现已保留 `uiFingerprintScratch`、`proxyFingerprintScratch`、`animationSampleScratch` 与 `sceneItemScratch`，不会在每次 refresh 无条件重建这些数组/列表；容量扩张时仍可能分配。
-
-`refreshUiSceneIfNeeded()` 当前仍在判定 fingerprint 不变之前遍历 `cached`，计算每个 Dock item 的 UI / 动画 / proxy 指纹。因此剩余问题是稳定帧的扫描成本，而非“每帧创建 long[]”：
-
-- 先用 Perfetto / trace 对比有无动画、不同 Dock icon 数量下的真实 UI-thread 成本；
-- 研究 revision、output geometry 与动画状态驱动的 fast-path，确保没有遗漏 parent-chain translation、visibility、drag/proxy、resize/recenter；
-- dirty 的 item 才重新采样 geometry；保持 workstation radius、output-root transform 和 source freshness 不变；
-- 不要盲目缓存可变的 vendor View 状态。
+- 不为了减少文件行数拆分具有明确生命周期的渲染组件。
+- 不使用固定延迟替代真实事件驱动。
+- 不以静态分析代替真机验证。
+- 不删除仍被迁移、预设、导入导出或运行时使用的配置。
 
 ---
 
-## P2 · 旧 GUI / 采样配置收敛（2026-10-09 审计）
+# P1 · Runtime performance
 
-**状态：待清理。** PR #290 仅收紧 GUI 描述并删除无实际控件的旧帮助文本；后续清理必须独立核验和测试。
+## 1. Workspace glass dirty-scene optimization
 
-- 核实 `ConfigSchema.Glass` 中旧 capture/dynamic 参数（如 `liquid_capture_power_limit_fps`、`liquid_capture_stop_delay`、`liquid_capture_scale`、`liquid_dynamic_*`、`liquid_black_threshold`、`liquid_home_settle_delay`）是否有真正的运行时消费或导入导出/预设依赖。无消费者才分批清理，切勿误删 `PASSBLUR_CAPTURE_SCALE` / `PASSBLUR_RENDER_FPS`。
-- 检查 `liquid_edge_band`、`liquid_highlight_alpha`、`liquid_recents_prearm_distance`：当前没有可见 GUI 控件；仍须验证配置链是否仅有声明、预设或历史兼容用途，再决定删除键或保留迁移。
-- 对八个旧网格独立四边边距键与两个工作台 All Apps 合并纵向偏移键，先做历史配置迁移、导入覆盖与新键缺省回退测试，之后再考虑删除旧读取分支。不得让既有布局在升级时跳变。
-- 完整核对可见 GUI 的 `ConfigSchema` 写入、`LiquidDockConfig` 读取及真实 Hook 消费；不可根据“页面没有入口”直接定义业务代码为死代码。
-- GUI 滑条从“松手后写入”调整为**右侧数值每跨一个合法档位就实时写入**（#314，待实机确认）。同档位去重，避免无意义的每帧写入。SharedPreferences → API101 Remote Preferences 的延迟、拖动帧率和最终落盘可靠性仍需实测；4×2 网格预检继续优先于风险档位的写入。
-- **Prismal GUI 底栏视觉完整性**：已确认原生胶囊模糊/折射/回弹运行，文字因历史重影问题采用单份 overlay。[#318](https://github.com/yu4032/LiquidDock/pull/318) 尝试桥接 native `LocalPrismalBottomTabHighlightedIndex` 的拖动中即时高亮和轻缩放，需真机确认长按、快速拖动及切页不闪烁/不重影。**仍未恢复**胶囊对图文字形的实际镜片折射，也尚未桥接原生按压比例 `LocalPrismalBottomTabScale`（上游为 internal）；后续不能简单重复图文或修改上游。详见 [审查报告](docs/gui-prismal-bottom-navigation-audit-20261010.md)。
+**状态：待测量 / 待设计。**
+
+当前 Workspace glass 在 Launcher root `OnPreDraw` 中同步：
+
+- drag/static node 快照；
+- static node geometry capture；
+- ancestor visibility/alpha；
+- global matrix transform；
+- root rotation；
+- source backend reconcile。
+
+Perfetto 分段诊断已经进入 main：
+
+- `LD.Workspace.SceneSync`
+- `LD.Workspace.DragNodes`
+- `LD.Workspace.StaticNodes`
+- `LD.Workspace.SourceReconcile`
+
+下一步：
+
+- 使用 stable/paging/drag/unlock 场景采样真实成本；
+- 设计 dirty-node / dirty-scene 模型；
+- layout、attach、detach、visibility、scale、translation、drag、proxy 等真实事件驱动更新；
+- 保留 Workspace scroll projection；
+- 保证 HOME spring、分页、widget、folder、proxy geometry 不回归。
+
+目标：静止 Workspace 从 O(N) node scan 降低到接近 O(1) bookkeeping。
 
 ---
 
-## P2 · Secondary performance cleanup
+## 2. Dock PassBlur geometry reconciliation
+
+**状态：待量化。**
+
+当前 Dock PassBlur root pre-draw 仍可能执行：
+
+- surface geometry 读取；
+- ViewRoot / Surface 状态检查；
+- sampling mapping 更新；
+- DockGlassCompositor scene refresh。
+
+已有：
+
+- Field/Method 缓存；
+- PassBlur frame sync 修复。
+
+下一步：
+
+- Perfetto 分析稳定帧成本；
+- 使用真实 geometry authority 事件标记 dirty；
+- 避免固定 polling interval。
+
+---
+
+## 3. DockGlassCompositor stable-frame scan
+
+**状态：部分完成。**
+
+已有 scratch 复用：
+
+- ui fingerprint scratch；
+- proxy fingerprint scratch；
+- animation sample scratch；
+- scene item scratch。
+
+剩余：
+
+- 测量稳定帧 fingerprint scan 成本；
+- 研究 revision / dirty item fast path；
+- 保持 animation、drag、resize、recenter、source freshness 正确。
+
+---
+
+# P2 · Configuration and maintenance
+
+## 4. ConfigSchema dead-key audit
+
+**状态：待清理。**
+
+重新核对：
+
+- Glass capture/dynamic 历史参数；
+- 无 GUI 控件但仍存在的键；
+- 旧网格边距键；
+- 工作台旧偏移键。
+
+要求：
+
+- 先确认真实消费链；
+- 检查导入导出和预设迁移；
+- 确认无用户数据依赖后再删除。
+
+禁止仅因为 GUI 没入口就判断死代码。
+
+---
+
+## 5. Grid configuration migration
 
 **状态：未完成。**
 
-这些路径目前不是首要瓶颈，但可以在 P1 hot paths 收口后继续处理。
+迁移：
 
-### Launcher Dialog material guard
+- `home_grid_8x4`
+- 新 grid enable key
 
-`LauncherDialogGlassCoordinator` 仍通过 pre-draw 检查：
+要求：
 
-- dialog dim；
-- panel background；
-- transparent clone alpha；
-- pass-window blur gate。
+- 新安装读取新键；
+- 老配置平滑迁移；
+- 后续删除旧读取路径。
 
-后续目标参考已经完成的 Launcher HotSeats / Gboard ownership 模式：
+---
 
-- vendor setter/write boundary interception；
-- claimed 期间记录 latest vendor intent；
-- release 时 replay；
-- 尽量移除 material-state pre-draw reassertion。
+## 6. Geometry-only pre-draw observer review
 
-Dialog 生命周期短，因此优先级低于 Workspace/Dock。
+**状态：低优先级。**
 
-### Geometry-only pre-draw observers
-
-继续评估以下 pre-draw 是否可缩为“仅动画/移动期间启用”或真实 layout/translation dirty event：
+评估：
 
 - Gboard floating geometry；
 - Shortcut popup geometry；
@@ -161,286 +143,115 @@ Dialog 生命周期短，因此优先级低于 Workspace/Dock。
 - Recents capsule geometry；
 - page indicator translation guard。
 
-不要为了消灭 `OnPreDrawListener` 本身而牺牲实时跟随；只有在真实事件足够完整时才替换。
+目标：
 
-### Debug logging I/O
+仅动画/移动期间启用，或改为真实事件驱动。
 
-`MainHook.log()` 在 debug logging 开启时不仅输出 API/logcat，还同步：
+禁止为了删除 OnPreDraw 而破坏实时跟随。
 
-- 创建时间格式对象；
-- open file；
-- append write；
-- close file。
+---
 
-高频动画/producer/trace 日志会明显污染性能测量。
+## 7. Debug logging I/O optimization
+
+**状态：低优先级。**
+
+当前 debug logging 仍可能同步：
+
+- 时间格式化；
+- 文件打开；
+- append；
+- close。
 
 目标：
 
-- 默认行为保持 debug off；
-- 如需长期文件日志，改为独立线程 + buffered writer / batched flush；
-- per-frame trace 只在显式诊断模式启用；
-- 性能测试时不能让同步文件日志成为主要干扰源。
-
-
-## P1 · Expanded integration compatibility corpus
-
-**状态：功能已上线，跨版本覆盖仍需要真实样本。**
-
-v2.5.1 已经同时覆盖：
-
-- SystemUI app-caption menu；
-- Security Center sidebar；
-- Gboard floating keyboard / toolbar；
-- MIUI Searchbox；
-- Launcher uninstall/remove dialogs。
-
-这些路径都依赖外部应用/系统组件的真实结构。后续需要积累不同版本的反编译与真机 contract corpus。
-
-### SystemUI
-
-验证：
-
-- MIUI caption-menu path；
-- AOSP/WMShell handle-menu path；
-- open/close surface animation；
-- callback failure isolation；
-- stock fallback。
-
-### Security Center
-
-验证：
-
-- Game；
-- Video；
-- Global Dock；
-- All Apps；
-- root replacement；
-- carrier/material epoch；
-- terminal cleanup。
-
-保持 ambiguity -> reject，不增加混淆名表或 version whitelist。
-
-### Gboard
-
-验证：
-
-- floating geometry；
-- toolbar/capsule；
-- handle drag；
-- non-floating keyboard 不误触发；
-- vendor update 后结构识别。
-
-### MIUI Search
-
-验证：
-
-- SearchActivity 主背景；
-- day/night；
-- resume；
-- background view replacement；
-- search box 本体不被误改。
-
-- `ConfigSchema.Grid.ENABLED` 改用新键 `grid_enabled`；
-- Launcher/设置进程启动迁移时，如果 `grid_enabled` 尚不存在，则把现有 `home_grid_8x4` 的布尔值原样复制到 `grid_enabled`；
-- 过渡版本内同时维护两个键：GUI、preset、import/export 与任何直接写入路径更新开关时同时写 `grid_enabled` 和 `home_grid_8x4`，保证一个完整版本周期内二者一致；
-- 运行时以完成迁移后的 `grid_enabled` 为主值，不再从键名推断任何 8×4 语义；
-- 增加测试覆盖首次复制、双写一致性和已有 `grid_enabled` 不被旧键覆盖。
-
-### 再下一次更新：彻底删除 `home_grid_8x4`
-
-- 只读取和写入 `grid_enabled`；
-- 从 `ConfigSchema`、preset、GUI、import/export、测试和文档中删除 `home_grid_8x4`；
-- 删除第一阶段的旧键复制/双写兼容代码；
-- 更新时从 SharedPreferences 中移除残留的 `home_grid_8x4`；
-- 全仓搜索确认 `home_grid_8x4` 生产代码引用归零。
-
-最终配置契约：
-
-```json
-{
-  "grid_enabled": false,
-  "grid_columns": 8,
-  "grid_rows": 4
-}
-```
-
----
-## P2 · Third-party profile configuration ownership
-
-Gboard 已有 `ConfigSchema.Gboard` 与 shared profile bridge；MIUI Search 仍由 `MiuiSearchboxGlassPreferences` 管理公开设置。
-
-当前行为有效，但后续可评估：
-
-- 是否把公开第三方 adapter key 统一纳入一个明确 registry/schema；
-- JSON 导入导出如何表达第三方 adapter profile；
-- profile default / public UI key / hidden shared-profile key 的 ownership 是否足够清晰；
-- 不破坏已有备份和现有用户值。
-
-这不是行为 bug，不要为了“统一”贸然迁移 key。
+- 降低调试模式自身干扰；
+- 保持普通用户路径零影响。
 
 ---
 
-## P2 · Widget component discovery diagnostics
+# P3 · Architecture and compatibility
 
-Widget component hiding 已进入生产，但 discovery/parser 的降级信息仍可继续收紧。
+## 8. RootPassBlur / glass session ownership audit
 
-目标：
+**状态：持续维护。**
 
-- required bundled resource 缺失与 optional parse failure 分开；
-- 真实 degradation 输出 one-shot structured diagnostic；
-- 不产生 per-frame/per-bind 日志；
-- selector 失败不产生部分 mutation；
-- backup/import 失败不覆盖已有有效规则。
+检查：
 
-不扩展成任意脚本/方法调用 DSL。
+- Surface 生命周期；
+- EGL owner；
+- texture release；
+- recovery path。
 
----
-
-## P2 · ShortcutMenu dark-mode persisted naming
-
-当前 persisted key：
-
-```text
-liquid_shortcut_popup_dark_text
-```
-
-实际功能已覆盖“文字 + 适合处理的近黑图标”。
-
-为兼容旧配置暂时保留旧 key 名。
-
-若未来重命名：
-
-1. 新 schema key；
-2. migration；
-3. import/export alias；
-4. 至少一个兼容周期；
-5. 再删除旧 key。
+原则：不同 Session 不强行合并。
 
 ---
 
-## P2 · Test architecture debt
+## 9. Signed build / R8 regression coverage
 
-`RuntimeBehaviorTestPolicyContractTest` 已建立 production-source-reader default deny。
+**状态：保留。**
 
-当前 `LEGACY_SOURCE_DEBT` 为 **11 项**（以 `RuntimeBehaviorTestPolicyContractTest` 的源码集合为准）：
+继续检查：
 
-- `GlassConfigGenerationContractTest.java`
-- `Miuix307EdgeOverscanContractTest.java`
-- `PrismalCompositeHotPathContractTest.java`
-- `PrismalModuleBoundaryContractTest.java`
-- `PrismalOfficialParityV3Test.java`
-- `RestartBoundSettingsContractTest.java`
-- `WidgetBackgroundRankingUiContractTest.java`
-- `WidgetComponentDiscoveryContractTest.java`
-- `WidgetComponentSelectionContractTest.java`
-- `WidgetMamlRenderTreeDiscoveryContractTest.java`
-- `WorkstationAllAppsHookContractTest.java`
-
-逐项处理：
-
-- 真正静态 contract -> audited allowlist；
-- runtime behavior -> typed state/policy test；
-- obsolete -> 删除。
-
-该列表只能减少。另有 allowlist 内的源码字符串断言（如 `ModernSettingsArchitectureTest`）；它们适合限制静态结构，但不能替代真实状态/交互测试。GUI 拆文件时优先调整测试以检查等价行为，不能为了测试通过保留巨型文件。
+- Class.forName；
+- reflection keep rules；
+- release build 行为。
 
 ---
 
-## P2 · Settings i18n
+## 10. Settings i18n cleanup
 
-Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增：
+**状态：低优先级。**
 
-- dialog；
-- SystemUI handle menu；
-- Gboard；
-- Searchbox；
-- widget component pages；
-- highlight pages。
-
-目标：
-
-- 迁入 Android string resources；
-- 中英文术语统一；
-- 不在 i18n PR 中改变行为、key 或 default。
+迁移剩余硬编码 UI 文本到资源文件。
 
 ---
 
-## P2 · Documentation automation
+# Validation queue
 
-2026-10-10 发现多个技术文档仍把 2026-10-03 / v2.6.1 写成当前主线。本文档已与当日源码重新核对关键事实；其他技术文档仅更正可核实的版本元数据，未做逐项 runtime 复验。`docs/superpowers/*` 属于历史方案，不可直接当作当前规范。
+## GUI PR acceptance
 
-后续可以增加轻量 CI：
+待实机确认：
 
-- 检查根文档版本号与 Gradle `versionName`；
-- 检查 README scope 与 `META-INF/xposed/scope.list`；
-- 检查内部相对链接；
-- 检查历史 docs 是否带 archive banner；
-- 检查 active docs 是否仍引用已删除生产类。
+- #319 数值控制；
+- #320 Surface/Cell 拆分。
 
-不要让文档 CI 变成脆弱的逐字字符串快照。
+检查：
+
+- Prismal 背景；
+- 深色主题；
+- 弹窗动画；
+- 输入焦点；
+- 滑动性能。
+
+## Workspace performance validation
+
+待采样：
+
+- 静止桌面；
+- 页面切换；
+- 拖动图标；
+- 解锁进入桌面。
+
+关注：
+
+- UI thread p95；
+- StaticNodes 成本；
+- allocation/GC。
 
 ---
 
-## P1 · Code maintainability / regression-safe refactor
+# Completed / archive
 
-**状态：GUI 主 Activity 已收敛，后续以功能回归和运行时热点为优先。** #309–#318 已合并 `main`；[#319](https://github.com/yu4032/LiquidDock/pull/319)（数值设置）与 [#320](https://github.com/yu4032/LiquidDock/pull/320)（Surface/Cell）CI 通过、仍开放并待实机验收。#320 分支上的 `ModernSettingsUi.kt` 291 行，采样/Scaffold/顶栏应作为一个生命周期单元，不建议为缩行数继续拆。P1-A Perfetto 埋点独立 [#321](https://github.com/yu4032/LiquidDock/pull/321) 已通过 [CI #38044043722](https://github.com/yu4032/LiquidDock/actions/runs/38044043722)，尚待真机数据和后续实际优化。
+以下不再进入 active TODO：
 
-优先顺序：
-1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
-2. Gesture：将 `GestureState` 的 DOWN/reset/取消/commit 定义为可测试的状态转换，覆盖连续手势、vendor handoff、代际取消。
-3. PassBlur：先封装不可变几何快照和 GL 资源 owner；不改变 producer/frame sync/rotation/壁纸 generation/错误恢复时序。
-4. 包结构：按域渐进搬迁；必须审核 Xposed 注入、R8、反射二进制名及测试，禁止自动批量移动所有类。
+- GUI 大规模拆分；
+- ModernSettingsUi 进一步机械拆分；
+- Prismal 弹窗动画开发；
+- Perfetto 接入；
+- GL location caching；
+- WorkspaceGridSizing 旧状态设计；
+- 第三方 profile schema 扩展；
+- ShortcutMenu dark-mode key 重命名；
+- 文档自动化建设。
 
-验收门槛：每批独立 PR、CI 测试、源代码 diff/配置键比对；GUI 涉及配置写入、触摸控制或 Prismal 视觉时仍需实机确认；Hook/图形/手势相关变更尤其必须实测。**不要将“源码移动和编译成功”记作全部维护性问题已修复。**
-
----
-
-# 已完成并只需防回归
-
-## 近期已落地的优化（非完整性能验收）
-
-- **GL program location caching**：主要 Render Session 在 EGL program 初始化后缓存 attribute/uniform location；后续只考虑复用无状态 GL helper，不再把 location 查询当作持续逐帧热点。
-- **Dock scratch 复用**：`DockGlassCompositor` 已用复用数组/列表减少短命对象；稳定态 O(N) 扫描仍列于 P1-D。
-- **自动采样保护区**：四边 `SAMPLING_EXTRA_TOP/BOTTOM/LEFT/RIGHT` 的手动补偿配置已退役，保留自动保护区及纹理上限裁剪；不要恢复无效 GUI 控件。
-
-## MainHook composition refactor
-
-`MainHook` 已经收缩为安装顺序/composition root，不再是旧文档中的大规模 feature state 容器。
-
-## HomeGrid split
-
-Profile、orientation、mutation、count、centering、bounds、cell geometry、folder alignment、page indicator、rotation refresh、drop、drag bounds 已拆成独立 owner/policy。
-
-## Single default configuration
-
-双预设/归零默认已经移除。当前只保留一套内置默认配置；首次空 store seed，升级不覆盖已有配置。
-
-Security Center、SystemUI handle-menu 与 debug log 默认明确关闭。
-
-## Launcher dialog glass and native dark mode
-
-卸载/移除/二次确认 glass 已进入主线；native dark mode 的 R8 class-string 问题已修复为 `Context + Dialog + Window` constructor semantics。
-
-## ShortcutMenu Dock coverage
-
-Workspace、Home-forwarded Dock 和非桌面 direct Dock 均有 pre-show capture 路径；`ACTION_CANCEL` 与 Dock owner churn 的真实问题已经修复。
-
-## Workspace source-driven glass
-
-普通 HOME 不依赖固定 capture pump；freshness、wallpaper generation、producer generation 已分离。
-
-## Launcher live drag
-
-真实 DragView + upper overlay + live source 已进入生产，不再使用 frozen drag-start backdrop。
-
-## Widget component hiding
-
-Discovery、用户选择、可恢复 mutation、backup/import 已进入生产。
-
-## Recents capsule glass
-
-Clear All 与设备互联按钮已经有独立玻璃替换和 stock fallback。
-
-## Gboard / MIUI Search adapters
-
-两者已通过独立第三方 adapter registry 进入生产，并有各自设置页面与 fail-safe fallback。
+这些内容如需变化，应重新建立新的明确任务，而不是恢复旧 TODO。
