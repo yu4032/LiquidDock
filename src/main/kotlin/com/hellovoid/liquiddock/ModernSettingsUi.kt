@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -785,6 +786,34 @@ internal fun NumericSettingInputDialog(
     }
 }
 
+// Keep the right readout's measured width independent of the value's digit count.
+// Shared by numeric preferences and custom/third-party glass slider rows.
+private val SliderValueReadoutWidth = 104.dp
+
+@Composable
+internal fun SliderValueReadout(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .width(SliderValueReadoutWidth)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 9.dp),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Text(
+            text = text,
+            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @Composable
 internal fun SliderPreference(
     value: Float,
@@ -856,14 +885,10 @@ internal fun SliderPreference(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     if (shownValueText.isNotBlank()) {
-                        Text(
+                        SliderValueReadout(
                             text = shownValueText,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable(enabled = enabled) { editingValue = true }
-                                .padding(horizontal = 8.dp, vertical = 9.dp),
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.66f),
-                            fontSize = 13.sp,
+                            enabled = enabled,
+                            onClick = { editingValue = true },
                         )
                     }
                     endActions?.invoke()
