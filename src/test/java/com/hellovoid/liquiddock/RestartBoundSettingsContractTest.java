@@ -97,7 +97,9 @@ public class RestartBoundSettingsContractTest {
         assertTrue(source.contains("玻璃的快速淡出；已加载的桌面 Hook 即时生效"));
         assertTrue(source.contains("玻璃退出时的 LiquidDock 淡出；已加载的安全中心 Hook 即时生效"));
         assertTrue(source.contains("已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面"));
-        assertTrue(source.contains("已加载的工作区、Launcher 玻璃及独立应用玻璃实时生效"));
+        String specs = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt"));
+        assertTrue(specs.contains("已加载的工作区、Launcher 玻璃及独立应用玻璃实时生效"));
         assertTrue(stringValue(zh, "recents_header_summary").contains("即时生效"));
         assertFalse(stringValue(zh, "recents_header_summary").contains("重启"));
         assertFalse(stringValue(en, "recents_header_summary").toLowerCase(Locale.ROOT).contains("restart"));
