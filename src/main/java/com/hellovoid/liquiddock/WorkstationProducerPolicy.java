@@ -9,6 +9,12 @@ final class WorkstationProducerPolicy {
         return workspaceCovered && !workstationMode;
     }
 
+    /** Do not stop the native source if Recents glass shares its OES frame. */
+    static boolean keepSharedSourceLiveForRecents(
+            boolean covered, boolean capsulesEnabled, boolean folderCovered) {
+        return covered && capsulesEnabled && !folderCovered;
+    }
+
     /** Workspace HOME capture is continuous; coverage/presentation suspension is handled separately. */
     static boolean shouldUseSingleFramePulse(boolean workstationMode) {
         return false;

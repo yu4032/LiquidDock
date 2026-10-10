@@ -18,6 +18,14 @@ public class WorkstationProducerPolicyTest {
     }
 
     @Test
+    public void recentsKeepsSharedSourceLiveWhileCovered() {
+        assertTrue(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true, false));
+        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(false, true, false));
+        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, false, false));
+        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true, true));
+    }
+
+    @Test
     public void workspaceRefreshUsesContinuousCaptureInAllModes() {
         assertFalse(WorkstationProducerPolicy.shouldUseSingleFramePulse(true));
         assertFalse(WorkstationProducerPolicy.shouldUseSingleFramePulse(false));

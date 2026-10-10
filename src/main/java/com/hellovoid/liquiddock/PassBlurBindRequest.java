@@ -34,7 +34,7 @@ final class PassBlurBindRequest {
                 host,
                 PassBlurDomain.LAUNCHER_WORKSPACE,
                 requestedScale,
-                NO_EXTRA_EXCLUSIONS);
+                RECENTS_CAPSULE_EXTRA_EXCLUSIONS);
     }
 
     static PassBlurBindRequest launcherDialog(View authoritativeRoot) {
