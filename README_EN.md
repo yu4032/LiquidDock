@@ -10,13 +10,25 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/yu4032/LiquidDock"></a>
 </p>
 
-LiquidDock is an LSPosed module for HyperOS 3 tablets. It customizes the home screen, Dock, Recents, and extends Liquid Glass styling to launcher, additional system surfaces and selected third-party apps.
+LiquidDock is an LSPosed module for HyperOS 3 tablets. Customize the workspace and Dock, and bring Liquid Glass to Recents, folders, widgets, system surfaces, and selected apps.
+
+> **Version note:** This README describes the current `main` branch (2.7.0 prepared for release). APKs on [GitHub Releases](https://github.com/yu4032/LiquidDock/releases) may not include these changes yet; check the [changelog](CHANGELOG.md) for the version you installed.
 
 <p align="center">
   <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
 </p>
 
 ## Main features
+
+### Modern settings UI
+
+The settings app uses a **MIUIX + Prismal** glass design, organized into workspace, Dock, Liquid Glass, app integrations, animations, and other feature pages. The glass header and bottom navigation remain visually distinct, including in dark mode and when settings glass is disabled.
+
+- **Sliders:** smooth, continuous dragging with the nearest valid value shown live. Safe settings follow the displayed value; grid changes that could invalidate widget placement are checked before saving. Release springs remain animated.
+- **Direct entry:** tap a number to type it, or use increment, decrement, and reset controls without label-width jumps.
+- **Dialogs:** animated numeric input, defaults, grid warnings, and restart-scope dialogs. Restart scopes support a scrollable multi-select list.
+- **Bottom navigation:** draggable glass capsule with icon and label highlights that track selection.
+- **iOS Glass Effect:** controls the settings app's glass appearance separately from Launcher glass options.
 
 ### Liquid Glass
 
@@ -35,7 +47,9 @@ With the LiquidDock and Liquid Glass master switches enabled, LiquidDock can add
 - the MIUI system search main background;
 - the Gboard floating keyboard and related toolbar surfaces.
 
-Blur, refraction, dispersion, tint, brightness, shadow, highlights, corner radius, and individual highlight layers can be adjusted.
+Blur, refraction, dispersion, tint, brightness, shadow, highlights, corner radius, and individual highlight layers can be adjusted. **IOR** changes the lens bending at glass edges; the separate lens-refraction multiplier has a maximum of 8. Lower backdrop capture resolution is designed to retain sharp glass contours and highlights.
+
+Most appearance changes update **already-installed hooks** live. Enabling a hook that has not been installed yet, or changing structural settings such as the grid, may still require restarting the relevant scope.
 
 <p align="center">
   <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
@@ -50,6 +64,8 @@ Enable the free workspace grid to choose **2–10 columns and 2–6 rows** in la
 - row gaps;
 - page-indicator position;
 - widget sizing adaptation.
+
+When reducing rows or columns, LiquidDock checks whether an existing **4×2 widget** would exceed the target grid. It warns you and blocks the unsafe change. Restart Launcher after changing the grid.
 
 Custom icon size has its own switch and does not require the free grid. One shared scale applies to workspace, Dock, small-folder, folder-content and Workstation app-page icons. The sidebar app page and search page do not follow this scaling.
 
@@ -76,7 +92,13 @@ If wallpaper flickers, try the optional wallpaper GPU rendering switch. It requi
 
 ### Widgets and folders
 
-With widget glass enabled, widgets can use glass backgrounds; dark-content adaptation has its own switch. Supported widgets can also be scanned from the current workspace so individual internal background components can be hidden. These hiding rules can be backed up and restored separately.
+With widget glass enabled, widgets can use glass backgrounds; dark-content adaptation has its own switch. In **Widget Component Management**, load widgets currently on the workspace and choose precise components:
+
+- **Hide individual backgrounds:** select internal widget background regions; hiding rules have their own backup and restore.
+- **Whiten components for dark themes:** turn selected RemoteViews text white or display selected images as white silhouettes while retaining transparency, without tinting an entire widget.
+- **Avoid conflicts:** hide and whiten cannot both target the same exact component. Whiten selections are stored separately and **are not included in hiding-rule backups**.
+
+Precise whitening currently works for **RemoteViews TextView / ImageView**, not script-drawn MAML elements. Restart Launcher after changing per-component rules.
 
 Small and large folders have separate glass, size, and corner-radius controls.
 
@@ -94,6 +116,8 @@ Launcher uninstall, remove, and second-confirmation dialogs additionally require
 - local blur;
 - restoring inheritance from the global glass appearance.
 
+Launcher dialogs also have their own **All Parameters** page for finer optics such as refraction and highlights. Unset values inherit the global glass profile, and you can reset all overrides at once.
+
 ### Recents and Workstation
 
 Recents supports:
@@ -102,9 +126,9 @@ Recents supports:
 - optional wallpaper-dimming suppression;
 - Liquid Glass for the Clear All and device-interconnect action buttons.
 
-Recents background blur and wallpaper-dimming suppression do not require Liquid Glass. Glass on its action buttons requires the glass master and corresponding feature switch.
+Recents background blur and wallpaper-dimming suppression do not require Liquid Glass. Glass on its action buttons requires the glass master and corresponding feature switch. When a Prismal frame is not ready, the enabled buttons retain a transparent interim background instead of falling back to an inconsistent native blur; turning the feature off restores the stock background.
 
-Workstation mode offers Dock length, icon position, icon corner radius, workspace horizontal position and All Apps spacing. Workstation Dock dimensions and icon geometry require Workstation customization; the divider has an independent switch.
+Workstation mode offers **Dock icon vertical offset**, glass corner radius, workspace horizontal positioning, and independent All Apps spacing in portrait and landscape. Workstation Dock icon adjustments require Workstation customization; the divider has its own switch. Ineffective Dock length-offset and icon-bottom-spacing controls have been removed from the settings UI.
 
 ### System UI and Security Center
 
@@ -113,13 +137,13 @@ Optional system integrations include:
 - the app-caption menu containing split-screen, floating-window, and related controls;
 - supported Security Center Game Toolbox, Video Toolbox, Global Dock, and All Apps surfaces.
 
-Both glass integrations require the module master, glass master and corresponding feature switches, together with a supported target-system integration.
+Both glass integrations require the module master, glass master and corresponding feature switches, and a compatible target-system build. Security Center currently uses one glass feature switch; **separate blur and tint controls for Global Dock, All Apps, Game Toolbox, and Video Toolbox are not yet part of main**.
 
 ### MIUI system search and Gboard
 
-MIUI system search can replace its main background with Liquid Glass and use independent tint and blur values. This requires the module master, glass master and corresponding third-party glass configuration.
+MIUI system search can replace its main background with Liquid Glass, with local tint and blur as well as an **All Parameters** page for additional independent refraction and highlight options. Unset values inherit global glass settings. This requires the module master, glass master and the relevant app-glass switch.
 
-Gboard supports glass for the floating keyboard and related toolbar surfaces, with independent tint and blur. This also requires the module master, glass master and corresponding third-party glass configuration. Resize-after-handle-drag uses an independent setting without requiring glass; its touch integration requires successful identification of the keyboard bottom handle.
+Gboard supports glass for the floating keyboard and related toolbar surfaces, with independent tint and blur. Its **All Parameters** page supports additional optical overrides and a one-step reset to global inheritance. Glass requires the module master, glass master and the relevant app switch. Resize-after-handle-drag is independent of glass and requires successful identification of the keyboard bottom handle.
 
 ### Configuration, animation, and backup
 
@@ -132,7 +156,7 @@ The settings app supports:
 - importing a JSON configuration;
 - separate backup and restore for widget-component hiding rules.
 
-A fresh install is seeded with the current built-in default configuration. Existing user settings are not replaced by the default profile during upgrades.
+Fresh installs use the current built-in defaults; upgrades do not replace the whole current configuration with the default preset. **However, starting with 2.7.0, legacy preference keys are no longer migrated.** Settings saved only under retired keys fall back to current defaults. LiquidDock JSON backups and Launcher layout backups are separate.
 
 ## Compatibility
 
@@ -148,7 +172,7 @@ Updates to Launcher, System UI, Security Center, Gboard, or MIUI Search may temp
 
 ## Installation
 
-Back up your launcher layout before upgrading or changing the grid. LiquidDock JSON configuration backups are separate from launcher layout backups.
+**Back up both your LiquidDock JSON configuration and Launcher layout** before upgrading. They are different backups. In particular, 2.7.0 does not migrate retired preference keys; keep a restorable workspace layout before changing the grid.
 
 1. Download the latest APK from [GitHub Releases](https://github.com/yu4032/LiquidDock/releases).
 2. Install it and enable LiquidDock in LSPosed.
@@ -166,7 +190,7 @@ Back up your launcher layout before upgrading or changing the grid. LiquidDock J
 4. Restart the affected processes or reboot the device.
 5. Open LiquidDock and configure the features you want.
 
-Some structural settings require a Launcher, System UI, or app restart. The settings app indicates this where possible.
+Most appearance settings update live when their hooks are already installed. Structural layout changes and newly enabled integrations may still require restarting Launcher, System UI, or an app. Use **Restart Scopes** in the settings UI to select affected processes.
 
 ## Reporting issues
 
