@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.window.WindowDialog
 
 // Pure source relocation: keeps the widget 4×2 preflight, in-flight cancellation,
 // stale reply rejection and large warning dialog inside their existing GridBasicsPage.
@@ -219,7 +218,7 @@ internal fun GridBasicsPage(
             masterEnabled && customGrid,
         )
     }
-    WindowDialog(
+    AnimatedSettingsWindowDialog(
         show = gridWarning != null,
         title = "网格尺寸无法修改",
         onDismissRequest = { gridWarning = null },
