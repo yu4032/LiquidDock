@@ -142,7 +142,7 @@ public class LauncherRecentsCapsuleGlassContractTest {
         String schema = read("config/ConfigSchema.java");
         String config = read("LiquidDockConfig.java");
         String runtime = read("GlassRuntimeState.java");
-        String ui = read(KOTLIN, "ComposeSettingsActivity.kt");
+        String ui = read(KOTLIN, "GlassSettingsPages.kt");
         assertTrue(schema.contains("RECENTS_CAPSULE_GLASS"));
         assertTrue(schema.contains("liquid_recents_capsule_glass"));
         assertTrue(config.contains("recentsCapsuleEnabled"));
