@@ -83,11 +83,11 @@
 
 **第六批（进行中、未合并）**：`refactor/gui-auxiliary-pages-20261010` 以整合后的 `main@7be4f71` 为基线。仅将 `StrokePage`、`ShadowPage` 迁入 `DockDecorationSettingsPages.kt`，并将 `SecurityCenterSidebarPage`、`DataPage`、`AboutPage` 连同私有 URL 打开和默认配置恢复 helper 迁入 `SettingsUtilityPages.kt`。主 Activity **1209 → 987 行**；5 个 Composable 和相关 ConfigSchema 引用均完整保留。数据备份、默认重置红色按钮、侧滑设置及诊断日志功能不应改变。独立 CI 与设备验收是合并门槛。
 
-**第七批（本分支，尚待 CI / 实机验收）**：`refactor/gui-navigation-controls-extraction-20261010` 在 #315 分支 `1b040bd` 上继续按职责拆分：
+**第七批（本分支 CI 已通过，仍待实机验收与合并）**：`refactor/gui-navigation-controls-extraction-20261010` 在 #315 分支 `1b040bd` 上继续按职责拆分：
 
 - `SettingsNavigationModel.kt` 拥有原 `Page` 枚举、`ROOT_PAGES`、`isRootPage`、`HubEntry` 和所有 hub entry list；必要的 `private → internal` 仅改变可见性，保持常量、资源 ID、入口排列和 root 判定完全一致。
 - `SettingsControls.kt` 拥有原 `LocalSettingsPreferenceRevisions` composition local 与 `groupedIntSettings`、`DenseSettingsList`、`SettingsList`、`PageHeader`、`SettingsCard`、`BooleanSetting`、`IntSetting`。移动的控制逻辑逐字保留，包括 #314 的右侧数值实时写入、去重、Grid preflight callback；没有重写 Prismal 滑条或控件。
 - `ComposeSettingsActivity.kt` **984 → 536 行**，保留 Activity 生命周期、单一 `SharedPreferences` 监听器、Miuix theme、滚动容器、重启作用域、页面路由、返回栈和主菜单页面。移出的文本不算删除功能；13 个 Composable 和 8 处 `ConfigSchema` 引用在三个文件的合集完全保留。
-- 测试契约继续核对导航结构、持久化键来源、热更新 listener 以及每档实时写入。不得把源码 `contains` 通过等同于真机手势/功能验收。
+- 测试契约继续核对导航结构、持久化键来源、热更新 listener 以及每档实时写入。[CI #38036812829](https://github.com/yu4032/LiquidDock/actions/runs/38036812829) 已通过完整 unit tests、Debug APK 构建和安全检查。**这仍不等同于真机手势/功能验收**；不能以源码 `contains` 测试替代设备验证。
 
 风险界限：GUI 的文件拆分不触及 PassBlur/EGL、渲染 producer、LSPosed Hook。所有编译和静态检查结果必须与实机验收区别记录，完成后更新 TODO 状态。
