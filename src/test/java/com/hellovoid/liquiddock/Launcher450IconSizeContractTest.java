@@ -121,7 +121,7 @@ public class Launcher450IconSizeContractTest {
         String compositor = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/DockGlassCompositor.java"));
         String ui = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+                "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"));
 
         assertTrue(schema.contains("FUNCTIONAL_DOCK_ICON_GLASS"));
         assertTrue(schema.contains("liquid_functional_dock_icon_glass"));
