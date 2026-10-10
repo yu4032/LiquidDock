@@ -101,8 +101,10 @@
 
 ## 10. P1-A Workspace 预绘制扫描测量能力（2026-10-10）
 
-**状态：独立诊断 PR，CI/实机数据待验证；未做 runtime fast-path 优化。** 按用户要求停止无收益的 GUI Scaffold 文件拆分：第十批 #320 上的 `ModernSettingsUi.kt` 已减少到约 **291 行**，剩余 Scaffold、Prismal 共享采样和顶栏的生命周期强耦合；拆散它们只为减少行数会提高 source authority 和 CompositionLocal 风险。#319 和 #320 仍分层开放，未经用户设备确认均未合并。
+**状态：独立诊断 PR #321，CI 通过、实机数据待验证；未做 runtime fast-path 优化。** 按用户要求停止无收益的 GUI Scaffold 文件拆分：第十批 #320 上的 `ModernSettingsUi.kt` 已减少到约 **291 行**，剩余 Scaffold、Prismal 共享采样和顶栏的生命周期强耦合；拆散它们只为减少行数会提高 source authority 和 CompositionLocal 风险。#319 和 #320 仍分层开放，未经用户设备确认均未合并。
 
 **独立性能诊断分支** `perf/workspace-prescan-tracing-20261010` 基于 `main@c25a4c92`，不依赖 GUI 分支、不触及其代码。在 `LauncherGlassSession` 已有 UI pre-draw 调用外围新增 Perfetto gated slices：`SceneSync`、`DragNodes`、`StaticNodes`、`SourceReconcile`，仅在 `Trace.isEnabled()` 时给出 drag/static candidate 及 geometry read 计数；保留现有 node scan、rotation settle、vendor visibility、scroll projection 和 source reconciliation 顺序。未增加每帧文件日志或固定轮询时间间隔；未宣称 FPS 提升。
 
 **下一证据门槛**：真机采样 static/paging/drag/unlock，并比较静态节点总数与真实 capture 数及各阶段 p95，确认哪条链是 UI 线程瓶颈，再设计完整 dirty-node 失效覆盖范围。操作见 [Workspace Perfetto 测量方案](workspace-ui-node-scan-perfetto-20261010.md)。Perfetto 的存在不证明优化已完成。
+
+- [CI #38044043722](https://github.com/yu4032/LiquidDock/actions/runs/38044043722) 已通过完整 Gradle 单元测试、Debug APK 和仓库安全检查。静态源审计发现 `LauncherGlassStaticNode.captureGeometry` 调用 `LauncherGlassBoundsPolicy.apply` 时会分配新 `float[4]`；这是潜在后续分配优化候选，不可在尚未有帧性能测量时宣称消除此处数组可解决整体掉帧。

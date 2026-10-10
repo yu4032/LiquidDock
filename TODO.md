@@ -1,6 +1,6 @@
 # LiquidDock TODO FOR AGENT
 
-基准：**2026-10-10 `main`（`67d596d`）/ `build.gradle.kts` 中 `versionName=2.6.4` / HyperOS 3 平板、Launcher 4.50 适配主线 / libxposed API 101**。`versionName` 是源码构建版本，不等于已发布 Release 版本。
+基准：**2026-10-10 `main`（截至本轮核验 `c25a4c92`）/ `build.gradle.kts` 中 `versionName=2.6.4` / HyperOS 3 平板、Launcher 4.50 适配主线 / libxposed API 101**。`versionName` 是源码构建版本，不等于已发布 Release 版本。
 
 自由网格、横竖屏位置记忆、挤压循环/事务保护和 PR #275 的图标/小组件规划器路由已落地。下面的性能与兼容性条目仍是待验证或待优化事项，不代表上述功能尚未实现。
 
@@ -18,7 +18,7 @@
 
 ### P1-A · Launcher Workspace glass per-frame node scan
 
-**最新阶段：已补充分段 Perfetto 诊断，尚未减少每帧扫描。** 分支 `perf/workspace-prescan-tracing-20261010` 在 `LauncherGlassSession` 内仅当 `Trace.isEnabled()` 时采样 `SceneSync / DragNodes / StaticNodes / SourceReconcile`，以及 drag/static candidate 与真实 geometry read 数。此轮没有 dirty cache、没有额外 per-frame log/file write，也未完成真机性能测量。量化步骤见 [Workspace 扫描 Perfetto 指南](docs/workspace-ui-node-scan-perfetto-20261010.md)。
+**最新阶段：已补充分段 Perfetto 诊断、CI 通过，尚未减少每帧扫描，待实机测量。** 分支 `perf/workspace-prescan-tracing-20261010` 在 `LauncherGlassSession` 内仅当 `Trace.isEnabled()` 时采样 `SceneSync / DragNodes / StaticNodes / SourceReconcile`，以及 drag/static candidate 与真实 geometry read 数。此轮没有 dirty cache、没有额外 per-frame log/file write，也未完成真机性能测量。量化步骤见 [Workspace 扫描 Perfetto 指南](docs/workspace-ui-node-scan-perfetto-20261010.md)。
 
 `LauncherGlassSession` 当前在 Launcher root 的 `OnPreDrawListener` 中每帧执行 `syncSceneOnUiThread()`。
 
@@ -53,10 +53,10 @@
 - fresh generation / source authority；
 - 不重新引入固定时间 capture pump。
 
-### P1-D · GUI 玻璃弹窗动画验收
+### P1-D · GUI 玻璃弹窗动画验收（已完成基本验收，仅持续防回归）
 
 - [#318](https://github.com/yu4032/LiquidDock/pull/318) 的数值输入、默认恢复、Grid 安全提醒和重启作用域弹窗增加进出场动画；使用 Compose spring/tween 尽量延续 Prismal 的动效语言，但不替换 MIUIX 窗口的键盘与焦点管线，也不新增采样层。验收：正常打开/取消关闭、快速重入、系统返回键、输入法焦点、弹窗重启操作与底栏拖动无冲突。
-- PrismalAGSL v1.0.4 没有可直接代替现有 MIUIX WindowDialog 的原生 modal，**不可声称是 Prismal 原生窗口动画**；仅是匹配其 spring 手感。确认 GPU/布局不会因弹窗动画额外抖动后再合并。
+- PrismalAGSL v1.0.4 没有可直接代替现有 MIUIX WindowDialog 的原生 modal，**不可声称是 Prismal 原生窗口动画**；仅是匹配其 spring 手感。已根据用户确认合并 #318；后续多机型的 GPU/布局抖动属于持续回归观察，不是尚待合并的门槛。
 
 ### P1-B · Dock PassBlur geometry polling
 
@@ -477,7 +477,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 模块拆分已完成八批，交互动画独立推进。** [#309](https://github.com/yu4032/LiquidDock/pull/309) 至 [#317](https://github.com/yu4032/LiquidDock/pull/317) 已并入 `main`，其中 #317 的 Prismal 底栏与重启弹窗拆分经用户实机验证。当前 [#318](https://github.com/yu4032/LiquidDock/pull/318) 在独立分支为三类 MIUIX 弹窗和重启作用域弹窗增加 spring/fade 过渡，并以原生 Tab 的拖动候选状态桥接单份图文的高亮与轻缩放，**尚待 CI 与实机验收，不得记为已发布效果**。主 Activity 约 536 行；GPU/Hook 大类另列维护任务。
+**状态：GUI 主 Activity 已收敛，后续以功能回归和运行时热点为优先。** #309–#318 已合并 `main`；[#319](https://github.com/yu4032/LiquidDock/pull/319)（数值设置）与 [#320](https://github.com/yu4032/LiquidDock/pull/320)（Surface/Cell）CI 通过、仍开放并待实机验收。#320 分支上的 `ModernSettingsUi.kt` 291 行，采样/Scaffold/顶栏应作为一个生命周期单元，不建议为缩行数继续拆。P1-A Perfetto 埋点独立 [#321](https://github.com/yu4032/LiquidDock/pull/321) 已通过 [CI #38044043722](https://github.com/yu4032/LiquidDock/actions/runs/38044043722)，尚待真机数据和后续实际优化。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。

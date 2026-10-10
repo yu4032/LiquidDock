@@ -1,6 +1,6 @@
 # Workspace glass pre-draw scan: Perfetto sampling gate
 
-**Status (2026-10-10): instrumentation implemented on an independent branch, CI/device measurements pending. This is not yet a speed-up.** Baseline `main@c25a4c92`; target `LauncherGlassSession.syncSceneOnUiThreadInternal` (Launcher Workspace glass). It does not touch Dock PassBlur producer, EGL output lifecycle, Prismal parameters or background wallpaper generation.
+**Status (2026-10-10): instrumentation on independent PR #321 passed [CI #38044043722](https://github.com/yu4032/LiquidDock/actions/runs/38044043722); device traces are not yet captured. This is not yet a speed-up.** Baseline `main@c25a4c92`; target `LauncherGlassSession.syncSceneOnUiThreadInternal` (Launcher Workspace glass). It does not touch Dock PassBlur producer, EGL output lifecycle, Prismal parameters or background wallpaper generation.
 
 ## Why measurement comes before a dirty-node cache
 
@@ -67,3 +67,7 @@ If the device denies access to the output directory, use a shell-accessible trac
 ### Interpretation and limits
 
 Perfetto tracing itself has measurable overhead; use several runs and compare analogous captures, not traced FPS against untraced FPS. This patch gives stage attribution, **not** a claim that scanning was eliminated, nor a measured improvement. On-device A/B and regressions are required before any runtime cache.
+
+## Additional source-level candidate (not changed in this PR)
+
+`LauncherGlassStaticNode.captureGeometry()` calls `LauncherGlassBoundsPolicy.apply(...)` which returns a newly allocated `float[4]` on each call. The per-node `geometryPoints` buffer is already reused. A later, separately tested `applyInto` overload using a reusable 4-float buffer may reduce allocations without suppressing geometry updates; it must preserve finite-offset coercion, negative insets, collapsed-dimension 1-pixel normalization and repeated calls. This does **not** solve the O(N) scan itself and needs a measured allocation baseline.
