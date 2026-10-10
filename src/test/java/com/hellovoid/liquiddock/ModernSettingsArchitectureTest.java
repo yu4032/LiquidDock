@@ -683,6 +683,7 @@ public class ModernSettingsArchitectureTest {
     public void bottomTabsHaveIconsAndNumericControlsExposeValueSliderAndStepper() throws Exception {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
+        String controls = Files.readString(CONTROLS);
 
         assertTrue(ui.contains("val rootIcons = listOf("));
         assertTrue(ui.contains("MiuixIcons.Home"));
@@ -691,9 +692,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("MiuixIcons.Settings"));
         assertTrue(ui.contains("icons = rootIcons"));
 
-        assertTrue(ui.contains("val displayText ="));
-        assertTrue(ui.contains("ModernGlassSlider("));
-        assertTrue(ui.contains("ModernGlassStepper("));
+        assertTrue(controls.contains("val displayText ="));
+        assertTrue(controls.contains("ModernGlassSlider("));
+        assertTrue(controls.contains("ModernGlassStepper("));
         assertTrue(surfaces.contains("internal fun ModernGlassSlider("));
         assertTrue(surfaces.contains("internal fun ModernGlassStepper("));
     }
@@ -834,7 +835,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void numericLabelsUseMiuixInputDialogWithoutChangingSliders() throws Exception {
         String surfaces = Files.readString(SURFACES);
-        String settings = Files.readString(UI);
+        String settings = Files.readString(CONTROLS);
         String gboard = Files.readString(GBOARD);
         String dialog = Files.readString(DIALOG_GLASS);
         String sideSlide = Files.readString(SIDE_SLIDE);
