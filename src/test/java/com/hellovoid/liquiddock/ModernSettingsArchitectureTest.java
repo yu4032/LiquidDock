@@ -54,6 +54,14 @@ public class ModernSettingsArchitectureTest {
             assertTrue(source.contains("modifier = Modifier.matchParentSize().graphicsLayer {"));
             assertTrue(source.contains("scaleX = dampedDragAnimation.scaleX /"));
             assertTrue(source.contains("scaleY = dampedDragAnimation.scaleY *"));
+            int outerLayer = source.indexOf(".graphicsLayer {");
+            int gesture = source.indexOf(
+                    ".then(if (enabled) dampedDragAnimation.modifier else Modifier)", outerLayer);
+            assertTrue("live glass must have a stable outer translation-only layer",
+                    outerLayer >= 0 && gesture > outerLayer);
+            String sourceTransform = source.substring(outerLayer, gesture);
+            assertFalse("outer scaling skews backdrop sampling", sourceTransform.contains("scaleX ="));
+            assertFalse("outer scaling skews backdrop sampling", sourceTransform.contains("scaleY ="));
         }
         assertTrue(slider.contains("if (sampling) Modifier.drawPrismalGlass("));
         assertTrue(toggle.contains("if (samplingEnabled) Modifier.drawPrismalGlass("));
