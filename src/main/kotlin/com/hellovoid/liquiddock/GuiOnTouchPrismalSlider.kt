@@ -175,8 +175,8 @@ internal fun GuiOnTouchPrismalSlider(
             onDispose { releaseJob[0]?.cancel() }
         }
         var motionFrame by remember { mutableIntStateOf(0) }
-        // The expensive motion-driven glass pass is completely dormant
-        // between gestures. Keep motion physics alive for value animations.
+        // Sampling is bounded to touch and the post-release settle; the frozen
+        // thumb retains its spring without moving the sampled background.
         LaunchedEffect(dampedDragAnimation, sampling) {
             if (sampling) {
                 snapshotFlow { dampedDragAnimation.animationSnapshot() }
@@ -339,6 +339,8 @@ internal fun GuiOnTouchPrismalSlider(
                                 alpha = progress
                             )
                         },
+                        // Keep the live spring inside the optical renderer: scaling
+                        // the parent graphicsLayer would misalign the glass backdrop.
                         layerBlock = {
                             scaleX = dampedDragAnimation.scaleX
                             scaleY = dampedDragAnimation.scaleY
@@ -360,7 +362,15 @@ internal fun GuiOnTouchPrismalSlider(
                     GuiFrozenPrismalChrome(
                         backdrop = underlayBackdrop,
                         shape = { PrismalCapsule() },
-                        modifier = Modifier.matchParentSize(),
+                        // Reuse the main-branch #307 fix: transform only the frozen
+                        // cached thumb, never the live source/backdrop coordinate space.
+                        modifier = Modifier.matchParentSize().graphicsLayer {
+                            val velocity = dampedDragAnimation.velocity / 10f
+                            scaleX = dampedDragAnimation.scaleX /
+                                (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
+                            scaleY = dampedDragAnimation.scaleY *
+                                (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
+                        },
                         blurRadius = 8.dp,
                         refractionHeightPx = with(density) { 4.dp.toPx() },
                         refractionAmountPx = with(density) { 6.dp.toPx() },

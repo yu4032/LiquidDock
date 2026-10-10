@@ -46,6 +46,27 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/SideSlideHoldSetting.kt");
 
     @Test
+    public void sliderAndSwitchSpringVisualsOutliveTouchOnlyGlassSampling() throws Exception {
+        String slider = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        String toggle = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
+        for (String source : new String[]{slider, toggle}) {
+            assertTrue(source.contains("pressedScale = 1.5f"));
+            assertTrue(source.contains("dampedDragAnimation.modifier"));
+            assertTrue(source.contains("translationX ="));
+            assertTrue(source.contains("layerBlock = {"));
+            assertTrue(source.contains("GuiFrozenPrismalChrome("));
+            assertTrue(source.contains("modifier = Modifier.matchParentSize().graphicsLayer {"));
+            assertTrue(source.contains("scaleX = dampedDragAnimation.scaleX /"));
+            assertTrue(source.contains("scaleY = dampedDragAnimation.scaleY *"));
+            assertTrue(source.contains(".then(if (enabled) dampedDragAnimation.modifier else Modifier)"));
+        }
+        assertTrue(slider.contains("if (sampling) Modifier.drawPrismalGlass("));
+        assertTrue(toggle.contains("if (samplingEnabled) Modifier.drawPrismalGlass("));
+    }
+
+    @Test
     public void dangerousGridEditsAreCheckedBeforePersistenceAndDisplayLargeWarning() throws Exception {
         String gui = Files.readString(UI);
         String grid = Files.readString(GRID_PAGES);

@@ -218,6 +218,8 @@ internal fun GuiOnTouchPrismalToggle(
                             alpha = progress
                         )
                     },
+                    // Keep the live Prismal transform inside the optical renderer;
+                    // scaling the parent changes source-to-screen sampling coordinates.
                     layerBlock = {
                         scaleX = dampedDragAnimation.scaleX
                         scaleY = dampedDragAnimation.scaleY
@@ -238,7 +240,14 @@ internal fun GuiOnTouchPrismalToggle(
                 GuiFrozenPrismalChrome(
                     backdrop = underlayBackdrop,
                     shape = { PrismalCapsule() },
-                    modifier = Modifier.matchParentSize(),
+                    // Release animation applies to cached output, not the backdrop input.
+                    modifier = Modifier.matchParentSize().graphicsLayer {
+                        val velocity = dampedDragAnimation.velocity / 50f
+                        scaleX = dampedDragAnimation.scaleX /
+                            (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
+                        scaleY = dampedDragAnimation.scaleY *
+                            (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
+                    },
                     blurRadius = 8.dp,
                     refractionHeightPx = with(density) { 4.dp.toPx() },
                     refractionAmountPx = with(density) { 6.dp.toPx() },
