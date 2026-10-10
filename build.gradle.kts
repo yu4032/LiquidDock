@@ -66,10 +66,9 @@ android {
 dependencies {
     implementation(project(":prismal"))
 
-    // API 101 is provided by the Xposed framework inside hooked processes.
-    compileOnly("io.github.libxposed:api:101.0.1")
-    // The module app uses the companion service binder to read/write Remote Preferences.
-    implementation("io.github.libxposed:service:101.0.0")
+    // Experimental API 102: framework provides the hook API; companion service remains app-side.
+    compileOnly("io.github.libxposed:api:102.0.0")
+    implementation("io.github.libxposed:service:102.0.0")
 
     implementation("androidx.preference:preference:1.2.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
@@ -78,6 +77,8 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
     implementation("com.github.styropyr0:PrismalAGSL:v1.0.4")
+    // Unit-test the API 102 HookHandle lifecycle with fake interface implementations.
+    testImplementation("io.github.libxposed:api:102.0.0")
     testImplementation("junit:junit:4.13.2")
 }
 

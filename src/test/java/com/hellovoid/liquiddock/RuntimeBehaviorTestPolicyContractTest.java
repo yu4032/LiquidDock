@@ -33,6 +33,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
      * These files must not use source ordering or method slicing to prove runtime behavior.
      */
     private static final Set<String> STATIC_SOURCE_ALLOWLIST = Set.of(
+            "Api102HotReloadContractTest.java",
             "ConfigKeyOwnershipContractTest.java",
             "DockGlassShapeOwnershipContractTest.java",
             "DockFinalCompositeAlphaContractTest.java",

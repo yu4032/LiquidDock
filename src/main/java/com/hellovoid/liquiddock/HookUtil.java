@@ -100,16 +100,31 @@ public final class HookUtil {
 
     // ── Hooking ──────────────────────────────────────────────────────
 
-    /** Hook a method. The callback receives the chain directly. */
+    /**
+     * Hook a method without inventing an ID: several independent owners legitimately intercept
+     * the same vendor method. The returned handle is retained for API 102 ownership accounting.
+     */
     public static void hook(Method method, XposedInterface.Hooker callback) {
         method.setAccessible(true);
-        Api101Bridge.module().hook(method).intercept(callback);
+        Api102HookRegistry.registerUnidentified(
+                Api101Bridge.module().hook(method).intercept(callback));
     }
 
-    /** Hook a constructor. */
+    /** Hook a constructor; preserve existing interceptor ordering and semantics. */
     public static void hook(Constructor<?> ctor, XposedInterface.Hooker callback) {
         ctor.setAccessible(true);
-        Api101Bridge.module().hook(ctor).intercept(callback);
+        Api102HookRegistry.registerUnidentified(
+                Api101Bridge.module().hook(ctor).intercept(callback));
+    }
+
+    /** Keep direct priority-hook owners on the same tracking path without changing priority. */
+    public static void hookWithPriority(
+            Method method, int priority, XposedInterface.Hooker callback) {
+        method.setAccessible(true);
+        Api102HookRegistry.registerUnidentified(
+                Api101Bridge.module().hook(method)
+                        .setPriority(priority)
+                        .intercept(callback));
     }
 
     /** Find + hook a declared method (exact class only; no superclass walk). */

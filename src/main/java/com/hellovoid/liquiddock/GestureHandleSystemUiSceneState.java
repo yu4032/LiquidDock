@@ -47,6 +47,13 @@ final class GestureHandleSystemUiSceneState {
         return shouldHideLocked();
     }
 
+    /** Clear a finished module generation's HOME/RECENTS state before a fresh owner installs. */
+    synchronized void resetForFutureReload() {
+        home = false;
+        recentsAnimation = false;
+        overview = false;
+    }
+
     synchronized Snapshot snapshot() {
         return new Snapshot(home, recentsAnimation, overview);
     }

@@ -1,0 +1,155 @@
+package com.hellovoid.liquiddock;
+
+import java.lang.reflect.Executable;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import io.github.libxposed.api.XposedInterface;
+
+/**
+ * API 102 hook ledger. Explicitly named hooks are eligible for future replacement;
+ * legacy HookUtil/direct interceptors are counted but never implicitly replaced.
+ *
+ * <p>Do not infer hot-reload readiness from this registry: native producers, listeners,
+ * receivers and long-lived Android callbacks are not owned by this registry. No retained HookHandle
+ * or Hooker may be transferred through HotReloadingParam saved instance state.</p>
+ */
+final class Api102HookRegistry {
+    interface Installer {
+        XposedInterface.HookHandle install(
+                Method method, String id, XposedInterface.Hooker callback);
+    }
+
+    private static final Api102HookRegistry PROCESS = new Api102HookRegistry(
+            (method, id, callback) -> Api101Bridge.module().hook(method)
+                    .setId(id)
+                    .intercept(callback));
+
+    private final Installer installer;
+    private final Map<String, XposedInterface.HookHandle> handles = new LinkedHashMap<>();
+    // Existing HookUtil callers can install multiple callbacks on the same Method. Retain each
+    // returned handle without assigning a fake ID or changing its installation semantics.
+    private final List<XposedInterface.HookHandle> unnamedHandles = new ArrayList<>();
+
+    Api102HookRegistry(Installer installer) {
+        if (installer == null) throw new IllegalArgumentException("installer");
+        this.installer = installer;
+    }
+
+    static Api102HookRegistry processRegistry() {
+        return PROCESS;
+    }
+
+    static String stableId(String domain, Executable executable) {
+        if (domain == null || domain.isBlank() || executable == null) {
+            throw new IllegalArgumentException("domain/executable");
+        }
+        StringBuilder id = new StringBuilder("liquiddock.")
+                .append(domain)
+                .append(':')
+                .append(executable.getDeclaringClass().getName())
+                .append('#')
+                .append(executable instanceof Method
+                        ? executable.getName() : "<init>")
+                .append('(');
+        Class<?>[] parameters = executable.getParameterTypes();
+        for (int i = 0; i < parameters.length; i++) {
+            if (i > 0) id.append(',');
+            id.append(parameters[i].getName());
+        }
+        return id.append(')').toString();
+    }
+
+    static XposedInterface.HookHandle hookIdentified(
+            Method method, String id, XposedInterface.Hooker callback) {
+        return PROCESS.install(method, id, callback);
+    }
+
+    static boolean rollbackIdentified(List<String> ids) {
+        return PROCESS.rollback(ids);
+    }
+
+    static int installedCount() {
+        return PROCESS.count();
+    }
+
+    static void registerUnidentified(XposedInterface.HookHandle handle) {
+        PROCESS.trackUnidentified(handle);
+    }
+
+    synchronized XposedInterface.HookHandle install(
+            Method method, String id, XposedInterface.Hooker callback) {
+        if (method == null || callback == null || id == null || id.isBlank()) {
+            throw new IllegalArgumentException("method/id/callback");
+        }
+        if (handles.containsKey(id)) {
+            throw new IllegalStateException("duplicate API 102 hook id: " + id);
+        }
+        method.setAccessible(true);
+        XposedInterface.HookHandle handle = installer.install(method, id, callback);
+        if (handle == null) throw new IllegalStateException("null API 102 HookHandle: " + id);
+        handles.put(id, handle);
+        return handle;
+    }
+
+    /**
+     * API 102 primitive for a future generation handoff. A successful replaceHook returns the
+     * new live handle; keep the previous handle registered if replacement itself fails.
+     * This is intentionally not called by ModuleMain until process-owner teardown exists.
+     */
+    synchronized XposedInterface.HookHandle replaceIdentified(
+            String id, XposedInterface.Hooker next) {
+        if (id == null || id.isBlank() || next == null) {
+            throw new IllegalArgumentException("id/next");
+        }
+        XposedInterface.HookHandle previous = handles.get(id);
+        if (previous == null) throw new IllegalStateException("unregistered hook id: " + id);
+        XposedInterface.HookHandle replacement = previous.replaceHook(next);
+        if (replacement == null) {
+            throw new IllegalStateException("null replacement HookHandle: " + id);
+        }
+        handles.put(id, replacement);
+        return replacement;
+    }
+
+    synchronized int count() {
+        return handles.size() + unnamedHandles.size();
+    }
+
+    synchronized int unidentifiedCount() {
+        return unnamedHandles.size();
+    }
+
+    synchronized void trackUnidentified(XposedInterface.HookHandle handle) {
+        if (handle == null) throw new IllegalArgumentException("HookHandle");
+        unnamedHandles.add(handle);
+    }
+
+    synchronized List<String> idSnapshot() {
+        return new ArrayList<>(handles.keySet());
+    }
+
+    /** Reverse order matches stack-like installation and safely cleans partial installs. */
+    synchronized boolean rollback(List<String> ids) {
+        if (ids == null) return true;
+        boolean complete = true;
+        for (int i = ids.size() - 1; i >= 0; i--) {
+            XposedInterface.HookHandle handle = handles.get(ids.get(i));
+            if (handle == null) continue;
+            try {
+                handle.unhook();
+                handles.remove(ids.get(i));
+            } catch (Throwable error) {
+                // Keep the handle in the ledger and the feature in installed state. Retrying
+                // registration after a failed unhook would duplicate callbacks.
+                complete = false;
+                Api101Bridge.log("[DC][API102] identified-hook rollback failed id="
+                        + ids.get(i), error);
+            }
+        }
+        return complete;
+    }
+}
