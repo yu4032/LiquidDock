@@ -16,8 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,26 +36,20 @@ internal fun SecurityCenterSidebarPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
+    open: (Page) -> Unit,
 ) {
     val liquidGlassEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
-    var sidebarGlassEnabled by remember {
-        mutableStateOf(prefs.getBoolean(
-            ConfigSchema.Glass.SECURITY_CENTER_GLASS.name(),
-            ConfigSchema.Glass.SECURITY_CENTER_GLASS.uiDefault(),
-        ))
-    }
-    val sceneEnabled = remember {
-        mutableStateMapOf<String, Boolean>().apply {
-            sidebarSceneSettings.forEach { group ->
-                this[group.enabled.name()] = prefs.getBoolean(
-                    group.enabled.name(), group.enabled.uiDefault())
-            }
-        }
-    }
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         item {
             PageHeader(
                 stringResource(R.string.page_security_center_sidebar),
@@ -65,11 +57,7 @@ internal fun SecurityCenterSidebarPage(
             )
         }
         item { SmallTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
-        item {
-            SettingsCard {
-                SideSlideHoldSetting(prefs, masterEnabled)
-            }
-        }
+        item { SettingsCard { SideSlideHoldSetting(prefs, masterEnabled) } }
         item { SmallTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
         item {
             SettingsCard {
@@ -79,25 +67,19 @@ internal fun SecurityCenterSidebarPage(
                     stringResource(R.string.liquid_security_center_glass_enable),
                     stringResource(R.string.liquid_security_center_glass_enable_summary),
                     masterEnabled && liquidGlassEnabled,
-                ) { sidebarGlassEnabled = it }
+                )
             }
         }
-        sidebarSceneSettings.forEach { group ->
-            item(key = "sc-scene-label:${group.enabled.name()}") {
-                SmallTitle(group.title)
+        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_scenes)) }
+        sidebarSceneSettings.forEach { scene ->
+            item(key = "sc-scene-entry:${scene.page.name}") {
+                ModernFeatureCard(
+                    title = stringResource(scene.page.titleRes),
+                    summary = "独立玻璃开关、模糊度与颜色",
+                    onClick = { open(scene.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
             }
-            item(key = "sc-scene-toggle:${group.enabled.name()}") {
-                SettingsCard {
-                    BooleanSetting(
-                        prefs, group.enabled, "${group.title}玻璃",
-                        "关闭时恢复系统原生材质；与其他场景独立",
-                        masterEnabled && liquidGlassEnabled && sidebarGlassEnabled,
-                    ) { sceneEnabled[group.enabled.name()] = it }
-                }
-            }
-            groupedIntSettings(group.specs, prefs,
-                masterEnabled && liquidGlassEnabled && sidebarGlassEnabled
-                    && (sceneEnabled[group.enabled.name()] ?: true))
         }
     }
 }

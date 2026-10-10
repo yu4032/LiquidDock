@@ -22,6 +22,11 @@
     <string name="page_recents">Recents</string>
     <string name="page_liquid">Liquid glass</string>
     <string name="page_security_center_sidebar">Security Center sidebar</string>
+    <string name="page_security_center_dock">Sidebar Dock</string>
+    <string name="page_security_center_all_apps">Sidebar All Apps</string>
+    <string name="page_security_center_game_toolbox">Game Toolbox</string>
+    <string name="page_security_center_video_toolbox">Video Toolbox</string>
+    <string name="security_center_sidebar_category_scenes">Scene glass settings</string>
     <string name="security_center_sidebar_header_summary">Manage Launcher side-slide behavior and Security Center sidebar material; when a reload is required, use Restart scopes and select Desktop and Security Center.</string>
     <string name="security_center_sidebar_category_gesture">Side-slide launch</string>
     <string name="security_center_sidebar_category_appearance">Appearance</string>

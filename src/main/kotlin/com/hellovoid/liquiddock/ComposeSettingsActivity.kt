@@ -148,6 +148,10 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     selectedRestartScopes = when (page) {
                         Page.Gboard -> setOf("com.google.android.inputmethod.latin")
                         Page.SecurityCenterSidebar,
+                        Page.SecurityCenterDock,
+                        Page.SecurityCenterAllApps,
+                        Page.SecurityCenterGameToolbox,
+                        Page.SecurityCenterVideoToolbox,
                         Page.Animation,
                         Page.AnimationPopups -> setOf(
                             "com.miui.home",
@@ -369,6 +373,16 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     padding = padding,
                     prefs = prefs,
                     masterEnabled = masterEnabled,
+                    open = ::navigateTo,
+                )
+                Page.SecurityCenterDock,
+                Page.SecurityCenterAllApps,
+                Page.SecurityCenterGameToolbox,
+                Page.SecurityCenterVideoToolbox -> SecurityCenterSceneSettingsPage(
+                    padding = padding,
+                    prefs = prefs,
+                    masterEnabled = masterEnabled,
+                    scene = sidebarSceneSettings.first { it.page == target },
                 )
                 Page.Animation -> AnimationPage(padding, ::navigateTo)
                 Page.AnimationWorkspace -> AnimationWorkspacePage(padding, prefs, masterEnabled)

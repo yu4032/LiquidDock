@@ -53,6 +53,10 @@ internal enum class Page(val titleRes: Int) {
     Shadow(R.string.page_shadow),
 
     SecurityCenterSidebar(R.string.page_security_center_sidebar),
+    SecurityCenterDock(R.string.page_security_center_dock),
+    SecurityCenterAllApps(R.string.page_security_center_all_apps),
+    SecurityCenterGameToolbox(R.string.page_security_center_game_toolbox),
+    SecurityCenterVideoToolbox(R.string.page_security_center_video_toolbox),
     Animation(R.string.page_animation),
     AnimationWorkspace(R.string.page_animation_workspace),
     AnimationInteraction(R.string.page_animation_interaction),
