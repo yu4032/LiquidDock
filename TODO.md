@@ -97,7 +97,7 @@ Perfetto 分段诊断已经进入 main：
 
 ## 4. ConfigSchema dead-key audit
 
-**状态：待核验。** 旧键清理的一部分在 [PR #324](https://github.com/yu4032/LiquidDock/pull/324) 中，尚未进入 `main`。
+**状态：部分完成；旧迁移与历史键删除已实现，剩余键仍需按当前消费链核验。**
 
 重新核对：
 
@@ -116,25 +116,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 5. Remove legacy config paths (current keys only)
-
-**状态：进行中；[PR #324](https://github.com/yu4032/LiquidDock/pull/324) 仍未合并。**
-
-用户决策：**不兼容老用户配置，不做迁移，统一采用当前键。**
-
-验收条件：
-
-- 网格启用只读取 `grid_enabled`，移除对 `home_grid_8x4` 的运行时依赖；
-- 移除旧网格边距、单位模式、工作台旧偏移等历史键的读取、转换、双写与 JSON alias；
-- 当前 `ConfigSchema`、默认值、GUI、预设、导入导出与 Hook 消费方一致；
-- 旧配置值不自动迁入新键，缺失当前键时使用当前默认值；
-- CI / R8 及真机验证通过，PR 合并后将本项移至已完成并重新编号。
-
-**注意：** PR #324 的实现不等于已进入主线；未合并前禁止标记完成。
-
----
-
-## 6. Geometry-only pre-draw observer review
+## 5. Geometry-only pre-draw observer review
 
 **状态：低优先级。**
 
@@ -154,7 +136,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 7. Debug logging I/O optimization
+## 6. Debug logging I/O optimization
 
 **状态：低优先级。**
 
@@ -174,7 +156,7 @@ Perfetto 分段诊断已经进入 main：
 
 # P3 · Architecture and compatibility
 
-## 8. RootPassBlur / glass session ownership audit
+## 7. RootPassBlur / glass session ownership audit
 
 **状态：持续维护。**
 
@@ -189,7 +171,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 9. Signed build / R8 regression coverage
+## 8. Signed build / R8 regression coverage
 
 **状态：保留。**
 
@@ -201,7 +183,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 10. libxposed API 102 migration
+## 9. libxposed API 102 migration
 
 **状态：待规划。**
 
@@ -225,7 +207,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 11. Settings i18n cleanup
+## 10. Settings i18n cleanup
 
 **状态：低优先级。**
 
@@ -233,7 +215,7 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 12. MAML precise widget foreground adaptation
+## 11. MAML precise widget foreground adaptation
 
 **状态：仅 MAML 待技术核验；RemoteViews 部分已完成并真机验证（PR #326）。**
 
@@ -287,7 +269,8 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 - GL location caching；
 - 滑块数值区域宽度修复（[PR #325](https://github.com/yu4032/LiquidDock/pull/325)）；
 - RemoteViews 精确白化、与隐藏的同节点互斥、隐藏规则导入冲突处理（[PR #326](https://github.com/yu4032/LiquidDock/pull/326)，真机验证通过）；
-- IOR 折射率参与边缘透镜位移及采样边距修复（[PR #327](https://github.com/yu4032/LiquidDock/pull/327)，真机验证通过）。
+- IOR 折射率参与边缘透镜位移及采样边距修复（[PR #327](https://github.com/yu4032/LiquidDock/pull/327)，真机验证通过）；
+- 旧配置迁移链、历史网格键及 JSON 旧别名清理，统一使用当前键（[PR #324](https://github.com/yu4032/LiquidDock/pull/324)）。
 
 ## 已归档或主动取消（不等于代码已实现）
 
@@ -297,6 +280,6 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 - ShortcutMenu dark-mode persisted naming；
 - 文档自动化建设。
 
-历史配置迁移**不再是目标**；但删除旧迁移链、统一当前键的实施工作仍列在 TODO #5，待 PR #324 合并验证后才能归档。
+历史配置迁移**不再是目标**。旧迁移链与旧网格键的移除属于 PR #324；其余配置键继续按当前消费链审计。
 
 上述项目如需重新推进，应新建明确任务，不直接恢复旧 TODO。

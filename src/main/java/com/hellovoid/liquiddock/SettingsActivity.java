@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import com.hellovoid.liquiddock.config.ConfigCodec;
-import com.hellovoid.liquiddock.config.ConfigMigration;
 
 public class SettingsActivity extends AppCompatActivity {
     private static final int WIDGET_HIDDEN_BACKUP_MAX_BYTES = 1024 * 1024;
@@ -48,7 +47,6 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        migratePreferences();
         Window w = getWindow();
         // Compose installs content after this base onCreate returns. Without the former XML
         // setContentView(), PhoneWindow may not have created DecorView yet, and
@@ -63,10 +61,6 @@ public class SettingsActivity extends AppCompatActivity {
                     night ? 0 : WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
                     WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
         }
-    }
-
-    private void migratePreferences() {
-        ConfigMigration.migrate(this, PreferenceManager.getDefaultSharedPreferences(this));
     }
 
     void launchExport() {

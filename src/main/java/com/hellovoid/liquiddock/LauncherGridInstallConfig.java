@@ -13,42 +13,18 @@ final class LauncherGridInstallConfig {
 
     static LauncherGridInstallConfig from(LiquidDockConfig config, float density) {
         LiquidDockConfig.Grid grid = config.grid;
-        boolean dp = grid.dp;
-        boolean offsets = grid.offsets;
-        float gridScale = dp ? density : 1f;
-        int landXBase = dp ? 57 : 160;
-        int landYBase = dp ? 28 : 80;
-        int portXBase = dp ? 28 : 80;
-        int portYBase = dp ? 57 : 160;
-
-        float landLeft = offsets ? grid.landscapeHorizontal
-                : landXBase + grid.landscapeHorizontal;
-        float landRight = offsets ? grid.landscapeHorizontal
-                : landXBase + grid.landscapeHorizontal;
-        float landTop = offsets ? grid.landscapeTop : landYBase + grid.landscapeTop;
-        float landBottom = offsets ? grid.landscapeBottom
-                : landYBase + grid.landscapeBottom;
-        float portLeft = offsets ? grid.portraitHorizontal
-                : portXBase + grid.portraitHorizontal;
-        float portRight = offsets ? grid.portraitHorizontal
-                : portXBase + grid.portraitHorizontal;
-        float portTop = offsets ? grid.portraitTop : portYBase + grid.portraitTop;
-        float portBottom = offsets ? grid.portraitBottom
-                : portYBase + grid.portraitBottom;
+        // Current grid geometry stores dp offsets from vendor baselines.
+        float gridScale = density;
+        float landLeft = grid.landscapeHorizontal;
+        float landRight = grid.landscapeHorizontal;
+        float landTop = grid.landscapeTop;
+        float landBottom = grid.landscapeBottom;
+        float portLeft = grid.portraitHorizontal;
+        float portRight = grid.portraitHorizontal;
+        float portTop = grid.portraitTop;
+        float portBottom = grid.portraitBottom;
         float landGap = grid.landscapeRowGap;
         float portGap = grid.portraitRowGap;
-        if (!offsets) {
-            landLeft -= landXBase;
-            landRight -= landXBase;
-            landTop -= landYBase;
-            landBottom -= landYBase;
-            portLeft -= portXBase;
-            portRight -= portXBase;
-            portTop -= portYBase;
-            portBottom -= portYBase;
-            landGap -= dp ? 1 : 3;
-            portGap -= dp ? 1 : 3;
-        }
 
         HomeGridInstallConfig home = new HomeGridInstallConfig(
                 grid.enabled,

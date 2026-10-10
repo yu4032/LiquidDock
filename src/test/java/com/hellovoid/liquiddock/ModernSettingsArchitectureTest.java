@@ -818,7 +818,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(search.contains("glassEnabled = glassEnabled"));
         assertTrue(widget.contains("SETTINGS_UI_GLASS_ENABLED"));
         assertTrue(widget.contains("glassEnabled = glassEnabled"));
-        assertTrue(zh.contains("<string name=\"settings_glass_effect\">设置界面玻璃效果</string>"));
+        assertTrue(zh.contains("<string name=\"settings_glass_effect\">IOS玻璃效果</string>"));
     }
 
     @Test
