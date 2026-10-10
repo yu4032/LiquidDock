@@ -2061,7 +2061,7 @@ private fun GlassIconsPage(
                     prefs,
                     ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
                     "多任务操作按钮玻璃",
-                    "将多任务界面的清除全部和设备互联胶囊背景替换为液态玻璃",
+                    "使用液态玻璃替换清除全部和设备互联胶囊背景；采样未就绪时保持透明，不回退原生模糊",
                     masterEnabled && liquidEnabled,
                 )
             }

@@ -118,7 +118,7 @@ final class LauncherRecentsCapsuleGlassHook {
                     + sourceRoot.getWidth() + "x" + sourceRoot.getHeight()
                     + " decorations=" + decorations.getWidth() + "x" + decorations.getHeight());
         } catch (Throwable error) {
-            MainHook.log(TAG + " Prismal bind failed; native fallback retained: " + error);
+            MainHook.log(TAG + " Prismal bind failed; no native blur fallback: " + error);
             releaseActive("bind-failure");
         }
     }
@@ -223,14 +223,11 @@ final class LauncherRecentsCapsuleGlassHook {
         final View world;
         final Drawable clearAllStockBackground;
         final Drawable worldStockBackground;
-        final int nativeBlurRadiusPx;
         final RecentsCapsuleGlassSession session;
         RecentsCapsuleGlassSinkView clearAllSink;
         RecentsCapsuleGlassSinkView worldSink;
         boolean clearAllPrismalPresented;
         boolean worldPrismalPresented;
-        boolean clearAllNativeFallback;
-        boolean worldNativeFallback;
         boolean captureRequested;
         boolean prismalFailed;
         boolean released;
@@ -244,12 +241,13 @@ final class LauncherRecentsCapsuleGlassHook {
             this.world = world;
             clearAllStockBackground = clearAll.getBackground();
             worldStockBackground = world.getBackground();
-            nativeBlurRadiusPx = Math.max(1, Math.round(glass.blur));
             session = new RecentsCapsuleGlassSession(sourceRoot, glass, this);
         }
 
         void start() {
-            applyNativeFallback();
+            // Enabled Prismal owns capsule backgrounds from the start. No vendor fallback:
+            // without a valid GPU frame, the action content remains above transparent glass.
+            takeOverTransparentBackgrounds();
             clearAllSink = installSink(clearAll, RecentsCapsuleGlassSession.Target.CLEAR_ALL);
             worldSink = installSink(world, RecentsCapsuleGlassSession.Target.WORLD);
             decorations.addOnAttachStateChangeListener(this);
@@ -257,7 +255,11 @@ final class LauncherRecentsCapsuleGlassHook {
             refreshGeometry();
             if (clearAllSink == null || worldSink == null) {
                 prismalFailed = true;
-                MainHook.log(TAG + " capsule local host unavailable; keeping native blur fallback");
+                MainHook.log(TAG + " capsule local host unavailable; remaining transparent");
+                if (clearAllSink != null) clearAllSink.dispose();
+                if (worldSink != null) worldSink.dispose();
+                clearAllSink = null;
+                worldSink = null;
                 session.shutdown();
             }
         }
@@ -314,25 +316,14 @@ final class LauncherRecentsCapsuleGlassHook {
             }
         }
 
-        private void applyNativeFallback() {
-            if (!clearAllPrismalPresented) {
-                clearAllNativeFallback = MiBlurBridge.applyPassWindowBlur(clearAll, nativeBlurRadiusPx);
-            }
-            if (!worldPrismalPresented) {
-                worldNativeFallback = MiBlurBridge.applyPassWindowBlur(world, nativeBlurRadiusPx);
-            }
-            MainHook.log(TAG + " native fallback clearAll=" + clearAllNativeFallback
-                    + " world=" + worldNativeFallback + " blur=" + nativeBlurRadiusPx);
-        }
-
-        private void clearNativeFallback(RecentsCapsuleGlassSession.Target target) {
-            if (target == RecentsCapsuleGlassSession.Target.CLEAR_ALL) {
-                if (clearAllNativeFallback) MiBlurBridge.clearPassWindowBlur(clearAll);
-                clearAllNativeFallback = false;
-            } else {
-                if (worldNativeFallback) MiBlurBridge.clearPassWindowBlur(world);
-                worldNativeFallback = false;
-            }
+        private void takeOverTransparentBackgrounds() {
+            // OEM blur is deliberately NOT used as a fallback while this switch is enabled.
+            // Clear any previous native state only at takeover, never on each frame/show.
+            MiBlurBridge.clearPassWindowBlur(clearAll);
+            MiBlurBridge.clearPassWindowBlur(world);
+            clearAll.setBackground(null);
+            world.setBackground(null);
+            MainHook.log(TAG + " transparent capsule ownership; native blur disabled");
         }
 
         @Override public void onFirstFramePresented(RecentsCapsuleGlassSession.Target target) {
@@ -340,14 +331,10 @@ final class LauncherRecentsCapsuleGlassHook {
             if (target == RecentsCapsuleGlassSession.Target.CLEAR_ALL) {
                 if (clearAllPrismalPresented) return;
                 clearAllPrismalPresented = true;
-                clearNativeFallback(target);
-                clearAll.setBackground(null);
                 if (clearAllSink != null) clearAllSink.reveal();
             } else {
                 if (worldPrismalPresented) return;
                 worldPrismalPresented = true;
-                clearNativeFallback(target);
-                world.setBackground(null);
                 if (worldSink != null) worldSink.reveal();
             }
             MainHook.log(TAG + " Prismal presented target=" + target);
@@ -359,23 +346,20 @@ final class LauncherRecentsCapsuleGlassHook {
             worldPrismalPresented = false;
             if (clearAllSink != null) clearAllSink.conceal();
             if (worldSink != null) worldSink.conceal();
-            restoreStockBackground();
-            applyNativeFallback();
-            MainHook.log(TAG + " native fallback during transient shared source loss");
+            // Keep ownership and the transparent background; never re-enable native PassBlur.
+            MainHook.log(TAG + " temporary source loss; capsules remain transparent");
         }
 
         @Override public void onFailure(Throwable error) {
             if (released || prismalFailed) return;
             prismalFailed = true;
-            MainHook.log(TAG + " Prismal session failed; keeping native fallback: " + error);
-            restoreStockBackground();
+            MainHook.log(TAG + " Prismal session failed; capsules remain transparent: " + error);
             if (clearAllSink != null) clearAllSink.dispose();
             if (worldSink != null) worldSink.dispose();
             clearAllSink = null;
             worldSink = null;
             clearAllPrismalPresented = false;
             worldPrismalPresented = false;
-            applyNativeFallback();
             session.shutdown();
         }
 
@@ -390,9 +374,9 @@ final class LauncherRecentsCapsuleGlassHook {
             ViewTreeObserver observer = decorations.getViewTreeObserver();
             if (observer.isAlive()) observer.removeOnPreDrawListener(this);
             decorations.removeOnAttachStateChangeListener(this);
-            clearNativeFallback(RecentsCapsuleGlassSession.Target.CLEAR_ALL);
-            clearNativeFallback(RecentsCapsuleGlassSession.Target.WORLD);
-            restoreStockBackground();
+            // Restore the vendor backgrounds only when the user disables the replacement.
+            // Detach/owner replacement while enabled must not silently restore stock blur.
+            if (!GlassRuntimeState.isRecentsCapsuleEnabled()) restoreStockBackground();
             if (clearAllSink != null) clearAllSink.dispose();
             if (worldSink != null) worldSink.dispose();
             clearAllSink = null;

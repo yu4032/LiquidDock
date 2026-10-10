@@ -115,15 +115,20 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(bridge.contains("binding.domain == PassBlurDomain.RECENTS_CAPSULE"));
     }
 
-    @Test public void nativeBlurStaysUntilPrismalActuallyPresents() throws Exception {
+    @Test public void enabledCapsulesStayTransparentUntilFirstGpuFrameAndOnFailures() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
-        assertTrue(capsule.contains("MiBlurBridge.applyPassWindowBlur"));
-        assertTrue(capsule.contains("MiBlurBridge.clearPassWindowBlur"));
-        assertTrue(capsule.contains("onFirstFramePresented"));
-        assertTrue(capsule.contains("clearNativeFallback"));
+        assertTrue(capsule.contains("takeOverTransparentBackgrounds()"));
+        assertTrue(capsule.contains("MiBlurBridge.clearPassWindowBlur(clearAll)"));
+        assertTrue(capsule.contains("MiBlurBridge.clearPassWindowBlur(world)"));
+        assertFalse(capsule.contains("MiBlurBridge.applyPassWindowBlur"));
+        assertFalse(capsule.contains("applyNativeFallback()"));
+        assertTrue(capsule.contains("capsules remain transparent"));
+        assertTrue(capsule.contains("onSourceUnavailable"));
+        assertTrue(capsule.contains("onFailure"));
+        assertTrue(capsule.contains("if (!GlassRuntimeState.isRecentsCapsuleEnabled()) restoreStockBackground()"));
     }
 
-    @Test public void stockBackgroundIsRemovedOnlyAfterPrismalPresentationAndNativeContentRemains() throws Exception {
+    @Test public void stockBackgroundIsRemovedAtTakeoverAndNativeContentRemains() throws Exception {
         String capsule = read("LauncherRecentsCapsuleGlassHook.java");
         assertTrue(capsule.contains("clearAllStockBackground"));
         assertTrue(capsule.contains("worldStockBackground"));
