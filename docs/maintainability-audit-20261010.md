@@ -116,4 +116,6 @@
 - 将作为 `CompositionLocalProvider` 来源的唯一两处声明 `LocalFrozenPrismalBackdrop` 与 `LocalStaticGlassChrome` 一同移动，只将 `private` 改为同包共享的 `internal`。**不得在新旧两个文件里各声明一份**：否则原 Scaffold 和子控件将监听不同状态，冻结层与玻璃模式会失效。
 - `ModernSettingsUi.kt` **672 → 291 行**，聚焦 Scaffold 的 `backgroundLayer` / `screenLayer` 合成、单层静态玻璃提供者、顶栏 Prismal Action 和主题。
 - 保留按钮 destructive 配色、禁用轮廓、Chevron Cell 静态按压策略、Glass/MIUIX 双实现、Prismal 点击高光和原有 shader 缓存；函数逻辑没有任何重写。仅改变模块归属、CompositionLocal 可见性和已无用 imports。
-- 旧 `ModernSettingsArchitectureTest` 静态断言重新定位至新文件而不删除；增加针对 CompositionLocal 唯一性的断言。**CI 与实机均尚待验证**，不可提前当作性能优化或已合并。
+- 旧 `ModernSettingsArchitectureTest` 静态断言重新定位至新文件而不删除；增加针对 CompositionLocal 唯一性的断言。**CI #38042459056 已通过，实机尚待验证**，不可提前当作性能优化或已合并。
+
+- 本批源码等价校验：移动的八个 `@Composable` 函数体与 #319 分支原内容逐字相同；`ModernSettingsUi.kt` 与 `SettingsSurfaceComponents.kt` 总计 19 个 Composable 不变，冻结/静态 CompositionLocal 分别只声明一次。最终 CI 的 source-contract 测试检查了跨文件 provider 和静态组件路径；完整单元测试 / Debug APK [#38042459056](https://github.com/yu4032/LiquidDock/actions/runs/38042459056) 通过。
