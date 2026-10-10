@@ -10,25 +10,13 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/yu4032/LiquidDock"></a>
 </p>
 
-LiquidDock is an LSPosed module for HyperOS 3 tablets. Customize the workspace and Dock, and bring Liquid Glass to Recents, folders, widgets, system surfaces, and selected apps.
-
-> **Version note:** This README describes the current `main` branch (2.7.0 prepared for release). APKs on [GitHub Releases](https://github.com/yu4032/LiquidDock/releases) may not include these changes yet; check the [changelog](CHANGELOG.md) for the version you installed.
+LiquidDock is an LSPosed module for HyperOS 3 tablets. It customizes the home screen, Dock, Recents, and extends Liquid Glass styling to launcher, additional system surfaces and selected third-party apps.
 
 <p align="center">
   <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
 </p>
 
 ## Main features
-
-### Modern settings UI
-
-The settings app uses a **MIUIX + Prismal** glass design, organized into workspace, Dock, Liquid Glass, app integrations, animations, and other feature pages. The glass header and bottom navigation remain visually distinct, including in dark mode and when settings glass is disabled.
-
-- **Sliders:** smooth, continuous dragging with the nearest valid value shown live. Safe settings follow the displayed value; grid changes that could invalidate widget placement are checked before saving. Release springs remain animated.
-- **Direct entry:** tap a number to type it, or use increment, decrement, and reset controls without label-width jumps.
-- **Dialogs:** animated numeric input, defaults, grid warnings, and restart-scope dialogs. Restart scopes support a scrollable multi-select list.
-- **Bottom navigation:** draggable glass capsule with icon and label highlights that track selection.
-- **iOS Glass Effect:** controls the settings app's glass appearance separately from Launcher glass options.
 
 ### Liquid Glass
 
@@ -149,6 +137,10 @@ Gboard supports glass for the floating keyboard and related toolbar surfaces, wi
 
 Animation timing can be adjusted for workspace visibility, Dock icon return, press feedback, Dock size changes, and settings-page transitions.
 
+The settings app uses MIUIX + Prismal glass styling with options grouped by feature. Sliders support continuous dragging, live values and spring animations on release; tap a value to enter it directly, or use increment, decrement and reset. Settings dialogs have transitions, while the bottom glass capsule can be dragged between pages with matching icon and label highlights.
+
+The **iOS Glass Effect** switch controls the settings app's own glass appearance. The restart-scope dialog supports scrolling and multi-selection, separately from Launcher glass features.
+
 The settings app supports:
 
 - restoring the built-in default configuration;
@@ -156,7 +148,7 @@ The settings app supports:
 - importing a JSON configuration;
 - separate backup and restore for widget-component hiding rules.
 
-Fresh installs use the current built-in defaults; upgrades do not replace the whole current configuration with the default preset. **However, starting with 2.7.0, legacy preference keys are no longer migrated.** Settings saved only under retired keys fall back to current defaults. LiquidDock JSON backups and Launcher layout backups are separate.
+Fresh installs use the current built-in defaults; upgrades do not replace the whole current configuration with the default preset. **Legacy preference keys are no longer migrated:** settings saved only under retired keys fall back to current defaults. LiquidDock JSON backups and Launcher layout backups are separate.
 
 ## Compatibility
 
@@ -172,7 +164,7 @@ Updates to Launcher, System UI, Security Center, Gboard, or MIUI Search may temp
 
 ## Installation
 
-**Back up both your LiquidDock JSON configuration and Launcher layout** before upgrading. They are different backups. In particular, 2.7.0 does not migrate retired preference keys; keep a restorable workspace layout before changing the grid.
+**Back up both your LiquidDock JSON configuration and Launcher layout** before upgrading or changing the grid. They are separate backups; keep a restorable workspace layout.
 
 1. Download the latest APK from [GitHub Releases](https://github.com/yu4032/LiquidDock/releases).
 2. Install it and enable LiquidDock in LSPosed.
