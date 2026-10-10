@@ -18,6 +18,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
     private static final Path OPTION_SPECS = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt");
+    private static final Path ANIMATION_PAGES = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/AnimationSettingsPages.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
     private static final Path SEARCHBOX = Path.of(
@@ -774,6 +776,7 @@ public class ModernSettingsArchitectureTest {
     public void redesignedGuiRetainsTheOriginalUserFacingPreferenceReferences() throws Exception {
         String compose = Files.readString(UI);
         String optionSpecs = Files.readString(OPTION_SPECS);
+        String animationPages = Files.readString(ANIMATION_PAGES);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -785,7 +788,8 @@ public class ModernSettingsArchitectureTest {
 
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
-                .matcher(compose + "\n" + optionSpecs + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
+                .matcher(compose + "\n" + optionSpecs + "\n" + animationPages + "\n"
+                        + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
