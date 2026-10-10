@@ -136,7 +136,7 @@ public class ShortcutSecondaryGlassContractTest {
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
         String settings = SourceContractText.read(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+                "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"));
 
         assertTrue(schema.contains("SHORTCUT_POPUP_GLASS = bool("));
         assertTrue(schema.contains("\"liquid_shortcut_popup_glass\", true, true, true"));
@@ -150,12 +150,12 @@ public class ShortcutSecondaryGlassContractTest {
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String settings = SourceContractText.read(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+                "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"));
 
         assertTrue(schema.contains("SHORTCUT_POPUP_DARK_TEXT = bool("));
         assertTrue(schema.contains("\"liquid_shortcut_popup_dark_text\", false, false, false"));
         assertTrue(schema.contains("Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT"));
-        assertTrue(settings.contains("private fun GlassMenusPage("));
+        assertTrue(settings.contains("internal fun GlassMenusPage("));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(settings.contains("快捷菜单深色模式适配"));
@@ -174,6 +174,8 @@ public class ShortcutSecondaryGlassContractTest {
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String settings = SourceContractText.read(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String glassPages = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"));
 
         // Canonical HyperOS 4.50: Delete/Remove/SecondConfirm all extend BaseUninstallDialog.
         assertTrue(hook.contains(
@@ -247,7 +249,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(schema.contains("UNINSTALL_DIALOG_GLASS = bool("));
         assertTrue(schema.contains("\"liquid_uninstall_dialog_glass\", true, true, true"));
         assertTrue(settings.contains("Page.DialogCustomization -> DialogGlassSettingsPage("));
-        assertTrue(settings.contains("onClick = { open(Page.DialogCustomization) }"));
+        assertTrue(glassPages.contains("onClick = { open(Page.DialogCustomization) }"));
     }
 
     @Test public void launcherDialogGlassFollowsMiuixDimViewAndHasIndependentAppearancePage()
@@ -260,6 +262,8 @@ public class ShortcutSecondaryGlassContractTest {
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String settings = SourceContractText.read(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String glassPages = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"));
         String dialogPage = SourceContractText.read(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/DialogGlassSettingsPage.kt"));
         String params = Files.readString(Path.of(
@@ -317,8 +321,8 @@ public class ShortcutSecondaryGlassContractTest {
 
         // UI is reached through the lightweight glass menus page.
         assertTrue(settings.contains("DialogCustomization(R.string.page_dialog_customization)"));
-        assertTrue(settings.contains("private fun GlassMenusPage("));
-        assertTrue(settings.contains("onClick = { open(Page.DialogCustomization) }"));
+        assertTrue(glassPages.contains("internal fun GlassMenusPage("));
+        assertTrue(glassPages.contains("onClick = { open(Page.DialogCustomization) }"));
         assertTrue(dialogPage.contains("ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS"));
         assertTrue(dialogPage.contains("ConfigSchema.Glass.DIALOG_DISABLE_DIMMING"));
         assertTrue(dialogPage.contains("DialogAppearanceValueSlider("));
