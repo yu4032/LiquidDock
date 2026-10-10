@@ -42,6 +42,22 @@ public class WidgetComponentWhiteningPolicyTest {
         assertFalse(WidgetComponentWhiteningPolicy.supports(maml));
     }
 
+    @Test public void importedHidesOnlyClearWhiteRulesForTheSameNode() {
+        WidgetComponentStore.Descriptor white = remote("com.example/.Clock",
+                WidgetComponentStore.ACTION_CLEAR_IMAGE, "android.widget.ImageView",
+                WidgetComponentStore.TYPE_IMAGE);
+        WidgetComponentStore.Descriptor hiddenSame = remote("com.example/.Clock",
+                WidgetComponentStore.ACTION_HIDE_VIEW, "android.widget.ImageView",
+                WidgetComponentStore.TYPE_IMAGE);
+        WidgetComponentStore.Descriptor unrelated = remote("com.example/.Other",
+                WidgetComponentStore.ACTION_CLEAR_IMAGE, "android.widget.ImageView",
+                WidgetComponentStore.TYPE_IMAGE);
+        assertEquals(Set.of(unrelated.selectorKey()),
+                WidgetComponentWhiteningPolicy.withoutHiddenNodes(
+                        Set.of(white.selectorKey(), unrelated.selectorKey()),
+                        Set.of(hiddenSame.selectorKey())));
+    }
+
     @Test public void conflictDetectionMatchesOneNodeEvenAcrossDifferentActions() {
         WidgetComponentStore.Descriptor image = remote("com.example/.Clock",
                 WidgetComponentStore.ACTION_CLEAR_IMAGE, "android.widget.ImageView",
