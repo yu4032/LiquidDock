@@ -35,3 +35,10 @@
 ## 本轮工作
 
 `refactor/gui-prismal-bottom-navigation-20261010` 只将既有底栏函数原样迁入 `SettingsBottomNavigation.kt`，重启作用域弹窗迁入 `SettingsRestartScopesDialog.kt`；`ModernSettingsUi.kt` 仍负责现有 backdrop compositing/Prismal 容器。移动不会自动补齐上面缺少的视觉能力。审计发现列入 TODO，不以纯重构 PR 偷渡不易回归的触摸/图文变更。
+
+## 后续实现记录：PR #318（待 CI 和真机确认）
+
+- `SettingsBottomNavigation.kt` 在**原生** `PrismalGlassBottomTab` 的内容作用域内读取公开的 `LocalPrismalBottomTabHighlightedIndex`，借助 `SideEffect` 把候选 index 转交外层唯一可见图文层。拖动中根据候选 index 动态着色，并对跨 Tab 拖动候选应用轻量 spring scale；镜片、背景、触摸命中仍由上游 `PrismalGlassBottomTabs` 负责。
+- 为避免隐藏采样再次包含字形，原生 Tab content 只有无视觉的索引观察器，**没有 Text/Icon**；不会恢复历史两份文字。只在第一个 Tab 注册报告逻辑，避免四个 Tab 每帧都重复提交同一索引。
+- **限制**：这并不等同于完整原生 `LocalPrismalBottomTabScale` 的按压比例（其上游可见性为 internal），也不恢复 glyph 的 droplet lens 折射。不能仅凭 CI 判断拖动/长按无闪烁；须做 UI 实机验证。
+- 与此同时 #318 增加的通用 MIUIX 弹窗过渡采用 Compose spring/tween，而不是声称 Prismal v1.0.4 自带 modal 组件；共享采样链不增加任何 layer。
