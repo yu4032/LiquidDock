@@ -160,13 +160,6 @@ internal fun GuiOnTouchPrismalToggle(
                     translationX =
                         if (isLtr) lerp(padding, padding + dragWidth, trackFraction)
                         else lerp(-padding, -(padding + dragWidth), trackFraction)
-                    // Preserve Prismal's press / velocity squish during spring
-                    // release; the static glass backing remains GPU-cached.
-                    val velocity = dampedDragAnimation.velocity / 50f
-                    scaleX = dampedDragAnimation.scaleX /
-                        (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
-                    scaleY = dampedDragAnimation.scaleY *
-                        (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                 }
                 .semantics { role = Role.Switch }
                 .then(if (enabled) dampedDragAnimation.modifier else Modifier)
@@ -225,6 +218,15 @@ internal fun GuiOnTouchPrismalToggle(
                             alpha = progress
                         )
                     },
+                    // Keep the live Prismal transform inside the optical renderer;
+                    // scaling the parent changes source-to-screen sampling coordinates.
+                    layerBlock = {
+                        scaleX = dampedDragAnimation.scaleX
+                        scaleY = dampedDragAnimation.scaleY
+                        val velocity = dampedDragAnimation.velocity / 50f
+                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                    },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
                         drawRect(Color.White.copy(alpha = 1f - progress))
@@ -238,7 +240,14 @@ internal fun GuiOnTouchPrismalToggle(
                 GuiFrozenPrismalChrome(
                     backdrop = underlayBackdrop,
                     shape = { PrismalCapsule() },
-                    modifier = Modifier.matchParentSize(),
+                    // Release animation applies to cached output, not the backdrop input.
+                    modifier = Modifier.matchParentSize().graphicsLayer {
+                        val velocity = dampedDragAnimation.velocity / 50f
+                        scaleX = dampedDragAnimation.scaleX /
+                            (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
+                        scaleY = dampedDragAnimation.scaleY *
+                            (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
+                    },
                     blurRadius = 8.dp,
                     refractionHeightPx = with(density) { 4.dp.toPx() },
                     refractionAmountPx = with(density) { 6.dp.toPx() },

@@ -146,9 +146,8 @@ internal fun GuiOnTouchPrismalSlider(
             )
         }
         var motionFrame by remember { mutableIntStateOf(0) }
-        // The expensive motion-driven glass pass is completely dormant
-        // between gestures. The thumb's outer graphicsLayer observes spring
-        // state directly, even after sampling stops and frozen chrome resumes.
+        // Touch-only live sampling stays dormant between gestures.
+        // The frozen thumb retains its own spring layer after the live sampling ends.
         LaunchedEffect(dampedDragAnimation, sampling) {
             if (sampling) {
                 snapshotFlow { dampedDragAnimation.animationSnapshot() }
@@ -221,13 +220,6 @@ internal fun GuiOnTouchPrismalSlider(
                             (-size.width / 2f + trackWidth * dampedDragAnimation.progress)
                                 .fastCoerceIn(-size.width / 4f, trackWidth - size.width * 3f / 4f) *
                                     if (isLtr) 1f else -1f
-                        // Animate the whole thumb, including its frozen Prismal backing.
-                        // The spring keeps settling after the touch-only glass pass ends.
-                        val velocity = dampedDragAnimation.velocity / 10f
-                        scaleX = dampedDragAnimation.scaleX /
-                            (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
-                        scaleY = dampedDragAnimation.scaleY *
-                            (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                     }
                     .then(if (enabled) dampedDragAnimation.modifier else Modifier)
                     .then(if (sampling) Modifier.drawPrismalGlass(
@@ -285,6 +277,16 @@ internal fun GuiOnTouchPrismalSlider(
                                 alpha = progress
                             )
                         },
+                        // Live glass samples in the original, unscaled thumb coordinates.
+                        // Applying spring scale on the outer parent graphicsLayer would
+                        // also distort the backdrop source transform.
+                        layerBlock = {
+                            scaleX = dampedDragAnimation.scaleX
+                            scaleY = dampedDragAnimation.scaleY
+                            val velocity = dampedDragAnimation.velocity / 10f
+                            scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                            scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                        },
                         onDrawSurface = {
                             val progress = dampedDragAnimation.pressProgress
                             drawRect(Color.White.copy(alpha = 1f - progress))
@@ -299,7 +301,15 @@ internal fun GuiOnTouchPrismalSlider(
                     GuiFrozenPrismalChrome(
                         backdrop = underlayBackdrop,
                         shape = { PrismalCapsule() },
-                        modifier = Modifier.matchParentSize(),
+                        // Transform the already-recorded frozen glass only.
+                        // It keeps the spring settling without resampling a shifted backdrop.
+                        modifier = Modifier.matchParentSize().graphicsLayer {
+                            val velocity = dampedDragAnimation.velocity / 10f
+                            scaleX = dampedDragAnimation.scaleX /
+                                (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
+                            scaleY = dampedDragAnimation.scaleY *
+                                (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
+                        },
                         blurRadius = 8.dp,
                         refractionHeightPx = with(density) { 4.dp.toPx() },
                         refractionAmountPx = with(density) { 6.dp.toPx() },

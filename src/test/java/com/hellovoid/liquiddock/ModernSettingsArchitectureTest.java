@@ -47,10 +47,13 @@ public class ModernSettingsArchitectureTest {
             assertTrue(source.contains("pressedScale = 1.5f"));
             assertTrue(source.contains("dampedDragAnimation.modifier"));
             assertTrue(source.contains(".graphicsLayer {"));
+            // Source sampling must stay in the original outer translation-only
+            // graphicsLayer, while the live refraction uses its native layerBlock.
+            assertTrue(source.contains("layerBlock = {"));
+            assertTrue(source.contains("GuiFrozenPrismalChrome("));
+            assertTrue(source.contains("modifier = Modifier.matchParentSize().graphicsLayer {"));
             assertTrue(source.contains("scaleX = dampedDragAnimation.scaleX /"));
             assertTrue(source.contains("scaleY = dampedDragAnimation.scaleY *"));
-            assertFalse(source.contains("layerBlock = {"));
-            assertTrue(source.contains("GuiFrozenPrismalChrome("));
         }
         assertTrue(slider.contains("if (sampling) Modifier.drawPrismalGlass("));
         assertTrue(toggle.contains("if (samplingEnabled) Modifier.drawPrismalGlass("));
