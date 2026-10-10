@@ -72,7 +72,8 @@ internal fun GuiOnTouchPrismalSlider(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     adaptiveLuminance: Boolean = false,
-    luminance: () -> Float = { 0.5f }
+    luminance: () -> Float = { 0.5f },
+    steps: Int = 0,
 ) {
     val density = LocalDensity.current
     val isLightTheme = !isSystemInDarkTheme()
@@ -100,12 +101,16 @@ internal fun GuiOnTouchPrismalSlider(
         var isTrackPressed by remember { mutableStateOf(false) }
         val sampling = enabled && (isDragging || isTrackPressed)
         var lastReportedValue by remember { mutableFloatStateOf(value()) }
+        // Keep raw drag displacement between pointer events. Re-applying each small
+        // delta to an already-snapped target would make discrete thumbs stick.
+        var rawDragTarget by remember { mutableFloatStateOf(value()) }
         val trackWidthState = remember { mutableIntStateOf(0) }
         trackWidthState.intValue = trackWidth
         val dampedDragAnimation = remember(
             animationScope,
             valueRange.start,
             valueRange.endInclusive,
+            steps,
         ) {
             PrismalSpringMotion(
                 animationScope = animationScope,
@@ -117,6 +122,7 @@ internal fun GuiOnTouchPrismalSlider(
                 onDragStarted = {
                     isDragging = true
                     didDrag = false
+                    rawDragTarget = targetValue
                 },
                 onDragStopped = {
                     isDragging = false
@@ -133,10 +139,15 @@ internal fun GuiOnTouchPrismalSlider(
                     }
                     val delta =
                         (valueRange.endInclusive - valueRange.start) * (dragAmount.x / width.toFloat())
-                    val nextValue = (
-                            if (isLtr) targetValue + delta
-                            else targetValue - delta
+                    val rawBase = if (steps > 0) rawDragTarget else targetValue
+                    val rawNext = (
+                            if (isLtr) rawBase + delta
+                            else rawBase - delta
                             ).fastCoerceIn(valueRange.start, valueRange.endInclusive)
+                    if (steps > 0) rawDragTarget = rawNext
+                    val nextValue = DiscreteSliderSteps.snap(
+                        rawNext, valueRange.start, valueRange.endInclusive, steps,
+                    )
                     updateValue(nextValue)
                     if (abs(nextValue - lastReportedValue) >= visibilityThreshold) {
                         lastReportedValue = nextValue
@@ -164,6 +175,13 @@ internal fun GuiOnTouchPrismalSlider(
                 }
         }
 
+        // A blocked widget preflight disables the row/column slider while waiting.
+        // Immediately return its thumb to the last committed value, not the
+        // tentative 2/3-column stop that has not passed safety validation.
+        LaunchedEffect(enabled, dampedDragAnimation, steps) {
+            if (!enabled && steps > 0) dampedDragAnimation.updateValue(value())
+        }
+
         // No track GraphicsLayer recording while the thumb is idle.
         if (sampling) {
             trackBackdrop.readSamplingState()
@@ -187,8 +205,11 @@ internal fun GuiOnTouchPrismalSlider(
                                 (if (isLtr) valueRange.start + delta
                                 else valueRange.endInclusive - delta)
                                     .coerceIn(valueRange)
-                            dampedDragAnimation.animateToValue(targetValue)
-                            onValueChange(targetValue)
+                            val snapped = DiscreteSliderSteps.snap(
+                                targetValue, valueRange.start, valueRange.endInclusive, steps,
+                            )
+                            dampedDragAnimation.animateToValue(snapped)
+                            onValueChange(snapped)
                             },
                         )
                     } else Modifier)
