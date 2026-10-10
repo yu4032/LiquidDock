@@ -90,15 +90,15 @@ public class RestartBoundSettingsContractTest {
         String source = Files.readString(UI);
         String en = Files.readString(EN);
         String zh = Files.readString(ZH);
-        assertTrue(source.contains("工作区玻璃淡入淡出时长；已加载的桌面 Hook 即时生效"));
-        assertTrue(source.contains("Dock 图标玻璃恢复；已加载的桌面 Hook 即时生效"));
-        assertTrue(source.contains("玻璃按下反馈速度；已加载的桌面 Hook 即时生效"));
-        assertTrue(source.contains("玻璃松手恢复速度；已加载的桌面 Hook 即时生效"));
-        assertTrue(source.contains("玻璃的快速淡出；已加载的桌面 Hook 即时生效"));
-        assertTrue(source.contains("玻璃退出时的 LiquidDock 淡出；已加载的安全中心 Hook 即时生效"));
-        assertTrue(source.contains("已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面"));
         String specs = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt"));
+        assertTrue(specs.contains("工作区玻璃淡入淡出时长；已加载的桌面 Hook 即时生效"));
+        assertTrue(specs.contains("Dock 图标玻璃恢复；已加载的桌面 Hook 即时生效"));
+        assertTrue(specs.contains("玻璃按下反馈速度；已加载的桌面 Hook 即时生效"));
+        assertTrue(specs.contains("玻璃松手恢复速度；已加载的桌面 Hook 即时生效"));
+        assertTrue(specs.contains("玻璃的快速淡出；已加载的桌面 Hook 即时生效"));
+        assertTrue(specs.contains("玻璃退出时的 LiquidDock 淡出；已加载的安全中心 Hook 即时生效"));
+        assertTrue(source.contains("已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面"));
         assertTrue(specs.contains("已加载的工作区、Launcher 玻璃及独立应用玻璃实时生效"));
         assertTrue(stringValue(zh, "recents_header_summary").contains("即时生效"));
         assertFalse(stringValue(zh, "recents_header_summary").contains("重启"));
