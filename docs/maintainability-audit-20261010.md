@@ -97,3 +97,12 @@
 对照 PrismalAGSL v1.0.4 上游，**底栏并非“全部效果丢失”**：底层 native PrismalGlassBottomTabs 的基础模糊/折射、按压/拖动弹簧、边缘高光仍生效；但原生 Tab 子节点为空、图文以 sibling overlay 绘制，因此图文不参与原生 tab 按压缩放 / 拖动候选高亮 / droplet 对文本本身的折射。静止 droplet 的光学效果在 upstream 本身部分由 pressProgress 调节，静止表现相对平淡。该方案原为避免长按文字重影而刻意选择，不能简单回滚。详细证据、风险和独立修复路径见 [Prismal 底栏审查](gui-prismal-bottom-navigation-audit-20261010.md)。
 
 风险界限：GUI 的文件拆分不触及 PassBlur/EGL、渲染 producer、LSPosed Hook。所有编译和静态检查结果必须与实机验收区别记录，完成后更新 TODO 状态。
+
+
+## 10. P1-A Workspace 预绘制扫描测量能力（2026-10-10）
+
+**状态：独立诊断 PR，CI/实机数据待验证；未做 runtime fast-path 优化。** 按用户要求停止无收益的 GUI Scaffold 文件拆分：第十批 #320 上的 `ModernSettingsUi.kt` 已减少到约 **291 行**，剩余 Scaffold、Prismal 共享采样和顶栏的生命周期强耦合；拆散它们只为减少行数会提高 source authority 和 CompositionLocal 风险。#319 和 #320 仍分层开放，未经用户设备确认均未合并。
+
+**独立性能诊断分支** `perf/workspace-prescan-tracing-20261010` 基于 `main@c25a4c92`，不依赖 GUI 分支、不触及其代码。在 `LauncherGlassSession` 已有 UI pre-draw 调用外围新增 Perfetto gated slices：`SceneSync`、`DragNodes`、`StaticNodes`、`SourceReconcile`，仅在 `Trace.isEnabled()` 时给出 drag/static candidate 及 geometry read 计数；保留现有 node scan、rotation settle、vendor visibility、scroll projection 和 source reconciliation 顺序。未增加每帧文件日志或固定轮询时间间隔；未宣称 FPS 提升。
+
+**下一证据门槛**：真机采样 static/paging/drag/unlock，并比较静态节点总数与真实 capture 数及各阶段 p95，确认哪条链是 UI 线程瓶颈，再设计完整 dirty-node 失效覆盖范围。操作见 [Workspace Perfetto 测量方案](workspace-ui-node-scan-perfetto-20261010.md)。Perfetto 的存在不证明优化已完成。
