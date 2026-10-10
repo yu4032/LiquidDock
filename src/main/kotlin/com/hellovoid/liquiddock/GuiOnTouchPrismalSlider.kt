@@ -61,7 +61,8 @@ import kotlin.math.abs
  * Glass-styled slider with a refracting thumb and damped drag physics.
  *
  * @param value Current value provider (read on each frame during drag).
- * @param onValueChange Called only after the native Prismal release spring settles.
+ * @param onValueChange Final release value callback; live quantized updates can be
+ *   delivered through onValuePreview by the setting owner.
  * @param valueRange Allowed value range.
  * @param visibilityThreshold Legacy spring threshold; precise post-release settling uses 0.001f.
  * @param backdrop Source sampled through the track and thumb glass.
@@ -157,8 +158,9 @@ internal fun GuiOnTouchPrismalSlider(
                             snapshotFlow { motion.value }
                                 .first { abs(it - nearest) <= 0.005f }
                             if (!isDragging) {
-                                // Business logic, preflight and preference writes
-                                // run only after the thumb reaches its snapped stop.
+                                // Finalize after Prismal settles. The setting owner
+                                // deduplicates steps already persisted during drag;
+                                // guarded grid changes still run preflight here.
                                 commitState.value(nearest)
                                 lastPreview = null
                                 previewState.value(null)
@@ -176,8 +178,9 @@ internal fun GuiOnTouchPrismalSlider(
                     val nextValue = (
                         if (isLtr) targetValue + delta else targetValue - delta
                     ).fastCoerceIn(valueRange.start, valueRange.endInclusive)
-                    // The thumb tracks the raw position. Only the nearby value
-                    // label is discretized during touch; no configuration writes.
+                    // The thumb tracks the raw position. Both the adjacent label
+                    // and permitted live writes use this snapped value.
+                    // Guarded settings can defer writes until release.
                     updateValue(nextValue)
                     val preview = DiscreteSliderSteps.snap(
                         nextValue, valueRange.start, valueRange.endInclusive,
@@ -263,8 +266,9 @@ internal fun GuiOnTouchPrismalSlider(
                             lastPreview = snapped
                             previewState.value(snapped)
                             isSettling = true
-                            // A track tap also uses Prismal's native press/value/
-                            // release springs, then commits after visual arrival.
+                            // Track taps retain Prismal press/value/release springs;
+                            // live writes may happen on the preview, while guarded
+                            // settings still wait for their release preflight.
                             dampedDragAnimation.animateToValue(snapped)
                             releaseJob[0] = animationScope.launch {
                                 snapshotFlow { dampedDragAnimation.value }
