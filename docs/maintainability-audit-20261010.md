@@ -76,4 +76,6 @@
 
 - [PR #311](https://github.com/yu4032/LiquidDock/pull/311)：七个 Dock、Divider、Workstation、Recents leaf pages 迁移至 `DockWorkstationSettingsPages.kt`；主 Activity 分支现为 **1902 行**。代码与逻辑逐字保持等价，所需 `private → internal` 可见性例外已记录；CI [#38023359767](https://github.com/yu4032/LiquidDock/actions/runs/38023359767) 的单元测试、Debug/R8 构建和产物上传成功；需单独实机验收。
 
-阶段性边界：三个批次均没有重新实现 UI、修改持久化键、引入额外采样或触动 PassBlur/GL/Hook。后续仍须继续拆分主 Activity 内的 Grid/Glass/Data 等页面，检查 GUI 来源测试对特定源文件的耦合，并在视觉/行为验证之后才合并。不能将文件行数下降解释为 FPS 或 GPU 占用改善。
+- 第四批（分支 `refactor/gui-grid-settings-pages-20261010`，以 #311 为父）：五个 Grid 页面整体迁出到 `GridSettingsPages.kt`，主 Activity **1902 → 1630 行**；保留 4×2 小组件预检、不确定性拒绝保存、离开页面取消请求、晚到结果复核与原有大按钮警告。仅 `gridEntries` 和跨文件共享的偏好 revision provider 改为 Kotlin `internal`。需检查 CI 和真机，**不要将此分支直接认作主线已完成**。
+
+阶段性边界：各批次均没有重新实现 UI、修改持久化键、引入额外采样或触动 PassBlur/GL/Hook。后续仍须继续拆分主 Activity 内的 Glass/Data 等页面，检查 GUI 来源测试对特定源文件的耦合，并在视觉/行为验证之后才合并。不能将文件行数下降解释为 FPS 或 GPU 占用改善。
