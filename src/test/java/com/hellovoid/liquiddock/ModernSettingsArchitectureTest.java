@@ -857,7 +857,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.TextField("));
         assertTrue(surfaces.contains("keyboardActions = KeyboardActions("));
         // Both slider paths must use the fixed-width, single-line readout and preserve tap-to-edit.
-        assertTrue(surfaces.contains("private val SliderValueReadoutWidth = 104.dp"));
+        assertTrue(surfaces.contains("private val SliderValueReadoutWidth = 92.dp"));
         assertTrue(surfaces.contains(".width(SliderValueReadoutWidth)"));
         assertTrue(surfaces.contains("maxLines = 1"));
         assertTrue(surfaces.contains("onClick = { editingValue = true }"));
