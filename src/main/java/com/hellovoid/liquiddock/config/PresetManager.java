@@ -87,15 +87,11 @@ public final class PresetManager {
 
         SharedPreferences.Editor editor = preferences.edit();
         editor.putInt(ConfigSchema.Dock.BLUR_RADIUS.name(), 100);
-        editor.putBoolean(ConfigSchema.Dock.DIMENSIONS_DP.name(), true);
-        editor.putBoolean(ConfigSchema.Dock.CORNERS_DP.name(), true);
         putDp(editor, ConfigSchema.Dock.HEIGHT_OFFSET, heightOffset / density);
         putDp(editor, ConfigSchema.Dock.WIDTH_OFFSET, widthOffset / density);
         putDp(editor, ConfigSchema.Dock.CORNER_OFFSET, cornerOffset / density);
         putDp(editor, ConfigSchema.Dock.BLUR_CORNER_OFFSET, -1f);
         editor.putBoolean(ConfigSchema.Grid.ENABLED.name(), true);
-        editor.putBoolean(ConfigSchema.Grid.MARGINS_DP.name(), true);
-        editor.putBoolean(ConfigSchema.Grid.MARGINS_OFFSET.name(), true);
         putDp(editor, ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE, 0f);
         putDp(editor, ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE, 0f);
         putDp(editor, ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE, 0f);
@@ -151,8 +147,6 @@ public final class PresetManager {
         source.put("grid_rows", 4);
         source.put("launcher450_icon_size_enabled", Boolean.TRUE);
         source.put("launcher450_icon_size_percent", 100);
-        source.put("grid_margins_dp", Boolean.TRUE);
-        source.put("grid_margins_offset", Boolean.TRUE);
         source.put("grid_widget_horizontal_stretch", Boolean.FALSE);
         source.put("grid_landscape_horizontal_distance", 0);
         source.put("grid_landscape_top_distance", -8);
@@ -170,13 +164,11 @@ public final class PresetManager {
         source.put("dock_frame_sync", Boolean.TRUE);
         source.put("dock_resize_animation", Boolean.FALSE);
         source.put("dock_smooth_resize_animation", Boolean.TRUE);
-        source.put("dock_dimensions_dp", Boolean.TRUE);
         source.put("width_offset", 0);
         source.put("height_offset", 0);
         source.put("dock_spacing", 0);
         source.put("dock_bottom_offset", 0);
         source.put("blur_radius", 100);
-        source.put("corners_dp", Boolean.TRUE);
         source.put("corner_offset", 3.4d);
         source.put("blur_corner_offset", 0);
         source.put("squircle", Boolean.FALSE);
@@ -219,13 +211,11 @@ public final class PresetManager {
         source.put("liquid_dialog_blur", 6);
         source.put("liquid_dialog_tint_b", 0);
         source.put("liquid_dialog_tint_alpha", 0);
-        source.put("liquid_folder_glass", Boolean.TRUE);
         source.put("liquid_widget_glass", Boolean.TRUE);
         source.put("liquid_widget_dark_content", Boolean.TRUE);
         source.put("liquid_icon_glass", Boolean.FALSE);
         source.put("liquid_functional_dock_icon_glass", Boolean.TRUE);
         source.put("liquid_recents_capsule_glass", Boolean.TRUE);
-        source.put("liquid_folder_corner_radius", 0);
         source.put("liquid_icon_size_offset", 0);
         source.put("liquid_icon_corner_radius", 16.5d);
         source.put("liquid_widget_size_offset", 0);
@@ -236,9 +226,7 @@ public final class PresetManager {
         source.put("liquid_large_folder_glass", Boolean.TRUE);
         source.put("liquid_large_folder_size_offset", 0);
         source.put("liquid_large_folder_corner_radius", 16);
-        source.put("liquid_dimensions_dp", Boolean.TRUE);
         source.put("liquid_blur_mode", "advanced_material");
-        source.put("liquid_miuix_307_pipeline", Boolean.FALSE);
         source.put("liquid_blur", 7.2d);
         source.put("liquid_chromatic", 9);
         source.put("liquid_tint_alpha", 0);

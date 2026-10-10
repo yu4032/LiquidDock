@@ -54,8 +54,6 @@ public class ConfigCodecTest {
         expected.put("liquid_glass", true);
         expected.put("liquid_blur", 7.3d);
         expected.put("liquid_ior", 170);
-        expected.put("dock_dimensions_dp", true);
-        expected.put("liquid_dimensions_dp", true);
 
         Map<String, Object> exported = ConfigCodec.exportValues(prefs);
         for (Map.Entry<String, Object> entry : expected.entrySet()) {
@@ -111,18 +109,16 @@ public class ConfigCodecTest {
     }
 
     @Test
-    public void partialImportCannotDisableAbsentGridMarginFlags() {
+    public void retiredUnitFlagsAreIgnoredByCurrentImport() {
         Map<String, Object> json = new LinkedHashMap<>();
+        for (String key : new String[] {"grid_margins_dp", "grid_margins_offset",
+                "dock_dimensions_dp", "corners_dp", "liquid_dimensions_dp"}) {
+            json.put(key, false);
+        }
         json.put(ConfigSchema.Glass.PRISMAL_VIBRANCY.name(), 180);
         Map<String, Object> imported = ConfigCodec.importValues(json);
+        assertEquals(1, imported.size());
         assertEquals(180, imported.get(ConfigSchema.Glass.PRISMAL_VIBRANCY.name()));
-        assertFalse(imported.containsKey(ConfigSchema.Grid.MARGINS_DP.name()));
-        assertFalse(imported.containsKey(ConfigSchema.Grid.MARGINS_OFFSET.name()));
-
-        json.put(ConfigSchema.Grid.MARGINS_DP.name(), false);
-        imported = ConfigCodec.importValues(json);
-        assertEquals(false, imported.get(ConfigSchema.Grid.MARGINS_DP.name()));
-        assertFalse(imported.containsKey(ConfigSchema.Grid.MARGINS_OFFSET.name()));
     }
 
     @Test
@@ -180,17 +176,6 @@ public class ConfigCodecTest {
         assertEquals(12005, imported.get("liquid_home_settle_delay_tenths"));
     }
 
-    @Test
-    public void dimensionModeExportsStayForcedTrueWhenSourceExplicitlyFalse() {
-        Map<String, Object> prefs = new HashMap<>();
-        prefs.put("dock_dimensions_dp", false);
-        prefs.put("liquid_dimensions_dp", false);
-
-        Map<String, Object> exported = ConfigCodec.exportValues(prefs);
-
-        assertEquals(Boolean.TRUE, exported.get("dock_dimensions_dp"));
-        assertEquals(Boolean.TRUE, exported.get("liquid_dimensions_dp"));
-    }
 
     @Test
     public void absentPreferencesExportCompleteHistoricalDefaultsFromSchema() {
@@ -204,10 +189,7 @@ public class ConfigCodecTest {
 
         assertEquals(expectedAlwaysKeys, exported.keySet());
         assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.ENABLED.name()));
-        assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.MIUIX_307_PIPELINE.name()));
         assertEquals(Boolean.FALSE, exported.get(ConfigSchema.Glass.WIDGET_DARK_CONTENT.name()));
-        assertEquals(Boolean.TRUE, exported.get(ConfigSchema.Glass.FOLDER_GLASS.name()));
-        assertFalse(exported.containsKey(ConfigSchema.Glass.FOLDER_CORNER_RADIUS.name()));
         assertEquals(Boolean.TRUE, exported.get(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name()));
         assertEquals(Boolean.TRUE, exported.get(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name()));
         assertEquals(0.0d,

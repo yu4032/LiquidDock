@@ -32,9 +32,6 @@ public final class ConfigCodec {
     }
 
     private static Object exportValue(ConfigKey<?> key, Map<String, ?> preferences) {
-        if (key == ConfigSchema.Dock.DIMENSIONS_DP || key == ConfigSchema.Glass.DIMENSIONS_DP) {
-            return Boolean.TRUE;
-        }
         if (key.storageMode() == ConfigKey.StorageMode.DP_TENTHS) {
             Object tenths = preferences.get(key.name() + "_tenths");
             if (preferences.containsKey(key.name() + "_tenths") && tenths instanceof Number) {

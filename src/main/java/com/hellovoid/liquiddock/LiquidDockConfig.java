@@ -71,7 +71,7 @@ final class LiquidDockConfig {
     }
 
     static final class Grid {
-        final boolean enabled, iconSizeEnabled, dp, offsets, widgetHorizontalStretch;
+        final boolean enabled, iconSizeEnabled, widgetHorizontalStretch;
         final int columns, rows, iconSizePercent;
         final float landscapeHorizontal, landscapeTop, landscapeBottom, landscapeRowGap;
         final float portraitHorizontal, portraitTop, portraitBottom, portraitRowGap;
@@ -93,10 +93,6 @@ final class LiquidDockConfig {
                     Math.min(Launcher450IconSizePolicy.MAX_PERCENT, c.i(
                             ConfigSchema.Grid.ICON_SIZE_PERCENT.name(),
                             ConfigSchema.Grid.ICON_SIZE_PERCENT.runtimeFallback())));
-            dp = c.b(ConfigSchema.Grid.MARGINS_DP.name(),
-                    ConfigSchema.Grid.MARGINS_DP.runtimeFallback());
-            offsets = c.b(ConfigSchema.Grid.MARGINS_OFFSET.name(),
-                    ConfigSchema.Grid.MARGINS_OFFSET.runtimeFallback());
             widgetHorizontalStretch = c.b(
                     ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name(),
                     ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.runtimeFallback());
@@ -114,8 +110,8 @@ final class LiquidDockConfig {
                     ConfigSchema.Grid.PORTRAIT_BOTTOM_DISTANCE.runtimeFallback());
             splitHorizontalOffset = c.f(ConfigSchema.Grid.SPLIT_HORIZONTAL_OFFSET.name(),
                     ConfigSchema.Grid.SPLIT_HORIZONTAL_OFFSET.runtimeFallback());
-            landscapeRowGap = c.f("grid_landscape_row_gap", offsets ? 0 : (dp ? 1 : 3));
-            portraitRowGap = c.f("grid_portrait_row_gap", offsets ? 0 : (dp ? 1 : 3));
+            landscapeRowGap = c.f(ConfigSchema.Grid.LANDSCAPE_ROW_GAP.name(), 0f);
+            portraitRowGap = c.f(ConfigSchema.Grid.PORTRAIT_ROW_GAP.name(), 0f);
             landscapeIndicatorY = c.f(ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y.name(),
                     ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y.runtimeFallback());
             portraitIndicatorY = c.f(ConfigSchema.Grid.PORTRAIT_INDICATOR_Y.name(),
@@ -141,8 +137,7 @@ final class LiquidDockConfig {
                     ConfigSchema.Dock.RESIZE_ANIMATION.runtimeFallback());
             smoothResizeAnimation = c.b(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(),
                     ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.runtimeFallback());
-            dimensionsDp = c.b(ConfigSchema.Dock.DIMENSIONS_DP.name(),
-                    ConfigSchema.Dock.DIMENSIONS_DP.runtimeFallback());
+            dimensionsDp = true;
             widthOffset = c.f(ConfigSchema.Dock.WIDTH_OFFSET.name(),
                     ConfigSchema.Dock.WIDTH_OFFSET.runtimeFallback());
             heightOffset = c.f(ConfigSchema.Dock.HEIGHT_OFFSET.name(),
@@ -153,8 +148,7 @@ final class LiquidDockConfig {
                     ConfigSchema.Dock.BOTTOM_OFFSET.runtimeFallback());
             blurRadius = c.i(ConfigSchema.Dock.BLUR_RADIUS.name(),
                     ConfigSchema.Dock.BLUR_RADIUS.runtimeFallback());
-            cornersDp = c.b(ConfigSchema.Dock.CORNERS_DP.name(),
-                    ConfigSchema.Dock.CORNERS_DP.runtimeFallback());
+            cornersDp = true;
             cornerOffset = c.f(ConfigSchema.Dock.CORNER_OFFSET.name(),
                     ConfigSchema.Dock.CORNER_OFFSET.runtimeFallback());
             blurCornerOffset = c.f(ConfigSchema.Dock.BLUR_CORNER_OFFSET.name(),
@@ -240,7 +234,6 @@ final class LiquidDockConfig {
         final boolean enabled, securityCenterEnabled, systemUiHandleMenuEnabled,
                 folderEnabled, widgetEnabled, widgetDarkContent, iconEnabled,
                 functionalDockIconEnabled, recentsCapsuleEnabled;
-        final float folderCornerRadiusDp;
         final GlassComponentStyle iconStyle;
         final GlassComponentStyle widgetStyle;
         final GlassComponentStyle smallFolderStyle;
@@ -270,10 +263,6 @@ final class LiquidDockConfig {
             systemUiHandleMenuEnabled = c.b(
                     ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name(),
                     ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.runtimeFallback());
-            boolean legacyFolderEnabled = c.b("liquid_folder_glass",
-                    ConfigSchema.Glass.FOLDER_GLASS.runtimeFallback());
-            float legacyFolderRadius = c.f("liquid_folder_corner_radius",
-                    ConfigSchema.Glass.FOLDER_CORNER_RADIUS.runtimeFallback());
             boolean resolvedIconEnabled = c.b(ConfigSchema.Glass.ICON_GLASS.name(),
                     ConfigSchema.Glass.ICON_GLASS.runtimeFallback());
             functionalDockIconEnabled = c.b(
@@ -286,18 +275,14 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.WIDGET_GLASS.runtimeFallback());
             widgetDarkContent = c.b(ConfigSchema.Glass.WIDGET_DARK_CONTENT.name(),
                     ConfigSchema.Glass.WIDGET_DARK_CONTENT.runtimeFallback());
-            boolean resolvedSmallEnabled = c.has(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name())
-                    ? c.b(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), true)
-                    : legacyFolderEnabled;
-            boolean resolvedLargeEnabled = c.has(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name())
-                    ? c.b(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), true)
-                    : legacyFolderEnabled;
-            float smallRadius = c.has(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name())
-                    ? c.f(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name(), 0f)
-                    : legacyFolderRadius;
-            float largeRadius = c.has(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name())
-                    ? c.f(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name(), 0f)
-                    : legacyFolderRadius;
+            boolean resolvedSmallEnabled = c.b(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(),
+                    ConfigSchema.Glass.SMALL_FOLDER_GLASS.runtimeFallback());
+            boolean resolvedLargeEnabled = c.b(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(),
+                    ConfigSchema.Glass.LARGE_FOLDER_GLASS.runtimeFallback());
+            float smallRadius = c.f(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name(),
+                    ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.runtimeFallback());
+            float largeRadius = c.f(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name(),
+                    ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.runtimeFallback());
             iconStyle = new GlassComponentStyle(
                     resolvedIconEnabled || functionalDockIconEnabled,
                     c.f(ConfigSchema.Glass.ICON_SIZE_OFFSET.name(), 0f),
@@ -312,7 +297,6 @@ final class LiquidDockConfig {
             iconEnabled = resolvedIconEnabled;
             widgetEnabled = widgetStyle.enabled;
             folderEnabled = smallFolderStyle.enabled || largeFolderStyle.enabled;
-            folderCornerRadiusDp = legacyFolderRadius;
             launcherHighlightProfile = LauncherHighlightPreferences.read(c);
             largeSurfaceHighlightProfile = LauncherHighlightPreferences.readLargeSurfaces(c);
             blur = c.f(ConfigSchema.Glass.BLUR.name(), ConfigSchema.Glass.BLUR.runtimeFallback());
@@ -449,7 +433,7 @@ final class LiquidDockConfig {
         Workstation(ConfigReader c) {
             dockEnabled = c.b(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
                     ConfigSchema.Workstation.DOCK_CUSTOMIZATION.runtimeFallback());
-            dimensionsDp = c.b("dock_dimensions_dp", true);
+            dimensionsDp = true;
             dockWidthOffset = c.f(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.runtimeFallback());
             dockIconGlassCornerRadius = c.f(

@@ -73,7 +73,6 @@ internal fun optionSummary(key: String): String = when (key) {
     "workstation_all_apps_portrait_top_spacing" -> "直接设置工作台所有应用竖屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_bottom_spacing" -> "直接设置工作台所有应用竖屏图标区下间距；不叠加系统默认位置"
     "workstation_dock_icon_top_offset" -> "通过图标顶部装饰偏移调整工作台 Dock 图标垂直位置；正值通常向下移动"
-    "liquid_folder_corner_radius" -> "0 表示自动跟随 MIUI 原生圆角；大于 0 时同时覆盖桌面与拖动文件夹玻璃"
     "liquid_blur" -> "控制玻璃背景的模糊程度"
     "liquid_thickness" -> "控制虚拟玻璃厚度对折射效果的影响"
     "liquid_ior" -> "折射率；越高，边缘弯曲越明显"
