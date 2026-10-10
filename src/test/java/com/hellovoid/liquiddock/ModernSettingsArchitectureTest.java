@@ -410,7 +410,7 @@ public class ModernSettingsArchitectureTest {
     public void defaultPresetRequiresConfirmationAndRecreatesSettingsState() throws Exception {
         String ui = Files.readString(UI);
         assertTrue(Files.readString(UTILITY_PAGES).contains("confirmDefaultReset = true"));
-        assertTrue(Files.readString(UTILITY_PAGES).contains("WindowDialog("));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("AnimatedSettingsWindowDialog("));
         assertTrue(Files.readString(UTILITY_PAGES).contains("确认恢复默认配置"));
         assertTrue(Files.readString(UTILITY_PAGES).contains("activity.recreate()"));
     }
@@ -621,9 +621,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
         assertTrue(bottom.contains("labels.indices.forEach { index ->"));
-        assertTrue(bottom.contains("ModernTabContents(label, icons[index], index == selected)"));
+        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
-        assertFalse(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
+        assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
         assertTrue(bottom.contains("indication = null"));
         assertFalse(bottom.contains("Modifier.matchParentSize()\n                    .padding(4.dp)"));
     }
@@ -674,9 +674,9 @@ public class ModernSettingsArchitectureTest {
         String bottom = Files.readString(BOTTOM_NAV);
         assertTrue(bottom.contains("labels.indices.forEach { index ->"));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
-        assertTrue(bottom.contains(") {}"));
-        assertTrue(bottom.contains("ModernTabContents(label, icons[index], index == selected)"));
-        assertFalse(bottom.contains("LocalPrismalBottomTabHighlightedIndex"));
+        assertTrue(bottom.contains("SideEffect {"));
+        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
+        assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex"));
         assertTrue(bottom.contains("tintDropletContent = false"));
     }
 
@@ -853,7 +853,7 @@ public class ModernSettingsArchitectureTest {
         String sideSlide = Files.readString(SIDE_SLIDE);
 
         assertTrue(surfaces.contains("internal fun NumericSettingInputDialog("));
-        assertTrue(surfaces.contains("WindowDialog("));
+        assertTrue(surfaces.contains("AnimatedSettingsWindowDialog("));
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.TextField("));
         assertTrue(surfaces.contains("keyboardActions = KeyboardActions("));
         assertTrue(surfaces.contains(".clickable(enabled = enabled) { editingValue = true }"));
