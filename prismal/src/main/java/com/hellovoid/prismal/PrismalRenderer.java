@@ -595,7 +595,8 @@ public final class PrismalRenderer implements AutoCloseable {
         float minGlassDim = Math.min(g.glassWidth, g.glassHeight);
         float domeBoost = 1f + 0.55f * clamp(p.liquidDome, 0f, 2f);
         float refractionHeight = p.heightTransitionWidthPx * domeBoost;
-        float lensPx = refractionHeight * 2f * p.displacementScale * p.lensRefractionScale;
+        float lensPx = refractionHeight * 2f * p.displacementScale * p.lensRefractionScale
+                * PrismalIorLensPolicy.relativeBend(p.ior);
         uniform1f("u_lensRefractionPx", clamp(lensPx, 0f, Math.max(4f, minGlassDim * 0.85f)));
 
         // Opacity and interaction can vary per node even when PrismalParams is shared.
