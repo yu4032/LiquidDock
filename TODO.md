@@ -198,7 +198,31 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
-## 10. Settings i18n cleanup
+## 10. libxposed API 102 migration
+
+**状态：待规划。**
+
+当前基线：libxposed API 101。
+
+目标：评估并迁移到 API 102，同时保持 HyperOS / LSPosed 环境兼容。
+
+检查范围：
+
+- API 版本差异；
+- Hook 注册流程；
+- 回调生命周期；
+- reflection / classloader 行为；
+- 与现有 API 101 fallback 的兼容策略。
+
+要求：
+
+- 不为了版本升级改变现有 Hook 语义；
+- 保留 API 101 可运行路径直到 API 102 真机验证完成；
+- 使用 CI + 真机验证确认桌面、SystemUI、输入法等 Hook 范围无回归。
+
+---
+
+## 11. Settings i18n cleanup
 
 **状态：低优先级。**
 
