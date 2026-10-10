@@ -79,6 +79,7 @@ internal fun GuiOnTouchPrismalSlider(
     luminance: () -> Float = { 0.5f },
     steps: Int = 0,
     snapIncrement: Float = 0f,
+    onValuePreview: (Float?) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val isLightTheme = !isSystemInDarkTheme()
@@ -107,6 +108,8 @@ internal fun GuiOnTouchPrismalSlider(
         var isTrackPressed by remember { mutableStateOf(false) }
         val sampling = enabled && (isDragging || isTrackPressed || isSettling)
         val commitState = rememberUpdatedState(onValueChange)
+        val previewState = rememberUpdatedState(onValuePreview)
+        var lastPreview by remember { mutableStateOf<Float?>(null) }
         val releaseJob = remember { arrayOfNulls<Job>(1) }
         val trackWidthState = remember { mutableIntStateOf(0) }
         trackWidthState.intValue = trackWidth
@@ -129,6 +132,7 @@ internal fun GuiOnTouchPrismalSlider(
                     isSettling = false
                     isDragging = true
                     didDrag = false
+                    lastPreview = null
                 },
                 onDragStopped = {
                     isDragging = false
@@ -140,6 +144,10 @@ internal fun GuiOnTouchPrismalSlider(
                             targetValue, valueRange.start, valueRange.endInclusive,
                             steps, snapIncrement,
                         )
+                        if (lastPreview != nearest) {
+                            lastPreview = nearest
+                            previewState.value(nearest)
+                        }
                         isSettling = true
                         updateValue(nearest)
                         val motion = this
@@ -151,6 +159,8 @@ internal fun GuiOnTouchPrismalSlider(
                                 // Business logic, preflight and preference writes
                                 // run only after the thumb reaches its snapped stop.
                                 commitState.value(nearest)
+                                lastPreview = null
+                                previewState.value(null)
                                 isSettling = false
                             }
                         }
@@ -165,9 +175,17 @@ internal fun GuiOnTouchPrismalSlider(
                     val nextValue = (
                         if (isLtr) targetValue + delta else targetValue - delta
                     ).fastCoerceIn(valueRange.start, valueRange.endInclusive)
-                    // During pointer movement the track is fully continuous.
-                    // Do not quantize, call a preference listener or run preflight.
+                    // The thumb tracks the raw position. Only the nearby value
+                    // label is discretized during touch; no configuration writes.
                     updateValue(nextValue)
+                    val preview = DiscreteSliderSteps.snap(
+                        nextValue, valueRange.start, valueRange.endInclusive,
+                        steps, snapIncrement,
+                    )
+                    if (preview != lastPreview) {
+                        lastPreview = preview
+                        previewState.value(preview)
+                    }
                 }
             )
         }
@@ -239,6 +257,8 @@ internal fun GuiOnTouchPrismalSlider(
                                 targetValue, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
                             )
                             releaseJob[0]?.cancel()
+                            lastPreview = snapped
+                            previewState.value(snapped)
                             isSettling = true
                             // A track tap also uses Prismal's native press/value/
                             // release springs, then commits after visual arrival.
@@ -248,6 +268,8 @@ internal fun GuiOnTouchPrismalSlider(
                                     .first { abs(it - snapped) <= 0.005f }
                                 if (!isDragging) {
                                     commitState.value(snapped)
+                                    lastPreview = null
+                                    previewState.value(null)
                                     isSettling = false
                                 }
                             }
