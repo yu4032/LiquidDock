@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,9 +61,9 @@ import kotlin.math.abs
  * Glass-styled slider with a refracting thumb and damped drag physics.
  *
  * @param value Current value provider (read on each frame during drag).
- * @param onValueChange Called when the value changes.
+ * @param onValueChange Called only after the native Prismal release spring settles.
  * @param valueRange Allowed value range.
- * @param visibilityThreshold Minimum change delta before [onValueChange] fires.
+ * @param visibilityThreshold Legacy spring threshold; precise post-release settling uses 0.001f.
  * @param backdrop Source sampled through the track and thumb glass.
  */
 @Composable
@@ -106,7 +105,7 @@ internal fun GuiOnTouchPrismalSlider(
         var isDragging by remember { mutableStateOf(false) }
         var isSettling by remember { mutableStateOf(false) }
         var isTrackPressed by remember { mutableStateOf(false) }
-        val sampling = enabled && (isDragging || isTrackPressed)
+        val sampling = enabled && (isDragging || isTrackPressed || isSettling)
         val commitState = rememberUpdatedState(onValueChange)
         val releaseJob = remember { arrayOfNulls<Job>(1) }
         val trackWidthState = remember { mutableIntStateOf(0) }
@@ -122,7 +121,7 @@ internal fun GuiOnTouchPrismalSlider(
                 animationScope = animationScope,
                 initialValue = value(),
                 valueRange = valueRange,
-                visibilityThreshold = visibilityThreshold,
+                visibilityThreshold = 0.001f, // Must finish closer than the 0.005f commit gate.
                 initialScale = 1f,
                 pressedScale = 1.5f,
                 onDragStarted = {
