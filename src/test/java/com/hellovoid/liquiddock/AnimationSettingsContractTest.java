@@ -14,36 +14,45 @@ public class AnimationSettingsContractTest {
     private static final Path UI = MAIN.resolve(
             "kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
     private static final Path JAVA = MAIN.resolve("java/com/hellovoid/liquiddock");
+    private static final Path ANIMATION_PAGES = MAIN.resolve(
+            "kotlin/com/hellovoid/liquiddock/AnimationSettingsPages.kt");
+    private static final Path OPTION_SPECS = MAIN.resolve(
+            "kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt");
 
     @Test
     public void animationSettingsAreSplitByOwningDomain() throws Exception {
         String ui = Files.readString(UI);
+        String pages = Files.readString(ANIMATION_PAGES);
+        String specs = Files.readString(OPTION_SPECS);
 
         assertTrue(ui.contains("private fun AnimationPage("));
-        assertTrue(ui.contains("private fun AnimationWorkspacePage("));
-        assertTrue(ui.contains("private fun AnimationInteractionPage("));
-        assertTrue(ui.contains("private fun AnimationPopupsPage("));
-        assertTrue(ui.contains("private fun AnimationSystemPage("));
-        assertTrue(ui.contains("private fun AnimationGuiPage("));
+        assertTrue(pages.contains("internal fun AnimationWorkspacePage("));
+        assertTrue(pages.contains("internal fun AnimationInteractionPage("));
+        assertTrue(pages.contains("internal fun AnimationPopupsPage("));
+        assertTrue(pages.contains("internal fun AnimationSystemPage("));
+        assertTrue(pages.contains("internal fun AnimationGuiPage("));
+        assertTrue(pages.contains("ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS"));
+        assertTrue(ui.contains("Page.AnimationWorkspace -> AnimationWorkspacePage("));
 
-        assertTrue(ui.contains("ConfigSchema.Animation.WORKSPACE_VISIBILITY"));
-        assertTrue(ui.contains("ConfigSchema.Animation.DOCK_ICON_REVEAL"));
-        assertTrue(ui.contains("ConfigSchema.Animation.PRESS_IN"));
-        assertTrue(ui.contains("ConfigSchema.Animation.PRESS_OUT"));
-        assertTrue(ui.contains("ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE"));
-        assertTrue(ui.contains("ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE"));
-        assertTrue(ui.contains("ConfigSchema.Animation.SETTINGS_PAGE"));
-        assertTrue(ui.contains("ConfigSchema.Animation.DOCK_RESIZE"));
-        assertTrue(ui.contains("调整快捷菜单与安全中心玻璃的退出渐隐"));
+        assertTrue(specs.contains("ConfigSchema.Animation.WORKSPACE_VISIBILITY"));
+        assertTrue(specs.contains("ConfigSchema.Animation.DOCK_ICON_REVEAL"));
+        assertTrue(specs.contains("ConfigSchema.Animation.PRESS_IN"));
+        assertTrue(specs.contains("ConfigSchema.Animation.PRESS_OUT"));
+        assertTrue(specs.contains("ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE"));
+        assertTrue(specs.contains("ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE"));
+        assertTrue(specs.contains("ConfigSchema.Animation.SETTINGS_PAGE"));
+        assertTrue(specs.contains("ConfigSchema.Animation.DOCK_RESIZE"));
+        assertTrue(pages.contains("调整快捷菜单与安全中心玻璃的退出渐隐"));
     }
 
     @Test
     public void dockResizeTimingStaysOnAnimationPageAndUsesDockFeatureGate() throws Exception {
         String ui = Files.readString(UI);
-        int animationStart = ui.indexOf("private fun AnimationWorkspacePage(");
-        int animationEnd = ui.indexOf("private fun AnimationInteractionPage(", animationStart);
+        String pages = Files.readString(ANIMATION_PAGES);
+        int animationStart = pages.indexOf("internal fun AnimationWorkspacePage(");
+        int animationEnd = pages.indexOf("internal fun AnimationInteractionPage(", animationStart);
         assertTrue(animationStart >= 0 && animationEnd > animationStart);
-        String animationPage = ui.substring(animationStart, animationEnd);
+        String animationPage = pages.substring(animationStart, animationEnd);
         assertTrue(animationPage.contains(
                 "masterEnabled && dockCustomizationEnabled"));
         assertTrue(animationPage.contains(
