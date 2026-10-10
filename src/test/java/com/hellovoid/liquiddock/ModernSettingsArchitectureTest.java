@@ -67,7 +67,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void numericSliderPreviewWiringDoesNotReplacePersistenceCallbacks() throws Exception {
+    public void numericSliderPreviewWritesDisplayedStepsButRetainsReleaseSpringAndGridGuard() throws Exception {
         // Static API wiring only; nearest-stop arithmetic is tested through
         // DiscreteSliderStepsTest rather than slicing source to infer behavior.
         String prismal = Files.readString(Path.of(
@@ -79,12 +79,21 @@ public class ModernSettingsArchitectureTest {
         assertTrue(prismal.contains("commitState.value(nearest)"));
         assertTrue(prismal.contains("previewState.value(null)"));
         assertTrue(ui.contains("val shownValueText = previewValue?.let { valueTextForPreview?.invoke(it) } ?: valueText"));
-        assertTrue(ui.contains("onValuePreview = { previewValue = it }"));
+        assertTrue(ui.contains("onValuePreview = stableSliderPreview"));
         assertTrue(ui.contains("onValueChangeFinished = {"));
         assertTrue(ui.contains("previewCallbackState.value(DiscreteSliderSteps.snap("));
+        assertTrue(ui.contains("stableSliderPreview(quantizeState.value(next))"));
+        assertTrue(ui.contains("lastLiveStep[0] != next"));
+        assertTrue(ui.contains("stableSliderChange(released)"));
         assertTrue(activity.contains("previewLabel ?: displayValue"));
-        assertTrue(activity.contains("onValuePreview = { sliderPreview = it }"));
+        assertTrue(activity.contains("onValuePreview = { preview ->"));
+        assertTrue(activity.contains("save(preview)"));
+        assertTrue(activity.contains("previewWriteAllowed?.invoke(preview) == true"));
         assertTrue(activity.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
+        String grid = Files.readString(GRID_PAGES);
+        assertTrue(grid.contains("previewWriteAllowed = { proposed ->"));
+        assertTrue(grid.contains("GridWidget4x2PreflightPolicy.needsCheck("));
+        assertTrue(grid.contains("beforeSave = { proposed, commit ->"));
         String scoped = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ScopedGlassSettingsPage.kt"));
         for (String consumer : new String[]{
