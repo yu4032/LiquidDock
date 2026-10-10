@@ -134,8 +134,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(grid.contains("检测到桌面存在 4×2 小组件。行数或列数不能降低到 4 以下"));
         assertFalse(grid.contains("旋转后可能为 2×4"));
         assertTrue(grid.contains("gridCheck[0]?.cancel()"));
-        // Grid and common numeric controls snap ONLY on release: continuous
-        // pointer movement never runs configuration persistence or preflight.
+        // The thumb remains continuous with Prismal spring snapping on release.
+        // Preview values can live-write safe steps; unsafe Grid changes still
+        // require their existing asynchronous 4×2 widget preflight.
         assertTrue(grid.contains("steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context))"));
         String prismalSlider = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
@@ -147,7 +148,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(prismalSlider.contains("releaseJob[0]?.cancel()"));
         assertTrue(gui.contains("DiscreteSliderSteps.forStoragePrecision(spec.min, maxValue, decimalDp)"));
         assertTrue(gui.contains("snapIncrement = if (decimalDp) 0.1f else 1f"));
-        String uiComponents = Files.readString(SURFACES);
+        String uiComponents = Files.readString(NUMERIC_CONTROLS);
         assertTrue(uiComponents.contains("snapIncrement = snapIncrement"));
         assertTrue(uiComponents.contains("onValueChangeFinished = {"));
         assertTrue(uiComponents.contains("nativeDraft = next"));
