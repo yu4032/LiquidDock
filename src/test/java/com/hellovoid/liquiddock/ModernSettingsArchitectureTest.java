@@ -58,18 +58,24 @@ public class ModernSettingsArchitectureTest {
         assertTrue(grid.contains("GridWidget4x2PreflightClient.start("));
         assertTrue(grid.contains("GridWidget4x2PreflightClient.CLEAR ->"));
         assertTrue(grid.contains("gridCheck[0]?.cancel()"));
-        // Row/column thumbs must physically snap, not merely round when persisted.
+        // Grid and common numeric controls snap ONLY on release: continuous
+        // pointer movement never runs configuration persistence or preflight.
         assertTrue(grid.contains("steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context))"));
         String prismalSlider = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
-        assertTrue(prismalSlider.contains("rawDragTarget = rawNext"));
-        assertTrue(prismalSlider.contains("DiscreteSliderSteps.snap("));
+        assertTrue(prismalSlider.contains("onDragStopped = {"));
+        assertTrue(prismalSlider.contains("updateValue(nextValue)"));
+        assertTrue(prismalSlider.contains("val nearest = DiscreteSliderSteps.snap("));
+        assertTrue(prismalSlider.contains("snapshotFlow { motion.value }"));
+        assertTrue(prismalSlider.contains("commitState.value(nearest)"));
+        assertTrue(prismalSlider.contains("releaseJob[0]?.cancel()"));
         assertTrue(gui.contains("DiscreteSliderSteps.forStoragePrecision(spec.min, maxValue, decimalDp)"));
         assertTrue(gui.contains("snapIncrement = if (decimalDp) 0.1f else 1f"));
-        assertTrue(prismalSlider.contains("rawBase = if (steps > 0 || snapIncrement > 0f)"));
         String uiComponents = Files.readString(SURFACES);
         assertTrue(uiComponents.contains("snapIncrement = snapIncrement"));
-        assertTrue(uiComponents.contains("steps = steps"));
+        assertTrue(uiComponents.contains("onValueChangeFinished = {"));
+        assertTrue(uiComponents.contains("nativeDraft = next"));
+        assertTrue(uiComponents.contains("steps = 0, // Apply quantization only after release"));
         assertTrue(gui.contains("beforeSave: ((Float, () -> Unit) -> Unit)? = null"));
         assertTrue(gui.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
         assertTrue(grid.contains("minWidth = 164.dp"));
