@@ -870,11 +870,12 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void topBarUsesOnlyBottomStrokeAndKeepsActionShadowRoom() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
 
-        assertTrue(surfaces.contains("val fallbackShape = RoundedCornerShape(30.dp)"));
-        assertTrue(surfaces.contains(".border("));
-        assertTrue(surfaces.contains("width = 1.dp"));
-        assertTrue(surfaces.contains("alpha = 0.14f"));
+        assertTrue(bottom.contains("val fallbackShape = RoundedCornerShape(30.dp)"));
+        assertTrue(bottom.contains(".border("));
+        assertTrue(bottom.contains("width = 1.dp"));
+        assertTrue(bottom.contains("alpha = 0.14f"));
 
         assertTrue(surfaces.contains("TOP_BAR_ACTION_SHADOW_ROOM = 10.dp"));
         assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
