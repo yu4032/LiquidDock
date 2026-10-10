@@ -436,12 +436,15 @@ final class LauncherGlassStaticNode {
                 localRight = center + targetWidth * 0.5f;
             }
         }
-        float[] styledBounds = LauncherGlassBoundsPolicy.apply(
-                localLeft, localTop, localRight, localBottom, style.sizeOffsetDp * density);
-        localLeft = styledBounds[0];
-        localTop = styledBounds[1];
-        localRight = styledBounds[2];
-        localBottom = styledBounds[3];
+        // Reuse the first four slots of the node-owned matrix scratch before
+        // expanding them into the four point pairs below. No per-capture float[4].
+        LauncherGlassBoundsPolicy.applyInto(
+                localLeft, localTop, localRight, localBottom,
+                style.sizeOffsetDp * density, geometryPoints);
+        localLeft = geometryPoints[0];
+        localTop = geometryPoints[1];
+        localRight = geometryPoints[2];
+        localBottom = geometryPoints[3];
         float localWidth = Math.max(1f, localRight - localLeft);
         float localHeight = Math.max(1f, localBottom - localTop);
         geometryPoints[0] = localLeft;
