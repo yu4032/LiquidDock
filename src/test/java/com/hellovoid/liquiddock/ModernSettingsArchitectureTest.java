@@ -24,6 +24,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/DockWorkstationSettingsPages.kt");
     private static final Path GRID_PAGES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/GridSettingsPages.kt");
+    private static final Path GLASS_PAGES = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
     private static final Path SEARCHBOX = Path.of(
@@ -152,7 +154,7 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue(Files.readString(GRID_PAGES).contains("gridEntries.forEach"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("dockEntries.forEach"));
-        assertTrue(source.contains("liquidEntries.forEach"));
+        assertTrue(Files.readString(GLASS_PAGES).contains("liquidEntries.forEach"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("workstationEntries.forEach"));
         assertTrue(source.contains("animationEntries"));
         assertTrue(source.contains("highlightEntries"));
@@ -178,9 +180,9 @@ public class ModernSettingsArchitectureTest {
             assertTrue(page + " must remain a dedicated page",
                     source.contains("Page." + page));
         }
-        assertTrue(source.contains("private fun GlassComponentsPage("));
-        assertTrue(source.contains("private fun LiquidSamplingPage("));
-        assertTrue(source.contains("private fun LiquidSpecPage("));
+        assertTrue(Files.readString(GLASS_PAGES).contains("internal fun GlassComponentsPage("));
+        assertTrue(Files.readString(GLASS_PAGES).contains("internal fun LiquidSamplingPage("));
+        assertTrue(Files.readString(GLASS_PAGES).contains("internal fun LiquidSpecPage("));
     }
 
     @Test
@@ -232,7 +234,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(frozen.contains("onClick = null,"));
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
         assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
-        assertTrue(ui.contains("private fun GlassIconsPage("));
+        assertTrue(Files.readString(GLASS_PAGES).contains("internal fun GlassIconsPage("));
     }
 
     @Test
@@ -254,13 +256,13 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("internal fun LazyListScope.groupedIntSettings("));
         assertTrue(ui.contains("items(specs.chunked(3), key = { group ->"));
         assertTrue(ui.contains("group.forEachIndexed { index, spec ->"));
-        assertTrue(ui.contains("groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)"));
+        assertTrue(Files.readString(GLASS_PAGES).contains("groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)"));
-        assertTrue(ui.contains("item(key = \"icons-glass-toggles\")"));
-        assertTrue(ui.contains("item(key = \"icons-glass-geometry\")"));
-        assertTrue(ui.contains("item(key = \"icons-glass-highlights\")"));
-        assertTrue(ui.contains("private fun GlassIconsPage("));
-        assertTrue(ui.contains("DenseSettingsList(\n        padding,\n        stringResource(R.string.page_glass_icons)"));
+        assertTrue(Files.readString(GLASS_PAGES).contains("item(key = \"icons-glass-toggles\")"));
+        assertTrue(Files.readString(GLASS_PAGES).contains("item(key = \"icons-glass-geometry\")"));
+        assertTrue(Files.readString(GLASS_PAGES).contains("item(key = \"icons-glass-highlights\")"));
+        assertTrue(Files.readString(GLASS_PAGES).contains("internal fun GlassIconsPage("));
+        assertTrue(Files.readString(GLASS_PAGES).contains("DenseSettingsList(\n        padding,\n        stringResource(R.string.page_glass_icons)"));
     }
 
     @Test
@@ -856,6 +858,7 @@ public class ModernSettingsArchitectureTest {
         String animationPages = Files.readString(ANIMATION_PAGES);
         String dockWorkstationPages = Files.readString(DOCK_WORKSTATION_PAGES);
         String gridPages = Files.readString(GRID_PAGES);
+        String glassPages = Files.readString(GLASS_PAGES);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -868,7 +871,8 @@ public class ModernSettingsArchitectureTest {
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
                 .matcher(compose + "\n" + optionSpecs + "\n" + animationPages + "\n"
-                        + dockWorkstationPages + "\n" + gridPages + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
+                        + dockWorkstationPages + "\n" + gridPages + "\n" + glassPages + "\n"
+                        + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
