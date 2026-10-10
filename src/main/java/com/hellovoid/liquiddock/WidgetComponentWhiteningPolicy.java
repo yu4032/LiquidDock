@@ -26,7 +26,11 @@ final class WidgetComponentWhiteningPolicy {
         ArrayList<WidgetComponentStore.Descriptor> results = new ArrayList<>();
         for (String key : encoded) {
             WidgetComponentStore.Descriptor selected = WidgetComponentStore.parseSelector(key);
-            if (selected != null && provider.equals(selected.owner) && supports(selected)) {
+            // The persisted R2 selector encodes action/path/class, not componentType.
+            // Resolve the actual TextView/ImageView type at the runtime target.
+            if (selected != null && provider.equals(selected.owner) && selected.isRemoteViews()
+                    && (WidgetComponentStore.ACTION_HIDE_VIEW.equals(selected.action)
+                    || WidgetComponentStore.ACTION_CLEAR_IMAGE.equals(selected.action))) {
                 results.add(selected);
             }
         }
