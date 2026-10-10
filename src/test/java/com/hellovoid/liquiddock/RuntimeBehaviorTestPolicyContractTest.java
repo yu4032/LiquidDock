@@ -84,7 +84,6 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "Miuix307EdgeOverscanContractTest.java",
             "PrismalCompositeHotPathContractTest.java",
             "PrismalModuleBoundaryContractTest.java",
-            "PrismalOfficialParityV3Test.java",
             "RestartBoundSettingsContractTest.java",
             "WidgetBackgroundRankingUiContractTest.java",
             "WidgetComponentDiscoveryContractTest.java",
