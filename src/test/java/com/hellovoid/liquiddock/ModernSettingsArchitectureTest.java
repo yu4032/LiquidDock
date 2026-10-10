@@ -966,4 +966,48 @@ public class ModernSettingsArchitectureTest {
         return refs.size();
     }
 
+    @Test
+    public void glassSettingsDialogsUseMeasuredSpringMotionWithoutExtraSampling() throws Exception {
+        String motion = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsDialogMotion.kt"));
+        String reset = Files.readString(UTILITY_PAGES);
+        String grid = Files.readString(GRID_PAGES);
+        String numeric = Files.readString(SURFACES);
+        String restart = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt"));
+
+        assertTrue(reset.contains("AnimatedSettingsWindowDialog("));
+        assertTrue(grid.contains("AnimatedSettingsWindowDialog("));
+        assertTrue(numeric.contains("AnimatedSettingsWindowDialog("));
+        assertTrue(motion.contains("WindowDialog("));
+        assertTrue(motion.contains("show || transition.currentState || transition.isRunning"));
+        assertTrue(motion.contains("Spring.DampingRatioNoBouncy"));
+        assertTrue(motion.contains("scaleX = panelScale"));
+        assertTrue(motion.contains("translationY = panelOffset"));
+        assertTrue(restart.contains("AnimatedVisibility("));
+        assertTrue(restart.contains("enter = fadeIn("));
+        assertTrue(restart.contains("exit = fadeOut("));
+        assertTrue(restart.contains("graphicsLayer { scaleX = panelScale; scaleY = panelScale }"));
+        assertTrue(restart.contains("GuiOnTouchPrismalToggle("));
+        assertFalse(motion.contains("rememberPrismalGlassLayer"));
+        assertFalse(motion.contains("PixelCopy"));
+    }
+
+    @Test
+    public void prismalBottomTabsBridgeDragIndexWithoutDuplicatingVisibleGlyphs() throws Exception {
+        String bottom = Files.readString(BOTTOM_NAV);
+        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("PrismalGlassBottomTab("));
+        assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
+        assertTrue(bottom.contains("if (index == 0) {"));
+        assertTrue(bottom.contains("SideEffect {"));
+        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
+        assertTrue(bottom.contains("draggingCandidate = highlightedIndex.intValue != selected"));
+        assertTrue(bottom.contains("val contentColor by animateColorAsState("));
+        assertTrue(bottom.contains("val contentScale by animateFloatAsState("));
+        assertTrue(bottom.contains("tintDropletContent = false"));
+        assertFalse(bottom.contains("rememberPrismalGlassLayer("));
+        assertFalse(bottom.contains("drawPrismalGlass("));
+    }
+
 }
