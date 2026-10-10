@@ -95,13 +95,9 @@ public class ConfigSchemaTest {
     }
 
     @Test
-    public void legacyGridImportAliasesRemainKnownButAreNeverExported() {
-        assertEquals("grid_landscape_margin_horizontal",
-                ConfigSchema.Grid.LEGACY_LANDSCAPE_HORIZONTAL_MARGIN.name());
-        assertEquals(ConfigKey.ExportMode.NEVER,
-                ConfigSchema.Grid.LEGACY_LANDSCAPE_HORIZONTAL_MARGIN.exportMode());
-        assertEquals("grid_margin_left", ConfigSchema.Grid.LEGACY_MARGIN_LEFT.name());
-        assertEquals(ConfigKey.ExportMode.NEVER, ConfigSchema.Grid.LEGACY_MARGIN_LEFT.exportMode());
+    public void currentGridEnableKeyHasNoEightByFourAlias() {
+        assertEquals("grid_enabled", ConfigSchema.Grid.ENABLED.name());
+        assertEquals(ConfigKey.ExportMode.ALWAYS, ConfigSchema.Grid.ENABLED.exportMode());
     }
 
     @Test

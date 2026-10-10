@@ -16,7 +16,7 @@ public class ConfigCodecTest {
     public void representativeExportPreservesCurrentFields() {
         Map<String, Object> prefs = new HashMap<>();
         prefs.put("liquiddock_enabled", false);
-        prefs.put("home_grid_8x4", true);
+        prefs.put("grid_enabled", true);
         prefs.put("grid_landscape_horizontal_distance", -3);
         prefs.put("grid_landscape_horizontal_distance_tenths", -27);
         prefs.put("indicator_landscape_y", -8);
@@ -31,8 +31,8 @@ public class ConfigCodecTest {
         prefs.put("dock_divider_width_dp", 8);
         prefs.put("dock_divider_width_dp_tenths", 83);
         prefs.put("workstation_dock_customization", true);
-        prefs.put("workstation_all_apps_landscape_vertical_offset", -4);
-        prefs.put("workstation_all_apps_landscape_vertical_offset_tenths", -36);
+        prefs.put("workstation_all_apps_landscape_top_spacing", -4);
+        prefs.put("workstation_all_apps_landscape_top_spacing_tenths", -36);
         prefs.put("liquid_glass", true);
         prefs.put("liquid_blur", 7);
         prefs.put("liquid_blur_tenths", 73);
@@ -40,7 +40,7 @@ public class ConfigCodecTest {
 
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("liquiddock_enabled", false);
-        expected.put("home_grid_8x4", true);
+        expected.put("grid_enabled", true);
         expected.put("grid_landscape_horizontal_distance", -2.7d);
         expected.put("indicator_landscape_y", -7.7d);
         expected.put("dock_customization", false);
@@ -50,7 +50,7 @@ public class ConfigCodecTest {
         expected.put("dock_divider_enabled", true);
         expected.put("dock_divider_width_dp", 8);
         expected.put("workstation_dock_customization", true);
-        expected.put("workstation_all_apps_landscape_vertical_offset", -3.6d);
+        expected.put("workstation_all_apps_landscape_top_spacing", -3.6d);
         expected.put("liquid_glass", true);
         expected.put("liquid_blur", 7.3d);
         expected.put("liquid_ior", 170);
@@ -70,34 +70,21 @@ public class ConfigCodecTest {
     }
 
     @Test
-    public void representativeLegacyImportProducesExactTypedWrites() {
+    public void currentImportIgnoresHistoricalAliasesAndClampsValues() {
         Map<String, Object> json = new HashMap<>();
-        json.put("grid_margins_dp", true);
-        json.put("grid_margins_offset", true);
-        json.put("grid_widget_adaptation", true);
+        json.put("home_grid_8x4", true);
         json.put("grid_landscape_margin_horizontal", 41);
-        json.put("grid_portrait_margin_horizontal", -12);
+        json.put("workstation_all_apps_horizontal_offset", 2.6d);
+        json.put("grid_enabled", true);
         json.put("liquid_capture_power_limit_fps", 100);
         json.put("dock_shadow_alpha", -3);
         json.put("dock_divider_width_dp", 999);
-        json.put("workstation_all_apps_horizontal_offset", 2.6d);
-        json.put("workstation_all_apps_vertical_offset", -3.4d);
 
         Map<String, Object> expected = new LinkedHashMap<>();
-        expected.put("grid_margins_dp", true);
-        expected.put("grid_margins_offset", true);
+        expected.put("grid_enabled", true);
         expected.put("liquid_capture_power_limit_fps", 60);
         expected.put("dock_shadow_alpha", 0);
         expected.put("dock_divider_width_dp", 160);
-        expected.put("grid_landscape_margin_left", 41);
-        expected.put("grid_landscape_margin_right", 41);
-        expected.put("grid_portrait_margin_left", -12);
-        expected.put("grid_portrait_margin_right", -12);
-        expected.put("workstation_all_apps_horizontal_offset", 3);
-        expected.put("workstation_all_apps_horizontal_offset_tenths", 26);
-        expected.put("workstation_all_apps_vertical_offset", -3);
-        expected.put("workstation_all_apps_vertical_offset_tenths", -34);
-
         assertEquals(expected, ConfigCodec.importValues(json));
     }
 
@@ -297,54 +284,6 @@ public class ConfigCodecTest {
         assertEquals(7, imported.get("liquid_prismal_refraction_inset"));
         assertEquals(72, imported.get("liquid_prismal_refraction_inset_tenths"));
         assertEquals(Boolean.TRUE, imported.get("liquid_prismal_show_normals"));
-    }
-
-    @Test
-    public void legacyHorizontalMarginsPopulateBothEdges() {
-        Map<String, Object> json = new HashMap<>();
-        json.put("grid_landscape_margin_horizontal", 41);
-        json.put("grid_portrait_margin_horizontal", -12);
-
-        Map<String, Object> imported = ConfigCodec.importValues(json);
-
-        assertEquals(41, imported.get("grid_landscape_margin_left"));
-        assertEquals(41, imported.get("grid_landscape_margin_right"));
-        assertEquals(-12, imported.get("grid_portrait_margin_left"));
-        assertEquals(-12, imported.get("grid_portrait_margin_right"));
-    }
-
-    @Test
-    public void preAxisLegacyMarginsConvertWhenModernLandscapeMarginsAreAbsent() {
-        Map<String, Object> json = new HashMap<>();
-        json.put("grid_margin_left", 450);
-        json.put("grid_margin_right", 20);
-        json.put("grid_margin_top", 30);
-        json.put("grid_margin_bottom", -4);
-
-        Map<String, Object> imported = ConfigCodec.importValues(json);
-
-        assertEquals(400, imported.get("grid_landscape_margin_left"));
-        assertEquals(20, imported.get("grid_landscape_margin_right"));
-        assertEquals(30, imported.get("grid_landscape_margin_top"));
-        assertEquals(0, imported.get("grid_landscape_margin_bottom"));
-        assertEquals(30, imported.get("grid_portrait_margin_left"));
-        assertEquals(0, imported.get("grid_portrait_margin_right"));
-        assertEquals(20, imported.get("grid_portrait_margin_top"));
-        assertEquals(400, imported.get("grid_portrait_margin_bottom"));
-    }
-
-    @Test
-    public void legacyWorkstationAllAppsOffsetsRemainImportable() {
-        Map<String, Object> json = new HashMap<>();
-        json.put("workstation_all_apps_horizontal_offset", 2.6d);
-        json.put("workstation_all_apps_vertical_offset", -3.4d);
-
-        Map<String, Object> imported = ConfigCodec.importValues(json);
-
-        assertEquals(3, imported.get("workstation_all_apps_horizontal_offset"));
-        assertEquals(26, imported.get("workstation_all_apps_horizontal_offset_tenths"));
-        assertEquals(-3, imported.get("workstation_all_apps_vertical_offset"));
-        assertEquals(-34, imported.get("workstation_all_apps_vertical_offset_tenths"));
     }
 
     @Test

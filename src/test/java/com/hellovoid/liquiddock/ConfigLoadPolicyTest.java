@@ -19,7 +19,7 @@ public class ConfigLoadPolicyTest {
     public void loadingConfigDoesNotMutateWidgetGridRuntimeState() {
         WidgetGridSizing.setCustomGridEnabled(false);
         Map<String, Object> prefs = new HashMap<>();
-        prefs.put("home_grid_8x4", true);
+        prefs.put("grid_enabled", true);
 
         LiquidDockConfig.from(new ConfigReader(prefs));
 

@@ -100,32 +100,18 @@ final class LiquidDockConfig {
             widgetHorizontalStretch = c.b(
                     ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name(),
                     ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.runtimeFallback());
-            landscapeHorizontal = c.has(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE.name())
-                    ? c.f(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE.name(),
-                            ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE.runtimeFallback())
-                    : (c.f(ConfigSchema.Grid.LANDSCAPE_MARGIN_LEFT.name(),
-                            ConfigSchema.Grid.LANDSCAPE_MARGIN_LEFT.runtimeFallback())
-                    + c.f(ConfigSchema.Grid.LANDSCAPE_MARGIN_RIGHT.name(),
-                            ConfigSchema.Grid.LANDSCAPE_MARGIN_RIGHT.runtimeFallback())) / 2f;
+            landscapeHorizontal = c.f(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE.name(),
+                    ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE.runtimeFallback());
             landscapeTop = c.f(ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE.name(),
-                    c.f(ConfigSchema.Grid.LANDSCAPE_MARGIN_TOP.name(),
-                            ConfigSchema.Grid.LANDSCAPE_MARGIN_TOP.runtimeFallback()));
+                    ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE.runtimeFallback());
             landscapeBottom = c.f(ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE.name(),
-                    c.f(ConfigSchema.Grid.LANDSCAPE_MARGIN_BOTTOM.name(),
-                            ConfigSchema.Grid.LANDSCAPE_MARGIN_BOTTOM.runtimeFallback()));
-            portraitHorizontal = c.has(ConfigSchema.Grid.PORTRAIT_HORIZONTAL_DISTANCE.name())
-                    ? c.f(ConfigSchema.Grid.PORTRAIT_HORIZONTAL_DISTANCE.name(),
-                            ConfigSchema.Grid.PORTRAIT_HORIZONTAL_DISTANCE.runtimeFallback())
-                    : (c.f(ConfigSchema.Grid.PORTRAIT_MARGIN_LEFT.name(),
-                            ConfigSchema.Grid.PORTRAIT_MARGIN_LEFT.runtimeFallback())
-                    + c.f(ConfigSchema.Grid.PORTRAIT_MARGIN_RIGHT.name(),
-                            ConfigSchema.Grid.PORTRAIT_MARGIN_RIGHT.runtimeFallback())) / 2f;
+                    ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE.runtimeFallback());
+            portraitHorizontal = c.f(ConfigSchema.Grid.PORTRAIT_HORIZONTAL_DISTANCE.name(),
+                    ConfigSchema.Grid.PORTRAIT_HORIZONTAL_DISTANCE.runtimeFallback());
             portraitTop = c.f(ConfigSchema.Grid.PORTRAIT_TOP_DISTANCE.name(),
-                    c.f(ConfigSchema.Grid.PORTRAIT_MARGIN_TOP.name(),
-                            ConfigSchema.Grid.PORTRAIT_MARGIN_TOP.runtimeFallback()));
+                    ConfigSchema.Grid.PORTRAIT_TOP_DISTANCE.runtimeFallback());
             portraitBottom = c.f(ConfigSchema.Grid.PORTRAIT_BOTTOM_DISTANCE.name(),
-                    c.f(ConfigSchema.Grid.PORTRAIT_MARGIN_BOTTOM.name(),
-                            ConfigSchema.Grid.PORTRAIT_MARGIN_BOTTOM.runtimeFallback()));
+                    ConfigSchema.Grid.PORTRAIT_BOTTOM_DISTANCE.runtimeFallback());
             splitHorizontalOffset = c.f(ConfigSchema.Grid.SPLIT_HORIZONTAL_OFFSET.name(),
                     ConfigSchema.Grid.SPLIT_HORIZONTAL_OFFSET.runtimeFallback());
             landscapeRowGap = c.f("grid_landscape_row_gap", offsets ? 0 : (dp ? 1 : 3));
@@ -471,27 +457,24 @@ final class LiquidDockConfig {
                     ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS.runtimeFallback());
             gridHorizontalOffset = c.f(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET.name(),
                     ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET.runtimeFallback());
-            // Compatibility chain: oldest global vertical -> old per-orientation merged
-            // vertical -> new independent top/bottom. Existing users keep their layout until
-            // they move either new edge control.
-            float legacyAllAppsX = c.f(ConfigSchema.Workstation.LEGACY_ALL_APPS_HORIZONTAL_OFFSET.name(), 0);
-            float legacyAllAppsY = c.f(ConfigSchema.Workstation.LEGACY_ALL_APPS_VERTICAL_OFFSET.name(), 0);
-            float mergedLandscapeY = c.f(
-                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_VERTICAL_OFFSET.name(), legacyAllAppsY);
-            float mergedPortraitY = c.f(
-                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_VERTICAL_OFFSET.name(), legacyAllAppsY);
             allAppsLandscapeHorizontalOffset = c.f(
-                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET.name(), legacyAllAppsX);
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET.name(),
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET.runtimeFallback());
             allAppsLandscapeTopSpacing = c.f(
-                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING.name(), mergedLandscapeY);
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING.name(),
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING.runtimeFallback());
             allAppsLandscapeBottomSpacing = c.f(
-                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING.name(), mergedLandscapeY);
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING.name(),
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING.runtimeFallback());
             allAppsPortraitHorizontalOffset = c.f(
-                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET.name(), legacyAllAppsX);
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET.name(),
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET.runtimeFallback());
             allAppsPortraitTopSpacing = c.f(
-                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING.name(), mergedPortraitY);
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING.name(),
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING.runtimeFallback());
             allAppsPortraitBottomSpacing = c.f(
-                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.name(), mergedPortraitY);
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.name(),
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.runtimeFallback());
             iconTopOffset = c.f(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.runtimeFallback());
             iconBottomOffset = c.f(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET.name(),

@@ -59,7 +59,7 @@ public final class ConfigSchema {
 
     public static final class Grid {
         public static final ConfigKey<Boolean> ENABLED = bool(
-                "home_grid_8x4", false, false, false, ConfigKey.ExportMode.ALWAYS);
+                "grid_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> COLUMNS = integer(
                 "grid_columns", 8, 8, 8, 2, 10, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ROWS = integer(
@@ -99,33 +99,7 @@ public final class ConfigSchema {
                 "grid_split_horizontal_offset", 0, 0, 0, -600, 600,
                 ConfigKey.ExportMode.ALWAYS);
 
-        // Migrated legacy per-edge grid settings remain exported and runtime-readable.
-        public static final ConfigKey<Integer> LANDSCAPE_MARGIN_LEFT = dp(
-                "grid_landscape_margin_left", 0, 0, 0, -2000, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> LANDSCAPE_MARGIN_RIGHT = dp(
-                "grid_landscape_margin_right", 0, 0, 0, -2000, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> LANDSCAPE_MARGIN_TOP = dp(
-                "grid_landscape_margin_top", 0, 0, 0, -2000, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> LANDSCAPE_MARGIN_BOTTOM = dp(
-                "grid_landscape_margin_bottom", 0, 0, 0, -2000, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> PORTRAIT_MARGIN_LEFT = dp(
-                "grid_portrait_margin_left", 0, 0, 0, -2000, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> PORTRAIT_MARGIN_RIGHT = dp(
-                "grid_portrait_margin_right", 0, 0, 0, -2000, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> PORTRAIT_MARGIN_TOP = dp(
-                "grid_portrait_margin_top", 0, 0, 0, -2000, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> PORTRAIT_MARGIN_BOTTOM = dp(
-                "grid_portrait_margin_bottom", 0, 0, 0, -2000, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-
-        // Runtime defaults for row gaps are compatibility-dependent and stay in LiquidDockConfig.
+        // Current grid geometry uses axis distances and independent row gaps.
         public static final ConfigKey<Integer> LANDSCAPE_ROW_GAP = dp(
                 "grid_landscape_row_gap", 0, null, 0, -200, 400,
                 ConfigKey.ExportMode.ALWAYS);
@@ -138,23 +112,6 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> PORTRAIT_INDICATOR_Y = dp(
                 "indicator_portrait_y", 0, 0, 0, -160, 160,
                 ConfigKey.ExportMode.ALWAYS);
-
-        // Import-only JSON aliases from pre-axis-distance exports. They never become
-        // independent current preferences and therefore have no scalar runtime fallback.
-        public static final ConfigKey<Integer> LEGACY_LANDSCAPE_HORIZONTAL_MARGIN = integer(
-                "grid_landscape_margin_horizontal", 0, null, null, null, null,
-                ConfigKey.ExportMode.NEVER);
-        public static final ConfigKey<Integer> LEGACY_PORTRAIT_HORIZONTAL_MARGIN = integer(
-                "grid_portrait_margin_horizontal", 0, null, null, null, null,
-                ConfigKey.ExportMode.NEVER);
-        public static final ConfigKey<Integer> LEGACY_MARGIN_LEFT = integer(
-                "grid_margin_left", 160, null, null, null, null, ConfigKey.ExportMode.NEVER);
-        public static final ConfigKey<Integer> LEGACY_MARGIN_RIGHT = integer(
-                "grid_margin_right", 160, null, null, null, null, ConfigKey.ExportMode.NEVER);
-        public static final ConfigKey<Integer> LEGACY_MARGIN_TOP = integer(
-                "grid_margin_top", 80, null, null, null, null, ConfigKey.ExportMode.NEVER);
-        public static final ConfigKey<Integer> LEGACY_MARGIN_BOTTOM = integer(
-                "grid_margin_bottom", 80, null, null, null, null, ConfigKey.ExportMode.NEVER);
 
         private Grid() {}
     }
@@ -556,11 +513,6 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET = dp(
                 "workstation_all_apps_landscape_horizontal_offset", 0, 0, 0, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
-        // Merged vertical keys are retained for old configs/JSON only; current UI writes
-        // independent top/bottom spacing keys below.
-        public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_VERTICAL_OFFSET = dp(
-                "workstation_all_apps_landscape_vertical_offset", 0, 0, 0, 0, 240,
-                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_TOP_SPACING = dp(
                 "workstation_all_apps_landscape_top_spacing", 0, 0, 0, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
@@ -569,9 +521,6 @@ public final class ConfigSchema {
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET = dp(
                 "workstation_all_apps_portrait_horizontal_offset", 0, 0, 0, 0, 240,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_VERTICAL_OFFSET = dp(
-                "workstation_all_apps_portrait_vertical_offset", 0, 0, 0, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_TOP_SPACING = dp(
                 "workstation_all_apps_portrait_top_spacing", 0, 0, 0, 0, 240,
@@ -585,13 +534,6 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> DOCK_ICON_BOTTOM_OFFSET = dp(
                 "workstation_dock_icon_bottom_offset", 0, 0, 0, -48, 48,
                 ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> LEGACY_ALL_APPS_HORIZONTAL_OFFSET = dp(
-                "workstation_all_apps_horizontal_offset", 0, 0, 0, null, null,
-                ConfigKey.ExportMode.NEVER);
-        public static final ConfigKey<Integer> LEGACY_ALL_APPS_VERTICAL_OFFSET = dp(
-                "workstation_all_apps_vertical_offset", 0, 0, 0, null, null,
-                ConfigKey.ExportMode.NEVER);
-
         private Workstation() {}
     }
 
@@ -634,17 +576,9 @@ public final class ConfigSchema {
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 Grid.PORTRAIT_TOP_DISTANCE, Grid.PORTRAIT_BOTTOM_DISTANCE,
-                Grid.SPLIT_HORIZONTAL_OFFSET,
-                Grid.LANDSCAPE_MARGIN_LEFT, Grid.LANDSCAPE_MARGIN_RIGHT,
-                Grid.LANDSCAPE_MARGIN_TOP, Grid.LANDSCAPE_MARGIN_BOTTOM,
-                Grid.PORTRAIT_MARGIN_LEFT, Grid.PORTRAIT_MARGIN_RIGHT,
-                Grid.PORTRAIT_MARGIN_TOP, Grid.PORTRAIT_MARGIN_BOTTOM,
+                Grid.SPLIT_HORIZONTAL_OFFSET ,
                 Grid.LANDSCAPE_ROW_GAP, Grid.PORTRAIT_ROW_GAP,
-                Grid.LANDSCAPE_INDICATOR_Y, Grid.PORTRAIT_INDICATOR_Y,
-                Grid.LEGACY_LANDSCAPE_HORIZONTAL_MARGIN,
-                Grid.LEGACY_PORTRAIT_HORIZONTAL_MARGIN, Grid.LEGACY_MARGIN_LEFT,
-                Grid.LEGACY_MARGIN_RIGHT, Grid.LEGACY_MARGIN_TOP,
-                Grid.LEGACY_MARGIN_BOTTOM);
+                Grid.LANDSCAPE_INDICATOR_Y, Grid.PORTRAIT_INDICATOR_Y);
         add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT, Dock.FRAME_SYNC,
                 Dock.RESIZE_ANIMATION, Dock.SMOOTH_RESIZE_ANIMATION,
                 Dock.DIMENSIONS_DP, Dock.WIDTH_OFFSET, Dock.HEIGHT_OFFSET, Dock.SPACING,
@@ -717,16 +651,12 @@ public final class ConfigSchema {
                 Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
                 Workstation.GRID_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
-                Workstation.ALL_APPS_LANDSCAPE_VERTICAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
                 Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
                 Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
-                Workstation.ALL_APPS_PORTRAIT_VERTICAL_OFFSET,
                 Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
                 Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
-                Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET,
-                Workstation.LEGACY_ALL_APPS_HORIZONTAL_OFFSET,
-                Workstation.LEGACY_ALL_APPS_VERTICAL_OFFSET);
+                Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET);
         add(keys, Recents.BACKGROUND_BLUR_PERCENT, Recents.DISABLE_WALLPAPER_DIMMING);
         add(keys, Debug.LOGGING);
         return Collections.unmodifiableList(keys);
