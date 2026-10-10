@@ -2,6 +2,8 @@ package com.hellovoid.liquiddock;
 
 import android.opengl.GLES20;
 
+import com.hellovoid.prismal.PrismalIorLensPolicy;
+
 /**
  * Upstream-Prismal optical parameter adapter for the HyperOS 3.0.307 zero-copy backend.
  *
@@ -295,7 +297,8 @@ final float chromaticAberration;
         float refractionHeight = Math.max(
                 p.heightTransitionWidthPx * (1f + 0.55f * clamp(p.liquidDome, 0f, 2f)), 1f);
         float lensPx = refractionHeight * 2f
-                * Math.abs(p.displacementScale) * Math.abs(p.lensRefractionScale);
+                * Math.abs(p.displacementScale) * Math.abs(p.lensRefractionScale)
+                * PrismalIorLensPolicy.relativeBend(p.ior);
         return clamp(lensPx, 0f, Math.max(4f, minGlassDim * 0.85f));
     }
 

@@ -2,15 +2,17 @@
 
 基准：**2026-10-10 `main` / HyperOS 3 平板 / Launcher 4.50 / libxposed API 101**。
 
-本文件只记录当前仍需要代码、验证或设计决策的事项。
-已经完成的功能、历史探索、已确认不继续推进的方向不再保留在 active TODO。
+活跃清单只记录仍需代码、验证或设计决策的事项；完成与主动取消的项目在末尾分别归档。
+状态以**已经合并到 `main` 的代码**为准；未合并 PR 必须显式标注，不能提前算作完成。
 
 原则：
 
 - 不为了减少文件行数拆分具有明确生命周期的渲染组件。
 - 不使用固定延迟替代真实事件驱动。
 - 不以静态分析代替真机验证。
-- 不删除仍被迁移、预设、导入导出或运行时使用的配置。
+- 删除配置键之前核对当前 GUI、运行时、预设和当前格式导入导出的真实消费链。
+- 配置层不再维护老用户迁移、历史别名回退或旧键与新键双写；旧键无须兼容。
+- API 101/102 的运行环境兼容属于 Hook 框架升级，不等同于配置数据迁移。
 
 ---
 
@@ -95,7 +97,7 @@ Perfetto 分段诊断已经进入 main：
 
 ## 4. ConfigSchema dead-key audit
 
-**状态：部分完成；剩余键仍需按实际消费链核验。**
+**状态：部分完成；旧迁移与历史键删除已实现，剩余键仍需按当前消费链核验。**
 
 重新核对：
 
@@ -106,11 +108,11 @@ Perfetto 分段诊断已经进入 main：
 
 要求：
 
-- 先确认真实消费链；
-- 检查导入导出和预设迁移；
-- 确认无用户数据依赖后再删除。
+- 先确认当前运行时及 GUI 的真实消费链；
+- 检查当前 `ConfigSchema`、预设和 JSON 导入导出是否消费该键；
+- 只依据**现行功能依赖**决定保留或删除，历史用户存量值不构成保留理由。
 
-禁止仅因为 GUI 没入口就判断死代码。
+禁止仅因为 GUI 没入口就判断死代码，也禁止为了兼容旧配置而重新引入迁移。
 
 ---
 
@@ -213,16 +215,26 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
+## 11. MAML precise widget foreground adaptation
+
+**状态：仅 MAML 待技术核验；RemoteViews 部分已完成并真机验证（PR #326）。**
+
+RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；MAML 内部元素仍由脚本直接绘制，不使用宿主 View 的全局颜色滤镜代替精确节点适配。
+需要先确认 Launcher 4.50 MAML Text/Image/Shape 可逆颜色 API 与动态表达式更新时序，再决定是否扩展。
+
+---
+
 # Validation queue
 
-## GUI PR acceptance
+## GUI PR integration and acceptance
 
-待实机确认：
+**状态：未完成；相关 PR 仍为 Open，尚未合并到 `main`。**
 
-- #319 数值控制；
-- #320 Surface/Cell 拆分。
+- [#319](https://github.com/yu4032/LiquidDock/pull/319)：数值输入、实时滑块与 Prismal stepper；需要对齐最新主线、解决合并状态并核验 CI / 真机。
+- [#320](https://github.com/yu4032/LiquidDock/pull/320)：Surface / Cell 结构拆分；当前以 #319 分支为 base，属叠加 PR，应先处理 #319 后再决定合并顺序。
+- #325 的滑块数值宽度修复**已合并**，不能替代 #319 / #320 的结构性验收。
 
-检查：
+真机检查：
 
 - Prismal 背景；
 - 深色主题；
@@ -249,18 +261,25 @@ Perfetto 分段诊断已经进入 main：
 
 # Completed / archive
 
-以下不再进入 active TODO：
+## 已完成并进入 `main`
 
-- GUI 大规模拆分；
-- ModernSettingsUi 进一步机械拆分；
+- 既定阶段的 GUI 结构清理；不再以减少类大小为目标机械拆分；
 - Prismal 弹窗动画开发；
-- Perfetto 接入；
+- Perfetto 分段诊断接入（**不代表** Workspace / Dock 性能优化已完成）；
 - GL location caching；
+- 滑块数值区域宽度修复（[PR #325](https://github.com/yu4032/LiquidDock/pull/325)）；
+- RemoteViews 精确白化、与隐藏的同节点互斥、隐藏规则导入冲突处理（[PR #326](https://github.com/yu4032/LiquidDock/pull/326)，真机验证通过）；
+- IOR 折射率参与边缘透镜位移及采样边距修复（[PR #327](https://github.com/yu4032/LiquidDock/pull/327)，真机验证通过）；
+- 旧配置迁移链、历史网格键及 JSON 旧别名清理，统一使用当前键（[PR #324](https://github.com/yu4032/LiquidDock/pull/324)）。
+
+## 已归档或主动取消（不等于代码已实现）
+
+- ModernSettingsUi 继续机械拆分（目前没有继续拆分的必要）；
 - WorkspaceGridSizing 旧状态设计；
 - 第三方 profile schema 扩展；
-- ShortcutMenu dark-mode key 重命名；
-- 文档自动化建设；
-- 旧配置迁移链、旧网格键及旧 JSON 别名（改为 `grid_enabled`，不迁移旧值）；
-- 旧单位模式标记与旧文件夹合并开关。
+- ShortcutMenu dark-mode persisted naming；
+- 文档自动化建设。
 
-这些内容如需变化，应重新建立新的明确任务，而不是恢复旧 TODO。
+历史配置迁移**不再是目标**。旧迁移链与旧网格键的移除属于 PR #324；其余配置键继续按当前消费链审计。
+
+上述项目如需重新推进，应新建明确任务，不直接恢复旧 TODO。

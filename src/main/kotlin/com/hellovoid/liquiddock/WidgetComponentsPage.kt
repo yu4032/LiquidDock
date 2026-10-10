@@ -39,7 +39,8 @@ internal fun WidgetComponentsPage(
             if (key == WidgetComponentStore.CATALOG_KEY) catalogRevision++
         }
         val selectionListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == WidgetComponentStore.SELECTION_KEY) selectionRevision++
+            if (key == WidgetComponentStore.SELECTION_KEY ||
+                key == WidgetComponentStore.WHITE_SELECTION_KEY) selectionRevision++
         }
         catalogPrefs.registerOnSharedPreferenceChangeListener(catalogListener)
         prefs.registerOnSharedPreferenceChangeListener(selectionListener)
@@ -52,6 +53,9 @@ internal fun WidgetComponentsPage(
     val descriptors = remember(catalogRevision) { loadWidgetCatalog(catalogPrefs) }
     val selected = remember(selectionRevision) {
         prefs.getStringSet(WidgetComponentStore.SELECTION_KEY, emptySet())?.toSet().orEmpty()
+    }
+    val whitened = remember(selectionRevision) {
+        prefs.getStringSet(WidgetComponentStore.WHITE_SELECTION_KEY, emptySet())?.toSet().orEmpty()
     }
     val groups = descriptors
         .groupBy(::widgetGroupKey)
@@ -144,12 +148,14 @@ internal fun WidgetComponentsPage(
                             batch.forEachIndexed { index, (key, components) ->
                                 val first = components.first()
                                 val selectedCount = components.count { it.selectorKey() in selected }
+                                val whitenedCount = components.count { it.selectorKey() in whitened }
                                 val source = if (first.isMaml()) "MAML" else "RemoteViews"
                                 val likelyCount = components.count(WidgetComponentRanking::isLikelyBackground)
                                 ArrowPreference(
                                     title = first.displayOwner(),
                                     summary = buildString {
                                         append("$source · 已隐藏 $selectedCount / ${components.size}")
+                                        if (whitenedCount > 0) append(" · 已白化 $whitenedCount")
                                         if (likelyCount > 0) append(" · 疑似背景 $likelyCount")
                                     },
                                     onClick = {

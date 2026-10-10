@@ -1,6 +1,6 @@
 package com.hellovoid.prismal;
 
-/** Conservative background-pixel reach for the unmodified upstream Prismal model. */
+/** Conservative backdrop reach, including LiquidDock's IOR-aware edge-lens correction. */
 public final class PrismalSampling {
     private static final float BLUR_FBO_SCALE = 0.5f;
     private static final int BLUR_KERNEL_RADIUS = 15;
@@ -25,7 +25,8 @@ public final class PrismalSampling {
         float refractionHeight = Math.max(p.heightTransitionWidthPx * (1f + 0.55f * dome), 1f);
         float lensPx = clamp(
                 refractionHeight * 2f * Math.abs(p.displacementScale)
-                        * Math.abs(p.lensRefractionScale),
+                        * Math.abs(p.lensRefractionScale)
+                        * PrismalIorLensPolicy.relativeBend(p.ior),
                 0f,
                 Math.max(4f, Math.min(width, height) * 0.85f));
         float lens = lensPx * 1.45f * 1.12f;
