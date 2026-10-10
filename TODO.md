@@ -467,7 +467,7 @@ Compose 设置页仍有大量硬编码中文用户字符串，包括近期新增
 
 ## P1 · Code maintainability / regression-safe refactor
 
-**状态：GUI 结构拆分进行中，其他领域仍待重构。** `main` 已合并 [#309](https://github.com/yu4032/LiquidDock/pull/309)（规格分离）和 [#310](https://github.com/yu4032/LiquidDock/pull/310)（动画页面），`ComposeSettingsActivity.kt` 已从 2725 降到 2166 行。当前 [#311](https://github.com/yu4032/LiquidDock/pull/311) 已拆出 Dock/Divider/Workstation/Recents 七个页面，主文件 1902 行，CI 通过但未实机验收、未合并；其后继分支 `refactor/gui-grid-settings-pages-20261010` 继续迁出五个 Grid 页面，分支主文件为 1630 行，仍待独立 CI 与实机验收。`Miuix307PassBlurTextureView.java` 2086 行、`LauncherGlassSession.java` 1436 行、`Launcher450SideSlideHoldHook.java` 1219 行仍为独立后续任务；Java 生产源码大量聚集在根包。详情见 [维护性审计](docs/maintainability-audit-20261010.md)。
+**状态：GUI 分批重构进行中；非 GUI 领域仍待治理。** [#309](https://github.com/yu4032/LiquidDock/pull/309)（设置规格）、[#310](https://github.com/yu4032/LiquidDock/pull/310)（动画页面）、[#311](https://github.com/yu4032/LiquidDock/pull/311)（Dock/工作台）、[#312](https://github.com/yu4032/LiquidDock/pull/312)（Grid 与滑条提交边界修复）均已合并入 `main`。主 Activity 当前 **1646 行**；其中 #312 的滑条手感和提交时序改动不能归为纯文件移动。当前分支 `refactor/gui-glass-pages-20261010` 将十个 Liquid/组件/高光页面迁至 `GlassSettingsPages.kt`，Activity 分支为 **1198 行**，需独立 CI 与实机回归后才能合并。`Miuix307PassBlurTextureView.java`、`LauncherGlassSession.java`、`Launcher450SideSlideHoldHook.java` 等复杂 runtime 类仍待单独处理；详情见 [维护性审计](docs/maintainability-audit-20261010.md)。
 
 优先顺序：
 1. GUI：按页面领域拆分 Composable/IntSpec/导航/存储边界，**保留两个 UI 作用域的分离设计、Prismal 视觉和全部配置键/热更新行为**；优先增加行为测试。
