@@ -67,6 +67,44 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void sliderPreviewIsNearestDuringContinuousDragAndNeverPersistsUntilRelease() throws Exception {
+        String prismal = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        String ui = Files.readString(SURFACES);
+        String activity = Files.readString(UI);
+
+        int dragStart = prismal.indexOf("onDrag = { _, dragAmount ->");
+        int dragEnd = prismal.indexOf("\n                }\n            )", dragStart);
+        assertTrue(dragStart >= 0 && dragEnd > dragStart);
+        String drag = prismal.substring(dragStart, dragEnd);
+        assertTrue(drag.contains("updateValue(nextValue)"));
+        assertTrue(drag.contains("val preview = DiscreteSliderSteps.snap("));
+        assertTrue(drag.contains("previewState.value(preview)"));
+        assertFalse(drag.contains("commitState.value("));
+        assertFalse(drag.contains("GridWidget4x2Preflight"));
+        assertTrue(prismal.contains("snapshotFlow { motion.value }"));
+        assertTrue(prismal.contains("commitState.value(nearest)"));
+        assertTrue(prismal.contains("previewState.value(null)"));
+
+        assertTrue(ui.contains("val shownValueText = previewValue?.let { valueTextForPreview?.invoke(it) } ?: valueText"));
+        assertTrue(ui.contains("onValuePreview = { previewValue = it }"));
+        assertTrue(ui.contains("previewValue = quantizeState.value(next)"));
+        assertTrue(ui.contains("onValueChangeFinished = {"));
+        assertTrue(ui.contains("previewCallbackState.value(DiscreteSliderSteps.snap("));
+        assertTrue(activity.contains("val displayText = \"\u0024{previewLabel ?: displayValue}"));
+        assertTrue(activity.contains("onValuePreview = { sliderPreview = it }"));
+        assertTrue(activity.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
+
+        String scoped = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ScopedGlassSettingsPage.kt"));
+        for (String consumer : new String[]{
+                scoped, Files.readString(GBOARD), Files.readString(DIALOG_GLASS),
+                Files.readString(SIDE_SLIDE)}) {
+            assertTrue(consumer.contains("valueTextForPreview ="));
+        }
+    }
+
+    @Test
     public void dangerousGridEditsAreCheckedBeforePersistenceAndDisplayLargeWarning() throws Exception {
         String gui = Files.readString(UI);
         String grid = Files.readString(GRID_PAGES);
