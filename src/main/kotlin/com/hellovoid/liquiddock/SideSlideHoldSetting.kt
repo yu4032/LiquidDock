@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 @Composable
 internal fun SideSlideHoldSetting(
@@ -43,16 +44,19 @@ internal fun SideSlideHoldSetting(
     SliderPreference(
         value = secondStageDistancePx.toFloat(),
         onValueChange = { raw ->
-            val rounded = ((raw / 5f).toInt() * 5).coerceIn(
-                SideSlideHoldFeatureConfig.MIN_SECOND_STAGE_DISTANCE_PX,
-                SideSlideHoldFeatureConfig.MAX_SECOND_STAGE_DISTANCE_PX,
-            )
+            val rounded = DiscreteSliderSteps.snapToIncrement(
+                raw,
+                SideSlideHoldFeatureConfig.MIN_SECOND_STAGE_DISTANCE_PX.toFloat(),
+                SideSlideHoldFeatureConfig.MAX_SECOND_STAGE_DISTANCE_PX.toFloat(),
+                5f,
+            ).toInt()
             secondStageDistancePx = rounded
             prefs.edit().putInt(distanceKey, rounded).apply()
         },
         title = "第二段振动触发距离",
         summary = "与屏幕边缘的横向拖动距离；默认 240 px。调大可拉开与第一段系统返回振动的间隔",
         valueText = "$secondStageDistancePx px",
+        valueTextForPreview = { "${it.roundToInt()} px" },
         enabled = enabled && value,
         valueRange = SideSlideHoldFeatureConfig.MIN_SECOND_STAGE_DISTANCE_PX.toFloat()..
                 SideSlideHoldFeatureConfig.MAX_SECOND_STAGE_DISTANCE_PX.toFloat(),

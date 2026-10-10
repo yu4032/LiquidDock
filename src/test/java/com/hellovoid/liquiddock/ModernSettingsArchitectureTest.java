@@ -22,6 +22,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/AnimationSettingsPages.kt");
     private static final Path DOCK_WORKSTATION_PAGES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/DockWorkstationSettingsPages.kt");
+    private static final Path GRID_PAGES = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/GridSettingsPages.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
     private static final Path SEARCHBOX = Path.of(
@@ -65,21 +67,70 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void numericSliderPreviewWiringDoesNotReplacePersistenceCallbacks() throws Exception {
+        // Static API wiring only; nearest-stop arithmetic is tested through
+        // DiscreteSliderStepsTest rather than slicing source to infer behavior.
+        String prismal = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        String ui = Files.readString(SURFACES);
+        String activity = Files.readString(UI);
+        assertTrue(prismal.contains("onValuePreview: (Float?) -> Unit = {}"));
+        assertTrue(prismal.contains("previewState.value(preview)"));
+        assertTrue(prismal.contains("commitState.value(nearest)"));
+        assertTrue(prismal.contains("previewState.value(null)"));
+        assertTrue(ui.contains("val shownValueText = previewValue?.let { valueTextForPreview?.invoke(it) } ?: valueText"));
+        assertTrue(ui.contains("onValuePreview = { previewValue = it }"));
+        assertTrue(ui.contains("onValueChangeFinished = {"));
+        assertTrue(ui.contains("previewCallbackState.value(DiscreteSliderSteps.snap("));
+        assertTrue(activity.contains("previewLabel ?: displayValue"));
+        assertTrue(activity.contains("onValuePreview = { sliderPreview = it }"));
+        assertTrue(activity.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
+        String scoped = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ScopedGlassSettingsPage.kt"));
+        for (String consumer : new String[]{
+                scoped, Files.readString(GBOARD), Files.readString(DIALOG_GLASS),
+                Files.readString(SIDE_SLIDE)}) {
+            assertTrue(consumer.contains("valueTextForPreview ="));
+        }
+    }
+
+    @Test
     public void dangerousGridEditsAreCheckedBeforePersistenceAndDisplayLargeWarning() throws Exception {
         String gui = Files.readString(UI);
+        String grid = Files.readString(GRID_PAGES);
         String bridge = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/LauncherManualDiscoveryBridge.java"));
         String client = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/GridWidget4x2PreflightClient.java"));
 
-        assertTrue(gui.contains("GridWidget4x2PreflightPolicy.needsCheck(current, target)"));
-        assertTrue(gui.contains("GridWidget4x2PreflightClient.start("));
-        assertTrue(gui.contains("GridWidget4x2PreflightClient.CLEAR ->"));
-        assertTrue(gui.contains("gridCheck[0]?.cancel()"));
+        assertTrue(grid.contains("GridWidget4x2PreflightPolicy.needsCheck(current, target)"));
+        assertTrue(grid.contains("GridWidget4x2PreflightClient.start("));
+        assertTrue(grid.contains("GridWidget4x2PreflightClient.CLEAR ->"));
+        assertTrue(grid.contains("检测到桌面存在 4×2 小组件。行数或列数不能降低到 4 以下"));
+        assertFalse(grid.contains("旋转后可能为 2×4"));
+        assertTrue(grid.contains("gridCheck[0]?.cancel()"));
+        // Grid and common numeric controls snap ONLY on release: continuous
+        // pointer movement never runs configuration persistence or preflight.
+        assertTrue(grid.contains("steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context))"));
+        String prismalSlider = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        assertTrue(prismalSlider.contains("onDragStopped = {"));
+        assertTrue(prismalSlider.contains("updateValue(nextValue)"));
+        assertTrue(prismalSlider.contains("val nearest = DiscreteSliderSteps.snap("));
+        assertTrue(prismalSlider.contains("snapshotFlow { motion.value }"));
+        assertTrue(prismalSlider.contains("commitState.value(nearest)"));
+        assertTrue(prismalSlider.contains("releaseJob[0]?.cancel()"));
+        assertTrue(gui.contains("DiscreteSliderSteps.forStoragePrecision(spec.min, maxValue, decimalDp)"));
+        assertTrue(gui.contains("snapIncrement = if (decimalDp) 0.1f else 1f"));
+        String uiComponents = Files.readString(SURFACES);
+        assertTrue(uiComponents.contains("snapIncrement = snapIncrement"));
+        assertTrue(uiComponents.contains("onValueChangeFinished = {"));
+        assertTrue(uiComponents.contains("nativeDraft = next"));
+        assertTrue(uiComponents.contains("steps = 0, // Apply quantization only after release"));
         assertTrue(gui.contains("beforeSave: ((Float, () -> Unit) -> Unit)? = null"));
         assertTrue(gui.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
-        assertTrue(gui.contains("minWidth = 164.dp"));
-        assertTrue(gui.contains("minHeight = 42.dp"));
+        assertTrue(grid.contains("minWidth = 164.dp"));
+        assertTrue(grid.contains("minHeight = 42.dp"));
         assertTrue(bridge.contains("new String[]{\"container\", \"spanX\", \"spanY\"}"));
         assertTrue(client.contains("private static final long TIMEOUT_MS = 4500L"));
     }
@@ -99,7 +150,7 @@ public class ModernSettingsArchitectureTest {
     public void heavySettingsUseDedicatedHubAndPartitionStructures() throws Exception {
         String source = Files.readString(UI);
 
-        assertTrue(source.contains("gridEntries.forEach"));
+        assertTrue(Files.readString(GRID_PAGES).contains("gridEntries.forEach"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("dockEntries.forEach"));
         assertTrue(source.contains("liquidEntries.forEach"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("workstationEntries.forEach"));
@@ -133,7 +184,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void topAndBottomKeepLivePrismalButBodyGlassesSampleOnlyOnTouch() throws Exception {
+    public void topAndBottomKeepLivePrismalButBodyGlassesSampleOnlyDuringGestureAndRelease() throws Exception {
         String ui = Files.readString(SURFACES);
         String slider = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
@@ -154,7 +205,10 @@ public class ModernSettingsArchitectureTest {
         assertTrue(toggle.contains("if (samplingEnabled) Modifier.drawPrismalGlass("));
         assertTrue(slider.contains("onDragStarted = {"));
         assertTrue(toggle.contains("onDragStarted = { sampling = true }"));
-        assertTrue(slider.contains("val sampling = enabled && (isDragging || isTrackPressed)"));
+        assertTrue(slider.contains("val sampling = enabled && (isDragging || isTrackPressed || isSettling)"));
+        assertTrue(slider.contains("isSettling = false"));
+        assertTrue(slider.contains("commitState.value(nearest)"));
+        assertTrue(slider.contains("snapshotFlow { motion.value }"));
         assertTrue(toggle.contains("val samplingEnabled = enabled && sampling"));
         assertTrue(slider.contains("if (enabled) dampedDragAnimation.modifier else Modifier"));
         assertTrue(toggle.contains("if (enabled) dampedDragAnimation.modifier else Modifier"));
@@ -801,6 +855,7 @@ public class ModernSettingsArchitectureTest {
         String optionSpecs = Files.readString(OPTION_SPECS);
         String animationPages = Files.readString(ANIMATION_PAGES);
         String dockWorkstationPages = Files.readString(DOCK_WORKSTATION_PAGES);
+        String gridPages = Files.readString(GRID_PAGES);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -813,7 +868,7 @@ public class ModernSettingsArchitectureTest {
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
                 .matcher(compose + "\n" + optionSpecs + "\n" + animationPages + "\n"
-                        + dockWorkstationPages + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
+                        + dockWorkstationPages + "\n" + gridPages + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
