@@ -26,6 +26,10 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/GridSettingsPages.kt");
     private static final Path GLASS_PAGES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt");
+    private static final Path DOCK_DECORATION_PAGES = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/DockDecorationSettingsPages.kt");
+    private static final Path UTILITY_PAGES = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SettingsUtilityPages.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
     private static final Path SEARCHBOX = Path.of(
@@ -285,7 +289,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("contentPadding = PaddingValues("));
         assertTrue(ui.contains("verticalArrangement = Arrangement.spacedBy(10.dp)"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("items(specs, key = { it.key })"));
-        assertTrue(ui.contains("item(key = \"stroke-colors-title\")"));
+        assertTrue(Files.readString(DOCK_DECORATION_PAGES).contains("item(key = \"stroke-colors-title\")"));
         assertTrue(ui.contains("SettingsCard {"));
         assertTrue(ui.contains("internal fun SettingsList("));
         // Each child is a lazy item with its own Prismal glass card, not a
@@ -382,19 +386,19 @@ public class ModernSettingsArchitectureTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/ScopedGlassSettingsPage.kt"));
         String ui = Files.readString(UI);
         assertTrue(scoped.contains("verticalArrangement = Arrangement.spacedBy(8.dp)"));
-        assertTrue(ui.contains("horizontalArrangement = Arrangement.spacedBy(12.dp)"));
-        assertTrue(ui.contains("modifier = Modifier.weight(1f)"));
-        assertTrue(ui.contains("minHeight = 42.dp"));
-        assertTrue(ui.contains("destructive = true"));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("horizontalArrangement = Arrangement.spacedBy(12.dp)"));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("modifier = Modifier.weight(1f)"));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("minHeight = 42.dp"));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("destructive = true"));
     }
 
     @Test
     public void defaultPresetRequiresConfirmationAndRecreatesSettingsState() throws Exception {
         String ui = Files.readString(UI);
-        assertTrue(ui.contains("confirmDefaultReset = true"));
-        assertTrue(ui.contains("WindowDialog("));
-        assertTrue(ui.contains("确认恢复默认配置"));
-        assertTrue(ui.contains("activity.recreate()"));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("confirmDefaultReset = true"));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("WindowDialog("));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("确认恢复默认配置"));
+        assertTrue(Files.readString(UTILITY_PAGES).contains("activity.recreate()"));
     }
 
     @Test
@@ -868,6 +872,8 @@ public class ModernSettingsArchitectureTest {
         String dockWorkstationPages = Files.readString(DOCK_WORKSTATION_PAGES);
         String gridPages = Files.readString(GRID_PAGES);
         String glassPages = Files.readString(GLASS_PAGES);
+        String decorationPages = Files.readString(DOCK_DECORATION_PAGES);
+        String utilityPages = Files.readString(UTILITY_PAGES);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -881,6 +887,7 @@ public class ModernSettingsArchitectureTest {
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
                 .matcher(compose + "\n" + optionSpecs + "\n" + animationPages + "\n"
                         + dockWorkstationPages + "\n" + gridPages + "\n" + glassPages + "\n"
+                        + decorationPages + "\n" + utilityPages + "\n"
                         + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);

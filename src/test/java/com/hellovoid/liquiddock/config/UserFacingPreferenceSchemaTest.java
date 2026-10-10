@@ -71,6 +71,8 @@ public class UserFacingPreferenceSchemaTest {
 
         String specs = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt"));
+        String utility = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsUtilityPages.kt"));
         assertTrue("integer settings must carry ConfigKey metadata",
                 specs.contains("val config: ConfigKey<Int>"));
         assertTrue("boolean settings must accept ConfigKey<Boolean>",
@@ -88,8 +90,9 @@ public class UserFacingPreferenceSchemaTest {
         assertFalse("settings must not write literal string keys directly",
                 source.contains("prefs.edit().putString(\""));
         assertTrue("settings must expose the single default configuration",
-                source.contains("\"应用默认配置\""));
+                utility.contains("\"应用默认配置\""));
         assertFalse("settings must not expose a second tuned/default preset",
-                source.contains("\"应用调校预设\"") || source.contains("applyTunedPreset"));
+                (source + utility).contains("\"应用调校预设\"")
+                        || (source + utility).contains("applyTunedPreset"));
     }
 }

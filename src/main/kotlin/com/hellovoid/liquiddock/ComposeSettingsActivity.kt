@@ -1,11 +1,8 @@
 package com.hellovoid.liquiddock
 
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -51,10 +48,8 @@ import androidx.compose.ui.unit.sp
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
-import com.hellovoid.liquiddock.config.PresetManager
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.GridView
@@ -64,7 +59,6 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
-import top.yukonga.miuix.kmp.window.WindowDialog
 
 // A single observer updates only the changed preference key; long slider pages
 // do not register listeners per control or re-read preferences on every frame.
@@ -710,218 +704,8 @@ private fun AnimationPage(
 
 // Dock, Workstation, Divider and Recents pages live in DockWorkstationSettingsPages.kt.
 
-@Composable
-private fun SecurityCenterSidebarPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val liquidGlassEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item {
-            PageHeader(
-                stringResource(R.string.page_security_center_sidebar),
-                stringResource(R.string.security_center_sidebar_header_summary),
-            )
-        }
-        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
-        item {
-            SettingsCard {
-                SideSlideHoldSetting(prefs, masterEnabled)
-            }
-        }
-        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
-        item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.SECURITY_CENTER_GLASS,
-                    stringResource(R.string.liquid_security_center_glass_enable),
-                    stringResource(R.string.liquid_security_center_glass_enable_summary),
-                    masterEnabled && liquidGlassEnabled,
-                )
-            }
-        }
-    }
-}
-
-// Liquid, component glass and highlight leaf pages live in GlassSettingsPages.kt.
-
-@Composable
-private fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
-    var dockStroke by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_ENABLED.name(), ConfigSchema.Dock.STROKE_ENABLED.uiDefault())) }
-    var squircle by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SQUIRCLE.name(), ConfigSchema.Dock.SQUIRCLE.uiDefault())) }
-    var fillDiff by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.FILL_DIFF.name(), ConfigSchema.Dock.FILL_DIFF.uiDefault())) }
-    DenseSettingsList(padding, "描边") {
-        item(key = "stroke-enabled") {
-            SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边", "控制 Dock 边框与灯光", masterEnabled) { dockStroke = it }
-            }
-        }
-        item(key = "stroke-squircle") {
-            SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线", "iPad 风格连续圆角", masterEnabled) { squircle = it }
-            }
-        }
-        item(key = "stroke-fill-diff") {
-            SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Dock.FILL_DIFF, "Fill-Diff 描边", "通过填充与挖空获得清晰抗锯齿", masterEnabled) { fillDiff = it }
-            }
-        }
-        item(key = "stroke-colors-title") { SmallTitle("描边背景色") }
-        items(strokeSpecs.filter { it.section == IntSection.StrokeBackground }, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && dockStroke)
-            }
-        }
-        item(key = "stroke-geometry-title") { SmallTitle("方圆形与线宽") }
-        items(strokeSpecs.filter { it.section == IntSection.StrokeGeometry }, key = { it.key }) { spec ->
-            val enabled = when (spec.dependency) {
-                "dock_stroke" -> dockStroke
-                "squircle" -> squircle
-                "fill_diff" -> fillDiff
-                else -> true
-            }
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && enabled)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
-    val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
-    var dockShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SHADOW_ENABLED.name(), ConfigSchema.Dock.SHADOW_ENABLED.uiDefault())) }
-    var strokeShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_SHADOW.name(), ConfigSchema.Dock.STROKE_SHADOW.uiDefault())) }
-    DenseSettingsList(padding, "阴影") {
-        item(key = "dock-shadow-enabled") {
-            SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Dock.SHADOW_ENABLED, "整个 Dock 下方阴影", "跟随 Dock 长宽、高度和圆角", masterEnabled && dockEnabled) { dockShadow = it }
-            }
-        }
-        item(key = "stroke-shadow-enabled") {
-            SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Dock.STROKE_SHADOW, "描边阴影", "描边下方的柔和阴影", masterEnabled && dockEnabled) { strokeShadow = it }
-            }
-        }
-        items(shadowSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && dockEnabled && when (spec.dependency) {
-                    "dock_shadow" -> dockShadow
-                    "stroke_shadow" -> strokeShadow
-                    else -> true
-                })
-            }
-        }
-    }
-}
-
-@Composable
-private fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
-    var confirmDefaultReset by rememberSaveable { mutableStateOf(false) }
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader("预设", "默认配置、JSON 备份与恢复") }
-        item { SmallTitle("预设") }
-        item { SettingsCard { ArrowPreference("应用默认配置", summary = "恢复内置默认参数与开关（需确认）", onClick = { confirmDefaultReset = true }) } }
-        item { SmallTitle("备份与应用") }
-        item {
-            SettingsCard {
-                ArrowPreference("导出当前参数", summary = "保存为 LiquidDock JSON", onClick = activity::launchExport)
-                ArrowPreference("导入参数", summary = "校验并恢复参数；完成后自动重启桌面", onClick = activity::launchImport)
-            }
-        }
-    }
-    WindowDialog(
-        show = confirmDefaultReset,
-        title = "确认恢复默认配置",
-        onDismissRequest = { confirmDefaultReset = false },
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text("将覆盖当前内置配置与开关并重启桌面。该操作不能直接撤销，建议先导出 JSON 备份。")
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Button(
-                    onClick = { confirmDefaultReset = false },
-                    modifier = Modifier.weight(1f),
-                    minHeight = 42.dp,
-                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
-                ) {
-                    Text("取消")
-                }
-                Button(
-                    onClick = {
-                        confirmDefaultReset = false
-                        applyDefaultPreset(activity)
-                    },
-                    modifier = Modifier.weight(1f),
-                    minHeight = 42.dp,
-                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
-                    destructive = true,
-                ) {
-                    Text("恢复默认", color = androidx.compose.ui.graphics.Color.White)
-                }
-            }
-        }
-    }
-}
-
-private fun openUrl(context: Context, url: String) {
-    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-}
-
-@Composable
-private fun AboutPage(
-    padding: PaddingValues,
-    activity: ComposeSettingsActivity,
-    prefs: SharedPreferences,
-) {
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader("许可", "LiquidDock 使用的第三方开源项目与许可证") }
-        item { SmallTitle("运行诊断") }
-        item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Debug.LOGGING,
-                    "诊断日志",
-                    "将 LiquidDock 运行诊断写入日志文件；修改后重启对应 Hook 作用域生效",
-                )
-            }
-        }
-        item { SmallTitle("界面与运行框架") }
-        item {
-            SettingsCard {
-                ArrowPreference("Compose Miuix", summary = "MIUIX Compose 界面框架 · Apache-2.0", onClick = { openUrl(activity, "https://github.com/compose-miuix-ui/miuix") })
-                ArrowPreference("PrismalAGSL", summary = "设置界面液态玻璃组件 · MIT", onClick = { openUrl(activity, "https://github.com/styropyr0/PrismalAGSL") })
-                ArrowPreference("AndroidX / Jetpack", summary = "Activity、Preference、AppCompat · Apache-2.0", onClick = { openUrl(activity, "https://source.android.com/docs/setup/about/licenses") })
-                ArrowPreference("LSPosed API", summary = "模块 Hook API · GPL-3.0", onClick = { openUrl(activity, "https://github.com/LSPosed/LSPosed") })
-            }
-        }
-        item { SmallTitle("开源项目") }
-        item {
-            SettingsCard {
-                ArrowPreference("HyperCeiler", summary = "开源模块项目 · GPL-3.0", onClick = { openUrl(activity, "https://github.com/ReChronoRain/HyperCeiler") })
-                ArrowPreference("Prismal", summary = "液态玻璃光学模型 · MIT", onClick = { openUrl(activity, "https://github.com/styropyr0/Prismal") })
-            }
-        }
-        item { SmallTitle("许可说明") }
-        item {
-            SettingsCard {
-                ArrowPreference("第三方开源声明", summary = "依赖版本、用途与许可证文本链接", onClick = { openUrl(activity, "https://github.com/yu4032/LiquidDock/blob/main/THIRD_PARTY_NOTICES.md") })
-            }
-        }
-    }
-}
+// Dock decoration controls live in DockDecorationSettingsPages.kt.
+// Security Center sidebar, data management and notices live in SettingsUtilityPages.kt.
 
 /**
  * Keep at most three numeric settings in one native Prismal glass surface.
@@ -1196,13 +980,4 @@ internal fun IntSetting(
             editingValue = false
         },
     )
-}
-
-private fun applyDefaultPreset(activity: ComposeSettingsActivity) {
-    val prefs = PreferenceManager.getDefaultSharedPreferences(activity)
-    PresetManager.applyDefault(prefs.edit())
-    Toast.makeText(activity, "默认配置已应用", Toast.LENGTH_LONG).show()
-    activity.restartLauncher()
-    // Destroy remembered page/slider state after applying a new full preset.
-    activity.recreate()
 }
