@@ -5,12 +5,11 @@ final class PassBlurSourceStallRecoveryPolicy {
     private PassBlurSourceStallRecoveryPolicy() {}
 
     static boolean shouldRollover(
-            boolean validBinding, boolean rebindPending, boolean currentFrameFresh,
+            boolean validBinding, boolean rebindPending,
             long arrivals, long arrivalsAtArm, long bindEpoch, long epochAtArm,
             long nowMs, long nextAllowedMs) {
         return validBinding
                 && !rebindPending
-                && !currentFrameFresh
                 && arrivals == arrivalsAtArm
                 && bindEpoch == epochAtArm
                 && nowMs >= nextAllowedMs;

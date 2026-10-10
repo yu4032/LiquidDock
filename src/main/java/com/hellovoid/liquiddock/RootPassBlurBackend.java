@@ -337,7 +337,6 @@ final class RootPassBlurBackend {
         if (!PassBlurSourceStallRecoveryPolicy.shouldRollover(
                 RootPassBlurEndpointBridge.isBindingValid(current),
                 state.isRebindPending(),
-                state.hasFreshFrame(state.requestedGeneration()),
                 sourceArrivalSerial, observedArrivals,
                 bindEpoch.get(), observedEpoch,
                 now, nextStallRolloverAllowedMs)) return false;
