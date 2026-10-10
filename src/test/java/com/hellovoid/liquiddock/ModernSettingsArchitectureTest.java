@@ -64,6 +64,12 @@ public class ModernSettingsArchitectureTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
         assertTrue(prismalSlider.contains("rawDragTarget = rawNext"));
         assertTrue(prismalSlider.contains("DiscreteSliderSteps.snap("));
+        assertTrue(gui.contains("DiscreteSliderSteps.forStoragePrecision(spec.min, maxValue, decimalDp)"));
+        assertTrue(gui.contains("snapIncrement = if (decimalDp) 0.1f else 1f"));
+        assertTrue(prismalSlider.contains("rawBase = if (steps > 0 || snapIncrement > 0f)"));
+        String uiComponents = Files.readString(SURFACES);
+        assertTrue(uiComponents.contains("snapIncrement = snapIncrement"));
+        assertTrue(uiComponents.contains("steps = steps"));
         assertTrue(gui.contains("beforeSave: ((Float, () -> Unit) -> Unit)? = null"));
         assertTrue(gui.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
         assertTrue(grid.contains("minWidth = 164.dp"));
