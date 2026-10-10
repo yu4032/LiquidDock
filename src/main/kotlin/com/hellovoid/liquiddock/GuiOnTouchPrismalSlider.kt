@@ -192,6 +192,15 @@ internal fun GuiOnTouchPrismalSlider(
                     }
                 }
         }
+        // Also reconcile the committed value when settling ends without a
+        // preference change (for example a blocked 4×2 widget preflight).
+        LaunchedEffect(isSettling, dampedDragAnimation) {
+            if (!isSettling && !isDragging && !isTrackPressed &&
+                dampedDragAnimation.targetValue != value()
+            ) {
+                dampedDragAnimation.updateValue(value())
+            }
+        }
 
         // A blocked widget preflight disables the row/column slider while waiting.
         // Immediately return its thumb to the last committed value, not the
@@ -215,6 +224,8 @@ internal fun GuiOnTouchPrismalSlider(
                     .then(if (enabled) Modifier.pointerInput(animationScope, trackWidth, valueRange, isLtr) {
                         detectTapGestures(
                             onPress = {
+                                releaseJob[0]?.cancel()
+                                isSettling = false
                                 isTrackPressed = true
                                 try { tryAwaitRelease() } finally { isTrackPressed = false }
                             },
