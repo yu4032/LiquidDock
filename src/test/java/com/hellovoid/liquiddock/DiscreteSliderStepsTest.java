@@ -62,6 +62,14 @@ public class DiscreteSliderStepsTest {
     }
 
     @Test
+    public void sideSlideDistanceRoundsToNearestFivePixels() {
+        assertEquals(245f, DiscreteSliderSteps.snapToIncrement(247.4f, 180f, 480f, 5f), 0f);
+        assertEquals(250f, DiscreteSliderSteps.snapToIncrement(247.6f, 180f, 480f, 5f), 0f);
+        assertEquals(180f, DiscreteSliderSteps.snapToIncrement(-10f, 180f, 480f, 5f), 0f);
+        assertEquals(480f, DiscreteSliderSteps.snapToIncrement(600f, 180f, 480f, 5f), 0f);
+    }
+
+    @Test
     public void explicitGridStepsRemainCompatible() {
         assertEquals(7f, DiscreteSliderSteps.snap(7.3f, 2f, 10f, 7, 0.1f), 0f);
         assertEquals(4f, DiscreteSliderSteps.snap(3.7f, 2f, 6f, 3, 1f), 0f);
