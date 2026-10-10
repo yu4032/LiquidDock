@@ -12,7 +12,7 @@
 
 **状态：部分完成，稳定态 CPU 热点仍待量化。** GL program location 缓存和 Dock scratch 数组复用已经落地，详见文末完成项；目前重点是避免稳定帧重复扫描几何与节点。
 
-当前最高价值的性能债务集中在“稳定态仍按帧执行”的路径。原则是优先把 `O(frame)` 工作降为 `O(event)`，而不是简单加节流或固定延迟。
+“稳定态仍按帧执行”路径：优先把 `O(frame)` 工作降为 `O(event)`，而不是简单加节流或固定延迟。
 
 本阶段仅建立可靠的性能测量窗口，不把 Perfetto 埋点当作 CPU 优化；后续以 stable/paging/drag/unlock 的 p95 与节点计数对比决定 dirty-node 策略。
 
@@ -181,45 +181,6 @@ Dialog 生命周期短，因此优先级低于 Workspace/Dock。
 - per-frame trace 只在显式诊断模式启用；
 - 性能测试时不能让同步文件日志成为主要干扰源。
 
-## P1 · Workstation composite runtime restore
-
-**状态：未完成。**
-
-单个 Workstation visual owner 已经可以独立恢复，但完整 Workstation structure 仍跨越：
-
-- Dock width / geometry；
-- Dock icon top/bottom offset；
-- Dock icon glass radius；
-- Workspace Grid；
-- All Apps geometry；
-- Divider；
-- Recents producer recovery；
-- wallpaper / rotation freshness；
-- normal-layout backup / restore。
-
-如果未来要支持完整热切换，需要定义一个可验证的 composite restore transaction，而不是逐个 toggle 子模块。
-
-必须保持：
-
-- 普通桌面无回归；
-- retired producer 不重新冒充 fresh source；
-- Recents/HOME 仍经过 fresh-frame authority；
-- Divider 等独立 owner 的 snapshot/restore 不被覆盖。
-
----
-
-
-
-## P2 · WidgetGridSizing state ownership / dimensions
-
-**状态：部分完成；旧 TODO 描述已过时。** 当前 `WidgetGridSizing` 的 process-static 开关名为 `customGridEnabled`，通过 `setCustomGridEnabled()` 控制；`isSupportedSpec(spanX, spanY)` 只检查跨度为正值，并无“仅支持 1×1 / 2×1 / 2×2 / 4×2”的硬编码白名单；`gridRect()` 还依据实际 `xs/ys` 数组做边界校验。
-
-待办：
-- 明确 `customGridEnabled` 的 install/runtime owner 与重载/退出时序，避免陈旧 process-static 状态；
-- 如确需类型注册表，应先证明现有正跨度 + 实际网格边界不足，不能为了重构重新引入 widget 类型白名单；
-- 保持 CellLayout/MIUI occupancy 权威，只调整最终 allocation/frame；测试旋转、边界与组件居中。 
-
----
 
 ## P1 · Expanded integration compatibility corpus
 
@@ -278,63 +239,6 @@ v2.5.1 已经同时覆盖：
 - resume；
 - background view replacement；
 - search box 本体不被误改。
-
----
-
-## P1 · RootPassBlur / session ownership audit
-
-**状态：已经形成共享基础层，但 feature session 数量继续增加。**
-
-当前 domain 包括 Launcher Workspace、Dock、ShortcutMenu、Drag、Dialog、Recents capsule、SystemUI handle menu、Security Center、Gboard、Searchbox。
-
-继续审计：
-
-- endpoint bind / release / rollover；
-- Surface / SurfaceTexture ownership；
-- EGLDisplay / EGLContext / EGLSurface ownership；
-- OES texture lifecycle；
-- root replacement；
-- terminal failure；
-- source freshness；
-- output cleanup。
-
-不要预设需要“大一统 GlassEngine”。只有生命周期真的相同的代码才抽成公共 primitive。
-
-必须保持：
-
-- active backdrop 不回退 screenshot；
-- source drain 不被 render FPS cap 阻塞；
-- fresh generation 可以越过普通 throttle；
-- feature-specific geometry/presentation failure 不污染其他 domain。
-
----
-
-## P1 · Signed-build / R8 compatibility regression coverage
-
-v2.5.1 已经出现并修复两个真实的跨 ClassLoader R8 问题：
-
-1. Launcher RecyclerView signature；
-2. Dialog native-night AppCompatDialog class-string 被改写成 `v9`。
-
-后续目标：
-
-- 扫描新 `Class.forName` / exact signature call；
-- 检查模块是否也打包了同名类；
-- 优先使用目标进程参数语义、继承关系、资源关系；
-- 必须保留二进制名时仅增加 targeted `-keepnames`；
-- 对高风险 path 增加 signed/release smoke test 指南或自动检查。
-
-不允许用 LiquidDock 整包 keep 掩盖问题。
-
----
-
-## P1 · Rename custom-grid enable key across two releases
-
-当前自定义主屏网格总开关仍使用历史键名 `home_grid_8x4`，但其语义早已不再表示 8×4；当前尺寸唯一真值已经是 `grid_columns / grid_rows`。
-
-按两个连续版本完成迁移，不做一步到位删除：
-
-### 第一次更新：引入 `grid_enabled`，双键过渡
 
 - `ConfigSchema.Grid.ENABLED` 改用新键 `grid_enabled`；
 - Launcher/设置进程启动迁移时，如果 `grid_enabled` 尚不存在，则把现有 `home_grid_8x4` 的布尔值原样复制到 `grid_enabled`；
