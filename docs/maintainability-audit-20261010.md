@@ -90,4 +90,10 @@
 - `ComposeSettingsActivity.kt` **984 → 536 行**，保留 Activity 生命周期、单一 `SharedPreferences` 监听器、Miuix theme、滚动容器、重启作用域、页面路由、返回栈和主菜单页面。移出的文本不算删除功能；13 个 Composable 和 8 处 `ConfigSchema` 引用在三个文件的合集完全保留。
 - 测试契约继续核对导航结构、持久化键来源、热更新 listener 以及每档实时写入。[CI #38036812829](https://github.com/yu4032/LiquidDock/actions/runs/38036812829) 已通过完整 unit tests、Debug APK 构建和安全检查。**这仍不等同于真机手势/功能验收**；不能以源码 `contains` 测试替代设备验证。
 
+**第六、第七批已合并**：[PR #315](https://github.com/yu4032/LiquidDock/pull/315)（Dock 描边/阴影与设置辅助页）和 [PR #316](https://github.com/yu4032/LiquidDock/pull/316)（路由目录与共享控件）经用户实机验收后进入 `main`；`ComposeSettingsActivity.kt` 当前约 **536 行**。
+
+**第八批（本分支，待验证）**：`refactor/gui-prismal-bottom-navigation-20261010` 将原 `ModernBottomNavigation` / `ModernTabContents` 迁入 `SettingsBottomNavigation.kt`，重启选择弹窗与切换开关迁入 `SettingsRestartScopesDialog.kt`。保留 `ModernSettingsUi.kt` 的 `backgroundLayer + screenLayer` 记录/融合管线及所有原生 Prismal 设置参数。出于回归安全，**不改变底栏行为或可见布局**。
+
+对照 PrismalAGSL v1.0.4 上游，**底栏并非“全部效果丢失”**：底层 native PrismalGlassBottomTabs 的基础模糊/折射、按压/拖动弹簧、边缘高光仍生效；但原生 Tab 子节点为空、图文以 sibling overlay 绘制，因此图文不参与原生 tab 按压缩放 / 拖动候选高亮 / droplet 对文本本身的折射。静止 droplet 的光学效果在 upstream 本身部分由 pressProgress 调节，静止表现相对平淡。该方案原为避免长按文字重影而刻意选择，不能简单回滚。详细证据、风险和独立修复路径见 [Prismal 底栏审查](gui-prismal-bottom-navigation-audit-20261010.md)。
+
 风险界限：GUI 的文件拆分不触及 PassBlur/EGL、渲染 producer、LSPosed Hook。所有编译和静态检查结果必须与实机验收区别记录，完成后更新 TODO 状态。

@@ -36,6 +36,10 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/SettingsControls.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
+    private static final Path BOTTOM_NAV = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SettingsBottomNavigation.kt");
+    private static final Path RESTART_DIALOG = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt");
     private static final Path SEARCHBOX = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/SearchboxSettingsActivity.kt");
     private static final Path WIDGET_DETAIL = Path.of(
@@ -207,6 +211,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void topAndBottomKeepLivePrismalButBodyGlassesSampleOnlyDuringGestureAndRelease() throws Exception {
         String ui = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
         String slider = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
         String toggle = Files.readString(Path.of(
@@ -216,7 +221,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
         assertTrue(ui.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
         assertTrue(ui.contains("GuiPrismalFlatHeader("));
-        assertTrue(ui.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(ui.contains("GuiOnTouchPrismalSlider("));
         assertTrue(ui.contains("GuiOnTouchPrismalToggle("));
         assertTrue(ui.contains("val backdrop = LocalPrismalSurfaceBackdrop.current"));
@@ -238,6 +243,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void staticGuiReplaysRealCachedPrismalUnderLiveSettingsContent() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
         String ui = Files.readString(UI);
         String frozen = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiFrozenPrismalChrome.kt"));
@@ -252,7 +258,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(frozen.contains("PrismalGlassSurface("));
         assertTrue(frozen.contains("onClick = null,"));
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
-        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(Files.readString(GLASS_PAGES).contains("internal fun GlassIconsPage("));
     }
 
@@ -308,12 +314,13 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void prismalGesturesReadLatestStateThroughStableBridges() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
         assertTrue(surfaces.contains("val stableSelected = remember { { selectedState.value } }"));
         assertTrue(surfaces.contains("onSelect = stableToggleChange,"));
         assertTrue(surfaces.contains("val stableSliderChange: (Float) -> Unit = remember {"));
         assertTrue(surfaces.contains("onValueChange = stableSliderChange,"));
-        assertTrue(surfaces.contains("val stableSelectedIndex = remember { { selected } }"));
-        assertTrue(surfaces.contains("onTabSelected = stableTabChange,"));
+        assertTrue(bottom.contains("val stableSelectedIndex = remember { { selected } }"));
+        assertTrue(bottom.contains("onTabSelected = stableTabChange,"));
     }
 
     @Test
@@ -342,7 +349,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(cards.contains("specular"));
         assertTrue(cards.contains("applyPrismalGlassEffects("));
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
-        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(Files.readString(BOTTOM_NAV).contains("PrismalGlassBottomTabs("));
     }
 
     @Test
@@ -450,6 +457,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void solidActionsAndDarkCellsHaveDistinctLayeringWithoutReplacingPrismal() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
         String navSurface = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
 
@@ -481,6 +489,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void modernShellRetainsPrismalControlsWithSolidHeader() throws Exception {
         String source = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
         String build = Files.readString(BUILD);
         String header = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalFlatHeader.kt"));
@@ -490,8 +499,8 @@ public class ModernSettingsArchitectureTest {
         assertFalse("no unused MIUIX blur implementation", build.contains("miuix-blur-android"));
         assertTrue(source.contains("PrismalGlassSurface"));
         assertTrue(source.contains("PrismalGlassButton"));
-        assertTrue(source.contains("PrismalGlassBottomTabs"));
-        assertTrue(source.contains("PrismalGlassBottomTab"));
+        assertTrue(bottom.contains("PrismalGlassBottomTabs"));
+        assertTrue(bottom.contains("PrismalGlassBottomTab"));
         assertTrue(source.contains("GuiOnTouchPrismalToggle"));
         assertTrue(source.contains("GuiOnTouchPrismalSlider"));
         assertTrue(source.contains("PrismalGlassStepper"));
@@ -584,6 +593,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void bothBarsShareTheOriginalPrismalBackdropWithoutSecondRecording() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
         String header = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalFlatHeader.kt"));
 
@@ -591,12 +601,12 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(backgroundLayer)"));
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
         assertTrue(surfaces.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
-        assertTrue(surfaces.contains("val backdrop = LocalPrismalOverlayBackdrop.current"));
+        assertTrue(bottom.contains("val backdrop = LocalPrismalOverlayBackdrop.current"));
         assertTrue(surfaces.contains("backdrop = activeOverlayBackdrop,"));
         // Static architecture audit; actual modifier capture order is validated
         // by real rendering rather than prohibited source-order inference.
         assertTrue(surfaces.contains("lerp(background, primary, 0.07f)"));
-        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(header.contains("PrismalBackdrop"));
         assertFalse(surfaces.contains("rememberLayerBackdrop {"));
         assertFalse(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
@@ -606,15 +616,16 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void bottomTabSelectionUsesNativeCapsuleClippedHitTargets() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
 
-        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
-        assertTrue(surfaces.contains("PrismalGlassBottomTab("));
-        assertTrue(surfaces.contains("labels.indices.forEach { index ->"));
-        assertTrue(surfaces.contains("ModernTabContents(label, icons[index], index == selected)"));
-        assertTrue(surfaces.contains("PrismalGlassBottomTab("));
-        assertFalse(surfaces.contains("LocalPrismalBottomTabHighlightedIndex.current"));
-        assertTrue(surfaces.contains("indication = null"));
-        assertFalse(surfaces.contains("Modifier.matchParentSize()\n                    .padding(4.dp)"));
+        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("PrismalGlassBottomTab("));
+        assertTrue(bottom.contains("labels.indices.forEach { index ->"));
+        assertTrue(bottom.contains("ModernTabContents(label, icons[index], index == selected)"));
+        assertTrue(bottom.contains("PrismalGlassBottomTab("));
+        assertFalse(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
+        assertTrue(bottom.contains("indication = null"));
+        assertFalse(bottom.contains("Modifier.matchParentSize()\n                    .padding(4.dp)"));
     }
 
     @Test
@@ -660,12 +671,13 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void bottomLabelsAreSinglePassAbovePrismalDragDroplet() throws Exception {
         String source = Files.readString(SURFACES);
-        assertTrue(source.contains("labels.indices.forEach { index ->"));
-        assertTrue(source.contains("PrismalGlassBottomTab("));
-        assertTrue(source.contains(") {}"));
-        assertTrue(source.contains("ModernTabContents(label, icons[index], index == selected)"));
-        assertFalse(source.contains("LocalPrismalBottomTabHighlightedIndex"));
-        assertTrue(source.contains("tintDropletContent = false"));
+        String bottom = Files.readString(BOTTOM_NAV);
+        assertTrue(bottom.contains("labels.indices.forEach { index ->"));
+        assertTrue(bottom.contains("PrismalGlassBottomTab("));
+        assertTrue(bottom.contains(") {}"));
+        assertTrue(bottom.contains("ModernTabContents(label, icons[index], index == selected)"));
+        assertFalse(bottom.contains("LocalPrismalBottomTabHighlightedIndex"));
+        assertTrue(bottom.contains("tintDropletContent = false"));
     }
 
     @Test
@@ -829,7 +841,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains(".clip(cardShape)"));
         assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
         assertTrue(surfaces.contains("PrismalGlassSurface("));
-        assertTrue(surfaces.contains("PrismalGlassBottomTabs("));
+        assertTrue(Files.readString(BOTTOM_NAV).contains("PrismalGlassBottomTabs("));
     }
 
     @Test
@@ -858,11 +870,12 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void topBarUsesOnlyBottomStrokeAndKeepsActionShadowRoom() throws Exception {
         String surfaces = Files.readString(SURFACES);
+        String bottom = Files.readString(BOTTOM_NAV);
 
-        assertTrue(surfaces.contains("val fallbackShape = RoundedCornerShape(30.dp)"));
-        assertTrue(surfaces.contains(".border("));
-        assertTrue(surfaces.contains("width = 1.dp"));
-        assertTrue(surfaces.contains("alpha = 0.14f"));
+        assertTrue(bottom.contains("val fallbackShape = RoundedCornerShape(30.dp)"));
+        assertTrue(bottom.contains(".border("));
+        assertTrue(bottom.contains("width = 1.dp"));
+        assertTrue(bottom.contains("alpha = 0.14f"));
 
         assertTrue(surfaces.contains("TOP_BAR_ACTION_SHADOW_ROOM = 10.dp"));
         assertTrue(surfaces.contains("TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f"));
