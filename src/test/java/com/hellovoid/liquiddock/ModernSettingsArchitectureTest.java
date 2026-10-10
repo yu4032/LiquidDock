@@ -58,6 +58,12 @@ public class ModernSettingsArchitectureTest {
         assertTrue(grid.contains("GridWidget4x2PreflightClient.start("));
         assertTrue(grid.contains("GridWidget4x2PreflightClient.CLEAR ->"));
         assertTrue(grid.contains("gridCheck[0]?.cancel()"));
+        // Row/column thumbs must physically snap, not merely round when persisted.
+        assertTrue(grid.contains("steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context))"));
+        String prismalSlider = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        assertTrue(prismalSlider.contains("rawDragTarget = rawNext"));
+        assertTrue(prismalSlider.contains("DiscreteSliderSteps.snap("));
         assertTrue(gui.contains("beforeSave: ((Float, () -> Unit) -> Unit)? = null"));
         assertTrue(gui.contains("if (beforeSave != null) beforeSave(bounded, persist) else persist()"));
         assertTrue(grid.contains("minWidth = 164.dp"));
