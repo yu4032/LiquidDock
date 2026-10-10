@@ -16,6 +16,8 @@ import org.junit.Test;
 public class ModernSettingsArchitectureTest {
     private static final Path UI = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt");
+    private static final Path OPTION_SPECS = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
     private static final Path SEARCHBOX = Path.of(
@@ -157,13 +159,14 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void workstationDockGuiOmitsBrokenControlsButKeepsTheirConfigSchema() throws Exception {
         String ui = Files.readString(UI);
-        assertTrue(ui.contains("工作台 Dock 图标垂直偏移"));
+        String specs = Files.readString(OPTION_SPECS);
+        assertTrue(specs.contains("工作台 Dock 图标垂直偏移"));
         assertFalse(ui.contains("工作台 Dock 图标上间距"));
         assertFalse(ui.contains("工作台 Dock 图标下间距"));
         assertFalse(ui.contains("工作台 Dock 长度偏移"));
-        assertTrue(ui.contains("ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,"));
-        assertFalse(ui.contains("IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,"));
-        assertFalse(ui.contains("IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,"));
+        assertTrue(specs.contains("ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,"));
+        assertFalse(specs.contains("IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,"));
+        assertFalse(specs.contains("IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,"));
     }
 
     @Test
@@ -663,7 +666,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(zh.contains("8 列水平距离"));
         assertFalse(en.contains("8-column horizontal spacing"));
 
-        assertTrue(ui.contains("适用于当前实际网格列数"));
+        assertTrue(Files.readString(OPTION_SPECS).contains("适用于当前实际网格列数"));
         assertTrue(zh.contains("适配当前实际网格列数"));
         assertTrue(en.contains("current grid column count"));
 
@@ -770,6 +773,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void redesignedGuiRetainsTheOriginalUserFacingPreferenceReferences() throws Exception {
         String compose = Files.readString(UI);
+        String optionSpecs = Files.readString(OPTION_SPECS);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -781,7 +785,7 @@ public class ModernSettingsArchitectureTest {
 
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
-                .matcher(compose + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
+                .matcher(compose + "\n" + optionSpecs + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
@@ -813,8 +817,8 @@ public class ModernSettingsArchitectureTest {
         assertFalse(ui.contains("\"liquid_edge_band\" ->"));
         assertFalse(ui.contains("\"liquid_highlight_alpha\" ->"));
         assertFalse(ui.contains("\"liquid_recents_prearm_distance\" ->"));
-        assertTrue(ui.contains("ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE"));
-        assertTrue(ui.contains("ConfigSchema.Glass.PASSBLUR_RENDER_FPS"));
+        assertTrue(Files.readString(OPTION_SPECS).contains("ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE"));
+        assertTrue(Files.readString(OPTION_SPECS).contains("ConfigSchema.Glass.PASSBLUR_RENDER_FPS"));
     }
 
     @Test
