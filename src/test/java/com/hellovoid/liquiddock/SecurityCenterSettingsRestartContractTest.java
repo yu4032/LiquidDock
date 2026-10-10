@@ -30,7 +30,7 @@ public class SecurityCenterSettingsRestartContractTest {
         String compose = Files.readString(
                 MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
         String dialog = Files.readString(
-                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt"));
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt"));
 
         assertTrue(compose.contains("onToggle = { id, checked ->"));
         assertTrue(compose.contains("selectedRestartScopes + id"));
@@ -115,7 +115,7 @@ public class SecurityCenterSettingsRestartContractTest {
     @Test
     public void restartDialogIsScrollableAndUsesCenteredRedConfirmButton() throws Exception {
         String ui = Files.readString(
-                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt"));
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt"));
 
         assertTrue(ui.contains("verticalScroll(rememberScrollState())"));
         assertTrue(ui.contains("System Framework（system）需要重启设备"));
