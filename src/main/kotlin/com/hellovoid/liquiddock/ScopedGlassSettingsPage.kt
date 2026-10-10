@@ -180,6 +180,7 @@ internal fun ScopedGlassSettingsPage(
                                 summary = if (prefs.contains(key)) "−1 表示继承自动圆角"
                                     else "继承自动圆角",
                                 valueText = "${v.roundToInt()} dp",
+                                valueTextForPreview = { "${it.roundToInt()} dp" },
                                 enabled = enabled,
                                 valueRange = -1f..400f,
                                 steps = 400,
@@ -356,6 +357,11 @@ private fun ScopedGlassSlider(
         valueText = if (decimal) String.format(java.util.Locale.ROOT, "%.1f", v) +
             (if (unit.isBlank()) "" else " $unit")
             else "${v.roundToInt()}" + (if (unit.isBlank()) "" else " $unit"),
+        valueTextForPreview = { nearest ->
+            val shown = if (decimal) String.format(java.util.Locale.ROOT, "%.1f", nearest)
+                else nearest.roundToInt().toString()
+            shown + (if (unit.isBlank()) "" else " $unit")
+        },
         enabled = enabled,
         valueRange = min..max,
         // Large optical ranges snap without generating hundreds of UI tick positions.
