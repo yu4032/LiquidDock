@@ -1042,6 +1042,8 @@ internal fun IntSetting(
     enabledOverride: Boolean? = null,
     steps: Int = 0,
     beforeSave: ((Float, () -> Unit) -> Unit)? = null,
+    // Guarded settings may allow only preflight-free steps during an active drag.
+    previewWriteAllowed: ((Float) -> Boolean)? = null,
 ) {
     val decimalDp = spec.isDecimal
     val context = LocalContext.current
@@ -1069,8 +1071,8 @@ internal fun IntSetting(
         }
     }
     var editingValue by remember(spec.key) { mutableStateOf(false) }
-    // UI-only draft: the thumb moves continuously; show its nearest legal value.
-    // Never read this preview in save(), the widget guard, or the stepper.
+    // The thumb remains continuous, but the displayed quantized preview becomes
+    // the persisted value immediately when allowed by the setting's safety policy.
     var sliderPreview by remember(spec.key) { mutableStateOf<Float?>(null) }
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
 
@@ -1108,8 +1110,8 @@ internal fun IntSetting(
     val scaledMax = if (decimalDp) maxValue * 10 else maxValue
     val sliderSteps = if (steps > 0) steps else
         DiscreteSliderSteps.forStoragePrecision(spec.min, maxValue, decimalDp)
-    // The thumb remains continuous while dragging; display and release targets
-    // use storage precision without allocating excessive native tick marks.
+    // The thumb remains continuous while dragging; its displayed/persisted
+    // values use storage precision without allocating excessive native tick marks.
     val snapIncrement = if (decimalDp) 0.1f else 1f
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1138,7 +1140,16 @@ internal fun IntSetting(
             visibilityThreshold = if (decimalDp) 0.1f else 1f,
             steps = sliderSteps,
             snapIncrement = snapIncrement,
-            onValuePreview = { sliderPreview = it },
+            onValuePreview = { preview ->
+                sliderPreview = preview
+                if (preview != null && enabled &&
+                    (beforeSave == null || previewWriteAllowed?.invoke(preview) == true)
+                ) {
+                    // Same quantized value as the right-hand label; save() suppresses
+                    // repeated writes for frames in the same displayed step.
+                    save(preview)
+                }
+            },
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
