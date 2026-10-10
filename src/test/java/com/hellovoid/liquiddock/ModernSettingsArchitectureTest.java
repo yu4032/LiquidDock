@@ -106,6 +106,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(grid.contains("GridWidget4x2PreflightPolicy.needsCheck(current, target)"));
         assertTrue(grid.contains("GridWidget4x2PreflightClient.start("));
         assertTrue(grid.contains("GridWidget4x2PreflightClient.CLEAR ->"));
+        assertTrue(grid.contains("检测到桌面存在 4×2 小组件。行数或列数不能降低到 4 以下"));
+        assertFalse(grid.contains("旋转后可能为 2×4"));
         assertTrue(grid.contains("gridCheck[0]?.cancel()"));
         // Grid and common numeric controls snap ONLY on release: continuous
         // pointer movement never runs configuration persistence or preflight.
