@@ -74,6 +74,7 @@ internal fun GuiOnTouchPrismalSlider(
     adaptiveLuminance: Boolean = false,
     luminance: () -> Float = { 0.5f },
     steps: Int = 0,
+    snapIncrement: Float = 0f,
 ) {
     val density = LocalDensity.current
     val isLightTheme = !isSystemInDarkTheme()
@@ -111,6 +112,7 @@ internal fun GuiOnTouchPrismalSlider(
             valueRange.start,
             valueRange.endInclusive,
             steps,
+            snapIncrement,
         ) {
             PrismalSpringMotion(
                 animationScope = animationScope,
@@ -139,17 +141,20 @@ internal fun GuiOnTouchPrismalSlider(
                     }
                     val delta =
                         (valueRange.endInclusive - valueRange.start) * (dragAmount.x / width.toFloat())
-                    val rawBase = if (steps > 0) rawDragTarget else targetValue
+                    val rawBase = if (steps > 0 || snapIncrement > 0f) rawDragTarget else targetValue
                     val rawNext = (
                             if (isLtr) rawBase + delta
                             else rawBase - delta
                             ).fastCoerceIn(valueRange.start, valueRange.endInclusive)
-                    if (steps > 0) rawDragTarget = rawNext
+                    if (steps > 0 || snapIncrement > 0f) rawDragTarget = rawNext
                     val nextValue = DiscreteSliderSteps.snap(
-                        rawNext, valueRange.start, valueRange.endInclusive, steps,
+                        rawNext, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
                     )
                     updateValue(nextValue)
-                    if (abs(nextValue - lastReportedValue) >= visibilityThreshold) {
+                    if ((steps > 0 || snapIncrement > 0f)
+                            && nextValue != lastReportedValue
+                        || (steps <= 0 && snapIncrement <= 0f)
+                            && abs(nextValue - lastReportedValue) >= visibilityThreshold) {
                         lastReportedValue = nextValue
                         onValueChange(nextValue)
                     }
@@ -179,7 +184,9 @@ internal fun GuiOnTouchPrismalSlider(
         // Immediately return its thumb to the last committed value, not the
         // tentative 2/3-column stop that has not passed safety validation.
         LaunchedEffect(enabled, dampedDragAnimation, steps) {
-            if (!enabled && steps > 0) dampedDragAnimation.updateValue(value())
+            if (!enabled && (steps > 0 || snapIncrement > 0f)) {
+                dampedDragAnimation.updateValue(value())
+            }
         }
 
         // No track GraphicsLayer recording while the thumb is idle.
@@ -206,7 +213,7 @@ internal fun GuiOnTouchPrismalSlider(
                                 else valueRange.endInclusive - delta)
                                     .coerceIn(valueRange)
                             val snapped = DiscreteSliderSteps.snap(
-                                targetValue, valueRange.start, valueRange.endInclusive, steps,
+                                targetValue, valueRange.start, valueRange.endInclusive, steps, snapIncrement,
                             )
                             dampedDragAnimation.animateToValue(snapped)
                             onValueChange(snapped)
