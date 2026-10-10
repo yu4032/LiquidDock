@@ -1517,6 +1517,9 @@ internal fun IntSetting(
         }
     }
     var editingValue by remember(spec.key) { mutableStateOf(false) }
+    // UI-only draft: the thumb moves continuously; show its nearest legal value.
+    // Never read this preview in save(), the widget guard, or the stepper.
+    var sliderPreview by remember(spec.key) { mutableStateOf<Float?>(null) }
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
 
     fun save(nextValue: Float) {
@@ -1543,7 +1546,11 @@ internal fun IntSetting(
             value.roundToInt().toString()
         }
     }
-    val displayText = "$displayValue${if (spec.unit.isBlank()) "" else " ${spec.unit}"}"
+    val previewLabel = sliderPreview?.let { draft ->
+        if (decimalDp) String.format(java.util.Locale.ROOT, "%.1f", draft)
+        else draft.roundToInt().toString()
+    }
+    val displayText = "${previewLabel ?: displayValue}${if (spec.unit.isBlank()) "" else " ${spec.unit}"}"
     val scaledValue = if (decimalDp) (value * 10f).roundToInt() else value.roundToInt()
     val scaledMin = if (decimalDp) spec.min * 10 else spec.min
     val scaledMax = if (decimalDp) maxValue * 10 else maxValue
@@ -1579,6 +1586,7 @@ internal fun IntSetting(
             visibilityThreshold = if (decimalDp) 0.1f else 1f,
             steps = sliderSteps,
             snapIncrement = snapIncrement,
+            onValuePreview = { sliderPreview = it },
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
