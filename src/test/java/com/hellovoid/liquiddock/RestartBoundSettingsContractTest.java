@@ -111,7 +111,8 @@ public class RestartBoundSettingsContractTest {
 
     @Test
     public void diagnosticLoggingRemainsAvailableAndUsesScopeRestartWording() throws Exception {
-        String source = Files.readString(UI);
+        String source = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsUtilityPages.kt"));
         assertTrue(source.contains("ConfigSchema.Debug.LOGGING"));
         assertTrue(source.contains("\"运行诊断\""));
         assertTrue(source.contains("\"诊断日志\""));
