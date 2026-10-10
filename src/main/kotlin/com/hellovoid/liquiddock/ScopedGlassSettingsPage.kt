@@ -337,8 +337,9 @@ private fun ScopedGlassSlider(
     val overridden = prefs.contains(key) || prefs.contains("${key}_tenths")
     val min = fallback.minInt().toFloat()
     val max = fallback.maxInt().toFloat()
-    val multiplier = if (decimal) 10 else 1
-    val intervals = ((max - min) * multiplier).roundToInt().coerceAtLeast(1)
+    val nativeSteps = DiscreteSliderSteps.forStoragePrecision(
+        requireNotNull(fallback.minInt()), requireNotNull(fallback.maxInt()), decimal,
+    )
     SliderPreference(
         value = v.coerceIn(min, max),
         onValueChange = { raw ->
@@ -357,6 +358,8 @@ private fun ScopedGlassSlider(
             else "${v.roundToInt()}" + (if (unit.isBlank()) "" else " $unit"),
         enabled = enabled,
         valueRange = min..max,
-        steps = (intervals - 1).coerceAtLeast(0),
+        // Large optical ranges snap without generating hundreds of UI tick positions.
+        steps = nativeSteps,
+        snapIncrement = if (decimal) 0.1f else 1f,
     )
 }
