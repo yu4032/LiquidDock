@@ -36,6 +36,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/SettingsControls.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
+    private static final Path NUMERIC_CONTROLS = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/SettingsNumericControls.kt");
     private static final Path BOTTOM_NAV = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/SettingsBottomNavigation.kt");
     private static final Path RESTART_DIALOG = Path.of(
@@ -86,7 +88,7 @@ public class ModernSettingsArchitectureTest {
         // DiscreteSliderStepsTest rather than slicing source to infer behavior.
         String prismal = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
-        String ui = Files.readString(SURFACES);
+        String ui = Files.readString(NUMERIC_CONTROLS);
         String activity = Files.readString(CONTROLS);
         assertTrue(prismal.contains("onValuePreview: (Float?) -> Unit = {}"));
         assertTrue(prismal.contains("previewState.value(preview)"));
@@ -222,7 +224,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
         assertTrue(ui.contains("GuiPrismalFlatHeader("));
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
-        assertTrue(ui.contains("GuiOnTouchPrismalSlider("));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("GuiOnTouchPrismalSlider("));
         assertTrue(ui.contains("GuiOnTouchPrismalToggle("));
         assertTrue(ui.contains("val backdrop = LocalPrismalSurfaceBackdrop.current"));
         assertTrue(slider.contains("if (sampling) Modifier.prismalGlassLayer(trackBackdrop) else Modifier"));
@@ -293,7 +295,7 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void denseSettingsScrollTheWholePageWithLazyMovingGlassCells() throws Exception {
         String ui = Files.readString(CONTROLS);
-        String surfaces = Files.readString(SURFACES);
+        String surfaces = Files.readString(NUMERIC_CONTROLS);
 
         assertTrue(ui.contains("internal fun DenseSettingsList("));
         assertTrue(ui.contains("content: LazyListScope.() -> Unit"));
@@ -317,8 +319,8 @@ public class ModernSettingsArchitectureTest {
         String bottom = Files.readString(BOTTOM_NAV);
         assertTrue(surfaces.contains("val stableSelected = remember { { selectedState.value } }"));
         assertTrue(surfaces.contains("onSelect = stableToggleChange,"));
-        assertTrue(surfaces.contains("val stableSliderChange: (Float) -> Unit = remember {"));
-        assertTrue(surfaces.contains("onValueChange = stableSliderChange,"));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("val stableSliderChange: (Float) -> Unit = remember {"));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("onValueChange = stableSliderChange,"));
         assertTrue(bottom.contains("val stableSelectedIndex = remember { { selected } }"));
         assertTrue(bottom.contains("onTabSelected = stableTabChange,"));
     }
@@ -502,8 +504,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(bottom.contains("PrismalGlassBottomTabs"));
         assertTrue(bottom.contains("PrismalGlassBottomTab"));
         assertTrue(source.contains("GuiOnTouchPrismalToggle"));
-        assertTrue(source.contains("GuiOnTouchPrismalSlider"));
-        assertTrue(source.contains("PrismalGlassStepper"));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("GuiOnTouchPrismalSlider"));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("PrismalGlassStepper"));
         assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 14f"));
         assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
         assertTrue(source.contains("blurRadius = TOP_BAR_BLUR_RADIUS.dp"));
@@ -707,8 +709,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(controls.contains("val displayText ="));
         assertTrue(controls.contains("ModernGlassSlider("));
         assertTrue(controls.contains("ModernGlassStepper("));
-        assertTrue(surfaces.contains("internal fun ModernGlassSlider("));
-        assertTrue(surfaces.contains("internal fun ModernGlassStepper("));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("internal fun ModernGlassSlider("));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("internal fun ModernGlassStepper("));
     }
 
     @Test
@@ -740,7 +742,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
         assertTrue(surfaces.contains("val backdrop = if (prismalNumericAction) {"));
         assertTrue(surfaces.contains("prismalNumericAction: Boolean = false"));
-        assertTrue(surfaces.contains("val backdrop = LocalTouchPrismalBackdrop.current\n    if (backdrop != null) {\n        PrismalGlassStepper("));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("val backdrop = LocalTouchPrismalBackdrop.current\n    if (backdrop != null) {\n        PrismalGlassStepper("));
         assertTrue(surfaces.contains("PrismalGlassButton("));
         assertTrue(ui.contains("prismalNumericAction = true,"));
         assertTrue(ui.contains("ModernGlassStepper("));
@@ -748,7 +750,7 @@ public class ModernSettingsArchitectureTest {
 
     @Test
     public void prismalSliderObservesExternalStepperAndResetUpdates() throws Exception {
-        String surfaces = Files.readString(SURFACES);
+        String surfaces = Files.readString(NUMERIC_CONTROLS);
         assertTrue(surfaces.contains("val currentValue by rememberUpdatedState(value)"));
         assertTrue(surfaces.contains("val stableSliderValue = remember { { currentValue } }"));
         assertTrue(surfaces.contains("value = stableSliderValue,"));
@@ -810,7 +812,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("LocalPrismalSurfaceBackdrop provides surfaceBackdrop"));
         assertTrue(surfaces.contains("if (glassEnabled) Modifier.prismalGlassLayer"));
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Switch("));
-        assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Slider("));
+        assertTrue(Files.readString(NUMERIC_CONTROLS).contains("top.yukonga.miuix.kmp.basic.Slider("));
         assertTrue(surfaces.contains("if (backdrop != null)"));
         assertTrue(surfaces.contains("depthShadow = null"));
 
@@ -846,7 +848,7 @@ public class ModernSettingsArchitectureTest {
 
     @Test
     public void numericLabelsUseMiuixInputDialogWithoutChangingSliders() throws Exception {
-        String surfaces = Files.readString(SURFACES);
+        String surfaces = Files.readString(NUMERIC_CONTROLS);
         String settings = Files.readString(CONTROLS);
         String gboard = Files.readString(GBOARD);
         String dialog = Files.readString(DIALOG_GLASS);
@@ -972,7 +974,7 @@ public class ModernSettingsArchitectureTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/SettingsDialogMotion.kt"));
         String reset = Files.readString(UTILITY_PAGES);
         String grid = Files.readString(GRID_PAGES);
-        String numeric = Files.readString(SURFACES);
+        String numeric = Files.readString(NUMERIC_CONTROLS);
         String restart = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt"));
 
