@@ -1488,6 +1488,7 @@ internal fun IntSetting(
     prefs: SharedPreferences,
     spec: IntSpec,
     enabledOverride: Boolean? = null,
+    steps: Int = 0,
     beforeSave: ((Float, () -> Unit) -> Unit)? = null,
 ) {
     val decimalDp = spec.isDecimal
@@ -1571,6 +1572,7 @@ internal fun IntSetting(
             onValueChange = ::save,
             valueRange = spec.min.toFloat()..maxValue.toFloat(),
             visibilityThreshold = if (decimalDp) 0.1f else 1f,
+            steps = steps,
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
