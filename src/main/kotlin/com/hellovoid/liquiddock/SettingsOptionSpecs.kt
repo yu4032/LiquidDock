@@ -76,7 +76,7 @@ internal fun optionSummary(key: String): String = when (key) {
     "liquid_folder_corner_radius" -> "0 表示自动跟随 MIUI 原生圆角；大于 0 时同时覆盖桌面与拖动文件夹玻璃"
     "liquid_blur" -> "控制玻璃背景的模糊程度"
     "liquid_thickness" -> "控制虚拟玻璃厚度对折射效果的影响"
-    "liquid_ior" -> "材质折射率（显示 155 表示 1.55）；控制边缘透镜弯曲与反射，1.00 无折射、1.55 保持原有默认视觉"
+    "liquid_ior" -> "折射率 IOR（155 表示 1.55）；控制边缘透镜弯曲与反射，1.00 关闭透镜折射、1.55 保持默认视觉"
     "liquid_normal_strength" -> "控制表面起伏对折射与光照的影响"
     "liquid_dome" -> "控制玻璃表面的凸起程度"
     "liquid_lens_refraction" -> "边缘透镜折射位移增益；实际强度同时受 IOR 影响，0 关闭透镜位移，其他光学效果仍保留"
