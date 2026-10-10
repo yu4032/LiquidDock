@@ -120,6 +120,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final Handler mainHandler;
     private final FloatBuffer quadBuffer;
     private final RootPassBlurBackend sourceBackend;
+    // One GL-thread source for Workspace and its two Recents capsule outputs.
+    private volatile RecentsCapsuleGlassSession recentsConsumer;
     private final LauncherGlassScrollProjectionState workspaceScrollProjection =
             new LauncherGlassScrollProjectionState();
     // UI-thread scratch. Root-to-global is common to every Workspace node in one pre-draw, so
@@ -149,6 +151,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile int rootHeight;
     private volatile int configRotation;
     private volatile long sceneGeneration = 1L;
+    private long traceReturnSerial;
+    private volatile long traceFrameCallbacks;
+    private volatile long traceFrameRejections;
+    private volatile long traceBackdropPrepared;
+    private volatile long traceStaticPresents;
+    private static final long RECENTS_SOURCE_STALL_CHECK_MS = 1800L;
     private volatile float appliedGlassBlur = Float.NaN;
     private volatile int passBlurCaptureScalePercent =
             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
@@ -240,6 +248,87 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         return shuttingDown;
     }
 
+    /** A Recents child shares this session's native producer, EGL context and render thread. */
+    synchronized RootPassBlurBackend attachRecentsConsumer(RecentsCapsuleGlassSession child) {
+        if (shuttingDown || !workspaceSource || child == null
+                || (recentsConsumer != null && recentsConsumer != child)) return null;
+        recentsConsumer = child;
+        MainHook.log("[DC][RecentsCapsule] shared Workspace root PassBlur source attached");
+        return sourceBackend;
+    }
+
+    synchronized void detachRecentsConsumer(RecentsCapsuleGlassSession child) {
+        if (recentsConsumer == child) recentsConsumer = null;
+    }
+
+    boolean hasVisibleRecentsConsumer() {
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        return !shuttingDown && child != null && child.isRecentsVisible();
+    }
+
+    void resumeRecentsSharedSource(RecentsCapsuleGlassSession child) {
+        if (shuttingDown || recentsConsumer != child || sourceBackend.isShutdown()) return;
+        // The SceneController pauses this *same* producer when Recents covers Workspace.
+        // Resume it after coverage, without creating or re-publishing a Surface binder.
+        sourceBackend.requestFresh(sceneGeneration, false);
+        sourceBackend.setUpdatesEnabled(true, "recents-shared-root-live");
+        MainHook.log("[DC][RecentsCapsule] shared source resumed generation="
+                + sceneGeneration);
+
+        // Rotation reliably revives a stalled producer by creating a NEW BufferQueue.
+        // Reuse only that safe recovery operation, once after a genuinely missing source
+        // callback, with root-generation fences and a backend 20-second cooldown.
+        final long observedArrivals = sourceBackend.sourceArrivalSerial();
+        final long observedEpoch = sourceBackend.sourceBindEpoch();
+        final View watchedRoot = rootRef.get();
+        if (MainHook.debugLogging) {
+            MainHook.log("[DC][StallProbe] armed session=" + diagnosticSessionId()
+                    + " arrivals=" + observedArrivals + " epoch=" + observedEpoch
+                    + " sceneGen=" + sceneGeneration
+                    + " recentsVisible=" + child.isRecentsVisible()
+                    + " source={" + sourceBackend.traceFramePipeline() + "}");
+        }
+        mainHandler.postDelayed(() -> {
+            String blocked = shuttingDown ? "session-shutdown"
+                    : rootRef.get() != watchedRoot ? "root-replaced"
+                    : watchedRoot == null || !watchedRoot.isAttachedToWindow() ? "root-detached"
+                    : rotationSettlePending ? "rotation-pending"
+                    : recentsConsumer != child || !child.isRecentsVisible() ? "recents-no-longer-visible"
+                    : !GlassRuntimeState.isRecentsCapsuleEnabled() ? "capsule-disabled"
+                    : LauncherGlassHomePresentationHook.isUnlockProducerBlocked()
+                        || LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
+                        ? "unlock-blocked" : null;
+            if (blocked != null) {
+                if (MainHook.debugLogging) {
+                    MainHook.log("[DC][StallProbe] action=skip stage=timer reason=" + blocked
+                            + " arrivals=" + sourceBackend.sourceArrivalSerial()
+                            + " armedArrivals=" + observedArrivals
+                            + " epoch=" + sourceBackend.sourceBindEpoch()
+                            + " armedEpoch=" + observedEpoch);
+                }
+                return;
+            }
+            boolean accepted = sourceBackend.recoverStalledSource(observedArrivals, observedEpoch);
+            if (!MainHook.debugLogging) return;
+            MainHook.log("[DC][StallProbe] action=checked accepted=" + accepted
+                    + " recentsVisible=" + child.isRecentsVisible()
+                    + " source={" + sourceBackend.traceFramePipeline() + "}");
+            if (!accepted) return;
+            mainHandler.postDelayed(() -> {
+                if (!shuttingDown && rootRef.get() == watchedRoot) {
+                    MainHook.log("[DC][StallProbe] action=post-rollover elapsedMs=1000 source={"
+                            + sourceBackend.traceFramePipeline() + "}");
+                }
+            }, 1000L);
+            mainHandler.postDelayed(() -> {
+                if (!shuttingDown && rootRef.get() == watchedRoot) {
+                    MainHook.log("[DC][StallProbe] action=post-rollover elapsedMs=3000 source={"
+                            + sourceBackend.traceFramePipeline() + "}");
+                }
+            }, 3000L);
+        }, RECENTS_SOURCE_STALL_CHECK_MS);
+    }
+
     boolean ensureLiveDragSource() {
         if (shuttingDown) return false;
         sourceBackend.setUpdatesEnabled(true, "launcher-drag-live");
@@ -253,6 +342,36 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     String diagnosticSessionId() {
         return "session#" + sessionId;
+    }
+
+    /** Debug-only, bounded Recents/HOME snapshots; no source or output changes. */
+    void traceWallpaperReturn(String phase, long serial) {
+        if (!MainHook.debugLogging || shuttingDown) return;
+        View root = rootRef.get();
+        if (root == null) return;
+        traceReturnSerial++;
+        final long fence = traceReturnSerial;
+        final long startMs = SystemClock.uptimeMillis();
+        for (long delayMs : new long[]{0L, 400L, 1200L, 2500L, 4500L, 7000L}) {
+            mainHandler.postDelayed(() -> {
+                if (!MainHook.debugLogging || shuttingDown || traceReturnSerial != fence
+                        || rootRef.get() != root) return;
+                MainHook.log("[DC][WallpaperZoomTrace] phase=" + phase
+                        + " serial=" + serial
+                        + " elapsedMs=" + (SystemClock.uptimeMillis() - startMs)
+                        + " session=" + diagnosticSessionId()
+                        + " root=" + root.getWidth() + "x" + root.getHeight()
+                        + " sceneGen=" + sceneGeneration
+                        + " rot=" + configRotation
+                        + " rotPending=" + rotationSettlePending
+                        + " recentsCovered=" + LauncherGlassSceneController.isRecentsCoveredByVendor()
+                        + " callbacks=" + traceFrameCallbacks
+                        + " rejected=" + traceFrameRejections
+                        + " backdrops=" + traceBackdropPrepared
+                        + " staticPresents=" + traceStaticPresents
+                        + " source={" + sourceBackend.traceFramePipeline() + "}");
+            }, delayMs);
+        }
     }
 
     boolean ownsRoot(View root) {
@@ -980,10 +1099,22 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
-        if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != sceneGeneration || rotationSettlePending) return;
+        if (shuttingDown || backend != sourceBackend || frame == null) return;
+        if (MainHook.debugLogging) traceFrameCallbacks++;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
+        // The Recents child uses this OES frame on the same GL thread, with its own geometry.
+        // Never reject its frame because Workspace static-output geometry is temporarily stale
+        // or a HOME-only Prismal parameter is unavailable during the Recents transition.
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        if (child != null) child.onSharedSourceFrame(backend, frame);
+        // HOME generation/rotation constraints are separate from the Recents GPU consumer.
+        if (frame.generation != sceneGeneration || rotationSettlePending) {
+            if (MainHook.debugLogging) traceFrameRejections++;
+            return;
+        }
+        if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
+
         PrismalParams params = prismalParams;
         if (params == null) return;
         OutputState currentOutput = staticOutput;
@@ -1039,6 +1170,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             long backdropDoneNs = perf ? System.nanoTime() : 0L;
             backdropPrepared = true;
+            if (MainHook.debugLogging) traceBackdropPrepared++;
             outputRenderState.consumeForSourceRender();
             renderOutputs(true, true);
             if (perf) {
@@ -1086,6 +1218,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || generation != sceneGeneration) return;
         MainHook.log(TAG + " source backend failed closed " + debugLabel()
                 + " generation=" + generation + ": " + error);
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        // Native source failure can recover when a fresh root endpoint appears; do not
+        // irreversibly destroy the Recents consumer on a transient bind exhaustion.
+        if (child != null) child.onSharedSourceUnavailable(error);
         Runnable listener = terminalFailureListener;
         if (listener != null) {
             mainHandler.post(() -> {
@@ -1147,6 +1283,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
         sourceBackend.swapBuffers(output.eglSurface);
+        if (MainHook.debugLogging) traceStaticPresents++;
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
@@ -1291,6 +1428,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         MainHook.log(TAG + " shutdown " + debugLabel());
+        RecentsCapsuleGlassSession child = recentsConsumer;
+        recentsConsumer = null;
+        if (child != null) child.onSharedSourceFailure(
+                new IllegalStateException("Workspace source owner shut down"));
         WorkspaceTransitionFrameSyncState.Decision frameSyncReset = transitionFrameSync.reset();
         if (frameSyncReset.disable) {
             sourceBackend.setTransitionFrameSyncEnabled(false, "launcher-shutdown");

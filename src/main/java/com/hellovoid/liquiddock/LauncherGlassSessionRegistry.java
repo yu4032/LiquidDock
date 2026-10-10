@@ -47,6 +47,21 @@ final class LauncherGlassSessionRegistry {
         return created;
     }
 
+    /** Existing Workspace native producer only. A Recents capsule must never bind another one. */
+    static synchronized LauncherGlassSession existingRootSource(View root) {
+        LauncherGlassSession session = root != null ? SESSIONS.get(root) : null;
+        return session != null && !session.isShutdown() ? session : null;
+    }
+
+    static synchronized void traceWallpaperReturnForAll(String phase, long serial) {
+        if (!MainHook.debugLogging) return;
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session != null && !session.isShutdown()) {
+                session.traceWallpaperReturn(phase, serial);
+            }
+        }
+    }
+
     /** Update existing root owners without acquiring new surfaces or reattaching nodes. */
     static synchronized void applyLiveGlassConfigToAll(LiquidDockConfig.Glass glassConfig) {
         for (java.util.Map.Entry<View, LauncherGlassSession> entry
