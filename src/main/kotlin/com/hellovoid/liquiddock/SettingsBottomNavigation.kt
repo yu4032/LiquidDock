@@ -102,11 +102,16 @@ internal fun ModernBottomNavigation(
                                 if (index != selected) onSelect(index)
                             },
                         ) {
-                            val highlighted = LocalPrismalBottomTabHighlightedIndex.current
-                            val currentCandidate = highlighted().coerceIn(0, labels.lastIndex)
-                            SideEffect {
-                                if (highlightedIndex.intValue != currentCandidate) {
-                                    highlightedIndex.intValue = currentCandidate
+                            // The upstream body is composed twice (visible and
+                            // hidden recording pass). Only the first tab needs
+                            // to report the shared candidate; no glyph is added.
+                            if (index == 0) {
+                                val highlighted = LocalPrismalBottomTabHighlightedIndex.current
+                                val currentCandidate = highlighted().coerceIn(0, labels.lastIndex)
+                                SideEffect {
+                                    if (highlightedIndex.intValue != currentCandidate) {
+                                        highlightedIndex.intValue = currentCandidate
+                                    }
                                 }
                             }
                         }
