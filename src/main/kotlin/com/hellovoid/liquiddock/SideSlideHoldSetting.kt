@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 @Composable
 internal fun SideSlideHoldSetting(
