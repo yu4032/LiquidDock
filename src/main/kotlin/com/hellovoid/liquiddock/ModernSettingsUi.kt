@@ -1138,14 +1138,32 @@ internal fun SliderPreference(
     val sliderEnabledState = rememberUpdatedState(enabled)
     val sliderCallbackState = rememberUpdatedState(onValueChange)
     val quantizeState = rememberUpdatedState<(Float) -> Float>({ raw -> quantize(raw) })
+    // Only dispatch when the number shown at the right changes. The track/thumb
+    // continue moving freely; persistence receives the displayed snapped value.
+    val lastLiveStep = remember(title) { arrayOfNulls<Float>(1) }
     val stableSliderValue = remember { { currentValue } }
     val stableSliderChange: (Float) -> Unit = remember {
         { next ->
-            if (sliderEnabledState.value) sliderCallbackState.value(quantizeState.value(next))
+            val snapped = quantizeState.value(next)
+            if (sliderEnabledState.value && lastLiveStep[0] != snapped) {
+                sliderCallbackState.value(snapped)
+            }
+            lastLiveStep[0] = null
         }
     }
-    // Miuix is controlled by a continuous, visual-only draft during touch.
-    // The preference callback runs once, after release, at the nearest stop.
+    val stableSliderPreview: (Float?) -> Unit = remember {
+        { next ->
+            previewValue = next
+            if (next == null) {
+                lastLiveStep[0] = null
+            } else if (sliderEnabledState.value && lastLiveStep[0] != next) {
+                lastLiveStep[0] = next
+                sliderCallbackState.value(next)
+            }
+        }
+    }
+    // Miuix keeps a continuous visual draft, but persists its displayed
+    // quantized value while the finger is moving, not only after release.
     var nativeDragging by remember { mutableStateOf(false) }
     var nativeDraft by remember { mutableFloatStateOf(value) }
     val shownValueText = previewValue?.let { valueTextForPreview?.invoke(it) } ?: valueText
@@ -1185,7 +1203,7 @@ internal fun SliderPreference(
                 backdrop = backdrop,
                 steps = steps,
                 snapIncrement = snapIncrement,
-                onValuePreview = { previewValue = it },
+                onValuePreview = stableSliderPreview,
                 enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1199,19 +1217,19 @@ internal fun SliderPreference(
                     if (enabled) {
                         nativeDraft = next
                         nativeDragging = true
-                        previewValue = quantizeState.value(next)
+                        stableSliderPreview(quantizeState.value(next))
                     }
                 },
                 onValueChangeFinished = {
                     if (nativeDragging) {
                         val released = nativeDraft
                         nativeDragging = false
-                        sliderCallbackState.value(quantizeState.value(released))
-                        previewValue = null
+                        stableSliderChange(released)
+                        stableSliderPreview(null)
                     }
                 },
                 valueRange = valueRange,
-                steps = 0, // Native track stays continuous until finger release.
+                steps = 0, // Native track stays continuous; only its values snap.
                 enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
