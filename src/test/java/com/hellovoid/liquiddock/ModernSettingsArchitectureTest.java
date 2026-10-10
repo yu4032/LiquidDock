@@ -133,7 +133,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void topAndBottomKeepLivePrismalButBodyGlassesSampleOnlyOnTouch() throws Exception {
+    public void topAndBottomKeepLivePrismalButBodyGlassesSampleOnlyDuringGestureAndRelease() throws Exception {
         String ui = Files.readString(SURFACES);
         String slider = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
@@ -154,7 +154,10 @@ public class ModernSettingsArchitectureTest {
         assertTrue(toggle.contains("if (samplingEnabled) Modifier.drawPrismalGlass("));
         assertTrue(slider.contains("onDragStarted = {"));
         assertTrue(toggle.contains("onDragStarted = { sampling = true }"));
-        assertTrue(slider.contains("val sampling = enabled && (isDragging || isTrackPressed)"));
+        assertTrue(slider.contains("val sampling = enabled && (isDragging || isTrackPressed || isSettling)"));
+        assertTrue(slider.contains("isSettling = false"));
+        assertTrue(slider.contains("commitState.value(nearest)"));
+        assertTrue(slider.contains("snapshotFlow { motion.value }"));
         assertTrue(toggle.contains("val samplingEnabled = enabled && sampling"));
         assertTrue(slider.contains("if (enabled) dampedDragAnimation.modifier else Modifier"));
         assertTrue(toggle.contains("if (enabled) dampedDragAnimation.modifier else Modifier"));
