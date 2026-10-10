@@ -65,13 +65,15 @@
 4. 渲染、手势、Launcher、SystemUI、SecurityCenter、Gboard、Searchbox 相关 PR 根据实际影响补真机回归；日志需按开关控制，不通过 debug 文件 I/O 伪造性能结果。
 5. 完成后同步更新 `TODO.md`：将已验证子项移至“完成 / 防回归”，保留尚未测量与未验证的风险。不得删除历史 evidence 文档。
 
-## 7. 后续结构批次（分支验证记录，尚未归入 main）
+## 7. GUI 结构重构进度（2026-10-10）
 
-以下是 **2026-10-10 的分支进度**，不是“已发布 / 已完成实机验收”的声明。
+已进入 `main`、经用户确认实机有效：
 
-- [PR #309](https://github.com/yu4032/LiquidDock/pull/309)：从 `ComposeSettingsActivity.kt` 迁出声明式 `IntSpec`、各领域设置规格与光学描述符，降至 2312 行；CI [#38022079774](https://github.com/yu4032/LiquidDock/actions/runs/38022079774) 通过。保留页面、导航、原始 Prismal、默认值与所有配置键；待实机验收。
-- [PR #310](https://github.com/yu4032/LiquidDock/pull/310)：以 #309 分支为基线进一步迁出 5 个 Animation leaf-page Composable 和 8 个动画参数规格。主 Activity 降至 2166 行。仅改变 Kotlin top-level 声明的 file owner / 必要 `internal` 可见性；动画入口、偏好行为及重启 scope 仍由原 owner 管理。
-- #310 的父分支关系必须保持为 #309；如果为了触发现有“仅对 main PR 生效”的 CI 而临时切换 PR base，检查完成后需要恢复。
-- 任何未通过的 CI 必须定位并在当前分支修复；通过 CI 不代表已验证 Android 真机交互、Prismal 绘制或重启作用域契约。
+- [PR #309](https://github.com/yu4032/LiquidDock/pull/309)：`IntSpec`、分组规格和光学描述符迁到 `SettingsOptionSpecs.kt`；主 Activity **2725 → 2312** 行，CI [#38022079774](https://github.com/yu4032/LiquidDock/actions/runs/38022079774) 成功；已合并。
+- [PR #310](https://github.com/yu4032/LiquidDock/pull/310)：五个 Animation leaf pages 与八个 animation option spec 独立；主 Activity **2312 → 2166** 行，CI [#38022729294](https://github.com/yu4032/LiquidDock/actions/runs/38022729294) 成功；已合并。
 
-下一批优先处理页面模块与导航的显式接口，而不是把 `IntSetting`、全局 Scaffold 或 PassBlur/EGL 直接改写。每一批都要有提取前后的声明等价性检查和现有 source-reader 测试的边界调整。
+正在评审，**未合并到 `main`**：
+
+- [PR #311](https://github.com/yu4032/LiquidDock/pull/311)：七个 Dock、Divider、Workstation、Recents leaf pages 迁移至 `DockWorkstationSettingsPages.kt`；主 Activity 分支现为 **1902 行**。代码与逻辑逐字保持等价，所需 `private → internal` 可见性例外已记录；CI [#38023359767](https://github.com/yu4032/LiquidDock/actions/runs/38023359767) 的单元测试、Debug/R8 构建和产物上传成功；需单独实机验收。
+
+阶段性边界：三个批次均没有重新实现 UI、修改持久化键、引入额外采样或触动 PassBlur/GL/Hook。后续仍须继续拆分主 Activity 内的 Grid/Glass/Data 等页面，检查 GUI 来源测试对特定源文件的耦合，并在视觉/行为验证之后才合并。不能将文件行数下降解释为 FPS 或 GPU 占用改善。

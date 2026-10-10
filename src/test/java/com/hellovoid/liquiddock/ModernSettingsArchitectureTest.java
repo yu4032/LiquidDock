@@ -20,6 +20,8 @@ public class ModernSettingsArchitectureTest {
             "src/main/kotlin/com/hellovoid/liquiddock/SettingsOptionSpecs.kt");
     private static final Path ANIMATION_PAGES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/AnimationSettingsPages.kt");
+    private static final Path DOCK_WORKSTATION_PAGES = Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/DockWorkstationSettingsPages.kt");
     private static final Path SURFACES = Path.of(
             "src/main/kotlin/com/hellovoid/liquiddock/ModernSettingsUi.kt");
     private static final Path SEARCHBOX = Path.of(
@@ -98,9 +100,9 @@ public class ModernSettingsArchitectureTest {
         String source = Files.readString(UI);
 
         assertTrue(source.contains("gridEntries.forEach"));
-        assertTrue(source.contains("dockEntries.forEach"));
+        assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("dockEntries.forEach"));
         assertTrue(source.contains("liquidEntries.forEach"));
-        assertTrue(source.contains("workstationEntries.forEach"));
+        assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("workstationEntries.forEach"));
         assertTrue(source.contains("animationEntries"));
         assertTrue(source.contains("highlightEntries"));
 
@@ -195,11 +197,11 @@ public class ModernSettingsArchitectureTest {
     @Test
     public void groupedPrismalCardsBoundOffscreenLayersWithoutNestedScroll() throws Exception {
         String ui = Files.readString(UI);
-        assertTrue(ui.contains("private fun LazyListScope.groupedIntSettings("));
+        assertTrue(ui.contains("internal fun LazyListScope.groupedIntSettings("));
         assertTrue(ui.contains("items(specs.chunked(3), key = { group ->"));
         assertTrue(ui.contains("group.forEachIndexed { index, spec ->"));
         assertTrue(ui.contains("groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)"));
-        assertTrue(ui.contains("groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)"));
+        assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)"));
         assertTrue(ui.contains("item(key = \"icons-glass-toggles\")"));
         assertTrue(ui.contains("item(key = \"icons-glass-geometry\")"));
         assertTrue(ui.contains("item(key = \"icons-glass-highlights\")"));
@@ -212,12 +214,12 @@ public class ModernSettingsArchitectureTest {
         String ui = Files.readString(UI);
         String surfaces = Files.readString(SURFACES);
 
-        assertTrue(ui.contains("private fun DenseSettingsList("));
+        assertTrue(ui.contains("internal fun DenseSettingsList("));
         assertTrue(ui.contains("content: LazyListScope.() -> Unit"));
         assertTrue(ui.contains("if (!summary.isNullOrBlank()) item(key = \"dense-page-summary\")"));
         assertTrue(ui.contains("contentPadding = PaddingValues("));
         assertTrue(ui.contains("verticalArrangement = Arrangement.spacedBy(10.dp)"));
-        assertTrue(ui.contains("items(specs, key = { it.key })"));
+        assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("items(specs, key = { it.key })"));
         assertTrue(ui.contains("item(key = \"stroke-colors-title\")"));
         assertTrue(ui.contains("SettingsCard {"));
         assertTrue(ui.contains("internal fun SettingsList("));
@@ -798,6 +800,7 @@ public class ModernSettingsArchitectureTest {
         String compose = Files.readString(UI);
         String optionSpecs = Files.readString(OPTION_SPECS);
         String animationPages = Files.readString(ANIMATION_PAGES);
+        String dockWorkstationPages = Files.readString(DOCK_WORKSTATION_PAGES);
         String gboard = Files.readString(GBOARD);
         String search = Files.readString(SEARCHBOX);
         String searchPage = Files.readString(SEARCHBOX_PAGE);
@@ -810,7 +813,7 @@ public class ModernSettingsArchitectureTest {
         Set<String> configRefs = new HashSet<>();
         Matcher configMatcher = Pattern.compile("ConfigSchema(?:\\.[A-Za-z0-9_]+){2,}")
                 .matcher(compose + "\n" + optionSpecs + "\n" + animationPages + "\n"
-                        + gboard + "\n" + search + "\n" + searchPage + "\n"
+                        + dockWorkstationPages + "\n" + gboard + "\n" + search + "\n" + searchPage + "\n"
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
