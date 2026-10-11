@@ -9,7 +9,6 @@
     <color name="gui_preset_thumb_fill">#FFFFFF</color>
     <color name="gui_preset_danger_fill">#D73333</color>
     <!-- Four-corner fixed Prismal-style edge: cached color stops, not AGSL. -->
-    <color name="gui_preset_rim_contrast">#557B8798</color>
     <color name="gui_preset_rim_strong">#E6FFFFFF</color>
     <color name="gui_preset_rim_medium">#B8FFFFFF</color>
     <color name="gui_preset_rim_weak">#74FFFFFF</color>
