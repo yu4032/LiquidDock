@@ -764,6 +764,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
         StaticNodeState[] staticSnapshot = staticNodeStateSnapshot;
         int staticGeometryReads = 0;
+        int widgetGeometryReads = 0;
         if (tracing) Trace.beginSection("LD.Workspace.StaticNodes");
         try {
             Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
@@ -772,7 +773,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             for (StaticNodeState state : staticSnapshot) {
                 LauncherGlassStaticNode node = state.nodeRef.get();
                 if (node == null) continue;
-                if (tracing && staticRootTransformValid) staticGeometryReads++;
+                if (tracing && staticRootTransformValid) {
+                    staticGeometryReads++;
+                    if (node.nodeKind() == LauncherGlassNodeKind.WIDGET) widgetGeometryReads++;
+                }
                 LauncherGlassGeometry.Snapshot observed = staticRootTransformValid
                         ? node.captureGeometry(root, uiGlobalToRoot, rootWidth, rootHeight)
                         : null;
@@ -795,6 +799,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 Trace.endSection();
                 Trace.setCounter("LD.Workspace.StaticCandidates", staticSnapshot.length);
                 Trace.setCounter("LD.Workspace.StaticGeometryReads", staticGeometryReads);
+                Trace.setCounter("LD.Workspace.WidgetGeometryReads", widgetGeometryReads);
             }
         }
 
