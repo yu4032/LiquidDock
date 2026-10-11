@@ -816,10 +816,10 @@ public class ModernSettingsArchitectureTest {
     public void disabledGlassKeepsSolidCanvasAndUsesThemeAwareCellContrast() throws Exception {
         String surfaces = Files.readString(SURFACES);
 
-        // The desktop still uses one static opaque background in solid mode,
-        // and glass-on retains the original wallpaper gradient/source layers.
-        assertTrue(surfaces.contains("if (glassEnabled) {"));
-        assertTrue(surfaces.contains("Brush.verticalGradient("));
+        // Both GUI background modes now draw a single opaque theme color.
+        // The header/footer still share the original Prismal source layers.
+        assertTrue(surfaces.contains("if (glassEnabled) Modifier.background(background)"));
+        assertFalse(surfaces.contains("Brush.verticalGradient("));
         assertTrue(surfaces.contains("Modifier.background(lerp(background, Color.Black, 0.06f))"));
         assertTrue(surfaces.contains("if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)"));
         assertTrue(surfaces.contains("if (backdrop == null)"));
