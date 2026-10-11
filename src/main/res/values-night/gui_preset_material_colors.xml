@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Derived offline from the fixed dark GUI canvas #1B2028. -->
+    <color name="gui_preset_canvas">#1B2028</color>
+    <color name="gui_preset_card_fill">#343B46</color>
+    <color name="gui_preset_card_rim">#FF6E7C90</color>
+    <color name="gui_preset_card_outline">#FF46505E</color>
+    <color name="gui_preset_pill_fill">#454E5B</color>
+    <color name="gui_preset_pill_rim">#FF8694A6</color>
+    <color name="gui_preset_pill_outline">#FF596474</color>
+    <color name="gui_preset_danger_fill">#D73333</color>
+    <color name="gui_preset_danger_rim">#FFFF7A7A</color>
+    <color name="gui_preset_danger_outline">#FF9F1C24</color>
+</resources>
