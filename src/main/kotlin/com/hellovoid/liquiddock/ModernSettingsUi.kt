@@ -329,7 +329,7 @@ internal fun ModernSurface(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(cardShape)
+            .then(if (staticChrome) Modifier.guiBakedDepthShadow(GuiSolidChromeStyle.CARD, presetChrome) else Modifier)
             .then(
                 if (staticChrome) {
                     Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)
@@ -337,6 +337,7 @@ internal fun ModernSurface(
                     fallbackChrome
                 }
             )
+            .clip(cardShape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(contentPadding),
         content = content,
@@ -459,7 +460,12 @@ internal fun Button(
             .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
             .height(minHeight)
             .alpha(if (enabled) 1f else 0.66f)
-            .clip(buttonShape)
+            .then(
+                if (staticChrome) Modifier.guiBakedDepthShadow(
+                    if (destructive) GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL,
+                    presetChrome,
+                ) else Modifier
+            )
             .then(
                 if (staticChrome) {
                     Modifier.guiSolidChrome(
@@ -470,6 +476,7 @@ internal fun Button(
                     fallbackChrome
                 }
             )
+            .clip(buttonShape)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
