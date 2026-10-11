@@ -57,7 +57,7 @@ public class SystemSettingsScopeContractTest {
         assertTrue(host.contains("owner.performClick()"));
         assertTrue(host.contains("stock.performClick()"));
         assertTrue(host.contains("importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS"));
-        assertTrue(host.contains("if (!scene.capturing) super.draw(canvas)"));
+        assertTrue(host.contains("if (!scene.capturing) super.dispatchDraw(canvas)"));
         assertTrue(host.contains("content.removeView(view)"));
 
         assertTrue(backdrop.contains("RenderNode("));
