@@ -84,6 +84,7 @@ internal fun GuiOnTouchPrismalSlider(
 ) {
     val density = LocalDensity.current
     val isLightTheme = !isSystemInDarkTheme()
+    val presetChrome = LocalGuiPresetChromePalette.current
     val accentColor =
         if (isLightTheme) Color(0xFF0088FF)
         else Color(0xFF0091FF)
@@ -396,7 +397,7 @@ internal fun GuiOnTouchPrismalSlider(
                             scaleY = dampedDragAnimation.scaleY *
                                 (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                         }
-                            .guiSolidChrome(GuiSolidChromeStyle.PILL, !isLightTheme),
+                            .guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome),
                     )
                 }
             }
