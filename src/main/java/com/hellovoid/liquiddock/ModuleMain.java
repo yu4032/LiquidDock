@@ -13,6 +13,7 @@ import io.github.libxposed.api.XposedModule;
 public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
+    private static final String SETTINGS_PACKAGE = "com.android.settings";
 
     private String loadedProcessName;
 
@@ -48,6 +49,8 @@ public final class ModuleMain extends XposedModule {
     public void onPackageReady(@NonNull PackageReadyParam param) {
         refreshDebugLogging();
         String packageName = param.getPackageName();
+        // Reserved for Settings Prismal UI adapters; deliberately no hooks installed yet.
+        if (SETTINGS_PACKAGE.equals(packageName)) return;
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
             ClassLoader classLoader = param.getClassLoader();
             if (classLoader == null) return;
