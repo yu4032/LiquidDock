@@ -274,7 +274,8 @@ public class ModernSettingsArchitectureTest {
         assertFalse(chrome.contains("RenderEffect.create"));
         String[] resources = {
                 "gui_static_glass_card_light.xml", "gui_static_glass_card_dark.xml",
-                "gui_static_glass_pill_light.xml", "gui_static_glass_pill_dark.xml"
+                "gui_static_glass_pill_light.xml", "gui_static_glass_pill_dark.xml",
+                "gui_static_glass_danger.xml"
         };
         for (String resource : resources) {
             String shape = Files.readString(Path.of("src/main/res/drawable", resource));
@@ -333,7 +334,7 @@ public class ModernSettingsArchitectureTest {
         // viewport-height static card enclosing an independently scrolling list.
         assertFalse(ui.contains(".weight(1f)\n                .padding(horizontal = 14.dp)"));
         assertTrue(surfaces.contains("GuiOnTouchPrismalSlider("));
-        assertTrue(surfaces.contains("PrismalGlassStepper("));
+        assertTrue(surfaces.contains("GuiStaticRepeatStepButton("));
     }
 
     @Test
@@ -349,62 +350,29 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void pageEntryZoomDoesNotRegressAndCellsAvoidRecapturedDepthShadows() throws Exception {
+    public void pageEntryCellsUseStaticResourcesAndDoNotCaptureExtraDepthShadows() throws Exception {
         String surfaces = Files.readString(SURFACES);
-        String cards = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
-
-        // PR #293: a chevron Cell always takes the static-geometry Prismal
-        // renderer even while its AGSL click ripple and navigation remain.
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
-        assertTrue(surfaces.contains("staticPress = true,"));
-        assertTrue(surfaces.contains("if (onClick == null || staticPress) {"));
-        assertTrue(surfaces.contains("GuiStaticPressPrismalSurface("));
-        assertTrue(cards.contains("PrismalPressRipple("));
-        assertTrue(cards.contains(".then(pressRipple?.modifier ?: Modifier)"));
-        assertTrue(cards.contains(".then(pressRipple?.gestureModifier ?: Modifier)"));
-        assertFalse(cards.contains("layerBlock ="));
-        assertFalse(cards.contains("scaleX ="));
-        assertFalse(cards.contains("translationX ="));
-
-        // The bottom bar still records normal page text and glass optics.
-        // Avoid capturing default PrismalDepthShadow twice on Settings Cells,
-        // which produces broad gradient bands behind the refractive capsule.
-        assertTrue(cards.contains("depthShadow = null,"));
-        assertTrue(cards.contains("specular"));
-        assertTrue(cards.contains("applyPrismalGlassEffects("));
+        assertTrue(surfaces.contains("GuiStaticGlassChrome("));
+        assertTrue(surfaces.contains("style = GuiStaticGlassStyle.CARD"));
+        assertTrue(surfaces.contains("if (onClick != null) Modifier.clickable(onClick = onClick)"));
+        assertFalse(surfaces.contains("GuiStaticPressPrismalSurface("));
+        assertFalse(surfaces.contains("PrismalGlassSurface("));
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
         assertTrue(Files.readString(BOTTOM_NAV).contains("PrismalGlassBottomTabs("));
     }
 
     @Test
-    public void chevronPageCellsRetainPrismalRippleWithoutGeometryMotion() throws Exception {
+    public void chevronPageCellsHaveStaticChromeAndNativeClickFeedbackWithoutGlassOptics() throws Exception {
         String surfaces = Files.readString(SURFACES);
-        String navigationSurface = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
-
-        // Static architecture/API contract, not an inference about device frame times.
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
-        assertTrue(surfaces.contains("staticPress = true,"));
-        assertTrue(surfaces.contains("GuiStaticPressPrismalSurface("));
         assertTrue(surfaces.contains("onClick = onClick,"));
-        assertTrue(surfaces.contains("PrismalGlassSurface("));
-        assertTrue(surfaces.contains("internal fun ArrowPreference("));
         assertTrue(surfaces.contains("imageVector = MiuixIcons.Basic.ArrowRight"));
-
-        assertTrue("original press highlight/ripple must be preserved",
-                navigationSurface.contains("PrismalPressRipple("));
-        assertTrue(navigationSurface.contains(".then(pressRipple?.modifier ?: Modifier)"));
-        assertTrue(navigationSurface.contains(".then(pressRipple?.gestureModifier ?: Modifier)"));
-        assertTrue(navigationSurface.contains("if (onClick != null) PrismalPressRipple("));
-        assertTrue(navigationSurface.contains("drawPrismalGlass("));
-        assertTrue(navigationSurface.contains("drawPrismalGlassTint("));
-        assertTrue(navigationSurface.contains("applyPrismalGlassEffects("));
-        assertTrue(navigationSurface.contains("role = Role.Button"));
-        assertFalse("navigation press may not transform the whole glass Cell",
-                navigationSurface.contains("layerBlock ="));
-        assertFalse(navigationSurface.contains("translationX ="));
-        assertFalse(navigationSurface.contains("scaleX ="));
+        assertTrue(surfaces.contains("GuiStaticGlassChrome("));
+        assertTrue(surfaces.contains("Modifier.clickable(onClick = onClick)"));
+        assertFalse(surfaces.contains("GuiStaticPressPrismalSurface("));
+        assertFalse(surfaces.contains("PrismalGlassSurface("));
+        assertFalse(surfaces.contains("PrismalPressRipple("));
     }
 
     @Test
@@ -480,35 +448,23 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void solidActionsAndDarkCellsHaveDistinctLayeringWithoutReplacingPrismal() throws Exception {
+    public void staticActionAndDarkCellResourcesKeepIndependentThemeAndDangerStates()
+            throws Exception {
         String surfaces = Files.readString(SURFACES);
-        String bottom = Files.readString(BOTTOM_NAV);
-        String navSurface = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticPressPrismalSurface.kt"));
-
-        // Static material and architecture guards, not device-level contrast metrics.
+        String chrome = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticGlassChrome.kt"));
         assertTrue(surfaces.contains("val solidCardColor = if (darkTheme)"));
-        assertTrue(surfaces.contains("lerp(colors.surface, colors.onSurface, 0.08f)"));
         assertTrue(surfaces.contains(".background(solidCardColor)"));
         assertTrue(surfaces.contains(".border(1.dp, cardStroke, cardShape)"));
-        assertTrue(surfaces.contains("val glassCardModifier = modifier"));
-        assertTrue(surfaces.contains("darkGlassWash"));
-        assertTrue(surfaces.contains("surfaceColor = darkGlassWash"));
-
-        // +/- and reset share Button's fallback and must have their own outline.
         assertTrue(surfaces.contains("val buttonShape = RoundedCornerShape(minHeight / 2)"));
-        assertTrue(surfaces.contains("val fillColor = if (destructive) Color(0xFFD73333)"));
-        assertTrue(surfaces.contains("else lerp(colors.surface, colors.onSurface,"));
-        assertTrue(surfaces.contains(".border(1.dp, outlineColor, buttonShape)"));
-        assertTrue(surfaces.contains("else if (backdrop == null) 0.66f"));
-
-        // Glass still uses the original renderer and the navigational ripple.
-        assertTrue(surfaces.contains("PrismalGlassSurface("));
-        assertTrue(navSurface.contains("PrismalPressRipple("));
-        assertTrue(navSurface.contains("drawPrismalGlassTint(tint, tintAlpha)"));
-        assertTrue(navSurface.contains("surfaceColor.isSpecified"));
-        assertFalse(navSurface.contains("scaleX ="));
-        assertFalse(navSurface.contains("translationX ="));
+        assertTrue(surfaces.contains("destructive: Boolean = false"));
+        assertTrue(surfaces.contains("GuiStaticGlassStyle.DANGER"));
+        assertTrue(surfaces.contains("GuiStaticGlassStyle.PILL"));
+        assertTrue(chrome.contains("R.drawable.gui_static_glass_danger"));
+        assertTrue(chrome.contains("R.drawable.gui_static_glass_pill_light"));
+        assertTrue(chrome.contains("R.drawable.gui_static_glass_pill_dark"));
+        assertFalse(surfaces.contains("PrismalGlassSurface("));
+        assertFalse(surfaces.contains("PrismalGlassStepper("));
     }
 
     @Test
@@ -522,13 +478,13 @@ public class ModernSettingsArchitectureTest {
         assertTrue(build.contains("com.github.styropyr0:PrismalAGSL:v1.0.4"));
         assertTrue(build.contains("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4"));
         assertFalse("no unused MIUIX blur implementation", build.contains("miuix-blur-android"));
-        assertTrue(source.contains("PrismalGlassSurface"));
+        assertFalse(source.contains("PrismalGlassSurface("));
         assertTrue(source.contains("PrismalGlassButton"));
         assertTrue(bottom.contains("PrismalGlassBottomTabs"));
         assertTrue(bottom.contains("PrismalGlassBottomTab"));
         assertTrue(source.contains("GuiOnTouchPrismalToggle"));
         assertTrue(source.contains("GuiOnTouchPrismalSlider"));
-        assertTrue(source.contains("PrismalGlassStepper"));
+        assertFalse(source.contains("PrismalGlassStepper("));
         assertTrue(source.contains("TOP_BAR_BLUR_RADIUS = 14f"));
         assertTrue(source.contains("TOP_BAR_GLASS_TINT_ALPHA = 0.34f"));
         assertTrue(source.contains("blurRadius = TOP_BAR_BLUR_RADIUS.dp"));
@@ -753,22 +709,33 @@ public class ModernSettingsArchitectureTest {
         assertTrue(widgetDetail.contains("rankedComponents.chunked(10)"));
         assertTrue(widgetDetail.contains("ModernListDivider()"));
 
-        assertTrue(surfaces.contains("pressLift = 0.dp"));
-        assertTrue(surfaces.contains("depthShadow = null"));
+        assertTrue(surfaces.contains("GuiStaticRepeatStepButton("));
+        assertFalse(surfaces.contains("PrismalGlassStepper("));
     }
 
     @Test
-    public void numericStepperAndResetKeepNativePrismalWhileOtherCellsStayStatic() throws Exception {
+    public void numericStepperAndResetUseResourcesWithRepeatOnHoldInsteadOfPrismal()
+            throws Exception {
         String surfaces = Files.readString(SURFACES);
-        String ui = Files.readString(CONTROLS);
-        assertTrue(surfaces.contains("val surfaceBackdrop: PrismalBackdrop? = null"));
+        String controls = Files.readString(CONTROLS);
+        String step = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticRepeatStepButton.kt"));
+        String dialog = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt"));
         assertTrue(surfaces.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
-        assertTrue(surfaces.contains("val backdrop = if (prismalNumericAction) {"));
-        assertTrue(surfaces.contains("prismalNumericAction: Boolean = false"));
-        assertTrue(surfaces.contains("val backdrop = LocalTouchPrismalBackdrop.current\n    if (backdrop != null) {\n        PrismalGlassStepper("));
-        assertTrue(surfaces.contains("PrismalGlassButton("));
-        assertTrue(ui.contains("prismalNumericAction = true,"));
-        assertTrue(ui.contains("ModernGlassStepper("));
+        assertTrue(surfaces.contains("GuiStaticRepeatStepButton("));
+        assertTrue(surfaces.contains("staticChrome = staticChrome"));
+        assertFalse(surfaces.contains("PrismalGlassStepper("));
+        assertFalse(surfaces.contains("prismalNumericAction"));
+        assertFalse(controls.contains("prismalNumericAction"));
+        assertTrue(controls.contains("ModernGlassStepper("));
+        assertTrue(step.contains("delay(430L)"));
+        assertTrue(step.contains("while (isActive)"));
+        assertTrue(step.contains("tryAwaitRelease()"));
+        assertTrue(step.contains("if (released && !repeated) callback.value()"));
+        assertTrue(step.contains("GuiStaticGlassChrome("));
+        assertTrue(dialog.contains("destructive = true,"));
+        assertFalse(dialog.contains("PrismalGlassButton("));
     }
 
     @Test
@@ -837,7 +804,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Switch("));
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Slider("));
         assertTrue(surfaces.contains("if (backdrop != null)"));
-        assertTrue(surfaces.contains("depthShadow = null"));
+        assertTrue(surfaces.contains("GuiStaticGlassChrome("));
 
         assertTrue(search.contains("SETTINGS_UI_GLASS_ENABLED"));
         assertTrue(search.contains("glassEnabled = glassEnabled"));
@@ -865,7 +832,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains(".border(1.dp, cardStroke, cardShape)"));
         assertTrue(surfaces.contains(".clip(cardShape)"));
         assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
-        assertTrue(surfaces.contains("PrismalGlassSurface("));
+        assertFalse(surfaces.contains("PrismalGlassSurface("));
         assertTrue(Files.readString(BOTTOM_NAV).contains("PrismalGlassBottomTabs("));
     }
 
