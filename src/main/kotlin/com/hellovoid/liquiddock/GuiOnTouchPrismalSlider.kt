@@ -385,6 +385,7 @@ internal fun GuiOnTouchPrismalSlider(
                     ) else Modifier
                     )
                     .size(40.dp, 24.dp)
+                .then(if (sampling) Modifier.guiThumbHighlight(presetChrome) else Modifier)
             ) {
                 if (!sampling) {
                     // Draw a plain-color thumb while keeping the original spring transform.
@@ -397,7 +398,7 @@ internal fun GuiOnTouchPrismalSlider(
                             scaleY = dampedDragAnimation.scaleY *
                                 (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                         }
-                            .guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome),
+                            .guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome),
                     )
                 }
             }
