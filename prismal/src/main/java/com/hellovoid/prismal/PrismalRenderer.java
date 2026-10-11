@@ -497,10 +497,10 @@ public final class PrismalRenderer implements AutoCloseable {
 
     private void ensureTargets(int nextRenderWidth, int nextRenderHeight,
                                int nextOutputWidth, int nextOutputHeight) {
-        if (renderWidth == nextRenderWidth && renderHeight == nextRenderHeight
-                && outputWidth == nextOutputWidth && outputHeight == nextOutputHeight
-                && sourceFramebuffer != 0 && blurFramebufferH != 0
-                && blurFramebufferV != 0) {
+        if (PrismalNativeOutputPolicy.canReuseBackdrop(
+                renderWidth, renderHeight, outputWidth, outputHeight,
+                nextRenderWidth, nextRenderHeight, nextOutputWidth, nextOutputHeight,
+                sourceFramebuffer, blurFramebufferH, blurFramebufferV)) {
             return;
         }
         releaseTargets();
@@ -524,7 +524,7 @@ public final class PrismalRenderer implements AutoCloseable {
     }
 
     private void ensureNativeOutputTarget() {
-        if (outputTexture != 0 && outputFramebuffer != 0) return;
+        if (PrismalNativeOutputPolicy.hasNativeOutput(outputTexture, outputFramebuffer)) return;
         outputTexture = createTexture(outputWidth, outputHeight);
         try {
             outputFramebuffer = createFramebuffer(outputTexture);
