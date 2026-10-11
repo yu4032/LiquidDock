@@ -25,6 +25,9 @@ internal data class GuiPresetChromePalette(
     val pillFill: Color,
     val pillRim: Color,
     val pillOutline: Color,
+    val thumbFill: Color,
+    val thumbRim: Color,
+    val thumbOutline: Color,
     val dangerFill: Color,
     val dangerRim: Color,
     val dangerOutline: Color,
@@ -46,23 +49,28 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val pillFill = colorResource(R.color.gui_preset_pill_fill)
     val pillRim = colorResource(R.color.gui_preset_pill_rim)
     val pillOutline = colorResource(R.color.gui_preset_pill_outline)
+    val thumbFill = colorResource(R.color.gui_preset_thumb_fill)
+    val thumbRim = colorResource(R.color.gui_preset_thumb_rim)
+    val thumbOutline = colorResource(R.color.gui_preset_thumb_outline)
     val dangerFill = colorResource(R.color.gui_preset_danger_fill)
     val dangerRim = colorResource(R.color.gui_preset_danger_rim)
     val dangerOutline = colorResource(R.color.gui_preset_danger_outline)
     return remember(
         canvas, canvasWithoutGlass, cardFill, cardRim, cardOutline,
         pillFill, pillRim, pillOutline,
+        thumbFill, thumbRim, thumbOutline,
         dangerFill, dangerRim, dangerOutline,
     ) {
         GuiPresetChromePalette(
             canvas, canvasWithoutGlass, cardFill, cardRim, cardOutline,
             pillFill, pillRim, pillOutline,
+        thumbFill, thumbRim, thumbOutline,
             dangerFill, dangerRim, dangerOutline,
         )
     }
 }
 
-internal enum class GuiSolidChromeStyle { CARD, PILL, DANGER }
+internal enum class GuiSolidChromeStyle { CARD, PILL, THUMB, DANGER }
 
 private val cardShape = RoundedCornerShape(24.dp)
 private val pillShape = RoundedCornerShape(999.dp)
@@ -91,6 +99,11 @@ internal fun Modifier.guiSolidChrome(
             rim = palette.pillRim
             outline = palette.pillOutline
         }
+        GuiSolidChromeStyle.THUMB -> {
+            fill = palette.thumbFill
+            rim = palette.thumbRim
+            outline = palette.thumbOutline
+        }
         GuiSolidChromeStyle.DANGER -> {
             fill = palette.dangerFill
             rim = palette.dangerRim
@@ -100,6 +113,19 @@ internal fun Modifier.guiSolidChrome(
     val shape = if (style == GuiSolidChromeStyle.CARD) cardShape else pillShape
     return this
         .background(fill, shape)
-        .border(1.dp, outline, shape)
-        .border(0.5.dp, rim, shape)
+        // Outer contrast and inner bright line are both baked XML colors.
+        // A 1dp bright edge remains visible on dense 40x24dp thumbs.
+        .border(1.75.dp, outline, shape)
+        .border(1.dp, rim, shape)
 }
+
+/**
+ * Foreground-only preset edge for a thumb while its original Prismal renderer
+ * is active. No fill is applied over live sampled content; it simply persists
+ * the precomputed highlight after the sampling boundary has changed.
+ */
+internal fun Modifier.guiThumbHighlight(palette: GuiPresetChromePalette): Modifier =
+    this
+        .border(1.75.dp, palette.thumbOutline, pillShape)
+        .border(1.dp, palette.thumbRim, pillShape)
+
