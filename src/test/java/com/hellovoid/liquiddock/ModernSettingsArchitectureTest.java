@@ -253,7 +253,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void staticGuiBakesPlusCompositedPrismalMaterialInsteadOfOverlayingSpecular()
+    public void staticGuiUsesFixedResourceColorsAndExactPrismalShapeSpecular()
             throws Exception {
         String surfaces = Files.readString(SURFACES);
         String bottom = Files.readString(BOTTOM_NAV);
@@ -266,7 +266,7 @@ public class ModernSettingsArchitectureTest {
 
         assertTrue(surfaces.contains("LocalStaticGlassChrome provides glassEnabled"));
         assertTrue(surfaces.contains("LocalGuiPresetChromePalette provides presetChrome"));
-        assertTrue(surfaces.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)"));
+        assertTrue(surfaces.contains("Modifier.guiExactPrismalCornerChrome(GuiSolidChromeStyle.CARD, presetChrome, cardShape)"));
         assertTrue(surfaces.contains("GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL"));
         assertTrue(surfaces.contains("val cardShape = PrismalRoundedRectangle(24.dp)"));
         assertTrue(surfaces.contains("val buttonShape = PrismalRoundedRectangle(minHeight / 2)"));
@@ -282,6 +282,11 @@ public class ModernSettingsArchitectureTest {
         assertFalse(surfaces.contains("PrismalGlassSurface("));
 
         assertTrue(chrome.contains("internal fun Modifier.guiSolidChrome("));
+        assertTrue(chrome.contains("internal fun Modifier.guiExactPrismalCornerChrome("));
+        assertTrue(chrome.contains("this.background(fill, shape).guiStaticSpecularRim(shape, palette)"));
+        assertTrue(chrome.contains("val cardFill = colorResource(R.color.gui_preset_card_fill)"));
+        assertTrue(chrome.contains("val pillFill = colorResource(R.color.gui_preset_pill_fill)"));
+        assertTrue(chrome.contains("GuiSolidChromeStyle.THUMB -> error("));
         assertTrue(chrome.contains("LocalGuiPresetChromePalette"));
         assertTrue(chrome.contains("rememberGuiPresetChromePalette()"));
         assertTrue(chrome.contains("val canvas = colorResource(R.color.gui_preset_canvas)"));
@@ -490,16 +495,17 @@ public class ModernSettingsArchitectureTest {
         }
         assertFalse(light.contains("name=\"gui_preset_rim_contrast\""));
         assertFalse(dark.contains("name=\"gui_preset_rim_contrast\""));
+        assertTrue(chrome.contains("this.background(fill, shape).guiStaticSpecularRim(shape, palette)"));
         assertTrue(surfaces.contains("Modifier.guiStaticSoftShadow(cardShape)"));
-        assertFalse("Card material already bakes the reflected edge",
+        assertFalse("Card must have one exact-path reflection, not a duplicate modifier",
                 surfaces.contains(".guiStaticSpecularRim(cardShape, presetChrome)"));
         assertTrue(surfaces.contains("Modifier.guiStaticSoftShadow(buttonShape)"));
-        assertFalse("Button material already bakes the reflected edge",
+        assertFalse("Button must have one exact-path reflection, not a duplicate modifier",
                 surfaces.contains(".guiStaticSpecularRim(buttonShape, presetChrome)"));
         assertTrue(surfaces.contains(".clip(cardShape)"));
         assertTrue(surfaces.contains(".clip(buttonShape)"));
         assertTrue(stepper.contains("Modifier.guiStaticSoftShadow(shape)"));
-        assertFalse("Stepper material already bakes the reflected edge",
+        assertFalse("Stepper must have one exact-path reflection, not a duplicate modifier",
                 stepper.contains(".guiStaticSpecularRim(shape, presetChrome)"));
 
         for (String source : new String[]{slider, toggle}) {
@@ -512,6 +518,38 @@ public class ModernSettingsArchitectureTest {
             assertTrue(source.contains("PrismalDepthShadow("));
             assertFalse(source.contains("guiThumbHighlight("));
         }
+    }
+
+    @Test
+    public void staticCardAndPillCornersUseActualPrismalOutlineNotBakedRasterRadius()
+            throws Exception {
+        String ui = Files.readString(SURFACES);
+        String step = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticRepeatStepButton.kt"));
+        String chrome = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiSolidChrome.kt"));
+
+        // Upstream Continuous curvature extends beyond the nominal radius.
+        // The former 80x64dp superellipse PNG with 24dp corners was too
+        // small once the erroneous additional outlines were removed.
+        assertTrue(ui.contains("val cardShape = PrismalRoundedRectangle(24.dp)"));
+        assertTrue(ui.contains("val buttonShape = PrismalRoundedRectangle(minHeight / 2)"));
+        assertTrue(ui.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.CARD, presetChrome, cardShape)"));
+        assertTrue(ui.contains("presetChrome,\n                        buttonShape,"));
+        assertTrue(step.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL, presetChrome, shape)"));
+
+        assertTrue(chrome.contains("internal fun Modifier.guiExactPrismalCornerChrome("));
+        assertTrue(chrome.contains("this.background(fill, shape).guiStaticSpecularRim(shape, palette)"));
+        assertFalse(ui.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD"));
+        assertFalse(ui.contains("Modifier.guiSolidChrome(\n                        if (destructive)"));
+        assertFalse(step.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.PILL"));
+
+        // One external shadow, one resource fill, one cached outline.
+        assertTrue(ui.contains("Modifier.guiStaticSoftShadow(cardShape)"));
+        assertTrue(ui.contains(".clip(cardShape)"));
+        assertTrue(ui.contains(".clip(buttonShape)"));
+        assertFalse(ui.contains(".guiStaticSpecularRim(cardShape, presetChrome)"));
+        assertFalse(ui.contains(".guiStaticSpecularRim(buttonShape, presetChrome)"));
     }
 
     @Test
@@ -579,7 +617,7 @@ public class ModernSettingsArchitectureTest {
     public void pageEntryCellsUseStaticResourcesAndDoNotCaptureExtraDepthShadows() throws Exception {
         String surfaces = Files.readString(SURFACES);
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
-        assertTrue(surfaces.contains(".guiSolidChrome("));
+        assertTrue(surfaces.contains(".guiExactPrismalCornerChrome("));
         assertTrue(surfaces.contains("GuiSolidChromeStyle.CARD"));
         assertTrue(surfaces.contains("if (onClick != null) Modifier.clickable(onClick = onClick)"));
         assertFalse(surfaces.contains("GuiStaticPressPrismalSurface("));
@@ -594,7 +632,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
         assertTrue(surfaces.contains("onClick = onClick,"));
         assertTrue(surfaces.contains("imageVector = MiuixIcons.Basic.ArrowRight"));
-        assertTrue(surfaces.contains(".guiSolidChrome("));
+        assertTrue(surfaces.contains(".guiExactPrismalCornerChrome("));
         assertTrue(surfaces.contains("Modifier.clickable(onClick = onClick)"));
         assertFalse(surfaces.contains("GuiStaticPressPrismalSurface("));
         assertFalse(surfaces.contains("PrismalGlassSurface("));
@@ -957,7 +995,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(step.contains("while (isActive)"));
         assertTrue(step.contains("tryAwaitRelease()"));
         assertTrue(step.contains("if (released && !repeated) callback.value()"));
-        assertTrue(step.contains(".guiSolidChrome("));
+        assertTrue(step.contains(".guiExactPrismalCornerChrome("));
         assertTrue(dialog.contains("destructive = true,"));
         assertFalse(dialog.contains("PrismalGlassButton("));
     }
@@ -1028,7 +1066,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Switch("));
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Slider("));
         assertTrue(surfaces.contains("if (backdrop != null)"));
-        assertTrue(surfaces.contains(".guiSolidChrome("));
+        assertTrue(surfaces.contains(".guiExactPrismalCornerChrome("));
 
         assertTrue(search.contains("SETTINGS_UI_GLASS_ENABLED"));
         assertTrue(search.contains("glassEnabled = glassEnabled"));
