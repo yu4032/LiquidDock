@@ -33,25 +33,44 @@ object SystemSettingsPrismalSwitchOverlay {
     private const val STOCK_VISUAL_ALPHA = 0.02f
     private val main = Handler(Looper.getMainLooper())
     private val active = WeakHashMap<CompoundButton, Binding>()
+    private val loggedSkips = HashSet<String>()
+
+    private fun skipOnce(reason: String): Boolean {
+        if (loggedSkips.add(reason)) {
+            Api101Bridge.log("[DC][SettingsSwitch] skipped: $reason")
+        }
+        return true
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun isAttached(original: CompoundButton): Boolean = active.containsKey(original)
 
     @JvmStatic
     @Synchronized
     fun attach(original: CompoundButton): Boolean {
         if (active.containsKey(original)) return true
-        // The verified MIUIX CheckBoxPreference layout uses android.R.id.checkbox
-        // below android.R.id.widget_frame. Reject other switch types/contexts.
-        if (original.id != android.R.id.checkbox) return true
-        if (!isPreferenceWidget(original)) return true
-        if (!original.isAttachedToWindow || original.width <= 0 || original.height <= 0) return true
-        if (active.size >= MAX_ACTIVE) return true
-        val content = original.rootView.findViewById<FrameLayout>(android.R.id.content) ?: return true
-        if (!content.isAttachedToWindow) return true
+        // Canonical Settings XML uses checkbox on legacy MIUIX rows and
+        // switch_widget on switch preferences AND MainSwitchBar. Many of the
+        // latter have no widget_frame ancestor.
+        if (original.id != android.R.id.checkbox &&
+            original.id != android.R.id.switch_widget) {
+            return skipOnce("unsupported id=${original.id} type=${original.javaClass.name}")
+        }
+        if (!original.isAttachedToWindow || original.width <= 0 || original.height <= 0) {
+            return skipOnce("not attached/measured type=${original.javaClass.name}")
+        }
+        if (active.size >= MAX_ACTIVE) return skipOnce("active overlay cap reached")
+        val host = original.rootView.findViewById<View>(android.R.id.content)
+        val content = host as? FrameLayout
+            ?: return skipOnce("android.R.id.content not a FrameLayout")
+        if (!content.isAttachedToWindow) return skipOnce("content not attached")
 
         val binding = Binding(original, content)
         return try {
             binding.install()
             active[original] = binding
-            Api101Bridge.log("[DC][SettingsSwitch] Prismal checkbox visual attached")
+            Api101Bridge.log("[DC][SettingsSwitch] Prismal visual attached: ${original.javaClass.name} id=${original.id}")
             true
         } catch (error: Throwable) {
             binding.dispose()
@@ -60,16 +79,7 @@ object SystemSettingsPrismalSwitchOverlay {
         }
     }
 
-    private fun isPreferenceWidget(stock: View): Boolean {
-        var ancestor = stock.parent as? View
-        repeat(5) {
-            if (ancestor?.id == android.R.id.widget_frame) return true
-            ancestor = ancestor?.parent as? View
-        }
-        return false
-    }
-
-    private class Binding(
+       private class Binding(
         private val stock: CompoundButton,
         private val content: FrameLayout,
     ) : View.OnAttachStateChangeListener {
@@ -84,6 +94,29 @@ object SystemSettingsPrismalSwitchOverlay {
         private var overlay: ComposeView? = null
         private var drawObserver: ViewTreeObserver? = null
         private var preDraw: ViewTreeObserver.OnPreDrawListener? = null
+
+        /**
+         * Some native MIUIX widgets have android:clickable="false" intentionally:
+         * Settings' preference row or MainSwitchBar owns the validation and
+         * persistence path. Dispatch to that owner, never force setChecked().
+         */
+        private fun performNativePreferenceClick() {
+            var parent = stock.parent
+            repeat(8) {
+                val owner = parent as? View ?: return@repeat
+                if (owner.id == android.R.id.content) return@repeat
+                if (owner.isClickable && owner.isEnabled) {
+                    owner.performClick()
+                    return
+                }
+                parent = owner.parent
+            }
+            if (stock.isClickable) {
+                stock.performClick()
+            } else {
+                Api101Bridge.log("[DC][SettingsSwitch] no native clickable row; ignoring overlay gesture")
+            }
+        }
 
         fun install() {
             val view = ComposeView(stock.context).apply {
@@ -100,7 +133,7 @@ object SystemSettingsPrismalSwitchOverlay {
                             onSelect = { next ->
                                 if (!disposed && stock.isEnabled && next != stock.isChecked) {
                                     try {
-                                        stock.performClick()
+                                        performNativePreferenceClick()
                                     } catch (error: Throwable) {
                                         Api101Bridge.log(
                                             "[DC][SettingsSwitch] native click failed; restoring stock",
