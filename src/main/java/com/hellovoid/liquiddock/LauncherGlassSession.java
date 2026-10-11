@@ -1216,8 +1216,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             // full-root buffers. Once any node acquires geometry, resume *all* source frames.
             boolean hasDrawableGeometry = false;
             for (StaticNodeState state : snapshot) {
-                if (state.nodeRef.get() != null && state.frame != null
-                        && state.frame.geometry != null) {
+                StaticGeometryFrame frame = state.frame;
+                if (state.nodeRef.get() != null && frame != null && frame.geometry != null) {
                     hasDrawableGeometry = true;
                     break;
                 }
