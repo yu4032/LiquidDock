@@ -227,7 +227,7 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 
 **状态：第一个 MIUIX SlidingButton Prismal 开关试验已编码；默认关闭，待 CI 和实机验收。**
 
-已从该版本 Settings 的 JADX 类清单确认 `miuix.slidingwidget.widget.SlidingButton` 存在；当前使用该 vendor 类自己的绘制/布局入口，并只在 `android.R.id.widget_frame` 中叠加 Prismal ComposeView。其真实方法签名、容器匹配率、与原生业务事件的一致性、跨 native 背景取样及性能均待实机检验。不对 `android.widget.CompoundButton` 全局 Hook，Compose SPA 暂不适配。不得把静态 CI 等同于真机证明。
+正式 JADX/REA 已确认 `SlidingButton#onDraw(Canvas)`、`performClick()` 以及标准 `miuix_preference_widget_checkbox.xml` 的 ID。由于 `settingslib_preference.xml` 的 widget_frame 实际为 LinearLayout，当前改为在 Activity 原生 content FrameLayout 上以目标开关的屏幕位置叠加 Prismal，不移动或覆写原控件，仅在隐藏原控件绘制时同步 alpha。待真机核验：视觉成功率、是否触发并正确持久化原 Preference 回调、滚动/rebind 后还原状态、Native/Compose 混合渲染帧耗时，以及无障碍。该实验尚无真实 Settings 背景折射；不得因静态 CI 通过就宣称功能完成。
 
 ---
 
