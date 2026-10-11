@@ -46,7 +46,6 @@ internal data class GuiPresetChromePalette(
     val pillMaterial: Drawable,
     val thumbMaterial: Drawable,
     val dangerMaterial: Drawable,
-    val rimContrast: Color,
     val rimStrong: Color,
     val rimMedium: Color,
     val rimWeak: Color,
@@ -66,7 +65,6 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val thumbColor = colorResource(R.color.gui_preset_thumb_fill).toArgb()
     val dangerColor = colorResource(R.color.gui_preset_danger_fill).toArgb()
     // Resource colors are shared. No Cell derives its own light direction.
-    val rimContrast = colorResource(R.color.gui_preset_rim_contrast)
     val rimStrong = colorResource(R.color.gui_preset_rim_strong)
     val rimMedium = colorResource(R.color.gui_preset_rim_medium)
     val rimWeak = colorResource(R.color.gui_preset_rim_weak)
@@ -100,12 +98,12 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     return remember(
         canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
         thumbMaterial, dangerMaterial,
-        rimContrast, rimStrong, rimMedium, rimWeak,
+        rimStrong, rimMedium, rimWeak,
     ) {
         GuiPresetChromePalette(
             canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
             thumbMaterial, dangerMaterial,
-            rimContrast, rimStrong, rimMedium, rimWeak,
+            rimStrong, rimMedium, rimWeak,
         )
     }
 }
@@ -265,10 +263,10 @@ private fun loadGuiChromeOrSolidFallback(
  * was never valid for the 40x24dp XML thumb. Use the ACTUAL continuous
  * Prismal shape, cached once per measured size, and fixed resource colors.
  *
- * A plain outline is insufficient: sweep stops leave a white glint at ALL
- * four curved corners with stronger opposing 45-degree lobes, while the
- * dim contrast edge preserves the glossy transition on white handles.
- * This is cheap shape-stroke rendering, NOT a per-Cell AGSL, lens pass or blur.
+ * This is now ONLY used for idle slider/toggle handles. Card/Pill already
+ * contain their baked edge reflection; an added rim doubled their outline.
+ * White handles receive one thin directional highlight, without contrast.
+ * The outline is cached, with no per-Cell AGSL, lens sampling, or blur.
  */
 internal fun Modifier.guiStaticSpecularRim(
     shape: Shape,
@@ -288,13 +286,8 @@ internal fun Modifier.guiStaticSpecularRim(
         1f to palette.rimWeak,
         center = Offset(size.width / 2f, size.height / 2f),
     )
-    val contrastWidth = if (compact) 2.2.dp.toPx() else 1.8.dp.toPx()
-    val glintWidth = if (compact) 1.2.dp.toPx() else 1.15.dp.toPx()
+    val glintWidth = if (compact) 0.8.dp.toPx() else 1.dp.toPx()
     onDrawBehind {
-        drawOutline(
-            outline, color = palette.rimContrast,
-            style = Stroke(width = contrastWidth),
-        )
         drawOutline(
             outline, brush = whiteReflection,
             style = Stroke(width = glintWidth),
