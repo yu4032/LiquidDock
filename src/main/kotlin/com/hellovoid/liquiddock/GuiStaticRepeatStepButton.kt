@@ -33,7 +33,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * Fixed-resource replacement for a PrismalGlassStepper button.
+ * Solid-color replacement for a PrismalGlassStepper button.
  *
  * Maintains press feedback, tap-to-step, range-aware disabled state and
  * repeat-on-hold without instantiating an optical surface or backdrop sampler.
@@ -56,6 +56,13 @@ internal fun GuiStaticRepeatStepButton(
             .size(36.dp)
             .alpha(if (enabled) 1f else 0.45f)
             .clip(shape)
+            .then(
+                if (staticChrome) Modifier.guiSolidChrome(GuiSolidChromeStyle.PILL, darkTheme)
+                else Modifier.background(
+                    lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f),
+                    shape,
+                )
+            )
             .pointerInput(enabled) {
                 if (enabled) {
                     detectTapGestures(
@@ -99,22 +106,6 @@ internal fun GuiStaticRepeatStepButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (staticChrome) {
-            GuiStaticGlassChrome(
-                modifier = Modifier.matchParentSize(),
-                style = GuiStaticGlassStyle.PILL,
-                darkTheme = darkTheme,
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f),
-                        shape,
-                    ),
-            )
-        }
         if (pressed) {
             Box(
                 modifier = Modifier
