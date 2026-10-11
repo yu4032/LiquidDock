@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Canvas;
+import android.view.MotionEvent;
 import android.widget.CompoundButton;
 import java.lang.reflect.Method;
 
@@ -70,6 +71,48 @@ final class SystemSettingsPrismalSwitchHook {
                 count++;
                 Api101Bridge.log(TAG + " hooked native Canvas "
                         + name + "#onDraw");
+
+                // Mirror Prismal's drag/press animation without intercepting
+                // or substituting any of the vendor click/gesture authority.
+                Method touch = declared(target, "onTouchEvent", MotionEvent.class);
+                if (touch != null) {
+                    try {
+                        HookUtil.hook(touch, chain -> {
+                            Object[] touchArgs = chain.getArgs().toArray(new Object[0]);
+                            Object originalResult = chain.proceed(touchArgs);
+                            if (chain.getThisObject() instanceof CompoundButton
+                                    && touchArgs.length == 1
+                                    && touchArgs[0] instanceof MotionEvent) {
+                                SystemSettingsPrismalSwitchMotion.observeNativeTouch(
+                                        (CompoundButton) chain.getThisObject(),
+                                        (MotionEvent) touchArgs[0]);
+                            }
+                            return originalResult;
+                        });
+                        Api101Bridge.log(TAG + " observing Prismal touch " + name);
+                    } catch (Throwable touchError) {
+                        Api101Bridge.log(TAG + " touch observer skipped " + name
+                                + " " + touchError.getClass().getSimpleName());
+                    }
+                }
+                Method checked = declared(target, "setChecked", boolean.class);
+                if (checked != null) {
+                    try {
+                        HookUtil.hook(checked, chain -> {
+                            Object[] checkedArgs = chain.getArgs().toArray(new Object[0]);
+                            Object originalResult = chain.proceed(checkedArgs);
+                            if (chain.getThisObject() instanceof CompoundButton) {
+                                SystemSettingsPrismalSwitchMotion.observeNativeChecked(
+                                        (CompoundButton) chain.getThisObject());
+                            }
+                            return originalResult;
+                        });
+                        Api101Bridge.log(TAG + " observing Prismal checked " + name);
+                    } catch (Throwable stateError) {
+                        Api101Bridge.log(TAG + " checked observer skipped " + name
+                                + " " + stateError.getClass().getSimpleName());
+                    }
+                }
             } catch (Throwable error) {
                 Api101Bridge.log(TAG + " vendor hook unavailable=" + name, error);
             }
