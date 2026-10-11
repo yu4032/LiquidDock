@@ -77,9 +77,9 @@ public class PrismalGaussianBlurKernelTest {
         }
     }
 
-    private static double sample(float[] signal, float position) {
+    private static double sample(float[] signal, double position) {
         int lo = (int)Math.floor(position);
-        float alpha = (float)(position - lo);
+        double alpha = position - lo;
         return at(signal, lo) * (1.0 - alpha) + at(signal, lo + 1) * alpha;
     }
 
