@@ -106,3 +106,24 @@ Thus Android's drawable loader returned null for our new **card shadow PNG**, an
 No claim of restored shadows after this emergency rollback. First priority is that the settings App opens. After real-device startup confirmation, shadows and final Prismal edge fidelity should be revisited **only in a separate guarded incremental change** with device logs.
 
 PR remains Draft; do not merge an unverified crash fix.
+
+## Follow-up after #8085 restored startup stability: four corner highlights and shadows
+
+Device acceptance of #8085 confirmed the null-decorative-resource crash is fixed, but revealed that **all four Cell corner highlights were missing**, idle switch/slider handles still lacked recognizable chrome, and no static shadows were visible.
+
+Source inspection showed why:
+
+- The previous static Card/Pill path contained only a fixed-baked RGB PNG with nine-region stretching; there was **no separate outline on the actual continuous Prismal Shape**, so its four curved corner reflections could disappear under bitmap stretching and clipping.
+- The inactive toggle/slider uses `gui_material_thumb.xml`, which is a flat opaque-white ShapeDrawable. Original animated `PrismalSpecular.Ambient` and `PrismalDepthShadow` exist **only in the active sampling path**; there was no idle chrome/shadow equivalent.
+- The earlier attempted prebaked shadow PNGs caused the startup crash (resource returned null and `requireNotNull` threw), so retaining or reloading them is **prohibited**.
+
+### Restoration without risky asset loading
+
+1. Keep the now-stable Card/Pill PNG and null-safe theme-color fallback, including white idle thumb XML.
+2. Draw an **additional cached outline on Prismal's actual continuous-curvature Shape**, separate from the bitmap. A fixed four-corner white sweep profile restores visible glints on **every corner**, with stronger 45-degree opposing highlights. Colors live in `values/gui_preset_material_colors.xml` and its `values-night` counterpart. Only one basic sweep gradient is constructed **per size/cache invalidation**, not re-evaluated as a live lighting shader each frame.
+3. Restore shadow with a **cached, un-clipped Shape stroke approximation**, not PNGs, RenderEffect or offscreen Prismal shadow layers. Three low-alpha outline widths approximate the soft native 24dp black shadow with 4dp downward offset; the thumb gets a much smaller 4dp / 0.67dp, ~5% shadow. Shape outline is cached per measured size; shadow colors are cached, not allocated during every draw. The modifier order is `guiStaticSoftShadow -> guiSolidChrome -> guiStaticSpecularRim -> clip(PrismalShape)`, so exterior shadow and curved bright edge are not cut off.
+4. Apply the shared specular/shadow wrappers to Cards, action pills, +/- steppers, and **idle** slider/toggle thumbs. **Active** thumb source-sampling, `PrismalSpecular.Ambient`, `PrismalDepthShadow`, spring physics and response remain unchanged; never double the animated material with a second static rim.
+
+The new shadow and glints are **cheap static approximations**, not pixel-identical to the native AGSL and Gaussian blur. Draw call count increases modestly; measure performance on dense screens. There is **no new R.drawable for shadow** and the #8085 null-drawable crash protection stays in place. The relevant regression contracts assert the four highlight lobes, outside-clip placement, original active optical path and absence of shader/readback/shadow PNG loading.
+
+Do not merge #352 without an actual device test of these new visuals and opening the Settings App.
