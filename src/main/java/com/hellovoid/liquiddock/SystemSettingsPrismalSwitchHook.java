@@ -1,14 +1,16 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Canvas;
-import android.view.MotionEvent;
+import android.os.SystemClock;
 import android.widget.CompoundButton;
+
 import java.lang.reflect.Method;
+import java.util.WeakHashMap;
 
 /**
- * Restrict the experiment to verified MIUIX virtual drawing overrides.
- * No ComposeView, lifecycle injection, listener changes or preference hooks.
- * A failure to draw always proceeds to Settings' original onDraw.
+ * Discover native MIUIX controls and attach a genuine PrismalAGSL component.
+ * The vendor CompoundButton is retained for Preference state/persistence and
+ * accessibility, but its actual visual/touch surface is replaced with Prismal.
  */
 final class SystemSettingsPrismalSwitchHook {
     static final String TARGET_CLASS = "miuix.slidingwidget.widget.SlidingButton";
@@ -18,119 +20,102 @@ final class SystemSettingsPrismalSwitchHook {
     private static final String[] TARGETS = {
             TARGET_CLASS, TARGET_SWITCH, TARGET_SWITCH_COMPAT
     };
+    private static final WeakHashMap<CompoundButton, Long> LAST_TRIED = new WeakHashMap<>();
+    private static int observed;
     private static boolean installed;
-    private static int candidateDraws;
 
     private SystemSettingsPrismalSwitchHook() {}
 
     static synchronized boolean install(ClassLoader loader) {
         if (installed) return true;
-        if (loader == null) {
-            Api101Bridge.log(TAG + " install skipped: Settings classLoader=null");
-            return false;
-        }
+        if (loader == null) return false;
         int count = 0;
         for (String name : TARGETS) {
             try {
-                Class<?> target = Class.forName(name, false, loader);
-                if (!CompoundButton.class.isAssignableFrom(target)) {
-                    Api101Bridge.log(TAG + " invalid CompoundButton type " + name);
-                    continue;
-                }
-                Method method = declared(target, "onDraw", Canvas.class);
-                if (method == null) {
-                    Api101Bridge.log(TAG + " no declared onDraw(Canvas) " + name);
-                    continue;
-                }
-                HookUtil.hook(method, chain -> {
+                Class<?> cls = Class.forName(name, false, loader);
+                if (!CompoundButton.class.isAssignableFrom(cls)) continue;
+                Method draw = declared(cls, "onDraw", Canvas.class);
+                if (draw == null) continue;
+                HookUtil.hook(draw, chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
-                    Object owner = chain.getThisObject();
-                    if (owner instanceof CompoundButton && args.length == 1
-                            && args[0] instanceof Canvas) {
+                    Object result = chain.proceed(args);
+                    Object target = chain.getThisObject();
+                    if (target instanceof CompoundButton) {
                         try {
-                            if (candidateDraws++ < 5) {
-                                Api101Bridge.log(TAG + " native onDraw observed="
-                                        + owner.getClass().getName()
-                                        + " id=" + ((CompoundButton) owner).getId());
+                            CompoundButton stock = (CompoundButton) target;
+                            if (observed++ < 6) {
+                                Api101Bridge.log(TAG + " native switch discovered="
+                                        + stock.getClass().getName() + " id=" + stock.getId());
                             }
-                            // Rendering only: native View's touch, accessibility,
-                            // setChecked, haptics and persistence stay authoritative.
-                            if (SystemSettingsNativeSwitchPainter.paint(
-                                    (Canvas) args[0], (CompoundButton) owner)) {
-                                return null;
-                            }
+                            enqueue(stock);
                         } catch (Throwable error) {
-                            Api101Bridge.log(TAG + " native renderer failed, "
-                                    + "falling back to MIUIX: "
-                                    + error.getClass().getName()
-                                    + " " + error.getMessage());
+                            Api101Bridge.log(TAG + " Prismal attachment not enqueued: "
+                                    + error.getClass().getName() + " " + error.getMessage());
                         }
                     }
-                    return chain.proceed(args);
+                    return result;
                 });
                 count++;
-                Api101Bridge.log(TAG + " hooked native Canvas "
-                        + name + "#onDraw");
+                Api101Bridge.log(TAG + " installed native discovery " + name + "#onDraw");
 
-                // Mirror Prismal's drag/press animation without intercepting
-                // or substituting any of the vendor click/gesture authority.
-                Method touch = declared(target, "onTouchEvent", MotionEvent.class);
-                if (touch != null) {
-                    try {
-                        HookUtil.hook(touch, chain -> {
-                            Object[] touchArgs = chain.getArgs().toArray(new Object[0]);
-                            Object originalResult = chain.proceed(touchArgs);
-                            if (chain.getThisObject() instanceof CompoundButton
-                                    && touchArgs.length == 1
-                                    && touchArgs[0] instanceof MotionEvent) {
-                                SystemSettingsPrismalSwitchMotion.observeNativeTouch(
-                                        (CompoundButton) chain.getThisObject(),
-                                        (MotionEvent) touchArgs[0]);
-                            }
-                            return originalResult;
-                        });
-                        Api101Bridge.log(TAG + " observing Prismal touch " + name);
-                    } catch (Throwable touchError) {
-                        Api101Bridge.log(TAG + " touch observer skipped " + name
-                                + " " + touchError.getClass().getSimpleName());
-                    }
-                }
-                Method checked = declared(target, "setChecked", boolean.class);
+                Method checked = declared(cls, "setChecked", boolean.class);
                 if (checked != null) {
                     try {
                         HookUtil.hook(checked, chain -> {
-                            Object[] checkedArgs = chain.getArgs().toArray(new Object[0]);
-                            Object originalResult = chain.proceed(checkedArgs);
+                            Object[] params = chain.getArgs().toArray(new Object[0]);
+                            Object result = chain.proceed(params);
                             if (chain.getThisObject() instanceof CompoundButton) {
-                                SystemSettingsPrismalSwitchMotion.observeNativeChecked(
-                                        (CompoundButton) chain.getThisObject());
+                                try {
+                                    SystemSettingsPrismalSwitchHost.onCheckedChanged(
+                                            (CompoundButton) chain.getThisObject());
+                                } catch (Throwable error) {
+                                    Api101Bridge.log(TAG + " Prismal state sync unavailable "
+                                            + error.getClass().getSimpleName());
+                                }
                             }
-                            return originalResult;
+                            return result;
                         });
-                        Api101Bridge.log(TAG + " observing Prismal checked " + name);
-                    } catch (Throwable stateError) {
-                        Api101Bridge.log(TAG + " checked observer skipped " + name
-                                + " " + stateError.getClass().getSimpleName());
+                    } catch (Throwable error) {
+                        Api101Bridge.log(TAG + " checked observer skipped "
+                                + error.getClass().getSimpleName());
                     }
                 }
             } catch (Throwable error) {
-                Api101Bridge.log(TAG + " vendor hook unavailable=" + name, error);
+                Api101Bridge.log(TAG + " vendor discovery unavailable " + name
+                        + " " + error.getClass().getName());
             }
         }
         installed = count > 0;
-        Api101Bridge.log(TAG + " native Canvas installed hooks=" + count);
+        Api101Bridge.log(TAG + " Prismal component discovery hooks=" + count);
         return installed;
     }
 
-    private static Method declared(Class<?> type, String name, Class<?>... params) {
+    private static void enqueue(CompoundButton view) {
+        if (!view.isAttachedToWindow()
+                || SystemSettingsPrismalSwitchHost.isAttached(view)) return;
+        long now = SystemClock.uptimeMillis();
+        synchronized (LAST_TRIED) {
+            Long last = LAST_TRIED.get(view);
+            if (last != null && now - last < 1500L) return;
+            LAST_TRIED.put(view, now);
+        }
+        view.post(() -> {
+            try {
+                if (view.isAttachedToWindow())
+                    SystemSettingsPrismalSwitchHost.attach(view);
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " Prismal component install fell back "
+                        + error.getClass().getName() + ": " + error.getMessage());
+            }
+        });
+    }
+
+    private static Method declared(Class<?> cls, String name, Class<?>... parameters) {
         try {
-            Method method = type.getDeclaredMethod(name, params);
-            method.setAccessible(true);
-            return method;
-        } catch (Throwable unavailable) {
-            Api101Bridge.log(TAG + " draw override unavailable "
-                    + type.getName() + "#" + name + ": "
-                    + unavailable.getClass().getSimpleName());
+            Method m = cls.getDeclaredMethod(name, parameters);
+            m.setAccessible(true);
+            return m;
+        } catch (Throwable notPresent) {
             return null;
         }
     }
