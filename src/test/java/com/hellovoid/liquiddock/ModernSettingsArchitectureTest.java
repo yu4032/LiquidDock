@@ -311,20 +311,23 @@ public class ModernSettingsArchitectureTest {
             assertTrue(dark.contains("name=\"" + colorKey + "\""));
         }
 
-        // Check the actual baked alpha map; flat white borders would fail this
-        // spatial light-direction requirement. Verify both theme qualifiers.
+        // Faithfully mirror PrismalAGSL v1.0.4 default_specular.agsl:
+        // pow(abs(dot(roundedRectSdfNormal, vec2(cos(45), sin(45)))), 1).
+        // Both matching diagonal corners must be bright, opposite corners faint.
+        // The thumb uses ambient_specular.agsl: normal sign selects white vs black.
         for (String qualifier : new String[]{"drawable-xxhdpi", "drawable-night-xxhdpi"}) {
             for (String kind : new String[]{"card", "pill", "thumb"}) {
                 byte[] png = Files.readAllBytes(Path.of(
                         "src/main/res", qualifier, "gui_specular_" + kind + ".9.png"));
                 assertTrue(png.length > 100);
-                // Minimal 4-bit indexed PNG decoder for the baked assets.
-                // Android unit-test Java does not expose desktop java.awt/ImageIO.
+                // Minimal indexed PNG byte decoder; works in Android unit tests,
+                // which do not contain java.awt/imageio desktop APIs.
                 assertTrue((png[0] & 255) == 137 && png[1] == 80 && png[2] == 78
                         && png[3] == 71);
                 int width = 0;
                 int height = 0;
                 byte[] alphaPalette = null;
+                byte[] rgbPalette = null;
                 java.io.ByteArrayOutputStream idat = new java.io.ByteArrayOutputStream();
                 for (int offset = 8; offset + 12 <= png.length;) {
                     java.nio.ByteBuffer chunkInfo = java.nio.ByteBuffer.wrap(png, offset, 8)
@@ -337,8 +340,11 @@ public class ModernSettingsArchitectureTest {
                                 png, offset + 8, 8).order(java.nio.ByteOrder.BIG_ENDIAN);
                         width = dimensions.getInt();
                         height = dimensions.getInt();
-                        assertTrue((png[offset + 16] & 255) == 4); // 4-bit indexed
+                        assertTrue((png[offset + 16] & 255) == 8); // 8-bit indexed
                         assertTrue((png[offset + 17] & 255) == 3); // indexed palette
+                    } else if (type == 0x504c5445) { // PLTE
+                        rgbPalette = java.util.Arrays.copyOfRange(
+                                png, offset + 8, offset + 8 + length);
                     } else if (type == 0x74524e53) { // tRNS
                         alphaPalette = java.util.Arrays.copyOfRange(
                                 png, offset + 8, offset + 8 + length);
@@ -348,30 +354,46 @@ public class ModernSettingsArchitectureTest {
                     offset += length + 12;
                 }
                 assertTrue(width >= 70 && height >= 60);
-                assertTrue(alphaPalette != null && alphaPalette.length >= 16);
+                assertTrue(alphaPalette != null && alphaPalette.length >= 128);
+                assertTrue(rgbPalette != null && rgbPalette.length >= 384);
                 byte[] decompressed;
                 try (java.util.zip.InflaterInputStream inflater =
                         new java.util.zip.InflaterInputStream(
                                 new java.io.ByteArrayInputStream(idat.toByteArray()))) {
                     decompressed = inflater.readAllBytes();
                 }
-                int stride = (width + 1) / 2;
+                int stride = width; // filter byte + one 8-bit palette index per pixel
                 assertTrue(decompressed.length == (stride + 1) * height);
-                long upperLeftLight = 0;
-                long lowerRightLight = 0;
+                long[] quadrant = new long[4];
                 for (int y = 2; y < height - 2; y++) {
                     int row = y * (stride + 1);
-                    assertTrue((decompressed[row] & 255) == 0); // PNG filter NONE
+                    assertTrue((decompressed[row] & 255) == 0); // filter NONE
                     for (int x = 2; x < width - 2; x++) {
-                        int packed = decompressed[row + 1 + x / 2] & 255;
-                        int index = x % 2 == 0 ? packed >>> 4 : packed & 15;
+                        int index = decompressed[row + x + 1] & 255;
                         int alpha = alphaPalette[index] & 255;
-                        if (x < width / 2 && y < height / 4) upperLeftLight += alpha;
-                        if (x >= width / 2 && y >= height * 3 / 4) lowerRightLight += alpha;
+                        int rgbOffset = index * 3;
+                        boolean white = (rgbPalette[rgbOffset] & 255) > 128;
+                        int quadrantIndex = (x < width / 2 ? 0 : 1)
+                                + (y < height / 2 ? 0 : 2);
+                        quadrant[quadrantIndex] += white ? alpha : -alpha;
                     }
                 }
-                assertTrue("Baked white reflection must favor the upper-left key light: "
-                        + kind + " / " + qualifier, upperLeftLight > lowerRightLight);
+                if ("thumb".equals(kind)) {
+                    assertTrue("Ambient: dark normal-facing side upper-left",
+                            quadrant[0] < 0);
+                    assertTrue("Ambient: bright side bottom-right", quadrant[3] > 0);
+                    assertTrue("Ambient signs must not collapse into a white outline",
+                            quadrant[3] > quadrant[0]);
+                } else {
+                    assertTrue("Default: upper-left corner more reflective than upper-right",
+                            quadrant[0] > quadrant[1] * 1.2);
+                    assertTrue("Default: bottom-right corner more reflective than bottom-left",
+                            quadrant[3] > quadrant[2] * 1.2);
+                    assertTrue("Default: both diagonally opposed corners receive specular",
+                            quadrant[0] > 0 && quadrant[3] > 0);
+                    assertTrue("Default: opposite corners have similar intensity",
+                            Math.abs(quadrant[0] - quadrant[3]) < quadrant[0] * 0.1);
+                }
             }
         }
         assertTrue(surfaces.contains("LocalGuiPresetChromePalette provides presetChrome"));
