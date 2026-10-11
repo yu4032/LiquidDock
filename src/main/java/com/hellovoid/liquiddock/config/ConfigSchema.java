@@ -507,6 +507,15 @@ public final class ConfigSchema {
         private Recents() {}
     }
 
+    /** System Settings UI integration is independent of Dock and disabled by default. */
+    public static final class SystemSettings {
+        public static final ConfigKey<Boolean> PRISMAL_SWITCH = bool(
+                "system_settings_prismal_switch", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
+
+        private SystemSettings() {}
+    }
+
     public static final class Debug {
         public static final ConfigKey<Boolean> LOGGING = bool(
                 "liquiddock_debug_log", false, false, false, ConfigKey.ExportMode.NEVER);
@@ -607,6 +616,7 @@ public final class ConfigSchema {
                 Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
                 Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET);
         add(keys, Recents.BACKGROUND_BLUR_PERCENT, Recents.DISABLE_WALLPAPER_DIMMING);
+        add(keys, SystemSettings.PRISMAL_SWITCH);
         add(keys, Debug.LOGGING);
         return Collections.unmodifiableList(keys);
     }
