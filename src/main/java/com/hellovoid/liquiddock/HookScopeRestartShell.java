@@ -16,6 +16,7 @@ final class HookScopeRestartShell {
     static final String SECURITY_CENTER = "com.miui.securitycenter";
     static final String GBOARD = "com.google.android.inputmethod.latin";
     static final String SEARCH = "com.android.quicksearchbox";
+    static final String SETTINGS = "com.android.settings";
 
     static final String RESTARTED = "RESTARTED";
     static final String STOPPED = "STOPPED";
@@ -28,7 +29,7 @@ final class HookScopeRestartShell {
     // action. Launcher should be penultimate so returning HOME cannot prevent
     // other application scopes from restarting.
     private static final String[] ORDER = {
-            SECURITY_CENTER, GBOARD, SEARCH, HOME, SYSTEM_UI
+            SECURITY_CENTER, GBOARD, SEARCH, SETTINGS, HOME, SYSTEM_UI
     };
 
     static final Set<String> ALLOWED = Set.of(ORDER);
@@ -146,6 +147,8 @@ final class HookScopeRestartShell {
             } else if (SEARCH.equals(scope)) {
                 script.append("restart_running com.android.quicksearchbox ");
                 script.append("com.android.quicksearchbox\n");
+            } else if (SETTINGS.equals(scope)) {
+                script.append("restart_running com.android.settings com.android.settings\n");
             }
         }
         if (diagnostic) script.append("trace 'ROOT_DONE'\n");
