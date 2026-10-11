@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -143,6 +144,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // Render-thread only. A geometry-only swap immediately after another static-buffer present
     // may be coalesced with the next source frame. Never pace source-driven presentations.
     private long lastStaticSwapNs;
+    // GL posts a brief delay for STATIC work only; drag arriving during the wait must wake it
+    // immediately. Only cross-thread visibility is needed for this tiny handoff.
+    private volatile boolean geometryDelayPending;
+    private final AtomicBoolean dragDelayWakeupQueued = new AtomicBoolean();
 
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
@@ -662,13 +667,24 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private void scheduleOutputRender(boolean staticDirty, boolean dragDirty) {
         if (shuttingDown) return;
-        if (outputRenderState.request(staticDirty, dragDirty)
-                && !postRender(this::drainOutputRenderWork)) {
-            outputRenderState.onPostRejected();
+        boolean newQueueOwner = outputRenderState.request(staticDirty, dragDirty);
+        if (newQueueOwner) {
+            if (!postRender(this::drainOutputRenderWork)) outputRenderState.onPostRejected();
+        } else if (dragDirty && geometryDelayPending
+                && dragDelayWakeupQueued.compareAndSet(false, true)) {
+            // A drag request must not be held behind the optional static geometry wait.
+            // The delayed task is still safe to run afterward; it will see an empty work mask.
+            if (!sourceBackend.postUrgentToRenderThread(() -> {
+                dragDelayWakeupQueued.set(false);
+                drainOutputRenderWork();
+            })) {
+                dragDelayWakeupQueued.set(false);
+            }
         }
     }
 
     private void drainOutputRenderWork() {
+        geometryDelayPending = false;
         int work = outputRenderState.consumeQueuedRender();
         // Geometry-only outputs are the only optional presents. Fresh PassBlur frames always
         // bypass this gate and draw the latest geometry immediately. Drag/Recents output work
@@ -679,8 +695,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     lastStaticSwapNs, System.nanoTime(), staticSwapRefreshPeriodNs);
             if (delayMs > 0L) {
                 outputRenderState.request(true, false);
+                geometryDelayPending = true;
                 if (!sourceBackend.postToRenderThreadDelayed(
                         this::drainOutputRenderWork, delayMs)) {
+                    geometryDelayPending = false;
                     outputRenderState.onPostRejected();
                 }
                 return;
