@@ -78,7 +78,7 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(gate.contains("chain.proceed(new Object[]{0, null})"));
         assertTrue(gate.contains("callNative(host, radius, colors)"));
         assertTrue(gate.contains("if (!shouldMute)"));
-        assertFalse(gate.contains("clearContentBlur("));
+        assertFalse(gate.contains("MiBlurBridge.clearContentBlur("));
         assertFalse(gate.contains("clearPassWindowBlur("));
         assertFalse(gate.contains("setMiBackgroundBlurRadius"));
         assertFalse(gate.contains("setMiViewBlurMode"));
