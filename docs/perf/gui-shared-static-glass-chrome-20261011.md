@@ -48,3 +48,38 @@ A fully baked resource is the appropriate approximation **because the GUI canvas
 - Verify GUI glass OFF solid fallback, light/dark contrasts, top/header/footer sampling. **Do not merge on CI success alone.**
 
 Unrelated PR #340 remains independent; `main` remains untouched.
+
+## Late regression fix: lost rounded-corner highlights, missing controls, missing shadows
+
+The on-device report confirmed that the previous composite implementation still **did not render its rounded-corner reflection correctly** and **both toggle and slider idle handles vanished**. This was a code defect, not just an image-quality mismatch.
+
+### Proven idle-control disappearance cause
+
+`guiSolidChrome` assumed that a drawable must report a positive `intrinsicWidth` and `intrinsicHeight` before it could be drawn. Android XML `<shape>` drawables (the new white thumb and destructive action) normally return `-1`. The guard therefore returned an empty `onDrawBehind` for every idle thumb.
+
+The guard now rejects only nonpositive **measured destination size**. XML drawables follow the direct `setBounds(width,height)+draw` path regardless of intrinsic dimensions. Slider and toggle continue to use native Prismal whenever sampling is active; idle handles regain their own white fill.
+
+### Restore native Prismal's missing depth hierarchy
+
+The source uses `PrismalDepthShadow.Default` outside the shape: radius **24dp**, `offsetY=radius/6=4dp`, black alpha **0.10**. Earlier static Cell code removed this shadow entirely. When the clipped background layer was reused to draw an outside glow, it also clipped the four rounded-corner regions.
+
+The static replacement now uses three pre-blurred `drawable-nodpi/gui_depth_shadow_{card,pill,thumb}.png` masks shared across controls. Card/Pill masks approximate the default black 24dp blur and 4dp offset; the small idle thumb mask approximates the interactive control's radius **4dp**, alpha **0.05**, offset **4/6dp**. Material masks are RGBA and need no NinePatch AAPT metadata. The existing draw-time nine-slice helper stretches only straight sections, leaving pre-blurred corners fixed.
+
+The exact modifier order matters:
+
+```kotlin
+Modifier
+    .guiBakedDepthShadow(style, presetChrome) // exterior; never clipped
+    .guiSolidChrome(style, presetChrome)       // reflected white edge
+    .clip(prismalContinuousShape)              // clip Cell CONTENT only
+```
+
+The static material is drawn **before** the clip, keeping the corner reflection and its antialiased fringe. Text and controls still clip to the original continuous Prismal shape.
+
+This adds up to one static shadow asset draw and one static material asset draw per Cell. It avoids reintroducing the original per-Cell Prismal shader, RenderEffect, offscreen blur layer, or live capture. It may still increase draw calls and texture bandwidth; verify on device rather than claiming a measured improvement.
+
+### Contracts
+
+`ModernSettingsArchitectureTest` explicitly guards the XML-intrinsic-size bug, static material/shadow ordering, original active Ambient/DepthShadow behavior, pre-baked mask existence and PNG format, and the white idle thumb resource.
+
+**Do not merge** before the user verifies rounded-corner reflections on all four corners, toggle/slider visibility, white idle handles, native press animation and frame time on dense pages.
