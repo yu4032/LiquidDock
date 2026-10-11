@@ -236,11 +236,10 @@ internal fun GuiOnTouchPrismalToggle(
                 .size(40.dp, 24.dp)
         ) {
             if (!samplingEnabled) {
-                // Reuse one recorded Prismal surface while not interacting.
-                GuiFrozenPrismalChrome(
-                    backdrop = underlayBackdrop,
-                    shape = { PrismalCapsule() },
-                    // Release animation applies to cached output, not the backdrop input.
+                // Draw shared static chrome while the untouched gesture spring remains active.
+                GuiStaticGlassChrome(
+                    style = GuiStaticGlassStyle.PILL,
+                    darkTheme = !isLightTheme,
                     modifier = Modifier.matchParentSize().graphicsLayer {
                         val velocity = dampedDragAnimation.velocity / 50f
                         scaleX = dampedDragAnimation.scaleX /
@@ -248,12 +247,6 @@ internal fun GuiOnTouchPrismalToggle(
                         scaleY = dampedDragAnimation.scaleY *
                             (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                     },
-                    blurRadius = 8.dp,
-                    refractionHeightPx = with(density) { 4.dp.toPx() },
-                    refractionAmountPx = with(density) { 6.dp.toPx() },
-                    chromaticAberration = 0.28f,
-                    surfaceColor = Color.White.copy(alpha = 0.75f),
-                    depthEffect = false,
                 )
             }
         }
