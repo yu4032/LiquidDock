@@ -29,21 +29,21 @@ The main UI now uses a baked **composite** 9-patch, not a solid fill plus a sepa
 - A **single opaque color fill** is the material's interior.
 - The offline baker computes the source 45° normal dot, approximates the clipped specular stroke/blur near the shape edge, applies the *actual additive Plus equation* `C_out = min(255, C_fill + 255 * 0.5 * intensity * edgeWeight)` to the final fixed-color RGB values, then stores that RGB directly in the resource. On light Cells, this creates a narrow saturated white perimeter with faint directional differences; on dark Cells, more of the two-lobed shape remains visible.
 - Nine-patch corners approximate the original **Continuous** outline with a superellipse. The `ModernSurface` and action buttons once again clip with `PrismalRoundedRectangle`, so the drawn outline aligns with the real upstream geometry. The clip approximation remains a declared fidelity limit, not a pixel-exact AGSL recreation.
-- Eight `drawable[-night]-xxhdpi/gui_material_{card,pill,thumb,danger}.9.png` resources encode final material output. Each is **4-bit indexed PNG**, the format previously accepted by this project's AAPT2 version. Stretch guides avoid distorting the curved corners for variable-width controls.
-- `GuiSolidChrome` resolves the four drawables **once at the Scaffold**. `Modifier.guiSolidChrome` performs only one `drawBehind` NinePatch draw per static Cell: no extra `Modifier.background`, foreground alpha overlay, per-Cell shader, backdrop sample, GPU GraphicsLayer, or color math.
+- Four `drawable[-night]-xxhdpi/gui_material_{card,pill}.9.png` files encode the final composite as standard **8-bit RGBA PNG**. The first indexed-color attempt triggered AAPT2 native compiler crashes on opaque material assets, so it was not retained. `drawable/gui_material_thumb.xml` provides the actual flat-white idle handle; `drawable/gui_material_danger.xml` keeps the uncommon red action as a simple preset shape. Stretch guides avoid distorting the curved corners in Cards and Pills of variable widths.
+- `GuiSolidChrome` resolves the four drawables (two NinePatch + two XML) **once at the Scaffold**. `Modifier.guiSolidChrome` performs only one `drawBehind` NinePatch draw per static Cell: no extra `Modifier.background`, foreground alpha overlay, per-Cell shader, backdrop sample, GPU GraphicsLayer, or color math.
 - **Idle thumb:** uses a white precomposited resource in both themes. **Active thumb:** continues using original Prismal Ambient, pressProgress, white-fill crossfade, and gesture/spring animations. No second baked reflection is overlaid on touch.
 
 A fully baked resource is the appropriate approximation **because the GUI canvas and Cell fill are intentionally fixed**. This would not be valid for arbitrary dynamic wallpapers.
 
 ## Reproducibility
 
-`scripts/bake_gui_materials.py` regenerates the eight material files using only Python 3's standard library, including nine-patch guide markers and indexed-PNG encoding. It documents the source math, the approximate stroke falloff, the fixed background colors and the clipping approximation. Keep the script and assets in sync when changing colors or shapes.
+`scripts/bake_gui_materials.py` regenerates the four Card/Pill RGBA NinePatch files using only Python 3's standard library, including stretch guides and truecolor PNG encoding. The idle-thumb and destructive-action XML shapes are independently maintained. It documents the source math, the approximate stroke falloff, the fixed background colors and the clipping approximation. Keep the script and assets in sync when changing colors or shapes.
 
 ## Device acceptance
 
 - On the light GUI, compare the original screenshot: near-white/lavender cell, **continuous thin white rim**, small directional modulation rather than isolated white bulbs, consistent rounding.
 - Compare long navigation Cells and shorter status/action cards. Ensure 9-patch center stretching leaves no vertical seams or duplicated corners.
-- Verify the idle white thumb, drag-time original Prismal Ambient, no double specular, and smooth release spring.
+- Verify the idle white thumb XML, drag-time original Prismal Ambient, no double specular, and smooth release spring.
 - Dense-list scroll and graphics memory usage should remain close to the proven static/no-shader version. A single 9-patch draw is not zero cost; only a controlled on-device measurement establishes whether the final build stays performant.
 - Verify GUI glass OFF solid fallback, light/dark contrasts, top/header/footer sampling. **Do not merge on CI success alone.**
 
