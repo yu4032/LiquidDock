@@ -8,25 +8,51 @@ import java.nio.file.Path;
 
 import org.junit.Test;
 
-/** Settings is an opt-in module scope, not a live UI replacement yet. */
+/** The Settings pilot is strictly opt-in and never owns Settings persistence. */
 public class SystemSettingsScopeContractTest {
     private static final Path MAIN = Path.of("src/main");
 
     @Test
-    public void settingsScopeLoadsWithoutInstallingAnyFeatureHooks() throws Exception {
-        String scope = Files.readString(
-                MAIN.resolve("resources/META-INF/xposed/scope.list"));
-        String module = Files.readString(
-                MAIN.resolve("java/com/hellovoid/liquiddock/ModuleMain.java"));
-        String thirdPartyRegistry = Files.readString(
-                MAIN.resolve("java/com/hellovoid/liquiddock/ThirdPartyGlassAdapterRegistry.java"));
+    public void settingsScopeIsOptInAndTargeted() throws Exception {
+        String scope = read("resources/META-INF/xposed/scope.list");
+        String module = read("java/com/hellovoid/liquiddock/ModuleMain.java");
+        String schema = read("java/com/hellovoid/liquiddock/config/ConfigSchema.java");
+        String registry = read("java/com/hellovoid/liquiddock/ThirdPartyGlassAdapterRegistry.java");
 
         assertTrue(scope.lines().anyMatch("com.android.settings"::equals));
-        assertTrue(module.contains("SETTINGS_PACKAGE = \"com.android.settings\""));
-        int settingsGate = module.indexOf("if (SETTINGS_PACKAGE.equals(packageName)) return;");
+        int settingsGate = module.indexOf("if (SETTINGS_PACKAGE.equals(packageName)) {");
         int systemUiGate = module.indexOf("if (SYSTEM_UI_PACKAGE.equals(packageName))");
-        assertTrue("Settings must return before all feature installers", settingsGate > 0);
-        assertTrue(settingsGate < systemUiGate);
-        assertFalse(thirdPartyRegistry.contains("\"com.android.settings\""));
+        assertTrue(settingsGate > 0 && settingsGate < systemUiGate);
+        assertTrue(module.contains("ConfigSchema.SystemSettings.PRISMAL_SWITCH"));
+        assertTrue(module.contains("SystemSettingsPrismalSwitchHook.install(param.getClassLoader())"));
+        assertTrue(schema.contains("\"system_settings_prismal_switch\", false, false, false"));
+        assertTrue(schema.contains("add(keys, SystemSettings.PRISMAL_SWITCH)"));
+        assertFalse(registry.contains("\"com.android.settings\""));
+    }
+
+    @Test
+    public void switchExperimentRetainsNativeOwnershipAndHasAStockFallback() throws Exception {
+        String hook = read("java/com/hellovoid/liquiddock/SystemSettingsPrismalSwitchHook.java");
+        String overlay = read("kotlin/com/hellovoid/liquiddock/SystemSettingsPrismalSwitchOverlay.kt");
+        String ui = read("kotlin/com/hellovoid/liquiddock/SystemSettingsPage.kt");
+        String nav = read("kotlin/com/hellovoid/liquiddock/SettingsNavigationModel.kt");
+
+        assertTrue(hook.contains("miuix.slidingwidget.widget.SlidingButton"));
+        assertTrue(hook.contains("target.getDeclaredMethod(\"onDraw\""));
+        assertFalse(hook.contains("CompoundButton.class.getDeclaredMethod"));
+        assertTrue(overlay.contains("frame.id != android.R.id.widget_frame"));
+        assertTrue(overlay.contains("stock.performClick()"));
+        assertTrue(overlay.contains("stock.alpha = stockAlpha"));
+        assertTrue(overlay.contains("frame.removeView(view)"));
+        assertTrue(overlay.contains("GuiOnTouchPrismalToggle("));
+        assertFalse(overlay.contains("setOnCheckedChangeListener"));
+        assertFalse(overlay.contains("PixelCopy"));
+        assertFalse(overlay.contains("ScreenCapture"));
+        assertTrue(ui.contains("ConfigSchema.SystemSettings.PRISMAL_SWITCH"));
+        assertTrue(nav.contains("Page.SystemSettings"));
+    }
+
+    private static String read(String file) throws Exception {
+        return Files.readString(MAIN.resolve(file));
     }
 }
