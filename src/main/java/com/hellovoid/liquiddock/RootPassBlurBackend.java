@@ -39,6 +39,8 @@ final class RootPassBlurBackend {
 
     private static final String TAG = "[DC][RootPassBlur]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
+    private static final int EGL_BUFFER_AGE_EXT = 0x313D;
+    private static final int BUFFER_AGE_SAMPLE_INTERVAL = 60;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -84,6 +86,10 @@ final class RootPassBlurBackend {
     private EGLContext eglContext = EGL14.EGL_NO_CONTEXT;
     private EGLSurface eglPbufferSurface = EGL14.EGL_NO_SURFACE;
     private EGLSurface currentEglSurface = EGL14.EGL_NO_SURFACE;
+    // Diagnostics only: never change EGL_SWAP_BEHAVIOR or assume backbuffer preservation.
+    private boolean eglBufferAgeSupported;
+    private int eglSwapSampleCount;
+    private final int[] eglQueryValue = new int[1];
     private int normalizeProgram;
     private int normalizePositionLocation = -1;
     private int normalizeUvLocation = -1;
@@ -440,9 +446,18 @@ final class RootPassBlurBackend {
 
     void swapBuffers(EGLSurface surface) {
         requireRenderThread();
-        boolean trace = MainHook.debugLogging
+        boolean trace = Trace.isEnabled()
                 && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
-        if (trace) Trace.beginSection("LD.Workspace.Swap");
+        if (trace) {
+            // Sample BufferAge only every 60th EGL swap. Never query/modify it in normal mode.
+            if (eglBufferAgeSupported
+                    && ++eglSwapSampleCount % BUFFER_AGE_SAMPLE_INTERVAL == 0
+                    && EGL14.eglQuerySurface(
+                            eglDisplay, surface, EGL_BUFFER_AGE_EXT, eglQueryValue, 0)) {
+                Trace.setCounter("LD.Workspace.EglBufferAge", eglQueryValue[0]);
+            }
+            Trace.beginSection("LD.Workspace.EglSwap");
+        }
         try {
             if (!EGL14.eglSwapBuffers(eglDisplay, surface)) {
                 throw new IllegalStateException("eglSwapBuffers error=0x"
@@ -554,6 +569,10 @@ final class RootPassBlurBackend {
         eglConfig = configs[0];
         eglContext = context;
         eglPbufferSurface = pbuffer;
+        String extensions = EGL14.eglQueryString(display, EGL14.EGL_EXTENSIONS);
+        eglBufferAgeSupported = extensions != null
+                && (" " + extensions + " ").contains(" EGL_EXT_buffer_age ");
+        eglSwapSampleCount = 0;
     }
 
     private void createInputProducer() {
