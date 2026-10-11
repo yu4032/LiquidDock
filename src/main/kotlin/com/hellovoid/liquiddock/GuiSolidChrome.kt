@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -81,9 +81,10 @@ internal enum class GuiSolidChromeStyle { CARD, PILL, THUMB, DANGER }
  * deterministic nine-region stretch at runtime. Corners remain at their
  * physical dp radii; only straight middle bands stretch.
  *
- * This is a few ordinary draw calls using a single shared image resource.
- * It creates no per-Cell Bitmap, RenderEffect, Prismal shader, capture, offscreen
- * layer, per-Cell color calculation or extra composable background child.
+ * This is up to nine cheap clipped draws of one shared image. The nine-slice
+ * geometry is cached by drawWithCache when size/density changes, so scrolling
+ * does not allocate arrays per frame. There is no per-Cell Bitmap allocation,
+ * RenderEffect, shader, capture, offscreen layer, lighting or background child.
  */
 internal fun Modifier.guiSolidChrome(
     style: GuiSolidChromeStyle,
@@ -100,33 +101,52 @@ internal fun Modifier.guiSolidChrome(
         GuiSolidChromeStyle.PILL -> 18f
         GuiSolidChromeStyle.THUMB, GuiSolidChromeStyle.DANGER -> 0f
     }
-    return this.drawBehind {
-        drawIntoCanvas { canvas ->
-            val width = size.width.roundToInt()
-            val height = size.height.roundToInt()
-            if (width <= 0 || height <= 0) return@drawIntoCanvas
-            val native = canvas.nativeCanvas
-            if (cornerDp == 0f) {
-                // Plain Android XML drawable: a single cheap white/red shape.
-                val saved = native.save()
-                try {
-                    material.setBounds(0, 0, width, height)
-                    material.draw(native)
-                } finally {
-                    native.restoreToCount(saved)
+    // IMPORTANT: Build source/destination slice geometry once per measured
+    // Cell size. Scrolling must not allocate four arrays for every draw/frame.
+    return this.drawWithCache {
+        val width = size.width.roundToInt()
+        val height = size.height.roundToInt()
+        val sourceWidth = material.intrinsicWidth
+        val sourceHeight = material.intrinsicHeight
+        if (width <= 0 || height <= 0 || sourceWidth <= 0 || sourceHeight <= 0) {
+            onDrawBehind {}
+        } else if (cornerDp == 0f) {
+            onDrawBehind {
+                drawIntoCanvas { canvas ->
+                    val native = canvas.nativeCanvas
+                    val checkpoint = native.save()
+                    try {
+                        material.setBounds(0, 0, width, height)
+                        material.draw(native)
+                    } finally {
+                        native.restoreToCount(checkpoint)
+                    }
                 }
-            } else {
-                // Baked assets are stored as drawable[-night]-nodpi normal PNGs.
-                // Their 1px guide frame is cropped here; AAPT2 never sees a
-                // .9.png and cannot crash when compiling its custom metadata.
-                drawBakedNineSlice(
-                    native = native,
-                    material = material,
-                    width = width,
-                    height = height,
-                    sourceCornerPx = (cornerDp * 3f).roundToInt(), // xxhdpi baker
-                    targetCornerPx = cornerDp * density,
-                )
+            }
+        } else {
+            val sourceCornerPx = (cornerDp * 3f).roundToInt()
+            val sx = intArrayOf(
+                1, 1 + sourceCornerPx,
+                sourceWidth - 1 - sourceCornerPx, sourceWidth - 1,
+            )
+            val sy = intArrayOf(
+                1, 1 + sourceCornerPx,
+                sourceHeight - 1 - sourceCornerPx, sourceHeight - 1,
+            )
+            val cornerX = (cornerDp * density).coerceAtMost(width * 0.5f)
+            val cornerY = (cornerDp * density).coerceAtMost(height * 0.5f)
+            val dx = floatArrayOf(0f, cornerX, width - cornerX, width.toFloat())
+            val dy = floatArrayOf(0f, cornerY, height - cornerY, height.toFloat())
+            onDrawBehind {
+                drawIntoCanvas { canvas ->
+                    drawBakedNineSlice(
+                        native = canvas.nativeCanvas,
+                        material = material,
+                        sourceWidth = sourceWidth,
+                        sourceHeight = sourceHeight,
+                        sx = sx, sy = sy, dx = dx, dy = dy,
+                    )
+                }
             }
         }
     }
@@ -135,32 +155,13 @@ internal fun Modifier.guiSolidChrome(
 private fun drawBakedNineSlice(
     native: android.graphics.Canvas,
     material: Drawable,
-    width: Int,
-    height: Int,
-    sourceCornerPx: Int,
-    targetCornerPx: Float,
+    sourceWidth: Int,
+    sourceHeight: Int,
+    sx: IntArray,
+    sy: IntArray,
+    dx: FloatArray,
+    dy: FloatArray,
 ) {
-    val sourceWidth = material.intrinsicWidth
-    val sourceHeight = material.intrinsicHeight
-    if (sourceWidth <= 2 || sourceHeight <= 2) return
-
-    val sx = intArrayOf(
-        1,
-        1 + sourceCornerPx,
-        sourceWidth - 1 - sourceCornerPx,
-        sourceWidth - 1,
-    )
-    val sy = intArrayOf(
-        1,
-        1 + sourceCornerPx,
-        sourceHeight - 1 - sourceCornerPx,
-        sourceHeight - 1,
-    )
-    val cx = targetCornerPx.coerceAtMost(width * 0.5f)
-    val cy = targetCornerPx.coerceAtMost(height * 0.5f)
-    val dx = floatArrayOf(0f, cx, width - cx, width.toFloat())
-    val dy = floatArrayOf(0f, cy, height - cy, height.toFloat())
-
     for (row in 0..2) {
         for (column in 0..2) {
             val srcWidth = sx[column + 1] - sx[column]
