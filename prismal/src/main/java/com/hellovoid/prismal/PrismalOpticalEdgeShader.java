@@ -18,6 +18,27 @@ public final class PrismalOpticalEdgeShader {
     private static final String REFLECTION_MIX = "color = mix(color, reflSample, reflW);";
     private static final String PLAIN_HIGHLIGHT_ADD =
             "color += plusHL * vec3(0.99, 0.995, 1.0);";
+    // Upstream shows its surface normal before the OS4 SDF normal or directional light exists.
+    private static final String UPSTREAM_NORMAL_DEBUG =
+            "if (u_showNormals == 1) {\n"
+            + "        gl_FragColor = vec4(N * 0.5 + 0.5, opacity);\n"
+            + "        return;\n"
+            + "    }";
+    private static final String FINAL_GLASS_COLOR =
+            "gl_FragColor = vec4(color, opacity * u_transmittance);";
+    private static final String OS4_NORMAL_DEBUG = """
+                if (u_showNormals == 1) {
+                    // Prismal surface in the center; the very same SDF normal used by
+                    // OS4 background reflection and directional light at the edge.
+                    vec3 os4DebugNormal = normalize(mix(N, os4EdgeNormal3, os4EdgeMask));
+                    vec3 os4DebugColor = os4DebugNormal * 0.5 + 0.5;
+                    // The white overlay is proportional to the final OS4 directional
+                    // contribution, not to the disabled legacy Prismal specular.
+                    os4DebugColor = mix(os4DebugColor, vec3(1.0), os4SoftLight * 0.7);
+                    gl_FragColor = vec4(os4DebugColor, opacity);
+                    return;
+                }
+                """;
 
     private static final String OS4_EDGE_UNIFORMS = """
             uniform float u_os4EdgeEnabled;
@@ -64,6 +85,8 @@ public final class PrismalOpticalEdgeShader {
         requireSingle(source, SHADOW_EXTENT);
         requireSingle(source, REFLECTION_MIX);
         requireSingle(source, PLAIN_HIGHLIGHT_ADD);
+        requireSingle(source, UPSTREAM_NORMAL_DEBUG);
+        requireSingle(source, FINAL_GLASS_COLOR);
         return source
                 .replace(PRECISION,
                         "#extension GL_OES_standard_derivatives : enable\n\n"
@@ -154,7 +177,11 @@ public final class PrismalOpticalEdgeShader {
                 .replace("tw * 0.42", "tw * 0.42 * opticalEdgeScale")
                 .replace("minDim * 0.12", "minDim * 0.12 * opticalEdgeScale")
                 .replace("bandFracR * rimBandTight",
-                        "bandFracR * opticalEdgeScale * rimBandTight");
+                        "bandFracR * opticalEdgeScale * rimBandTight")
+                // Only the debug path changes: normal glass output is untouched.
+                .replace(UPSTREAM_NORMAL_DEBUG,
+                        "// OS4 normal debug is deferred until directional lighting is available.")
+                .replace(FINAL_GLASS_COLOR, OS4_NORMAL_DEBUG + FINAL_GLASS_COLOR);
     }
 
     private static void requireSingle(String source, String anchor) {

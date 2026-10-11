@@ -66,4 +66,22 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("max(u_os4DirectionalIntensity, 0.0)"));
         assertTrue(patched.contains("max(u_os4DirectionalOppositeIntensity, 0.0)"));
     }
+    @Test
+    public void normalDebugShowsActualOs4EdgeNormalAndDirectionalLighting() {
+        String patched = PrismalComponentGateShader.apply(
+                PrismalOpticalEdgeShader.apply(
+                        PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)));
+
+        assertFalse(patched.contains("gl_FragColor = vec4(N * 0.5 + 0.5, opacity);"));
+        assertTrue(patched.contains("normalize(mix(N, os4EdgeNormal3, os4EdgeMask))"));
+        assertTrue(patched.contains("mix(os4DebugColor, vec3(1.0), os4SoftLight * 0.7)"));
+        assertTrue(patched.contains("gl_FragColor = vec4(os4DebugColor, opacity);"));
+        assertTrue(patched.indexOf("vec3 os4EdgeNormal3 =") >= 0);
+        assertTrue(patched.indexOf("float os4SoftLight =") > patched.indexOf("vec3 os4EdgeNormal3 ="));
+        assertTrue(patched.indexOf("if (u_showNormals == 1)") > patched.indexOf("float os4SoftLight ="));
+        assertTrue(patched.indexOf("gl_FragColor = vec4(color, opacity * u_transmittance);")
+                > patched.indexOf("gl_FragColor = vec4(os4DebugColor, opacity);"));
+    }
+
+
 }

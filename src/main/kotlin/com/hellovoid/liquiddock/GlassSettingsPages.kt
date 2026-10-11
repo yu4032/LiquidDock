@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigSchema
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 
 // Pure relocation of the existing Liquid, component-glass, and highlight pages.
@@ -114,6 +115,34 @@ internal fun LiquidSpecPage(
     }
 }
 
+
+@Composable
+internal fun LiquidLightingPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    val enabled = masterEnabled && liquidEnabled
+    DenseSettingsList(
+        padding = padding,
+        title = stringResource(R.string.page_liquid_lighting),
+        summary = "调节焦散、菲涅尔反射与光源方向，并集中调整 OS4 边缘反射和方向光。",
+    ) {
+        item(key = "lighting-basic-heading") {
+            SmallTitle("基础光照与焦散")
+        }
+        groupedIntSettings(liquidLightingSpecs, prefs, enabled)
+        item(key = "lighting-os4-heading") {
+            SmallTitle("OS4 反射与方向光")
+        }
+        groupedIntSettings(liquidOs4Specs, prefs, enabled)
+    }
+}
+
 @Composable
 internal fun LiquidSamplingPage(
     padding: PaddingValues,
@@ -160,8 +189,8 @@ internal fun LiquidSamplingPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
-                    "表面法线可视化",
-                    "以颜色显示玻璃表面法线方向，用于检查折射、曲面与光照响应",
+                    "OS4 法线与方向光可视化",
+                    "内部显示玻璃表面法线，边缘显示 OS4 反射使用的 SDF 法线；亮度反映 OS4 方向光，不包含背景反射纹理",
                     masterEnabled && liquidEnabled,
                 )
             }

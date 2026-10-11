@@ -33,7 +33,6 @@ internal enum class Page(val titleRes: Int) {
     LiquidLighting(R.string.page_liquid_lighting),
     LiquidShadow(R.string.page_liquid_shadow),
     LiquidSampling(R.string.page_liquid_sampling),
-    LiquidOs4(R.string.page_liquid_os4),
 
     GlassComponents(R.string.page_glass_components),
     GlassIcons(R.string.page_glass_icons),
@@ -132,10 +131,9 @@ internal val liquidEntries = listOf(
     HubEntry(Page.LiquidMaterial, R.string.page_liquid_material, "模糊、厚度、透射率与亮度"),
     HubEntry(Page.LiquidRefraction, R.string.page_liquid_refraction, "折射、法线、穹顶与位移"),
     HubEntry(Page.LiquidColor, R.string.page_liquid_color, "底色、色散与鲜艳度"),
-    HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "焦散、反射与光源方向"),
+    HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "高光、焦散、OS4 边缘反射与方向光"),
     HubEntry(Page.LiquidShadow, R.string.page_liquid_shadow, "玻璃内部阴影颜色与柔和度"),
     HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "背景缩放、帧率与帧同步"),
-    HubEntry(Page.LiquidOs4, R.string.page_liquid_os4, "OS4 边缘反射与方向光"),
 )
 
 internal val componentEntries = listOf(

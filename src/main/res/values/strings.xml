@@ -95,10 +95,9 @@
     <string name="page_liquid_material">Material basics</string>
     <string name="page_liquid_refraction">Refraction</string>
     <string name="page_liquid_color">Color &amp; dispersion</string>
-    <string name="page_liquid_lighting">Caustics &amp; lighting</string>
+    <string name="page_liquid_lighting">Highlights &amp; lighting</string>
     <string name="page_liquid_shadow">Inner shadow</string>
     <string name="page_liquid_sampling">Sampling &amp; performance</string>
-    <string name="page_liquid_os4">OS4 reflection</string>
     <string name="page_animation_workspace">Workspace &amp; Dock</string>
     <string name="page_animation_interaction">Glass interaction</string>
     <string name="page_animation_popups">Popup transitions</string>

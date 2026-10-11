@@ -93,10 +93,9 @@
     <string name="page_liquid_material">材质基础</string>
     <string name="page_liquid_refraction">折射</string>
     <string name="page_liquid_color">颜色与色散</string>
-    <string name="page_liquid_lighting">焦散与光照</string>
+    <string name="page_liquid_lighting">高光与光照</string>
     <string name="page_liquid_shadow">内阴影</string>
     <string name="page_liquid_sampling">采样与性能</string>
-    <string name="page_liquid_os4">OS4 反射</string>
     <string name="page_animation_workspace">工作区与 Dock</string>
     <string name="page_animation_interaction">玻璃交互</string>
     <string name="page_animation_popups">弹出界面过渡</string>

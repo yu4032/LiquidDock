@@ -132,8 +132,11 @@ internal fun ScopedGlassSettingsPage(
                     mutableStateOf(prefs.getBoolean(normalsKey, inherited))
                 }
                 SwitchPreference(
-                    title = "显示法线调试",
-                    summary = if (prefs.contains(normalsKey)) "独立设置" else "继承全局",
+                    title = "OS4 法线与方向光",
+                    summary = if (prefs.contains(normalsKey))
+                        "独立设置；边缘法线与方向光强度可视化"
+                    else
+                        "继承全局；边缘法线与方向光强度可视化",
                     checked = checked,
                     enabled = enabled,
                     onCheckedChange = {
