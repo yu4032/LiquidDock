@@ -4,6 +4,7 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Map;
@@ -13,11 +14,28 @@ import java.util.WeakHashMap;
 final class LauncherGlassVendorMaterialSuppressor {
     private static final Map<View, OwnedValueState<Drawable>> WIDGET_BACKGROUND_OWNERSHIP =
             Collections.synchronizedMap(new WeakHashMap<>());
+    // MAML variables belong to a particular ScreenElementRoot generation. The root reference
+    // must be weak because ScreenElementRoot can retain its View and this map has weak host keys.
+    private static final Map<View, MamlBackgroundClaim> MAML_BACKGROUND_OWNERSHIP =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    private static final class MamlBackgroundClaim {
+        final WeakReference<Object> rootRef;
+        final OwnedValueState<Double> value = new OwnedValueState<>();
+
+        MamlBackgroundClaim(Object root, double original) {
+            rootRef = new WeakReference<>(root);
+            value.claim(original);
+        }
+    }
 
     private LauncherGlassVendorMaterialSuppressor() {}
 
     static void claimWidgetMaterial(View host) {
         if (host == null) return;
+        // Capture the provider's original MAML variable before invoking any vendor blur
+        // setters. Some setters themselves change enable_background_blur.
+        if (isMaMlHost(host)) rememberMamlBackground(host, readMamlRoot(host));
         MiBlurBridge.clearContentBlur(host);
         setMaMlBlurIfSupported(host, false);
         invokeBoolean(host, "setViewBlur", false);
@@ -39,7 +57,21 @@ final class LauncherGlassVendorMaterialSuppressor {
         }
 
         // This variable is Launcher/MAML vendor material state, not a product-specific hide rule.
-        if (isMaMlHost(host)) putMaMlBackgroundBlurVariable(host, 1.0d);
+        if (isMaMlHost(host) && MAML_BACKGROUND_OWNERSHIP.containsKey(host)) {
+            putMaMlBackgroundBlurVariable(host, 1.0d);
+        }
+    }
+
+    /**
+     * A MAML root may be initialized after the host was first claimed. In that case the original
+     * variable must be sampled from the newly loaded root, not guessed from a null mRoot.
+     */
+    static void claimLoadedMamlRoot(View host, Object root) {
+        if (host == null || root == null || !isMaMlHost(host)) return;
+        rememberMamlBackground(host, root);
+        if (MAML_BACKGROUND_OWNERSHIP.containsKey(host)) {
+            putMaMlBackgroundBlurVariable(host, 1.0d);
+        }
     }
 
     static void releaseWidgetMaterial(View host) {
@@ -56,7 +88,50 @@ final class LauncherGlassVendorMaterialSuppressor {
                 }
             }
         }
-        if (isMaMlHost(host)) putMaMlBackgroundBlurVariable(host, 0.0d);
+        if (isMaMlHost(host)) restoreMamlBackground(host);
+    }
+
+    private static void rememberMamlBackground(View host, Object root) {
+        if (root == null) return;
+        MamlBackgroundClaim previous = MAML_BACKGROUND_OWNERSHIP.get(host);
+        if (previous != null && previous.rootRef.get() == root) return;
+        // A new ScreenElementRoot is a new provider-owned variable namespace. Never copy
+        // the old root's saved value into it.
+        MAML_BACKGROUND_OWNERSHIP.remove(host);
+        Double original = getMaMlBackgroundBlurVariable(host);
+        if (original != null && Double.isFinite(original)) {
+            MAML_BACKGROUND_OWNERSHIP.put(host, new MamlBackgroundClaim(root, original));
+        }
+    }
+
+    private static void restoreMamlBackground(View host) {
+        MamlBackgroundClaim claim = MAML_BACKGROUND_OWNERSHIP.remove(host);
+        if (claim == null) return;
+        Object currentRoot = readMamlRoot(host);
+        Double current = getMaMlBackgroundBlurVariable(host);
+        boolean owned = currentRoot != null && currentRoot == claim.rootRef.get()
+                && current != null && Double.compare(current, 1.0d) == 0;
+        OwnedValueState.ReleaseDecision<Double> decision = claim.value.release(owned);
+        if (decision.restoreOriginal && decision.originalValue != null) {
+            putMaMlBackgroundBlurVariable(host, decision.originalValue);
+        }
+    }
+
+    private static Object readMamlRoot(View host) {
+        try { return HookUtil.getField(host, "mRoot"); }
+        catch (Throwable ignored) { return null; }
+    }
+
+    private static Double getMaMlBackgroundBlurVariable(View host) {
+        try {
+            Method method = findMethod(host.getClass(), "getVariableNumber", String.class);
+            if (method == null) return null;
+            method.setAccessible(true);
+            Object value = method.invoke(host, "enable_background_blur");
+            return value instanceof Number ? ((Number) value).doubleValue() : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     static void claimFolderMaterial(View material) {
