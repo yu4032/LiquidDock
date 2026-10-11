@@ -66,9 +66,12 @@
     <string name="launcher_highlights_entry">图标、文件夹与小组件高光层</string>
     <string name="launcher_highlights_entry_summary">控制工作区图标、文件夹与小组件玻璃使用的高光层</string>
     <string name="launcher_highlights_header_summary">分别控制工作区图标、小文件夹、Dock 图标以及小组件、大文件夹玻璃使用的高光层。</string>
-    <string name="highlight_sky_haze">天空雾光</string><string name="highlight_sky_haze_summary">玻璃边缘附近的柔和环境反射雾光</string>
-    <string name="highlight_caustics">焦散</string><string name="highlight_caustics_summary">曲面玻璃聚焦形成的光纹</string>
-    <string name="highlight_press_glow">按压辉光</string><string name="highlight_press_glow_summary">交互按压效果使用的局部辉光</string>
+    <string name="highlight_sky_haze">天空雾光</string>
+    <string name="highlight_sky_haze_summary">玻璃边缘附近的柔和环境反射雾光</string>
+    <string name="highlight_caustics">焦散</string>
+    <string name="highlight_caustics_summary">曲面玻璃聚焦形成的光纹</string>
+    <string name="highlight_press_glow">按压辉光</string>
+    <string name="highlight_press_glow_summary">交互按压效果使用的局部辉光</string>
     <string name="tab_overview">概览</string>
     <string name="tab_layout">布局</string>
     <string name="tab_glass">外观</string>
