@@ -110,9 +110,11 @@ object SystemSettingsPrismalSwitchOverlay {
                 }
             }
             overlay = view
+            val width = visualWidth()
+            val height = visualHeight()
             content.addView(
                 view,
-                FrameLayout.LayoutParams(stock.width, stock.height, Gravity.TOP or Gravity.LEFT),
+                FrameLayout.LayoutParams(width, height, Gravity.TOP or Gravity.LEFT),
             )
             installed = true
             stock.addOnAttachStateChangeListener(this)
@@ -128,6 +130,12 @@ object SystemSettingsPrismalSwitchOverlay {
             }
             syncPresentation(view)
         }
+
+        private fun visualWidth(): Int =
+            maxOf(stock.width, (64f * stock.resources.displayMetrics.density + 0.5f).toInt())
+
+        private fun visualHeight(): Int =
+            maxOf(stock.height, (32f * stock.resources.displayMetrics.density + 0.5f).toInt())
 
         private fun syncPresentation(view: ComposeView) {
             if (!stock.isAttachedToWindow || stock.rootView !== content.rootView) {
@@ -152,17 +160,19 @@ object SystemSettingsPrismalSwitchOverlay {
 
             stock.getLocationOnScreen(stockPosition)
             content.getLocationOnScreen(contentPosition)
-            val dx = (stockPosition[0] - contentPosition[0]).toFloat()
-            val dy = (stockPosition[1] - contentPosition[1]).toFloat()
+            // PrismalAGSL's track is 64dp wide. Centre it on the stock switch instead
+            // of clipping the native Prismal capsule to MIUIX's smaller measured width.
+            val width = visualWidth()
+            val height = visualHeight()
+            val dx = (stockPosition[0] - contentPosition[0] - (width - stock.width) / 2f)
+            val dy = (stockPosition[1] - contentPosition[1] - (height - stock.height) / 2f)
             if (view.translationX != dx) view.translationX = dx
             if (view.translationY != dy) view.translationY = dy
-            if (view.width != stock.width || view.height != stock.height) {
-                val lp = view.layoutParams as? FrameLayout.LayoutParams
-                if (lp != null && (lp.width != stock.width || lp.height != stock.height)) {
-                    lp.width = stock.width
-                    lp.height = stock.height
-                    view.layoutParams = lp
-                }
+            val lp = view.layoutParams as? FrameLayout.LayoutParams
+            if (lp != null && (lp.width != width || lp.height != height)) {
+                lp.width = width
+                lp.height = height
+                view.layoutParams = lp
             }
             if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
             // Keep the actual native switch clickable and accessible in its original row.
