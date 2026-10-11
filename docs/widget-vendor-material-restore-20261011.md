@@ -30,3 +30,13 @@ There is **no** blind `setMaMlBlur(true)`, hard-coded blur radius or blanket nat
 6. Capture launcher logs for `[DC][StaticGlassHook]`, `[DC][GlassRuntime]`, `[MamlWidgetBg]` if restoration still fails; retrieve `enable_background_blur` before/after through device-side reflection to identify remaining unowned native blur state.
 
 This is a **source-evidenced restoration fix**, not a real-device verified resolution. Leave PR draft until a repeatable MAML device test passes. The performance instrumentation remains separate in PR #340; do not merge the issues or reduce background quality to hide either bug.
+
+## Follow-up: App → HOME still loses the native material (2026-10-11)
+
+**Device report invalidated the previous acceptance assumption:** PR #341's first MAML-variable-only fix did **not** restore the original widget backdrop after returning from an app. The PR remains draft, unmerged.
+
+Source inspection identified an additional destructive native-material path. `MiBlurBridge.clearContentBlur(host)` called on every widget glass claim invokes `clearPassWindowBlur()`, which forces view blur mode, background blur mode, background blur radius and background blend list to zero/empty. The same claim path used several vendor boolean/radius setters without storing original state. Releasing the widget later restored none of this state; restoring MAML `enable_background_blur` alone was insufficient.
+
+The revised widget-only claim preserves native compositor blur configuration. It reads the original `getPassWindowBlurEnabled` flag when supported, gates this output off **without clearing native modes/radius/blend**, and on release restores the original enabled state only if the LiquidDock-owned disabled flag is still applied. Repeated claims keep the original snapshot. Unsupported native getters fail open for the vendor state instead of overwriting values LiquidDock cannot reverse. Other consumers of `MiBlurBridge.clearContentBlur()` are unaffected.
+
+**Outstanding proof:** source evidence supports the loss-of-state mechanism but **does not establish that it is the only cause**. Validate (a) MAML/advanced material on/off and App → HOME, (b) original native material quality and radius when glass is off, (c) no stock backdrop through glass when glass is on, (d) RemoteViews provider updates, (e) cold Launcher restart before A/B because the prior APK already cleared native material parameters irreversibly in the live process. If A/B still fails, collect Launcher runtime MAML variable / pass gate before and after `onResume` and `updateColor`, and look for `LauncherWidgetTransitionCoordinator` fresh-scene gating rather than broadening speculative state restoration.
