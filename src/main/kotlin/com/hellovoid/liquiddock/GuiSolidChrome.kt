@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawOutline
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
@@ -326,43 +325,5 @@ internal fun Modifier.guiStaticSpecularRim(
             outline, brush = whiteReflection,
             style = Stroke(width = glintWidth),
         )
-    }
-}
-
-/**
- * Lightweight fixed soft edge in place of PrismalDepthShadow's per-item
- * Offscreen GraphicsLayer/RenderEffect. The shadow draws outside the clip.
- * Low-alpha concentric strokes approximate the native 24dp/4dp-vertical
- * shadow (or the handle's compact 4dp/0.67dp variant).
- *
- * This never loads a drawable, never allocates a GPU target, and therefore
- * cannot repeat the null-shadow resource startup crash.
- */
-internal fun Modifier.guiStaticSoftShadow(
-    shape: Shape,
-    compact: Boolean = false,
-): Modifier = this.drawWithCache {
-    val outline = shape.createOutline(size, layoutDirection, this)
-    val offsetY = if (compact) (4f / 6f).dp.toPx() else 4.dp.toPx()
-    val layers = if (compact) {
-        floatArrayOf(5.dp.toPx(), 3.dp.toPx(), 1.5.dp.toPx())
-    } else {
-        floatArrayOf(32.dp.toPx(), 18.dp.toPx(), 8.dp.toPx())
-    }
-    val opacities = if (compact) {
-        floatArrayOf(0.012f, 0.016f, 0.018f)
-    } else {
-        floatArrayOf(0.008f, 0.016f, 0.025f)
-    }
-    val shadowColors = opacities.map { Color.Black.copy(alpha = it) }
-    onDrawBehind {
-        translate(top = offsetY) {
-            for (i in layers.indices) {
-                drawOutline(
-                    outline, color = shadowColors[i],
-                    style = Stroke(width = layers[i]),
-                )
-            }
-        }
     }
 }
