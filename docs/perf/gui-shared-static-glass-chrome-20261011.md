@@ -1,76 +1,69 @@
-# GUI fixed canvas and baked Cell material palette — 2026-10-11
+# GUI specular fidelity audit — PrismalAGSL v1.0.4 (2026-10-11)
 
-## Background
+## Status
 
-PR #352 replaced expensive Prismal Cell lenses, pressed shader ripples and per-instance optical layers. The user measured a **significant improvement**, requested solid fills, then requested that the **highlight outlines and fill colors be predetermined from the actual GUI background**, rather than independently selected colors or per-Cell blends.
+**The previous PR #352 directional highlight was conceptually wrong.** It assumed a single upper-left hotspot that decays across the entire rectangle. The actual upstream specular is determined by the **signed-distance gradient of the rounded-rect boundary**, not by the global pixel distance from a light source. PR #352 remains Draft until device testing, and the proven performance improvements from the static Cell conversion must be retained.
 
-MIUIX uses `ThemeController(ColorSchemeMode.MonetSystem)`, so the previous `MiuixTheme.colorScheme.background` depended on system/wallpaper colors. Literal build-time precomputation requires locking only the **settings GUI canvas** to a specific light/dark pair. This does not alter the rest of the MIUIX color scheme, typography, text foregrounds, or Launcher/Widget material.
+Authoritative upstream source pinned to the exact dependency version:
+- `Prismal/src/main/assets/agsl/default_specular.agsl`
+- `Prismal/src/main/assets/agsl/ambient_specular.agsl`
+- `Prismal/src/main/assets/agsl/rounded_rect_sdf.agsl`
+- `Prismal/src/main/java/com/styropyr0/prismal/specular/PrismalSpecularStyle.kt`
+- `Prismal/src/main/java/com/styropyr0/prismal/specular/PrismalSpecularModifier.kt`
 
-## Precomputed assets
+Repository: https://github.com/styropyr0/PrismalAGSL/tree/v1.0.4
 
-The checked-in `src/main/res/values/gui_preset_material_colors.xml` and `values-night/gui_preset_material_colors.xml` contain the complete colors. No color interpolation is needed for the glass-ON Cell chrome.
+## What Prismal actually computes
 
-| Palette component | Light | Dark |
-|---|---|---|
-| Canvas | `#F5F7FA` | `#1B2028` |
-| Glass-OFF canvas | `#E6E8EB` | `#191E26` |
-| Cell fill | `#EDF1F6` | `#343B46` |
-| Button, +/- and idle thumb fill | `#E5EAF1` | `#454E5B` |
-| Cell outer highlight | `#FFFFFF` | `#6E7C90` |
-| Cell under-rim | `#C9D2DF` | `#46505E` |
-| Button highlight | `#FDFEFF` | `#8694A6` |
-| Button under-rim | `#BFCAD8` | `#596474` |
-| Destructive fill | `#D73333` | `#D73333` |
+**Default (Cards / PrismalGlassButton / PrismalGlassStepper)**:
+```glsl
+float2 grad = prismalGradSdRoundRect(centeredCoord, halfSize, gradRadius);
+float2 normal = float2(cos(angle), sin(angle)); // angle = 45 degrees
+float d = dot(grad, normal);
+float intensity = pow(abs(d), falloff); // falloff = 1
+return color * intensity;
+```
+The `abs` makes the lobes **diagonally symmetric**: the **upper-left and lower-right rounded corners are both bright**, while **upper-right and lower-left are low-intensity**. Straight sides have intermediate intensity. This is a per-boundary-normal illumination field, **not** a white band that fades monotonically from one position.
 
-The Cell/pill colors are coordinated with their canvas instead of being determined individually by the current Monet theme. The glass-OFF canvas is the precomputed equivalent of its old small darkening. The two outline colors are likewise literal XML color resources.
+The default style uses `Color.White.copy(alpha=0.5f)`, `BlendMode.Plus` and a stroke with default width `0.5dp` and blur `width/2`; the native specular node clips to the actual glass outline and internally records a GraphicsLayer. Our baked solution removes that per-Cell layer but approximates its shape-edge width, and does not pretend that a 9-patch exactly reproduces blur and additive blending.
 
-## Runtime path
+**Ambient (Slider / Toggle thumbs)**:
+```glsl
+float d = dot(prismalGradSdRoundRect(...), float2(cos(45°), sin(45°)));
+float intensity = pow(abs(d), 1.0);
+float t = step(0.0, d);
+return half4(t, t, t, 1.0) * intensity;
+```
+This additionally separates the **bright bottom/right-facing normal hemisphere** from the **dark top/left-facing normal hemisphere**. The style defaults to `intensity=0.38` and standard SrcOver blending. Upstream slider and toggle pass `PrismalSpecular.Ambient.copy(width=width/1.5, blurRadius=blurRadius/1.5, alpha=pressProgress)`, so **the true dynamic reflection is press-dependent and approaches zero alpha at rest**. It differs from the static preset idle thumb, which deliberately supplies a low-cost Ambient-like visible contour.
 
-- `rememberGuiPresetChromePalette()` reads the resource palette **once at the settings Scaffold**, memoizes it, and exposes it through `LocalGuiPresetChromePalette`.
-- `ModernSettingsScaffold` uses `palette.canvas` (or `palette.canvasWithoutGlass`) for the single opaque background.
-- `ModernSurface` uses the exact precomputed Card fill and two simple rounded outlines; `Button`, `GuiStaticRepeatStepButton` and idle slider/toggle thumbs reuse Pill/Destructive resource colors.
-- `Modifier.guiSolidChrome` draws one flat fill, a 1dp perimeter outline and a 0.5dp fixed-color rim. Both colors come from Android resources; no runtime specular/refraction/light computation, gradient shader, `Canvas` drawable, per-Cell bitmap, or extra material child.
-- The disabled GUI glass fallback retains the existing MIUIX-style cell colors/strokes, but runs its material mixing **only when glass is OFF**.
-- Gesture-time slider/toggle Prismal, dynamic top header and bottom navigation remain unchanged, as requested.
+## Fixed palette and new maps
 
-These are *precomputed color resources*, not pre-rendered 9-patch border bitmaps; Android/Compose still rasterizes the simple round-rect outline for the actual measured cell dimensions. This is intentional, since Cell sizes vary and replacing the efficient solid modifier with a per-Cell Drawable/Canvas pipeline would reintroduce overhead.
+The GUI has fixed theme canvases in `src/main/res/values[-night]/gui_preset_material_colors.xml`. Flat material fills stay consistent with them. Unlike the previous uniformly bright outlines, six transparent 9-patch assets in `drawable[-night]-xxhdpi` encode the normal-based specular:
 
-## Verification
+- `gui_specular_card.9.png` — Default 45-degree `abs(dot)` SDF normal distribution, 24dp reference round-rect corners.
+- `gui_specular_pill.9.png` — Default 45-degree `abs(dot)`, rounded capsule with 18dp reference corners.
+- `gui_specular_thumb.9.png` — Ambient signed-white/black lobe, 12dp capsule reference corners.
 
-1. Compare light/dark Cell visibility, fixed highlight outlines and color harmony with the now-matching plain canvas.
-2. Confirm no gradients, per-Cell optical shaders or double layered background; keep click and text interaction intact.
-3. Check stepper +/- tap, press/repeat/release, reset, restart confirmation, slider/toggle idle/drag transitions.
-4. Verify header and bottom glass still capture their original merged background and page contents without hue regressions.
-5. Benchmark dense-page scroll with matched pages against the previous solid candidate. A CI pass does not establish real GPU performance.
+Precomputation evaluates the same `prismalGradSdRoundRect` normal selection and `abs(dot)`, with a small inside-edge falloff approximating a clipped specular stroke. `Default` uses a white alpha palette; `Ambient` uses white/black alpha palettes depending on signed `d`. Stretch bands on the straight sides extend different-length controls while preserving corner lobes.
 
-The entire change remains in PR #352 Draft pending user device acceptance. PR #340 and main remain untouched.
+The six Android resources cover light/dark qualifying directories; the normal-based intensity formula itself is theme-independent, therefore the image byte content is currently identical between day and night. The *underlying pure fill* still differs by theme. This is deliberate, not independently invented lighting.
 
+## Runtime and performance
 
-## User correction: spatial directional white reflection, not a uniform bright border
+`GuiPresetChromePalette` still loads one backdrop-free specular drawable per shape at the Scaffold, and Cells use a pure-color `Modifier.background` + a light 9-patch overlay without allocating a separate composable. The 9-patch draw adds a tiny bitmap operation; it does **not** reintroduce per-Cell Prismal AGSL, blur/refraction, dynamic highlight shader, or backdrop capture.
 
-The previous "1dp white rim" implementation was **visually incorrect**: a bright single-color outline has identical intensity everywhere and does not convey a light source. The user explicitly requires *light-caused white specular highlights*, while retaining the performance improvement from all non-interactive Cells using fixed backgrounds.
+**Active slider/toggle thumbs retain the original Prismal Ambient renderer without an additional baked overlay**, avoiding double specular and preserving its `alpha=pressProgress` behavior. **Idle thumbs** alone use the baked Ambient-inspired style. This is a conscious static-versus-dynamic visual distinction, not pixel-exact parity.
 
-### Precomputed light maps
+The top header/actions and bottom navigation remain Prismal-driven and are outside this optimization.
 
-Six transparent Android NinePatch assets are checked in:
+## Validation
 
-- `drawable-xxhdpi/gui_specular_{card,pill,thumb}.9.png` for light theme.
-- `drawable-night-xxhdpi/gui_specular_{card,pill,thumb}.9.png` for dark theme.
+Static architecture and PNG-byte tests now require:
+- Default card/pill maps: both diagonal corners (top-left **and bottom-right**) are bright; other diagonal corners weaker.
+- Ambient thumb map: the top-left hemisphere is dark, bottom-right is white.
+- No accidental duplicated 9-patch reflection on top of the native touch-time Prismal Ambient.
+- No changes to GUI touch-sampling logic or top/bottom navigation source ownership.
 
-The distributions are baked *offline*, not computed at each Cell draw. A fixed upper-left key light produces a white upper-left hotspot. Its luminance tapers along the top and left edges, and the bottom/right sides keep a weak, darker definition. This is a **spatially asymmetric alpha/light map**, unlike a uniformly colored Compose border. NinePatch stretch regions are located away from corners so large Cards, medium Capsules and small 40×24dp Handles retain their corner geometry as their actual widths/heights change.
+These tests verify the geometric lighting convention and build-time resource validity, **not** exact GPU shader equivalence. Verify in-app: natural highlights on long and short Cells, capsule stretch behavior, thumb press/drag/release, light/dark backgrounds, and dense-list GPU load before merging.
 
-### Runtime path
-
-- `GuiPresetChromePalette` retains the fixed opaque Cell, Pill, Thumb, Danger and Canvas fill colors. The earlier `*_rim` and `*_outline` flat color keys were removed.
-- In `rememberGuiPresetChromePalette()`, three NinePatchDrawables are selected through Android's drawable night qualifier and loaded **once at the Scaffold**. Each Cell shares the existing drawable objects.
-- `Modifier.guiSolidChrome`: one `background(fill, shape)` plus a transparent overlay `drawWithContent` whose NinePatch bitmap is drawn over existing content. No per-Cell gradient calculation, shader, lighting, backdrop blur, sample layer or new composable node.
-- `Modifier.guiThumbHighlight` overlays **only** the dedicated thumb's precomputed light map during touch-time Prismal rendering. The live Prismal thumb's existing movement, source alignment and spring are untouched.
-- The dynamic top header / bottom navigation still use their original Prismal sources; no broad renderer changes.
-
-### Performance and visual bounds
-
-This deliberately substitutes a tiny, stretchable precomputed bitmap edge for real-time specular shading. It does add a NinePatch draw call to each Cell, so its exact GPU cost must be checked against the prior pure-color version; however, it avoids recomputing refraction or specular illumination and creates no extra composable. The files are xxhdpi with guide-marked 9-patch stretch bars; AAPT2 compiles the guide borders.
-
-Unit tests assert that *actual baked pixel alpha near the upper-left* exceeds bottom-right alpha, that all six theme/shape resources exist, and that no live per-Cell optical pipeline was reintroduced. This verifies nonuniform distribution only; it does not replace on-device visual comparison.
-
-**Important**: Do not merge #352 until the user confirms that the source direction, edge strength, press transition, and scroll performance look correct.
+Do not merge before user confirmation. PR #340 remains independent.
