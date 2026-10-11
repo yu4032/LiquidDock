@@ -54,7 +54,8 @@ public class SystemSettingsScopeContractTest {
         assertTrue(painter.contains("canvas.drawRoundRect("));
         assertTrue(painter.contains("drawCanvasFallback("));
         assertTrue(painter.contains("return false"));
-        assertFalse(painter.contains("ComposeView"));
+        assertFalse(painter.contains("import androidx.compose."));
+        assertFalse(painter.contains("new ComposeView("));
         assertFalse(painter.contains("PixelCopy"));
         assertFalse(painter.contains("ScreenCapture"));
         assertFalse(painter.contains("Bitmap.createBitmap"));
