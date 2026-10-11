@@ -310,13 +310,21 @@ public class ModernSettingsArchitectureTest {
         assertTrue(light.contains("<color name=\"gui_preset_thumb_fill\">#FFFFFF</color>"));
         assertTrue(dark.contains("<color name=\"gui_preset_thumb_fill\">#FFFFFF</color>"));
 
-        // Decode PNG bytes using only classes available in Android unit tests.
-        // The screenshot-matched material is fully COMPOSITED:
-        // center pixels are opaque background colors, thin rim is white due
-        // to source Prismal BlendMode.Plus, *not* translucent white SrcOver.
+        // The idle thumb has NO Ambient reflection: upstream draws opaque white
+        // at pressProgress=0. Destructive actions can stay a simple red shape.
+        String thumb = Files.readString(Path.of(
+                "src/main/res/drawable/gui_material_thumb.xml"));
+        String danger = Files.readString(Path.of(
+                "src/main/res/drawable/gui_material_danger.xml"));
+        assertTrue(thumb.contains("<solid android:color=\"#FFFFFFFF\"/>"));
+        assertTrue(danger.contains("<solid android:color=\"#FFD73333\"/>"));
+
+        // The final Card/Pill RGB is baked after Prismal BlendMode.Plus,
+        // NOT a white-alpha bitmap composited at runtime with SrcOver.
+        // Standard 8-bit RGBA PNGs avoid AAPT2's indexed NinePatch crash.
         for (String qualifier : new String[]{"drawable-xxhdpi", "drawable-night-xxhdpi"}) {
             boolean isLight = qualifier.equals("drawable-xxhdpi");
-            for (String kind : new String[]{"card", "pill", "thumb", "danger"}) {
+            for (String kind : new String[]{"card", "pill"}) {
                 byte[] png = Files.readAllBytes(Path.of(
                         "src/main/res", qualifier, "gui_material_" + kind + ".9.png"));
                 assertTrue(png.length > 100);
@@ -324,8 +332,6 @@ public class ModernSettingsArchitectureTest {
                         && png[2] == 78 && png[3] == 71);
                 int width = 0;
                 int height = 0;
-                byte[] palette = null;
-                byte[] alpha = null;
                 java.io.ByteArrayOutputStream idat = new java.io.ByteArrayOutputStream();
                 for (int offset = 8; offset + 12 <= png.length;) {
                     java.nio.ByteBuffer chunk = java.nio.ByteBuffer.wrap(png, offset, 8)
@@ -334,60 +340,43 @@ public class ModernSettingsArchitectureTest {
                     int type = chunk.getInt();
                     assertTrue(length >= 0 && offset + length + 12 <= png.length);
                     if (type == 0x49484452) {
-                        java.nio.ByteBuffer dimensions = java.nio.ByteBuffer.wrap(
+                        java.nio.ByteBuffer dims = java.nio.ByteBuffer.wrap(
                                 png, offset + 8, 8).order(java.nio.ByteOrder.BIG_ENDIAN);
-                        width = dimensions.getInt();
-                        height = dimensions.getInt();
-                        assertTrue((png[offset + 16] & 255) == 4);
-                        assertTrue((png[offset + 17] & 255) == 3);
-                    } else if (type == 0x504c5445) {
-                        palette = java.util.Arrays.copyOfRange(
-                                png, offset + 8, offset + 8 + length);
-                    } else if (type == 0x74524e53) {
-                        alpha = java.util.Arrays.copyOfRange(
-                                png, offset + 8, offset + 8 + length);
+                        width = dims.getInt();
+                        height = dims.getInt();
+                        assertTrue((png[offset + 16] & 255) == 8); // 8-bit
+                        assertTrue((png[offset + 17] & 255) == 6); // RGBA
                     } else if (type == 0x49444154) {
                         idat.write(png, offset + 8, length);
                     }
                     offset += length + 12;
                 }
                 assertTrue(width >= 70 && height >= 60);
-                assertTrue(palette != null && palette.length == 48);
-                assertTrue(alpha != null && alpha.length == 16);
-                byte[] pixels;
+                byte[] rgba;
                 try (java.util.zip.InflaterInputStream inflater =
                         new java.util.zip.InflaterInputStream(
                                 new java.io.ByteArrayInputStream(idat.toByteArray()))) {
-                    pixels = inflater.readAllBytes();
+                    rgba = inflater.readAllBytes();
                 }
-                int stride = (width + 1) / 2;
-                assertTrue(pixels.length == (stride + 1) * height);
-                int midY = height / 2;
+                int stride = width * 4;
+                assertTrue(rgba.length == (stride + 1) * height);
                 int midX = width / 2;
-                int centerRow = midY * (stride + 1);
-                int centerPacked = pixels[centerRow + 1 + midX / 2] & 255;
-                int centerIdx = midX % 2 == 0 ? centerPacked >>> 4 : centerPacked & 15;
-                assertTrue("Interior material must be opaque", (alpha[centerIdx] & 255) == 255);
-                assertTrue("Nine-patch border must be transparent", (alpha[0] & 255) == 0);
-                int centerR = palette[centerIdx * 3] & 255;
-
-                int topY = 3;
-                int topRow = topY * (stride + 1);
-                int topPacked = pixels[topRow + 1 + midX / 2] & 255;
-                int topIdx = midX % 2 == 0 ? topPacked >>> 4 : topPacked & 15;
-                int topR = palette[topIdx * 3] & 255;
-
-                if (kind.equals("thumb")) {
-                    // Original Prismal onDrawSurface is opaque white at rest
-                    // and Ambient alpha = pressProgress -> 0 when idle.
-                    assertTrue("Idle thumb is white", centerR == 255 && topR == 255);
-                } else {
-                    assertTrue("Plus-composited rim must brighten the final RGB",
-                            topR > centerR);
-                    if (isLight && !kind.equals("danger")) {
-                        assertTrue("Near-white backdrop should saturate at the edge",
-                                topR >= 251);
-                    }
+                int centerY = height / 2;
+                int center = centerY * (stride + 1) + 1 + midX * 4;
+                int top = 3 * (stride + 1) + 1 + midX * 4;
+                int centerR = rgba[center] & 255;
+                int topR = rgba[top] & 255;
+                assertTrue("Center must be opaque precomposited material",
+                        (rgba[center + 3] & 255) == 255);
+                assertTrue("NinePatch guide exterior must stay transparent",
+                        (rgba[(stride + 1) + 1 + 3] & 255) == 0);
+                assertTrue("Plus blend must brighten the edge of " + kind,
+                        topR > centerR);
+                if (isLight) {
+                    assertTrue("Light reference has thin saturated white rim",
+                            topR >= 251);
+                    if (kind.equals("card")) assertTrue(centerR == 244);
+                    if (kind.equals("pill")) assertTrue(centerR == 242);
                 }
             }
         }
