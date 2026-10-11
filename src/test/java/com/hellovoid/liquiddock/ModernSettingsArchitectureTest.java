@@ -292,10 +292,16 @@ public class ModernSettingsArchitectureTest {
         assertTrue(chrome.contains("ContextCompat.getDrawable"));
         assertTrue(chrome.contains("this.drawBehind {"));
         assertTrue(chrome.contains("material.draw(native)"));
+        assertTrue(chrome.contains("drawBakedNineSlice("));
+        assertTrue(chrome.contains("native.clipRect("));
+        assertTrue(chrome.contains("sourceCornerPx = (cornerDp * 3f).roundToInt()"));
         assertFalse(chrome.contains("drawWithContent"));
         assertFalse(chrome.contains("drawContent()"));
         assertFalse(chrome.contains("PrismalGlassSurface("));
         assertFalse(chrome.contains("rememberGraphicsLayer("));
+        assertFalse(chrome.contains("BitmapFactory"));
+        assertFalse(chrome.contains("ScreenCapture"));
+        assertFalse(chrome.contains("PixelCopy"));
         assertFalse(chrome.contains("Brush."));
         assertFalse(chrome.contains("RenderEffect.create"));
 
@@ -322,11 +328,11 @@ public class ModernSettingsArchitectureTest {
         // The final Card/Pill RGB is baked after Prismal BlendMode.Plus,
         // NOT a white-alpha bitmap composited at runtime with SrcOver.
         // Standard 8-bit RGBA PNGs avoid AAPT2's indexed NinePatch crash.
-        for (String qualifier : new String[]{"drawable-xxhdpi", "drawable-night-xxhdpi"}) {
+        for (String qualifier : new String[]{"drawable-nodpi", "drawable-night-nodpi"}) {
             boolean isLight = qualifier.equals("drawable-xxhdpi");
             for (String kind : new String[]{"card", "pill"}) {
                 byte[] png = Files.readAllBytes(Path.of(
-                        "src/main/res", qualifier, "gui_material_" + kind + ".9.png"));
+                        "src/main/res", qualifier, "gui_material_" + kind + ".png"));
                 assertTrue(png.length > 100);
                 assertTrue((png[0] & 255) == 137 && png[1] == 80
                         && png[2] == 78 && png[3] == 71);
