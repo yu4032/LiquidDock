@@ -28,7 +28,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -140,14 +139,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final LauncherGlassOutputRenderState outputRenderState =
             new LauncherGlassOutputRenderState();
     private final boolean workspaceSource;
-    private final long staticSwapRefreshPeriodNs;
-    // Render-thread only. A geometry-only swap immediately after another static-buffer present
-    // may be coalesced with the next source frame. Never pace source-driven presentations.
-    private long lastStaticSwapNs;
-    // GL posts a brief delay for STATIC work only; drag arriving during the wait must wake it
-    // immediately. Only cross-thread visibility is needed for this tiny handoff.
-    private volatile boolean geometryDelayPending;
-    private final AtomicBoolean dragDelayWakeupQueued = new AtomicBoolean();
 
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
@@ -225,18 +216,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             View root, LiquidDockConfig.Glass glassConfig, PassBlurBindRequest bindRequest) {
         if (bindRequest == null) throw new IllegalArgumentException("bindRequest == null");
         workspaceSource = bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
-        float refreshHz = 0f;
-        try {
-            Display display = root.getDisplay();
-            if (display != null) refreshHz = display.getRefreshRate();
-        } catch (Throwable ignored) {}
-        // If no display is attached yet, use the highest mode as a conservative shorter cap:
-        // the source producer still runs at its own configured FPS regardless of this policy.
-        if (!Float.isFinite(refreshHz) || refreshHz < 30f) {
-            refreshHz = DisplayRefreshRatePolicy.maxSupportedRefreshRateHz(root.getContext());
-        }
-        staticSwapRefreshPeriodNs = workspaceSource
-                ? WorkspaceGeometrySwapPacingPolicy.framePeriodNs(refreshHz) : 0L;
         rootRef = new WeakReference<>(root);
         rootWidth = Math.max(0, root.getWidth());
         rootHeight = Math.max(0, root.getHeight());
@@ -618,7 +597,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             try {
                 ensureLauncherGl();
                 releaseOutput(staticOutput);
-                lastStaticSwapNs = 0L; // The new Surface has no previously submitted frame.
                 OutputState next = new OutputState(surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
                 staticOutput = next;
@@ -641,7 +619,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             if (output != null) {
                 output.width = Math.max(1, width);
                 output.height = Math.max(1, height);
-                lastStaticSwapNs = 0L;
                 scheduleOutputRender(true, false);
             }
         });
@@ -655,7 +632,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (!postRender(() -> {
             OutputState output = staticOutput;
             staticOutput = null;
-            lastStaticSwapNs = 0L;
             if (output != null) releaseOutput(output);
             else if (surface != null) surface.release();
         }) && surface != null) surface.release();
@@ -667,43 +643,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private void scheduleOutputRender(boolean staticDirty, boolean dragDirty) {
         if (shuttingDown) return;
-        boolean newQueueOwner = outputRenderState.request(staticDirty, dragDirty);
-        if (newQueueOwner) {
-            if (!postRender(this::drainOutputRenderWork)) outputRenderState.onPostRejected();
-        } else if (dragDirty && geometryDelayPending
-                && dragDelayWakeupQueued.compareAndSet(false, true)) {
-            // A drag request must not be held behind the optional static geometry wait.
-            // The delayed task is still safe to run afterward; it will see an empty work mask.
-            if (!sourceBackend.postUrgentToRenderThread(() -> {
-                dragDelayWakeupQueued.set(false);
-                drainOutputRenderWork();
-            })) {
-                dragDelayWakeupQueued.set(false);
-            }
+        if (outputRenderState.request(staticDirty, dragDirty)
+                && !postRender(this::drainOutputRenderWork)) {
+            outputRenderState.onPostRejected();
         }
     }
 
     private void drainOutputRenderWork() {
-        geometryDelayPending = false;
         int work = outputRenderState.consumeQueuedRender();
-        // Geometry-only outputs are the only optional presents. Fresh PassBlur frames always
-        // bypass this gate and draw the latest geometry immediately. Drag/Recents output work
-        // is also never deliberately deferred.
-        if (work == LauncherGlassOutputRenderState.STATIC && backdropPrepared
-                && staticOutput != null && outputs.isEmpty()) {
-            long delayMs = WorkspaceGeometrySwapPacingPolicy.geometryDelayMs(
-                    lastStaticSwapNs, System.nanoTime(), staticSwapRefreshPeriodNs);
-            if (delayMs > 0L) {
-                outputRenderState.request(true, false);
-                geometryDelayPending = true;
-                if (!sourceBackend.postToRenderThreadDelayed(
-                        this::drainOutputRenderWork, delayMs)) {
-                    geometryDelayPending = false;
-                    outputRenderState.onPostRejected();
-                }
-                return;
-            }
-        }
         boolean trace = MainHook.debugLogging && workspaceSource && work != 0;
         if (trace) Trace.beginSection("LD.Workspace.GeometryFrame");
         try {
@@ -1278,7 +1225,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
         sourceBackend.swapBuffers(output.eglSurface);
-        lastStaticSwapNs = System.nanoTime();
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
