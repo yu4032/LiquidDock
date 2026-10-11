@@ -1,5 +1,13 @@
 package com.hellovoid.liquiddock
 
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.ViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.ViewTreeSavedStateRegistryOwner
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
@@ -34,6 +42,54 @@ object SystemSettingsPrismalSwitchOverlay {
     private val main = Handler(Looper.getMainLooper())
     private val active = WeakHashMap<CompoundButton, Binding>()
     private val loggedSkips = HashSet<String>()
+    private var lastFailedStage: String? = null
+
+    /** Keep exception and actionable frame in one grep-able logcat line. */
+    private fun failureSummary(stage: String, error: Throwable): String {
+        val cause = generateSequence(error) { it.cause?.takeIf { next -> next !== it } }
+            .take(6).last()
+        val frame = cause.stackTrace.firstOrNull {
+            it.className.startsWith("androidx.compose.") ||
+                it.className.startsWith("androidx.lifecycle.") ||
+                it.className.startsWith("com.styropyr0.") ||
+                it.className.startsWith("com.hellovoid.liquiddock.")
+        } ?: cause.stackTrace.firstOrNull()
+        return "stage=$stage type=${error.javaClass.name} message=${error.message} " +
+            "cause=${cause.javaClass.name}: ${cause.message} at=${frame?.toString()}"
+    }
+
+    /** Only use genuine owner implementations; never synthesize a fake lifecycle. */
+    private fun findHostActivity(context: Context): android.app.Activity? {
+        var current = context
+        repeat(12) {
+            if (current is android.app.Activity) return current
+            current = (current as? ContextWrapper)?.baseContext ?: return null
+        }
+        return null
+    }
+
+    private fun bindExistingViewTreeOwners(view: ComposeView, host: FrameLayout) {
+        val existingLifecycle = ViewTreeLifecycleOwner.get(host)
+        val existingSavedState = ViewTreeSavedStateRegistryOwner.get(host)
+        val activity = findHostActivity(host.context)
+        val lifecycle = existingLifecycle ?: (activity as? LifecycleOwner)
+        val saved = existingSavedState ?: (activity as? SavedStateRegistryOwner)
+        Api101Bridge.log(
+            "[DC][SettingsSwitch] compose owners lifecycle=${lifecycle != null}" +
+                " savedState=${saved != null} activity=${activity?.javaClass?.name}" +
+                " host=${host.javaClass.name}"
+        )
+        if (lifecycle == null || saved == null) {
+            throw IllegalStateException(
+                "Settings ViewTreeLifecycleOwner/SavedStateRegistryOwner unavailable"
+            )
+        }
+        // Only assign to the new overlay, not to Settings' root/decor hierarchy.
+        ViewTreeLifecycleOwner.set(view, lifecycle)
+        ViewTreeSavedStateRegistryOwner.set(view, saved)
+        val model = ViewTreeViewModelStoreOwner.get(host) ?: (activity as? ViewModelStoreOwner)
+        if (model != null) ViewTreeViewModelStoreOwner.set(view, model)
+    }
 
     private fun skipOnce(reason: String): Boolean {
         if (loggedSkips.add(reason)) {
@@ -73,8 +129,18 @@ object SystemSettingsPrismalSwitchOverlay {
             Api101Bridge.log("[DC][SettingsSwitch] Prismal visual attached: ${original.javaClass.name} id=${original.id}")
             true
         } catch (error: Throwable) {
-            binding.dispose()
-            Api101Bridge.log("[DC][SettingsSwitch] overlay unavailable; stock restored", error)
+            // A Settings hook failure should never mask the original error.
+            val summary = failureSummary(binding.stage, error)
+            if (lastFailedStage != summary) {
+                lastFailedStage = summary
+                Api101Bridge.log("[DC][SettingsSwitch] overlay failure " + summary)
+            }
+            try {
+                binding.dispose()
+            } catch (cleanup: Throwable) {
+                Api101Bridge.log("[DC][SettingsSwitch] cleanup failure " +
+                    failureSummary("dispose", cleanup))
+            }
             false
         }
     }
@@ -90,6 +156,8 @@ object SystemSettingsPrismalSwitchOverlay {
         private val stockPosition = IntArray(2)
         private val contentPosition = IntArray(2)
         private var disposed = false
+        var stage: String = "binding-created"
+            private set
         private var installed = false
         private var overlay: ComposeView? = null
         private var drawObserver: ViewTreeObserver? = null
@@ -119,10 +187,16 @@ object SystemSettingsPrismalSwitchOverlay {
         }
 
         fun install() {
+            stage = "create-compose-view"
             val view = ComposeView(stock.context).apply {
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-                setContent {
+            }
+            overlay = view
+            stage = "resolve-compose-owners"
+            bindExistingViewTreeOwners(view, content)
+            stage = "set-compose-content"
+            view.setContent {
                     val backdrop = rememberPrismalGlassLayer()
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         // Local Prismal chrome only; full native Settings backdrop sampling
@@ -148,15 +222,15 @@ object SystemSettingsPrismalSwitchOverlay {
                             enabled = allowed.value,
                         )
                     }
-                }
             }
-            overlay = view
+            stage = "add-compose-to-host"
             val width = visualWidth()
             val height = visualHeight()
             content.addView(
                 view,
                 FrameLayout.LayoutParams(width, height, Gravity.TOP or Gravity.LEFT),
             )
+            stage = "register-geometry-listener"
             installed = true
             stock.addOnAttachStateChangeListener(this)
             val observer = content.viewTreeObserver
@@ -169,7 +243,9 @@ object SystemSettingsPrismalSwitchOverlay {
                 drawObserver = observer
                 preDraw = watcher
             }
+            stage = "initial-geometry-sync"
             syncPresentation(view)
+            stage = "attached"
         }
 
         private fun visualWidth(): Int =
