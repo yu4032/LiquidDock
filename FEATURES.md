@@ -431,12 +431,12 @@ Dock 页面保留“Dock 尺寸过渡动画”和“LiquidDock 顺滑尺寸动�
 | `com.miui.securitycenter` | 安全中心侧边栏 |
 | `com.google.android.inputmethod.latin` | Gboard |
 | `com.android.quicksearchbox` | MIUI 系统搜索 |
-| `com.android.settings` | 系统设置 MIUIX 开关 Prismal 试验（默认关闭） |
+| `com.android.settings` | 系统设置 MIUIX 原生 Canvas/AGSL 玻璃开关试验（默认关闭） |
 | `system` | 可选的壁纸 GPU 渲染开关，需重启设备 |
 
 只需要某一项扩展时，可以只为对应应用勾选额外作用域。
 
-系统设置新增独立实验开关：仅尝试把 MIUIX `SlidingButton` 在标准 Preference widget frame 中的**视觉**替换为 Prismal，业务状态及持久化仍由原生控件管理；其它 Switch、Compose SPA 页面不做改变。首次安装/默认预设均关闭该功能，启用后需要重启系统设置进程；异常或不匹配时保留原生界面。
+系统设置独立试验开关：仅在确认的 OS3.0.310.0.WAOCNXM 版本里，使用 MIUIX `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 原有的 `onDraw(Canvas)` 绘制 Canvas/AGSL 玻璃质感。原生触摸、设置项回调、状态和持久化均保留；不再注入 ComposeView 或使用 Prismal 的 App Startup。没有真实的背景捕获或折射；软件 Canvas 降级为渐变玻璃，遇绘制异常直接还原 MIUIX onDraw。默认关闭，需重启系统设置作用域，仍待真机验收。
 
 ---
 
