@@ -39,9 +39,16 @@ public class SystemSettingsScopeContractTest {
         String nav = read("kotlin/com/hellovoid/liquiddock/SettingsNavigationModel.kt");
 
         assertTrue(hook.contains("miuix.slidingwidget.widget.SlidingButton"));
-        assertTrue(hook.contains("target.getDeclaredMethod(\"onDraw\""));
+        assertTrue(hook.contains("TARGET_SWITCH = \"miuix.slidingwidget.widget.SlidingSwitch\""));
+        assertTrue(hook.contains("TARGET_SWITCH_COMPAT = \"miuix.slidingwidget.widget.SlidingSwitchCompat\""));
+        assertTrue(hook.contains("declared(target, \"onDraw\", Canvas.class)"));
+        assertTrue(hook.contains("declared(target, \"onMeasure\", int.class, int.class)"));
         assertFalse(hook.contains("CompoundButton.class.getDeclaredMethod"));
-        assertTrue(overlay.contains("ancestor?.id == android.R.id.widget_frame"));
+        assertTrue(overlay.contains("original.id != android.R.id.checkbox"));
+        assertTrue(overlay.contains("original.id != android.R.id.switch_widget"));
+        assertTrue(overlay.contains("original.rootView.findViewById<View>(android.R.id.content)"));
+        assertTrue(overlay.contains("performNativePreferenceClick()"));
+        assertTrue(overlay.contains("owner.performClick()"));
         assertTrue(overlay.contains("stock.performClick()"));
         assertTrue(overlay.contains("stock.alpha = stockAlpha"));
         assertTrue(overlay.contains("content.removeView(view)"));
