@@ -64,7 +64,7 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
         GuiPresetChromePalette(
             canvas, canvasWithoutGlass, cardFill, cardRim, cardOutline,
             pillFill, pillRim, pillOutline,
-        thumbFill, thumbRim, thumbOutline,
+            thumbFill, thumbRim, thumbOutline,
             dangerFill, dangerRim, dangerOutline,
         )
     }
