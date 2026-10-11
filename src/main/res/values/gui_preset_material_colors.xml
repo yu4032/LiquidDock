@@ -6,11 +6,15 @@
     <color name="gui_preset_canvas_glass_off">#E6E8EB</color>
     <color name="gui_preset_card_fill">#EDF1F6</color>
     <color name="gui_preset_card_rim">#FFFFFFFF</color>
-    <color name="gui_preset_card_outline">#FFC9D2DF</color>
+    <color name="gui_preset_card_outline">#FFB9C8D9</color>
     <color name="gui_preset_pill_fill">#E5EAF1</color>
-    <color name="gui_preset_pill_rim">#FFFDFEFF</color>
-    <color name="gui_preset_pill_outline">#FFBFCAD8</color>
+    <color name="gui_preset_pill_rim">#FFFFFFFF</color>
+    <color name="gui_preset_pill_outline">#FFACBED2</color>
+    <!-- Slider/toggle thumb has a stronger independent highlight, including during drag. -->
+    <color name="gui_preset_thumb_fill">#E5EAF1</color>
+    <color name="gui_preset_thumb_rim">#FFFFFFFF</color>
+    <color name="gui_preset_thumb_outline">#FFB0BFD2</color>
     <color name="gui_preset_danger_fill">#D73333</color>
-    <color name="gui_preset_danger_rim">#FFFF7A7A</color>
+    <color name="gui_preset_danger_rim">#FFFFA3A3</color>
     <color name="gui_preset_danger_outline">#FF9F1C24</color>
 </resources>
