@@ -113,13 +113,8 @@ internal fun Modifier.guiSolidChrome(
     return this.background(fill, shape).guiDrawBakedSpecular(specular)
 }
 
-/**
- * Called for an actively sampled thumb: keep its original Prismal sample, and
- * overlay only the baked white reflection (no second filled glass layer).
- */
-internal fun Modifier.guiThumbHighlight(palette: GuiPresetChromePalette): Modifier =
-    guiDrawBakedSpecular(palette.thumbSpecular)
-
+// The pressed slider and toggle thumbs keep Prismal's *actual* Ambient shader,
+// whose layer alpha follows pressProgress. No baked overlay is added during touch.
 private fun Modifier.guiDrawBakedSpecular(drawable: Drawable): Modifier =
     this.drawWithContent {
         drawContent()
