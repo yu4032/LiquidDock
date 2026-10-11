@@ -74,16 +74,26 @@ internal fun Modifier.guiSolidChrome(
     style: GuiSolidChromeStyle,
     palette: GuiPresetChromePalette,
 ): Modifier {
-    val (fill, rim, outline) = when (style) {
-        GuiSolidChromeStyle.CARD -> Triple(
-            palette.cardFill, palette.cardRim, palette.cardOutline,
-        )
-        GuiSolidChromeStyle.PILL -> Triple(
-            palette.pillFill, palette.pillRim, palette.pillOutline,
-        )
-        GuiSolidChromeStyle.DANGER -> Triple(
-            palette.dangerFill, palette.dangerRim, palette.dangerOutline,
-        )
+    // Select resource values without allocating a Triple or a Paint per Cell.
+    val fill: Color
+    val rim: Color
+    val outline: Color
+    when (style) {
+        GuiSolidChromeStyle.CARD -> {
+            fill = palette.cardFill
+            rim = palette.cardRim
+            outline = palette.cardOutline
+        }
+        GuiSolidChromeStyle.PILL -> {
+            fill = palette.pillFill
+            rim = palette.pillRim
+            outline = palette.pillOutline
+        }
+        GuiSolidChromeStyle.DANGER -> {
+            fill = palette.dangerFill
+            rim = palette.dangerRim
+            outline = palette.dangerOutline
+        }
     }
     val shape = if (style == GuiSolidChromeStyle.CARD) cardShape else pillShape
     return this
