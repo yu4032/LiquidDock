@@ -279,7 +279,6 @@ internal fun IntSetting(
                 minWidth = 56.dp,
                 minHeight = 36.dp,
                 insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                prismalNumericAction = true,
             ) {
                 Text("重置")
             }

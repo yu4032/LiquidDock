@@ -119,7 +119,7 @@ public class SecurityCenterSettingsRestartContractTest {
 
         assertTrue(ui.contains("verticalScroll(rememberScrollState())"));
         assertTrue(ui.contains("System Framework（system）需要重启设备"));
-        assertTrue(ui.contains("tint = Color(0xFFD73333)"));
+        assertTrue(ui.contains("destructive = true,"));
         assertTrue(ui.contains("contentAlignment = Alignment.Center"));
         assertTrue(ui.contains("text = \"重启\""));
     }
