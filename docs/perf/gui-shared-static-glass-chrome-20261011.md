@@ -45,16 +45,32 @@ These are *precomputed color resources*, not pre-rendered 9-patch border bitmaps
 
 The entire change remains in PR #352 Draft pending user device acceptance. PR #340 and main remain untouched.
 
-## Stronger bright outline correction
 
-The user reported that **Cell, button, and slider handle bright outlines** were still effectively missing. Auditing the code found the bright rim was only 0.5dp and the dark-theme rim was muted grey-blue. Also, when a slider/toggle transitioned from idle static chrome to touch-time Prismal rendering, the static rim disappeared entirely.
+## User correction: spatial directional white reflection, not a uniform bright border
 
-The new resource-only correction:
-- **Cell**: highlight is white in light mode (`#FFFFFFFF`) and ice blue-white in dark mode (`#FFDBEAFF`).
-- **Ordinary buttons**: highlight is white in light mode (`#FFFFFFFF`) and near-white in dark mode (`#FFF2F8FF`).
-- **Slider/toggle thumb**: dedicated `gui_preset_thumb_{fill,rim,outline}` trio in both `values/` and `values-night/`; the thumb highlight is bright white (`#FFFFFFFF`) in both modes.
-- **Render width**: solid materials now use a fixed 1.75dp supporting outline followed by a prominent 1dp bright rim. These are two normal Compose round-rect border operations; no dynamic specular/refraction shader, gradient, capture, extra texture or image asset.
-- **Active thumb**: the original Prismal touch rendering continues unchanged, with `guiThumbHighlight(palette)` attaching only the lightweight predetermined outline while `sampling` is true. Idle path draws the fixed thumb fill + outline. Thus touching the handle no longer drops the bright border.
-- The preset colors are still resolved **once** by `rememberGuiPresetChromePalette()` in the scaffold. No per-item luminance, RGB interpolation, or dynamic highlight calculation.
+The previous "1dp white rim" implementation was **visually incorrect**: a bright single-color outline has identical intensity everywhere and does not convey a light source. The user explicitly requires *light-caused white specular highlights*, while retaining the performance improvement from all non-interactive Cells using fixed backgrounds.
 
-This is not a claim of exact optical equivalence to dynamic Prismal specular. Recheck dark-theme contrast and make sure slider drag scaling/clipping does not shift the fixed outline.
+### Precomputed light maps
+
+Six transparent Android NinePatch assets are checked in:
+
+- `drawable-xxhdpi/gui_specular_{card,pill,thumb}.9.png` for light theme.
+- `drawable-night-xxhdpi/gui_specular_{card,pill,thumb}.9.png` for dark theme.
+
+The distributions are baked *offline*, not computed at each Cell draw. A fixed upper-left key light produces a white upper-left hotspot. Its luminance tapers along the top and left edges, and the bottom/right sides keep a weak, darker definition. This is a **spatially asymmetric alpha/light map**, unlike a uniformly colored Compose border. NinePatch stretch regions are located away from corners so large Cards, medium Capsules and small 40×24dp Handles retain their corner geometry as their actual widths/heights change.
+
+### Runtime path
+
+- `GuiPresetChromePalette` retains the fixed opaque Cell, Pill, Thumb, Danger and Canvas fill colors. The earlier `*_rim` and `*_outline` flat color keys were removed.
+- In `rememberGuiPresetChromePalette()`, three NinePatchDrawables are selected through Android's drawable night qualifier and loaded **once at the Scaffold**. Each Cell shares the existing drawable objects.
+- `Modifier.guiSolidChrome`: one `background(fill, shape)` plus a transparent overlay `drawWithContent` whose NinePatch bitmap is drawn over existing content. No per-Cell gradient calculation, shader, lighting, backdrop blur, sample layer or new composable node.
+- `Modifier.guiThumbHighlight` overlays **only** the dedicated thumb's precomputed light map during touch-time Prismal rendering. The live Prismal thumb's existing movement, source alignment and spring are untouched.
+- The dynamic top header / bottom navigation still use their original Prismal sources; no broad renderer changes.
+
+### Performance and visual bounds
+
+This deliberately substitutes a tiny, stretchable precomputed bitmap edge for real-time specular shading. It does add a NinePatch draw call to each Cell, so its exact GPU cost must be checked against the prior pure-color version; however, it avoids recomputing refraction or specular illumination and creates no extra composable. The files are xxhdpi with guide-marked 9-patch stretch bars; AAPT2 compiles the guide borders.
+
+Unit tests assert that *actual baked pixel alpha near the upper-left* exceeds bottom-right alpha, that all six theme/shape resources exist, and that no live per-Cell optical pipeline was reintroduced. This verifies nonuniform distribution only; it does not replace on-device visual comparison.
+
+**Important**: Do not merge #352 until the user confirms that the source direction, edge strength, press transition, and scroll performance look correct.
