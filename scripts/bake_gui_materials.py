@@ -20,7 +20,7 @@ Source of truth:
   https://github.com/styropyr0/PrismalAGSL/tree/v1.0.4
 
 Run: python3 scripts/bake_gui_materials.py
-Output: 4-bit paletted AAPT2-compatible Android nine-patches in res/drawable*-xxhdpi.
+Output: 8-bit RGBA Android nine-patches in res/drawable*-xxhdpi.\nIdle thumbs and danger buttons intentionally use simple XML shape resources.
 """
 from pathlib import Path
 import math
@@ -92,68 +92,56 @@ def clip_distance(x, y, w, h, r):
 
 
 def bake(kind, theme):
+    assert kind in ("card", "pill"), (
+        "Idle thumbs use opaque-white XML; destructive actions use red XML."
+    )
     width_dp, height_dp, radius_dp = SHAPES[kind]
     width, height, radius = (p * SCALE for p in (width_dp, height_dp, radius_dp))
     columns, rows = width + 2, height + 2
     fill = BASE[theme][kind]
-    headroom = min(128, 255 - min(fill))
-    palette = [(0, 0, 0, 0), (0, 0, 0, 255), (*fill, 255)]
-    for level in range(1, 13):
-        palette.append((
-            *(min(255, round(c + headroom * level / 12)) for c in fill),
-            255,
-        ))
-    palette.append((*fill, 145))  # antialiased contour fringe
-    assert len(palette) == 16
-    pixels = bytearray(columns * rows)
+    pixels = bytearray(columns * rows * 4)
+
+    def put(x, y, red, green, blue, alpha):
+        start = (y * columns + x) * 4
+        pixels[start:start + 4] = bytes((red, green, blue, alpha))
+
     for y in range(height):
         for x in range(width):
             cx, cy = x + .5 - width / 2, y + .5 - height / 2
             signed = clip_distance(cx, cy, width, height, radius)
-            if signed > .5:
+            coverage = max(0, min(1, .5 - signed))
+            if coverage <= 0:
                 continue
-            if signed > -.2:
-                index = 15
-            elif kind == "thumb":
-                # Upstream Ambient is alpha=pressProgress; at rest it is ZERO.
-                # Upstream onDrawSurface fills the idle thumb with opaque white.
-                index = 2
-            else:
-                d = abs(normal_dot(cx, cy, width, height, radius))
-                # Clipped 2*ceil(0.5dp) stroke with ~0.25dp soft falloff.
-                band = 1 / (1 + math.exp((-signed - 1.7) / .55))
-                alpha = .5 * (.06 + .94 * d) * band
-                added = 255 * alpha  # BlendMode.Plus, NOT SrcOver white
-                intensity = max(min(255, c + added) - c for c in fill)
-                level = max(0, min(12, round(intensity / headroom * 12)))
-                index = 2 + level if level else 2
-            pixels[(y + 1) * columns + (x + 1)] = index
+            d = abs(normal_dot(cx, cy, width, height, radius))
+            # Approximate native 2*ceil(0.5dp) stroke, clipped at shape border;
+            # slight Gaussian-like softness inside and the smaller adjacent lobe.
+            band = 1 / (1 + math.exp((-signed - 1.7) / .55))
+            plus = 255 * .5 * (.06 + .94 * d) * band
+            rgb = tuple(min(255, round(c + plus)) for c in fill)
+            put(x + 1, y + 1, *rgb, round(coverage * 255))
 
-    # Black 1-pixel nine-patch guides: central stretch avoids corner distortion.
+    # 1px native 9-patch guide border. Keep stretch bars away from the corners.
     for x in range(width // 2 - 9, width // 2 + 10):
-        pixels[x + 1] = 1
+        put(x + 1, 0, 0, 0, 0, 255)
     yspan = min(9, max(2, round((height - 2 * radius) / 2)))
     for y in range(height // 2 - yspan, height // 2 + yspan + 1):
-        pixels[(y + 1) * columns] = 1
+        put(0, y + 1, 0, 0, 0, 255)
     for x in range(2, width):
-        pixels[(rows - 1) * columns + x] = 1
+        put(x, rows - 1, 0, 0, 0, 255)
     for y in range(2, height):
-        pixels[y * columns + columns - 1] = 1
+        put(columns - 1, y, 0, 0, 0, 255)
 
-    stride = (columns + 1) // 2
+    # AAPT2 did not reliably compile the earlier paletted 9-patches with a
+    # mostly-opaque material. Use Android's standard truecolor RGBA PNG format.
     scanlines = bytearray()
+    row_size = columns * 4
     for y in range(rows):
-        scanlines.append(0)  # no PNG row filter
-        for x in range(0, columns, 2):
-            hi = pixels[y * columns + x]
-            lo = pixels[y * columns + x + 1] if x + 1 < columns else 0
-            scanlines.append((hi << 4) | lo)
-    ihdr = struct.pack(">IIBBBBB", columns, rows, 4, 3, 0, 0, 0)
+        scanlines.append(0)
+        scanlines.extend(pixels[y * row_size:(y + 1) * row_size])
+    ihdr = struct.pack(">IIBBBBB", columns, rows, 8, 6, 0, 0, 0)
     out = (
-        b"\x89PNG\r\n\x1a\n"
+        b"\\x89PNG\\r\\n\\x1a\\n"
         + png_chunk("IHDR", ihdr)
-        + png_chunk("PLTE", bytes(c for p in palette for c in p[:3]))
-        + png_chunk("tRNS", bytes(p[3] for p in palette))
         + png_chunk("IDAT", zlib.compress(bytes(scanlines), level=0))
         + png_chunk("IEND", b"")
     )
@@ -164,6 +152,6 @@ def bake(kind, theme):
 
 if __name__ == "__main__":
     for theme in BASE:
-        for kind in SHAPES:
+        for kind in ("card", "pill"):
             bake(kind, theme)
-    print("Baked 8 static Plus-composited Prismal GUI materials.")
+    print("Baked 4 RGBA Plus-composited Card/Pill Prismal GUI materials.")
