@@ -329,9 +329,9 @@ internal fun ModernSurface(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            // A real Prismal depth shadow is outside the clipped glass outline.
-            // Use cached translucent outlines instead of a per-Cell render layer.
-            .then(if (staticChrome) Modifier.guiStaticSoftShadow(cardShape) else Modifier)
+            // Original Prismal native DepthShadow: blurred mask outside clip,
+            // with cached GraphicsLayer, without a sampled glass surface.
+            .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(cardShape) else Modifier)
             .then(
                 if (staticChrome) {
                     Modifier.guiExactPrismalCornerChrome(GuiSolidChromeStyle.CARD, presetChrome, cardShape)
@@ -462,7 +462,7 @@ internal fun Button(
             .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
             .height(minHeight)
             .alpha(if (enabled) 1f else 0.66f)
-            .then(if (staticChrome) Modifier.guiStaticSoftShadow(buttonShape) else Modifier)
+            .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(buttonShape) else Modifier)
             .then(
                 if (staticChrome) {
                     Modifier.guiExactPrismalCornerChrome(
