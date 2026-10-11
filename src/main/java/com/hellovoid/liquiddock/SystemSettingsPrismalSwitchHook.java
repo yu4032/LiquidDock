@@ -39,7 +39,12 @@ final class SystemSettingsPrismalSwitchHook {
                 Object result = chain.proceed(args);
                 Object owner = chain.getThisObject();
                 if (owner instanceof CompoundButton) {
-                    enqueue((CompoundButton) owner);
+                    try {
+                        enqueue((CompoundButton) owner);
+                    } catch (Throwable error) {
+                        disabledByPresentationFailure = true;
+                        Api101Bridge.log("[DC][SettingsSwitch] callback failed; stock retained", error);
+                    }
                 }
                 return result;
             });
