@@ -297,22 +297,14 @@ final class RootPassBlurBackend {
     }
 
     boolean postToRenderThread(Runnable runnable) {
-        return postRenderTask(runnable, false, 0L);
-    }
-
-    /**
-     * Only for an already-submitted Workspace static surface's non-urgent geometry redraw.
-     * Native source frames, producer recovery and Recents callbacks continue without delay.
-     */
-    boolean postToRenderThreadDelayed(Runnable runnable, long delayMillis) {
-        return postRenderTask(runnable, false, Math.max(0L, delayMillis));
+        return postRenderTask(runnable, false);
     }
 
     boolean postUrgentToRenderThread(Runnable runnable) {
-        return postRenderTask(runnable, true, 0L);
+        return postRenderTask(runnable, true);
     }
 
-    private boolean postRenderTask(Runnable runnable, boolean urgent, long delayMillis) {
+    private boolean postRenderTask(Runnable runnable, boolean urgent) {
         if (runnable == null || shuttingDown || !renderThread.isAlive()) return false;
         Runnable guarded = () -> {
             if (shuttingDown) return;
@@ -330,9 +322,8 @@ final class RootPassBlurBackend {
             }
         };
         try {
-            if (urgent) return renderHandler.postAtFrontOfQueue(guarded);
-            return delayMillis > 0L
-                    ? renderHandler.postDelayed(guarded, delayMillis)
+            return urgent
+                    ? renderHandler.postAtFrontOfQueue(guarded)
                     : renderHandler.post(guarded);
         } catch (Throwable ignored) {
             return false;
