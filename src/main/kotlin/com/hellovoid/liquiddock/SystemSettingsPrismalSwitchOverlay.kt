@@ -214,6 +214,9 @@ object SystemSettingsPrismalSwitchOverlay {
         fun install() {
             stage = "create-compose-view"
             val view = ComposeView(stock.context).apply {
+                // Multiple overlays share one Activity SavedStateRegistry; each
+                // ComposeView needs a unique saveable-state key.
+                id = View.generateViewId()
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             }
