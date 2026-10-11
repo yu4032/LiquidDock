@@ -66,6 +66,7 @@ internal fun GuiOnTouchPrismalToggle(
 ) {
     val density = LocalDensity.current
     val isLightTheme = !isSystemInDarkTheme()
+    val presetChrome = LocalGuiPresetChromePalette.current
     val accentColor =
         if (isLightTheme) Color(0xFF34C759)
         else Color(0xFF30D158)
@@ -245,7 +246,7 @@ internal fun GuiOnTouchPrismalToggle(
                         scaleY = dampedDragAnimation.scaleY *
                             (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                     }
-                            .guiSolidChrome(GuiSolidChromeStyle.PILL, !isLightTheme),
+                            .guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome),
                     )
             }
         }
