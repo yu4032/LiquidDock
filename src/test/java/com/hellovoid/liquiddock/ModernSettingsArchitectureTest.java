@@ -253,7 +253,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void staticGuiUsesPlainColorModifiersWithoutDrawablesOrOpticalLayers()
+    public void staticGuiUsesBakedDirectionalSpecularNinePatchesWithoutLiveCellOptics()
             throws Exception {
         String surfaces = Files.readString(SURFACES);
         String bottom = Files.readString(BOTTOM_NAV);
@@ -263,6 +263,7 @@ public class ModernSettingsArchitectureTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
         String toggle = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
+
         assertTrue(surfaces.contains("LocalStaticGlassChrome provides glassEnabled"));
         assertFalse(surfaces.contains("LocalFrozenPrismalBackdrop"));
         assertTrue(surfaces.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)"));
@@ -273,27 +274,28 @@ public class ModernSettingsArchitectureTest {
         assertTrue(toggle.contains(".then(if (samplingEnabled) Modifier.guiThumbHighlight(presetChrome) else Modifier)"));
         assertFalse(surfaces.contains("GuiStaticGlassChrome("));
         assertFalse(surfaces.contains("GuiFrozenPrismalChrome("));
+
         assertTrue(chrome.contains("internal fun Modifier.guiSolidChrome("));
+        assertTrue(chrome.contains("internal fun Modifier.guiThumbHighlight("));
         assertTrue(chrome.contains("LocalGuiPresetChromePalette"));
         assertTrue(chrome.contains("rememberGuiPresetChromePalette()"));
         assertTrue(chrome.contains("val canvas = colorResource(R.color.gui_preset_canvas)"));
-        assertTrue(chrome.contains(".border(1.75.dp, outline, shape)"));
-        assertTrue(chrome.contains(".border(1.dp, rim, shape)"));
-        assertTrue(chrome.contains("internal fun Modifier.guiThumbHighlight("));
+        assertTrue(chrome.contains("R.drawable.gui_specular_card"));
+        assertTrue(chrome.contains("R.drawable.gui_specular_pill"));
+        assertTrue(chrome.contains("R.drawable.gui_specular_thumb"));
+        assertTrue(chrome.contains("ContextCompat.getDrawable"));
+        assertTrue(chrome.contains("drawable.draw(nativeCanvas)"));
+        assertTrue(chrome.contains("drawContent()"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.THUMB ->"));
-        assertTrue(chrome.contains("R.color.gui_preset_thumb_rim"));
         assertTrue(chrome.contains("R.color.gui_preset_card_fill"));
-        assertTrue(chrome.contains("R.color.gui_preset_card_rim"));
+        assertTrue(chrome.contains("R.color.gui_preset_thumb_fill"));
         assertTrue(chrome.contains("R.color.gui_preset_danger_fill"));
-        assertFalse(chrome.contains("ContextCompat"));
-        assertFalse(chrome.contains("drawIntoCanvas"));
+        assertFalse(chrome.contains("PrismalGlassSurface("));
+        assertFalse(chrome.contains("drawPrismalGlass("));
+        assertFalse(chrome.contains("rememberGraphicsLayer("));
         assertFalse(chrome.contains("Brush."));
         assertFalse(chrome.contains("RenderEffect.create"));
-        for (String name : new String[]{
-                "card_light", "card_dark", "pill_light", "pill_dark", "danger"}) {
-            assertFalse(Files.exists(Path.of(
-                    "src/main/res/drawable/gui_static_glass_" + name + ".xml")));
-        }
+
         String light = Files.readString(Path.of(
                 "src/main/res/values/gui_preset_material_colors.xml"));
         String dark = Files.readString(Path.of(
@@ -302,21 +304,40 @@ public class ModernSettingsArchitectureTest {
         assertTrue(dark.contains("<color name=\"gui_preset_canvas\">#1B2028</color>"));
         assertTrue(light.contains("<color name=\"gui_preset_canvas_glass_off\">#E6E8EB</color>"));
         assertTrue(dark.contains("<color name=\"gui_preset_canvas_glass_off\">#191E26</color>"));
-        // All bright edges are precomputed relative to the fixed canvas.
-        assertTrue(light.contains("<color name=\"gui_preset_card_rim\">#FFFFFFFF</color>"));
-        assertTrue(dark.contains("<color name=\"gui_preset_card_rim\">#FFDBEAFF</color>"));
-        assertTrue(light.contains("<color name=\"gui_preset_pill_rim\">#FFFFFFFF</color>"));
-        assertTrue(dark.contains("<color name=\"gui_preset_pill_rim\">#FFF2F8FF</color>"));
-        assertTrue(light.contains("<color name=\"gui_preset_thumb_rim\">#FFFFFFFF</color>"));
-        assertTrue(dark.contains("<color name=\"gui_preset_thumb_rim\">#FFFFFFFF</color>"));
         for (String colorKey : new String[]{
-                "gui_preset_card_fill", "gui_preset_card_rim", "gui_preset_card_outline",
-                "gui_preset_pill_fill", "gui_preset_pill_rim", "gui_preset_pill_outline",
-                "gui_preset_thumb_fill", "gui_preset_thumb_rim", "gui_preset_thumb_outline",
-                "gui_preset_danger_fill", "gui_preset_danger_rim", "gui_preset_danger_outline"
-        }) {
+                "gui_preset_card_fill", "gui_preset_pill_fill",
+                "gui_preset_thumb_fill", "gui_preset_danger_fill"}) {
             assertTrue(light.contains("name=\"" + colorKey + "\""));
             assertTrue(dark.contains("name=\"" + colorKey + "\""));
+        }
+
+        // Check the actual baked alpha map; flat white borders would fail this
+        // spatial light-direction requirement. Verify both theme qualifiers.
+        for (String qualifier : new String[]{"drawable-xxhdpi", "drawable-night-xxhdpi"}) {
+            for (String kind : new String[]{"card", "pill", "thumb"}) {
+                java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(Path.of(
+                        "src/main/res", qualifier, "gui_specular_" + kind + ".9.png").toFile());
+                assertTrue(image != null);
+                assertTrue(image.getColorModel().hasAlpha());
+                int width = image.getWidth();
+                int height = image.getHeight();
+                assertTrue(width >= 70);
+                assertTrue(height >= 60);
+                long upperLeftLight = 0;
+                long lowerRightLight = 0;
+                for (int y = 2; y < height / 4; y++) {
+                    for (int x = 2; x < width / 2; x++) {
+                        upperLeftLight += (image.getRGB(x, y) >>> 24) & 255;
+                    }
+                }
+                for (int y = height * 3 / 4; y < height - 2; y++) {
+                    for (int x = width / 2; x < width - 2; x++) {
+                        lowerRightLight += (image.getRGB(x, y) >>> 24) & 255;
+                    }
+                }
+                assertTrue("Baked white reflection must favor the upper-left key light: "
+                        + kind + " / " + qualifier, upperLeftLight > lowerRightLight);
+            }
         }
         assertTrue(surfaces.contains("LocalGuiPresetChromePalette provides presetChrome"));
         assertTrue(surfaces.contains("val background = presetChrome.canvas"));
