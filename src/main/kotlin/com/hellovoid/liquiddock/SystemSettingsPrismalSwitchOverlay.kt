@@ -1,7 +1,12 @@
 package com.hellovoid.liquiddock
 
+import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.CompoundButton
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
@@ -16,50 +21,69 @@ import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import java.util.WeakHashMap
 
 /**
- * Experimental Compose-backed Prismal switch. Only the UI of a MIUIX widget_frame is replaced.
+ * Settings-only Prismal switch presentation pilot.
  *
- * No original listener or checked state is overwritten. The stock CompoundButton continues
- * to perform all preference validation, persistence, accessibility and business side effects.
+ * A MIUIX Preference's widget_frame is a LinearLayout in this ROM, not a FrameLayout.
+ * Keep the stock widget in its exact original parent; host a small ComposeView over its
+ * screen geometry on the existing Activity content FrameLayout. Never change stock
+ * listeners, layout parameters, checked state, or preference persistence.
  */
 object SystemSettingsPrismalSwitchOverlay {
     private const val MAX_ACTIVE = 6
+    private const val STOCK_VISUAL_ALPHA = 0.02f
+    private val main = Handler(Looper.getMainLooper())
     private val active = WeakHashMap<CompoundButton, Binding>()
 
     @JvmStatic
     @Synchronized
     fun attach(original: CompoundButton): Boolean {
         if (active.containsKey(original)) return true
-        // MIUIX Preference widget frames are FrameLayouts. Never reparent or rewrite arbitrary
-        // Android/SPA controls, and never touch a SlidingButton in an unexpected host.
-        val frame = original.parent as? FrameLayout ?: return true
-        if (frame.id != android.R.id.widget_frame) return true
-        if (!original.isAttachedToWindow || active.size >= MAX_ACTIVE) return true
-        if (frame.indexOfChild(original) < 0) return true
+        // The verified MIUIX CheckBoxPreference layout uses android.R.id.checkbox
+        // below android.R.id.widget_frame. Reject other switch types/contexts.
+        if (original.id != android.R.id.checkbox) return true
+        if (!isPreferenceWidget(original)) return true
+        if (!original.isAttachedToWindow || original.width <= 0 || original.height <= 0) return true
+        if (active.size >= MAX_ACTIVE) return true
+        val content = original.rootView.findViewById<FrameLayout>(android.R.id.content) ?: return true
+        if (!content.isAttachedToWindow) return true
 
-        val binding = Binding(original, frame)
+        val binding = Binding(original, content)
         return try {
             binding.install()
             active[original] = binding
+            Api101Bridge.log("[DC][SettingsSwitch] Prismal checkbox visual attached")
             true
         } catch (error: Throwable) {
             binding.dispose()
-            Api101Bridge.log("[DC][SettingsSwitch] Compose overlay unavailable; stock restored", error)
+            Api101Bridge.log("[DC][SettingsSwitch] overlay unavailable; stock restored", error)
             false
         }
     }
 
+    private fun isPreferenceWidget(stock: View): Boolean {
+        var ancestor = stock.parent as? View
+        repeat(5) {
+            if (ancestor?.id == android.R.id.widget_frame) return true
+            ancestor = ancestor?.parent as? View
+        }
+        return false
+    }
+
     private class Binding(
         private val stock: CompoundButton,
-        private val frame: FrameLayout,
+        private val content: FrameLayout,
     ) : View.OnAttachStateChangeListener {
         private val stockAlpha = stock.alpha
         private val selected = mutableStateOf(stock.isChecked)
         private val allowed = mutableStateOf(stock.isEnabled)
+        private val visibleRect = Rect()
+        private val stockPosition = IntArray(2)
+        private val contentPosition = IntArray(2)
         private var disposed = false
         private var installed = false
         private var overlay: ComposeView? = null
-        private var drawObserver: android.view.ViewTreeObserver? = null
-        private var preDraw: android.view.ViewTreeObserver.OnPreDrawListener? = null
+        private var drawObserver: ViewTreeObserver? = null
+        private var preDraw: ViewTreeObserver.OnPreDrawListener? = null
 
         fun install() {
             val view = ComposeView(stock.context).apply {
@@ -68,15 +92,13 @@ object SystemSettingsPrismalSwitchOverlay {
                 setContent {
                     val backdrop = rememberPrismalGlassLayer()
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        // This local source supports Prismal's switch material, without doing
-                        // any forbidden Settings bitmap/screen capture. Full page refraction
-                        // requires a later native-to-Compose backdrop bridge.
+                        // Local Prismal chrome only; full native Settings backdrop sampling
+                        // remains unsupported, and no screenshot/bitmap path is used.
                         Box(Modifier.fillMaxSize().prismalGlassLayer(backdrop))
                         GuiOnTouchPrismalToggle(
                             selected = { selected.value },
                             onSelect = { next ->
                                 if (!disposed && stock.isEnabled && next != stock.isChecked) {
-                                    // The native widget remains the only click and state authority.
                                     stock.performClick()
                                 }
                                 selected.value = stock.isChecked
@@ -88,27 +110,15 @@ object SystemSettingsPrismalSwitchOverlay {
                 }
             }
             overlay = view
-            // Only an existing Preference widget frame is extended; original native view stays
-            // mounted in-place. The overlay does not intercept the preference row outside frame.
-            frame.addView(view, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
+            content.addView(
+                view,
+                FrameLayout.LayoutParams(stock.width, stock.height, Gravity.TOP or Gravity.LEFT),
+            )
             installed = true
             stock.addOnAttachStateChangeListener(this)
-            val observer = frame.viewTreeObserver
-            val watcher = android.view.ViewTreeObserver.OnPreDrawListener {
-                if (!disposed) {
-                    if (selected.value != stock.isChecked) selected.value = stock.isChecked
-                    if (allowed.value != stock.isEnabled) allowed.value = stock.isEnabled
-                    // A recycled Preference may hide its stock widget without detaching the row.
-                    if (view.visibility != stock.visibility) view.visibility = stock.visibility
-                    if (view.width > 0 && view.height > 0 && stock.alpha == stockAlpha) {
-                        // Keep an almost-transparent native control for accessibility. Never
-                        // set GONE/INVISIBLE or discard the system's listener/checked state.
-                        stock.alpha = 0.02f
-                    }
-                }
+            val observer = content.viewTreeObserver
+            val watcher = ViewTreeObserver.OnPreDrawListener {
+                if (!disposed) syncPresentation(view)
                 true
             }
             if (observer.isAlive) {
@@ -116,15 +126,58 @@ object SystemSettingsPrismalSwitchOverlay {
                 drawObserver = observer
                 preDraw = watcher
             }
+            syncPresentation(view)
+        }
+
+        private fun syncPresentation(view: ComposeView) {
+            if (!stock.isAttachedToWindow || stock.rootView !== content.rootView) {
+                main.post { dispose() }
+                return
+            }
+
+            if (selected.value != stock.isChecked) selected.value = stock.isChecked
+            if (allowed.value != stock.isEnabled) allowed.value = stock.isEnabled
+
+            val fullyVisible = stock.isShown &&
+                stock.getGlobalVisibleRect(visibleRect) &&
+                visibleRect.width() >= stock.width - 1 &&
+                visibleRect.height() >= stock.height - 1 &&
+                stock.width > 0 && stock.height > 0
+
+            if (!fullyVisible) {
+                if (view.visibility != View.INVISIBLE) view.visibility = View.INVISIBLE
+                if (stock.alpha == STOCK_VISUAL_ALPHA) stock.alpha = stockAlpha
+                return
+            }
+
+            stock.getLocationOnScreen(stockPosition)
+            content.getLocationOnScreen(contentPosition)
+            val dx = (stockPosition[0] - contentPosition[0]).toFloat()
+            val dy = (stockPosition[1] - contentPosition[1]).toFloat()
+            if (view.translationX != dx) view.translationX = dx
+            if (view.translationY != dy) view.translationY = dy
+            if (view.width != stock.width || view.height != stock.height) {
+                val lp = view.layoutParams as? FrameLayout.LayoutParams
+                if (lp != null && (lp.width != stock.width || lp.height != stock.height)) {
+                    lp.width = stock.width
+                    lp.height = stock.height
+                    view.layoutParams = lp
+                }
+            }
+            if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
+            // Keep the actual native switch clickable and accessible in its original row.
+            // Only reduce the native drawing alpha after the overlay has valid geometry.
+            if (view.width > 0 && view.height > 0 && stock.alpha == stockAlpha) {
+                stock.alpha = STOCK_VISUAL_ALPHA
+            }
         }
 
         override fun onViewAttachedToWindow(v: View) = Unit
 
         override fun onViewDetachedFromWindow(v: View) {
-            // Do not mutate FrameLayout's child array while Android is dispatching detach
-            // to its children: that can crash ViewGroup.dispatchDetachedFromWindow.
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                if (!stock.isAttachedToWindow || stock.parent !== frame) dispose()
+            // Never change a ViewGroup's child array during detach dispatch.
+            main.post {
+                if (!stock.isAttachedToWindow || stock.rootView !== content.rootView) dispose()
             }
         }
 
@@ -142,13 +195,11 @@ object SystemSettingsPrismalSwitchOverlay {
             drawObserver = null
             stock.alpha = stockAlpha
             overlay?.let { view ->
-                if (view.parent === frame) frame.removeView(view)
+                if (view.parent === content) content.removeView(view)
                 view.disposeComposition()
             }
             overlay = null
-            synchronized(SystemSettingsPrismalSwitchOverlay) {
-                active.remove(stock)
-            }
+            synchronized(SystemSettingsPrismalSwitchOverlay) { active.remove(stock) }
             SystemSettingsPrismalSwitchHook.onDetached(stock)
         }
     }
