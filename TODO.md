@@ -38,6 +38,10 @@ Perfetto 分段诊断已经进入 main：
 - `LD.Workspace.StaticNodes`
 - `LD.Workspace.SourceReconcile`
 
+针对 Widget 密集页面的 App → HOME 返回缩放掉帧，待通过
+`docs/workspace-home-widget-return-perfetto-20261011.md` 的有/无玻璃 A/B 与 FrameTimeline 核验。
+新增 GL `SourceFrame` / `Backdrop` / `StaticDraw` / `StaticSwap` 和 Widget 计数埋点，仅辅助定位，**不是性能修复**。
+
 下一步：
 
 - 使用 stable/paging/drag/unlock 场景采样真实成本；
