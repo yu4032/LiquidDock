@@ -19,7 +19,8 @@ public class ScopedGlassOpticsTest {
         assertFalse(s.equals(d));
         assertFalse(g.equals(d));
         assertTrue(g.startsWith("liquid_"));
-        assertTrue(ScopedGlassOptics.opticalKeys().size() >= 40);
+        // Four legacy per-scope highlight strength controls were replaced by OS4.
+        assertEquals(37, ScopedGlassOptics.opticalKeys().size());
     }
 
     @Test public void oneScopeDoesNotChangeAnotherOrGlobalOptics() {

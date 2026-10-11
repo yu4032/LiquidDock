@@ -921,8 +921,10 @@ public class ModernSettingsArchitectureTest {
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
-        assertTrue("original GUI ConfigSchema coverage must not shrink: " + configRefs.size(),
-                configRefs.size() >= 229);
+        // The enforced OS4 edge replaces legacy specular/rim/plain highlight controls.
+        // Keep the active GUI catalog size stable rather than counting retired keys.
+        assertTrue("active GUI ConfigSchema coverage must not shrink: " + configRefs.size(),
+                configRefs.size() >= 215);
         assertTrue(configRefs.contains("ConfigSchema.Debug.LOGGING"));
         assertTrue(configRefs.contains("ConfigSchema.Glass.PRISMAL_SHOW_NORMALS"));
 
