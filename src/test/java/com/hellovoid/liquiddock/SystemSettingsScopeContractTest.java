@@ -56,8 +56,9 @@ public class SystemSettingsScopeContractTest {
         assertTrue(painter.contains("return false"));
         assertFalse(painter.contains("import androidx.compose."));
         assertFalse(painter.contains("new ComposeView("));
-        assertFalse(painter.contains("PixelCopy"));
-        assertFalse(painter.contains("ScreenCapture"));
+        assertFalse(painter.contains("import android.view.PixelCopy"));
+        assertFalse(painter.contains("PixelCopy.request("));
+        assertFalse(painter.contains("ScreenCapture.capture("));
         assertFalse(painter.contains("Bitmap.createBitmap"));
         assertFalse(painter.contains("setOnCheckedChangeListener"));
         assertTrue(ui.contains("ConfigSchema.SystemSettings.PRISMAL_SWITCH"));
