@@ -61,6 +61,8 @@ public class UserFacingPreferenceSchemaTest {
                 defaults.get(ConfigSchema.Glass.SECURITY_CENTER_GLASS.name()));
         assertEquals(Boolean.FALSE,
                 defaults.get(ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name()));
+        assertEquals(Boolean.FALSE,
+                defaults.get(ConfigSchema.SystemSettings.PRISMAL_SWITCH.name()));
         assertEquals(Boolean.FALSE, defaults.get(ConfigSchema.Debug.LOGGING.name()));
     }
 
