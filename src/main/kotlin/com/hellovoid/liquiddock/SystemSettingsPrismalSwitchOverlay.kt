@@ -3,11 +3,17 @@ package com.hellovoid.liquiddock
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.findViewTreeViewModelStoreOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+
 import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.ViewTreeViewModelStoreOwner
+
 import androidx.savedstate.SavedStateRegistryOwner
-import androidx.savedstate.ViewTreeSavedStateRegistryOwner
+import androidx.savedstate.findViewTreeSavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
@@ -69,8 +75,8 @@ object SystemSettingsPrismalSwitchOverlay {
     }
 
     private fun bindExistingViewTreeOwners(view: ComposeView, host: FrameLayout) {
-        val existingLifecycle = ViewTreeLifecycleOwner.get(host)
-        val existingSavedState = ViewTreeSavedStateRegistryOwner.get(host)
+        val existingLifecycle = host.findViewTreeLifecycleOwner()
+        val existingSavedState = host.findViewTreeSavedStateRegistryOwner()
         val activity = findHostActivity(host.context)
         val lifecycle = existingLifecycle ?: (activity as? LifecycleOwner)
         val saved = existingSavedState ?: (activity as? SavedStateRegistryOwner)
@@ -85,10 +91,10 @@ object SystemSettingsPrismalSwitchOverlay {
             )
         }
         // Only assign to the new overlay, not to Settings' root/decor hierarchy.
-        ViewTreeLifecycleOwner.set(view, lifecycle)
-        ViewTreeSavedStateRegistryOwner.set(view, saved)
-        val model = ViewTreeViewModelStoreOwner.get(host) ?: (activity as? ViewModelStoreOwner)
-        if (model != null) ViewTreeViewModelStoreOwner.set(view, model)
+        view.setViewTreeLifecycleOwner(lifecycle)
+        view.setViewTreeSavedStateRegistryOwner(saved)
+        val model = host.findViewTreeViewModelStoreOwner() ?: (activity as? ViewModelStoreOwner)
+        if (model != null) view.setViewTreeViewModelStoreOwner(model)
     }
 
     private fun skipOnce(reason: String): Boolean {
