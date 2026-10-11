@@ -59,7 +59,7 @@ internal fun GuiStaticRepeatStepButton(
             .then(if (staticChrome) Modifier.guiStaticSoftShadow(shape) else Modifier)
             .then(
                 if (staticChrome) {
-                    Modifier.guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome)
+                    Modifier.guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL, presetChrome, shape)
                 } else {
                     Modifier.background(
                         lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f),
