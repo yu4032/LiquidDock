@@ -49,8 +49,8 @@ final class SystemSettingsNativeSwitchPainter {
 
             float sdCapsule(float2 p, float2 hs) {
                 // hs.y is half-height and capsule's corner radius.
-                float2 q = abs(p) - float2(hs.x - hs.y, 0.0);
-                return length(max(q, 0.0)) + min(q.x, 0.0) - hs.y;
+                float2 q = float2(abs(p.x) - (hs.x - hs.y), p.y);
+                return length(float2(max(q.x, 0.0), q.y)) - hs.y;
             }
             float aaCover(float d, float a) {
                 return 1.0 - smoothstep(-a, a, d);
