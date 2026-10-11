@@ -33,6 +33,7 @@ import kotlin.math.min
  */
 internal class SystemSettingsNativeBackdrop(
     private val root: FrameLayout,
+    private val onFatalCapture: () -> Unit,
 ) : PrismalBackdrop {
     private val node = RenderNode("LiquidDock-Settings-Prismal-Backdrop")
     private val visibleSwitches = LinkedHashMap<View, View>()
@@ -43,6 +44,8 @@ internal class SystemSettingsNativeBackdrop(
     private var lastCaptureTime = 0L
     private var dirty = true
     private var disabled = false
+    private var capturedLogCount = 0
+    private var sampledLogCount = 0
     var capturing = false
         private set
 
@@ -96,11 +99,18 @@ internal class SystemSettingsNativeBackdrop(
             recording = false
             sampleVersion++
             lastCaptureTime = now
+            if (capturedLogCount++ < 4) {
+                Api101Bridge.log("[DC][SettingsSwitch] GPU native backdrop captured " +
+                    "region=${clip.left.toInt()},${clip.top.toInt()}-" +
+                    "${clip.right.toInt()},${clip.bottom.toInt()} " +
+                    "switches=${visibleSwitches.size} node=${width}x${height}")
+            }
             return true
         } catch (error: Throwable) {
             disabled = true
             Api101Bridge.log("[DC][SettingsSwitch] native GPU backdrop disabled " +
                 error.javaClass.name + ": " + error.message)
+            root.post { onFatalCapture() }
             if (recording) {
                 try { node.endRecording() } catch (_: Throwable) {}
             }
@@ -156,6 +166,10 @@ internal class SystemSettingsNativeBackdrop(
                 nativeCanvas.translate(-x, -y)
                 nativeCanvas.drawRenderNode(node)
                 nativeCanvas.restoreToCount(save)
+                if (sampledLogCount++ < 2) {
+                    Api101Bridge.log("[DC][SettingsSwitch] genuine Prismal sampled " +
+                        "GPU scene offset=${x.toInt()},${y.toInt()}")
+                }
             }
         } catch (_: Throwable) {
             // Sampling errors must not take down com.android.settings.
