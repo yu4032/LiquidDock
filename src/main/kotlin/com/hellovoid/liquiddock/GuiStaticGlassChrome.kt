@@ -20,7 +20,7 @@ import kotlin.math.roundToInt
  * A separate drawable instance avoids mutable draw bounds leaking between concurrently drawn
  * Compose nodes. Animated controls and contents remain outside this static background.
  */
-internal enum class GuiStaticGlassStyle { CARD, PILL }
+internal enum class GuiStaticGlassStyle { CARD, PILL, DANGER }
 
 @Composable
 internal fun GuiStaticGlassChrome(
@@ -40,6 +40,7 @@ internal fun GuiStaticGlassChrome(
         } else {
             R.drawable.gui_static_glass_pill_light
         }
+        GuiStaticGlassStyle.DANGER -> R.drawable.gui_static_glass_danger
     }
     val drawable = remember(context, resourceId) {
         requireNotNull(ContextCompat.getDrawable(context, resourceId)) {
