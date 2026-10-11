@@ -476,7 +476,7 @@ public class ModernSettingsArchitectureTest {
                 chrome.indexOf("internal fun Modifier.guiStaticSoftShadow("));
         assertTrue(thumbRimOnly.contains("drawOutline("));
         assertEquals("Idle thumb must have exactly one white outline",
-                1, thumbRimOnly.split("drawOutline\\\\(", -1).length - 1);
+                1, thumbRimOnly.split(java.util.regex.Pattern.quote("drawOutline("), -1);
         assertTrue(chrome.contains("val shadowColors = opacities.map"));
         assertTrue(chrome.contains("translate(top = offsetY)"));
         assertTrue(chrome.contains("onDrawBehind {"));
