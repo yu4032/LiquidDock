@@ -28,3 +28,22 @@ A shared vector-like XML gradient cannot contain a physically correct refraction
 5. Measure equal-length `dumpsys gfxinfo` runs before/after on same device; especially GPU p50/p90/p95, `GrVkTextureRenderTarget` cache bytes, frame misses and opening dense list. A final conclusion about GPU improvement requires on-device data; CI alone cannot establish actual perf gains.
 
 Regression gate: no `rememberGraphicsLayer`, `layer.record`, `PrismalGlassSurface` or `RenderEffect` in the static resource path. Do not merge before device checks.
+
+## Follow-up after the user reported little improvement
+
+The earlier change only replaced `GuiFrozenPrismalChrome` for standard Cells and idle slider/toggle thumbs. An actual source audit identified three unmodified per-Cell or dialog Prismal paths:
+
+1. `ModernGlassStepper` always instantiated `PrismalGlassStepper` whenever the GUI glass setting was enabled. This is present in every dense numeric Cell, often multiple times on a single page.
+2. The numeric reset action explicitly requested `Button(prismalNumericAction = true)`, routing around the static material path.
+3. The restart dialog still instantiated `PrismalGlassButton` for its destructive action. `ModernSurface` also retained a dead/conditionally active body glass branch through `GuiStaticPressPrismalSurface` and `PrismalGlassSurface`.
+
+The second pass closes these paths: `ModernSurface` has **one resource-based chrome implementation** (plus solid fallback for GUI glass OFF), `Button` has **only static/danger resource rendering**, restart actions share that resource, and `ModernGlassStepper` uses `GuiStaticRepeatStepButton`. Its pointer input preserves tap-to-step, disabled range behavior, a pressed overlay, and repeat-on-hold with a 430ms initial delay and 90ms cadence. Standard navigation click feedback uses Compose click indication instead of an AGSL ripple. Deleted the unreachable `GuiStaticPressPrismalSurface` renderer.
+
+The rule is now explicit: **inside GUI Cell chrome, only the switch and slider may instantiate interactive Prismal sampling**. The top header/app-bar actions, bottom tabs and their merged screen capture are separate floating navigation surfaces and intentionally remain live. Those global layers could still dominate GPU bandwidth, so an unmeasured whole-screen speedup is not claimed.
+
+### Additional acceptance checks
+
+- Many 3-control numeric Cell groups: ensure there is no Prismal layer for their +/- or Reset actions; test tapping, rapid tapping, long-press repeat, range boundaries and disabled state.
+- Folder/navigation Cell press: Compose click indication remains; no 1.0×→1.05× scale or moving Cell during press.
+- Restart dialog: red button remains visible and disabled when no scope is selected; toggles still animate and sample only while touching.
+- If GPU time barely improves again, measure the **remaining header/bottom backdrop recapture** independently, not by reintroducing shader effects into Cell chrome.
