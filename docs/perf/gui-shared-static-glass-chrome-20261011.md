@@ -1,69 +1,50 @@
-# GUI specular fidelity audit — PrismalAGSL v1.0.4 (2026-10-11)
+# GUI body material: baked final Prismal composite — 2026-10-11
 
-## Status
+Status: **PR #352 DRAFT**. Not merged. The user confirmed a significant improvement from eliminating all live Prismal Cell optics, but rejected two successive attempts to emulate the original specular appearance. This replaces the incorrect raw-specular overlay with an **offline-baked final RGB material**.
 
-**The previous PR #352 directional highlight was conceptually wrong.** It assumed a single upper-left hotspot that decays across the entire rectangle. The actual upstream specular is determined by the **signed-distance gradient of the rounded-rect boundary**, not by the global pixel distance from a light source. PR #352 remains Draft until device testing, and the proven performance improvements from the static Cell conversion must be retained.
+## Source evidence (PrismalAGSL v1.0.4, pinned)
 
-Authoritative upstream source pinned to the exact dependency version:
-- `Prismal/src/main/assets/agsl/default_specular.agsl`
-- `Prismal/src/main/assets/agsl/ambient_specular.agsl`
-- `Prismal/src/main/assets/agsl/rounded_rect_sdf.agsl`
-- `Prismal/src/main/java/com/styropyr0/prismal/specular/PrismalSpecularStyle.kt`
-- `Prismal/src/main/java/com/styropyr0/prismal/specular/PrismalSpecularModifier.kt`
+Source: https://github.com/styropyr0/PrismalAGSL/tree/v1.0.4
 
-Repository: https://github.com/styropyr0/PrismalAGSL/tree/v1.0.4
+- `default_specular.agsl`: `intensity = pow(abs(dot(prismalGradSdRoundRect(...), vec2(cos(angle),sin(angle)))), falloff)`; default angle 45°, falloff 1.
+- `PrismalSpecularStyle.Default`: **white alpha 0.5 + `BlendMode.Plus`**. This is additive compositing, not a transparent white `SrcOver` bitmap.
+- `PrismalSpecularModifier`: shape clipping; a stroke width of `2 * ceil(width.toPx())` with `PrismalSpecular.width = 0.5dp` and blur radius `width/2`. Applies the light Shader to the *stroke*, not to the entire Cell.
+- `PrismalRoundedRectangle(24.dp)`: original GUI Cell uses the upstream **Continuous** corner style, not Compose's simpler `RoundedCornerShape`.
+- The shader obtains its **normal field** with `gradRadius = min(cornerRadius * 1.5, halfWidth, halfHeight)`. This differs from the outline radius used for shape clipping; blindly using 24dp for both gives different lighting.
+- `PrismalGlassSurface` composes backdrop effects/tint/solid surface in addition to its independent specular and depth-shadow nodes. Lens/refraction of a **uniform fixed backdrop** contributes little in the Cell interior, whereas the shape clip, plus-blended white edge, and fill color remain visible.
+- `PrismalGlassSlider` / `PrismalGlassToggle` use `PrismalSpecular.Ambient.copy(alpha = pressProgress)`. Their surface explicitly paints `Color.White.copy(alpha = 1f - progress)` when released. **The idle thumb is white and has no active Ambient specular**. Baking a dark-left/white-right Ambient highlight into it at rest was incorrect.
 
-## What Prismal actually computes
+## Root causes of our prior visual mismatch
 
-**Default (Cards / PrismalGlassButton / PrismalGlassStepper)**:
-```glsl
-float2 grad = prismalGradSdRoundRect(centeredCoord, halfSize, gradRadius);
-float2 normal = float2(cos(angle), sin(angle)); // angle = 45 degrees
-float d = dot(grad, normal);
-float intensity = pow(abs(d), falloff); // falloff = 1
-return color * intensity;
-```
-The `abs` makes the lobes **diagonally symmetric**: the **upper-left and lower-right rounded corners are both bright**, while **upper-right and lower-left are low-intensity**. Straight sides have intermediate intensity. This is a per-boundary-normal illumination field, **not** a white band that fades monotonically from one position.
+1. The first arbitrary image faded only from the upper-left; this was not the upstream normal model.
+2. The next implementation baked `Default` source alpha and overlaid it with regular **SrcOver**, even though the original uses **Plus**. Over near-white material, Plus frequently saturates the thin stroke to pure white; SrcOver only gently interpolates towards white. Baking the raw shader separately loses the bright, continuous edge in the provided reference.
+3. The alpha overlay was drawn with `drawWithContent { drawContent(); draw(overlay) }` — above text and icons. The real static backing belongs **behind content**.
+4. We had changed the original `PrismalRoundedRectangle(24.dp)` clip to `RoundedCornerShape(24.dp)`, which changes how continuous corners look.
+5. The screenshot's pale-lavender Cell fill differs from the earlier guessed gray-blue palette. Sampling representative non-text regions yields approximately **canvas #F0F1F6; Cell #F4F4FC**; the display and JPEG compression introduce some noise, so these are fixed representative values rather than claims of exact original XML hex codes.
 
-The default style uses `Color.White.copy(alpha=0.5f)`, `BlendMode.Plus` and a stroke with default width `0.5dp` and blur `width/2`; the native specular node clips to the actual glass outline and internally records a GraphicsLayer. Our baked solution removes that per-Cell layer but approximates its shape-edge width, and does not pretend that a 9-patch exactly reproduces blur and additive blending.
+## Replacement design
 
-**Ambient (Slider / Toggle thumbs)**:
-```glsl
-float d = dot(prismalGradSdRoundRect(...), float2(cos(45°), sin(45°)));
-float intensity = pow(abs(d), 1.0);
-float t = step(0.0, d);
-return half4(t, t, t, 1.0) * intensity;
-```
-This additionally separates the **bright bottom/right-facing normal hemisphere** from the **dark top/left-facing normal hemisphere**. The style defaults to `intensity=0.38` and standard SrcOver blending. Upstream slider and toggle pass `PrismalSpecular.Ambient.copy(width=width/1.5, blurRadius=blurRadius/1.5, alpha=pressProgress)`, so **the true dynamic reflection is press-dependent and approaches zero alpha at rest**. It differs from the static preset idle thumb, which deliberately supplies a low-cost Ambient-like visible contour.
+The main UI now uses a baked **composite** 9-patch, not a solid fill plus a separate semi-transparent specular image:
 
-## Fixed palette and new maps
+- A **single opaque color fill** is the material's interior.
+- The offline baker computes the source 45° normal dot, approximates the clipped specular stroke/blur near the shape edge, applies the *actual additive Plus equation* `C_out = min(255, C_fill + 255 * 0.5 * intensity * edgeWeight)` to the final fixed-color RGB values, then stores that RGB directly in the resource. On light Cells, this creates a narrow saturated white perimeter with faint directional differences; on dark Cells, more of the two-lobed shape remains visible.
+- Nine-patch corners approximate the original **Continuous** outline with a superellipse. The `ModernSurface` and action buttons once again clip with `PrismalRoundedRectangle`, so the drawn outline aligns with the real upstream geometry. The clip approximation remains a declared fidelity limit, not a pixel-exact AGSL recreation.
+- Eight `drawable[-night]-xxhdpi/gui_material_{card,pill,thumb,danger}.9.png` resources encode final material output. Each is **4-bit indexed PNG**, the format previously accepted by this project's AAPT2 version. Stretch guides avoid distorting the curved corners for variable-width controls.
+- `GuiSolidChrome` resolves the four drawables **once at the Scaffold**. `Modifier.guiSolidChrome` performs only one `drawBehind` NinePatch draw per static Cell: no extra `Modifier.background`, foreground alpha overlay, per-Cell shader, backdrop sample, GPU GraphicsLayer, or color math.
+- **Idle thumb:** uses a white precomposited resource in both themes. **Active thumb:** continues using original Prismal Ambient, pressProgress, white-fill crossfade, and gesture/spring animations. No second baked reflection is overlaid on touch.
 
-The GUI has fixed theme canvases in `src/main/res/values[-night]/gui_preset_material_colors.xml`. Flat material fills stay consistent with them. Unlike the previous uniformly bright outlines, six transparent 9-patch assets in `drawable[-night]-xxhdpi` encode the normal-based specular:
+A fully baked resource is the appropriate approximation **because the GUI canvas and Cell fill are intentionally fixed**. This would not be valid for arbitrary dynamic wallpapers.
 
-- `gui_specular_card.9.png` — Default 45-degree `abs(dot)` SDF normal distribution, 24dp reference round-rect corners.
-- `gui_specular_pill.9.png` — Default 45-degree `abs(dot)`, rounded capsule with 18dp reference corners.
-- `gui_specular_thumb.9.png` — Ambient signed-white/black lobe, 12dp capsule reference corners.
+## Reproducibility
 
-Precomputation evaluates the same `prismalGradSdRoundRect` normal selection and `abs(dot)`, with a small inside-edge falloff approximating a clipped specular stroke. `Default` uses a white alpha palette; `Ambient` uses white/black alpha palettes depending on signed `d`. Stretch bands on the straight sides extend different-length controls while preserving corner lobes.
+`scripts/bake_gui_materials.py` regenerates the eight material files using only Python 3's standard library, including nine-patch guide markers and indexed-PNG encoding. It documents the source math, the approximate stroke falloff, the fixed background colors and the clipping approximation. Keep the script and assets in sync when changing colors or shapes.
 
-The six Android resources cover light/dark qualifying directories; the normal-based intensity formula itself is theme-independent, therefore the image byte content is currently identical between day and night. The *underlying pure fill* still differs by theme. This is deliberate, not independently invented lighting.
+## Device acceptance
 
-## Runtime and performance
+- On the light GUI, compare the original screenshot: near-white/lavender cell, **continuous thin white rim**, small directional modulation rather than isolated white bulbs, consistent rounding.
+- Compare long navigation Cells and shorter status/action cards. Ensure 9-patch center stretching leaves no vertical seams or duplicated corners.
+- Verify the idle white thumb, drag-time original Prismal Ambient, no double specular, and smooth release spring.
+- Dense-list scroll and graphics memory usage should remain close to the proven static/no-shader version. A single 9-patch draw is not zero cost; only a controlled on-device measurement establishes whether the final build stays performant.
+- Verify GUI glass OFF solid fallback, light/dark contrasts, top/header/footer sampling. **Do not merge on CI success alone.**
 
-`GuiPresetChromePalette` still loads one backdrop-free specular drawable per shape at the Scaffold, and Cells use a pure-color `Modifier.background` + a light 9-patch overlay without allocating a separate composable. The 9-patch draw adds a tiny bitmap operation; it does **not** reintroduce per-Cell Prismal AGSL, blur/refraction, dynamic highlight shader, or backdrop capture.
-
-**Active slider/toggle thumbs retain the original Prismal Ambient renderer without an additional baked overlay**, avoiding double specular and preserving its `alpha=pressProgress` behavior. **Idle thumbs** alone use the baked Ambient-inspired style. This is a conscious static-versus-dynamic visual distinction, not pixel-exact parity.
-
-The top header/actions and bottom navigation remain Prismal-driven and are outside this optimization.
-
-## Validation
-
-Static architecture and PNG-byte tests now require:
-- Default card/pill maps: both diagonal corners (top-left **and bottom-right**) are bright; other diagonal corners weaker.
-- Ambient thumb map: the top-left hemisphere is dark, bottom-right is white.
-- No accidental duplicated 9-patch reflection on top of the native touch-time Prismal Ambient.
-- No changes to GUI touch-sampling logic or top/bottom navigation source ownership.
-
-These tests verify the geometric lighting convention and build-time resource validity, **not** exact GPU shader equivalence. Verify in-app: natural highlights on long and short Cells, capsule stretch behavior, thumb press/drag/release, light/dark backgrounds, and dense-list GPU load before merging.
-
-Do not merge before user confirmation. PR #340 remains independent.
+Unrelated PR #340 remains independent; `main` remains untouched.
