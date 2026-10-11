@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Fixed GUI canvas and chrome fills are baked together. White specular distribution
-         is baked into drawable[-night]-xxhdpi 9-patches; no per-Cell light calculation. -->
-    <color name="gui_preset_canvas">#F5F7FA</color>
+    <!-- Reference-matched fixed GUI canvas and final Plus-composited chrome.\n         RGB fills match the pixels already baked into gui_material_*.9.png. -->
+    <color name="gui_preset_canvas">#F0F1F6</color>
     <color name="gui_preset_canvas_glass_off">#E6E8EB</color>
-    <color name="gui_preset_card_fill">#EDF1F6</color>
-    <color name="gui_preset_pill_fill">#E5EAF1</color>
-    <!-- Thumb fill is shared by idle and touch states; white specular is in 9-patch bitmap. -->
-    <color name="gui_preset_thumb_fill">#E5EAF1</color>
+    <color name="gui_preset_card_fill">#F4F4FC</color>
+    <color name="gui_preset_pill_fill">#F2F2FA</color>
+    <!-- Upstream idle thumb draws opaque white; Ambient alpha is pressProgress, zero at rest. -->
+    <color name="gui_preset_thumb_fill">#FFFFFF</color>
     <color name="gui_preset_danger_fill">#D73333</color>
 </resources>
