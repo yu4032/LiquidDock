@@ -335,7 +335,6 @@ internal fun ModernSurface(
             .then(
                 if (staticChrome) {
                     Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)
-                        .guiStaticSpecularRim(cardShape, presetChrome)
                 } else {
                     fallbackChrome
                 }
@@ -469,7 +468,7 @@ internal fun Button(
                     Modifier.guiSolidChrome(
                         if (destructive) GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL,
                         presetChrome,
-                    ).guiStaticSpecularRim(buttonShape, presetChrome)
+                    )
                 } else {
                     fallbackChrome
                 }
