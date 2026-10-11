@@ -20,7 +20,7 @@ internal fun SystemSettingsPage(
         item {
             PageHeader(
                 "系统设置",
-                "仅针对 OS3.0.310.0.WAOCNXM 的 MIUIX 开关（SlidingButton / SlidingSwitch / SlidingSwitchCompat）。其他 ROM 与 Compose SPA 页面保持原状。",
+                "仅针对 OS3.0.310.0.WAOCNXM 的 MIUIX 开关。原生 Canvas/AGSL 绘制，不加载 Prismal Compose 或 App Startup；没有真实背景折射。",
             )
         }
         item { SmallTitle("控件视觉") }
@@ -29,8 +29,8 @@ internal fun SystemSettingsPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.SystemSettings.PRISMAL_SWITCH,
-                    "使用 Prismal 开关",
-                    "实验功能，默认关闭。保留系统原生开关业务逻辑，打开后重启「系统设置」作用域。无变化时在「关于」开启诊断日志，并检查 [DC][SettingsSwitch]。",
+                    "使用原生玻璃开关",
+                    "试验功能，默认关闭。绘制玻璃质感和边缘高光；保留原生触摸、校验和状态写入，着色器失败时回退系统绘制。启用或关闭后重启「系统设置」。",
                     enabled = masterEnabled,
                 )
             }
