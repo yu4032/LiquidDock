@@ -127,3 +127,25 @@ Source inspection showed why:
 The new shadow and glints are **cheap static approximations**, not pixel-identical to the native AGSL and Gaussian blur. Draw call count increases modestly; measure performance on dense screens. There is **no new R.drawable for shadow** and the #8085 null-drawable crash protection stays in place. The relevant regression contracts assert the four highlight lobes, outside-clip placement, original active optical path and absence of shader/readback/shadow PNG loading.
 
 Do not merge #352 without an actual device test of these new visuals and opening the Settings App.
+
+## Final layer-count fix: no double rim on baked material (2026-10-12)
+
+The user's screenshot of **Dock 几何** proved that the previous attempt had layered multiple visibly separated outlines over a single surface. The chain was:
+
+1. Card/Pill material PNG already includes the final baked Prismal Plus-composited light edge.
+2. `guiStaticSpecularRim` added a **second contrast border**.
+3. The same modifier added a **third white sweep-gradient border**.
+
+Those three overlapping contours produced the exaggerated concentric rings around cards, reset buttons and +/- controls. This is a composition error, not an intensity-tuning problem.
+
+**Current final split:**
+
+- **Card, page-action pill, reset, +/- stepper:** retain `guiSolidChrome(...)` once, plus `guiStaticSoftShadow(shape)`. Remove `guiStaticSpecularRim` entirely from their modifier chains. The Plus-baked PNG owns the edge highlight.
+- **Idle slider and toggle thumb:** retain white XML `guiSolidChrome(THUMB)` and compact `guiStaticSoftShadow`. Since its plain XML background contains no baked specular, apply **one** narrow white sweep-gradient outline, **0.8dp**, with no extra `rimContrast` stroke.
+- **Actively pressed slider/toggle:** leave original Prismal Ambient specular/depth/spring code untouched; do not add a second static thumb overlay.
+- Eliminate the unused `gui_preset_rim_contrast` resource from both day/night palettes. The single idle-thumb sweep still uses the precomputed strong/medium/weak stops.
+- Keep the proven null-safe drawable fallback and never load shadow PNGs.
+
+Regression test `staticGuiRestoresFourCornerSpecularAndLowCostShadowsWithoutCrashing` now rejects the redundant Card/Button/Stepper stroke, verifies a **single** idle-thumb `drawOutline`, and checks pre-existing shadow/gesture behavior.
+
+This restores the intended single-edge visual hierarchy while avoiding additional runtime shader/light/refraction calls. CI confirms compile and contract behavior only; density, shadow softness and reflected edge appearance still need a device check. PR remains Draft until user validation.
