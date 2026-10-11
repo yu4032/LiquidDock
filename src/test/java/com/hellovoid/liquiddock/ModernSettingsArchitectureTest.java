@@ -290,11 +290,17 @@ public class ModernSettingsArchitectureTest {
         assertTrue(chrome.contains("R.drawable.gui_material_thumb"));
         assertTrue(chrome.contains("R.drawable.gui_material_danger"));
         assertTrue(chrome.contains("ContextCompat.getDrawable"));
-        assertTrue(chrome.contains("this.drawBehind {"));
+        assertTrue(chrome.contains("this.drawWithCache {"));
+        assertTrue(chrome.contains("onDrawBehind {"));
+        assertTrue(chrome.contains("val sx = intArrayOf("));
+        assertTrue(chrome.contains("val dx = floatArrayOf("));
+        assertTrue(chrome.contains("drawBakedNineSlice("));
+        assertFalse(chrome.contains("this.drawBehind {"));
         assertTrue(chrome.contains("material.draw(native)"));
         assertTrue(chrome.contains("drawBakedNineSlice("));
         assertTrue(chrome.contains("native.clipRect("));
         assertTrue(chrome.contains("sourceCornerPx = (cornerDp * 3f).roundToInt()"));
+        assertTrue(chrome.contains("val cornerX = (cornerDp * density).coerceAtMost("));
         assertFalse(chrome.contains("drawWithContent"));
         assertFalse(chrome.contains("drawContent()"));
         assertFalse(chrome.contains("PrismalGlassSurface("));
