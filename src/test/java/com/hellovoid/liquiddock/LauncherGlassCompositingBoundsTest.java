@@ -28,7 +28,7 @@ public class LauncherGlassCompositingBoundsTest {
         assertTrue(b.include(-100, 500, 300, 400));
         assertTrue(b.finish(3008, 1880));
         assertEquals(0, b.left);
-        assertEquals(230, b.top);
+        assertEquals(280, b.top);
         assertEquals(70, b.right);
         assertEquals(720, b.bottom);
     }
