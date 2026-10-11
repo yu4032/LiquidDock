@@ -2,6 +2,7 @@
 <resources>
     <!-- Derived offline from the fixed dark GUI canvas #1B2028. -->
     <color name="gui_preset_canvas">#1B2028</color>
+    <color name="gui_preset_canvas_glass_off">#191E26</color>
     <color name="gui_preset_card_fill">#343B46</color>
     <color name="gui_preset_card_rim">#FF6E7C90</color>
     <color name="gui_preset_card_outline">#FF46505E</color>
