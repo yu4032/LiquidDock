@@ -431,9 +431,12 @@ Dock 页面保留“Dock 尺寸过渡动画”和“LiquidDock 顺滑尺寸动�
 | `com.miui.securitycenter` | 安全中心侧边栏 |
 | `com.google.android.inputmethod.latin` | Gboard |
 | `com.android.quicksearchbox` | MIUI 系统搜索 |
+| `com.android.settings` | 系统设置（预留，暂不安装 GUI Hook） |
 | `system` | 可选的壁纸 GPU 渲染开关，需重启设备 |
 
 只需要某一项扩展时，可以只为对应应用勾选额外作用域。
+
+系统设置作用域目前仅为后续 Prismal 按钮和滑动条适配预留入口。即使勾选该作用域，当前版本也不会替换或修改系统设置控件。
 
 ---
 
