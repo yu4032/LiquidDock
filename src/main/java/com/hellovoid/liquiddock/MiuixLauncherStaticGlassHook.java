@@ -119,6 +119,8 @@ final class MiuixLauncherStaticGlassHook {
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         installedGlassConfig = glassConfig;
+        // Observe native self-blur writes before constructing/binding widget hosts.
+        LauncherWidgetNativeSelfBlurGate.install();
         boolean any = false;
         any |= installHostClass(classLoader, "com.miui.home.launcher.ShortcutIcon",
                 LauncherGlassDragState.Kind.ICON, glassConfig);
