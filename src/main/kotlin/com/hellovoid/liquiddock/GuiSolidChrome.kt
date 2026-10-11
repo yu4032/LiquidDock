@@ -108,9 +108,12 @@ internal fun Modifier.guiSolidChrome(
         val height = size.height.roundToInt()
         val sourceWidth = material.intrinsicWidth
         val sourceHeight = material.intrinsicHeight
-        if (width <= 0 || height <= 0 || sourceWidth <= 0 || sourceHeight <= 0) {
+        if (width <= 0 || height <= 0) {
             onDrawBehind {}
-        } else if (cornerDp == 0f) {
+        } else if (cornerDp == 0f || sourceWidth <= 0 || sourceHeight <= 0) {
+            // Android XML <shape> drawables have no intrinsic dimensions.
+            // Previously this path returned an empty draw and completely hid
+            // the idle slider/toggle thumb and destructive actions.
             onDrawBehind {
                 drawIntoCanvas { canvas ->
                     val native = canvas.nativeCanvas
