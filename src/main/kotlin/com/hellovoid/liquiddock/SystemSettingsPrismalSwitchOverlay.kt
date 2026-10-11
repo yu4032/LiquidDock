@@ -101,6 +101,8 @@ object SystemSettingsPrismalSwitchOverlay {
                 if (!disposed) {
                     if (selected.value != stock.isChecked) selected.value = stock.isChecked
                     if (allowed.value != stock.isEnabled) allowed.value = stock.isEnabled
+                    // A recycled Preference may hide its stock widget without detaching the row.
+                    if (view.visibility != stock.visibility) view.visibility = stock.visibility
                     if (view.width > 0 && view.height > 0 && stock.alpha == stockAlpha) {
                         // Keep an almost-transparent native control for accessibility. Never
                         // set GONE/INVISIBLE or discard the system's listener/checked state.
@@ -122,7 +124,7 @@ object SystemSettingsPrismalSwitchOverlay {
             // Do not mutate FrameLayout's child array while Android is dispatching detach
             // to its children: that can crash ViewGroup.dispatchDetachedFromWindow.
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                if (!stock.isAttachedToWindow) dispose()
+                if (!stock.isAttachedToWindow || stock.parent !== frame) dispose()
             }
         }
 
