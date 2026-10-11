@@ -25,10 +25,10 @@ system
 | `com.miui.securitycenter:ui` | Security Center sidebar glass |
 | `com.google.android.inputmethod.latin` | Gboard floating/toolbar glass |
 | `com.android.quicksearchbox` | MIUI Search main-background glass |
-| `com.android.settings` | Opt-in native MIUIX Canvas/AGSL switch glass pilot (default off) |
+| `com.android.settings` | Opt-in genuine PrismalAGSL switch with GPU-native scene sampling (default off) |
 | `system` | 配置启用时安装 `WallpaperClientCompositionHook`，支持可选壁纸 GPU 渲染 |
 
-`com.android.settings` 为 **默认关闭** 的原生 Canvas/AGSL 玻璃开关试验。`ModuleMain` 仅在总开关与 `ConfigSchema.SystemSettings.PRISMAL_SWITCH` 均启用且 ROM 匹配时，为 `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 安装窄范围 `onDraw(Canvas)` Hook。直接在原 View 绘制，无 ComposeView、Prismal App Startup 或全局 Android Hook；原生交互及持久化不变。
+`com.android.settings` 为 **默认关闭** 的真实 PrismalAGSL 组件替换试验。仅在总开关、Settings 子开关及版本检查通过后，为三种 MIUIX 开关安装 Hook。原生控件继续处理状态、设置项验证、持久化与无障碍；Prismal 组件接管可见界面和触摸，一个 Settings 窗口共享一个 GPU RenderNode 场景采样源。
 
 其他同包非目标进程不应误装 feature hooks。
 
@@ -367,44 +367,21 @@ Activity resume / attach 时会重新请求 freshness。
 
 ---
 
-## 18a. System Settings Switch Pilot — native Canvas/AGSL
+## 18a. Settings PrismalAGSL component replacement and GPU sampling
 
-Scope: **only** `com.android.settings` in `OS3.0.310.0.WAOCNXM`; config defaults off.
-Canonical JADX/REA validates MIUIX `SlidingButton`, `SlidingSwitch` and
-`SlidingSwitchCompat` names and virtual `onDraw(Canvas)` methods. Hook their
-declared drawing overrides in Settings' own classloader, never framework
-`CompoundButton`, `setChecked`, `onTouchEvent`, Preference persistence or Settings SPI.
+**Opt-in, default OFF**, strictly scoped to `com.android.settings` on `OS3.0.310.0.WAOCNXM`.
 
-Real-device diagnosis on 2026-10-11:
-- The previous Settings Compose overlay initialized a ViewTreeLifecycleOwner
-  bridge to fix the first `ComposeView` mounting failure.
-- The first successful attach then crashed the entire Settings UI because
-  `Prismal AGSL assets are not initialized. Ensure App Startup runs before drawing glass.`
-- Therefore Settings ComposeView and lifecycle bridge were **deleted** rather than
-  trying to recreate Prismal's App Startup inside a foreign application.
+Failure provenance: the original ComposeView overlay lacked a lifecycle owner; after adding one, Settings crashed because Prismal AGSL assets had not been initialized. A temporary hand-drawn Canvas imitation was stable, but did not match Prismal's visual or gesture behavior.
 
-Replacement: `SystemSettingsNativeSwitchPainter` builds a small `RuntimeShader`
-once per native switch (hardware Canvas only) for procedurally shaded
-capsules, track and thumb. If it cannot construct/draw AGSL, render using
-ordinary Android Canvas gradients. If painter fails entirely,
-the hook **proceeds** to the original MIUIX drawing method. The native View
-still handles its own touch/checked/accessibility/persistence. LiquidDock additionally
-observes the vendor onTouchEvent(MotionEvent) and setChecked(boolean) **after** each
-native callback returns, to run a separate Choreographer-driven visual spring
-without intercepting touch or writing state. The visual is sourced from
-GuiOnTouchPrismalToggle: 64×28dp track, 40×24dp translucent capsule thumb,
-20dp travel and 1.5× pressed scale with short velocity deformation. Its colors
-are #34C759 light / #30D158 dark and a low-opacity gray off-track.
-The runtime AGSL contributes SDF rim/specular/chromatic styling; the real
-Prismal scene backdrop/lens refraction cannot be reproduced from a naked
-MIUIX Canvas and is therefore explicitly out of scope. No additional
-View, window, bitmap, PixelCopy, ScreenCapture, or active backdrop producer
-is created. The material does **not** sample Settings' underlying content,
-so it must not be described as full Prismal background refraction.
+Current architecture:
+- The MIUIX `SlidingButton`, `SlidingSwitch` and `SlidingSwitchCompat` objects stay in their original parents as invisible preference controllers. Removing those Java instances would break Settings' stored Preference references and persistence. Their visual and touch surface is replaced with the **real** `GuiOnTouchPrismalToggle`, not an imitation shader.
+- `SystemSettingsPrismalBootstrap` explicitly binds PrismalAGSL shader assets from the LiquidDock APK before attaching the Compose component. R8 keep rules retain its reflective asset manager bridge.
+- `SystemSettingsComposeLifecycleBridge` supplies Activity-callback-backed lifecycle/saved state where native Settings has none, without setting owner tags on Settings' original root.
+- `SystemSettingsNativeBackdrop` records native Settings drawing commands into **one GPU RenderNode per window** and clips to glass geometry plus optical overscan. It implements `PrismalBackdrop` with per-thumb `positionInWindow` alignment. The injected glass wrapper skips its own children during native recording, preventing feedback. On scroll or movement, the recording is refreshed (25ms throttle). No Bitmap, PixelCopy, ScreenCapture or CPU readback.
+- The Prismal callback delegates any requested switch to the original clickable Settings Preference row (or native CompoundButton) so validation and persistent state remain owned by Settings; `setChecked` hooks observe but never substitute native work.
+- Transactional attach failures restore stock opacity and remove partial overlays. Listeners, GPU records, and lifecycle bridges are released on window teardown.
 
-Device acceptance still needed: shader hardware compatibility, switch animation,
-native interaction and preference persistence, disabled appearance, dark theme,
-performance and Settings stability. Passing CI proves only build-time contracts.
+The design is **not device-accepted**. Check startup/class loader compatibility, initial GPU sampling, correct glass refraction and moving-thumb coordinates, no recursive capture, per-frame GPU cost, preference veto, click/drag, scroll/rebind, accessibility, Activity recreation and safe restoration. Do not merge until verified.
 
 ---
 
