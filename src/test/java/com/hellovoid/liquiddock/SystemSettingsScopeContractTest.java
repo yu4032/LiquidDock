@@ -67,6 +67,30 @@ public class SystemSettingsScopeContractTest {
         assertTrue(nav.contains("Page.SystemSettings"));
     }
 
+    @Test
+    public void composeOverlayUsesRealSettingsActivityLifecycleWithoutTouchingNativeRoot() throws Exception {
+        String overlay = read("kotlin/com/hellovoid/liquiddock/SystemSettingsPrismalSwitchOverlay.kt");
+        String bridge = read("kotlin/com/hellovoid/liquiddock/SystemSettingsComposeLifecycleBridge.kt");
+
+        assertTrue(overlay.contains("bindComposeOwners(view, content)"));
+        assertTrue(overlay.contains("activityBridges.getOrPut(target)"));
+        assertTrue(overlay.contains("view.setViewTreeLifecycleOwner(lifecycle)"));
+        assertTrue(overlay.contains("view.setViewTreeSavedStateRegistryOwner(saved)"));
+        assertFalse(overlay.contains("host.setViewTreeLifecycleOwner"));
+        assertTrue(overlay.contains("compose owners mode="));
+        assertTrue(bridge.contains("Application.ActivityLifecycleCallbacks"));
+        assertTrue(bridge.contains("stateController.performAttach()"));
+        assertTrue(bridge.contains("stateController.performRestore(null)"));
+        assertTrue(bridge.contains("Lifecycle.Event.ON_CREATE"));
+        assertTrue(bridge.contains("Lifecycle.Event.ON_START"));
+        assertTrue(bridge.contains("onActivityStarted(candidate: Activity)"));
+        assertTrue(bridge.contains("onActivityResumed(candidate: Activity)"));
+        assertTrue(bridge.contains("onActivityStopped(candidate: Activity)"));
+        assertTrue(bridge.contains("onActivityDestroyed(candidate: Activity)"));
+        assertTrue(bridge.contains("unregisterActivityLifecycleCallbacks(this)"));
+        assertTrue(bridge.contains("viewModelStore.clear()"));
+    }
+
     private static String read(String file) throws Exception {
         return Files.readString(MAIN.resolve(file));
     }
