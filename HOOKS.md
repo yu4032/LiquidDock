@@ -369,17 +369,24 @@ Activity resume / attach 时会重新请求 freshness。
 
 ## 18a. System Settings Switch Pilot
 
-目标反编译证据：HyperOS 3.0.310.0 / Android 16 的 Settings 类索引包含
-`miuix.slidingwidget.widget.SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat`、
-`miuix.preference.CheckBoxPreference`。这只确认 class presence，不证明每个页面
-均使用 `SlidingButton` 或它在目标版本上覆写了 `onDraw`。
+针对 HyperOS 3.0.310.0（OS3.0.310.0.WAOCNXM）的正式 JADX/REA
+`SlidingButton.java` 证据确认：`extends AppCompatCheckBox`，明确覆写
+`onDraw(Canvas)`、`performClick()`、`setChecked(boolean)`；绘制由
+`SlidingButtonHelper.onDraw` 完成。布局
+`miuix_preference_widget_checkbox.xml` 使用 `@android:id/checkbox`，
+`settingslib_preference.xml` 使用 **LinearLayout** 的
+`@android:id/widget_frame`（不是 FrameLayout）。
 
-Hook 首选在目标类自己的 `onDraw(Canvas)`；否则仅尝试目标类自己的 `onLayout(...)`。
-不 Hook 通用 `CompoundButton`。只在 `android.R.id.widget_frame` 内注入 ComposeView，
-保留原生 Switch 作为交互/状态 authority。故障撤销 Compose overlay、恢复 alpha。
-最多同时加载 6 个 Compose overlay，避免第一阶段在长列表无限增加 renderer。
-可用背景目前仅来自 Compose 局部采样层，尚未实现跨 native Settings 页面整体
-refraction；此阶段不声称具备完整 native 背景捕获或光学保真。
+因此只 Hook `SlidingButton#onDraw(Canvas)` 的 after，必须由 Settings 主进程触发。
+匹配原生 checkbox ID + Preference widget_frame 祖先，但不搬动原生开关、不重写其
+layout/listener。Prismal ComposeView 放在 Activity 自带的 `android.R.id.content`
+FrameLayout 作为独立可逆绘制层，按 native 开关的屏幕位置同步 translation/大小，
+控件滑动至裁剪区域外时停止显示玻璃并恢复原生 alpha；detach 时清理并还原。
+最多并存 6 个 overlay，避免长列表增加渲染压力。
+
+Prismal 背景当前仅为 Compose 本地层；跨 native Settings 页面实时折射尚未实现，
+不能把首版描述为真实的背后内容捕获。其他 `SlidingSwitch`、SPA 和 AOSP
+`SwitchPreferenceCompat` 均不受影响。
 
 这是需要真机验收的实验版本，**CI 不能证明目标版本的私有方法和视觉兼容性**。
 
