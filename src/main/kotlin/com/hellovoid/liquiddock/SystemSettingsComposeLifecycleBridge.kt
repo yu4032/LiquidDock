@@ -21,7 +21,7 @@ import androidx.savedstate.SavedStateRegistryOwner
  */
 internal class SystemSettingsComposeLifecycleBridge(
     private val activity: Activity,
-    private val onActivityDestroyed: (Activity, SystemSettingsComposeLifecycleBridge) -> Unit,
+    private val onClosed: (Activity, SystemSettingsComposeLifecycleBridge) -> Unit,
 ) : LifecycleOwner, SavedStateRegistryOwner, ViewModelStoreOwner, Application.ActivityLifecycleCallbacks {
     private val registry = LifecycleRegistry(this)
     private val stateController = SavedStateRegistryController.create(this)
@@ -70,7 +70,7 @@ internal class SystemSettingsComposeLifecycleBridge(
     override fun onActivityDestroyed(candidate: Activity) {
         if (candidate !== activity) return
         close()
-        onActivityDestroyed(activity, this)
+        onClosed(activity, this)
     }
 
     fun close() {
