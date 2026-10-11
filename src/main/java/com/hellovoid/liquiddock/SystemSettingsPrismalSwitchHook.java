@@ -31,14 +31,7 @@ final class SystemSettingsPrismalSwitchHook {
                 return false;
             }
 
-            Method ownerMethod;
-            try {
-                ownerMethod = target.getDeclaredMethod("onDraw", Canvas.class);
-            } catch (NoSuchMethodException missingDraw) {
-                // Some MIUIX builds draw from their onLayout override instead.
-                ownerMethod = target.getDeclaredMethod("onLayout", boolean.class,
-                        int.class, int.class, int.class, int.class);
-            }
+            Method ownerMethod = target.getDeclaredMethod("onDraw", Canvas.class);
             if (ownerMethod.getDeclaringClass() != target) return false;
             ownerMethod.setAccessible(true);
             HookUtil.hook(ownerMethod, chain -> {
