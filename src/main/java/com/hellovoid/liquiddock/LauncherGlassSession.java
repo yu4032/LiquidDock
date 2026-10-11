@@ -138,6 +138,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
     private final LauncherGlassOutputRenderState outputRenderState =
             new LauncherGlassOutputRenderState();
+    private final LauncherGlassEmptyOutputPolicy emptyStaticOutput =
+            new LauncherGlassEmptyOutputPolicy();
     private final boolean workspaceSource;
 
     private volatile boolean shuttingDown;
@@ -597,6 +599,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             try {
                 ensureLauncherGl();
                 releaseOutput(staticOutput);
+                emptyStaticOutput.onSurfaceReset();
                 OutputState next = new OutputState(surface, width, height);
                 next.eglSurface = sourceBackend.createWindowSurface(surface);
                 staticOutput = next;
@@ -619,6 +622,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             if (output != null) {
                 output.width = Math.max(1, width);
                 output.height = Math.max(1, height);
+                emptyStaticOutput.onSurfaceReset();
                 scheduleOutputRender(true, false);
             }
         });
@@ -632,6 +636,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (!postRender(() -> {
             OutputState output = staticOutput;
             staticOutput = null;
+            emptyStaticOutput.onSurfaceReset();
             if (output != null) releaseOutput(output);
             else if (surface != null) surface.release();
         }) && surface != null) surface.release();
@@ -1204,12 +1209,27 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         OutputState output = staticOutput;
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
                 || output.width <= 0 || output.height <= 0) return;
+        StaticNodeState[] snapshot = staticNodeStateSnapshot;
+        if (emptyStaticOutput.canSkipEmptyFrame()) {
+            // We already submitted a transparent buffer on this exact Surface. A background
+            // PassBlur change cannot alter transparent pixels, so do not keep swapping blank
+            // full-root buffers. Once any node acquires geometry, resume *all* source frames.
+            boolean hasDrawableGeometry = false;
+            for (StaticNodeState state : snapshot) {
+                StaticGeometryFrame frame = state.frame;
+                if (state.nodeRef.get() != null && frame != null && frame.geometry != null) {
+                    hasDrawableGeometry = true;
+                    break;
+                }
+            }
+            if (!hasDrawableGeometry) return;
+        }
         // Background capture and blur remain downsampled, while procedural refraction
         // renders directly into the native-resolution window. The Prismal node scissor
         // limits expensive shading to occupied glass bounds.
         sourceBackend.makeCurrent(output.eglSurface);
         prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
-        StaticNodeState[] snapshot = staticNodeStateSnapshot;
+        int drawnNodes = 0;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
@@ -1223,8 +1243,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
+            drawnNodes++;
         }
         sourceBackend.swapBuffers(output.eglSurface);
+        emptyStaticOutput.onSwapCompleted(drawnNodes > 0);
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
