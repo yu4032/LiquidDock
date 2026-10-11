@@ -11,10 +11,9 @@ package com.hellovoid.prismal;
 final class PrismalZeroContributionShader {
     private static final String REFLECTION_DIRECTION =
             "    vec2 gDir = normalize(gradLens + vec2(1e-4));\n";
-    private static final String OS4_WEIGHT = """
-                float os4ReflectionWeight = clamp(os4EdgeMask
-                            * max(u_os4ReflectionStrength, 0.0), 0.0, 1.0);
-            """.stripTrailing();
+    private static final String OS4_WEIGHT =
+            "    float os4ReflectionWeight = clamp(os4EdgeMask\n"
+                    + "            * max(u_os4ReflectionStrength, 0.0), 0.0, 1.0);";
 
     private PrismalZeroContributionShader() {}
 
