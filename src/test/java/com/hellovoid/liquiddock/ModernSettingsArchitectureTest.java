@@ -585,7 +585,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("backdrop = activeOverlayBackdrop,"));
         // Static architecture audit; actual modifier capture order is validated
         // by real rendering rather than prohibited source-order inference.
-        assertTrue(surfaces.contains("lerp(background, primary, 0.07f)"));
+        assertTrue(surfaces.contains("Modifier.background(background)"));
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(header.contains("PrismalBackdrop"));
         assertFalse(surfaces.contains("rememberLayerBackdrop {"));
