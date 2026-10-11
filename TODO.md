@@ -227,7 +227,7 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 
 **状态：原 ComposeView/Prismal App Startup 方案因真实 Settings 绘制闪退已删除，切换为 MIUIX 原生 Canvas/AGSL 试验；默认关闭，待 CI 和真机验收。**
 
-2026-10-11 真实日志确认三个 MIUIX `onDraw(Canvas)` Hook 均命中；原方案首先因 `ViewTreeLifecycleOwner not found` 无法挂载，加入 Activity 生命周期桥后复现 `Prismal AGSL assets are not initialized` 并导致 Settings 主线程崩溃。因此已彻底移除 Settings Compose overlay/Activity owner bridge，改为直接在 `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 的原生 onDraw(Canvas) 内绘制仅本地程序性玻璃材质：硬件 Canvas 优先 AGSL，失败使用原生 Canvas 渐变；整个绘制失败回到 MIUIX 原始方法。不改 MIUIX 触摸、checked 或业务提交。仍需真机验证：AGSL 编译兼容性、完整视觉、原始布局、滑动中动画、禁用态、无障碍与 GPU 压力；没有真实背景折射，不得宣称功能已完成。
+2026-10-11 真实日志确认三个 MIUIX `onDraw(Canvas)` Hook 均命中；原方案首先因 `ViewTreeLifecycleOwner not found` 无法挂载，加入 Activity 生命周期桥后复现 `Prismal AGSL assets are not initialized` 并导致 Settings 主线程崩溃。因此已彻底移除 Settings Compose overlay/Activity owner bridge，改为直接在 `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 的原生 onDraw(Canvas) 内绘制仅本地程序性玻璃材质：硬件 Canvas 优先 AGSL，失败使用原生 Canvas 渐变；整个绘制失败回到 MIUIX 原始方法。不改 MIUIX 触摸、checked 或业务提交。第二轮将原生显示和动画对齐到项目内 GuiOnTouchPrismalToggle：64×28dp 轨道、40×24dp 玻璃胶囊、20dp 位移、按压 1.5 倍以及 Choreographer 弹簧和随手指拖动；以 after-hook 只观察原生 onTouchEvent / setChecked，保留系统对开关结果的权威。仍需真机验证：AGSL 编译兼容性、完整视觉、原始布局、滑动中动画、禁用态、无障碍与 GPU 压力；没有真实背景折射，不得宣称功能已完成。
 
 ---
 
