@@ -138,4 +138,18 @@ public class HookScopeRestartShellTest {
         assertEquals(HookScopeRestartShell.STOPPED,
                 results.get(HookScopeRestartShell.GBOARD));
     }
+    @Test
+    public void settingsRestartTargetsOnlyItsAppProcessWhenSelected() {
+        String script = HookScopeRestartShell.buildScript(
+                Set.of(HookScopeRestartShell.SETTINGS));
+        assertTrue(script.contains("\nrestart_running com.android.settings com.android.settings\n"));
+        assertFalse(script.contains("\nold_home="));
+        assertFalse(script.contains("\nrestart_systemui\n"));
+        assertEquals(HookScopeRestartShell.STOPPED,
+                HookScopeRestartShell.parseResults(
+                        Set.of(HookScopeRestartShell.SETTINGS),
+                        "LDRESTART|com.android.settings|STOPPED\n"
+                ).get(HookScopeRestartShell.SETTINGS));
+    }
+
 }
