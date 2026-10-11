@@ -26,7 +26,8 @@ final class PrismalZeroContributionShader {
         result = guardRange(result,
                 "    vec2 reflUv = clamp(",
                 "    color = mix(color, reflSample, reflW);",
-                "reflW > 0.0", "    " + REFLECTION_DIRECTION.strip() + "\n",
+                "reflW > 0.0", "",
+                "        " + REFLECTION_DIRECTION.strip() + "\n",
                 "legacy reflection sample");
 
         // OS4 reflection has its own narrow SDF edge mask. Calculate the scalar weight before
@@ -36,7 +37,7 @@ final class PrismalZeroContributionShader {
                 "    vec2 os4ReflectUvOffset = os4EdgeNormal3.xy",
                 "    color = mix(color, os4EdgeReflection, os4ReflectionWeight);",
                 "os4ReflectionWeight > 0.0",
-                "    " + OS4_WEIGHT + "\n",
+                OS4_WEIGHT + "\n", "",
                 "OS4 reflection sample");
 
         // Both acos() calls, three dots, luma and associated lighting math affect output only
@@ -51,7 +52,7 @@ final class PrismalZeroContributionShader {
                 "    color += vec3(os4SoftLight\n"
                         + "            * (0.42 + max(u_os4ReflectionLighten, 0.0) * os4DarkResponse));",
                 "os4EdgeMask > 0.0",
-                "    float os4SoftLight = 0.0;\n",
+                "    float os4SoftLight = 0.0;\n", "",
                 "OS4 edge-only directional lighting");
 
         // These three upstream intermediates have no remaining consumer after the single-edge
@@ -80,7 +81,7 @@ final class PrismalZeroContributionShader {
     }
 
     private static String guardRange(String shader, String first, String last,
-            String condition, String before, String label) {
+            String condition, String beforeOutside, String beforeInside, String label) {
         int start = shader.indexOf(first);
         if (start < 0 || shader.indexOf(first, start + first.length()) >= 0) {
             throw new IllegalStateException(label + " start anchor changed");
@@ -91,8 +92,9 @@ final class PrismalZeroContributionShader {
         }
         end += last.length();
         String block = shader.substring(start, end);
-        return shader.substring(0, start) + before
+        return shader.substring(0, start) + beforeOutside
                 + "    if (" + condition + ") {\n"
+                + beforeInside
                 + "    " + block.replace("\n", "\n    ")
                 + "\n    }" + shader.substring(end);
     }
