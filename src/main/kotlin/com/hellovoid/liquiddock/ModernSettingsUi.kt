@@ -125,7 +125,7 @@ internal fun ModernSettingsScaffold(
                 )
                 .then(
                     if (glassEnabled) Modifier.background(background)
-                    else Modifier.background(lerp(background, Color.Black, 0.06f))
+                    else Modifier.background(presetChrome.canvasWithoutGlass)
                 ),
         )
 
