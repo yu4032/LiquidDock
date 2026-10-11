@@ -44,7 +44,7 @@ object SystemSettingsPrismalSwitchOverlay {
         } catch (error: Throwable) {
             binding.dispose()
             Api101Bridge.log("[DC][SettingsSwitch] Compose overlay unavailable; stock restored", error)
-            true
+            false
         }
     }
 
