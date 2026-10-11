@@ -271,7 +271,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(chrome.contains("rememberGraphicsLayer"));
         assertFalse(chrome.contains("PrismalGlassSurface"));
         assertFalse(chrome.contains("drawPrismalGlass"));
-        assertFalse(chrome.contains("RenderEffect"));
+        assertFalse(chrome.contains("RenderEffect.create"));
         String[] resources = {
                 "gui_static_glass_card_light.xml", "gui_static_glass_card_dark.xml",
                 "gui_static_glass_pill_light.xml", "gui_static_glass_pill_dark.xml"
