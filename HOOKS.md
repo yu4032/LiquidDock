@@ -10,6 +10,7 @@ com.android.systemui
 com.miui.securitycenter
 com.google.android.inputmethod.latin
 com.android.quicksearchbox
+com.android.settings
 system
 ```
 
@@ -24,7 +25,10 @@ system
 | `com.miui.securitycenter:ui` | Security Center sidebar glass |
 | `com.google.android.inputmethod.latin` | Gboard floating/toolbar glass |
 | `com.android.quicksearchbox` | MIUI Search main-background glass |
+| `com.android.settings` | Reserved scope only; no Settings UI hooks installed yet |
 | `system` | 配置启用时安装 `WallpaperClientCompositionHook`，支持可选壁纸 GPU 渲染 |
+
+`com.android.settings` 当前仅注册为预留作用域，入口直接返回；不初始化玻璃适配器、监听器，也不修改控件。
 
 其他同包非目标进程不应误装 feature hooks。
 
