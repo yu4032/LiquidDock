@@ -1,34 +1,93 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 
 /**
- * One opaque color per theme and control kind. The GUI backdrop is fixed,
- * so no drawable inflation, gradient, specular/refraction pass, extra layout
- * child or offscreen buffer is justified for ordinary setting cells.
+ * All flat chrome, including the GUI canvas, is predetermined for light/dark themes.
+ * Color resources store the final fill/rim/outline values relative to the same canvas.
+ * The scaffold resolves each resource once, not once for each scrolling Cell.
  */
+internal data class GuiPresetChromePalette(
+    val canvas: Color,
+    val cardFill: Color,
+    val cardRim: Color,
+    val cardOutline: Color,
+    val pillFill: Color,
+    val pillRim: Color,
+    val pillOutline: Color,
+    val dangerFill: Color,
+    val dangerRim: Color,
+    val dangerOutline: Color,
+)
+
+internal val LocalGuiPresetChromePalette = staticCompositionLocalOf<GuiPresetChromePalette> {
+    error("Gui preset chrome requires ModernSettingsScaffold")
+}
+
+@Composable
+internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
+    // Android picks values/ or values-night/ once for the current system theme.
+    // Reading each static color here avoids luminance and per-cell color computations.
+    val canvas = colorResource(R.color.gui_preset_canvas)
+    val cardFill = colorResource(R.color.gui_preset_card_fill)
+    val cardRim = colorResource(R.color.gui_preset_card_rim)
+    val cardOutline = colorResource(R.color.gui_preset_card_outline)
+    val pillFill = colorResource(R.color.gui_preset_pill_fill)
+    val pillRim = colorResource(R.color.gui_preset_pill_rim)
+    val pillOutline = colorResource(R.color.gui_preset_pill_outline)
+    val dangerFill = colorResource(R.color.gui_preset_danger_fill)
+    val dangerRim = colorResource(R.color.gui_preset_danger_rim)
+    val dangerOutline = colorResource(R.color.gui_preset_danger_outline)
+    return remember(
+        canvas, cardFill, cardRim, cardOutline,
+        pillFill, pillRim, pillOutline,
+        dangerFill, dangerRim, dangerOutline,
+    ) {
+        GuiPresetChromePalette(
+            canvas, cardFill, cardRim, cardOutline,
+            pillFill, pillRim, pillOutline,
+            dangerFill, dangerRim, dangerOutline,
+        )
+    }
+}
+
 internal enum class GuiSolidChromeStyle { CARD, PILL, DANGER }
 
 private val cardShape = RoundedCornerShape(24.dp)
 private val pillShape = RoundedCornerShape(999.dp)
 
-internal fun guiSolidChromeColor(style: GuiSolidChromeStyle, darkTheme: Boolean): Color =
-    when (style) {
-        GuiSolidChromeStyle.CARD ->
-            if (darkTheme) Color(0xFF343944) else Color(0xFFF0F2F5)
-        GuiSolidChromeStyle.PILL ->
-            if (darkTheme) Color(0xFF4C5260) else Color(0xFFE5E9EE)
-        GuiSolidChromeStyle.DANGER -> Color(0xFFD73333)
-    }
-
+/**
+ * A direct solid fill and two fixed-color outlines; no extra composable, drawable
+ * inflation, shader gradient, dynamic light or backdrop capture. Both outlines
+ * use precomputed color resources, not runtime color interpolation.
+ */
 internal fun Modifier.guiSolidChrome(
     style: GuiSolidChromeStyle,
-    darkTheme: Boolean,
-): Modifier = background(
-    guiSolidChromeColor(style, darkTheme),
-    if (style == GuiSolidChromeStyle.CARD) cardShape else pillShape,
-)
+    palette: GuiPresetChromePalette,
+): Modifier {
+    val (fill, rim, outline) = when (style) {
+        GuiSolidChromeStyle.CARD -> Triple(
+            palette.cardFill, palette.cardRim, palette.cardOutline,
+        )
+        GuiSolidChromeStyle.PILL -> Triple(
+            palette.pillFill, palette.pillRim, palette.pillOutline,
+        )
+        GuiSolidChromeStyle.DANGER -> Triple(
+            palette.dangerFill, palette.dangerRim, palette.dangerOutline,
+        )
+    }
+    val shape = if (style == GuiSolidChromeStyle.CARD) cardShape else pillShape
+    return this
+        .background(fill, shape)
+        .border(1.dp, outline, shape)
+        .border(0.5.dp, rim, shape)
+}
