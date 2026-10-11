@@ -235,19 +235,19 @@ internal fun GuiOnTouchPrismalToggle(
                 ) else Modifier
                 )
                 .size(40.dp, 24.dp)
+                .then(if (samplingEnabled) Modifier.guiThumbHighlight(presetChrome) else Modifier)
         ) {
             if (!samplingEnabled) {
                 // Draw a plain-color thumb while keeping the original spring transform.
                 Box(
-                        modifier = Modifier.matchParentSize().graphicsLayer {
+                    modifier = Modifier.matchParentSize().graphicsLayer {
                         val velocity = dampedDragAnimation.velocity / 50f
                         scaleX = dampedDragAnimation.scaleX /
                             (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
                         scaleY = dampedDragAnimation.scaleY *
                             (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
-                    }
-                            .guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome),
-                    )
+                    }.guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome),
+                )
             }
         }
     }
