@@ -17,6 +17,7 @@ final class SystemSettingsPrismalSwitchHook {
     static final String TARGET_CLASS = "miuix.slidingwidget.widget.SlidingButton";
     private static final WeakHashMap<CompoundButton, Boolean> QUEUED = new WeakHashMap<>();
     private static boolean installed;
+    private static volatile boolean disabledByPresentationFailure;
 
     private SystemSettingsPrismalSwitchHook() {}
 
@@ -59,19 +60,20 @@ final class SystemSettingsPrismalSwitchHook {
     }
 
     private static void enqueue(CompoundButton switchView) {
-        if (!switchView.isAttachedToWindow()) return;
+        if (disabledByPresentationFailure || !switchView.isAttachedToWindow()) return;
         synchronized (QUEUED) {
             if (QUEUED.containsKey(switchView)) return;
             QUEUED.put(switchView, Boolean.TRUE);
         }
         switchView.post(() -> {
             try {
-                if (!switchView.isAttachedToWindow()
-                        || !SystemSettingsPrismalSwitchOverlay.attach(switchView)) {
-                    synchronized (QUEUED) { QUEUED.remove(switchView); }
+                if (!switchView.isAttachedToWindow()) return;
+                if (!SystemSettingsPrismalSwitchOverlay.attach(switchView)) {
+                    disabledByPresentationFailure = true;
+                    Api101Bridge.log("[DC][SettingsSwitch] overlay creation failed; future overlays disabled until Settings restart");
                 }
             } catch (Throwable error) {
-                synchronized (QUEUED) { QUEUED.remove(switchView); }
+                disabledByPresentationFailure = true;
                 Api101Bridge.log("[DC][SettingsSwitch] presentation failed; stock retained", error);
             }
         });
