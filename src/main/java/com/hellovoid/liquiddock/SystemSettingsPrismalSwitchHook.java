@@ -67,7 +67,10 @@ final class SystemSettingsPrismalSwitchHook {
         }
         switchView.post(() -> {
             try {
-                if (!switchView.isAttachedToWindow()) return;
+                if (!switchView.isAttachedToWindow()) {
+                    onDetached(switchView);
+                    return;
+                }
                 if (!SystemSettingsPrismalSwitchOverlay.attach(switchView)) {
                     disabledByPresentationFailure = true;
                     Api101Bridge.log("[DC][SettingsSwitch] overlay creation failed; future overlays disabled until Settings restart");
