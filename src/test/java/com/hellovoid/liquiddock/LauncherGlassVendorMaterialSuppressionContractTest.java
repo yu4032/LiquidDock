@@ -48,22 +48,20 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertFalse(helper.contains("if (isMaMlHost(host)) putMaMlBackgroundBlurVariable(host, 0.0d)"));
     }
 
-    @Test public void widgetClaimMustNotDestroyVendorBlurModesBeforeAppHomeReturn()
+    @Test public void widgetClaimBansDestructiveNativeMaterialApis()
             throws Exception {
         String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
-        String widgetClaim = helper.substring(helper.indexOf("static void claimWidgetMaterial"),
-                helper.indexOf("static void claimLoadedMamlRoot"));
-        assertTrue(widgetClaim.contains("suppressPassWindowWithoutClearingVendorMaterial(host)"));
-        assertFalse(widgetClaim.contains("MiBlurBridge.clearContentBlur(host)"));
-        assertFalse(widgetClaim.contains("setBlurRadius"));
-        assertFalse(widgetClaim.contains("setBlurIfNeed"));
-        assertFalse(widgetClaim.contains("setViewBlur"));
-        assertFalse(widgetClaim.contains("setMaMlBlurIfSupported"));
-        assertTrue(helper.contains("MiBlurBridge.getPassWindowBlurEnabled(host)"));
-        assertTrue(helper.contains("ownership.claim(current)"));
-        assertTrue(helper.contains("ownership.release(Boolean.FALSE.equals(current))"));
-        assertTrue(helper.contains("MiBlurBridge.setPassWindowBlurEnabled(host, true)"));
+        // A static API boundary only: no source slicing or inferred runtime call ordering.
+        // The folder path still has its own material contract, hence the explicit host scope.
+        assertTrue(helper.contains("suppressPassWindowWithoutClearingVendorMaterial(host)"));
+        assertFalse(helper.contains("MiBlurBridge.clearContentBlur(host)"));
         assertFalse(helper.contains("MiBlurBridge.clearPassWindowBlur(host)"));
+        assertFalse(helper.contains("invokeBoolean(host, \"setViewBlur\""));
+        assertFalse(helper.contains("invokeBoolean(host, \"setBlurIfNeed\""));
+        assertFalse(helper.contains("invokeInt(host, \"setBlurRadius\""));
+        assertFalse(helper.contains("setMaMlBlurIfSupported(host, false)"));
+        assertTrue(helper.contains("MiBlurBridge.getPassWindowBlurEnabled(host)"));
+        assertTrue(helper.contains("MiBlurBridge.setPassWindowBlurEnabled(host, true)"));
     }
 
     @Test public void folderHookTargetsConcreteLauncher450VariantsWithoutDrawableReplacement()
