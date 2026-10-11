@@ -48,6 +48,7 @@ internal fun GuiStaticRepeatStepButton(
     val callback = rememberUpdatedState(onStep)
     var pressed by remember { mutableStateOf(false) }
     val colors = MiuixTheme.colorScheme
+    val presetChrome = LocalGuiPresetChromePalette.current
     val darkTheme = colors.background.luminance() < 0.5f
     val shape = RoundedCornerShape(18.dp)
 
@@ -57,7 +58,7 @@ internal fun GuiStaticRepeatStepButton(
             .alpha(if (enabled) 1f else 0.45f)
             .clip(shape)
             .then(
-                if (staticChrome) Modifier.guiSolidChrome(GuiSolidChromeStyle.PILL, darkTheme)
+                if (staticChrome) Modifier.guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome)
                 else Modifier.background(
                     lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f),
                     shape,
