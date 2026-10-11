@@ -340,6 +340,7 @@ public class SettingsActivity extends AppCompatActivity {
             case HookScopeRestartShell.SECURITY_CENTER: return "安全中心";
             case HookScopeRestartShell.GBOARD: return "Gboard";
             case HookScopeRestartShell.SEARCH: return "系统搜索";
+            case HookScopeRestartShell.SETTINGS: return "系统设置";
             default: return scope;
         }
     }
