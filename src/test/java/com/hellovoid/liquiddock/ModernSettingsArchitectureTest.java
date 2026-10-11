@@ -70,7 +70,7 @@ public class ModernSettingsArchitectureTest {
             assertTrue(source.contains("dampedDragAnimation.modifier"));
             assertTrue(source.contains("translationX ="));
             assertTrue(source.contains("layerBlock = {"));
-            assertTrue(source.contains("GuiFrozenPrismalChrome("));
+            assertTrue(source.contains("GuiStaticGlassChrome("));
             assertTrue(source.contains("modifier = Modifier.matchParentSize().graphicsLayer {"));
             assertTrue(source.contains("scaleX = dampedDragAnimation.scaleX /"));
             assertTrue(source.contains("scaleY = dampedDragAnimation.scaleY *"));
@@ -253,22 +253,35 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void staticGuiReplaysRealCachedPrismalUnderLiveSettingsContent() throws Exception {
+    public void staticGuiUsesSharedDrawableResourcesWithoutPerCellOpticalLayers() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String bottom = Files.readString(BOTTOM_NAV);
         String ui = Files.readString(UI);
-        String frozen = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GuiFrozenPrismalChrome.kt"));
-        assertTrue(surfaces.contains("LocalFrozenPrismalBackdrop provides frozenBackdrop"));
-        assertTrue(surfaces.contains("GuiFrozenPrismalChrome("));
-        assertTrue(surfaces.contains("refractionHeightPx = 16f,"));
-        assertTrue(surfaces.contains("refractionAmountPx = 21f,"));
-        assertTrue(surfaces.contains("chromaticAberration = 0.28f,"));
-        assertTrue(frozen.contains("val layer = rememberGraphicsLayer()"));
-        assertTrue(frozen.contains("layer.record(dimensions)"));
-        assertTrue(frozen.contains("drawLayer(layer)"));
-        assertTrue(frozen.contains("PrismalGlassSurface("));
-        assertTrue(frozen.contains("onClick = null,"));
+        String chrome = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticGlassChrome.kt"));
+        assertTrue(surfaces.contains("LocalStaticGlassChrome provides glassEnabled"));
+        assertFalse(surfaces.contains("LocalFrozenPrismalBackdrop"));
+        assertTrue(surfaces.contains("GuiStaticGlassChrome("));
+        assertTrue(surfaces.contains("style = GuiStaticGlassStyle.CARD"));
+        assertTrue(surfaces.contains("style = GuiStaticGlassStyle.PILL"));
+        assertFalse(surfaces.contains("GuiFrozenPrismalChrome("));
+        assertTrue(chrome.contains("ContextCompat.getDrawable(context, resourceId)"));
+        assertTrue(chrome.contains("drawIntoCanvas { canvas ->"));
+        assertTrue(chrome.contains("drawable.draw(nativeCanvas)"));
+        assertFalse(chrome.contains("rememberGraphicsLayer"));
+        assertFalse(chrome.contains("PrismalGlassSurface"));
+        assertFalse(chrome.contains("drawPrismalGlass"));
+        assertFalse(chrome.contains("RenderEffect"));
+        String[] resources = {
+                "gui_static_glass_card_light.xml", "gui_static_glass_card_dark.xml",
+                "gui_static_glass_pill_light.xml", "gui_static_glass_pill_dark.xml"
+        };
+        for (String resource : resources) {
+            String shape = Files.readString(Path.of("src/main/res/drawable", resource));
+            assertTrue(shape.contains("<layer-list"));
+            assertTrue(shape.contains("<gradient "));
+            assertTrue(shape.contains("<stroke "));
+        }
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(Files.readString(GLASS_PAGES).contains("internal fun GlassIconsPage("));
