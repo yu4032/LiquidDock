@@ -329,14 +329,18 @@ internal fun ModernSurface(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(cardShape)
+            // A real Prismal depth shadow is outside the clipped glass outline.
+            // Use cached translucent outlines instead of a per-Cell render layer.
+            .then(if (staticChrome) Modifier.guiStaticSoftShadow(cardShape) else Modifier)
             .then(
                 if (staticChrome) {
                     Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)
+                        .guiStaticSpecularRim(cardShape, presetChrome)
                 } else {
                     fallbackChrome
                 }
             )
+            .clip(cardShape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(contentPadding),
         content = content,
@@ -459,17 +463,18 @@ internal fun Button(
             .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
             .height(minHeight)
             .alpha(if (enabled) 1f else 0.66f)
-            .clip(buttonShape)
+            .then(if (staticChrome) Modifier.guiStaticSoftShadow(buttonShape) else Modifier)
             .then(
                 if (staticChrome) {
                     Modifier.guiSolidChrome(
                         if (destructive) GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL,
                         presetChrome,
-                    )
+                    ).guiStaticSpecularRim(buttonShape, presetChrome)
                 } else {
                     fallbackChrome
                 }
             )
+            .clip(buttonShape)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
