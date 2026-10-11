@@ -1,62 +1,58 @@
-# Widget-dense App → HOME return — frame pacing experiment
+# Widget-dense App → HOME return — Perfetto study and safe empty-frame optimization
 
-**Date:** 2026-10-11. **Branch:** `perf/workspace-geometry-swap-coalesce-20261011`. **Status:** experimental / no on-device validation. Based on main `5eb30db`. Do not merge until repeatable A/B trace and wallpaper visual checks.
+**Date:** 2026-10-11. **Base main:** `5eb30db`. **Branch:** `perf/workspace-geometry-swap-coalesce-20261011`. **Status:** experiment / CI, not yet real-device tested. Keep draft until visual and matched-trace checks.
 
-## Evidence from the two supplied traces
+## Observed signals
 
-Captured by the user: `多组件玻璃开.perfetto-trace` (about **5.425 seconds** of available ftrace events) and `多组件玻璃关.perfetto-trace` (about **6.808 seconds**). The traces are **different interactive sequences**, not randomized matched-window trials; do not equate differences with causal improvement percentages.
+The user provided two Perfetto traces, `多组件玻璃开.perfetto-trace` (~5.425s of ftrace events) and `多组件玻璃关.perfetto-trace` (~6.808s). They cover **different interactions and durations**; comparisons below are descriptive, not controlled causal estimates. FrameTimeline data was decoded from Android `FrameTimelineEvent` (`TracePacket` field 76), with actual SurfaceFrame start/end cookies paired.
 
-```
-                          glass ON     glass OFF
-LD.Workspace.SourceFrame      336          185
-LD.Workspace.GeometryFrame    193            0
-LD.Workspace.StaticSwap       529          186
-LD.Workspace.DrawnWidgets   7 usual         0
-LD.Workspace.StaticNodes
-  p50 (milliseconds)         0.236        0.040
-LD.Workspace.StaticSwap
-  p50 / p90 (ms)          1.446/9.061  0.367/2.445
-StaticSwap intervals
-  < 6.0606 milliseconds      182            5
-```
+| Measure | Widget glass ON | Widget glass OFF |
+|---|---:|---:|
+| `LD.Workspace.SourceFrame` | 336 | 185 |
+| `LD.Workspace.GeometryFrame` | 193 | 0 |
+| `LD.Workspace.StaticSwap` | 529 | 186 |
+| `DrawnWidgets` typical nonzero | 7 | 0 |
+| `StaticNodes` p50 | 0.236ms | 0.040ms |
+| `StaticSwap` p50 / p90 | 1.446 / 9.061ms | 0.367 / 2.445ms |
+| Pairs of successive static swaps starting <6.0606ms apart | 182 | 5 |
+| Launcher actual SurfaceFrames (all Launcher layers) | 670 | 604 |
+| Launcher `PRESENT_ON_TIME` | 63 | 170 |
+| Launcher `JANK_BUFFER_STUFFING` flag | 309 | 218 |
+| SurfaceFlinger actual DisplayFrames | 802 | 818 |
+| SurfaceFlinger `PRESENT_ON_TIME` | 218 | 363 |
 
-The data show `529 = 336 + 193` output opportunities when widget glass is on. These are **separate source-triggered and geometry-triggered presentations**, not definitive proof that 193 frames were identical. During animation, a geometry-only frame can be essential, even if there is no new background.
+Caveats: `eglSwapBuffers` slices measure CPU wait and submission, **not direct GPU shader duration**. The FrameTimeline `BUFFER_STUFFING` bit means buffers were queued; it does not by itself identify which producer caused the delay. Earlier `StaticSwap` p90=80ms was an analysis error; correct ON p90 is 9.061ms.
 
-FrameTimeline actual SurfaceFrame classification, grouped by `com.miui.home/...Launcher#` (both Launcher layers combined for the OFF trace):
+## Candidate rejected: delaying geometry-only swaps
 
-```
-                                      glass ON  glass OFF
-Launcher actual frames                   670       604
-Launcher PRESENT_ON_TIME                  63       170
-Launcher JANK_BUFFER_STUFFING bit set    309       218
-SurfaceFlinger actual display frames    802       818
-SF display PRESENT_ON_TIME               218       363
-```
+Naive one-refresh bounded geometry delays looked promising given 193 additional geometry frames; an offline replay of the real timestamps disproved a sufficiently good coalescing ratio:
 
-`JANK_BUFFER_STUFFING` is a FrameTimeline bit flag, not proof of which producer initiated a missed deadline. The separate `Floating Dock` layer shows related lateness. The GL `StaticSwap` slice times wall-clock `eglSwapBuffers` (driver/compositor back-pressure may be counted there), **not** directly the shader execution time. Corrected previous misreport: ON StaticSwap p90 ~9.06ms, **not 80.17ms**.
+- ~169/193 geometry frames would be delayed.
+- Only ~42/169 would see the next source frame arrive within the delay.
+- Most geometry updates would become later without removing a swap. The additional delay risks visible Widget/WALLPAPER phase lag.
 
-## Experimental change
+The experimental delay code was **fully reverted from the final branch diff**, rather than kept as an unproven patch. Producer cadence, native HOME zoom, PassBlur freshness, geometry updates, and wallpaper token ownership must remain unchanged.
 
-Only when work consists of **Workspace STATIC geometry** (no DRAG), there is no active drag output, a static EGL output already exists, and the last **completed static swap** happened less than one active display period ago:
+## Safer measurable target: transparent static output
 
-1. Keep geometry work pending, post a GL delayed callback for the remaining frame period (whole milliseconds rounded upward).
-2. Allow a native PassBlur source callback to run immediately and consume that geometry work, as already supported by `LauncherGlassOutputRenderState.consumeForSourceRender()`.
-3. If no PassBlur source arrived, the delayed callback must still submit the latest geometry frame. Source processing and Recents output are never delayed.
-4. Do not pace first presentation after output creation/resizing; reset the submission timestamp when the output surface changes.
-5. Leave Prismal SDF/refraction/highlight shader, backdrop capture quality, geometry transforms, wallpaper token and HOME transition ownership unchanged.
+The same trace contains repeated output buffers where **zero Widget/static geometry was actually drawn**:
 
-**Intended** reduction: duplicate consecutive *geometry-only* swaps within one refresh interval, without introducing dirty-scene caching. This is not a new source-frame cadence rule.
+- ON: 100 zero-node swaps across **six** contiguous runs; 94 of them could theoretically be avoided if their EGL Surface remained unchanged between frames.
+- OFF: 186 zero-node swaps in **one** run; up to 185 could theoretically be avoided.
+- These numbers are upper bounds from recorded traces, **not real FPS savings or a confirmed result from this patch**.
 
-**Known limitations:** without FrameTimeline-vsync alignment, an `eglSwapBuffers` wall-clock completion is an imperfect proxy for the display present phase; `Handler.postDelayed` may add up to ~1ms round-up and scheduling jitter. A geometrical update during a source drought can become ~one refresh interval later. If this shows any visual phase lag or poor input responsiveness, revert the experiment. In particular the prior #256 dirty-cache changes were reverted after device regressions, so do not re-introduce them.
+When there is no drawable glass geometry, the renderer still clears the entire output to transparent and `eglSwapBuffers` on every source callback. The previously presented transparent buffer is already sufficient until a node acquires geometry again.
 
-## Mandatory on-device acceptance gates
+Patch: a tiny GL-thread `LauncherGlassEmptyOutputPolicy` records when a successful fully transparent static output has been presented on a given EGL Surface. The first empty presentation still clears and swaps (including after previously nonempty nodes), and source/geometry-driven rendering resumes immediately once any node has geometry. Subsequent empty frames skip the static clear/swap. Reset this state on static Surface attachment, detachment, or resize. Failed/unswapped clears never set the blank state.
 
-- Same widget-heavy page, same app return path and wallpaper, 5–10 App→HOME gestures; **baseline PR #340** instrumentation vs this experimental branch, panel 165Hz, animations unmodified.
-- Confirm counters: `LD.Workspace.SourceFrame`, `GeometryFrame`, `StaticSwap` and actual SurfaceFlinger/Launcher FrameTimeline PresentType/JankType. Goal: fewer closely spaced static swaps **without** more Launcher missed deadlines or worse input latency.
-- Also repeat glass-off and few-widget control. These are independent captures, so compare across repeated matched runs, not percentages from the initial pair above.
-- Ensure visual continuity of HOME/workspace scaling, wallpaper zoom ending, Recents→HOME, rapid back navigation, folder opening/closing, Workspace page scrolling, widget fade and position, landscape/portrait, root rebind and service restart.
-- Confirm advanced-material Widget original background restored after toggling glass (separate fix in PR #341); this experiment does not modify the native material ownership chain.
-- Observe whether the expected static presentation fell through while no source arrived; it must be delivered no later than one refresh-period pacing window plus platform scheduling overhead.
-- Cancel/revert the experiment if the GL worker's delayed task creates input starvation, if any visible geometry trails the native Launcher surface, or if FrameTimeline fails to improve.
+The policy intentionally does **not** skip `prepareBackdrop()` in `onFreshFrame` or drop source-frame freshness acknowledgments. It never changes active Widget glass rendering or visual fidelity: 7-node animation frames continue to draw exactly as before. Thus the patch targets unnecessary work while a scene is empty; it is **not yet a complete fix for jank with 7 visible widgets**.
 
-CI only verifies compilation and pure state-machine/pacing rules; it cannot establish visual correctness or an FPS improvement.
+## Device acceptance gates before merge
+
+1. Glass off and glass on, same page: confirm previously visible Widget backgrounds still restore properly (the separate MAML ownership PR #341 has not been incorporated).
+2. With Widget glass enabled: open and close an app repeatedly; confirm no lingering glass after widgets disappear, no one-frame stale opaque image, and no missing first glass frame when widgets return.
+3. Test home/workspace zoom, Recents→HOME, moving between pages, widget add/remove and fade, widget material reload, rotation, SurfaceTexture detach/attach/resize, folder/popup and scrolling. No Sprite/bitmap workaround or native wallpaper alteration.
+4. Collect matched Perfetto runs with FrameTimeline and `LD.Workspace.StaticSwap`; in empty periods, swap count should reduce. **Do not declare heavy-widget improvement solely from this.**
+5. Re-run dense Widget return profiling focusing on long `StaticSwap` and `BUFFER_STUFFING` when `DrawnWidgets=7`; if those remain, optimize active-geometry presentation/compositor only after extra measurement.
+
+CI tests are pure state contracts. They cannot prove glass visual correctness, absence of wallpaper drift, or improved end-user FPS.
