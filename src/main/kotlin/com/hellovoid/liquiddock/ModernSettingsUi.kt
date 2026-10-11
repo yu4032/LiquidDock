@@ -916,6 +916,7 @@ internal fun ModernGlassStepper(
 ) {
     // Retain repeat-on-hold and bound checks without PrismalGlassStepper's
     // two independent optical layers for controls inside every numeric Cell.
+    val staticChrome = LocalStaticGlassChrome.current
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -924,11 +925,13 @@ internal fun ModernGlassStepper(
         GuiStaticRepeatStepButton(
             label = "−",
             enabled = enabled && value > valueRange.first,
+            staticChrome = staticChrome,
             onStep = { onValueChange((value - 1).coerceAtLeast(valueRange.first)) },
         )
         GuiStaticRepeatStepButton(
             label = "+",
             enabled = enabled && value < valueRange.last,
+            staticChrome = staticChrome,
             onStep = { onValueChange((value + 1).coerceAtMost(valueRange.last)) },
         )
     }
