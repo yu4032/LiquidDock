@@ -41,6 +41,7 @@ internal enum class Page(val titleRes: Int) {
     GlassMenus(R.string.page_glass_menus),
     DialogCustomization(R.string.page_dialog_customization),
     ThirdPartyApps(R.string.page_third_party_apps),
+    SystemSettings(R.string.page_system_settings),
     Gboard(R.string.page_gboard),
     GboardAll(R.string.page_gboard),
     DialogAll(R.string.page_dialog_customization),
@@ -99,6 +100,7 @@ internal val glassEntries = listOf(
     HubEntry(Page.Shadow, R.string.page_shadow, "Dock 与描边阴影"),
     HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock 与玻璃交互动画"),
     HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用适配"),
+    HubEntry(Page.SystemSettings, R.string.page_system_settings, "系统设置 MIUIX 开关的 Prismal 视觉试验"),
 )
 
 internal val moreEntries = listOf(
