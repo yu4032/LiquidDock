@@ -66,10 +66,16 @@ final class PrismalZeroContributionShader {
         // The falloff configuration expression also has zero users after the single-edge
         // replacement. Do not silently change the lens formula or the persisted GUI key:
         // the disconnected setting is documented separately for an explicit functional fix.
+        // SingleEdge's text-block replacement starts inside the original statement's
+        // four-space indentation: its *second* generated line has no leading indentation.
+        // Match the expression text rather than assuming the original layout.
         result = replaceOnce(result,
-                "    float edgeFalloffPower = max(0.02, max(u_edgeRefractionFalloff, 0.0) * 0.205);\n"
-                        + "    float dropLens = pow(smoothstep(refractionHeight, 0.0, edgeDist), edgeFalloffPower);\n",
+                "float edgeFalloffPower = max(0.02, max(u_edgeRefractionFalloff, 0.0) * 0.205);\n"
+                        + "float dropLens = pow(smoothstep(refractionHeight, 0.0, edgeDist), edgeFalloffPower);\n",
                 "", "unused old lens falloff");
+        result = replaceOnce(result,
+                "// 400% retains the original 0.82 exponent, with a responsive full GUI range.\n",
+                "", "unused lens falloff comment");
         return result;
     }
 
