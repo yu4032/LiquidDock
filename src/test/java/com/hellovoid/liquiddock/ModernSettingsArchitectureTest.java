@@ -265,17 +265,21 @@ public class ModernSettingsArchitectureTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
         assertTrue(surfaces.contains("LocalStaticGlassChrome provides glassEnabled"));
         assertFalse(surfaces.contains("LocalFrozenPrismalBackdrop"));
-        assertTrue(surfaces.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, darkTheme)"));
+        assertTrue(surfaces.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)"));
         assertTrue(surfaces.contains("GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL"));
-        assertTrue(slider.contains(".guiSolidChrome(GuiSolidChromeStyle.PILL, !isLightTheme)"));
-        assertTrue(toggle.contains(".guiSolidChrome(GuiSolidChromeStyle.PILL, !isLightTheme)"));
+        assertTrue(slider.contains(".guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome)"));
+        assertTrue(toggle.contains(".guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome)"));
         assertFalse(surfaces.contains("GuiStaticGlassChrome("));
         assertFalse(surfaces.contains("GuiFrozenPrismalChrome("));
         assertTrue(chrome.contains("internal fun Modifier.guiSolidChrome("));
-        assertTrue(chrome.contains("guiSolidChromeColor(style, darkTheme)"));
-        assertTrue(chrome.contains("Color(0xFF343944)"));
-        assertTrue(chrome.contains("Color(0xFFF0F2F5)"));
-        assertTrue(chrome.contains("Color(0xFFD73333)"));
+        assertTrue(chrome.contains("LocalGuiPresetChromePalette"));
+        assertTrue(chrome.contains("rememberGuiPresetChromePalette()"));
+        assertTrue(chrome.contains("val canvas = colorResource(R.color.gui_preset_canvas)"));
+        assertTrue(chrome.contains(".border(1.dp, outline, shape)"));
+        assertTrue(chrome.contains(".border(0.5.dp, rim, shape)"));
+        assertTrue(chrome.contains("R.color.gui_preset_card_fill"));
+        assertTrue(chrome.contains("R.color.gui_preset_card_rim"));
+        assertTrue(chrome.contains("R.color.gui_preset_danger_fill"));
         assertFalse(chrome.contains("ContextCompat"));
         assertFalse(chrome.contains("drawIntoCanvas"));
         assertFalse(chrome.contains("Brush."));
@@ -285,6 +289,23 @@ public class ModernSettingsArchitectureTest {
             assertFalse(Files.exists(Path.of(
                     "src/main/res/drawable/gui_static_glass_" + name + ".xml")));
         }
+        String light = Files.readString(Path.of(
+                "src/main/res/values/gui_preset_material_colors.xml"));
+        String dark = Files.readString(Path.of(
+                "src/main/res/values-night/gui_preset_material_colors.xml"));
+        assertTrue(light.contains("<color name=\"gui_preset_canvas\">#F5F7FA</color>"));
+        assertTrue(dark.contains("<color name=\"gui_preset_canvas\">#1B2028</color>"));
+        for (String colorKey : new String[]{
+                "gui_preset_card_fill", "gui_preset_card_rim", "gui_preset_card_outline",
+                "gui_preset_pill_fill", "gui_preset_pill_rim", "gui_preset_pill_outline",
+                "gui_preset_danger_fill", "gui_preset_danger_rim", "gui_preset_danger_outline"
+        }) {
+            assertTrue(light.contains("name=\"" + colorKey + "\""));
+            assertTrue(dark.contains("name=\"" + colorKey + "\""));
+        }
+        assertTrue(surfaces.contains("LocalGuiPresetChromePalette provides presetChrome"));
+        assertTrue(surfaces.contains("val background = presetChrome.canvas"));
+        assertTrue(surfaces.contains("if (staticChrome) Modifier else {"));
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
     }
@@ -461,7 +482,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("GuiSolidChromeStyle.PILL"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.CARD ->"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.PILL ->"));
-        assertTrue(chrome.contains("GuiSolidChromeStyle.DANGER -> Color(0xFFD73333)"));
+        assertTrue(chrome.contains("palette.dangerFill"));
         assertFalse(surfaces.contains("PrismalGlassSurface("));
         assertFalse(surfaces.contains("PrismalGlassStepper("));
     }
