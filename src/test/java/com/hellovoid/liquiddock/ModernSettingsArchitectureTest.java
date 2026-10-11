@@ -70,7 +70,7 @@ public class ModernSettingsArchitectureTest {
             assertTrue(source.contains("dampedDragAnimation.modifier"));
             assertTrue(source.contains("translationX ="));
             assertTrue(source.contains("layerBlock = {"));
-            assertTrue(source.contains("GuiStaticGlassChrome("));
+            assertTrue(source.contains(".guiSolidChrome("));
             assertTrue(source.contains("modifier = Modifier.matchParentSize().graphicsLayer {"));
             assertTrue(source.contains("scaleX = dampedDragAnimation.scaleX /"));
             assertTrue(source.contains("scaleY = dampedDragAnimation.scaleY *"));
@@ -253,39 +253,40 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void staticGuiUsesSharedDrawableResourcesWithoutPerCellOpticalLayers() throws Exception {
+    public void staticGuiUsesPlainColorModifiersWithoutDrawablesOrOpticalLayers()
+            throws Exception {
         String surfaces = Files.readString(SURFACES);
         String bottom = Files.readString(BOTTOM_NAV);
-        String ui = Files.readString(UI);
         String chrome = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticGlassChrome.kt"));
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiSolidChrome.kt"));
+        String slider = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        String toggle = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
         assertTrue(surfaces.contains("LocalStaticGlassChrome provides glassEnabled"));
         assertFalse(surfaces.contains("LocalFrozenPrismalBackdrop"));
-        assertTrue(surfaces.contains("GuiStaticGlassChrome("));
-        assertTrue(surfaces.contains("style = GuiStaticGlassStyle.CARD"));
-        assertTrue(surfaces.contains("GuiStaticGlassStyle.DANGER else GuiStaticGlassStyle.PILL"));
+        assertTrue(surfaces.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, darkTheme)"));
+        assertTrue(surfaces.contains("GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL"));
+        assertTrue(slider.contains(".guiSolidChrome(GuiSolidChromeStyle.PILL, !isLightTheme)"));
+        assertTrue(toggle.contains(".guiSolidChrome(GuiSolidChromeStyle.PILL, !isLightTheme)"));
+        assertFalse(surfaces.contains("GuiStaticGlassChrome("));
         assertFalse(surfaces.contains("GuiFrozenPrismalChrome("));
-        assertTrue(chrome.contains("ContextCompat.getDrawable(context, resourceId)"));
-        assertTrue(chrome.contains("drawIntoCanvas { canvas ->"));
-        assertTrue(chrome.contains("drawable.draw(nativeCanvas)"));
-        assertFalse(chrome.contains("rememberGraphicsLayer"));
-        assertFalse(chrome.contains("PrismalGlassSurface"));
-        assertFalse(chrome.contains("drawPrismalGlass"));
+        assertTrue(chrome.contains("internal fun Modifier.guiSolidChrome("));
+        assertTrue(chrome.contains("guiSolidChromeColor(style, darkTheme)"));
+        assertTrue(chrome.contains("Color(0xFF343944)"));
+        assertTrue(chrome.contains("Color(0xFFF0F2F5)"));
+        assertTrue(chrome.contains("Color(0xFFD73333)"));
+        assertFalse(chrome.contains("ContextCompat"));
+        assertFalse(chrome.contains("drawIntoCanvas"));
+        assertFalse(chrome.contains("Brush."));
         assertFalse(chrome.contains("RenderEffect.create"));
-        String[] resources = {
-                "gui_static_glass_card_light.xml", "gui_static_glass_card_dark.xml",
-                "gui_static_glass_pill_light.xml", "gui_static_glass_pill_dark.xml",
-                "gui_static_glass_danger.xml"
-        };
-        for (String resource : resources) {
-            String shape = Files.readString(Path.of("src/main/res/drawable", resource));
-            assertTrue(shape.contains("<layer-list"));
-            assertTrue(shape.contains("<gradient "));
-            assertTrue(shape.contains("<stroke "));
+        for (String name : new String[]{
+                "card_light", "card_dark", "pill_light", "pill_dark", "danger"}) {
+            assertFalse(Files.exists(Path.of(
+                    "src/main/res/drawable/gui_static_glass_" + name + ".xml")));
         }
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
-        assertTrue(Files.readString(GLASS_PAGES).contains("internal fun GlassIconsPage("));
     }
 
     @Test
@@ -353,8 +354,8 @@ public class ModernSettingsArchitectureTest {
     public void pageEntryCellsUseStaticResourcesAndDoNotCaptureExtraDepthShadows() throws Exception {
         String surfaces = Files.readString(SURFACES);
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
-        assertTrue(surfaces.contains("GuiStaticGlassChrome("));
-        assertTrue(surfaces.contains("style = GuiStaticGlassStyle.CARD"));
+        assertTrue(surfaces.contains(".guiSolidChrome("));
+        assertTrue(surfaces.contains("GuiSolidChromeStyle.CARD"));
         assertTrue(surfaces.contains("if (onClick != null) Modifier.clickable(onClick = onClick)"));
         assertFalse(surfaces.contains("GuiStaticPressPrismalSurface("));
         assertFalse(surfaces.contains("PrismalGlassSurface("));
@@ -368,7 +369,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("internal fun ModernFeatureCard("));
         assertTrue(surfaces.contains("onClick = onClick,"));
         assertTrue(surfaces.contains("imageVector = MiuixIcons.Basic.ArrowRight"));
-        assertTrue(surfaces.contains("GuiStaticGlassChrome("));
+        assertTrue(surfaces.contains(".guiSolidChrome("));
         assertTrue(surfaces.contains("Modifier.clickable(onClick = onClick)"));
         assertFalse(surfaces.contains("GuiStaticPressPrismalSurface("));
         assertFalse(surfaces.contains("PrismalGlassSurface("));
@@ -448,21 +449,19 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void staticActionAndDarkCellResourcesKeepIndependentThemeAndDangerStates()
-            throws Exception {
+    public void staticActionsAndCellsHavePureThemeColorsAndOneDangerFill() throws Exception {
         String surfaces = Files.readString(SURFACES);
         String chrome = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticGlassChrome.kt"));
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiSolidChrome.kt"));
         assertTrue(surfaces.contains("val solidCardColor = if (darkTheme)"));
-        assertTrue(surfaces.contains(".background(solidCardColor)"));
-        assertTrue(surfaces.contains(".border(1.dp, cardStroke, cardShape)"));
+        assertTrue(surfaces.contains(".background(solidCardColor, cardShape)"));
         assertTrue(surfaces.contains("val buttonShape = RoundedCornerShape(minHeight / 2)"));
         assertTrue(surfaces.contains("destructive: Boolean = false"));
-        assertTrue(surfaces.contains("GuiStaticGlassStyle.DANGER"));
-        assertTrue(surfaces.contains("GuiStaticGlassStyle.PILL"));
-        assertTrue(chrome.contains("R.drawable.gui_static_glass_danger"));
-        assertTrue(chrome.contains("R.drawable.gui_static_glass_pill_light"));
-        assertTrue(chrome.contains("R.drawable.gui_static_glass_pill_dark"));
+        assertTrue(surfaces.contains("GuiSolidChromeStyle.DANGER"));
+        assertTrue(surfaces.contains("GuiSolidChromeStyle.PILL"));
+        assertTrue(chrome.contains("GuiSolidChromeStyle.CARD ->"));
+        assertTrue(chrome.contains("GuiSolidChromeStyle.PILL ->"));
+        assertTrue(chrome.contains("GuiSolidChromeStyle.DANGER -> Color(0xFFD73333)"));
         assertFalse(surfaces.contains("PrismalGlassSurface("));
         assertFalse(surfaces.contains("PrismalGlassStepper("));
     }
@@ -733,7 +732,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(step.contains("while (isActive)"));
         assertTrue(step.contains("tryAwaitRelease()"));
         assertTrue(step.contains("if (released && !repeated) callback.value()"));
-        assertTrue(step.contains("GuiStaticGlassChrome("));
+        assertTrue(step.contains(".guiSolidChrome("));
         assertTrue(dialog.contains("destructive = true,"));
         assertFalse(dialog.contains("PrismalGlassButton("));
     }
@@ -804,7 +803,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Switch("));
         assertTrue(surfaces.contains("top.yukonga.miuix.kmp.basic.Slider("));
         assertTrue(surfaces.contains("if (backdrop != null)"));
-        assertTrue(surfaces.contains("GuiStaticGlassChrome("));
+        assertTrue(surfaces.contains(".guiSolidChrome("));
 
         assertTrue(search.contains("SETTINGS_UI_GLASS_ENABLED"));
         assertTrue(search.contains("glassEnabled = glassEnabled"));
@@ -828,7 +827,7 @@ public class ModernSettingsArchitectureTest {
         // Updated UI contract: dynamic dark-theme Cells intentionally have a
         // subtle fill/rim separation, without any drop shadow or shader fallback.
         assertTrue(surfaces.contains("val solidCardColor = if (darkTheme)"));
-        assertTrue(surfaces.contains(".background(solidCardColor)"));
+        assertTrue(surfaces.contains(".background(solidCardColor, cardShape)"));
         assertTrue(surfaces.contains(".border(1.dp, cardStroke, cardShape)"));
         assertTrue(surfaces.contains(".clip(cardShape)"));
         assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
