@@ -469,6 +469,14 @@ public class ModernSettingsArchitectureTest {
         assertTrue(chrome.contains("0.625f to palette.rimStrong"));
         assertTrue(chrome.contains("0.875f to palette.rimMedium"));
         assertTrue(chrome.contains("style = Stroke(width = glintWidth)"));
+        assertTrue(chrome.contains("val glintWidth = if (compact) 0.8.dp.toPx() else 1.dp.toPx()"));
+        assertFalse(chrome.contains("palette.rimContrast"));
+        String thumbRimOnly = chrome.substring(
+                chrome.indexOf("internal fun Modifier.guiStaticSpecularRim("),
+                chrome.indexOf("internal fun Modifier.guiStaticSoftShadow("));
+        assertTrue(thumbRimOnly.contains("drawOutline("));
+        assertEquals("Idle thumb must have exactly one white outline",
+                1, thumbRimOnly.split("drawOutline\\\\(", -1).length - 1);
         assertTrue(chrome.contains("val shadowColors = opacities.map"));
         assertTrue(chrome.contains("translate(top = offsetY)"));
         assertTrue(chrome.contains("onDrawBehind {"));
@@ -479,18 +487,23 @@ public class ModernSettingsArchitectureTest {
 
         for (String source : new String[]{light, dark}) {
             for (String key : new String[]{
-                    "gui_preset_rim_contrast", "gui_preset_rim_strong",
+                    "gui_preset_rim_strong",
                     "gui_preset_rim_medium", "gui_preset_rim_weak"
             }) assertTrue(source.contains("name=\"" + key + "\""));
         }
+        assertFalse(light.contains("name=\"gui_preset_rim_contrast\""));
+        assertFalse(dark.contains("name=\"gui_preset_rim_contrast\""));
         assertTrue(surfaces.contains("Modifier.guiStaticSoftShadow(cardShape)"));
-        assertTrue(surfaces.contains(".guiStaticSpecularRim(cardShape, presetChrome)"));
+        assertFalse("Card material already bakes the reflected edge",
+                surfaces.contains(".guiStaticSpecularRim(cardShape, presetChrome)"));
         assertTrue(surfaces.contains("Modifier.guiStaticSoftShadow(buttonShape)"));
-        assertTrue(surfaces.contains(".guiStaticSpecularRim(buttonShape, presetChrome)"));
+        assertFalse("Button material already bakes the reflected edge",
+                surfaces.contains(".guiStaticSpecularRim(buttonShape, presetChrome)"));
         assertTrue(surfaces.contains(".clip(cardShape)"));
         assertTrue(surfaces.contains(".clip(buttonShape)"));
         assertTrue(stepper.contains("Modifier.guiStaticSoftShadow(shape)"));
-        assertTrue(stepper.contains(".guiStaticSpecularRim(shape, presetChrome)"));
+        assertFalse("Stepper material already bakes the reflected edge",
+                stepper.contains(".guiStaticSpecularRim(shape, presetChrome)"));
 
         for (String source : new String[]{slider, toggle}) {
             assertTrue(source.contains("val idleThumbShape = remember { PrismalCapsule() }"));
