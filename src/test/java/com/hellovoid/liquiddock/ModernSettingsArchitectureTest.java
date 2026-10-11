@@ -449,9 +449,11 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void staticGuiRestoresFourCornerSpecularAndLowCostShadowsWithoutCrashing() throws Exception {
+    public void staticGuiRestoresNativePrismalDepthShadowWithoutGlassCapture() throws Exception {
         String chrome = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiSolidChrome.kt"));
+        String nativeShadow = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalNativeDepthShadow.kt"));
         String surfaces = Files.readString(SURFACES);
         String stepper = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticRepeatStepButton.kt"));
@@ -459,64 +461,48 @@ public class ModernSettingsArchitectureTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
         String toggle = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
-        String light = Files.readString(Path.of(
-                "src/main/res/values/gui_preset_material_colors.xml"));
-        String dark = Files.readString(Path.of(
-                "src/main/res/values-night/gui_preset_material_colors.xml"));
 
+        // Keep the original single Prismal-outline specular result unchanged.
         assertTrue(chrome.contains("internal fun Modifier.guiStaticSpecularRim("));
-        assertTrue(chrome.contains("internal fun Modifier.guiStaticSoftShadow("));
-        assertTrue(chrome.contains("Brush.sweepGradient("));
-        assertTrue(chrome.contains("val outline = shape.createOutline(size, layoutDirection, this)"));
-        // White glints occur at ALL four rounded corners, with two strong
-        // opposing highlights rather than a single flat-colored perimeter.
-        assertTrue(chrome.contains("0.125f to palette.rimStrong"));
-        assertTrue(chrome.contains("0.375f to palette.rimMedium"));
-        assertTrue(chrome.contains("0.625f to palette.rimStrong"));
-        assertTrue(chrome.contains("0.875f to palette.rimMedium"));
-        assertTrue(chrome.contains("style = Stroke(width = glintWidth)"));
-        assertTrue(chrome.contains("val glintWidth = if (compact) 0.8.dp.toPx() else 1.dp.toPx()"));
-        assertFalse(chrome.contains("palette.rimContrast"));
-        assertTrue(chrome.contains("outline, brush = whiteReflection,"));
-        assertFalse("Idle thumb must not draw a second contrast outline",
-                chrome.contains("val contrastWidth ="));
-        assertTrue(chrome.contains("val shadowColors = opacities.map"));
-        assertTrue(chrome.contains("translate(top = offsetY)"));
-        assertTrue(chrome.contains("onDrawBehind {"));
+        assertTrue(chrome.contains("this.background(fill, shape).guiStaticSpecularRim(shape, palette)"));
+        assertFalse(chrome.contains("guiStaticSoftShadow("));
+        assertFalse(chrome.contains("val shadowColors = opacities.map"));
         assertFalse(chrome.contains("R.drawable.gui_depth_shadow_"));
         assertFalse(chrome.contains("requireNotNull(ContextCompat.getDrawable"));
-        assertFalse(chrome.contains("RenderEffect.create"));
-        assertFalse(chrome.contains("rememberGraphicsLayer("));
 
-        for (String source : new String[]{light, dark}) {
-            for (String key : new String[]{
-                    "gui_preset_rim_strong",
-                    "gui_preset_rim_medium", "gui_preset_rim_weak"
-            }) assertTrue(source.contains("name=\"" + key + "\""));
-        }
-        assertFalse(light.contains("name=\"gui_preset_rim_contrast\""));
-        assertFalse(dark.contains("name=\"gui_preset_rim_contrast\""));
-        assertTrue(chrome.contains("this.background(fill, shape).guiStaticSpecularRim(shape, palette)"));
-        assertTrue(surfaces.contains("Modifier.guiStaticSoftShadow(cardShape)"));
-        assertFalse("Card must have one exact-path reflection, not a duplicate modifier",
-                surfaces.contains(".guiStaticSpecularRim(cardShape, presetChrome)"));
-        assertTrue(surfaces.contains("Modifier.guiStaticSoftShadow(buttonShape)"));
-        assertFalse("Button must have one exact-path reflection, not a duplicate modifier",
-                surfaces.contains(".guiStaticSpecularRim(buttonShape, presetChrome)"));
+        // Clone only the upstream shadow draw modifier (internal to upstream),
+        // not the entire glass surface, blur sampling, or AGSL optical effects.
+        assertTrue(nativeShadow.contains("internal fun Modifier.guiNativePrismalDepthShadow("));
+        assertTrue(nativeShadow.contains("PrismalDepthShadow.Default"));
+        assertTrue(nativeShadow.contains("CompositingStrategy.Offscreen"));
+        assertTrue(nativeShadow.contains("BlurMaskFilter(radius, BlurMaskFilter.Blur.NORMAL)"));
+        assertTrue(nativeShadow.contains("blendMode = BlendMode.Clear"));
+        assertTrue(nativeShadow.contains("shadowLayer.record(shadowSize)"));
+        assertTrue(nativeShadow.contains("drawLayer(shadowLayer)"));
+        assertTrue(nativeShadow.contains("canvas.drawOutline(outline, GuiPrismalClearMask)"));
+        assertTrue(nativeShadow.contains("graphicsContext") || nativeShadow.contains("requireGraphicsContext()"));
+        assertTrue(nativeShadow.contains("releaseGraphicsLayer"));
+        assertTrue(nativeShadow.contains("if (needsOutline || recordKey != recordedShadow)"));
+        assertFalse(nativeShadow.contains("drawPrismalGlass("));
+        assertFalse(nativeShadow.contains("PrismalBackdrop"));
+        assertFalse(nativeShadow.contains("prismalLens("));
+        assertFalse(nativeShadow.contains("PixelCopy"));
+        assertFalse(nativeShadow.contains("ScreenCapture"));
+
+        assertTrue(surfaces.contains("Modifier.guiNativePrismalDepthShadow(cardShape)"));
+        assertTrue(surfaces.contains("Modifier.guiNativePrismalDepthShadow(buttonShape)"));
         assertTrue(surfaces.contains(".clip(cardShape)"));
         assertTrue(surfaces.contains(".clip(buttonShape)"));
-        assertTrue(stepper.contains("Modifier.guiStaticSoftShadow(shape)"));
-        assertFalse("Stepper must have one exact-path reflection, not a duplicate modifier",
-                stepper.contains(".guiStaticSpecularRim(shape, presetChrome)"));
+        assertTrue(stepper.contains("Modifier.guiNativePrismalDepthShadow(shape)"));
 
         for (String source : new String[]{slider, toggle}) {
             assertTrue(source.contains("val idleThumbShape = remember { PrismalCapsule() }"));
-            assertTrue(source.contains(".guiStaticSoftShadow(idleThumbShape, compact = true)"));
-            assertTrue(source.contains(".guiStaticSpecularRim(idleThumbShape, presetChrome, compact = true)"));
-            // Only idle gets cached chrome. The active branch retains original
-            // Prismal Ambient specular and depth-shadow without doubling.
+            assertTrue(source.contains(
+                    ".guiNativePrismalDepthShadow(idleThumbShape, idleThumbShadow)"));
+            assertTrue(source.contains("PrismalDepthShadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))"));
             assertTrue(source.contains("PrismalSpecular.Ambient.copy("));
-            assertTrue(source.contains("PrismalDepthShadow("));
+            assertTrue(source.contains("depthShadow = {"));
+            assertFalse(source.contains("guiStaticSoftShadow("));
             assertFalse(source.contains("guiThumbHighlight("));
         }
     }
@@ -546,7 +532,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(step.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.PILL"));
 
         // One external shadow, one resource fill, one cached outline.
-        assertTrue(ui.contains("Modifier.guiStaticSoftShadow(cardShape)"));
+        assertTrue(ui.contains("Modifier.guiNativePrismalDepthShadow(cardShape)"));
         assertTrue(ui.contains(".clip(cardShape)"));
         assertTrue(ui.contains(".clip(buttonShape)"));
         assertFalse(ui.contains(".guiStaticSpecularRim(cardShape, presetChrome)"));
