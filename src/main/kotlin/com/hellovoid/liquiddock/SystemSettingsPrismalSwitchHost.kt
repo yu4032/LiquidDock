@@ -113,7 +113,9 @@ object SystemSettingsPrismalSwitchHost {
     }
 
     private class Session(val content: FrameLayout) {
-        val backdrop = SystemSettingsNativeBackdrop(content)
+        val backdrop = SystemSettingsNativeBackdrop(content) {
+            main.post { dispose() }
+        }
         val bindings = LinkedHashSet<Binding>()
         private val activity = findActivity(content.context)
             ?: throw IllegalStateException("Cannot locate native Settings Activity")
