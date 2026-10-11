@@ -54,7 +54,12 @@ public class PrismalGaussianBlurKernelTest {
                 for (int j = 0; j < PrismalGaussianBlurKernel.PAIR_COUNT; j++) {
                     float d = kernel.verticalPairs[2*j];
                     float w = kernel.verticalPairs[2*j+1];
-                    paired += w * (sample(pixels, center + d) + sample(pixels, center - d));
+                    // Pixel centers are integral while pair offsets are fractional.
+                    // Evaluate the algebra in double precision: float(center) + float(d)
+                    // rounds at large pixel indices and does not model normalized GL UV.
+                    double offset = d;
+                    paired += w * (sample(pixels, center + offset)
+                            + sample(pixels, center - offset));
                 }
                 paired += kernel.weights[15] *
                         (sample(pixels, center + 15) + sample(pixels, center - 15));
