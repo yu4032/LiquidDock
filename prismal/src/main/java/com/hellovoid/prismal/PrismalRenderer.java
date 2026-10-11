@@ -97,6 +97,7 @@ public final class PrismalRenderer implements AutoCloseable {
     // renderer can upload the large frame-invariant optics block only when the params instance
     // actually changes. Geometry/opacity/interaction uniforms remain per-node.
     private PrismalParams cachedStaticParams;
+    private final float[] cachedOs4Invariants = new float[10];
     private int cachedHighlightMask = Integer.MIN_VALUE;
     private int cachedResolutionWidth = -1;
     private int cachedResolutionHeight = -1;
@@ -415,9 +416,10 @@ public final class PrismalRenderer implements AutoCloseable {
         sourceProgram = createProgram(SOURCE_VERTEX, SOURCE_FRAGMENT);
         blurHProgram = createProgram(PrismalShaderSources.BLUR_VERTEX, PrismalShaderSources.BLUR_H);
         blurVProgram = createProgram(PrismalShaderSources.BLUR_VERTEX, PrismalShaderSources.BLUR_V);
-        String glassFragment = PrismalComponentGateShader.apply(
-                PrismalOpticalEdgeShader.apply(
-                        PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)));
+        String glassFragment = PrismalOs4InvariantShader.apply(
+                PrismalComponentGateShader.apply(
+                        PrismalOpticalEdgeShader.apply(
+                                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
         String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
         glassProgram = createProgram(glassVertex, glassFragment);
         glassUniformLocations.clear();
@@ -657,6 +659,14 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform1f("u_os4DirectionalIntensity", p.os4DirectionalIntensity);
         uniform1f("u_os4DirectionalOppositeIntensity", p.os4DirectionalOppositeIntensity);
         uniform2f("u_lightDir", p.lightDirX, p.lightDirY);
+        PrismalOs4InvariantShader.compute(p, cachedOs4Invariants);
+        uniform3f("u_invariantLightPrimary",
+                cachedOs4Invariants[0], cachedOs4Invariants[1], cachedOs4Invariants[2]);
+        uniform2f("u_invariantLightXY", cachedOs4Invariants[3], cachedOs4Invariants[4]);
+        uniform3f("u_invariantOs4LightDir",
+                cachedOs4Invariants[5], cachedOs4Invariants[6], cachedOs4Invariants[7]);
+        uniform1f("u_invariantFresnelR0", cachedOs4Invariants[8]);
+        uniform1f("u_invariantShadowExtent", cachedOs4Invariants[9]);
         uniform1f("u_specular", p.specular);
         uniform1f("u_shininess", p.shininess);
         uniform1f("u_rimStrength", p.rimStrength);
@@ -791,6 +801,9 @@ public final class PrismalRenderer implements AutoCloseable {
     }
     private void uniform2f(String name, float x, float y) {
         GLES20.glUniform2f(glassUniformLocation(name), x, y);
+    }
+    private void uniform3f(String name, float x, float y, float z) {
+        GLES20.glUniform3f(glassUniformLocation(name), x, y, z);
     }
     private void uniform4f(String name, float x, float y, float z, float w) {
         GLES20.glUniform4f(glassUniformLocation(name), x, y, z, w);
