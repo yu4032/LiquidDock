@@ -1,6 +1,10 @@
 package com.hellovoid.liquiddock
 
+import android.content.Context
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.util.Log
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -46,20 +50,36 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val context = LocalContext.current
     val canvas = colorResource(R.color.gui_preset_canvas)
     val canvasWithoutGlass = colorResource(R.color.gui_preset_canvas_glass_off)
+    val cardColor = colorResource(R.color.gui_preset_card_fill).toArgb()
+    val pillColor = colorResource(R.color.gui_preset_pill_fill).toArgb()
+    val thumbColor = colorResource(R.color.gui_preset_thumb_fill).toArgb()
+    val dangerColor = colorResource(R.color.gui_preset_danger_fill).toArgb()
 
     // Android night/nodpi qualifiers select the correct source. Load four
     // drawable instances once per scaffold and reuse the same baked pixels.
-    val cardMaterial = remember(context, canvas) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_card)).mutate()
+    val cardMaterial = remember(context, cardColor) {
+        loadGuiChromeOrSolidFallback(
+            context, R.drawable.gui_material_card, cardColor, 24f,
+            "gui_material_card",
+        )
     }
-    val pillMaterial = remember(context, canvas) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_pill)).mutate()
+    val pillMaterial = remember(context, pillColor) {
+        loadGuiChromeOrSolidFallback(
+            context, R.drawable.gui_material_pill, pillColor, 18f,
+            "gui_material_pill",
+        )
     }
-    val thumbMaterial = remember(context, canvas) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_thumb)).mutate()
+    val thumbMaterial = remember(context, thumbColor) {
+        loadGuiChromeOrSolidFallback(
+            context, R.drawable.gui_material_thumb, thumbColor, 999f,
+            "gui_material_thumb",
+        )
     }
-    val dangerMaterial = remember(context, canvas) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_danger)).mutate()
+    val dangerMaterial = remember(context, dangerColor) {
+        loadGuiChromeOrSolidFallback(
+            context, R.drawable.gui_material_danger, dangerColor, 999f,
+            "gui_material_danger",
+        )
     }
     return remember(
         canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
@@ -189,5 +209,33 @@ private fun drawBakedNineSlice(
                 native.restoreToCount(saved)
             }
         }
+    }
+}
+
+/**
+ * Optional decorative resources must never prevent the settings Activity from
+ * starting. Several device ROMs returned null for dynamically loaded baked
+ * PNG shadows; requireNotNull() crashed during the first composition.
+ */
+private fun loadGuiChromeOrSolidFallback(
+    context: Context,
+    resourceId: Int,
+    fallbackColor: Int,
+    radiusDp: Float,
+    label: String,
+): Drawable {
+    try {
+        val candidate = ContextCompat.getDrawable(context, resourceId)
+        if (candidate != null) return candidate.mutate()
+        Log.w("GuiSolidChrome", "$label returned null, using a solid chrome fallback")
+    } catch (error: RuntimeException) {
+        Log.w("GuiSolidChrome", "Failed to load $label; using solid chrome", error)
+    }
+    val density = context.resources.displayMetrics.density
+    return GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = radiusDp * density
+        setColor(fallbackColor)
+        setStroke((density).roundToInt().coerceAtLeast(1), 0x55FFFFFF)
     }
 }
