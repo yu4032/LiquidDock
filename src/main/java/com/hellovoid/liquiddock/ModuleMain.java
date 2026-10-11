@@ -50,19 +50,34 @@ public final class ModuleMain extends XposedModule {
         refreshDebugLogging();
         String packageName = param.getPackageName();
         if (SETTINGS_PACKAGE.equals(packageName)) {
-            // Never initialize UI integration in Settings child/remote processes.
-            if (!SETTINGS_PACKAGE.equals(loadedProcessName)) return;
+            // Settings may have auxiliary processes; never inject a UI into them.
+            if (!SETTINGS_PACKAGE.equals(loadedProcessName)) {
+                Api101Bridge.log("[DC][SettingsSwitch] skip auxiliary process="
+                        + loadedProcessName);
+                return;
+            }
             try {
-                ConfigReader reader = ConfigReader.load();
-                if (!reader.b(ConfigSchema.Core.ENABLED.name(),
-                        ConfigSchema.Core.ENABLED.runtimeFallback())
-                        || !reader.b(ConfigSchema.SystemSettings.PRISMAL_SWITCH.name(),
-                                ConfigSchema.SystemSettings.PRISMAL_SWITCH.runtimeFallback())) {
+                String incremental = android.os.Build.VERSION.INCREMENTAL;
+                if (!"OS3.0.310.0.WAOCNXM".equals(incremental)) {
+                    Api101Bridge.log("[DC][SettingsSwitch] ROM unsupported="
+                            + incremental + " expected=OS3.0.310.0.WAOCNXM");
                     return;
                 }
-                // Only a verified MIUIX SlidingButton is handled, with original callbacks
-                // and preference persistence retained. Other Settings widgets are untouched.
-                SystemSettingsPrismalSwitchHook.install(param.getClassLoader());
+                ConfigReader reader = ConfigReader.load();
+                boolean master = reader.b(ConfigSchema.Core.ENABLED.name(),
+                        ConfigSchema.Core.ENABLED.runtimeFallback());
+                boolean switches = reader.b(
+                        ConfigSchema.SystemSettings.PRISMAL_SWITCH.name(),
+                        ConfigSchema.SystemSettings.PRISMAL_SWITCH.runtimeFallback());
+                Api101Bridge.log("[DC][SettingsSwitch] config master=" + master
+                        + " switches=" + switches
+                        + " remoteKeyPresent="
+                        + reader.has(ConfigSchema.SystemSettings.PRISMAL_SWITCH.name()));
+                if (!master || !switches) return;
+                ClassLoader loader = param.getClassLoader();
+                if (!SystemSettingsPrismalSwitchHook.install(loader)) {
+                    Api101Bridge.log("[DC][SettingsSwitch] no vendor switches hooked");
+                }
             } catch (Throwable error) {
                 Api101Bridge.log("[DC][SettingsSwitch] bootstrap unavailable; stock retained", error);
             }
