@@ -45,6 +45,7 @@ internal data class GuiPresetChromePalette(
     val canvasWithoutGlass: Color,
     val cardFill: Color,
     val pillFill: Color,
+    val thumbFill: Color,
     val dangerFill: Color,
     val cardMaterial: Drawable,
     val pillMaterial: Drawable,
@@ -66,6 +67,7 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val canvasWithoutGlass = colorResource(R.color.gui_preset_canvas_glass_off)
     val cardFill = colorResource(R.color.gui_preset_card_fill)
     val pillFill = colorResource(R.color.gui_preset_pill_fill)
+    val thumbFill = colorResource(R.color.gui_preset_thumb_fill)
     val dangerFill = colorResource(R.color.gui_preset_danger_fill)
     val cardColor = colorResource(R.color.gui_preset_card_fill).toArgb()
     val pillColor = colorResource(R.color.gui_preset_pill_fill).toArgb()
@@ -103,13 +105,13 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
         )
     }
     return remember(
-        canvas, canvasWithoutGlass, cardFill, pillFill, dangerFill,
+        canvas, canvasWithoutGlass, cardFill, pillFill, thumbFill, dangerFill,
         cardMaterial, pillMaterial,
         thumbMaterial, dangerMaterial,
         rimStrong, rimMedium, rimWeak,
     ) {
         GuiPresetChromePalette(
-            canvas, canvasWithoutGlass, cardFill, pillFill, dangerFill,
+            canvas, canvasWithoutGlass, cardFill, pillFill, thumbFill, dangerFill,
         cardMaterial, pillMaterial,
             thumbMaterial, dangerMaterial,
             rimStrong, rimMedium, rimWeak,
@@ -137,7 +139,7 @@ internal fun Modifier.guiExactPrismalCornerChrome(
         GuiSolidChromeStyle.CARD -> palette.cardFill
         GuiSolidChromeStyle.PILL -> palette.pillFill
         GuiSolidChromeStyle.DANGER -> palette.dangerFill
-        GuiSolidChromeStyle.THUMB -> error("Idle thumb uses the original XML material")
+        GuiSolidChromeStyle.THUMB -> palette.thumbFill
     }
     return this.background(fill, shape).guiStaticSpecularRim(shape, palette)
 }
