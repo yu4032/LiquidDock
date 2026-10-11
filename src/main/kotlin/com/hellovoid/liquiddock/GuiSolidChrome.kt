@@ -65,7 +65,8 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
         requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_danger)).mutate()
     }
     // This is a pre-blurred 24dp, 4dp-Y-offset approximation of
-    // PrismalDepthShadow.Default (black, 10%). Only two shared images.
+    // PrismalDepthShadow.Default (black, 10%). Three shared images
+    // include the smaller 4dp, 5%-black original thumb shadow.
     val cardShadow = remember(context) {
         requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_depth_shadow_card)).mutate()
     }
@@ -81,7 +82,7 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     ) {
         GuiPresetChromePalette(
             canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
-            thumbMaterial, dangerMaterial, cardShadow, pillShadow,
+            thumbMaterial, dangerMaterial, cardShadow, pillShadow, thumbShadow,
         )
     }
 }
