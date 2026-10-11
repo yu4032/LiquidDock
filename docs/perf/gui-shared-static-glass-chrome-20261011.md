@@ -83,3 +83,26 @@ This adds up to one static shadow asset draw and one static material asset draw 
 `ModernSettingsArchitectureTest` explicitly guards the XML-intrinsic-size bug, static material/shadow ordering, original active Ambient/DepthShadow behavior, pre-baked mask existence and PNG format, and the white idle thumb resource.
 
 **Do not merge** before the user verifies rounded-corner reflections on all four corners, toggle/slider visibility, white idle handles, native press animation and frame time on dense pages.
+
+
+## Emergency hotfix: actual Android startup crash (supersedes the shadow proposal)
+
+User provided a full Android stacktrace proving an **unconditional launch crash**:
+`java.lang.IllegalArgumentException: Required value was null` at `GuiSolidChromeKt.rememberGuiPresetChromePalette(GuiSolidChrome.kt:71)`.
+
+At the exact shipped commit `409665f3`, source line 71 was:
+```kotlin
+requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_depth_shadow_card)).mutate()
+```
+Thus Android's drawable loader returned null for our new **card shadow PNG**, and `requireNotNull` crashed first composition before the UI could display. This is established by the stack, unlike earlier speculative theories about nine-slice drawing.
+
+**Immediate containment in PR #352:**
+- Reverted ALL of the new `guiBakedDepthShadow` code and modifier calls in Cell, Button, stepper, idle slider/toggle. **The visual shadow restoration from the preceding section is NOT active and is pending a safer design.**
+- Removed the three `gui_depth_shadow_{card,pill,thumb}.png` blobs to prevent accidental loading and reduce APK asset size.
+- Kept the separate proven bug fix: XML `ShapeDrawable` has no positive intrinsic dimensions and must draw at measured target size, or slider/toggle idle handles disappear.
+- Added a fail-open `loadGuiChromeOrSolidFallback` for the four remaining optional Card/Pill/Thumb/Danger materials: if `ContextCompat.getDrawable` returns null or throws a RuntimeException, log which resource failed and substitute a simple solid theme-colored `GradientDrawable`. **Missing decorative images can never be a fatal prerequisite for settings startup.**
+- Unit source contract now asserts absence of the crashed shadow loader, that every material has a null-safe fallback, and that thumb visibility and the native active Prismal `Ambient` path remain.
+
+No claim of restored shadows after this emergency rollback. First priority is that the settings App opens. After real-device startup confirmation, shadows and final Prismal edge fidelity should be revisited **only in a separate guarded incremental change** with device logs.
+
+PR remains Draft; do not merge an unverified crash fix.
