@@ -98,7 +98,8 @@ internal fun ModernSettingsScaffold(
     val backgroundLayer = rememberPrismalGlassLayer()
     val screenLayer = rememberPrismalGlassLayer()
     val overlayBackdrop = rememberPrismalMergedSource(backgroundLayer, screenLayer)
-    val background = MiuixTheme.colorScheme.background
+    val presetChrome = rememberGuiPresetChromePalette()
+    val background = presetChrome.canvas
     val surface = MiuixTheme.colorScheme.surface
     // PrismalGlassSurface's tint applies BlendMode.Hue before its alpha overlay.
     // A neutral surface fill avoids recoloring green/other content behind the bar.
@@ -133,6 +134,7 @@ internal fun ModernSettingsScaffold(
             LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
             LocalTouchPrismalBackdrop provides touchBackdrop,
             LocalStaticGlassChrome provides glassEnabled,
+            LocalGuiPresetChromePalette provides presetChrome,
         ) {
             Scaffold(
                 containerColor = Color.Transparent,
@@ -306,6 +308,7 @@ internal fun ModernSurface(
     // is allowed to allocate a PrismalBackdrop, offscreen GraphicsLayer or
     // continuously calculate background lighting/refraction.
     val staticChrome = LocalStaticGlassChrome.current
+    val presetChrome = LocalGuiPresetChromePalette.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
     val cardShape = RoundedCornerShape(24.dp)
@@ -322,7 +325,7 @@ internal fun ModernSurface(
             .clip(cardShape)
             .then(
                 if (staticChrome) {
-                    Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, darkTheme)
+                    Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)
                 } else {
                     Modifier.background(solidCardColor, cardShape)
                         .border(1.dp, cardStroke, cardShape)
@@ -431,6 +434,7 @@ internal fun Button(
     // Fixed Cell actions, including reset, draw opaque Compose fills.
     // No drawable allocation or per-Cell render nodes. Only slider/toggle gestures use live Prismal in the page body.
     val staticChrome = LocalStaticGlassChrome.current
+    val presetChrome = LocalGuiPresetChromePalette.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
     val buttonShape = RoundedCornerShape(minHeight / 2)
@@ -450,7 +454,7 @@ internal fun Button(
                 if (staticChrome) {
                     Modifier.guiSolidChrome(
                         if (destructive) GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL,
-                        darkTheme,
+                        presetChrome,
                     )
                 } else {
                     Modifier.background(fillColor, buttonShape)
