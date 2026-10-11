@@ -315,24 +315,59 @@ public class ModernSettingsArchitectureTest {
         // spatial light-direction requirement. Verify both theme qualifiers.
         for (String qualifier : new String[]{"drawable-xxhdpi", "drawable-night-xxhdpi"}) {
             for (String kind : new String[]{"card", "pill", "thumb"}) {
-                java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(Path.of(
-                        "src/main/res", qualifier, "gui_specular_" + kind + ".9.png").toFile());
-                assertTrue(image != null);
-                assertTrue(image.getColorModel().hasAlpha());
-                int width = image.getWidth();
-                int height = image.getHeight();
-                assertTrue(width >= 70);
-                assertTrue(height >= 60);
+                byte[] png = Files.readAllBytes(Path.of(
+                        "src/main/res", qualifier, "gui_specular_" + kind + ".9.png"));
+                assertTrue(png.length > 100);
+                // Minimal 4-bit indexed PNG decoder for the baked assets.
+                // Android unit-test Java does not expose desktop java.awt/ImageIO.
+                assertTrue((png[0] & 255) == 137 && png[1] == 80 && png[2] == 78
+                        && png[3] == 71);
+                int width = 0;
+                int height = 0;
+                byte[] alphaPalette = null;
+                java.io.ByteArrayOutputStream idat = new java.io.ByteArrayOutputStream();
+                for (int offset = 8; offset + 12 <= png.length;) {
+                    java.nio.ByteBuffer chunkInfo = java.nio.ByteBuffer.wrap(png, offset, 8)
+                            .order(java.nio.ByteOrder.BIG_ENDIAN);
+                    int length = chunkInfo.getInt();
+                    int type = chunkInfo.getInt();
+                    assertTrue(length >= 0 && offset + length + 12 <= png.length);
+                    if (type == 0x49484452) { // IHDR
+                        java.nio.ByteBuffer dimensions = java.nio.ByteBuffer.wrap(
+                                png, offset + 8, 8).order(java.nio.ByteOrder.BIG_ENDIAN);
+                        width = dimensions.getInt();
+                        height = dimensions.getInt();
+                        assertTrue((png[offset + 16] & 255) == 4); // 4-bit indexed
+                        assertTrue((png[offset + 17] & 255) == 3); // indexed palette
+                    } else if (type == 0x74524e53) { // tRNS
+                        alphaPalette = java.util.Arrays.copyOfRange(
+                                png, offset + 8, offset + 8 + length);
+                    } else if (type == 0x49444154) { // IDAT
+                        idat.write(png, offset + 8, length);
+                    }
+                    offset += length + 12;
+                }
+                assertTrue(width >= 70 && height >= 60);
+                assertTrue(alphaPalette != null && alphaPalette.length >= 16);
+                byte[] decompressed;
+                try (java.util.zip.InflaterInputStream inflater =
+                        new java.util.zip.InflaterInputStream(
+                                new java.io.ByteArrayInputStream(idat.toByteArray()))) {
+                    decompressed = inflater.readAllBytes();
+                }
+                int stride = (width + 1) / 2;
+                assertTrue(decompressed.length == (stride + 1) * height);
                 long upperLeftLight = 0;
                 long lowerRightLight = 0;
-                for (int y = 2; y < height / 4; y++) {
-                    for (int x = 2; x < width / 2; x++) {
-                        upperLeftLight += (image.getRGB(x, y) >>> 24) & 255;
-                    }
-                }
-                for (int y = height * 3 / 4; y < height - 2; y++) {
-                    for (int x = width / 2; x < width - 2; x++) {
-                        lowerRightLight += (image.getRGB(x, y) >>> 24) & 255;
+                for (int y = 2; y < height - 2; y++) {
+                    int row = y * (stride + 1);
+                    assertTrue((decompressed[row] & 255) == 0); // PNG filter NONE
+                    for (int x = 2; x < width - 2; x++) {
+                        int packed = decompressed[row + 1 + x / 2] & 255;
+                        int index = x % 2 == 0 ? packed >>> 4 : packed & 15;
+                        int alpha = alphaPalette[index] & 255;
+                        if (x < width / 2 && y < height / 4) upperLeftLight += alpha;
+                        if (x >= width / 2 && y >= height * 3 / 4) lowerRightLight += alpha;
                     }
                 }
                 assertTrue("Baked white reflection must favor the upper-left key light: "
