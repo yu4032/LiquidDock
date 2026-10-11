@@ -204,9 +204,12 @@ LiquidDock is a community project and is not affiliated with Xiaomi, LSPosed, or
 
 ## Credits
 
-- **Prismal** — Liquid Glass visual reference
-- **LSPosed / libxposed** — module runtime
-- **HyperCeiler** — HyperOS module development reference
+- [Compose Miuix](https://github.com/compose-miuix-ui/miuix) — MIUIX Compose UI framework
+- [PrismalAGSL](https://github.com/styropyr0/PrismalAGSL) — Liquid Glass components for the settings UI
+- [AndroidX / Jetpack](https://source.android.com/docs/setup/about/licenses) — Android UI and foundation components
+- [LSPosed / libxposed](https://github.com/LSPosed/LSPosed) — module hooking API and runtime
+- [HyperCeiler](https://github.com/ReChronoRain/HyperCeiler) — HyperOS module development reference
+- [Prismal](https://github.com/styropyr0/Prismal) — Liquid Glass optical model reference
 
 ## License
 
