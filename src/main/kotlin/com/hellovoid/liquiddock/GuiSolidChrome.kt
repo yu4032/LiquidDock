@@ -276,19 +276,16 @@ internal fun Modifier.guiStaticSpecularRim(
     compact: Boolean = false,
 ): Modifier = this.drawWithCache {
     val outline = shape.createOutline(size, layoutDirection, this)
-    val colorStops = arrayOf(
-        0f to palette.rimWeak,      // right side
+    val whiteReflection = Brush.sweepGradient(
+        0f to palette.rimWeak,       // right side
         0.125f to palette.rimStrong, // bottom-right corner
-        0.25f to palette.rimMedium, // bottom side
+        0.25f to palette.rimMedium,  // bottom side
         0.375f to palette.rimMedium, // bottom-left corner
-        0.5f to palette.rimWeak,   // left side
+        0.5f to palette.rimWeak,     // left side
         0.625f to palette.rimStrong, // top-left corner
-        0.75f to palette.rimMedium, // top side
+        0.75f to palette.rimMedium,  // top side
         0.875f to palette.rimMedium, // top-right corner
         1f to palette.rimWeak,
-    )
-    val whiteReflection = Brush.sweepGradient(
-        colorStops = colorStops,
         center = Offset(size.width / 2f, size.height / 2f),
     )
     val contrastWidth = if (compact) 2.2.dp.toPx() else 1.8.dp.toPx()
@@ -330,11 +327,12 @@ internal fun Modifier.guiStaticSoftShadow(
     } else {
         floatArrayOf(0.008f, 0.016f, 0.025f)
     }
+    val shadowColors = opacities.map { Color.Black.copy(alpha = it) }
     onDrawBehind {
         translate(top = offsetY) {
             for (i in layers.indices) {
                 drawOutline(
-                    outline, color = Color.Black.copy(alpha = opacities[i]),
+                    outline, color = shadowColors[i],
                     style = Stroke(width = layers[i]),
                 )
             }
