@@ -154,6 +154,14 @@ Perfetto 分段诊断已经进入 main：
 
 ---
 
+## 系统设置 Prismal 控件适配（预留）
+
+**状态：仅加入 `com.android.settings` LSPosed 作用域；暂不安装任何 Settings 控件 Hook。**
+
+后续依据 `hyperos-analysis` 同版本 Settings canonical JADX 产物，先定位具体 MIUIX Preference 按钮和滑动条的真实 owner。每次仅适配一个已验证的控件类型，复用原始 listener、数值写入与可访问性语义；仅接管视觉层。使用精确页面/类加载器检查与 fail-closed 机制，不得全局 Hook `android.widget.Button`/`SeekBar`，不得把 Prismal 控件直接覆盖到整个 View 树；保留原生 fallback。需要 CI + 关键 Settings 页面真机验收，再扩展覆盖。
+
+---
+
 # P3 · Architecture and compatibility
 
 ## 7. RootPassBlur / glass session ownership audit
