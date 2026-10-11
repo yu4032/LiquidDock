@@ -30,11 +30,12 @@ public class PrismalOs4InvariantShaderTest {
         for (float x : new float[]{-2f, -0.5f, 0f, 0.77f, 2.3f}) {
             for (float y : new float[]{-1.8f, -0.8f, 0f, 0.65f, 2.1f}) {
                 for (float ior : new float[]{1.01f, 1.15f, 1.5f, 2f, 4f}) {
-                    PrismalParams p = PrismalParams.builder()
-                            .lightDir(x, y)
-                            .ior(ior)
-                            .shadowSoftness(7.5f)
-                            .build();
+                    PrismalParams.Builder builder = PrismalParams.builder();
+                    builder.lightDirX = x;
+                    builder.lightDirY = y;
+                    builder.ior = ior;
+                    builder.shadowSoftness = 7.5f;
+                    PrismalParams p = builder.build();
                     float[] out = new float[10];
                     PrismalOs4InvariantShader.compute(p, out);
 
@@ -54,11 +55,13 @@ public class PrismalOs4InvariantShaderTest {
 
     @Test public void shadowExtentClampsLikeOpticalEdgeShader() {
         float[] out = new float[10];
-        PrismalOs4InvariantShader.compute(
-                PrismalParams.builder().shadowSoftness(-100f).build(), out);
+        PrismalParams.Builder low = PrismalParams.builder();
+        low.shadowSoftness = -100f;
+        PrismalOs4InvariantShader.compute(low.build(), out);
         assertEquals(0.15f, out[9], 0.000001f);
-        PrismalOs4InvariantShader.compute(
-                PrismalParams.builder().shadowSoftness(100f).build(), out);
+        PrismalParams.Builder high = PrismalParams.builder();
+        high.shadowSoftness = 100f;
+        PrismalOs4InvariantShader.compute(high.build(), out);
         assertEquals(0.60f, out[9], 0.000001f);
     }
 
