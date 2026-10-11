@@ -431,12 +431,12 @@ Dock 页面保留“Dock 尺寸过渡动画”和“LiquidDock 顺滑尺寸动�
 | `com.miui.securitycenter` | 安全中心侧边栏 |
 | `com.google.android.inputmethod.latin` | Gboard |
 | `com.android.quicksearchbox` | MIUI 系统搜索 |
-| `com.android.settings` | 系统设置 MIUIX 原生 Canvas/AGSL 玻璃开关试验（默认关闭） |
+| `com.android.settings` | Settings 原生开关 PrismalAGSL 组件替换与 GPU 背景采样（默认关闭） |
 | `system` | 可选的壁纸 GPU 渲染开关，需重启设备 |
 
 只需要某一项扩展时，可以只为对应应用勾选额外作用域。
 
-系统设置独立试验开关：仅在确认的 OS3.0.310.0.WAOCNXM 版本里，使用 MIUIX `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 原有的 `onDraw(Canvas)` 绘制以 GuiOnTouchPrismalToggle 为比例和动效依据的 Canvas/AGSL 玻璃质感（64×28dp 轨道、40×24dp 玻璃胶囊滑块、20dp 行程、按压形变、弹簧过渡）。仅观察原生触摸与状态事件用于绘制；原生触摸、设置项回调、状态和持久化均保留；不再注入 ComposeView 或使用 Prismal 的 App Startup。没有真实的背景捕获或折射；软件 Canvas 降级为渐变玻璃，遇绘制异常直接还原 MIUIX onDraw。默认关闭，需重启系统设置作用域，仍待真机验收。
+系统设置独立试验开关：仅针对 OS3.0.310.0.WAOCNXM，保留 MIUIX 原始 CompoundButton 作为设置逻辑、校验、持久化和无障碍代理，隐藏原生绘制；可见与可触摸开关改由 LiquidDock GUI 中真实的 `GuiOnTouchPrismalToggle`/PrismalAGSL 绘制。每个 Settings 窗口共享 GPU `RenderNode` 录制原生内容，再以 `PrismalBackdrop` 把场景接入玻璃光学管线；不使用 Bitmap、PixelCopy、ScreenCapture 或 CPU 图像读取。首次绑定从 LiquidDock APK 显式初始化 Prismal 着色器，失败则不替换原生组件。该方案仍需真机验证坐标、渲染、性能与原生状态同步，默认关闭，修改后重启 Settings。
 
 ---
 
