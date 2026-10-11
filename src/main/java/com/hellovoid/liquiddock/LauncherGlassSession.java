@@ -812,9 +812,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
+        int nextRotation = readLauncherConfigRotation(root);
         updateStableCompositorClip(
                 root, staticSnapshot, staticRootTransformValid,
-                geometryMotionChanged || staticChanged || rotationSettlePending);
+                geometryMotionChanged || staticChanged || rotationSettlePending
+                        || nextRotation != configRotation
+                        || LauncherGlassSceneController.isRecentsCoveredByVendor());
 
         if (geometryMotionChanged
                 && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
@@ -829,7 +832,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         applyTransitionFrameSync(
                 transitionFrameSync.onPreDraw(geometryMotionChanged), root);
 
-        int nextRotation = readLauncherConfigRotation(root);
         if (nextRotation != configRotation) {
             configRotation = nextRotation;
             beginRotationSettle(nextRotation);
