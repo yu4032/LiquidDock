@@ -1,67 +1,127 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Canvas;
-import android.view.View;
+import android.os.SystemClock;
+import android.view.MotionEvent;
 import android.widget.CompoundButton;
 
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
 /**
- * Opt-in, Settings-only experiment: replace the presentation of MIUIX SlidingButton.
- * The original CompoundButton remains the sole state/click authority.
+ * HyperOS Settings MIUIX switches only. The system still owns click/persistence.
  *
- * We do not hook framework CompoundButton or Settings preference persistence.
+ * The OS3 Settings layouts use SlidingButton (checkbox rows), SlidingSwitch
+ * (switch rows and SettingsMainSwitchBar), and SlidingSwitchCompat. Hook only
+ * declared virtual overrides in these vendor classes, never framework methods.
  */
 final class SystemSettingsPrismalSwitchHook {
     static final String TARGET_CLASS = "miuix.slidingwidget.widget.SlidingButton";
-    private static final WeakHashMap<CompoundButton, Boolean> QUEUED = new WeakHashMap<>();
+    static final String TARGET_SWITCH = "miuix.slidingwidget.widget.SlidingSwitch";
+    static final String TARGET_SWITCH_COMPAT = "miuix.slidingwidget.widget.SlidingSwitchCompat";
+    private static final String TAG = "[DC][SettingsSwitch]";
+    private static final String[] TARGETS = {
+            TARGET_CLASS, TARGET_SWITCH, TARGET_SWITCH_COMPAT
+    };
+    private static final WeakHashMap<CompoundButton, Long> LAST_TRIED = new WeakHashMap<>();
     private static boolean installed;
     private static volatile boolean disabledByPresentationFailure;
+    private static int candidateDraws;
+    private static int attachedCount;
 
     private SystemSettingsPrismalSwitchHook() {}
 
     static synchronized boolean install(ClassLoader loader) {
         if (installed) return true;
-        if (loader == null) return false;
-        try {
-            Class<?> target = Class.forName(TARGET_CLASS, false, loader);
-            if (!CompoundButton.class.isAssignableFrom(target)) {
-                Api101Bridge.log("[DC][SettingsSwitch] SlidingButton is not a CompoundButton; stock retained");
-                return false;
-            }
-
-            Method ownerMethod = target.getDeclaredMethod("onDraw", Canvas.class);
-            if (ownerMethod.getDeclaringClass() != target) return false;
-            ownerMethod.setAccessible(true);
-            HookUtil.hook(ownerMethod, chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object result = chain.proceed(args);
-                Object owner = chain.getThisObject();
-                if (owner instanceof CompoundButton) {
-                    try {
-                        enqueue((CompoundButton) owner);
-                    } catch (Throwable error) {
-                        disabledByPresentationFailure = true;
-                        Api101Bridge.log("[DC][SettingsSwitch] callback failed; stock retained", error);
-                    }
-                }
-                return result;
-            });
-            installed = true;
-            Api101Bridge.log("[DC][SettingsSwitch] MIUIX SlidingButton presenter hook installed");
-            return true;
-        } catch (Throwable error) {
-            Api101Bridge.log("[DC][SettingsSwitch] unsupported vendor method; stock retained", error);
+        if (loader == null) {
+            Api101Bridge.log(TAG + " install skipped: Settings classLoader=null");
             return false;
+        }
+        int hooks = 0;
+        for (String name : TARGETS) {
+            try {
+                Class<?> target = Class.forName(name, false, loader);
+                if (!CompoundButton.class.isAssignableFrom(target)) {
+                    Api101Bridge.log(TAG + " invalid type=" + name);
+                    continue;
+                }
+                Method method = findSafeTarget(target);
+                if (method == null) {
+                    Api101Bridge.log(TAG + " no declared UI override class=" + name);
+                    continue;
+                }
+                HookUtil.hook(method, chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    // Do not swallow Settings native exceptions or mutate business behavior.
+                    Object result = chain.proceed(args);
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof CompoundButton) {
+                        try {
+                            if (candidateDraws++ < 8) {
+                                Api101Bridge.log(TAG + " observed class="
+                                        + owner.getClass().getName()
+                                        + " viewId=" + ((CompoundButton) owner).getId());
+                            }
+                            enqueue((CompoundButton) owner);
+                        } catch (Throwable error) {
+                            Api101Bridge.log(TAG + " candidate skipped; native drawing retained", error);
+                        }
+                    }
+                    return result;
+                });
+                hooks++;
+                Api101Bridge.log(TAG + " hooked " + name + "#"
+                        + method.getName() + " (Settings loader)");
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " vendor hook unavailable class=" + name
+                        + " (other switches continue)", error);
+            }
+        }
+        installed = hooks > 0;
+        Api101Bridge.log(TAG + " installation complete hooks=" + hooks);
+        return installed;
+    }
+
+    private static Method findSafeTarget(Class<?> target) {
+        // onDraw is confirmed in canonical SlidingButton.java. Other MIUIX
+        // siblings may use different overrides; resolve rather than assume.
+        Method candidate = declared(target, "onDraw", Canvas.class);
+        if (candidate == null) {
+            candidate = declared(target, "onMeasure", int.class, int.class);
+        }
+        if (candidate == null) {
+            candidate = declared(target, "setChecked", boolean.class);
+        }
+        if (candidate == null) {
+            candidate = declared(target, "onTouchEvent", MotionEvent.class);
+        }
+        return candidate;
+    }
+
+    private static Method declared(Class<?> type, String name, Class<?>... args) {
+        try {
+            Method method = type.getDeclaredMethod(name, args);
+            method.setAccessible(true);
+            return method;
+        } catch (NoSuchMethodException missing) {
+            return null;
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " member inaccessible: " + type.getName()
+                    + "#" + name, error);
+            return null;
         }
     }
 
     private static void enqueue(CompoundButton switchView) {
         if (disabledByPresentationFailure || !switchView.isAttachedToWindow()) return;
-        synchronized (QUEUED) {
-            if (QUEUED.containsKey(switchView)) return;
-            QUEUED.put(switchView, Boolean.TRUE);
+        if (SystemSettingsPrismalSwitchOverlay.isAttached(switchView)) return;
+        long now = SystemClock.uptimeMillis();
+        synchronized (LAST_TRIED) {
+            Long last = LAST_TRIED.get(switchView);
+            // The first draw can occur before the Preference row is attached or
+            // measured. Throttle follow-up attempts; don't permanently blacklist it.
+            if (last != null && now - last < 600L) return;
+            LAST_TRIED.put(switchView, now);
         }
         switchView.post(() -> {
             try {
@@ -71,16 +131,21 @@ final class SystemSettingsPrismalSwitchHook {
                 }
                 if (!SystemSettingsPrismalSwitchOverlay.attach(switchView)) {
                     disabledByPresentationFailure = true;
-                    Api101Bridge.log("[DC][SettingsSwitch] overlay creation failed; future overlays disabled until Settings restart");
+                    Api101Bridge.log(TAG + " visual failed; disabling new overlays until restart");
+                } else if (SystemSettingsPrismalSwitchOverlay.isAttached(switchView)) {
+                    if (attachedCount++ < 8) {
+                        Api101Bridge.log(TAG + " visual attached class="
+                                + switchView.getClass().getName());
+                    }
                 }
             } catch (Throwable error) {
                 disabledByPresentationFailure = true;
-                Api101Bridge.log("[DC][SettingsSwitch] presentation failed; stock retained", error);
+                Api101Bridge.log(TAG + " visual exception; native control retained", error);
             }
         });
     }
 
     static void onDetached(CompoundButton switchView) {
-        synchronized (QUEUED) { QUEUED.remove(switchView); }
+        synchronized (LAST_TRIED) { LAST_TRIED.remove(switchView); }
     }
 }
