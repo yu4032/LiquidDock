@@ -30,7 +30,7 @@ internal fun SystemSettingsPage(
                     prefs,
                     ConfigSchema.SystemSettings.PRISMAL_SWITCH,
                     "使用原生玻璃开关",
-                    "试验功能，默认关闭。绘制玻璃质感和边缘高光；保留原生触摸、校验和状态写入，着色器失败时回退系统绘制。启用或关闭后重启「系统设置」。",
+                    "试验功能，默认关闭。参照 Prismal 原组件的 64×28 轨道、40×24 玻璃滑块与触控弹簧动画；保留原生校验与状态提交。尚不支持实际背景折射。启用或关闭后需重启「系统设置」。",
                     enabled = masterEnabled,
                 )
             }
