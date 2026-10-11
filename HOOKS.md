@@ -388,7 +388,16 @@ once per native switch (hardware Canvas only) for procedurally shaded
 capsules, track and thumb. If it cannot construct/draw AGSL, render using
 ordinary Android Canvas gradients. If painter fails entirely,
 the hook **proceeds** to the original MIUIX drawing method. The native View
-still handles its own touch/checked/accessibility/persistence. No additional
+still handles its own touch/checked/accessibility/persistence. LiquidDock additionally
+observes the vendor onTouchEvent(MotionEvent) and setChecked(boolean) **after** each
+native callback returns, to run a separate Choreographer-driven visual spring
+without intercepting touch or writing state. The visual is sourced from
+GuiOnTouchPrismalToggle: 64×28dp track, 40×24dp translucent capsule thumb,
+20dp travel and 1.5× pressed scale with short velocity deformation. Its colors
+are #34C759 light / #30D158 dark and a low-opacity gray off-track.
+The runtime AGSL contributes SDF rim/specular/chromatic styling; the real
+Prismal scene backdrop/lens refraction cannot be reproduced from a naked
+MIUIX Canvas and is therefore explicitly out of scope. No additional
 View, window, bitmap, PixelCopy, ScreenCapture, or active backdrop producer
 is created. The material does **not** sample Settings' underlying content,
 so it must not be described as full Prismal background refraction.
