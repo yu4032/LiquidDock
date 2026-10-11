@@ -36,7 +36,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.styropyr0.prismal.PrismalBackdrop
-import com.styropyr0.prismal.components.PrismalGlassButton
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -60,7 +59,6 @@ internal fun RestartScopesDialog(
 ) {
     // Restart dialog is body chrome. It must not sample the header/footer
     // backdrop or install Prismal's per-control gesture/shader pipeline.
-    val backdrop = LocalPrismalSurfaceBackdrop.current
     // The scrim fades without changing backdrop ownership; only the panel
     // receives the spring scale (never scale the complete fullscreen scrim).
     val panelScale by animateFloatAsState(
@@ -149,47 +147,19 @@ internal fun RestartScopesDialog(
                     .padding(top = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                if (backdrop != null) {
-                    PrismalGlassButton(
-                        onClick = { if (selected.isNotEmpty()) onRestart(selected.toSet()) },
-                        backdrop = backdrop,
-                        modifier = Modifier.alpha(if (selected.isNotEmpty()) 1f else 0.38f),
-                        isInteractive = selected.isNotEmpty(),
-                        height = 42.dp,
-                        blurRadius = 7.dp,
-                        refractionHeight = 9.dp,
-                        refractionAmount = 12.dp,
-                        pressLift = 0.dp,
-                        contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
-                        tint = Color(0xFFD73333),
-                        tintAlpha = 0.92f,
-                        depthEffect = false,
-                        depthShadow = null,
-                    ) {
-                        Text(
-                            text = "重启",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(21.dp))
-                            .background(Color(0xFFD73333))
-                            .alpha(if (selected.isNotEmpty()) 1f else 0.38f)
-                            .clickable(enabled = selected.isNotEmpty()) {
-                                onRestart(selected.toSet())
-                            }
-                            .padding(horizontal = 26.dp, vertical = 11.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "重启",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
+                Button(
+                    onClick = { onRestart(selected.toSet()) },
+                    enabled = selected.isNotEmpty(),
+                    minHeight = 42.dp,
+                    minWidth = 100.dp,
+                    insideMargin = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                    destructive = true,
+                ) {
+                    Text(
+                        text = "重启",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
