@@ -67,6 +67,26 @@ public class PrismalOpticalEdgeShaderTest {
         assertTrue(patched.contains("max(u_os4DirectionalOppositeIntensity, 0.0)"));
     }
     @Test
+    public void os4NormalReusesPreDiscardSdfDerivativesInsteadOfFourExtraSdfEvaluations() {
+        String patched = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
+        assertTrue(patched.contains(
+                "dFdx(distMask) / max(edgePixelStep.x, 1e-3)"));
+        assertTrue(patched.contains(
+                "-dFdy(distMask) / max(edgePixelStep.y, 1e-3)"));
+        assertTrue(patched.contains(
+                "vec3 os4EdgeNormal3 = normalize(vec3(os4SdfGradient, 1.0));"));
+        assertFalse(patched.contains("float sdfXp = sdRoundBox("));
+        assertFalse(patched.contains("float sdfXn = sdRoundBox("));
+        assertFalse(patched.contains("float sdfYp = sdRoundBox("));
+        assertFalse(patched.contains("float sdfYn = sdRoundBox("));
+
+        int derivative = patched.indexOf("vec2 os4SdfGradient = vec2(");
+        int discard = patched.indexOf("if (opacity < 0.001) discard;");
+        assertTrue("derivatives must be evaluated before divergent discard",
+                derivative >= 0 && derivative < discard);
+    }
+
+    @Test
     public void normalDebugShowsActualOs4EdgeNormalAndDirectionalLighting() {
         String patched = PrismalComponentGateShader.apply(
                 PrismalOpticalEdgeShader.apply(

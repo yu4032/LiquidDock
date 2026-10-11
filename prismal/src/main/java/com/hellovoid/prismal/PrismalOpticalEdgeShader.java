@@ -99,6 +99,12 @@ public final class PrismalOpticalEdgeShader {
                 .replace(EDGE_DISTANCE, EDGE_DISTANCE + "\n"
                         + "    float opticalEdgeScale = clamp(u_highlightWidth, 0.5, 3.0);\n"
                         + "    float edgeAa = max(fwidth(distMask), 0.75);\n"
+                        + "    // distMask is already available before discard. Reuse the same\n"
+                        + "    // derivative quad that fwidth() uses instead of evaluating the\n"
+                        + "    // expensive rounded-box SDF four more times per fragment.\n"
+                        + "    vec2 os4SdfGradient = vec2(\n"
+                        + "            dFdx(distMask) / max(edgePixelStep.x, 1e-3),\n"
+                        + "            -dFdy(distMask) / max(edgePixelStep.y, 1e-3));\n"
                         + "    float os4DefaultEdgeWidthPx = clamp(6.0 * opticalEdgeScale, 3.0, 18.0);\n"
                         + "    float os4EdgeWidthPx = u_os4EdgeWidthPx > 0.0\n"
                         + "            ? u_os4EdgeWidthPx : os4DefaultEdgeWidthPx;\n"
@@ -120,19 +126,7 @@ public final class PrismalOpticalEdgeShader {
                         float shadowExt = mix(0.15, 0.60, clamp(u_shadowSoftness / 20.0, 0.0, 1.0));
                         """)
                 .replace(OUTWARD, OUTWARD + "\n"
-                        + "    float sdfXp = sdRoundBox(pPx + vec2(edgePixelStep.x, 0.0),\n"
-                        + "            halfSz, crMask, u_sminSmoothing);\n"
-                        + "    float sdfXn = sdRoundBox(pPx - vec2(edgePixelStep.x, 0.0),\n"
-                        + "            halfSz, crMask, u_sminSmoothing);\n"
-                        + "    float sdfYp = sdRoundBox(pPx + vec2(0.0, edgePixelStep.y),\n"
-                        + "            halfSz, crMask, u_sminSmoothing);\n"
-                        + "    float sdfYn = sdRoundBox(pPx - vec2(0.0, edgePixelStep.y),\n"
-                        + "            halfSz, crMask, u_sminSmoothing);\n"
-                        + "    vec2 sdfEdgeGradient = 0.5 * vec2(\n"
-                        + "            (sdfXp - sdfXn) / max(edgePixelStep.x, 1e-3),\n"
-                        + "            (sdfYp - sdfYn) / max(edgePixelStep.y, 1e-3));\n"
-                        + "    sdfEdgeGradient.y = -sdfEdgeGradient.y;\n"
-                        + "    vec3 os4EdgeNormal3 = normalize(vec3(sdfEdgeGradient, 1.0));")
+                        + "    vec3 os4EdgeNormal3 = normalize(vec3(os4SdfGradient, 1.0));")
                 .replace(REFLECTION_MIX, REFLECTION_MIX + "\n"
                         + "    float os4DefaultReflectOffsetPx = clamp(u_glassThickness * 0.38, 4.0, 14.0);\n"
                         + "    float os4ReflectOffsetPx = u_os4ReflectOffsetPx > 0.0\n"
