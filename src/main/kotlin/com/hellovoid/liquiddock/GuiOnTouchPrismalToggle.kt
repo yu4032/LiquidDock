@@ -235,7 +235,6 @@ internal fun GuiOnTouchPrismalToggle(
                 ) else Modifier
                 )
                 .size(40.dp, 24.dp)
-                .then(if (samplingEnabled) Modifier.guiThumbHighlight(presetChrome) else Modifier)
         ) {
             if (!samplingEnabled) {
                 // Draw a plain-color thumb while keeping the original spring transform.
