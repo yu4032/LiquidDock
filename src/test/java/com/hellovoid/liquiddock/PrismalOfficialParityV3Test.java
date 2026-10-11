@@ -54,8 +54,6 @@ public class PrismalOfficialParityV3Test {
         assertEquals(180, p.get("liquid_thickness_tenths"));
         assertEquals(1, p.get("liquid_lens_refraction"));
         assertEquals(13, p.get("liquid_lens_refraction_tenths"));
-        assertEquals(152, p.get("liquid_specular_strength"));
-        assertEquals(122, p.get("liquid_rim_light"));
         assertEquals(0, p.get("liquid_tint_r"));
         assertEquals(0, p.get("liquid_tint_g"));
         assertEquals(0, p.get("liquid_tint_b"));
@@ -73,7 +71,6 @@ public class PrismalOfficialParityV3Test {
         assertEquals(100, p.get("liquid_prismal_dispersion_r"));
         assertEquals(100, p.get("liquid_prismal_dispersion_b"));
         assertEquals(128, p.get("liquid_prismal_vibrancy"));
-        assertEquals(8, p.get("liquid_prismal_plain_highlight"));
         assertEquals(0, p.get("liquid_prismal_light_dir_x"));
         assertEquals(-80, p.get("liquid_prismal_light_dir_y"));
         assertEquals(0, p.get("liquid_prismal_shadow_r"));

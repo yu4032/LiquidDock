@@ -147,6 +147,34 @@ public class ConfigSchemaTest {
     }
 
     @Test
+    public void os4ReplacementRetiresUnusedOpticalKeysAndProfiles() {
+        java.util.Set<String> removed = java.util.Set.of(
+                "liquid_specular_sharp", "liquid_specular_strength",
+                "liquid_rim_light", "liquid_prismal_plain_highlight",
+                "liquid_edge_band", "liquid_highlight_alpha",
+                "launcher_surface_component_specular",
+                "launcher_surface_component_lit_rim",
+                "launcher_surface_component_opposite_rim",
+                "launcher_surface_component_corner_rim",
+                "launcher_surface_component_face_sheen",
+                "launcher_surface_component_plain_highlight",
+                "launcher_large_surface_component_specular",
+                "launcher_large_surface_component_lit_rim",
+                "launcher_large_surface_component_opposite_rim",
+                "launcher_large_surface_component_corner_rim",
+                "launcher_large_surface_component_face_sheen",
+                "launcher_large_surface_component_plain_highlight");
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            org.junit.Assert.assertFalse("obsolete schema key: " + key.name(),
+                    removed.contains(key.name()));
+        }
+        for (String key : removed) {
+            org.junit.Assert.assertFalse("obsolete preset key: " + key,
+                    PresetManager.defaultValues().containsKey(key));
+        }
+    }
+
+    @Test
     public void composeLiquidSpecsExposeOnlyActiveOpticalControls() {
         assertComposeIntSpec(ConfigSchema.Glass.BLUR, 2, 0, 60);
         assertComposeIntSpec(ConfigSchema.Glass.THICKNESS, 18, 1, 60);
@@ -162,9 +190,6 @@ public class ConfigSchemaTest {
         assertComposeIntSpec(ConfigSchema.Glass.TINT_BLUE, 255, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, 100, 50, 300);
         assertComposeIntSpec(ConfigSchema.Glass.BRIGHTNESS, 108, 50, 200);
-        assertComposeIntSpec(ConfigSchema.Glass.SPECULAR_SHARPNESS, 88, 1, 200);
-        assertComposeIntSpec(ConfigSchema.Glass.SPECULAR_STRENGTH, 152, 0, 300);
-        assertComposeIntSpec(ConfigSchema.Glass.RIM_LIGHT, 122, 0, 300);
         assertComposeIntSpec(ConfigSchema.Glass.CAUSTICS, 28, 0, 100);
     }
 
@@ -179,7 +204,6 @@ public class ConfigSchemaTest {
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_R, 100, 0, 400);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_B, 100, 0, 400);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, 128, 0, 300);
-        assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT, 8, 0, 100);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X, -50, -200, 200);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y, -80, -200, 200);
         assertComposeIntSpec(ConfigSchema.Glass.PRISMAL_SHADOW_RED, 255, 0, 255);

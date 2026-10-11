@@ -193,7 +193,7 @@ public class ModernSettingsArchitectureTest {
         String source = Files.readString(UI);
         String[] pages = {
                 "LiquidMaterial", "LiquidRefraction", "LiquidColor", "LiquidLighting",
-                "LiquidShadow", "LiquidSampling", "LiquidOs4",
+                "LiquidShadow", "LiquidSampling",
                 "GlassIcons", "GlassWidgets", "GlassFolders", "GlassMenus",
                 "WorkstationDock", "WorkstationDesktop",
                 "WorkstationAppsLandscape", "WorkstationAppsPortrait",
@@ -206,6 +206,18 @@ public class ModernSettingsArchitectureTest {
         assertTrue(Files.readString(GLASS_PAGES).contains("internal fun GlassComponentsPage("));
         assertTrue(Files.readString(GLASS_PAGES).contains("internal fun LiquidSamplingPage("));
         assertTrue(Files.readString(GLASS_PAGES).contains("internal fun LiquidSpecPage("));
+        String glassPages = Files.readString(GLASS_PAGES);
+        String navModel = Files.readString(NAVIGATION_MODEL);
+        String options = Files.readString(OPTION_SPECS);
+        assertTrue(glassPages.contains("internal fun LiquidLightingPage("));
+        assertTrue(glassPages.contains("groupedIntSettings(liquidLightingSpecs, prefs, enabled)"));
+        assertTrue(glassPages.contains("groupedIntSettings(liquidOs4Specs, prefs, enabled)"));
+        assertTrue(source.contains("Page.LiquidLighting -> LiquidLightingPage("));
+        assertFalse(source.contains("Page.LiquidOs4"));
+        assertFalse(navModel.contains("Page.LiquidOs4"));
+        assertFalse(navModel.contains("LiquidOs4("));
+        assertTrue(options.contains("internal val liquidOs4Specs = liquidSpecsFor("));
+        assertTrue(options.contains("ConfigSchema.Glass.OS4_REFLECTION_STRENGTH"));
     }
 
     @Test
@@ -921,8 +933,10 @@ public class ModernSettingsArchitectureTest {
                         + widgetCatalog + "\n" + widgetDetail + "\n"
                         + dialog + "\n" + sideSlide + "\n" + recent);
         while (configMatcher.find()) configRefs.add(configMatcher.group());
-        assertTrue("original GUI ConfigSchema coverage must not shrink: " + configRefs.size(),
-                configRefs.size() >= 229);
+        // The enforced OS4 edge replaces legacy specular/rim/plain highlight controls.
+        // Keep the active GUI catalog size stable rather than counting retired keys.
+        assertTrue("active GUI ConfigSchema coverage must not shrink: " + configRefs.size(),
+                configRefs.size() >= 215);
         assertTrue(configRefs.contains("ConfigSchema.Debug.LOGGING"));
         assertTrue(configRefs.contains("ConfigSchema.Glass.PRISMAL_SHOW_NORMALS"));
 

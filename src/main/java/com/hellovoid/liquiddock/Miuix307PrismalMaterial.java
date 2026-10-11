@@ -29,7 +29,6 @@ final float chromaticAberration;
         final float dispersionR;
         final float dispersionB;
         final float vibrancy;
-        final float plainHighlight;
         final float brightness;
         final float highlightWidth;
         final float os4EdgeWidthPx;
@@ -41,9 +40,6 @@ final float chromaticAberration;
         final float os4DirectionalOppositeIntensity;
         final float lightDirX;
         final float lightDirY;
-        final float specularStrength;
-        final float specularSharp;
-        final float rimLight;
         final float causticIntensity;
         final float shadowSoftness;
         final float transmittance;
@@ -78,7 +74,6 @@ final float chromaticAberration;
                 float dispersionR,
                 float dispersionB,
                 float vibrancy,
-                float plainHighlight,
                 float brightness,
                 float highlightWidth,
                 float os4EdgeWidthPx,
@@ -90,9 +85,6 @@ final float chromaticAberration;
                 float os4DirectionalOppositeIntensity,
                 float lightDirX,
                 float lightDirY,
-                float specularStrength,
-                float specularSharp,
-                float rimLight,
                 float causticIntensity,
                 float shadowSoftness,
                 float transmittance,
@@ -125,7 +117,6 @@ final float chromaticAberration;
             this.dispersionR = dispersionR;
             this.dispersionB = dispersionB;
             this.vibrancy = vibrancy;
-            this.plainHighlight = plainHighlight;
             this.brightness = brightness;
             this.highlightWidth = highlightWidth;
             this.os4EdgeWidthPx = os4EdgeWidthPx;
@@ -137,9 +128,6 @@ final float chromaticAberration;
             this.os4DirectionalOppositeIntensity = os4DirectionalOppositeIntensity;
             this.lightDirX = lightDirX;
             this.lightDirY = lightDirY;
-            this.specularStrength = specularStrength;
-            this.specularSharp = specularSharp;
-            this.rimLight = rimLight;
             this.causticIntensity = causticIntensity;
             this.shadowSoftness = shadowSoftness;
             this.transmittance = transmittance;
@@ -183,7 +171,6 @@ final float chromaticAberration;
                 1f,
                 1f,
                 1.28f,
-                0.08f,
                 1.08f,
                 1f,
                 6f,
@@ -195,9 +182,6 @@ final float chromaticAberration;
                 0.14f,
                 -0.5f,
                 -0.8f,
-                1.52f,
-                88f,
-                1.22f,
                 0.28f,
                 10f,
                 1f,
@@ -244,7 +228,6 @@ final float chromaticAberration;
                 glass.prismalDispersionR,
                 glass.prismalDispersionB,
                 glass.prismalVibrancy,
-                glass.prismalPlainHighlight,
                 glass.brightness,
                 glass.highlightWidth,
                 glass.os4EdgeWidthPx,
@@ -256,9 +239,6 @@ final float chromaticAberration;
                 glass.os4DirectionalOppositeIntensity,
                 glass.prismalLightDirX,
                 glass.prismalLightDirY,
-                glass.specularStrength,
-                glass.specularSharp,
-                glass.rimLight,
                 glass.caustics,
                 glass.prismalShadowSoftness,
                 glass.prismalTransmittance,
@@ -376,7 +356,6 @@ final float chromaticAberration;
         uniform1f(program, "u_dispersionR", p.dispersionR);
         uniform1f(program, "u_dispersionB", p.dispersionB);
         uniform1f(program, "u_vibrancy", p.vibrancy);
-        uniform1f(program, "u_plainHighlight", p.plainHighlight);
         uniform1f(program, "u_liquidDome", p.liquidDome);
         uniform1f(program, "u_fresnelReflect", p.fresnelReflect);
         uniform1f(program, "u_brightness", p.brightness);
@@ -384,9 +363,6 @@ final float chromaticAberration;
         uniform1fOptional(program, "u_highlightWidth", p.highlightWidth);
 
         uniform2f(program, "u_lightDir", p.lightDirX, p.lightDirY);
-        uniform1f(program, "u_specular", p.specularStrength);
-        uniform1f(program, "u_shininess", p.specularSharp);
-        uniform1f(program, "u_rimStrength", p.rimLight);
         uniform4fRaw(program, "u_shadowColor", p.shadowR, p.shadowG, p.shadowB, p.shadowA);
         uniform1f(program, "u_shadowSoftness", p.shadowSoftness);
         uniform1f(program, "u_causticIntensity", p.causticIntensity);

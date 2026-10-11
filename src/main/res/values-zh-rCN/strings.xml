@@ -66,15 +66,12 @@
     <string name="launcher_highlights_entry">图标、文件夹与小组件高光层</string>
     <string name="launcher_highlights_entry_summary">控制工作区图标、文件夹与小组件玻璃使用的高光层</string>
     <string name="launcher_highlights_header_summary">分别控制工作区图标、小文件夹、Dock 图标以及小组件、大文件夹玻璃使用的高光层。</string>
-    <string name="highlight_sky_haze">天空雾光</string><string name="highlight_sky_haze_summary">玻璃边缘附近的柔和环境反射雾光</string>
-    <string name="highlight_specular">镜面高光</string><string name="highlight_specular_summary">主光源形成的明亮镜面反射</string>
-    <string name="highlight_lit_rim">受光侧边缘</string><string name="highlight_lit_rim_summary">朝向主光源一侧的边缘高光</string>
-    <string name="highlight_opposite_rim">背光侧边缘</string><string name="highlight_opposite_rim_summary">主光源相对一侧的辅助边缘高光</string>
-    <string name="highlight_corner_rim">圆角高光</string><string name="highlight_corner_rim_summary">集中在圆角区域的附加高光</string>
-    <string name="highlight_face_sheen">表面柔光</string><string name="highlight_face_sheen_summary">覆盖玻璃表面的宽幅柔和反光</string>
-    <string name="highlight_plain">基础高光</string><string name="highlight_plain_summary">由基础高光强度参数控制的边缘高光</string>
-    <string name="highlight_caustics">焦散</string><string name="highlight_caustics_summary">曲面玻璃聚焦形成的光纹</string>
-    <string name="highlight_press_glow">按压辉光</string><string name="highlight_press_glow_summary">交互按压效果使用的局部辉光</string>
+    <string name="highlight_sky_haze">天空雾光</string>
+    <string name="highlight_sky_haze_summary">玻璃边缘附近的柔和环境反射雾光</string>
+    <string name="highlight_caustics">焦散</string>
+    <string name="highlight_caustics_summary">曲面玻璃聚焦形成的光纹</string>
+    <string name="highlight_press_glow">按压辉光</string>
+    <string name="highlight_press_glow_summary">交互按压效果使用的局部辉光</string>
     <string name="tab_overview">概览</string>
     <string name="tab_layout">布局</string>
     <string name="tab_glass">外观</string>
@@ -99,7 +96,6 @@
     <string name="page_liquid_lighting">高光与光照</string>
     <string name="page_liquid_shadow">内阴影</string>
     <string name="page_liquid_sampling">采样与性能</string>
-    <string name="page_liquid_os4">OS4 反射</string>
     <string name="page_animation_workspace">工作区与 Dock</string>
     <string name="page_animation_interaction">玻璃交互</string>
     <string name="page_animation_popups">弹出界面过渡</string>

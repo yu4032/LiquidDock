@@ -15,9 +15,11 @@ public class LiveGlassConfigStateTest {
         assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.BLUR.name() + "_tenths"));
         assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.IOR.name()));
         assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.PRISMAL_DISPERSION_R.name()));
-        assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.LauncherHighlight.SPECULAR.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.LauncherHighlight.SKY_HAZE.name()));
         assertFalse(LiveGlassConfigState.isLiveKey(ConfigSchema.Grid.COLUMNS.name()));
         assertFalse(LiveGlassConfigState.isLiveKey("unrelated_setting"));
+        assertFalse(LiveGlassConfigState.isLiveKey("liquid_rim_light"));
+        assertFalse(LiveGlassConfigState.isLiveKey("launcher_surface_component_specular"));
         assertTrue(LiveGlassConfigState.isLiveKey(null));
     }
 
@@ -31,7 +33,7 @@ public class LiveGlassConfigStateTest {
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Glass.SMALL_FOLDER_SIZE_OFFSET.name() + "_tenths"));
         assertTrue(LiveGlassConfigState.isLiveKey(
-                ConfigSchema.LauncherHighlight.LARGE_SPECULAR.name()));
+                ConfigSchema.LauncherHighlight.LARGE_CAUSTICS.name()));
     }
 
     @Test
