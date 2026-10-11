@@ -35,6 +35,19 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertFalse(helper.contains("findElement"));
     }
 
+    @Test public void mamlReleaseRestoresOwnedRootValueNotAssumedZero() throws Exception {
+        String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
+        assertTrue(helper.contains("MAML_BACKGROUND_OWNERSHIP"));
+        assertTrue(helper.contains("getMaMlBackgroundBlurVariable(host)"));
+        assertTrue(helper.contains("rememberMamlBackground(host, readMamlRoot(host))"));
+        assertTrue(helper.contains("claimLoadedMamlRoot(View host, Object root)"));
+        assertTrue(helper.contains("currentRoot == claim.rootRef.get()"));
+        assertTrue(helper.contains("claim.value.release(owned)"));
+        assertTrue(helper.contains("decision.restoreOriginal"));
+        assertTrue(helper.contains("putMaMlBackgroundBlurVariable(host, decision.originalValue)"));
+        assertFalse(helper.contains("if (isMaMlHost(host)) putMaMlBackgroundBlurVariable(host, 0.0d)"));
+    }
+
     @Test public void folderHookTargetsConcreteLauncher450VariantsWithoutDrawableReplacement()
             throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
