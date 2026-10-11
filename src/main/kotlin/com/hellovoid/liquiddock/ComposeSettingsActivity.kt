@@ -109,6 +109,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
         RestartScopeItem("com.miui.securitycenter", "安全中心", "com.miui.securitycenter"),
         RestartScopeItem("com.google.android.inputmethod.latin", "Gboard", "com.google.android.inputmethod.latin"),
         RestartScopeItem("com.android.quicksearchbox", "系统搜索", "com.android.quicksearchbox"),
+        RestartScopeItem("com.android.settings", "系统设置", "com.android.settings"),
     )
     var showRestartScopes by remember { mutableStateOf(false) }
     var selectedRestartScopes by remember {
