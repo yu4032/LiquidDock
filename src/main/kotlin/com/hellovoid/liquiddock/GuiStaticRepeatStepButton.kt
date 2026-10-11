@@ -56,7 +56,7 @@ internal fun GuiStaticRepeatStepButton(
         modifier = Modifier
             .size(36.dp)
             .alpha(if (enabled) 1f else 0.45f)
-            .then(if (staticChrome) Modifier.guiBakedDepthShadow(GuiSolidChromeStyle.PILL, presetChrome) else Modifier)
+            .clip(shape)
             .then(
                 if (staticChrome) Modifier.guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome)
                 else Modifier.background(
@@ -64,7 +64,6 @@ internal fun GuiStaticRepeatStepButton(
                     shape,
                 )
             )
-            .clip(shape)
             .pointerInput(enabled) {
                 if (enabled) {
                     detectTapGestures(
