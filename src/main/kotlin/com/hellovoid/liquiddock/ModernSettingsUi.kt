@@ -53,10 +53,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.styropyr0.prismal.PrismalBackdrop
-import com.styropyr0.prismal.PrismalGlassSurface
 import com.styropyr0.prismal.components.PrismalGlassButton
-import com.styropyr0.prismal.components.PrismalGlassStepper
-import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
@@ -317,105 +314,45 @@ internal fun ModernSurface(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(18.dp),
     onClick: (() -> Unit)? = null,
-    staticPress: Boolean = false,
-    // Static list cells can skip the costly edge lens while retaining native
-    // Prismal blur, tint, specular, outline, and press feedback.
-    edgeRefraction: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val backdrop = LocalPrismalSurfaceBackdrop.current
+    // The GUI body is drawn on an opaque, fixed-color theme background. No Cell
+    // is allowed to allocate a PrismalBackdrop, offscreen GraphicsLayer or
+    // continuously calculate background lighting/refraction.
     val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
     val cardShape = RoundedCornerShape(24.dp)
-    // Match the Prismal neutral wash/rim with static Compose gradients.
-    // No RenderEffect, backdrop evaluation or per-cell offscreen shader.
-    val solidCardColor = if (darkTheme) lerp(colors.surface, colors.onSurface, 0.08f) else colors.surface
+    val solidCardColor = if (darkTheme) {
+        lerp(colors.surface, colors.onSurface, 0.08f)
+    } else {
+        colors.surface
+    }
     val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
-    if (backdrop == null) {
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    ) {
         if (staticChrome) {
-            // Fixed cells draw one themed XML resource; content/press feedback remain live.
-            Box(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .clip(cardShape)
-                    .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-            ) {
-                GuiStaticGlassChrome(
-                    modifier = Modifier.matchParentSize(),
-                    style = GuiStaticGlassStyle.CARD,
-                    darkTheme = darkTheme,
-                )
-                Column(
-                    modifier = Modifier.padding(contentPadding),
-                    content = content,
-                )
-            }
+            GuiStaticGlassChrome(
+                modifier = Modifier.matchParentSize(),
+                style = GuiStaticGlassStyle.CARD,
+                darkTheme = darkTheme,
+            )
         } else {
-            Column(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .clip(cardShape)
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
                     .background(solidCardColor)
-                    .border(1.dp, cardStroke, cardShape)
-                    .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                    .padding(contentPadding),
-                content = content,
+                    .border(1.dp, cardStroke, cardShape),
             )
         }
-        return
-    }
-
-    // Dark glass stays refractive; only a faint neutral wash/rim raises separation.
-    val glassCardModifier = modifier
-        .fillMaxWidth()
-        .then(if (darkTheme) Modifier.border(1.dp, cardStroke, cardShape) else Modifier)
-    val darkGlassWash = if (darkTheme) Color.White.copy(alpha = 0.055f) else Color.Unspecified
-    val lensHeightPx = if (edgeRefraction) 16f else 0f
-    val lensAmountPx = if (edgeRefraction) 21f else 0f
-    val lensDispersion = if (edgeRefraction) 0.28f else 0f
-
-    val cardContent: @Composable BoxScope.() -> Unit = {
         Column(
             modifier = Modifier.padding(contentPadding),
             content = content,
-        )
-    }
-    if (onClick == null || staticPress) {
-        // Noninteractive and navigation Cells omit the recaptured depth shadow.
-        // Navigation retains its ripple without scale/parallax.
-        GuiStaticPressPrismalSurface(
-            backdrop = backdrop,
-            modifier = glassCardModifier,
-            shape = { PrismalRoundedRectangle(24.dp) },
-            onClick = onClick,
-            blurRadius = 12.dp,
-            tint = MiuixTheme.colorScheme.surface,
-            tintAlpha = 0.24f,
-            saturation = 1.32f,
-            refractionHeightPx = lensHeightPx,
-            refractionAmountPx = lensAmountPx,
-            chromaticAberration = lensDispersion,
-            depthEffect = true,
-            surfaceColor = darkGlassWash,
-            content = cardContent,
-        )
-    } else {
-        PrismalGlassSurface(
-            backdrop = backdrop,
-            modifier = glassCardModifier,
-            shape = { PrismalRoundedRectangle(24.dp) },
-            onClick = onClick,
-            blurRadius = 12.dp,
-            tint = MiuixTheme.colorScheme.surface,
-            tintAlpha = 0.24f,
-            saturation = 1.32f,
-            refractionHeightPx = lensHeightPx,
-            refractionAmountPx = lensAmountPx,
-            chromaticAberration = lensDispersion,
-            depthEffect = true,
-            surfaceColor = darkGlassWash,
-            content = cardContent,
         )
     }
 }
@@ -431,7 +368,6 @@ internal fun ModernFeatureCard(
     ModernSurface(
         modifier = modifier,
         onClick = onClick,
-        staticPress = true,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -513,78 +449,45 @@ internal fun Button(
     minHeight: Dp = 36.dp,
     insideMargin: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
     destructive: Boolean = false,
-    // Only small numeric reset actions opt into native Prismal. Other body
-    // buttons keep their static cached/solid performance path.
-    prismalNumericAction: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    // This generic action is inside the scrolling page. Top-bar actions
-    // are rendered separately by ModernTopActionButton with Prismal.
-    val backdrop = if (prismalNumericAction) {
-        LocalTouchPrismalBackdrop.current
-    } else {
-        LocalPrismalSurfaceBackdrop.current
-    }
+    // Fixed Cell actions, including reset and +/- controls, draw shared Android
+    // resources. Only slider/toggle gestures use live Prismal in the page body.
     val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
-    val resolved = modifier
-        .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
-        // Solid fallback actions need a visible boundary even when disabled.
-        // Numeric +/- and reset opt into native Prismal when GUI glass is on.
-        .alpha(if (enabled) 1f else if (backdrop == null) 0.66f else 0.42f)
-
-    if (backdrop == null) {
-        val buttonShape = RoundedCornerShape(minHeight / 2)
-            val fillColor = if (destructive) Color(0xFFD73333)
-            else lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
-        val outlineColor = if (destructive) Color.White.copy(alpha = 0.16f)
-            else colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
-        Box(
-            modifier = resolved
-                .height(minHeight)
-                .clip(buttonShape)
-                .then(if (!destructive && staticChrome) Modifier
-                    else Modifier.background(fillColor, buttonShape))
-                .border(1.dp, outlineColor, buttonShape)
-                .clickable(enabled = enabled, onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (!destructive && staticChrome) {
-                GuiStaticGlassChrome(
-                    modifier = Modifier.matchParentSize(),
-                    style = GuiStaticGlassStyle.PILL,
-                    darkTheme = darkTheme,
-                )
-            }
-            Row(
-                modifier = Modifier.padding(insideMargin),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                content()
-            }
-        }
-        return
+    val buttonShape = RoundedCornerShape(minHeight / 2)
+    val fillColor = if (destructive) Color(0xFFD73333) else {
+        lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
     }
-
-    PrismalGlassButton(
-        onClick = { if (enabled) onClick() },
-        backdrop = backdrop,
-        modifier = resolved,
-        isInteractive = enabled,
-        height = minHeight,
-        blurRadius = 7.dp,
-        refractionHeight = 9.dp,
-        refractionAmount = 12.dp,
-        pressLift = 0.dp,
-        contentPadding = insideMargin,
-        tint = if (destructive) Color(0xFFD73333) else MiuixTheme.colorScheme.surface,
-        tintAlpha = if (destructive) 0.92f else 0.20f,
-        depthEffect = false,
-        depthShadow = null,
+    val outlineColor = if (destructive) Color.White.copy(alpha = 0.16f) else {
+        colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
+    }
+    Box(
+        modifier = modifier
+            .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
+            .height(minHeight)
+            .alpha(if (enabled) 1f else 0.66f)
+            .clip(buttonShape)
+            .then(if (staticChrome) Modifier else Modifier.background(fillColor, buttonShape))
+            .then(if (staticChrome) Modifier else Modifier.border(1.dp, outlineColor, buttonShape))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        content()
+        if (staticChrome) {
+            GuiStaticGlassChrome(
+                modifier = Modifier.matchParentSize(),
+                style = if (destructive) GuiStaticGlassStyle.DANGER else GuiStaticGlassStyle.PILL,
+                darkTheme = darkTheme,
+            )
+        }
+        Row(
+            modifier = Modifier.padding(insideMargin),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            content()
+        }
     }
 }
 
@@ -1011,38 +914,22 @@ internal fun ModernGlassStepper(
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // The ordinary body surface backdrop is intentionally null. Restore
-    // native Prismal +/- through the same glass-only source used by sliders.
-    val backdrop = LocalTouchPrismalBackdrop.current
-    if (backdrop != null) {
-        PrismalGlassStepper(
-            value = value,
-            onValueChange = { if (enabled) onValueChange(it) },
-            backdrop = backdrop,
-            valueRange = valueRange,
-            repeatOnHold = true,
-            modifier = modifier.alpha(if (enabled) 1f else 0.42f),
+    // Retain repeat-on-hold and bound checks without PrismalGlassStepper's
+    // two independent optical layers for controls inside every numeric Cell.
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        GuiStaticRepeatStepButton(
+            label = "−",
+            enabled = enabled && value > valueRange.first,
+            onStep = { onValueChange((value - 1).coerceAtLeast(valueRange.first)) },
         )
-    } else {
-        Row(
-            modifier = modifier,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Button(
-                onClick = { onValueChange((value - 1).coerceAtLeast(valueRange.first)) },
-                enabled = enabled && value > valueRange.first,
-                minWidth = 36.dp,
-                minHeight = 36.dp,
-                insideMargin = PaddingValues(0.dp),
-            ) { Text("−") }
-            Button(
-                onClick = { onValueChange((value + 1).coerceAtMost(valueRange.last)) },
-                enabled = enabled && value < valueRange.last,
-                minWidth = 36.dp,
-                minHeight = 36.dp,
-                insideMargin = PaddingValues(0.dp),
-            ) { Text("+") }
-        }
+        GuiStaticRepeatStepButton(
+            label = "+",
+            enabled = enabled && value < valueRange.last,
+            onStep = { onValueChange((value + 1).coerceAtMost(valueRange.last)) },
+        )
     }
 }
