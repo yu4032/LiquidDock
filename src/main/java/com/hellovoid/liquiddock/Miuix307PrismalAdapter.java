@@ -30,7 +30,6 @@ final class Miuix307PrismalAdapter {
         b.dispersionR = p.dispersionR;
         b.dispersionB = p.dispersionB;
         b.vibrancy = p.vibrancy;
-        b.plainHighlight = p.plainHighlight;
         b.brightness = p.brightness;
         b.highlightWidth = p.highlightWidth;
         b.os4EdgeWidthPx = p.os4EdgeWidthPx;
@@ -42,9 +41,6 @@ final class Miuix307PrismalAdapter {
         b.os4DirectionalOppositeIntensity = p.os4DirectionalOppositeIntensity;
         b.lightDirX = p.lightDirX;
         b.lightDirY = p.lightDirY;
-        b.specular = p.specularStrength;
-        b.shininess = p.specularSharp;
-        b.rimStrength = p.rimLight;
         b.causticIntensity = p.causticIntensity;
         b.shadowSoftness = p.shadowSoftness;
         b.transmittance = p.transmittance;

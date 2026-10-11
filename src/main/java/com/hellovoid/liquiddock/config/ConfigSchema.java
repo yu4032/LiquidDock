@@ -350,18 +350,8 @@ public final class ConfigSchema {
                 "liquid_depth_effect", 0, 0, 8, 0, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> BRIGHTNESS = integer(
                 "liquid_brightness", 108, 108, 108, 50, 200, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> SPECULAR_SHARPNESS = integer(
-                "liquid_specular_sharp", 88, 88, 88, 1, 200, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> SPECULAR_STRENGTH = integer(
-                "liquid_specular_strength", 152, 152, 105, 0, 300, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> RIM_LIGHT = integer(
-                "liquid_rim_light", 122, 122, 100, 0, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAUSTICS = integer(
                 "liquid_caustics", 28, 28, 28, 0, 100, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> EDGE_BAND = integer(
-                "liquid_edge_band", 32, 32, 32, 5, 100, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> HIGHLIGHT_ALPHA = integer(
-                "liquid_highlight_alpha", 100, 100, 100, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> RECENTS_PREARM_DISTANCE = dp(
                 "liquid_recents_prearm_distance", 8, 8, 0, 1, 48, ConfigKey.ExportMode.ALWAYS);
 
@@ -385,8 +375,6 @@ public final class ConfigSchema {
                 "liquid_prismal_dispersion_b", 100, 100, 100, 0, 400, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_VIBRANCY = integer(
                 "liquid_prismal_vibrancy", 128, 128, 128, 0, 300, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> PRISMAL_PLAIN_HIGHLIGHT = integer(
-                "liquid_prismal_plain_highlight", 8, 8, 8, 0, 100, ConfigKey.ExportMode.ALWAYS);
         // Dedicated OS4 controls use logical output pixels, independent from backdrop downsampling.
         // Keep the historical keys so existing user values become active again.
         public static final ConfigKey<Integer> OS4_EDGE_WIDTH_PX = integer(
@@ -459,22 +447,10 @@ public final class ConfigSchema {
 
     public static final class LauncherHighlight {
         public static final ConfigKey<Boolean> SKY_HAZE = highlight("sky_haze");
-        public static final ConfigKey<Boolean> SPECULAR = highlight("specular");
-        public static final ConfigKey<Boolean> LIT_RIM = highlight("lit_rim");
-        public static final ConfigKey<Boolean> OPPOSITE_RIM = highlight("opposite_rim");
-        public static final ConfigKey<Boolean> CORNER_RIM = highlight("corner_rim");
-        public static final ConfigKey<Boolean> FACE_SHEEN = highlight("face_sheen");
-        public static final ConfigKey<Boolean> PLAIN_HIGHLIGHT = highlight("plain_highlight");
         public static final ConfigKey<Boolean> CAUSTICS = highlight("caustics");
         public static final ConfigKey<Boolean> PRESS_GLOW = highlight("press_glow");
 
         public static final ConfigKey<Boolean> LARGE_SKY_HAZE = largeHighlight("sky_haze");
-        public static final ConfigKey<Boolean> LARGE_SPECULAR = largeHighlight("specular");
-        public static final ConfigKey<Boolean> LARGE_LIT_RIM = largeHighlight("lit_rim");
-        public static final ConfigKey<Boolean> LARGE_OPPOSITE_RIM = largeHighlight("opposite_rim");
-        public static final ConfigKey<Boolean> LARGE_CORNER_RIM = largeHighlight("corner_rim");
-        public static final ConfigKey<Boolean> LARGE_FACE_SHEEN = largeHighlight("face_sheen");
-        public static final ConfigKey<Boolean> LARGE_PLAIN_HIGHLIGHT = largeHighlight("plain_highlight");
         public static final ConfigKey<Boolean> LARGE_CAUSTICS = largeHighlight("caustics");
         public static final ConfigKey<Boolean> LARGE_PRESS_GLOW = largeHighlight("press_glow");
 
@@ -600,15 +576,12 @@ public final class ConfigSchema {
                 Glass.DYNAMIC_BIT_THRESHOLD, Glass.DYNAMIC_HOLD_MS, Glass.BLACK_THRESHOLD,
                 Glass.HOME_SETTLE_DELAY_MS, Glass.HIGHLIGHT_WIDTH, Glass.TINT_RED,
                 Glass.TINT_GREEN, Glass.TINT_BLUE, Glass.DEPTH_EFFECT, Glass.BRIGHTNESS,
-                Glass.SPECULAR_SHARPNESS, Glass.SPECULAR_STRENGTH, Glass.RIM_LIGHT,
-                Glass.CAUSTICS, Glass.EDGE_BAND, Glass.HIGHLIGHT_ALPHA,
-                Glass.RECENTS_PREARM_DISTANCE,
+                Glass.CAUSTICS, Glass.RECENTS_PREARM_DISTANCE,
                 Glass.PRISMAL_REFRACTION_INSET, Glass.PRISMAL_DISPLACEMENT_SCALE,
                 Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH, Glass.PRISMAL_SMIN_SMOOTHING,
                 Glass.PRISMAL_EDGE_REFRACTION_FALLOFF, Glass.PRISMAL_FRESNEL_REFLECT,
                 Glass.PRISMAL_DISPERSION_R, Glass.PRISMAL_DISPERSION_B,
-                Glass.PRISMAL_VIBRANCY, Glass.PRISMAL_PLAIN_HIGHLIGHT,
-                Glass.OS4_EDGE_WIDTH_PX, Glass.OS4_REFLECT_OFFSET_PX,
+                Glass.PRISMAL_VIBRANCY, Glass.OS4_EDGE_WIDTH_PX, Glass.OS4_REFLECT_OFFSET_PX,
                 Glass.OS4_REFLECTION_STRENGTH, Glass.OS4_REFLECTION_LIGHTEN,
                 Glass.OS4_DIRECTIONAL_ANGLE_RANGE, Glass.OS4_DIRECTIONAL_INTENSITY,
                 Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
@@ -620,14 +593,8 @@ public final class ConfigSchema {
                 Glass.PRISMAL_PARALLAX_SCALE, Glass.PRISMAL_SHOW_NORMALS);
         add(keys, Gboard.ENABLED, Gboard.BLUR, Gboard.TINT_RED, Gboard.TINT_GREEN,
                 Gboard.TINT_BLUE, Gboard.TINT_ALPHA);
-        add(keys, LauncherHighlight.SKY_HAZE, LauncherHighlight.SPECULAR,
-                LauncherHighlight.LIT_RIM, LauncherHighlight.OPPOSITE_RIM,
-                LauncherHighlight.CORNER_RIM, LauncherHighlight.FACE_SHEEN,
-                LauncherHighlight.PLAIN_HIGHLIGHT, LauncherHighlight.CAUSTICS,
+        add(keys, LauncherHighlight.SKY_HAZE, LauncherHighlight.CAUSTICS,
                 LauncherHighlight.PRESS_GLOW, LauncherHighlight.LARGE_SKY_HAZE,
-                LauncherHighlight.LARGE_SPECULAR, LauncherHighlight.LARGE_LIT_RIM,
-                LauncherHighlight.LARGE_OPPOSITE_RIM, LauncherHighlight.LARGE_CORNER_RIM,
-                LauncherHighlight.LARGE_FACE_SHEEN, LauncherHighlight.LARGE_PLAIN_HIGHLIGHT,
                 LauncherHighlight.LARGE_CAUSTICS, LauncherHighlight.LARGE_PRESS_GLOW);
         add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.DOCK_WIDTH_OFFSET,
                 Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,

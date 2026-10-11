@@ -228,16 +228,16 @@ final class LiquidDockConfig {
         final PrismalHighlightProfile launcherHighlightProfile, largeSurfaceHighlightProfile;
         final float blur, chromatic, thickness, ior, normalStrength, dome,
         lensRefraction, depthEffect, highlightWidth, brightness,
-        specularStrength, rimLight, caustics;
+        caustics;
         final float prismalRefractionInset, prismalDisplacementScale, prismalHeightTransitionWidth,
                 prismalSminSmoothing, prismalEdgeRefractionFalloff, prismalFresnelReflect,
-                prismalDispersionR, prismalDispersionB, prismalVibrancy, prismalPlainHighlight,
+                prismalDispersionR, prismalDispersionB, prismalVibrancy,
                 os4EdgeWidthPx, os4ReflectOffsetPx, os4ReflectionStrength, os4ReflectionLighten,
                 os4DirectionalAngleRange, os4DirectionalIntensity,
                 os4DirectionalOppositeIntensity,
                 prismalLightDirX, prismalLightDirY, prismalShadowSoftness, prismalTransmittance,
                 prismalBackdropScaleX, prismalBackdropScaleY, prismalParallaxScale;
-        final int tintAlpha, tintR, tintG, tintB, specularSharp,
+        final int tintAlpha, tintR, tintG, tintB,
                 prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;
         final int passBlurCaptureScalePercent, passBlurRenderFps;
 
@@ -322,12 +322,6 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.TINT_BLUE.runtimeFallback()));
             brightness = c.i(ConfigSchema.Glass.BRIGHTNESS.name(),
                     ConfigSchema.Glass.BRIGHTNESS.runtimeFallback()) / 100f;
-            specularSharp = Math.max(1, c.i(ConfigSchema.Glass.SPECULAR_SHARPNESS.name(),
-                    ConfigSchema.Glass.SPECULAR_SHARPNESS.runtimeFallback()));
-            specularStrength = c.i(ConfigSchema.Glass.SPECULAR_STRENGTH.name(),
-                    ConfigSchema.Glass.SPECULAR_STRENGTH.runtimeFallback()) / 100f;
-            rimLight = c.i(ConfigSchema.Glass.RIM_LIGHT.name(),
-                    ConfigSchema.Glass.RIM_LIGHT.runtimeFallback()) / 100f;
             caustics = c.i(ConfigSchema.Glass.CAUSTICS.name(),
                     ConfigSchema.Glass.CAUSTICS.runtimeFallback()) / 100f;
 
@@ -348,8 +342,6 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.PRISMAL_DISPERSION_B.runtimeFallback()) / 100f;
             prismalVibrancy = c.i(ConfigSchema.Glass.PRISMAL_VIBRANCY.name(),
                     ConfigSchema.Glass.PRISMAL_VIBRANCY.runtimeFallback()) / 100f;
-            prismalPlainHighlight = c.i(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT.name(),
-                    ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT.runtimeFallback()) / 100f;
             os4EdgeWidthPx = clamp(c.i(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.name(),
                     ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.runtimeFallback()),
                     ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.minInt(),

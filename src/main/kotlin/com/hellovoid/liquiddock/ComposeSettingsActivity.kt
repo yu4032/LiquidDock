@@ -308,13 +308,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     "底色、色散与背景鲜艳度",
                     liquidColorSpecs,
                 )
-                Page.LiquidLighting -> LiquidSpecPage(
-                    padding,
-                    prefs,
-                    masterEnabled,
-                    "镜面高光、边缘光、焦散与光源方向",
-                    liquidLightingSpecs,
-                )
+                Page.LiquidLighting -> LiquidLightingPage(padding, prefs, masterEnabled)
                 Page.LiquidShadow -> LiquidSpecPage(
                     padding,
                     prefs,
@@ -323,13 +317,6 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                     liquidShadowSpecs,
                 )
                 Page.LiquidSampling -> LiquidSamplingPage(padding, prefs, masterEnabled)
-                Page.LiquidOs4 -> LiquidSpecPage(
-                    padding,
-                    prefs,
-                    masterEnabled,
-                    "OS4 风格边缘反射与方向补光",
-                    liquidOs4Specs,
-                )
 
                 Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
                 Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)

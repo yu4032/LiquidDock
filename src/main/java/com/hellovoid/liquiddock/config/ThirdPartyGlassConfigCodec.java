@@ -19,12 +19,6 @@ final class ThirdPartyGlassConfigCodec {
             "enabled",
             "fresh_on_resume",
             "highlight_sky_haze",
-            "highlight_specular",
-            "highlight_lit_rim",
-            "highlight_opposite_rim",
-            "highlight_corner_rim",
-            "highlight_face_sheen",
-            "highlight_plain",
             "highlight_caustics",
             "highlight_press_glow");
     private static final Set<String> INT_FIELDS = Set.of(
