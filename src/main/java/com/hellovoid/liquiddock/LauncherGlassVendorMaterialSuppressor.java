@@ -192,6 +192,15 @@ final class LauncherGlassVendorMaterialSuppressor {
         invokeStringDouble(host, "putVariableNumber", "enable_background_blur", value);
     }
 
+    private static void invokeBoolean(View host, String name, boolean value) {
+        try {
+            Method method = findMethod(host.getClass(), name, boolean.class);
+            if (method == null) return;
+            method.setAccessible(true);
+            method.invoke(host, value);
+        } catch (Throwable ignored) {}
+    }
+
     private static void invokeStringDouble(
             View host, String name, String key, double value) {
         try {
