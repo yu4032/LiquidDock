@@ -204,9 +204,12 @@ LiquidDock 是社区项目，与 Xiaomi、LSPosed 或其他相关项目没有隶
 
 ## Credits
 
-- **Prismal** — 液态玻璃视觉效果参考
-- **LSPosed / libxposed** — 模块运行环境
-- **HyperCeiler** — HyperOS 模块开发参考
+- [Compose Miuix](https://github.com/compose-miuix-ui/miuix) — MIUIX Compose 界面框架
+- [PrismalAGSL](https://github.com/styropyr0/PrismalAGSL) — 设置界面的液态玻璃组件
+- [AndroidX / Jetpack](https://source.android.com/docs/setup/about/licenses) — Android 基础界面组件
+- [LSPosed / libxposed](https://github.com/LSPosed/LSPosed) — 模块 Hook API 与运行框架
+- [HyperCeiler](https://github.com/ReChronoRain/HyperCeiler) — HyperOS 模块开发参考
+- [Prismal](https://github.com/styropyr0/Prismal) — 液态玻璃光学模型参考
 
 ## License
 
