@@ -342,7 +342,7 @@ public class ModernSettingsArchitectureTest {
                                 png, offset + 8, 8).order(java.nio.ByteOrder.BIG_ENDIAN);
                         width = dimensions.getInt();
                         height = dimensions.getInt();
-                        assertTrue((png[offset + 16] & 255) == 8); // 8-bit indexed
+                        assertTrue((png[offset + 16] & 255) == 4); // 4-bit indexed
                         assertTrue((png[offset + 17] & 255) == 3); // indexed palette
                     } else if (type == 0x504c5445) { // PLTE
                         rgbPalette = java.util.Arrays.copyOfRange(
@@ -356,22 +356,23 @@ public class ModernSettingsArchitectureTest {
                     offset += length + 12;
                 }
                 assertTrue(width >= 70 && height >= 60);
-                assertTrue(alphaPalette != null && alphaPalette.length >= 128);
-                assertTrue(rgbPalette != null && rgbPalette.length >= 384);
+                assertTrue(alphaPalette != null && alphaPalette.length == 16);
+                assertTrue(rgbPalette != null && rgbPalette.length == 48);
                 byte[] decompressed;
                 try (java.util.zip.InflaterInputStream inflater =
                         new java.util.zip.InflaterInputStream(
                                 new java.io.ByteArrayInputStream(idat.toByteArray()))) {
                     decompressed = inflater.readAllBytes();
                 }
-                int stride = width; // filter byte + one 8-bit palette index per pixel
+                int stride = (width + 1) / 2; // filter byte + two 4-bit indices per byte
                 assertTrue(decompressed.length == (stride + 1) * height);
                 long[] quadrant = new long[4];
                 for (int y = 2; y < height - 2; y++) {
                     int row = y * (stride + 1);
                     assertTrue((decompressed[row] & 255) == 0); // filter NONE
                     for (int x = 2; x < width - 2; x++) {
-                        int index = decompressed[row + x + 1] & 255;
+                        int packed = decompressed[row + x / 2 + 1] & 255;
+                        int index = x % 2 == 0 ? packed >>> 4 : packed & 15;
                         int alpha = alphaPalette[index] & 255;
                         int rgbOffset = index * 3;
                         boolean white = (rgbPalette[rgbOffset] & 255) > 128;
