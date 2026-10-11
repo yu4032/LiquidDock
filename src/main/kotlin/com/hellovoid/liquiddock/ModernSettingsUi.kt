@@ -334,7 +334,7 @@ internal fun ModernSurface(
             .then(if (staticChrome) Modifier.guiStaticSoftShadow(cardShape) else Modifier)
             .then(
                 if (staticChrome) {
-                    Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)
+                    Modifier.guiExactPrismalCornerChrome(GuiSolidChromeStyle.CARD, presetChrome, cardShape)
                 } else {
                     fallbackChrome
                 }
@@ -465,9 +465,10 @@ internal fun Button(
             .then(if (staticChrome) Modifier.guiStaticSoftShadow(buttonShape) else Modifier)
             .then(
                 if (staticChrome) {
-                    Modifier.guiSolidChrome(
+                    Modifier.guiExactPrismalCornerChrome(
                         if (destructive) GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL,
                         presetChrome,
+                        buttonShape,
                     )
                 } else {
                     fallbackChrome
