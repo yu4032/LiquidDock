@@ -149,3 +149,28 @@ Those three overlapping contours produced the exaggerated concentric rings aroun
 Regression test `staticGuiRestoresFourCornerSpecularAndLowCostShadowsWithoutCrashing` now rejects the redundant Card/Button/Stepper stroke, verifies a **single** idle-thumb `drawOutline`, and checks pre-existing shadow/gesture behavior.
 
 This restores the intended single-edge visual hierarchy while avoiding additional runtime shader/light/refraction calls. CI confirms compile and contract behavior only; density, shadow softness and reflected edge appearance still need a device check. PR remains Draft until user validation.
+
+## Shape geometry correction after removing duplicated rims (2026-10-12)
+
+The user observed that after dropping the overdrawn extra border in #8104, the **rounded corners visually became smaller**. This was a *geometry ownership* bug, not a request to inflate the radius constant.
+
+Source audit:
+- Upstream `PrismalRoundedRectangle(24.dp)` uses `PrismalRoundedCornerStyle.Continuous` by default.
+- `prismalContinuousCurvatureRoundedRectanglePath` uses a Bézier shape with an *extended corner transition*, including `extendedFraction = 2/3`, and handles source width/height when calculating corner control points.
+- Our offline PNG instead embedded a simpler **superellipse** at a fixed 80×64dp sample size with a nominal 24dp radius and sliced it at the 24dp cutoff. Its clipped silhouette **did not match the native Continuous corner** on long/tall Cells.
+- The duplicate dynamic rim previously disguised this discrepancy. Removing the rim exposed the smaller underlying PNG corner.
+
+### Narrow, stable fix
+
+Instead of trying another arbitrary nominal radius or PNG stretch multiplier:
+
+1. Card now draws `guiExactPrismalCornerChrome(CARD,palette,cardShape)` with its caller's actual `PrismalRoundedRectangle(24.dp)`. Ordinary/destructive action buttons pass their actual `PrismalRoundedRectangle(minHeight/2)`, and numeric stepper passes its own shape.
+2. This renderer uses preset `gui_preset_card_fill`, `gui_preset_pill_fill`, `gui_preset_danger_fill` theme resources, plus exactly **one cached directional white outline on the *same shape***. It does not draw the old PNG corner under the rim, which would recreate both the small silhouette and double-line outlines.
+3. `guiStaticSoftShadow` is still drawn on the same outline before content clipping; white idle thumb XML and touch-time Prismal remain unchanged.
+4. No per-cell AGSL, refraction, readback, offscreen GraphicsLayer or dynamic illumination. This exchanges the baked corner image for cheap native continuous-shape drawing to guarantee geometrical fidelity.
+
+**Scope:** The previously generated PNGs and their loader still exist temporarily as inert compatibility resources in this unmerged experimental PR; they are not selected for Card/Pill actions after this change. They should be deleted in a separate nonvisual cleanup after the new geometry passes device confirmation, to avoid mixing a dead-code cleanup with the fix.
+
+New regression contracts require Card/Button/Stepper to use the *same* shape for fill and single stroke, and reject use of the old PNG path for those components. **CI cannot verify perceived radius**; test the long Dock Geometry Cells and small +/- action buttons on device.
+
+Do not merge PR #352 until accepted.
