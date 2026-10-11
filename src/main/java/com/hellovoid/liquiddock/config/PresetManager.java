@@ -315,6 +315,7 @@ public final class PresetManager {
         source.put("third_party_glass.systemui.lockscreen_clock.blur", 3.3722174d);
         source.put("third_party_glass.systemui.lockscreen_clock.tint_b", 239);
         Map<String, Object> values = ConfigCodec.importValues(source);
+        values.put(ConfigSchema.SystemSettings.PRISMAL_SWITCH.name(), Boolean.FALSE);
         values.put(ConfigSchema.Debug.LOGGING.name(), Boolean.FALSE);
         return Collections.unmodifiableMap(values);
     }
