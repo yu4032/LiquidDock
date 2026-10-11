@@ -66,6 +66,11 @@ internal fun GuiOnTouchPrismalToggle(
 ) {
     val density = LocalDensity.current
     val isLightTheme = !isSystemInDarkTheme()
+    val presetChrome = LocalGuiPresetChromePalette.current
+    val idleThumbShape = remember { PrismalCapsule() }
+    val idleThumbShadow = remember {
+        PrismalDepthShadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))
+    }
     val accentColor =
         if (isLightTheme) Color(0xFF34C759)
         else Color(0xFF30D158)
@@ -236,24 +241,17 @@ internal fun GuiOnTouchPrismalToggle(
                 .size(40.dp, 24.dp)
         ) {
             if (!samplingEnabled) {
-                // Reuse one recorded Prismal surface while not interacting.
-                GuiFrozenPrismalChrome(
-                    backdrop = underlayBackdrop,
-                    shape = { PrismalCapsule() },
-                    // Release animation applies to cached output, not the backdrop input.
+                // Draw a plain-color thumb while keeping the original spring transform.
+                Box(
                     modifier = Modifier.matchParentSize().graphicsLayer {
                         val velocity = dampedDragAnimation.velocity / 50f
                         scaleX = dampedDragAnimation.scaleX /
                             (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
                         scaleY = dampedDragAnimation.scaleY *
                             (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
-                    },
-                    blurRadius = 8.dp,
-                    refractionHeightPx = with(density) { 4.dp.toPx() },
-                    refractionAmountPx = with(density) { 6.dp.toPx() },
-                    chromaticAberration = 0.28f,
-                    surfaceColor = Color.White.copy(alpha = 0.75f),
-                    depthEffect = false,
+                    }.guiNativePrismalDepthShadow(idleThumbShape, idleThumbShadow)
+                            .guiIdleThumbChrome(presetChrome)
+                            .guiStaticSpecularRim(idleThumbShape, presetChrome, compact = true),
                 )
             }
         }
