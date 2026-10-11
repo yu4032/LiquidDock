@@ -25,10 +25,10 @@ system
 | `com.miui.securitycenter:ui` | Security Center sidebar glass |
 | `com.google.android.inputmethod.latin` | Gboard floating/toolbar glass |
 | `com.android.quicksearchbox` | MIUI Search main-background glass |
-| `com.android.settings` | Opt-in MIUIX SlidingButton Prismal switch pilot (default off) |
+| `com.android.settings` | Opt-in native MIUIX Canvas/AGSL switch glass pilot (default off) |
 | `system` | 配置启用时安装 `WallpaperClientCompositionHook`，支持可选壁纸 GPU 渲染 |
 
-`com.android.settings` 当前为 **默认关闭** 的 Prismal 开关试验。`ModuleMain` 仅在总开关和 `ConfigSchema.SystemSettings.PRISMAL_SWITCH` 都打开后，尝试为目标 APK 的 `miuix.slidingwidget.widget.SlidingButton` 安装一个窄范围 presenter Hook。Compose SPA 和其他系统开关不会被修改；原生按钮保留状态、点击及监听器。
+`com.android.settings` 为 **默认关闭** 的原生 Canvas/AGSL 玻璃开关试验。`ModuleMain` 仅在总开关与 `ConfigSchema.SystemSettings.PRISMAL_SWITCH` 均启用且 ROM 匹配时，为 `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 安装窄范围 `onDraw(Canvas)` Hook。直接在原 View 绘制，无 ComposeView、Prismal App Startup 或全局 Android Hook；原生交互及持久化不变。
 
 其他同包非目标进程不应误装 feature hooks。
 
@@ -367,28 +367,35 @@ Activity resume / attach 时会重新请求 freshness。
 
 ---
 
-## 18a. System Settings Switch Pilot
+## 18a. System Settings Switch Pilot — native Canvas/AGSL
 
-针对 HyperOS 3.0.310.0（OS3.0.310.0.WAOCNXM）的正式 JADX/REA
-`SlidingButton.java` 证据确认：`extends AppCompatCheckBox`，明确覆写
-`onDraw(Canvas)`、`performClick()`、`setChecked(boolean)`；绘制由
-`SlidingButtonHelper.onDraw` 完成。布局
-`miuix_preference_widget_checkbox.xml` 使用 `@android:id/checkbox`，
-`settingslib_preference.xml` 使用 **LinearLayout** 的
-`@android:id/widget_frame`（不是 FrameLayout）。
+Scope: **only** `com.android.settings` in `OS3.0.310.0.WAOCNXM`; config defaults off.
+Canonical JADX/REA validates MIUIX `SlidingButton`, `SlidingSwitch` and
+`SlidingSwitchCompat` names and virtual `onDraw(Canvas)` methods. Hook their
+declared drawing overrides in Settings' own classloader, never framework
+`CompoundButton`, `setChecked`, `onTouchEvent`, Preference persistence or Settings SPI.
 
-因此只 Hook `SlidingButton#onDraw(Canvas)` 的 after，必须由 Settings 主进程触发。
-匹配原生 checkbox ID + Preference widget_frame 祖先，但不搬动原生开关、不重写其
-layout/listener。Prismal ComposeView 放在 Activity 自带的 `android.R.id.content`
-FrameLayout 作为独立可逆绘制层，按 native 开关的屏幕位置同步 translation/大小，
-控件滑动至裁剪区域外时停止显示玻璃并恢复原生 alpha；detach 时清理并还原。
-最多并存 6 个 overlay，避免长列表增加渲染压力。
+Real-device diagnosis on 2026-10-11:
+- The previous Settings Compose overlay initialized a ViewTreeLifecycleOwner
+  bridge to fix the first `ComposeView` mounting failure.
+- The first successful attach then crashed the entire Settings UI because
+  `Prismal AGSL assets are not initialized. Ensure App Startup runs before drawing glass.`
+- Therefore Settings ComposeView and lifecycle bridge were **deleted** rather than
+  trying to recreate Prismal's App Startup inside a foreign application.
 
-Prismal 背景当前仅为 Compose 本地层；跨 native Settings 页面实时折射尚未实现，
-不能把首版描述为真实的背后内容捕获。其他 `SlidingSwitch`、SPA 和 AOSP
-`SwitchPreferenceCompat` 均不受影响。
+Replacement: `SystemSettingsNativeSwitchPainter` builds a small `RuntimeShader`
+once per native switch (hardware Canvas only) for procedurally shaded
+capsules, track and thumb. If it cannot construct/draw AGSL, render using
+ordinary Android Canvas gradients. If painter fails entirely,
+the hook **proceeds** to the original MIUIX drawing method. The native View
+still handles its own touch/checked/accessibility/persistence. No additional
+View, window, bitmap, PixelCopy, ScreenCapture, or active backdrop producer
+is created. The material does **not** sample Settings' underlying content,
+so it must not be described as full Prismal background refraction.
 
-这是需要真机验收的实验版本，**CI 不能证明目标版本的私有方法和视觉兼容性**。
+Device acceptance still needed: shader hardware compatibility, switch animation,
+native interaction and preference persistence, disabled appearance, dark theme,
+performance and Settings stability. Passing CI proves only build-time contracts.
 
 ---
 
