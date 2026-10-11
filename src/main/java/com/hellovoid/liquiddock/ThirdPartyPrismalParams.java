@@ -25,7 +25,6 @@ final class ThirdPartyPrismalParams {
         b.dispersionR = base.dispersionR;
         b.dispersionB = base.dispersionB;
         b.vibrancy = base.vibrancy;
-        b.plainHighlight = base.plainHighlight;
         b.brightness = base.brightness;
         b.highlightWidth = base.highlightWidth;
         b.os4EdgeWidthPx = base.os4EdgeWidthPx;
@@ -37,9 +36,6 @@ final class ThirdPartyPrismalParams {
         b.os4DirectionalOppositeIntensity = base.os4DirectionalOppositeIntensity;
         b.lightDirX = base.lightDirX;
         b.lightDirY = base.lightDirY;
-        b.specular = base.specular;
-        b.shininess = base.shininess;
-        b.rimStrength = base.rimStrength;
         b.causticIntensity = base.causticIntensity;
         b.shadowSoftness = base.shadowSoftness;
         b.transmittance = base.transmittance;

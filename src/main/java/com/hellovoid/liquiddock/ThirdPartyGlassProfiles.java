@@ -59,12 +59,7 @@ final class ThirdPartyGlassProfiles {
 
         PrismalHighlightProfile highlights = new PrismalHighlightProfile(
                 reader.b(key(profileId, "highlight_sky_haze"), baseHighlights.skyHaze),
-                reader.b(key(profileId, "highlight_specular"), baseHighlights.specular),
-                reader.b(key(profileId, "highlight_lit_rim"), baseHighlights.litRim),
-                reader.b(key(profileId, "highlight_opposite_rim"), baseHighlights.oppositeRim),
-                reader.b(key(profileId, "highlight_corner_rim"), baseHighlights.cornerRim),
-                reader.b(key(profileId, "highlight_face_sheen"), baseHighlights.faceSheen),
-                reader.b(key(profileId, "highlight_plain"), baseHighlights.plainHighlight),
+                false, false, false, false, false, false,
                 reader.b(key(profileId, "highlight_caustics"), baseHighlights.caustics),
                 reader.b(key(profileId, "highlight_press_glow"), baseHighlights.pressGlow));
 
