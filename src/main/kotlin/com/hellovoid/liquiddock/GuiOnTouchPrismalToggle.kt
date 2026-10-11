@@ -68,6 +68,9 @@ internal fun GuiOnTouchPrismalToggle(
     val isLightTheme = !isSystemInDarkTheme()
     val presetChrome = LocalGuiPresetChromePalette.current
     val idleThumbShape = remember { PrismalCapsule() }
+    val idleThumbShadow = remember {
+        PrismalDepthShadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))
+    }
     val accentColor =
         if (isLightTheme) Color(0xFF34C759)
         else Color(0xFF30D158)
@@ -246,7 +249,7 @@ internal fun GuiOnTouchPrismalToggle(
                             (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
                         scaleY = dampedDragAnimation.scaleY *
                             (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
-                    }.guiStaticSoftShadow(idleThumbShape, compact = true)
+                    }.guiNativePrismalDepthShadow(idleThumbShape, idleThumbShadow)
                             .guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)
                             .guiStaticSpecularRim(idleThumbShape, presetChrome, compact = true),
                 )
