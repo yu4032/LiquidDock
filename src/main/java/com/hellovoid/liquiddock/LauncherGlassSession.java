@@ -1271,8 +1271,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // renders directly into the native-resolution window. The Prismal node scissor
         // limits expensive shading to occupied glass bounds.
         sourceBackend.makeCurrent(output.eglSurface);
-        prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
+        boolean tracing = workspaceSource && Trace.isEnabled();
+        if (tracing) Trace.beginSection("LD.Workspace.SurfaceClear");
+        try {
+            prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
         StaticNodeState[] snapshot = staticNodeStateSnapshot;
+        int drawnWidgets = 0;
+        if (tracing) Trace.beginSection("LD.Workspace.StaticDraw");
+        try {
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
@@ -1286,8 +1295,22 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
+            if (node.nodeKind() == LauncherGlassNodeKind.WIDGET) drawnWidgets++;
         }
-        sourceBackend.swapBuffers(output.eglSurface);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
+        if (tracing) {
+            Trace.setCounter("LD.Workspace.DrawnWidgets", drawnWidgets);
+            Trace.setCounter("LD.Workspace.StaticSurfacePixels",
+                    (long) output.width * output.height);
+            Trace.beginSection("LD.Workspace.StaticSwap");
+        }
+        try {
+            sourceBackend.swapBuffers(output.eglSurface);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
