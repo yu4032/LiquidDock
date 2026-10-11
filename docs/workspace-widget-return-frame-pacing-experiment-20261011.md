@@ -23,6 +23,19 @@ The user provided two Perfetto traces, `多组件玻璃开.perfetto-trace` (~5.4
 
 Caveats: `eglSwapBuffers` slices measure CPU wait and submission, **not direct GPU shader duration**. The FrameTimeline `BUFFER_STUFFING` bit means buffers were queued; it does not by itself identify which producer caused the delay. Earlier `StaticSwap` p90=80ms was an analysis error; correct ON p90 is 9.061ms.
 
+## Within-trace correlation by last drawn Widget count (glass ON only)
+
+To reduce the unmatched ON/OFF interaction confound, we also assigned each interval in the **same** ON recording the most recent value of `LD.Workspace.DrawnWidgets` (this is a last-observed counter, **not** a guaranteed exact per-FrameTimeline layer ownership label):
+
+| Measure | Last drawn widgets = 0 | Last drawn widgets = 7 |
+|---|---:|---:|
+| StaticSwap p90 | 4.314ms (100 swaps) | 9.812ms (429 swaps) |
+| StaticDraw p90 | 1.923ms (100 draws) | 2.739ms (428 draws) |
+| Launcher PRESENT_ON_TIME | 31 / 154 | 32 / 516 |
+| Launcher BUFFER_STUFFING bit | 21 / 154 (13.6%) | 288 / 516 (55.8%) |
+
+This strengthens the case for **active Widget glass output / composition pressure** as the larger bottleneck. It does not prove independent causation because presentation windows and user operations also change; per-layer GPU completion and matched return gestures are still missing. An EGL swap stall cannot be identified with shader execution alone.
+
 ## Candidate rejected: delaying geometry-only swaps
 
 Naive one-refresh bounded geometry delays looked promising given 193 additional geometry frames; an offline replay of the real timestamps disproved a sufficiently good coalescing ratio:
