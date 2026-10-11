@@ -24,6 +24,7 @@ public class SystemSettingsScopeContractTest {
         int systemUiGate = module.indexOf("if (SYSTEM_UI_PACKAGE.equals(packageName))");
         assertTrue(settingsGate > 0 && settingsGate < systemUiGate);
         assertTrue(module.contains("ConfigSchema.SystemSettings.PRISMAL_SWITCH"));
+        assertTrue(module.contains("SETTINGS_PACKAGE.equals(loadedProcessName)"));
         assertTrue(module.contains("SystemSettingsPrismalSwitchHook.install(param.getClassLoader())"));
         assertTrue(schema.contains("\"system_settings_prismal_switch\", false, false, false"));
         assertTrue(schema.contains("add(keys, SystemSettings.PRISMAL_SWITCH)"));
@@ -40,10 +41,14 @@ public class SystemSettingsScopeContractTest {
         assertTrue(hook.contains("miuix.slidingwidget.widget.SlidingButton"));
         assertTrue(hook.contains("target.getDeclaredMethod(\"onDraw\""));
         assertFalse(hook.contains("CompoundButton.class.getDeclaredMethod"));
-        assertTrue(overlay.contains("frame.id != android.R.id.widget_frame"));
+        assertTrue(overlay.contains("ancestor?.id == android.R.id.widget_frame"));
         assertTrue(overlay.contains("stock.performClick()"));
         assertTrue(overlay.contains("stock.alpha = stockAlpha"));
-        assertTrue(overlay.contains("frame.removeView(view)"));
+        assertTrue(overlay.contains("content.removeView(view)"));
+        assertTrue(overlay.contains("content.addView("));
+        assertTrue(overlay.contains("stock.getLocationOnScreen(stockPosition)"));
+        assertTrue(overlay.contains("stock.getGlobalVisibleRect(visibleRect)"));
+        assertFalse(overlay.contains("content.removeView(stock)"));
         assertTrue(overlay.contains("GuiOnTouchPrismalToggle("));
         assertFalse(overlay.contains("setOnCheckedChangeListener"));
         assertFalse(overlay.contains("PixelCopy"));
