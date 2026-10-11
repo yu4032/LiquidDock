@@ -57,6 +57,24 @@ public class PrismalCompositeHotPathContractTest {
     }
 
     @Test
+    public void workspaceAppReturnPerfettoSeparatesShaderWorkFromSwapWithoutDebugLogging()
+            throws Exception {
+        String source = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        assertTrue(source.contains("boolean trace = workspaceSource && Trace.isEnabled()"));
+        assertTrue(source.contains("boolean trace = workspaceSource && work != 0 && Trace.isEnabled()"));
+        assertTrue(source.contains("LD.Workspace.SourceFrame"));
+        assertTrue(source.contains("LD.Workspace.Backdrop"));
+        assertTrue(source.contains("LD.Workspace.StaticDraw"));
+        assertTrue(source.contains("LD.Workspace.StaticSwap"));
+        assertTrue(source.contains("LD.Workspace.DrawnStaticNodes"));
+        assertTrue(source.contains("LD.Workspace.DrawnWidgets"));
+        assertTrue(source.contains("LD.Workspace.WidgetGeometryReads"));
+        assertTrue(source.contains("if (tracing) Trace.beginSection"));
+        assertTrue(source.contains("if (tracing) Trace.endSection"));
+        assertFalse(source.contains("MainHook.debugLogging && workspaceSource"));
+    }
+
+    @Test
     public void securityCenterCompositeDoesNotPollGlErrorEveryPresent() throws Exception {
         String source = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
         assertFalse(source.contains("GLES20.glGetError()"));
