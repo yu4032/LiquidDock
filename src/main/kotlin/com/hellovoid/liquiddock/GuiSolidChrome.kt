@@ -1,135 +1,111 @@
 package com.hellovoid.liquiddock
 
 import android.graphics.drawable.Drawable
-import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
 
 /**
- * The settings canvas and opaque material fills are fixed per light/dark theme.
- * Directional white specular distribution is pre-baked into reusable 9-patch
- * resources. Unlike uniform stroke colors, its intensity decays from the
- * upper-left key light to the dark right/bottom perimeter.
+ * The GUI backdrop is fixed; bake the FINAL composite of the background,
+ * saturated Plus-blend Prismal Default specular, and shape edge into a 9-patch.
+ *
+ * The source default_specular.agsl yields a normal-dependent WHITE source,
+ * but PrismalSpecularModifier draws that source with BlendMode.Plus and clips
+ * it to a continuous rounded rectangle. A plain white SRC_OVER bitmap cannot
+ * reproduce the result over our near-white palette: Plus saturates thin lines
+ * all the way to white. The 9-patch therefore stores the actual composited
+ * opaque RGB result, not a standalone alpha map or a fake white outline.
+ *
+ * Upstream: PrismalAGSL v1.0.4 PrismalSpecularModifier.kt and
+ * default_specular.agsl. Assets built offline from the fixed light/dark canvas.
  */
 internal data class GuiPresetChromePalette(
     val canvas: Color,
     val canvasWithoutGlass: Color,
-    val cardFill: Color,
-    val pillFill: Color,
-    val thumbFill: Color,
-    val dangerFill: Color,
-    val cardSpecular: Drawable,
-    val pillSpecular: Drawable,
-    val thumbSpecular: Drawable,
+    val cardMaterial: Drawable,
+    val pillMaterial: Drawable,
+    val thumbMaterial: Drawable,
+    val dangerMaterial: Drawable,
 )
 
 internal val LocalGuiPresetChromePalette = staticCompositionLocalOf<GuiPresetChromePalette> {
-    error("Gui preset chrome requires ModernSettingsScaffold")
+    error("GUI preset material requires ModernSettingsScaffold")
 }
 
 @Composable
 internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val context = LocalContext.current
-    val isDark = isSystemInDarkTheme()
     val canvas = colorResource(R.color.gui_preset_canvas)
     val canvasWithoutGlass = colorResource(R.color.gui_preset_canvas_glass_off)
-    val cardFill = colorResource(R.color.gui_preset_card_fill)
-    val pillFill = colorResource(R.color.gui_preset_pill_fill)
-    val thumbFill = colorResource(R.color.gui_preset_thumb_fill)
-    val dangerFill = colorResource(R.color.gui_preset_danger_fill)
 
-    // Android selects drawable-night/ without a runtime per-cell color calculation.
-    // One instance per shape is shared by the scaffold; drawing only changes bounds.
-    val cardSpecular = remember(context, isDark) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_specular_card)).mutate()
+    // Qualifiers select light/dark images. Drawables are loaded exactly once at
+    // the scaffold; each Cell changes bounds and draws the shared immutable pixels.
+    val cardMaterial = remember(context, canvas) {
+        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_card)).mutate()
     }
-    val pillSpecular = remember(context, isDark) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_specular_pill)).mutate()
+    val pillMaterial = remember(context, canvas) {
+        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_pill)).mutate()
     }
-    val thumbSpecular = remember(context, isDark) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_specular_thumb)).mutate()
+    val thumbMaterial = remember(context, canvas) {
+        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_thumb)).mutate()
+    }
+    val dangerMaterial = remember(context, canvas) {
+        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_danger)).mutate()
     }
     return remember(
-        canvas, canvasWithoutGlass, cardFill, pillFill, thumbFill, dangerFill,
-        cardSpecular, pillSpecular, thumbSpecular,
+        canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
+        thumbMaterial, dangerMaterial,
     ) {
         GuiPresetChromePalette(
-            canvas, canvasWithoutGlass, cardFill, pillFill, thumbFill, dangerFill,
-            cardSpecular, pillSpecular, thumbSpecular,
+            canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
+            thumbMaterial, dangerMaterial,
         )
     }
 }
 
 internal enum class GuiSolidChromeStyle { CARD, PILL, THUMB, DANGER }
 
-private val cardShape = RoundedCornerShape(24.dp)
-private val pillShape = RoundedCornerShape(999.dp)
-
 /**
- * Solid fill directly on the Cell, plus a transparent, baked 9-patch highlight.
- * The image contains white light concentrated at the top-left, with a soft
- * falloff along top/left and almost none on the bottom-right. 9-patch regions
- * preserve corner radius on differently sized cells without AGSL, shaders,
- * per-cell optical gradients or offscreen background capture.
+ * Single precomposited material draw behind the Cell CONTENT. It replaces BOTH
+ * the solid background() and the specular drawWithContent overlay. In particular
+ * high-intensity edges must never be drawn over labels or interactive controls.
+ *
+ * No Prismal shader, capture, GraphicsLayer, runtime lighting, blur, per-Cell
+ * painter allocation, or second composable. 9-patch preserves corner pixels.
  */
 internal fun Modifier.guiSolidChrome(
     style: GuiSolidChromeStyle,
     palette: GuiPresetChromePalette,
 ): Modifier {
-    val fill: Color
-    val specular: Drawable
-    when (style) {
-        GuiSolidChromeStyle.CARD -> {
-            fill = palette.cardFill
-            specular = palette.cardSpecular
-        }
-        GuiSolidChromeStyle.PILL -> {
-            fill = palette.pillFill
-            specular = palette.pillSpecular
-        }
-        GuiSolidChromeStyle.THUMB -> {
-            fill = palette.thumbFill
-            specular = palette.thumbSpecular
-        }
-        GuiSolidChromeStyle.DANGER -> {
-            fill = palette.dangerFill
-            specular = palette.pillSpecular
-        }
+    val material = when (style) {
+        GuiSolidChromeStyle.CARD -> palette.cardMaterial
+        GuiSolidChromeStyle.PILL -> palette.pillMaterial
+        GuiSolidChromeStyle.THUMB -> palette.thumbMaterial
+        GuiSolidChromeStyle.DANGER -> palette.dangerMaterial
     }
-    val shape = if (style == GuiSolidChromeStyle.CARD) cardShape else pillShape
-    return this.background(fill, shape).guiDrawBakedSpecular(specular)
-}
-
-// The pressed slider and toggle thumbs keep Prismal's *actual* Ambient shader,
-// whose layer alpha follows pressProgress. No baked overlay is added during touch.
-private fun Modifier.guiDrawBakedSpecular(drawable: Drawable): Modifier =
-    this.drawWithContent {
-        drawContent()
+    return this.drawBehind {
         drawIntoCanvas { canvas ->
-            val nativeCanvas = canvas.nativeCanvas
             val width = size.width.roundToInt()
             val height = size.height.roundToInt()
             if (width > 0 && height > 0) {
-                val save = nativeCanvas.save()
+                val native = canvas.nativeCanvas
+                val checkpoint = native.save()
                 try {
-                    drawable.setBounds(0, 0, width, height)
-                    drawable.draw(nativeCanvas)
+                    material.setBounds(0, 0, width, height)
+                    material.draw(native)
                 } finally {
-                    nativeCanvas.restoreToCount(save)
+                    native.restoreToCount(checkpoint)
                 }
             }
         }
     }
+}
