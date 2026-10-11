@@ -263,7 +263,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(surfaces.contains("LocalFrozenPrismalBackdrop"));
         assertTrue(surfaces.contains("GuiStaticGlassChrome("));
         assertTrue(surfaces.contains("style = GuiStaticGlassStyle.CARD"));
-        assertTrue(surfaces.contains("style = GuiStaticGlassStyle.PILL"));
+        assertTrue(surfaces.contains("GuiStaticGlassStyle.DANGER else GuiStaticGlassStyle.PILL"));
         assertFalse(surfaces.contains("GuiFrozenPrismalChrome("));
         assertTrue(chrome.contains("ContextCompat.getDrawable(context, resourceId)"));
         assertTrue(chrome.contains("drawIntoCanvas { canvas ->"));
