@@ -140,7 +140,7 @@ def bake(kind, theme):
         scanlines.extend(pixels[y * row_size:(y + 1) * row_size])
     ihdr = struct.pack(">IIBBBBB", columns, rows, 8, 6, 0, 0, 0)
     out = (
-        b"\\x89PNG\\r\\n\\x1a\\n"
+        b"\x89PNG\r\n\x1a\n"
         + png_chunk("IHDR", ihdr)
         + png_chunk("IDAT", zlib.compress(bytes(scanlines), level=0))
         + png_chunk("IEND", b"")
