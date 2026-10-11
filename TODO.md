@@ -225,9 +225,9 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 
 ## 12. 系统设置 Prismal 控件适配（预留）
 
-**状态：第一个 MIUIX SlidingButton Prismal 开关试验已编码；默认关闭，待 CI 和实机验收。**
+**状态：原 ComposeView/Prismal App Startup 方案因真实 Settings 绘制闪退已删除，切换为 MIUIX 原生 Canvas/AGSL 试验；默认关闭，待 CI 和真机验收。**
 
-正式 JADX/REA 已确认 `SlidingButton#onDraw(Canvas)`、`performClick()` 以及标准 `miuix_preference_widget_checkbox.xml` 的 ID。由于 `settingslib_preference.xml` 的 widget_frame 实际为 LinearLayout，当前改为在 Activity 原生 content FrameLayout 上以目标开关的屏幕位置叠加 Prismal，不移动或覆写原控件，仅在隐藏原控件绘制时同步 alpha。待真机核验：视觉成功率、是否触发并正确持久化原 Preference 回调、滚动/rebind 后还原状态、Native/Compose 混合渲染帧耗时，以及无障碍。该实验尚无真实 Settings 背景折射；不得因静态 CI 通过就宣称功能完成。
+2026-10-11 真实日志确认三个 MIUIX `onDraw(Canvas)` Hook 均命中；原方案首先因 `ViewTreeLifecycleOwner not found` 无法挂载，加入 Activity 生命周期桥后复现 `Prismal AGSL assets are not initialized` 并导致 Settings 主线程崩溃。因此已彻底移除 Settings Compose overlay/Activity owner bridge，改为直接在 `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 的原生 onDraw(Canvas) 内绘制仅本地程序性玻璃材质：硬件 Canvas 优先 AGSL，失败使用原生 Canvas 渐变；整个绘制失败回到 MIUIX 原始方法。不改 MIUIX 触摸、checked 或业务提交。仍需真机验证：AGSL 编译兼容性、完整视觉、原始布局、滑动中动画、禁用态、无障碍与 GPU 压力；没有真实背景折射，不得宣称功能已完成。
 
 ---
 
