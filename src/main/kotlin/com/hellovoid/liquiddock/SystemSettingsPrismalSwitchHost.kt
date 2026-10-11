@@ -70,12 +70,14 @@ object SystemSettingsPrismalSwitchHost {
 
         var session = sessions[root]
         val newSession = session == null
+        var pending: Binding? = null
         try {
             if (session == null) {
                 session = Session(root)
                 sessions[root] = session
             }
             val binding = Binding(stock, session)
+            pending = binding
             binding.install()
             attached[stock] = binding
             session.register(binding)
@@ -86,9 +88,11 @@ object SystemSettingsPrismalSwitchHost {
             failedKinds.add(stock.javaClass.name)
             Api101Bridge.log("$TAG Prismal component install rejected " +
                 "type=${stock.javaClass.name} cause=${error.javaClass.name}: ${error.message}")
-            if (newSession) {
-                sessions.remove(root)?.dispose()
+            try { pending?.dispose() } catch (cleanup: Throwable) {
+                Api101Bridge.log("$TAG Prismal rollback failed " +
+                    cleanup.javaClass.name + ": " + cleanup.message)
             }
+            if (newSession) sessions.remove(root)?.dispose()
             return false
         }
     }
@@ -262,9 +266,9 @@ object SystemSettingsPrismalSwitchHost {
             // If the row is the actual click owner, dispatch through that row
             // so Settings' veto/confirmation/persistence path is preserved.
             var parent = stock.parent
-            repeat(12) {
-                val owner = parent as? View ?: return@repeat
-                if (owner.id == android.R.id.content) return@repeat
+            for (depth in 0 until 12) {
+                val owner = parent as? View ?: break
+                if (owner.id == android.R.id.content) break
                 if (owner.isEnabled && owner.isClickable) {
                     owner.performClick()
                     return
