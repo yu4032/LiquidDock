@@ -386,13 +386,11 @@ internal fun GuiOnTouchPrismalSlider(
                     .size(40.dp, 24.dp)
             ) {
                 if (!sampling) {
-                    // Frozen native Prismal thumb, never a flat white substitute.
+                    // Draw shared static chrome while the untouched gesture spring remains active.
                     // Gestures stay on the stable outer Box.
-                    GuiFrozenPrismalChrome(
-                        backdrop = underlayBackdrop,
-                        shape = { PrismalCapsule() },
-                        // Reuse the main-branch #307 fix: transform only the frozen
-                        // cached thumb, never the live source/backdrop coordinate space.
+                    GuiStaticGlassChrome(
+                        style = GuiStaticGlassStyle.PILL,
+                        darkTheme = !isLightTheme,
                         modifier = Modifier.matchParentSize().graphicsLayer {
                             val velocity = dampedDragAnimation.velocity / 10f
                             scaleX = dampedDragAnimation.scaleX /
@@ -400,12 +398,6 @@ internal fun GuiOnTouchPrismalSlider(
                             scaleY = dampedDragAnimation.scaleY *
                                 (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
                         },
-                        blurRadius = 8.dp,
-                        refractionHeightPx = with(density) { 4.dp.toPx() },
-                        refractionAmountPx = with(density) { 6.dp.toPx() },
-                        chromaticAberration = 0.28f,
-                        surfaceColor = Color.White.copy(alpha = 0.75f),
-                        depthEffect = false,
                     )
                 }
             }
