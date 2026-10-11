@@ -99,7 +99,15 @@ object SystemSettingsPrismalSwitchOverlay {
                             selected = { selected.value },
                             onSelect = { next ->
                                 if (!disposed && stock.isEnabled && next != stock.isChecked) {
-                                    stock.performClick()
+                                    try {
+                                        stock.performClick()
+                                    } catch (error: Throwable) {
+                                        Api101Bridge.log(
+                                            "[DC][SettingsSwitch] native click failed; restoring stock",
+                                            error,
+                                        )
+                                        main.post { dispose() }
+                                    }
                                 }
                                 selected.value = stock.isChecked
                             },
