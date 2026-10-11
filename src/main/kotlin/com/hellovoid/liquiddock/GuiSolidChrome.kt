@@ -9,6 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawOutline
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -39,6 +46,10 @@ internal data class GuiPresetChromePalette(
     val pillMaterial: Drawable,
     val thumbMaterial: Drawable,
     val dangerMaterial: Drawable,
+    val rimContrast: Color,
+    val rimStrong: Color,
+    val rimMedium: Color,
+    val rimWeak: Color,
 )
 
 internal val LocalGuiPresetChromePalette = staticCompositionLocalOf<GuiPresetChromePalette> {
@@ -54,6 +65,11 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val pillColor = colorResource(R.color.gui_preset_pill_fill).toArgb()
     val thumbColor = colorResource(R.color.gui_preset_thumb_fill).toArgb()
     val dangerColor = colorResource(R.color.gui_preset_danger_fill).toArgb()
+    // Resource colors are shared. No Cell derives its own light direction.
+    val rimContrast = colorResource(R.color.gui_preset_rim_contrast)
+    val rimStrong = colorResource(R.color.gui_preset_rim_strong)
+    val rimMedium = colorResource(R.color.gui_preset_rim_medium)
+    val rimWeak = colorResource(R.color.gui_preset_rim_weak)
 
     // Android night/nodpi qualifiers select the correct source. Load four
     // drawable instances once per scaffold and reuse the same baked pixels.
@@ -84,10 +100,12 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     return remember(
         canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
         thumbMaterial, dangerMaterial,
+        rimContrast, rimStrong, rimMedium, rimWeak,
     ) {
         GuiPresetChromePalette(
             canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
             thumbMaterial, dangerMaterial,
+            rimContrast, rimStrong, rimMedium, rimWeak,
         )
     }
 }
@@ -237,5 +255,89 @@ private fun loadGuiChromeOrSolidFallback(
         cornerRadius = radiusDp * density
         setColor(fallbackColor)
         setStroke((density).roundToInt().coerceAtLeast(1), 0x55FFFFFF)
+    }
+}
+
+
+/**
+ * Prismal's specular is a clipped, antialiased rounded-rectangle stroke.
+ * The previous prebaked PNG lost its four corner glints when stretched and
+ * was never valid for the 40x24dp XML thumb. Use the ACTUAL continuous
+ * Prismal shape, cached once per measured size, and fixed resource colors.
+ *
+ * A plain outline is insufficient: sweep stops leave a white glint at ALL
+ * four curved corners with stronger opposing 45-degree lobes, while the
+ * dim contrast edge preserves the glossy transition on white handles.
+ * This is cheap shape-stroke rendering, NOT a per-Cell AGSL, lens pass or blur.
+ */
+internal fun Modifier.guiStaticSpecularRim(
+    shape: Shape,
+    palette: GuiPresetChromePalette,
+    compact: Boolean = false,
+): Modifier = this.drawWithCache {
+    val outline = shape.createOutline(size, layoutDirection, this)
+    val colorStops = arrayOf(
+        0f to palette.rimWeak,      // right side
+        0.125f to palette.rimStrong, // bottom-right corner
+        0.25f to palette.rimMedium, // bottom side
+        0.375f to palette.rimMedium, // bottom-left corner
+        0.5f to palette.rimWeak,   // left side
+        0.625f to palette.rimStrong, // top-left corner
+        0.75f to palette.rimMedium, // top side
+        0.875f to palette.rimMedium, // top-right corner
+        1f to palette.rimWeak,
+    )
+    val whiteReflection = Brush.sweepGradient(
+        colorStops = colorStops,
+        center = Offset(size.width / 2f, size.height / 2f),
+    )
+    val contrastWidth = if (compact) 2.2.dp.toPx() else 1.8.dp.toPx()
+    val glintWidth = if (compact) 1.2.dp.toPx() else 1.15.dp.toPx()
+    onDrawBehind {
+        drawOutline(
+            outline, color = palette.rimContrast,
+            style = Stroke(width = contrastWidth),
+        )
+        drawOutline(
+            outline, brush = whiteReflection,
+            style = Stroke(width = glintWidth),
+        )
+    }
+}
+
+/**
+ * Lightweight fixed soft edge in place of PrismalDepthShadow's per-item
+ * Offscreen GraphicsLayer/RenderEffect. The shadow draws outside the clip.
+ * Low-alpha concentric strokes approximate the native 24dp/4dp-vertical
+ * shadow (or the handle's compact 4dp/0.67dp variant).
+ *
+ * This never loads a drawable, never allocates a GPU target, and therefore
+ * cannot repeat the null-shadow resource startup crash.
+ */
+internal fun Modifier.guiStaticSoftShadow(
+    shape: Shape,
+    compact: Boolean = false,
+): Modifier = this.drawWithCache {
+    val outline = shape.createOutline(size, layoutDirection, this)
+    val offsetY = if (compact) (4f / 6f).dp.toPx() else 4.dp.toPx()
+    val layers = if (compact) {
+        floatArrayOf(5.dp.toPx(), 3.dp.toPx(), 1.5.dp.toPx())
+    } else {
+        floatArrayOf(32.dp.toPx(), 18.dp.toPx(), 8.dp.toPx())
+    }
+    val opacities = if (compact) {
+        floatArrayOf(0.012f, 0.016f, 0.018f)
+    } else {
+        floatArrayOf(0.008f, 0.016f, 0.025f)
+    }
+    onDrawBehind {
+        translate(top = offsetY) {
+            for (i in layers.indices) {
+                drawOutline(
+                    outline, color = Color.Black.copy(alpha = opacities[i]),
+                    style = Stroke(width = layers[i]),
+                )
+            }
+        }
     }
 }
