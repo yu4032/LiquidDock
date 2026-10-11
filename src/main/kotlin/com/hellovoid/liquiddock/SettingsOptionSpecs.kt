@@ -87,9 +87,6 @@ internal fun optionSummary(key: String): String = when (key) {
     "liquid_highlight_width" -> "控制边缘反射与高光带宽度"
     "liquid_depth_effect" -> "控制圆角处折射方向向中心偏转；直边不变，0 为关闭"
     "liquid_brightness" -> "整体输出亮度"
-    "liquid_specular_sharp" -> "镜面高光锐度"
-    "liquid_specular_strength" -> "双镜面高光强度"
-    "liquid_rim_light" -> "边缘光强度"
     "liquid_caustics" -> "焦散强度"
     "liquid_prismal_refraction_inset" -> "调整玻璃可见遮罩的内缩；20 为原轮廓，保留抗锯齿"
     "liquid_prismal_displacement_scale" -> "折射与视差位移总倍率"
@@ -100,7 +97,6 @@ internal fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_dispersion_r" -> "红色通道相对色散倍率"
     "liquid_prismal_dispersion_b" -> "蓝色通道相对色散倍率"
     "liquid_prismal_vibrancy" -> "玻璃内背景的饱和度；100% 为原色，低于 100% 去饱和"
-    "liquid_prismal_plain_highlight" -> "基础边缘高光"
     "liquid_os4_edge_width_px" -> "OS4 边缘带宽度，使用完整逻辑输出像素，不随下采样比例变化"
     "liquid_os4_reflect_offset_px" -> "OS4 沿 SDF 边缘法线采样背景的偏移；0 为自动"
     "liquid_os4_reflection_strength" -> "OS4 背景反射与当前玻璃颜色的混合强度"
@@ -276,9 +272,6 @@ internal val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.TINT_BLUE, "底色 · 蓝", ""),
     IntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, "玻璃边缘厚度", "%"),
     IntSpec(ConfigSchema.Glass.BRIGHTNESS, "亮度", "%"),
-    IntSpec(ConfigSchema.Glass.SPECULAR_SHARPNESS, "高光锐度", ""),
-    IntSpec(ConfigSchema.Glass.SPECULAR_STRENGTH, "高光强度", "%"),
-    IntSpec(ConfigSchema.Glass.RIM_LIGHT, "边缘光强度", "%"),
     IntSpec(ConfigSchema.Glass.CAUSTICS, "焦散强度", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_REFRACTION_INSET, "折射内缩", "px"),
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPLACEMENT_SCALE, "位移倍率", "%"),
@@ -289,7 +282,6 @@ internal val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_R, "红色散倍率", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_DISPERSION_B, "蓝色散倍率", "%"),
     IntSpec(ConfigSchema.Glass.PRISMAL_VIBRANCY, "色彩饱和度", "%"),
-    IntSpec(ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT, "基础高光", "%"),
     IntSpec(ConfigSchema.Glass.OS4_EDGE_WIDTH_PX, "OS4 边缘带宽度", "px"),
     IntSpec(ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX, "OS4 反射偏移", "px"),
     IntSpec(ConfigSchema.Glass.OS4_REFLECTION_STRENGTH, "OS4 反射强度", "%"),
@@ -326,12 +318,6 @@ internal val scopedOpticalDescriptors: List<ScopedOpticalDescriptor> by lazy {
 
 internal val launcherHighlightSpecs = listOf(
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.SKY_HAZE, ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE, R.string.highlight_sky_haze, R.string.highlight_sky_haze_summary),
-    HighlightToggleSpec(ConfigSchema.LauncherHighlight.SPECULAR, ConfigSchema.LauncherHighlight.LARGE_SPECULAR, R.string.highlight_specular, R.string.highlight_specular_summary),
-    HighlightToggleSpec(ConfigSchema.LauncherHighlight.LIT_RIM, ConfigSchema.LauncherHighlight.LARGE_LIT_RIM, R.string.highlight_lit_rim, R.string.highlight_lit_rim_summary),
-    HighlightToggleSpec(ConfigSchema.LauncherHighlight.OPPOSITE_RIM, ConfigSchema.LauncherHighlight.LARGE_OPPOSITE_RIM, R.string.highlight_opposite_rim, R.string.highlight_opposite_rim_summary),
-    HighlightToggleSpec(ConfigSchema.LauncherHighlight.CORNER_RIM, ConfigSchema.LauncherHighlight.LARGE_CORNER_RIM, R.string.highlight_corner_rim, R.string.highlight_corner_rim_summary),
-    HighlightToggleSpec(ConfigSchema.LauncherHighlight.FACE_SHEEN, ConfigSchema.LauncherHighlight.LARGE_FACE_SHEEN, R.string.highlight_face_sheen, R.string.highlight_face_sheen_summary),
-    HighlightToggleSpec(ConfigSchema.LauncherHighlight.PLAIN_HIGHLIGHT, ConfigSchema.LauncherHighlight.LARGE_PLAIN_HIGHLIGHT, R.string.highlight_plain, R.string.highlight_plain_summary),
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.CAUSTICS, ConfigSchema.LauncherHighlight.LARGE_CAUSTICS, R.string.highlight_caustics, R.string.highlight_caustics_summary),
     HighlightToggleSpec(ConfigSchema.LauncherHighlight.PRESS_GLOW, ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW, R.string.highlight_press_glow, R.string.highlight_press_glow_summary),
 )
@@ -370,12 +356,8 @@ internal val liquidColorSpecs = liquidSpecsFor(
 )
 internal val liquidLightingSpecs = liquidSpecsFor(
     ConfigSchema.Glass.HIGHLIGHT_WIDTH,
-    ConfigSchema.Glass.SPECULAR_SHARPNESS,
-    ConfigSchema.Glass.SPECULAR_STRENGTH,
-    ConfigSchema.Glass.RIM_LIGHT,
     ConfigSchema.Glass.CAUSTICS,
     ConfigSchema.Glass.PRISMAL_FRESNEL_REFLECT,
-    ConfigSchema.Glass.PRISMAL_PLAIN_HIGHLIGHT,
     ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X,
     ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y,
 )

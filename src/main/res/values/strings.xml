@@ -69,12 +69,6 @@
     <string name="launcher_highlights_entry_summary">Control the glass highlight layers used by workspace icons, folders, and widgets</string>
     <string name="launcher_highlights_header_summary">Control highlight layers separately for icons, small folders, and Dock icons versus widgets and large folders.</string>
     <string name="highlight_sky_haze">Sky haze</string><string name="highlight_sky_haze_summary">Soft reflected haze near the glass edge</string>
-    <string name="highlight_specular">Specular highlights</string><string name="highlight_specular_summary">Bright reflections from the primary light</string>
-    <string name="highlight_lit_rim">Lit rim</string><string name="highlight_lit_rim_summary">Edge light on the side facing the primary light</string>
-    <string name="highlight_opposite_rim">Opposite rim</string><string name="highlight_opposite_rim_summary">Secondary edge light opposite the primary light</string>
-    <string name="highlight_corner_rim">Corner rim</string><string name="highlight_corner_rim_summary">Extra highlight concentrated around rounded corners</string>
-    <string name="highlight_face_sheen">Face sheen</string><string name="highlight_face_sheen_summary">Broad soft sheen across the glass surface</string>
-    <string name="highlight_plain">Base highlight</string><string name="highlight_plain_summary">Basic edge highlight controlled by the highlight intensity</string>
     <string name="highlight_caustics">Caustics</string><string name="highlight_caustics_summary">Focused light patterns from the curved glass surface</string>
     <string name="highlight_press_glow">Press glow</string><string name="highlight_press_glow_summary">Localized glow used by interactive press effects</string>
     <string name="tab_overview">Overview</string>

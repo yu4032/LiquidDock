@@ -18,6 +18,7 @@ public class ThirdPartyGlassConfigCodecTest {
         prefs.put("third_party_glass.miui.searchbox.tint_alpha", 120);
         prefs.put("third_party_glass.miui.searchbox.capture_scale_percent", 72);
         prefs.put("third_party_glass.miui.searchbox.render_fps", 45);
+        prefs.put("third_party_glass.miui.searchbox.highlight_caustics", false);
         prefs.put("third_party_glass.miui.searchbox.highlight_specular", false);
         prefs.put("third_party_glass.future.adapter.corner_radius_dp", 18.5f);
         prefs.put("third_party_glass.future.adapter.hook_class", "bad.DynamicHook");
@@ -30,9 +31,10 @@ public class ThirdPartyGlassConfigCodecTest {
         assertEquals(120, exported.get("third_party_glass.miui.searchbox.tint_alpha"));
         assertEquals(72, exported.get("third_party_glass.miui.searchbox.capture_scale_percent"));
         assertEquals(45, exported.get("third_party_glass.miui.searchbox.render_fps"));
-        assertEquals(false, exported.get("third_party_glass.miui.searchbox.highlight_specular"));
+        assertEquals(false, exported.get("third_party_glass.miui.searchbox.highlight_caustics"));
         assertEquals(18.5f, ((Number) exported.get("third_party_glass.future.adapter.corner_radius_dp")).floatValue(), 0.001f);
         assertFalse(exported.containsKey("third_party_glass.future.adapter.hook_class"));
+        assertFalse(exported.containsKey("third_party_glass.miui.searchbox.highlight_specular"));
         assertFalse(exported.containsKey("other.dynamic.key"));
 
         LinkedHashMap<String, Object> imported = ConfigCodec.importValues(exported);
@@ -41,7 +43,7 @@ public class ThirdPartyGlassConfigCodecTest {
         assertEquals(120, imported.get("third_party_glass.miui.searchbox.tint_alpha"));
         assertEquals(72, imported.get("third_party_glass.miui.searchbox.capture_scale_percent"));
         assertEquals(45, imported.get("third_party_glass.miui.searchbox.render_fps"));
-        assertEquals(false, imported.get("third_party_glass.miui.searchbox.highlight_specular"));
+        assertEquals(false, imported.get("third_party_glass.miui.searchbox.highlight_caustics"));
     }
 
     @Test

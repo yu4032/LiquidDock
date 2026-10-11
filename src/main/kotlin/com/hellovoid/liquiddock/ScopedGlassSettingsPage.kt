@@ -245,12 +245,6 @@ private data class ProfileHighlightSpec(
 
 private val profileHighlightSpecs = listOf(
     ProfileHighlightSpec("highlight_sky_haze", "天空泛光", ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE),
-    ProfileHighlightSpec("highlight_specular", "镜面高光", ConfigSchema.LauncherHighlight.LARGE_SPECULAR),
-    ProfileHighlightSpec("highlight_lit_rim", "受光边缘", ConfigSchema.LauncherHighlight.LARGE_LIT_RIM),
-    ProfileHighlightSpec("highlight_opposite_rim", "背光边缘", ConfigSchema.LauncherHighlight.LARGE_OPPOSITE_RIM),
-    ProfileHighlightSpec("highlight_corner_rim", "圆角边缘", ConfigSchema.LauncherHighlight.LARGE_CORNER_RIM),
-    ProfileHighlightSpec("highlight_face_sheen", "表面柔光", ConfigSchema.LauncherHighlight.LARGE_FACE_SHEEN),
-    ProfileHighlightSpec("highlight_plain", "基础高光", ConfigSchema.LauncherHighlight.LARGE_PLAIN_HIGHLIGHT),
     ProfileHighlightSpec("highlight_caustics", "焦散高光", ConfigSchema.LauncherHighlight.LARGE_CAUSTICS),
     ProfileHighlightSpec("highlight_press_glow", "按压泛光", ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW),
 )
