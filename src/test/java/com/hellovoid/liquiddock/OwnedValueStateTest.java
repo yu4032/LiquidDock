@@ -45,6 +45,23 @@ public class OwnedValueStateTest {
         assertFalse(state.isClaimed());
     }
 
+    @Test public void mamlBackgroundVariableKeepsProviderOriginalAcrossRepeatedClaims() {
+        OwnedValueState<Double> variable = new OwnedValueState<>();
+        variable.claim(0.65d);
+        variable.claim(1.0d);
+        OwnedValueState.ReleaseDecision<Double> decision = variable.release(true);
+        assertTrue(decision.restoreOriginal);
+        assertEquals(Double.valueOf(0.65d), decision.originalValue);
+    }
+
+    @Test public void mamlBackgroundVariableDoesNotReplaceLaterVendorState() {
+        OwnedValueState<Double> variable = new OwnedValueState<>();
+        variable.claim(0.0d);
+        OwnedValueState.ReleaseDecision<Double> decision = variable.release(false);
+        assertFalse(decision.restoreOriginal);
+        assertEquals(Double.valueOf(0.0d), decision.originalValue);
+    }
+
     @Test public void releaseDoesNotOverwriteValueChangedByAnotherOwner() {
         OwnedValueState<String> state = new OwnedValueState<>();
         state.claim("vendor-background");
