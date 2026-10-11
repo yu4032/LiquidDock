@@ -245,9 +245,7 @@ internal fun GuiOnTouchPrismalToggle(
                             (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
                         scaleY = dampedDragAnimation.scaleY *
                             (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
-                    }
-                        .guiBakedDepthShadow(GuiSolidChromeStyle.THUMB, presetChrome)
-                        .guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome),
+                    }.guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome),
                 )
             }
         }
