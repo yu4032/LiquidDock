@@ -90,9 +90,11 @@ final class LauncherGlassVendorMaterialSuppressor {
                 }
             }
         }
+        // Native vendor rebind may rewrite enable_background_blur. Restore original MAML
+        // variable and reversible PassWindow gate *after* the verified view-blur handoff.
+        LauncherWidgetNativeViewBlurGate.release(host);
         if (isMaMlHost(host)) restoreMamlBackground(host);
         restorePassWindowGate(host);
-        LauncherWidgetNativeSelfBlurGate.release(host);
     }
 
     private static void suppressPassWindowWithoutClearingVendorMaterial(View host) {
