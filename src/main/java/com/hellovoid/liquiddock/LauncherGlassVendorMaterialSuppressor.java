@@ -101,7 +101,11 @@ final class LauncherGlassVendorMaterialSuppressor {
         }
         OwnedValueState<Boolean> ownership = PASS_WINDOW_GATE_OWNERSHIP
                 .computeIfAbsent(host, ignored -> new OwnedValueState<>());
-        ownership.claim(current);
+        OwnedValueState.ClaimDecision<Boolean> claim = ownership.claim(current);
+        if (claim.newClaim) {
+            MainHook.log("[DC][WidgetVendor] pass gate claimed host="
+                    + host.getClass().getSimpleName() + " original=" + current);
+        }
         // Reassert the gate after Launcher re-enables native blur on resume/color refresh,
         // but never zero its blur modes/radius. Release will restore the first claimed value.
         if (current && !MiBlurBridge.setPassWindowBlurEnabled(host, false)) {
@@ -119,6 +123,11 @@ final class LauncherGlassVendorMaterialSuppressor {
         if (decision.restoreOriginal && Boolean.TRUE.equals(decision.originalValue)) {
             MiBlurBridge.setPassWindowBlurEnabled(host, true);
         }
+        MainHook.log("[DC][WidgetVendor] pass gate released host="
+                + host.getClass().getSimpleName()
+                + " original=" + decision.originalValue
+                + " current=" + current
+                + " restore=" + decision.restoreOriginal);
     }
 
     private static void rememberMamlBackground(View host, Object root) {
@@ -132,6 +141,8 @@ final class LauncherGlassVendorMaterialSuppressor {
         if (original != null && Double.isFinite(original)) {
             MAML_BACKGROUND_OWNERSHIP.put(host, new MamlBackgroundClaim(root, original));
         }
+        MainHook.log("[DC][WidgetVendor] MAML root claimed id="
+                + System.identityHashCode(root) + " originalBg=" + original);
     }
 
     private static void restoreMamlBackground(View host) {
@@ -145,6 +156,11 @@ final class LauncherGlassVendorMaterialSuppressor {
         if (decision.restoreOriginal && decision.originalValue != null) {
             putMaMlBackgroundBlurVariable(host, decision.originalValue);
         }
+        MainHook.log("[DC][WidgetVendor] MAML root released id="
+                + System.identityHashCode(currentRoot)
+                + " originalBg=" + decision.originalValue
+                + " currentBg=" + current
+                + " restored=" + decision.restoreOriginal);
     }
 
     private static Object readMamlRoot(View host) {
