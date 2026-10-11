@@ -39,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.lerp
@@ -100,7 +99,6 @@ internal fun ModernSettingsScaffold(
     val screenLayer = rememberPrismalGlassLayer()
     val overlayBackdrop = rememberPrismalMergedSource(backgroundLayer, screenLayer)
     val background = MiuixTheme.colorScheme.background
-    val primary = MiuixTheme.colorScheme.primary
     val surface = MiuixTheme.colorScheme.surface
     // PrismalGlassSurface's tint applies BlendMode.Hue before its alpha overlay.
     // A neutral surface fill avoids recoloring green/other content behind the bar.
@@ -125,20 +123,8 @@ internal fun ModernSettingsScaffold(
                     else Modifier,
                 )
                 .then(
-                    if (glassEnabled) {
-                        Modifier.background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    background,
-                                    // Keep the captured gradient opaque.
-                                    lerp(background, primary, 0.07f),
-                                    background,
-                                ),
-                            ),
-                        )
-                    } else {
-                        Modifier.background(lerp(background, Color.Black, 0.06f))
-                    },
+                    if (glassEnabled) Modifier.background(background)
+                    else Modifier.background(lerp(background, Color.Black, 0.06f))
                 ),
         )
 
