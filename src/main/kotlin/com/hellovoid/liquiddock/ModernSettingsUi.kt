@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.components.PrismalGlassButton
+import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
@@ -309,7 +310,7 @@ internal fun ModernSurface(
     // continuously calculate background lighting/refraction.
     val staticChrome = LocalStaticGlassChrome.current
     val presetChrome = LocalGuiPresetChromePalette.current
-    val cardShape = RoundedCornerShape(24.dp)
+    val cardShape = PrismalRoundedRectangle(24.dp)
     // Dynamic MIUIX material lookup is only needed with GUI glass explicitly OFF.
     // Glass ON uses resource colors already resolved once by the scaffold.
     val fallbackChrome = if (staticChrome) Modifier else {
@@ -440,7 +441,7 @@ internal fun Button(
     // No drawable allocation or per-Cell render nodes. Only slider/toggle gestures use live Prismal in the page body.
     val staticChrome = LocalStaticGlassChrome.current
     val presetChrome = LocalGuiPresetChromePalette.current
-    val buttonShape = RoundedCornerShape(minHeight / 2)
+    val buttonShape = PrismalRoundedRectangle(minHeight / 2)
     val fallbackChrome = if (staticChrome) Modifier else {
         val colors = MiuixTheme.colorScheme
         val darkTheme = colors.background.luminance() < 0.5f
