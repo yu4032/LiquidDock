@@ -253,7 +253,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void staticGuiUsesBakedDirectionalSpecularNinePatchesWithoutLiveCellOptics()
+    public void staticGuiBakesPlusCompositedPrismalMaterialInsteadOfOverlayingSpecular()
             throws Exception {
         String surfaces = Files.readString(SURFACES);
         String bottom = Files.readString(BOTTOM_NAV);
@@ -265,35 +265,36 @@ public class ModernSettingsArchitectureTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
 
         assertTrue(surfaces.contains("LocalStaticGlassChrome provides glassEnabled"));
-        assertFalse(surfaces.contains("LocalFrozenPrismalBackdrop"));
+        assertTrue(surfaces.contains("LocalGuiPresetChromePalette provides presetChrome"));
         assertTrue(surfaces.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)"));
         assertTrue(surfaces.contains("GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL"));
+        assertTrue(surfaces.contains("val cardShape = PrismalRoundedRectangle(24.dp)"));
+        assertTrue(surfaces.contains("val buttonShape = PrismalRoundedRectangle(minHeight / 2)"));
         assertTrue(slider.contains(".guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)"));
-        assertTrue(slider.contains("PrismalSpecular.Ambient.copy("));
-        assertTrue(slider.contains("alpha = progress"));
         assertTrue(toggle.contains(".guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)"));
+        assertTrue(slider.contains("PrismalSpecular.Ambient.copy("));
         assertTrue(toggle.contains("PrismalSpecular.Ambient.copy("));
+        assertTrue(slider.contains("alpha = progress"));
         assertTrue(toggle.contains("alpha = progress"));
-        assertFalse(surfaces.contains("GuiStaticGlassChrome("));
+        assertFalse(slider.contains("Modifier.guiThumbHighlight("));
+        assertFalse(toggle.contains("Modifier.guiThumbHighlight("));
         assertFalse(surfaces.contains("GuiFrozenPrismalChrome("));
+        assertFalse(surfaces.contains("PrismalGlassSurface("));
 
         assertTrue(chrome.contains("internal fun Modifier.guiSolidChrome("));
-        assertFalse(chrome.contains("internal fun Modifier.guiThumbHighlight("));
         assertTrue(chrome.contains("LocalGuiPresetChromePalette"));
         assertTrue(chrome.contains("rememberGuiPresetChromePalette()"));
         assertTrue(chrome.contains("val canvas = colorResource(R.color.gui_preset_canvas)"));
-        assertTrue(chrome.contains("R.drawable.gui_specular_card"));
-        assertTrue(chrome.contains("R.drawable.gui_specular_pill"));
-        assertTrue(chrome.contains("R.drawable.gui_specular_thumb"));
+        assertTrue(chrome.contains("R.drawable.gui_material_card"));
+        assertTrue(chrome.contains("R.drawable.gui_material_pill"));
+        assertTrue(chrome.contains("R.drawable.gui_material_thumb"));
+        assertTrue(chrome.contains("R.drawable.gui_material_danger"));
         assertTrue(chrome.contains("ContextCompat.getDrawable"));
-        assertTrue(chrome.contains("drawable.draw(nativeCanvas)"));
-        assertTrue(chrome.contains("drawContent()"));
-        assertTrue(chrome.contains("GuiSolidChromeStyle.THUMB ->"));
-        assertTrue(chrome.contains("R.color.gui_preset_card_fill"));
-        assertTrue(chrome.contains("R.color.gui_preset_thumb_fill"));
-        assertTrue(chrome.contains("R.color.gui_preset_danger_fill"));
+        assertTrue(chrome.contains("this.drawBehind {"));
+        assertTrue(chrome.contains("material.draw(native)"));
+        assertFalse(chrome.contains("drawWithContent"));
+        assertFalse(chrome.contains("drawContent()"));
         assertFalse(chrome.contains("PrismalGlassSurface("));
-        assertFalse(chrome.contains("drawPrismalGlass("));
         assertFalse(chrome.contains("rememberGraphicsLayer("));
         assertFalse(chrome.contains("Brush."));
         assertFalse(chrome.contains("RenderEffect.create"));
@@ -302,106 +303,95 @@ public class ModernSettingsArchitectureTest {
                 "src/main/res/values/gui_preset_material_colors.xml"));
         String dark = Files.readString(Path.of(
                 "src/main/res/values-night/gui_preset_material_colors.xml"));
-        assertTrue(light.contains("<color name=\"gui_preset_canvas\">#F5F7FA</color>"));
+        assertTrue(light.contains("<color name=\"gui_preset_canvas\">#F0F1F6</color>"));
         assertTrue(dark.contains("<color name=\"gui_preset_canvas\">#1B2028</color>"));
-        assertTrue(light.contains("<color name=\"gui_preset_canvas_glass_off\">#E6E8EB</color>"));
-        assertTrue(dark.contains("<color name=\"gui_preset_canvas_glass_off\">#191E26</color>"));
-        for (String colorKey : new String[]{
-                "gui_preset_card_fill", "gui_preset_pill_fill",
-                "gui_preset_thumb_fill", "gui_preset_danger_fill"}) {
-            assertTrue(light.contains("name=\"" + colorKey + "\""));
-            assertTrue(dark.contains("name=\"" + colorKey + "\""));
-        }
+        assertTrue(light.contains("<color name=\"gui_preset_card_fill\">#F4F4FC</color>"));
+        assertTrue(light.contains("<color name=\"gui_preset_pill_fill\">#F2F2FA</color>"));
+        assertTrue(light.contains("<color name=\"gui_preset_thumb_fill\">#FFFFFF</color>"));
+        assertTrue(dark.contains("<color name=\"gui_preset_thumb_fill\">#FFFFFF</color>"));
 
-        // Faithfully mirror PrismalAGSL v1.0.4 default_specular.agsl:
-        // pow(abs(dot(roundedRectSdfNormal, vec2(cos(45), sin(45)))), 1).
-        // Both matching diagonal corners must be bright, opposite corners faint.
-        // The thumb uses ambient_specular.agsl: normal sign selects white vs black.
+        // Decode PNG bytes using only classes available in Android unit tests.
+        // The screenshot-matched material is fully COMPOSITED:
+        // center pixels are opaque background colors, thin rim is white due
+        // to source Prismal BlendMode.Plus, *not* translucent white SrcOver.
         for (String qualifier : new String[]{"drawable-xxhdpi", "drawable-night-xxhdpi"}) {
-            for (String kind : new String[]{"card", "pill", "thumb"}) {
+            boolean isLight = qualifier.equals("drawable-xxhdpi");
+            for (String kind : new String[]{"card", "pill", "thumb", "danger"}) {
                 byte[] png = Files.readAllBytes(Path.of(
-                        "src/main/res", qualifier, "gui_specular_" + kind + ".9.png"));
+                        "src/main/res", qualifier, "gui_material_" + kind + ".9.png"));
                 assertTrue(png.length > 100);
-                // Minimal indexed PNG byte decoder; works in Android unit tests,
-                // which do not contain java.awt/imageio desktop APIs.
-                assertTrue((png[0] & 255) == 137 && png[1] == 80 && png[2] == 78
-                        && png[3] == 71);
+                assertTrue((png[0] & 255) == 137 && png[1] == 80
+                        && png[2] == 78 && png[3] == 71);
                 int width = 0;
                 int height = 0;
-                byte[] alphaPalette = null;
-                byte[] rgbPalette = null;
+                byte[] palette = null;
+                byte[] alpha = null;
                 java.io.ByteArrayOutputStream idat = new java.io.ByteArrayOutputStream();
                 for (int offset = 8; offset + 12 <= png.length;) {
-                    java.nio.ByteBuffer chunkInfo = java.nio.ByteBuffer.wrap(png, offset, 8)
+                    java.nio.ByteBuffer chunk = java.nio.ByteBuffer.wrap(png, offset, 8)
                             .order(java.nio.ByteOrder.BIG_ENDIAN);
-                    int length = chunkInfo.getInt();
-                    int type = chunkInfo.getInt();
+                    int length = chunk.getInt();
+                    int type = chunk.getInt();
                     assertTrue(length >= 0 && offset + length + 12 <= png.length);
-                    if (type == 0x49484452) { // IHDR
+                    if (type == 0x49484452) {
                         java.nio.ByteBuffer dimensions = java.nio.ByteBuffer.wrap(
                                 png, offset + 8, 8).order(java.nio.ByteOrder.BIG_ENDIAN);
                         width = dimensions.getInt();
                         height = dimensions.getInt();
-                        assertTrue((png[offset + 16] & 255) == 4); // 4-bit indexed
-                        assertTrue((png[offset + 17] & 255) == 3); // indexed palette
-                    } else if (type == 0x504c5445) { // PLTE
-                        rgbPalette = java.util.Arrays.copyOfRange(
+                        assertTrue((png[offset + 16] & 255) == 4);
+                        assertTrue((png[offset + 17] & 255) == 3);
+                    } else if (type == 0x504c5445) {
+                        palette = java.util.Arrays.copyOfRange(
                                 png, offset + 8, offset + 8 + length);
-                    } else if (type == 0x74524e53) { // tRNS
-                        alphaPalette = java.util.Arrays.copyOfRange(
+                    } else if (type == 0x74524e53) {
+                        alpha = java.util.Arrays.copyOfRange(
                                 png, offset + 8, offset + 8 + length);
-                    } else if (type == 0x49444154) { // IDAT
+                    } else if (type == 0x49444154) {
                         idat.write(png, offset + 8, length);
                     }
                     offset += length + 12;
                 }
                 assertTrue(width >= 70 && height >= 60);
-                assertTrue(alphaPalette != null && alphaPalette.length == 16);
-                assertTrue(rgbPalette != null && rgbPalette.length == 48);
-                byte[] decompressed;
+                assertTrue(palette != null && palette.length == 48);
+                assertTrue(alpha != null && alpha.length == 16);
+                byte[] pixels;
                 try (java.util.zip.InflaterInputStream inflater =
                         new java.util.zip.InflaterInputStream(
                                 new java.io.ByteArrayInputStream(idat.toByteArray()))) {
-                    decompressed = inflater.readAllBytes();
+                    pixels = inflater.readAllBytes();
                 }
-                int stride = (width + 1) / 2; // filter byte + two 4-bit indices per byte
-                assertTrue(decompressed.length == (stride + 1) * height);
-                long[] quadrant = new long[4];
-                for (int y = 2; y < height - 2; y++) {
-                    int row = y * (stride + 1);
-                    assertTrue((decompressed[row] & 255) == 0); // filter NONE
-                    for (int x = 2; x < width - 2; x++) {
-                        int packed = decompressed[row + x / 2 + 1] & 255;
-                        int index = x % 2 == 0 ? packed >>> 4 : packed & 15;
-                        int alpha = alphaPalette[index] & 255;
-                        int rgbOffset = index * 3;
-                        boolean white = (rgbPalette[rgbOffset] & 255) > 128;
-                        int quadrantIndex = (x < width / 2 ? 0 : 1)
-                                + (y < height / 2 ? 0 : 2);
-                        quadrant[quadrantIndex] += white ? alpha : -alpha;
-                    }
-                }
-                if ("thumb".equals(kind)) {
-                    assertTrue("Ambient: dark normal-facing side upper-left",
-                            quadrant[0] < 0);
-                    assertTrue("Ambient: bright side bottom-right", quadrant[3] > 0);
-                    assertTrue("Ambient signs must not collapse into a white outline",
-                            quadrant[3] > quadrant[0]);
+                int stride = (width + 1) / 2;
+                assertTrue(pixels.length == (stride + 1) * height);
+                int midY = height / 2;
+                int midX = width / 2;
+                int centerRow = midY * (stride + 1);
+                int centerPacked = pixels[centerRow + 1 + midX / 2] & 255;
+                int centerIdx = midX % 2 == 0 ? centerPacked >>> 4 : centerPacked & 15;
+                assertTrue("Interior material must be opaque", (alpha[centerIdx] & 255) == 255);
+                assertTrue("Nine-patch border must be transparent", (alpha[0] & 255) == 0);
+                int centerR = palette[centerIdx * 3] & 255;
+
+                int topY = 3;
+                int topRow = topY * (stride + 1);
+                int topPacked = pixels[topRow + 1 + midX / 2] & 255;
+                int topIdx = midX % 2 == 0 ? topPacked >>> 4 : topPacked & 15;
+                int topR = palette[topIdx * 3] & 255;
+
+                if (kind.equals("thumb")) {
+                    // Original Prismal onDrawSurface is opaque white at rest
+                    // and Ambient alpha = pressProgress -> 0 when idle.
+                    assertTrue("Idle thumb is white", centerR == 255 && topR == 255);
                 } else {
-                    assertTrue("Default: upper-left corner more reflective than upper-right",
-                            quadrant[0] > quadrant[1] * 1.2);
-                    assertTrue("Default: bottom-right corner more reflective than bottom-left",
-                            quadrant[3] > quadrant[2] * 1.2);
-                    assertTrue("Default: both diagonally opposed corners receive specular",
-                            quadrant[0] > 0 && quadrant[3] > 0);
-                    assertTrue("Default: opposite corners have similar intensity",
-                            Math.abs(quadrant[0] - quadrant[3]) < quadrant[0] * 0.1);
+                    assertTrue("Plus-composited rim must brighten the final RGB",
+                            topR > centerR);
+                    if (isLight && !kind.equals("danger")) {
+                        assertTrue("Near-white backdrop should saturate at the edge",
+                                topR >= 251);
+                    }
                 }
             }
         }
-        assertTrue(surfaces.contains("LocalGuiPresetChromePalette provides presetChrome"));
-        assertTrue(surfaces.contains("val background = presetChrome.canvas"));
-        assertTrue(surfaces.contains("if (staticChrome) Modifier else {"));
+
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
     }
