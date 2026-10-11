@@ -24,6 +24,7 @@ public class HookScopeRestartShellTest {
         assertTrue(script.contains("restart_running com.google.android.inputmethod.latin com.google.android.inputmethod.latin"));
         assertFalse(script.contains("restart_running com.android.systemui com.android.systemui"));
         assertFalse(script.contains("restart_running com.android.quicksearchbox com.android.quicksearchbox"));
+        assertFalse(script.contains("restart_running com.android.settings com.android.settings"));
         assertFalse(script.contains("am force-stop com.miui.securitycenter"));
         assertTrue(script.contains("if [ -z \"$before\" ]; then report \"$scope\" NOT_RUNNING"));
         assertTrue(script.contains("if ! kill -TERM $before"));
@@ -58,12 +59,14 @@ public class HookScopeRestartShellTest {
                 "\nrestart_running com.google.android.inputmethod.latin ");
         int search = script.indexOf(
                 "\nrestart_running com.android.quicksearchbox ");
+        int settings = script.indexOf("\nrestart_running com.android.settings com.android.settings");
         int home = script.indexOf("\nold_home=");
         int systemUi = script.indexOf("\nrestart_systemui\n");
         assertTrue(security > 0);
         assertTrue(gboard > security);
         assertTrue(search > gboard);
-        assertTrue(home > search);
+        assertTrue(settings > search);
+        assertTrue(home > settings);
         assertTrue("SystemUI must run LAST because it returns to lockscreen",
                 systemUi > home);
         assertTrue(script.contains("am start -a android.intent.action.MAIN "));
