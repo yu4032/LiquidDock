@@ -99,9 +99,13 @@ final class LauncherWidgetNativeSelfBlurGate {
             return;
         }
         boolean success = callNative(host, 0, null);
+        int nativeRadius;
         synchronized (state) {
             if (state.claimed) state.outputMuted = success;
+            nativeRadius = state.vendorRadius;
         }
+        MainHook.log(TAG + " claim class=" + host.getClass().getSimpleName()
+                + " nativeRadius=" + nativeRadius + " muted=" + success);
     }
 
     static void release(View host) {
