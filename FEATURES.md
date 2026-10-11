@@ -436,7 +436,7 @@ Dock 页面保留“Dock 尺寸过渡动画”和“LiquidDock 顺滑尺寸动�
 
 只需要某一项扩展时，可以只为对应应用勾选额外作用域。
 
-系统设置独立试验开关：仅在确认的 OS3.0.310.0.WAOCNXM 版本里，使用 MIUIX `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 原有的 `onDraw(Canvas)` 绘制 Canvas/AGSL 玻璃质感。原生触摸、设置项回调、状态和持久化均保留；不再注入 ComposeView 或使用 Prismal 的 App Startup。没有真实的背景捕获或折射；软件 Canvas 降级为渐变玻璃，遇绘制异常直接还原 MIUIX onDraw。默认关闭，需重启系统设置作用域，仍待真机验收。
+系统设置独立试验开关：仅在确认的 OS3.0.310.0.WAOCNXM 版本里，使用 MIUIX `SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat` 原有的 `onDraw(Canvas)` 绘制以 GuiOnTouchPrismalToggle 为比例和动效依据的 Canvas/AGSL 玻璃质感（64×28dp 轨道、40×24dp 玻璃胶囊滑块、20dp 行程、按压形变、弹簧过渡）。仅观察原生触摸与状态事件用于绘制；原生触摸、设置项回调、状态和持久化均保留；不再注入 ComposeView 或使用 Prismal 的 App Startup。没有真实的背景捕获或折射；软件 Canvas 降级为渐变玻璃，遇绘制异常直接还原 MIUIX onDraw。默认关闭，需重启系统设置作用域，仍待真机验收。
 
 ---
 
