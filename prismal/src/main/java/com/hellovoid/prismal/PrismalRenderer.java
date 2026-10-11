@@ -92,6 +92,9 @@ public final class PrismalRenderer implements AutoCloseable {
     private int blurVTexelSizeLocation = -1;
     private int blurVWeightsLocation = -1;
     private int blurVPairsLocation = -1;
+    private int blurHSigmaLocation = -1;
+    private int blurVSigmaLocation = -1;
+    private boolean optimizedGaussianBlur;
     private int glassPositionLocation = -1;
 
     // GL uniform values persist until the program is relinked. PrismalParams is immutable, so the
@@ -415,13 +418,25 @@ public final class PrismalRenderer implements AutoCloseable {
             return;
         }
         sourceProgram = createProgram(SOURCE_VERTEX, SOURCE_FRAGMENT);
-        // Preserve the vendored 31-tap Gaussian kernel but move per-pixel exp() work
-        // into one uniform upload per sigma. Only the matching-resolution V pass can
-        // safely combine adjacent taps through GL_LINEAR.
-        blurHProgram = createProgram(PrismalShaderSources.BLUR_VERTEX,
-                PrismalGaussianBlurKernel.HORIZONTAL_FRAGMENT);
-        blurVProgram = createProgram(PrismalShaderSources.BLUR_VERTEX,
-                PrismalGaussianBlurKernel.VERTICAL_FRAGMENT);
+        // Keep a driver-safe fallback to the exact unmodified upstream blur shader.
+        // One unsupported shader must not cause all Launcher/Dock glass to fail.
+        try {
+            blurHProgram = createProgram(PrismalShaderSources.BLUR_VERTEX,
+                    PrismalGaussianBlurKernel.HORIZONTAL_FRAGMENT);
+            blurVProgram = createProgram(PrismalShaderSources.BLUR_VERTEX,
+                    PrismalGaussianBlurKernel.VERTICAL_FRAGMENT);
+            optimizedGaussianBlur = true;
+        } catch (IllegalStateException unsupportedShader) {
+            if (blurHProgram != 0) GLES20.glDeleteProgram(blurHProgram);
+            if (blurVProgram != 0) GLES20.glDeleteProgram(blurVProgram);
+            blurHProgram = 0;
+            blurVProgram = 0;
+            optimizedGaussianBlur = false;
+            blurHProgram = createProgram(PrismalShaderSources.BLUR_VERTEX,
+                    PrismalShaderSources.BLUR_H);
+            blurVProgram = createProgram(PrismalShaderSources.BLUR_VERTEX,
+                    PrismalShaderSources.BLUR_V);
+        }
         String glassFragment = PrismalComponentGateShader.apply(
                 PrismalOpticalEdgeShader.apply(
                         PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)));
@@ -437,12 +452,19 @@ public final class PrismalRenderer implements AutoCloseable {
         blurHPositionLocation = requireAttrib(blurHProgram, "a_position");
         blurHTextureLocation = requireUniform(blurHProgram, "u_texture");
         blurHTexelSizeLocation = requireUniform(blurHProgram, "u_texelSize");
-        blurHWeightsLocation = requireUniform(blurHProgram, "u_weights[0]");
+        blurHWeightsLocation = optimizedGaussianBlur
+                ? requireUniform(blurHProgram, "u_weights[0]") : -1;
+        blurHSigmaLocation = optimizedGaussianBlur
+                ? -1 : requireUniform(blurHProgram, "u_sigma");
         blurVPositionLocation = requireAttrib(blurVProgram, "a_position");
         blurVTextureLocation = requireUniform(blurVProgram, "u_texture");
         blurVTexelSizeLocation = requireUniform(blurVProgram, "u_texelSize");
-        blurVWeightsLocation = requireUniform(blurVProgram, "u_weights[0]");
-        blurVPairsLocation = requireUniform(blurVProgram, "u_pairs[0]");
+        blurVWeightsLocation = optimizedGaussianBlur
+                ? requireUniform(blurVProgram, "u_weights[0]") : -1;
+        blurVPairsLocation = optimizedGaussianBlur
+                ? requireUniform(blurVProgram, "u_pairs[0]") : -1;
+        blurVSigmaLocation = optimizedGaussianBlur
+                ? -1 : requireUniform(blurVProgram, "u_sigma");
         glassPositionLocation = requireAttrib(glassProgram, "a_position");
 
         // Sampler units are immutable for the lifetime of these linked programs.
@@ -519,21 +541,22 @@ public final class PrismalRenderer implements AutoCloseable {
         float sigma = Math.max(p.blurRadiusPx * physicalScale * BLUR_FBO_SCALE, 0.5f);
         boolean updateTexelSize = cachedBlurWidth != blurWidth || cachedBlurHeight != blurHeight;
         boolean updateSigma = Float.compare(cachedBlurSigma, sigma) != 0;
-        if (updateSigma) gaussianKernel.update(sigma);
-        renderBlurPass(blurHProgram, sourceTexture, blurFramebufferH,
-                blurHPositionLocation, blurHTexelSizeLocation, blurHWeightsLocation, -1,
-                updateTexelSize, updateSigma);
-        renderBlurPass(blurVProgram, blurTextureH, blurFramebufferV,
+        if (updateSigma && optimizedGaussianBlur) gaussianKernel.update(sigma);
+        renderBlurPass(blurHProgram, sourceTexture, blurFramebufferH, sigma,
+                blurHPositionLocation, blurHTexelSizeLocation, blurHWeightsLocation,
+                blurHSigmaLocation, -1, updateTexelSize, updateSigma);
+        renderBlurPass(blurVProgram, blurTextureH, blurFramebufferV, sigma,
                 blurVPositionLocation, blurVTexelSizeLocation, blurVWeightsLocation,
-                blurVPairsLocation, updateTexelSize, updateSigma);
+                blurVSigmaLocation, blurVPairsLocation, updateTexelSize, updateSigma);
         cachedBlurWidth = blurWidth;
         cachedBlurHeight = blurHeight;
         cachedBlurSigma = sigma;
     }
 
-    private void renderBlurPass(int program, int inputTexture, int framebuffer,
+    private void renderBlurPass(int program, int inputTexture, int framebuffer, float sigma,
                                 int position, int texelSizeLocation, int weightsLocation,
-                                int pairsLocation, boolean updateTexelSize, boolean updateSigma) {
+                                int sigmaLocation, int pairsLocation,
+                                boolean updateTexelSize, boolean updateSigma) {
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer);
         GLES20.glViewport(0, 0, blurWidth, blurHeight);
@@ -549,11 +572,15 @@ public final class PrismalRenderer implements AutoCloseable {
                     1f / Math.max(1, blurWidth), 1f / Math.max(1, blurHeight));
         }
         if (updateSigma) {
-            GLES20.glUniform1fv(weightsLocation, gaussianKernel.weights.length,
-                    gaussianKernel.weights, 0);
-            if (pairsLocation >= 0) {
-                GLES20.glUniform2fv(pairsLocation,
-                        PrismalGaussianBlurKernel.PAIR_COUNT, gaussianKernel.verticalPairs, 0);
+            if (!optimizedGaussianBlur) {
+                GLES20.glUniform1f(sigmaLocation, sigma);
+            } else {
+                GLES20.glUniform1fv(weightsLocation, gaussianKernel.weights.length,
+                        gaussianKernel.weights, 0);
+                if (pairsLocation >= 0) {
+                    GLES20.glUniform2fv(pairsLocation,
+                            PrismalGaussianBlurKernel.PAIR_COUNT, gaussianKernel.verticalPairs, 0);
+                }
             }
         }
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);
@@ -875,9 +902,10 @@ public final class PrismalRenderer implements AutoCloseable {
         sourceProgram = blurHProgram = blurVProgram = glassProgram = 0;
         sourcePositionLocation = sourceUvLocation = sourceTextureLocation = -1;
         blurHPositionLocation = blurHTextureLocation = blurHTexelSizeLocation
-                = blurHWeightsLocation = -1;
+                = blurHWeightsLocation = blurHSigmaLocation = -1;
         blurVPositionLocation = blurVTextureLocation = blurVTexelSizeLocation
-                = blurVWeightsLocation = blurVPairsLocation = -1;
+                = blurVWeightsLocation = blurVPairsLocation = blurVSigmaLocation = -1;
+        optimizedGaussianBlur = false;
         glassPositionLocation = -1;
         cachedStaticParams = null;
         cachedHighlightMask = Integer.MIN_VALUE;
