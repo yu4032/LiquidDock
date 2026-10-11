@@ -50,6 +50,8 @@ public final class ModuleMain extends XposedModule {
         refreshDebugLogging();
         String packageName = param.getPackageName();
         if (SETTINGS_PACKAGE.equals(packageName)) {
+            // Never initialize UI integration in Settings child/remote processes.
+            if (!SETTINGS_PACKAGE.equals(loadedProcessName)) return;
             try {
                 ConfigReader reader = ConfigReader.load();
                 if (!reader.b(ConfigSchema.Core.ENABLED.name(),
