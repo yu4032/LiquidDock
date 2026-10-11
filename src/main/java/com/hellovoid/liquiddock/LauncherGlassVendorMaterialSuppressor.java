@@ -42,6 +42,7 @@ final class LauncherGlassVendorMaterialSuppressor {
         // setters. Some setters themselves change enable_background_blur.
         if (isMaMlHost(host)) rememberMamlBackground(host, readMamlRoot(host));
         suppressPassWindowWithoutClearingVendorMaterial(host);
+        LauncherWidgetNativeViewBlurGate.claim(host);
 
         // RemoteViews stores its layout id under android.R.id.widget_frame as a keyed tag on the
         // direct content root. Launcher 4.50 clears exactly that root background when native widget
@@ -89,6 +90,9 @@ final class LauncherGlassVendorMaterialSuppressor {
                 }
             }
         }
+        // Native vendor rebind may rewrite enable_background_blur. Restore original MAML
+        // variable and reversible PassWindow gate *after* the verified view-blur handoff.
+        LauncherWidgetNativeViewBlurGate.release(host);
         if (isMaMlHost(host)) restoreMamlBackground(host);
         restorePassWindowGate(host);
     }
