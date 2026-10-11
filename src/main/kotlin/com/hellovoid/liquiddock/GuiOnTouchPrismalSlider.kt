@@ -386,18 +386,17 @@ internal fun GuiOnTouchPrismalSlider(
                     .size(40.dp, 24.dp)
             ) {
                 if (!sampling) {
-                    // Draw shared static chrome while the untouched gesture spring remains active.
+                    // Draw a plain-color thumb while keeping the original spring transform.
                     // Gestures stay on the stable outer Box.
-                    GuiStaticGlassChrome(
-                        style = GuiStaticGlassStyle.PILL,
-                        darkTheme = !isLightTheme,
+                    Box(
                         modifier = Modifier.matchParentSize().graphicsLayer {
                             val velocity = dampedDragAnimation.velocity / 10f
                             scaleX = dampedDragAnimation.scaleX /
                                 (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
                             scaleY = dampedDragAnimation.scaleY *
                                 (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
-                        },
+                        }
+                            .guiSolidChrome(GuiSolidChromeStyle.PILL, !isLightTheme),
                     )
                 }
             }
