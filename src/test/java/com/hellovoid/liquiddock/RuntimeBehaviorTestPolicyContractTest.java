@@ -69,6 +69,7 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "SecurityCenterScopeContractTest.java",
             "SideSlideHoldArchitectureContractTest.java",
             "ShortcutSecondaryGlassContractTest.java",
+            "SystemSettingsScopeContractTest.java", // fixed vendor API/scope, GPU capture and R8 startup boundary
             "SystemUiHandleMenuGlassContractTest.java",
             "UserFacingPreferenceSchemaTest.java",
             "WidgetRemoteViewsRootBackgroundContractTest.java",
