@@ -174,3 +174,24 @@ Instead of trying another arbitrary nominal radius or PNG stretch multiplier:
 New regression contracts require Card/Button/Stepper to use the *same* shape for fill and single stroke, and reject use of the old PNG path for those components. **CI cannot verify perceived radius**; test the long Dock Geometry Cells and small +/- action buttons on device.
 
 Do not merge PR #352 until accepted.
+
+
+## Restore actual Prismal DepthShadow without restoring glass sampling (2026-10-12)
+
+The previous `guiStaticSoftShadow` was not Prismal's algorithm: three semitransparent contour strokes (32/18/8dp for Cards, 5/3/1.5dp for thumbs) created unnatural multiple-ring shading. The user requested direct restoration.
+
+**Native implementation restored:** Added `GuiPrismalNativeDepthShadow.kt`, adapting PrismalAGSL **v1.0.4's actual internal** `PrismalDepthShadowNode` and `Paint.blur` (MIT, Copyright 2026 Saurav Sajeev). Upstream makes this DrawModifierNode internal and ties it to an internal `PrismalShapeLayout`; using `drawPrismalGlass` merely to access the shadow would also restore unwanted backdrop processing and glass sampling. The local standalone node keeps **exactly the shadow pipeline**:
+- `GraphicsLayer` with `CompositingStrategy.Offscreen`, allocated on attach/released on detach.
+- `BlurMaskFilter(radius, NORMAL)` applied to the shadow's **filled Shape outline**.
+- `BlendMode.Clear` to subtract the interior of the offset shadow.
+- Draw the cached layer under content at the upstream `radius*2` inset.
+- Retain `PrismalDepthShadow.Default` for Cards, buttons and steppers (24dp radius, offset Y=4dp, black=10%), and the existing active-thumb settings (4dp radius, black=5%) for the **idle** slider/toggle thumb.
+- Cache `Shape.createOutline` based on Shape, size, layout direction and density, analogous to upstream `PrismalShapeLayout`. Only re-record the blurred shadow when those keys or relevant shadow properties change. This additionally avoids upstream's potential repeated re-records from identity-comparing freshly allocated outlines.
+
+The modifier is applied **before the existing shape clip and material**, keeping the genuine soft exterior shadow visible. The three-stroke fake `guiStaticSoftShadow` is removed entirely. Do not add the old shadow PNGs: they caused a real device crash due to `getDrawable() == null`; no new mandatory drawable resources are introduced.
+
+**Important performance tradeoff:** The native algorithm uses one offscreen `GraphicsLayer` per live shadow node, including an expanded shadow bounds of `size+4*radius+offset`. Draw cache means it should not re-blur on every frame if sizes are stable, but it is not zero-cost; verify GPU memory and frame time on dense GUI pages. If cost is excessive, optimize caching/lifetime with measurements rather than faking native blur with three bands.
+
+Native active slider/toggle Prismal `Ambient` and existing `DepthShadow` remain unchanged; do not double-render both static and native shadows on the same sampling frame.
+
+Upstream attribution: `THIRD_PARTY_NOTICES.md` and `docs/licenses/PrismalAGSL-MIT.txt`. PR is Draft; do not merge before verifying real-device shadows and performance.
