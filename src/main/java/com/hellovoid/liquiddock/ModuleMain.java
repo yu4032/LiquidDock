@@ -49,8 +49,23 @@ public final class ModuleMain extends XposedModule {
     public void onPackageReady(@NonNull PackageReadyParam param) {
         refreshDebugLogging();
         String packageName = param.getPackageName();
-        // Reserved for Settings Prismal UI adapters; deliberately no hooks installed yet.
-        if (SETTINGS_PACKAGE.equals(packageName)) return;
+        if (SETTINGS_PACKAGE.equals(packageName)) {
+            try {
+                ConfigReader reader = ConfigReader.load();
+                if (!reader.b(ConfigSchema.Core.ENABLED.name(),
+                        ConfigSchema.Core.ENABLED.runtimeFallback())
+                        || !reader.b(ConfigSchema.SystemSettings.PRISMAL_SWITCH.name(),
+                                ConfigSchema.SystemSettings.PRISMAL_SWITCH.runtimeFallback())) {
+                    return;
+                }
+                // Only a verified MIUIX SlidingButton is handled, with original callbacks
+                // and preference persistence retained. Other Settings widgets are untouched.
+                SystemSettingsPrismalSwitchHook.install(param.getClassLoader());
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][SettingsSwitch] bootstrap unavailable; stock retained", error);
+            }
+            return;
+        }
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
             ClassLoader classLoader = param.getClassLoader();
             if (classLoader == null) return;
