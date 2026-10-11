@@ -267,16 +267,21 @@ public class ModernSettingsArchitectureTest {
         assertFalse(surfaces.contains("LocalFrozenPrismalBackdrop"));
         assertTrue(surfaces.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)"));
         assertTrue(surfaces.contains("GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL"));
-        assertTrue(slider.contains(".guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome)"));
-        assertTrue(toggle.contains(".guiSolidChrome(GuiSolidChromeStyle.PILL, presetChrome)"));
+        assertTrue(slider.contains(".guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)"));
+        assertTrue(slider.contains(".then(if (sampling) Modifier.guiThumbHighlight(presetChrome) else Modifier)"));
+        assertTrue(toggle.contains(".guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)"));
+        assertTrue(toggle.contains(".then(if (samplingEnabled) Modifier.guiThumbHighlight(presetChrome) else Modifier)"));
         assertFalse(surfaces.contains("GuiStaticGlassChrome("));
         assertFalse(surfaces.contains("GuiFrozenPrismalChrome("));
         assertTrue(chrome.contains("internal fun Modifier.guiSolidChrome("));
         assertTrue(chrome.contains("LocalGuiPresetChromePalette"));
         assertTrue(chrome.contains("rememberGuiPresetChromePalette()"));
         assertTrue(chrome.contains("val canvas = colorResource(R.color.gui_preset_canvas)"));
-        assertTrue(chrome.contains(".border(1.dp, outline, shape)"));
-        assertTrue(chrome.contains(".border(0.5.dp, rim, shape)"));
+        assertTrue(chrome.contains(".border(1.75.dp, outline, shape)"));
+        assertTrue(chrome.contains(".border(1.dp, rim, shape)"));
+        assertTrue(chrome.contains("internal fun Modifier.guiThumbHighlight("));
+        assertTrue(chrome.contains("GuiSolidChromeStyle.THUMB ->"));
+        assertTrue(chrome.contains("R.color.gui_preset_thumb_rim"));
         assertTrue(chrome.contains("R.color.gui_preset_card_fill"));
         assertTrue(chrome.contains("R.color.gui_preset_card_rim"));
         assertTrue(chrome.contains("R.color.gui_preset_danger_fill"));
@@ -297,9 +302,17 @@ public class ModernSettingsArchitectureTest {
         assertTrue(dark.contains("<color name=\"gui_preset_canvas\">#1B2028</color>"));
         assertTrue(light.contains("<color name=\"gui_preset_canvas_glass_off\">#E6E8EB</color>"));
         assertTrue(dark.contains("<color name=\"gui_preset_canvas_glass_off\">#191E26</color>"));
+        // All bright edges are precomputed relative to the fixed canvas.
+        assertTrue(light.contains("<color name=\"gui_preset_card_rim\">#FFFFFFFF</color>"));
+        assertTrue(dark.contains("<color name=\"gui_preset_card_rim\">#FFDBEAFF</color>"));
+        assertTrue(light.contains("<color name=\"gui_preset_pill_rim\">#FFFFFFFF</color>"));
+        assertTrue(dark.contains("<color name=\"gui_preset_pill_rim\">#FFF2F8FF</color>"));
+        assertTrue(light.contains("<color name=\"gui_preset_thumb_rim\">#FFFFFFFF</color>"));
+        assertTrue(dark.contains("<color name=\"gui_preset_thumb_rim\">#FFFFFFFF</color>"));
         for (String colorKey : new String[]{
                 "gui_preset_card_fill", "gui_preset_card_rim", "gui_preset_card_outline",
                 "gui_preset_pill_fill", "gui_preset_pill_rim", "gui_preset_pill_outline",
+                "gui_preset_thumb_fill", "gui_preset_thumb_rim", "gui_preset_thumb_outline",
                 "gui_preset_danger_fill", "gui_preset_danger_rim", "gui_preset_danger_outline"
         }) {
             assertTrue(light.contains("name=\"" + colorKey + "\""));
