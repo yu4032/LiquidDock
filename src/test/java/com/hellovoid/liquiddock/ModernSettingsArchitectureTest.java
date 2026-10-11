@@ -269,14 +269,16 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)"));
         assertTrue(surfaces.contains("GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL"));
         assertTrue(slider.contains(".guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)"));
-        assertTrue(slider.contains(".then(if (sampling) Modifier.guiThumbHighlight(presetChrome) else Modifier)"));
+        assertTrue(slider.contains("PrismalSpecular.Ambient.copy("));
+        assertTrue(slider.contains("alpha = progress"));
         assertTrue(toggle.contains(".guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)"));
-        assertTrue(toggle.contains(".then(if (samplingEnabled) Modifier.guiThumbHighlight(presetChrome) else Modifier)"));
+        assertTrue(toggle.contains("PrismalSpecular.Ambient.copy("));
+        assertTrue(toggle.contains("alpha = progress"));
         assertFalse(surfaces.contains("GuiStaticGlassChrome("));
         assertFalse(surfaces.contains("GuiFrozenPrismalChrome("));
 
         assertTrue(chrome.contains("internal fun Modifier.guiSolidChrome("));
-        assertTrue(chrome.contains("internal fun Modifier.guiThumbHighlight("));
+        assertFalse(chrome.contains("internal fun Modifier.guiThumbHighlight("));
         assertTrue(chrome.contains("LocalGuiPresetChromePalette"));
         assertTrue(chrome.contains("rememberGuiPresetChromePalette()"));
         assertTrue(chrome.contains("val canvas = colorResource(R.color.gui_preset_canvas)"));
