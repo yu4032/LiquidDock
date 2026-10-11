@@ -309,15 +309,21 @@ internal fun ModernSurface(
     // continuously calculate background lighting/refraction.
     val staticChrome = LocalStaticGlassChrome.current
     val presetChrome = LocalGuiPresetChromePalette.current
-    val colors = MiuixTheme.colorScheme
-    val darkTheme = colors.background.luminance() < 0.5f
     val cardShape = RoundedCornerShape(24.dp)
-    val solidCardColor = if (darkTheme) {
-        lerp(colors.surface, colors.onSurface, 0.08f)
-    } else {
-        colors.surface
+    // Dynamic MIUIX material lookup is only needed with GUI glass explicitly OFF.
+    // Glass ON uses resource colors already resolved once by the scaffold.
+    val fallbackChrome = if (staticChrome) Modifier else {
+        val colors = MiuixTheme.colorScheme
+        val darkTheme = colors.background.luminance() < 0.5f
+        val solidCardColor = if (darkTheme) {
+            lerp(colors.surface, colors.onSurface, 0.08f)
+        } else {
+            colors.surface
+        }
+        val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
+        Modifier.background(solidCardColor, cardShape)
+            .border(1.dp, cardStroke, cardShape)
     }
-    val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
 
     Column(
         modifier = modifier
@@ -327,8 +333,7 @@ internal fun ModernSurface(
                 if (staticChrome) {
                     Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, presetChrome)
                 } else {
-                    Modifier.background(solidCardColor, cardShape)
-                        .border(1.dp, cardStroke, cardShape)
+                    fallbackChrome
                 }
             )
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
@@ -435,14 +440,18 @@ internal fun Button(
     // No drawable allocation or per-Cell render nodes. Only slider/toggle gestures use live Prismal in the page body.
     val staticChrome = LocalStaticGlassChrome.current
     val presetChrome = LocalGuiPresetChromePalette.current
-    val colors = MiuixTheme.colorScheme
-    val darkTheme = colors.background.luminance() < 0.5f
     val buttonShape = RoundedCornerShape(minHeight / 2)
-    val fillColor = if (destructive) Color(0xFFD73333) else {
-        lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
-    }
-    val outlineColor = if (destructive) Color.White.copy(alpha = 0.16f) else {
-        colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
+    val fallbackChrome = if (staticChrome) Modifier else {
+        val colors = MiuixTheme.colorScheme
+        val darkTheme = colors.background.luminance() < 0.5f
+        val fillColor = if (destructive) Color(0xFFD73333) else {
+            lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
+        }
+        val outlineColor = if (destructive) Color.White.copy(alpha = 0.16f) else {
+            colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
+        }
+        Modifier.background(fillColor, buttonShape)
+            .border(1.dp, outlineColor, buttonShape)
     }
     Box(
         modifier = modifier
@@ -457,8 +466,7 @@ internal fun Button(
                         presetChrome,
                     )
                 } else {
-                    Modifier.background(fillColor, buttonShape)
-                        .border(1.dp, outlineColor, buttonShape)
+                    fallbackChrome
                 }
             )
             .clickable(enabled = enabled, onClick = onClick),
