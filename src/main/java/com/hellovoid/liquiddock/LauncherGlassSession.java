@@ -651,7 +651,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private void drainOutputRenderWork() {
         int work = outputRenderState.consumeQueuedRender();
-        boolean trace = MainHook.debugLogging && workspaceSource && work != 0;
+        boolean trace = workspaceSource && work != 0 && Trace.isEnabled();
         if (trace) Trace.beginSection("LD.Workspace.GeometryFrame");
         try {
             if (backdropPrepared && work != 0) {
@@ -1089,7 +1089,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             return;
         }
-        boolean trace = MainHook.debugLogging && workspaceSource;
+        boolean trace = workspaceSource && Trace.isEnabled();
         if (trace) Trace.beginSection("LD.Workspace.SourceFrame");
         try {
             boolean perf = MainHook.debugLogging;
@@ -1204,27 +1204,52 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         OutputState output = staticOutput;
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
                 || output.width <= 0 || output.height <= 0) return;
-        // Background capture and blur remain downsampled, while procedural refraction
-        // renders directly into the native-resolution window. The Prismal node scissor
-        // limits expensive shading to occupied glass bounds.
-        sourceBackend.makeCurrent(output.eglSurface);
-        prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
-        StaticNodeState[] snapshot = staticNodeStateSnapshot;
-        for (StaticNodeState state : snapshot) {
-            LauncherGlassStaticNode node = state.nodeRef.get();
-            StaticGeometryFrame frame = state.frame;
-            LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
-            if (node == null || geometry == null) continue;
-            float projectedCenterX = workspaceScrollProjection.projectCenterX(
-                    geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
-            PrismalGeometry prismalGeometry = resolveStaticPrismalGeometry(
-                    state, frame, geometry, projectedCenterX);
-            PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
-                    node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
-            prismalRenderer.drawGlass(
-                    prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
+        // Trace GL-thread stages independently from debug-file logging. Do not change the
+        // source producer, wallpaper freshness or native HOME spring frame ownership.
+        boolean tracing = workspaceSource && Trace.isEnabled();
+        int renderedNodes = 0;
+        int renderedWidgets = 0;
+        if (tracing) Trace.beginSection("LD.Workspace.StaticDraw");
+        try {
+            // Background capture and blur remain downsampled, while procedural refraction
+            // renders directly into the native-resolution window. The Prismal node scissor
+            // limits expensive shading to occupied glass bounds.
+            sourceBackend.makeCurrent(output.eglSurface);
+            prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
+            StaticNodeState[] snapshot = staticNodeStateSnapshot;
+            for (StaticNodeState state : snapshot) {
+                LauncherGlassStaticNode node = state.nodeRef.get();
+                StaticGeometryFrame frame = state.frame;
+                LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
+                if (node == null || geometry == null) continue;
+                float projectedCenterX = workspaceScrollProjection.projectCenterX(
+                        geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
+                PrismalGeometry prismalGeometry = resolveStaticPrismalGeometry(
+                        state, frame, geometry, projectedCenterX);
+                PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
+                        node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
+                prismalRenderer.drawGlass(
+                        prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
+                if (tracing) {
+                    renderedNodes++;
+                    if (node.nodeKind() == LauncherGlassNodeKind.WIDGET) renderedWidgets++;
+                }
+            }
+        } finally {
+            if (tracing) {
+                Trace.endSection();
+                Trace.setCounter("LD.Workspace.DrawnStaticNodes", renderedNodes);
+                Trace.setCounter("LD.Workspace.DrawnWidgets", renderedWidgets);
+            }
         }
-        sourceBackend.swapBuffers(output.eglSurface);
+        // Driver/compositor back-pressure may be charged to eglSwapBuffers rather than
+        // drawGlass(). Keep this as a separate slice when inspecting FrameTimeline jank.
+        if (tracing) Trace.beginSection("LD.Workspace.StaticSwap");
+        try {
+            sourceBackend.swapBuffers(output.eglSurface);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
