@@ -6,6 +6,7 @@ import android.view.MotionEvent;
 import android.widget.CompoundButton;
 
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.WeakHashMap;
 
 /**
@@ -25,7 +26,8 @@ final class SystemSettingsPrismalSwitchHook {
     };
     private static final WeakHashMap<CompoundButton, Long> LAST_TRIED = new WeakHashMap<>();
     private static boolean installed;
-    private static volatile boolean disabledByPresentationFailure;
+    // A single incompatible View subclass must not suppress other Settings switch types.
+    private static final HashSet<String> FAILED_VIEW_CLASSES = new HashSet<>();
     private static int candidateDraws;
     private static int attachedCount;
 
@@ -64,7 +66,10 @@ final class SystemSettingsPrismalSwitchHook {
                             }
                             enqueue((CompoundButton) owner);
                         } catch (Throwable error) {
-                            Api101Bridge.log(TAG + " candidate skipped; native drawing retained", error);
+                            Api101Bridge.log(TAG + " candidate skipped type="
+                                    + error.getClass().getName()
+                                    + " message=" + error.getMessage()
+                                    + " native drawing retained");
                         }
                     }
                     return result;
@@ -113,7 +118,10 @@ final class SystemSettingsPrismalSwitchHook {
     }
 
     private static void enqueue(CompoundButton switchView) {
-        if (disabledByPresentationFailure || !switchView.isAttachedToWindow()) return;
+        if (!switchView.isAttachedToWindow()) return;
+        synchronized (FAILED_VIEW_CLASSES) {
+            if (FAILED_VIEW_CLASSES.contains(switchView.getClass().getName())) return;
+        }
         if (SystemSettingsPrismalSwitchOverlay.isAttached(switchView)) return;
         long now = SystemClock.uptimeMillis();
         synchronized (LAST_TRIED) {
@@ -130,8 +138,7 @@ final class SystemSettingsPrismalSwitchHook {
                     return;
                 }
                 if (!SystemSettingsPrismalSwitchOverlay.attach(switchView)) {
-                    disabledByPresentationFailure = true;
-                    Api101Bridge.log(TAG + " visual failed; disabling new overlays until restart");
+                    disableViewClass(switchView, "create/attach failed");
                 } else if (SystemSettingsPrismalSwitchOverlay.isAttached(switchView)) {
                     if (attachedCount++ < 8) {
                         Api101Bridge.log(TAG + " visual attached class="
@@ -139,10 +146,20 @@ final class SystemSettingsPrismalSwitchHook {
                     }
                 }
             } catch (Throwable error) {
-                disabledByPresentationFailure = true;
-                Api101Bridge.log(TAG + " visual exception; native control retained", error);
+                disableViewClass(switchView, error.getClass().getName()
+                        + ": " + error.getMessage());
             }
         });
+    }
+
+    private static void disableViewClass(CompoundButton switchView, String reason) {
+        String kind = switchView.getClass().getName();
+        synchronized (FAILED_VIEW_CLASSES) {
+            if (FAILED_VIEW_CLASSES.add(kind)) {
+                Api101Bridge.log(TAG + " disabled only class=" + kind
+                        + " until Settings restart cause=" + reason);
+            }
+        }
     }
 
     static void onDetached(CompoundButton switchView) {
