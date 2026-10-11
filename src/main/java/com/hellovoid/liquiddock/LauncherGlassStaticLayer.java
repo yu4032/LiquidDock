@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.SurfaceTexture;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -28,6 +29,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final LauncherGlassSession session;
     private final Handler mainHandler;
     private Surface outputSurface;
+    private Rect compositeClip;
     private boolean disposed;
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
@@ -97,6 +99,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         layer.workspaceRef = new WeakReference<>(workspace);
         // Do not translate the root-wide TextureView. Its pixels include the already sampled
         // backdrop, which belongs to root coordinates. Project only glass geometry in the session.
+        // Scroll projection can move static pixels without a matching node-layout event.
+        // Reset the narrow HWUI clip before updating the GL geometry projection.
+        layer.applyCompositorClip(null);
         layer.session.onWorkspaceScrollMutation(beforeScrollX, afterScrollX);
     }
 
@@ -203,6 +208,29 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         animator.start();
     }
 
+    /**
+     * Crop only HWUI's sampling of the already-fullscreen TextureView. Never call
+     * setTransform, resize the SurfaceTexture or move the texture in root space.
+     * May be called repeatedly by OnPreDraw; only an actual bounds change invalidates.
+     */
+    void applyCompositorClip(LauncherGlassCompositingBounds bounds) {
+        if (disposed) return;
+        if (bounds == null) {
+            if (compositeClip != null) {
+                compositeClip = null;
+                setClipBounds(null);
+            }
+            return;
+        }
+        if (compositeClip != null
+                && compositeClip.left == bounds.left && compositeClip.top == bounds.top
+                && compositeClip.right == bounds.right && compositeClip.bottom == bounds.bottom) {
+            return;
+        }
+        compositeClip = new Rect(bounds.left, bounds.top, bounds.right, bounds.bottom);
+        setClipBounds(compositeClip);
+    }
+
     private void applyLayerAlpha() { setAlpha(layerAlpha.alpha()); }
 
     private void cancelSceneAnimation() {
@@ -220,6 +248,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     void dispose() {
         if (disposed) return;
         session.resetWorkspaceScrollProjection();
+        applyCompositorClip(null);
         disposed = true;
         cancelSceneAnimation();
         cancelMotionAnimation();
@@ -234,6 +263,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
         if (disposed || texture == null) return;
         session.resetWorkspaceScrollProjection();
+        applyCompositorClip(null);
         Surface next = new Surface(texture);
         Surface old = outputSurface;
         outputSurface = next;
@@ -244,11 +274,13 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
         if (disposed) return;
         session.resetWorkspaceScrollProjection();
+        applyCompositorClip(null);
         session.resizeStaticOutput(Math.max(1, width), Math.max(1, height));
     }
 
     @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
         session.resetWorkspaceScrollProjection();
+        applyCompositorClip(null);
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachStaticOutput(current);
