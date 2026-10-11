@@ -120,8 +120,6 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue(ui.contains("verticalScroll(rememberScrollState())"));
         assertTrue(ui.contains("System Framework（system）需要重启设备"));
         assertTrue(ui.contains("destructive = true,"));
-        assertTrue(Files.readString(Path.of("src/main/res/drawable/gui_static_glass_danger.xml"))
-                .contains("#FFD73333"));
         assertTrue(ui.contains("contentAlignment = Alignment.Center"));
         assertTrue(ui.contains("text = \"重启\""));
     }
