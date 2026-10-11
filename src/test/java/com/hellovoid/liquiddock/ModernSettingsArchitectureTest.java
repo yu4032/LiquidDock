@@ -287,7 +287,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(chrome.contains("this.background(fill, shape).guiStaticSpecularRim(shape, palette)"));
         assertTrue(chrome.contains("val cardFill = colorResource(R.color.gui_preset_card_fill)"));
         assertTrue(chrome.contains("val pillFill = colorResource(R.color.gui_preset_pill_fill)"));
-        assertTrue(chrome.contains("GuiSolidChromeStyle.THUMB -> error("));
+        assertTrue(chrome.contains("GuiSolidChromeStyle.THUMB -> palette.thumbFill"));
         assertTrue(chrome.contains("LocalGuiPresetChromePalette"));
         assertTrue(chrome.contains("rememberGuiPresetChromePalette()"));
         assertTrue(chrome.contains("val canvas = colorResource(R.color.gui_preset_canvas)"));
