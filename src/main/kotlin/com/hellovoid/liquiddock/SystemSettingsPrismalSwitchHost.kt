@@ -194,15 +194,15 @@ object SystemSettingsPrismalSwitchHost {
         }
     }
 
-    private class MirrorComposeView(
+    private class MirrorLayer(
         context: Context,
         private val scene: SystemSettingsNativeBackdrop,
-    ) : ComposeView(context) {
-        override fun draw(canvas: Canvas) {
-            // Critical: native backdrop recording traverses the same root.
-            // Excluding the glass makes feedback recursion mathematically
-            // impossible and preserves a real scene sample.
-            if (!scene.capturing) super.draw(canvas)
+    ) : FrameLayout(context) {
+        override fun dispatchDraw(canvas: Canvas) {
+            // ComposeView is final. A FrameLayout wrapper is the recording
+            // exclusion barrier: the GPU capture may traverse the native root
+            // without ever recursively drawing the Prismal composable.
+            if (!scene.capturing) super.dispatchDraw(canvas)
         }
     }
 
@@ -215,14 +215,18 @@ object SystemSettingsPrismalSwitchHost {
         private val stockAlpha = stock.alpha
         private val visibleRect = Rect()
         private var disposed = false
-        var visual: MirrorComposeView? = null
+        var visual: MirrorLayer? = null
             private set
+        private var composition: ComposeView? = null
 
         fun install() {
             val scene = session.backdrop
-            val compose = MirrorComposeView(stock.context, scene).apply {
+            val layer = MirrorLayer(stock.context, scene).apply {
                 id = View.generateViewId()
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            }
+            val compose = ComposeView(stock.context).apply {
+                id = View.generateViewId()
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
                 // No fake local GlassLayer. The real native scene is the
                 // actual PrismalBackdrop read by the original Prismal toggle.
@@ -249,11 +253,15 @@ object SystemSettingsPrismalSwitchHost {
                     }
                 }
             }
-            visual = compose
+            layer.addView(compose, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT))
+            composition = compose
+            visual = layer
             val d = stock.resources.displayMetrics.density
             val width = maxOf(stock.width, (64f*d + 0.5f).toInt())
             val height = maxOf(stock.height, (48f*d + 0.5f).toInt())
-            session.content.addView(compose,
+            session.content.addView(layer,
                 FrameLayout.LayoutParams(width, height, Gravity.TOP or Gravity.LEFT))
             stock.addOnAttachStateChangeListener(this)
             // The original is still the Preference's live controller and
@@ -337,8 +345,9 @@ object SystemSettingsPrismalSwitchHost {
             stock.alpha = stockAlpha
             visual?.let { view ->
                 if (view.parent === session.content) session.content.removeView(view)
-                view.disposeComposition()
             }
+            composition?.disposeComposition()
+            composition = null
             visual = null
             attached.remove(stock)
             session.unregister(this)
