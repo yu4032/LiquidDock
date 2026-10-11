@@ -1,20 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Predetermined flat GUI canvas and chrome. All colors are baked relative to this canvas.
-         Only these resources are resolved at runtime; no per-Cell color blending or lighting. -->
+    <!-- Fixed GUI canvas and chrome fills are baked together. White specular distribution
+         is baked into drawable[-night]-xxhdpi 9-patches; no per-Cell light calculation. -->
     <color name="gui_preset_canvas">#F5F7FA</color>
     <color name="gui_preset_canvas_glass_off">#E6E8EB</color>
     <color name="gui_preset_card_fill">#EDF1F6</color>
-    <color name="gui_preset_card_rim">#FFFFFFFF</color>
-    <color name="gui_preset_card_outline">#FFB9C8D9</color>
     <color name="gui_preset_pill_fill">#E5EAF1</color>
-    <color name="gui_preset_pill_rim">#FFFFFFFF</color>
-    <color name="gui_preset_pill_outline">#FFACBED2</color>
-    <!-- Slider/toggle thumb has a stronger independent highlight, including during drag. -->
+    <!-- Thumb fill is shared by idle and touch states; white specular is in 9-patch bitmap. -->
     <color name="gui_preset_thumb_fill">#E5EAF1</color>
-    <color name="gui_preset_thumb_rim">#FFFFFFFF</color>
-    <color name="gui_preset_thumb_outline">#FFB0BFD2</color>
     <color name="gui_preset_danger_fill">#D73333</color>
-    <color name="gui_preset_danger_rim">#FFFFA3A3</color>
-    <color name="gui_preset_danger_outline">#FF9F1C24</color>
 </resources>
