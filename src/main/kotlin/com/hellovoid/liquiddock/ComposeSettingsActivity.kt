@@ -147,6 +147,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 text = stringResource(R.string.action_restart_scopes),
                 onClick = {
                     selectedRestartScopes = when (page) {
+                        Page.SystemSettings -> setOf("com.android.settings")
                         Page.Gboard -> setOf("com.google.android.inputmethod.latin")
                         Page.SecurityCenterSidebar,
                         Page.Animation,
@@ -330,6 +331,7 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
             Page.DialogAll -> ScopedGlassSettingsPage(
                 padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
             )
+                Page.SystemSettings -> SystemSettingsPage(padding, prefs, masterEnabled)
                 Page.ThirdPartyApps -> ThirdPartyAppsPage(
                     padding = padding,
                     prefs = prefs,
