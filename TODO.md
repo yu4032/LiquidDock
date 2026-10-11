@@ -225,9 +225,9 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 
 ## 12. 系统设置 Prismal 控件适配（预留）
 
-**状态：仅加入 `com.android.settings` LSPosed 作用域；暂不安装任何 Settings 控件 Hook。**
+**状态：第一个 MIUIX SlidingButton Prismal 开关试验已编码；默认关闭，待 CI 和实机验收。**
 
-后续依据 `hyperos-analysis` 同版本 Settings canonical JADX 产物，先定位具体 MIUIX Preference 按钮和滑动条的真实 owner。每次仅适配一个已验证的控件类型，复用原始 listener、数值写入与可访问性语义；仅接管视觉层。使用精确页面/类加载器检查与 fail-closed 机制，不得全局 Hook `android.widget.Button`/`SeekBar`，不得把 Prismal 控件直接覆盖到整个 View 树；保留原生 fallback。需要 CI + 关键 Settings 页面真机验收，再扩展覆盖。
+已从该版本 Settings 的 JADX 类清单确认 `miuix.slidingwidget.widget.SlidingButton` 存在；当前使用该 vendor 类自己的绘制/布局入口，并只在 `android.R.id.widget_frame` 中叠加 Prismal ComposeView。其真实方法签名、容器匹配率、与原生业务事件的一致性、跨 native 背景取样及性能均待实机检验。不对 `android.widget.CompoundButton` 全局 Hook，Compose SPA 暂不适配。不得把静态 CI 等同于真机证明。
 
 ---
 
