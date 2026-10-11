@@ -308,7 +308,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(chrome.contains("BitmapFactory"));
         assertFalse(chrome.contains("ScreenCapture"));
         assertFalse(chrome.contains("PixelCopy"));
-        assertFalse(chrome.contains("Brush."));
+        assertTrue(chrome.contains("Brush.sweepGradient("));
         assertFalse(chrome.contains("RenderEffect.create"));
 
         String light = Files.readString(Path.of(
@@ -440,6 +440,68 @@ public class ModernSettingsArchitectureTest {
         String thumbXml = Files.readString(Path.of(
                 "src/main/res/drawable/gui_material_thumb.xml"));
         assertTrue(thumbXml.contains("<solid android:color=\"#FFFFFFFF\"/>"));
+    }
+
+    @Test
+    public void staticGuiRestoresFourCornerSpecularAndLowCostShadowsWithoutCrashing() throws Exception {
+        String chrome = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiSolidChrome.kt"));
+        String surfaces = Files.readString(SURFACES);
+        String stepper = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticRepeatStepButton.kt"));
+        String slider = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
+        String toggle = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
+        String light = Files.readString(Path.of(
+                "src/main/res/values/gui_preset_material_colors.xml"));
+        String dark = Files.readString(Path.of(
+                "src/main/res/values-night/gui_preset_material_colors.xml"));
+
+        assertTrue(chrome.contains("internal fun Modifier.guiStaticSpecularRim("));
+        assertTrue(chrome.contains("internal fun Modifier.guiStaticSoftShadow("));
+        assertTrue(chrome.contains("Brush.sweepGradient("));
+        assertTrue(chrome.contains("val outline = shape.createOutline(size, layoutDirection, this)"));
+        // White glints occur at ALL four rounded corners, with two strong
+        // opposing highlights rather than a single flat-colored perimeter.
+        assertTrue(chrome.contains("0.125f to palette.rimStrong"));
+        assertTrue(chrome.contains("0.375f to palette.rimMedium"));
+        assertTrue(chrome.contains("0.625f to palette.rimStrong"));
+        assertTrue(chrome.contains("0.875f to palette.rimMedium"));
+        assertTrue(chrome.contains("style = Stroke(width = glintWidth)"));
+        assertTrue(chrome.contains("val shadowColors = opacities.map"));
+        assertTrue(chrome.contains("translate(top = offsetY)"));
+        assertTrue(chrome.contains("onDrawBehind {"));
+        assertFalse(chrome.contains("R.drawable.gui_depth_shadow_"));
+        assertFalse(chrome.contains("requireNotNull(ContextCompat.getDrawable"));
+        assertFalse(chrome.contains("RenderEffect.create"));
+        assertFalse(chrome.contains("rememberGraphicsLayer("));
+
+        for (String source : new String[]{light, dark}) {
+            for (String key : new String[]{
+                    "gui_preset_rim_contrast", "gui_preset_rim_strong",
+                    "gui_preset_rim_medium", "gui_preset_rim_weak"
+            }) assertTrue(source.contains("name=\"" + key + "\""));
+        }
+        assertTrue(surfaces.contains("Modifier.guiStaticSoftShadow(cardShape)"));
+        assertTrue(surfaces.contains(".guiStaticSpecularRim(cardShape, presetChrome)"));
+        assertTrue(surfaces.contains("Modifier.guiStaticSoftShadow(buttonShape)"));
+        assertTrue(surfaces.contains(".guiStaticSpecularRim(buttonShape, presetChrome)"));
+        assertTrue(surfaces.contains(".clip(cardShape)"));
+        assertTrue(surfaces.contains(".clip(buttonShape)"));
+        assertTrue(stepper.contains("Modifier.guiStaticSoftShadow(shape)"));
+        assertTrue(stepper.contains(".guiStaticSpecularRim(shape, presetChrome)"));
+
+        for (String source : new String[]{slider, toggle}) {
+            assertTrue(source.contains("val idleThumbShape = remember { PrismalCapsule() }"));
+            assertTrue(source.contains(".guiStaticSoftShadow(idleThumbShape, compact = true)"));
+            assertTrue(source.contains(".guiStaticSpecularRim(idleThumbShape, presetChrome, compact = true)"));
+            // Only idle gets cached chrome. The active branch retains original
+            // Prismal Ambient specular and depth-shadow without doubling.
+            assertTrue(source.contains("PrismalSpecular.Ambient.copy("));
+            assertTrue(source.contains("PrismalDepthShadow("));
+            assertFalse(source.contains("guiThumbHighlight("));
+        }
     }
 
     @Test
