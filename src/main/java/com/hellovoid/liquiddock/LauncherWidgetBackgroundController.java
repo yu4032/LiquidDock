@@ -24,7 +24,14 @@ final class LauncherWidgetBackgroundController {
 
     static void claimLoadedMamlRoot(View host, Object root) {
         if (host == null || root == null || !isMamlHost(host)) return;
+        // A root-loaded callback can precede the Workspace bind. Do not hide MAML elements
+        // or claim its vendor material unless a real widget-glass node owns this host.
+        LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
+        if (node == null || node.kind() != LauncherGlassDragState.Kind.WIDGET
+                || !GlassRuntimeState.isWidgetEnabled()
+                || !LauncherGlassHierarchy.isWorkspace(host)) return;
         LauncherManualDiscoveryBridge.ensureRegistered(host.getContext());
+        LauncherGlassVendorMaterialSuppressor.claimLoadedMamlRoot(host, root);
         LauncherMamlBackgroundRuleExecutor.claimLoadedRoot(host, root);
         LauncherWidgetComponentSelectionExecutor.claimLoadedMamlRoot(host, root);
     }
@@ -39,6 +46,11 @@ final class LauncherWidgetBackgroundController {
             LauncherMamlBackgroundRuleExecutor.release(host);
         }
         LauncherGlassVendorMaterialSuppressor.releaseWidgetMaterial(host);
+        // MAML draws from ScreenElementRoot state, not Android View backgrounds. Request a
+        // normal vendor redraw only after restored mShow and variable state are both committed.
+        if (isMamlHost(host) && host.isAttachedToWindow()) {
+            HookUtil.tryInvoke(host, "requestUpdate");
+        }
     }
 
     private static boolean isMamlHost(View host) {
