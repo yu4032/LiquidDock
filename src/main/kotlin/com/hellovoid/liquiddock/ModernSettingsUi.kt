@@ -330,31 +330,22 @@ internal fun ModernSurface(
     }
     val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
 
-    Box(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-    ) {
-        if (staticChrome) {
-            GuiStaticGlassChrome(
-                modifier = Modifier.matchParentSize(),
-                style = GuiStaticGlassStyle.CARD,
-                darkTheme = darkTheme,
+            .then(
+                if (staticChrome) {
+                    Modifier.guiSolidChrome(GuiSolidChromeStyle.CARD, darkTheme)
+                } else {
+                    Modifier.background(solidCardColor, cardShape)
+                        .border(1.dp, cardStroke, cardShape)
+                }
             )
-        } else {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(solidCardColor)
-                    .border(1.dp, cardStroke, cardShape),
-            )
-        }
-        Column(
-            modifier = Modifier.padding(contentPadding),
-            content = content,
-        )
-    }
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(contentPadding),
+        content = content,
+    )
 }
 
 @Composable
@@ -451,8 +442,8 @@ internal fun Button(
     destructive: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    // Fixed Cell actions, including reset and +/- controls, draw shared Android
-    // resources. Only slider/toggle gestures use live Prismal in the page body.
+    // Fixed Cell actions, including reset, draw opaque Compose fills.
+    // No drawable allocation or per-Cell render nodes. Only slider/toggle gestures use live Prismal in the page body.
     val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
@@ -469,18 +460,20 @@ internal fun Button(
             .height(minHeight)
             .alpha(if (enabled) 1f else 0.66f)
             .clip(buttonShape)
-            .then(if (staticChrome) Modifier else Modifier.background(fillColor, buttonShape))
-            .then(if (staticChrome) Modifier else Modifier.border(1.dp, outlineColor, buttonShape))
+            .then(
+                if (staticChrome) {
+                    Modifier.guiSolidChrome(
+                        if (destructive) GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL,
+                        darkTheme,
+                    )
+                } else {
+                    Modifier.background(fillColor, buttonShape)
+                        .border(1.dp, outlineColor, buttonShape)
+                }
+            )
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        if (staticChrome) {
-            GuiStaticGlassChrome(
-                modifier = Modifier.matchParentSize(),
-                style = if (destructive) GuiStaticGlassStyle.DANGER else GuiStaticGlassStyle.PILL,
-                darkTheme = darkTheme,
-            )
-        }
         Row(
             modifier = Modifier.padding(insideMargin),
             verticalAlignment = Alignment.CenterVertically,
