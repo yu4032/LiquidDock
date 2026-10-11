@@ -20,7 +20,9 @@ Source of truth:
   https://github.com/styropyr0/PrismalAGSL/tree/v1.0.4
 
 Run: python3 scripts/bake_gui_materials.py
-Output: 8-bit RGBA Android nine-patches in res/drawable*-xxhdpi.\nIdle thumbs and danger buttons intentionally use simple XML shape resources.
+Output: 8-bit RGBA ordinary PNGs in res/drawable[-night]-nodpi.
+Nine source regions are stretched explicitly at runtime to preserve corners;
+AAPT2 never compiles any native NinePatch metadata.\nIdle thumbs and danger buttons intentionally use simple XML shape resources.
 """
 from pathlib import Path
 import math
@@ -120,7 +122,8 @@ def bake(kind, theme):
             rgb = tuple(min(255, round(c + plus)) for c in fill)
             put(x + 1, y + 1, *rgb, round(coverage * 255))
 
-    # 1px native 9-patch guide border. Keep stretch bars away from the corners.
+    # 1px source slicing guide border. GuiSolidChrome crops it at runtime.
+    # Do not use .9.png: AAPT2 crashes compiling opaque-composite assets.
     for x in range(width // 2 - 9, width // 2 + 10):
         put(x + 1, 0, 0, 0, 0, 255)
     yspan = min(9, max(2, round((height - 2 * radius) / 2)))
@@ -131,8 +134,7 @@ def bake(kind, theme):
     for y in range(2, height):
         put(columns - 1, y, 0, 0, 0, 255)
 
-    # AAPT2 did not reliably compile the earlier paletted 9-patches with a
-    # mostly-opaque material. Use Android's standard truecolor RGBA PNG format.
+    # Use ordinary RGBA without Android's crashing native 9-patch compiler.
     scanlines = bytearray()
     row_size = columns * 4
     for y in range(rows):
@@ -145,13 +147,13 @@ def bake(kind, theme):
         + png_chunk("IDAT", zlib.compress(bytes(scanlines), level=0))
         + png_chunk("IEND", b"")
     )
-    folder = ROOT / ("drawable-xxhdpi" if theme == "light" else "drawable-night-xxhdpi")
+    folder = ROOT / ("drawable-nodpi" if theme == "light" else "drawable-night-nodpi")
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / ("gui_material_" + kind + ".9.png")).write_bytes(out)
+    (folder / ("gui_material_" + kind + ".png")).write_bytes(out)
 
 
 if __name__ == "__main__":
     for theme in BASE:
         for kind in ("card", "pill"):
             bake(kind, theme)
-    print("Baked 4 RGBA Plus-composited Card/Pill Prismal GUI materials.")
+    print("Baked 4 RGBA Plus-composited Card/Pill PNG resources.")
