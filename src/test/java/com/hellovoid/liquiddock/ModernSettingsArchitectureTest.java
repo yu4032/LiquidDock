@@ -471,12 +471,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(chrome.contains("style = Stroke(width = glintWidth)"));
         assertTrue(chrome.contains("val glintWidth = if (compact) 0.8.dp.toPx() else 1.dp.toPx()"));
         assertFalse(chrome.contains("palette.rimContrast"));
-        String thumbRimOnly = chrome.substring(
-                chrome.indexOf("internal fun Modifier.guiStaticSpecularRim("),
-                chrome.indexOf("internal fun Modifier.guiStaticSoftShadow("));
-        assertTrue(thumbRimOnly.contains("drawOutline("));
-        assertTrue("Idle thumb must have exactly one white outline",
-                thumbRimOnly.split(java.util.regex.Pattern.quote("drawOutline("), -1).length == 2);
+        assertTrue(chrome.contains("outline, brush = whiteReflection,"));
+        assertFalse("Idle thumb must not draw a second contrast outline",
+                chrome.contains("val contrastWidth ="));
         assertTrue(chrome.contains("val shadowColors = opacities.map"));
         assertTrue(chrome.contains("translate(top = offsetY)"));
         assertTrue(chrome.contains("onDrawBehind {"));
