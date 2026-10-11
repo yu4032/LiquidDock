@@ -9,12 +9,11 @@ package com.hellovoid.prismal;
  */
 final class PrismalLightVectorShader {
     private static final String ANCHOR = "uniform vec2  u_lightDir;";
-    private static final String LIGHT_BLOCK = """
-            vec3 Lp = normalize(vec3(u_lightDir, 1.45));
-            vec3 Ls = normalize(vec3(-u_lightDir.x * 0.62 + 0.41, -u_lightDir.y * 0.62 + 0.33, 0.74));
-            vec3 Hp = normalize(Lp + V);
-            vec3 Hs = normalize(Ls + V);
-            """;
+    private static final String LIGHT_BLOCK =
+            "vec3 Lp = normalize(vec3(u_lightDir, 1.45));\n"
+            + "    vec3 Ls = normalize(vec3(-u_lightDir.x * 0.62 + 0.41, -u_lightDir.y * 0.62 + 0.33, 0.74));\n"
+            + "    vec3 Hp = normalize(Lp + V);\n"
+            + "    vec3 Hs = normalize(Ls + V);";
 
     private PrismalLightVectorShader() {}
 
@@ -25,7 +24,7 @@ final class PrismalLightVectorShader {
                 + "uniform vec3 u_lightSecondary;\n"
                 + "uniform vec3 u_halfPrimary;\n"
                 + "uniform vec3 u_halfSecondary;", "light declaration");
-        return replaceOnce(amended, LIGHT_BLOCK.stripTrailing(),
+        return replaceOnce(amended, LIGHT_BLOCK,
                 "vec3 Lp = u_lightPrimary;\n"
                         + "    vec3 Ls = u_lightSecondary;\n"
                         + "    vec3 Hp = u_halfPrimary;\n"
