@@ -104,7 +104,7 @@ object SystemSettingsPrismalSwitchOverlay {
             var parent = stock.parent
             repeat(8) {
                 val owner = parent as? View ?: return@repeat
-                if (owner.id == android.R.id.content) return@repeat
+                if (owner.id == android.R.id.content) return
                 if (owner.isClickable && owner.isEnabled) {
                     owner.performClick()
                     return
