@@ -72,6 +72,7 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue(compose.contains("RestartScopeItem(\"com.miui.securitycenter\""));
         assertTrue(compose.contains("RestartScopeItem(\"com.google.android.inputmethod.latin\""));
         assertTrue(compose.contains("RestartScopeItem(\"com.android.quicksearchbox\""));
+        assertTrue(compose.contains("RestartScopeItem(\"com.android.settings\""));
         assertFalse(compose.contains("RestartScopeItem(\"system\""));
     }
 
