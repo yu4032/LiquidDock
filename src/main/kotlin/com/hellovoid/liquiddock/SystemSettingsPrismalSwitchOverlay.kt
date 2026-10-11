@@ -119,7 +119,11 @@ object SystemSettingsPrismalSwitchOverlay {
         override fun onViewAttachedToWindow(v: View) = Unit
 
         override fun onViewDetachedFromWindow(v: View) {
-            dispose()
+            // Do not mutate FrameLayout's child array while Android is dispatching detach
+            // to its children: that can crash ViewGroup.dispatchDetachedFromWindow.
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                if (!stock.isAttachedToWindow) dispose()
+            }
         }
 
         fun dispose() {
