@@ -25,10 +25,10 @@ system
 | `com.miui.securitycenter:ui` | Security Center sidebar glass |
 | `com.google.android.inputmethod.latin` | Gboard floating/toolbar glass |
 | `com.android.quicksearchbox` | MIUI Search main-background glass |
-| `com.android.settings` | Reserved scope only; no Settings UI hooks installed yet |
+| `com.android.settings` | Opt-in MIUIX SlidingButton Prismal switch pilot (default off) |
 | `system` | 配置启用时安装 `WallpaperClientCompositionHook`，支持可选壁纸 GPU 渲染 |
 
-`com.android.settings` 当前仅注册为预留作用域，入口直接返回；不初始化玻璃适配器、监听器，也不修改控件。
+`com.android.settings` 当前为 **默认关闭** 的 Prismal 开关试验。`ModuleMain` 仅在总开关和 `ConfigSchema.SystemSettings.PRISMAL_SWITCH` 都打开后，尝试为目标 APK 的 `miuix.slidingwidget.widget.SlidingButton` 安装一个窄范围 presenter Hook。Compose SPA 和其他系统开关不会被修改；原生按钮保留状态、点击及监听器。
 
 其他同包非目标进程不应误装 feature hooks。
 
@@ -364,6 +364,24 @@ Handwriting/companion toolbar 通过稳定 widget class hierarchy 和 geometry g
 目标限制为 SearchActivity 主背景，不泛化到整个进程任意 blur View。
 
 Activity resume / attach 时会重新请求 freshness。
+
+---
+
+## 18a. System Settings Switch Pilot
+
+目标反编译证据：HyperOS 3.0.310.0 / Android 16 的 Settings 类索引包含
+`miuix.slidingwidget.widget.SlidingButton`、`SlidingSwitch`、`SlidingSwitchCompat`、
+`miuix.preference.CheckBoxPreference`。这只确认 class presence，不证明每个页面
+均使用 `SlidingButton` 或它在目标版本上覆写了 `onDraw`。
+
+Hook 首选在目标类自己的 `onDraw(Canvas)`；否则仅尝试目标类自己的 `onLayout(...)`。
+不 Hook 通用 `CompoundButton`。只在 `android.R.id.widget_frame` 内注入 ComposeView，
+保留原生 Switch 作为交互/状态 authority。故障撤销 Compose overlay、恢复 alpha。
+最多同时加载 6 个 Compose overlay，避免第一阶段在长列表无限增加 renderer。
+可用背景目前仅来自 Compose 局部采样层，尚未实现跨 native Settings 页面整体
+refraction；此阶段不声称具备完整 native 背景捕获或光学保真。
+
+这是需要真机验收的实验版本，**CI 不能证明目标版本的私有方法和视觉兼容性**。
 
 ---
 
