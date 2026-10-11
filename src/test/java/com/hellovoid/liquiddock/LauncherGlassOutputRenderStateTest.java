@@ -41,6 +41,30 @@ public class LauncherGlassOutputRenderStateTest {
     }
 
     @Test
+    public void sourceFrameCanConsumeWorkDuringBoundedDelayedGeometryFallback() {
+        LauncherGlassOutputRenderState state = new LauncherGlassOutputRenderState();
+        assertTrue(state.request(true, false));
+        assertEquals(LauncherGlassOutputRenderState.STATIC, state.consumeQueuedRender());
+        // The render thread elected to defer the geometry-only swap one refresh interval.
+        assertFalse(state.request(true, false));
+        state.consumeForSourceRender(); // PassBlur beats the fallback and renders latest geometry.
+        assertEquals(0, state.consumeQueuedRender()); // Delayed callback must not swap again.
+        assertFalse(state.finishQueuedRender());
+        assertTrue(state.request(true, false)); // Later UI geometry remains schedulable.
+    }
+
+    @Test
+    public void delayedFallbackKeepsLatestGeometryWhenSourceDoesNotArrive() {
+        LauncherGlassOutputRenderState state = new LauncherGlassOutputRenderState();
+        assertTrue(state.request(true, false));
+        assertEquals(LauncherGlassOutputRenderState.STATIC, state.consumeQueuedRender());
+        assertFalse(state.request(true, false));
+        assertFalse(state.request(true, false)); // More geometry changes merge.
+        assertEquals(LauncherGlassOutputRenderState.STATIC, state.consumeQueuedRender());
+        assertFalse(state.finishQueuedRender());
+    }
+
+    @Test
     public void rejectedPostRetainsDirtyWorkForNextRequest() {
         LauncherGlassOutputRenderState state = new LauncherGlassOutputRenderState();
         state.request(true, false);
