@@ -5,10 +5,9 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-
 import org.junit.Test;
 
-/** The Settings pilot is strictly opt-in and never owns Settings persistence. */
+/** Opt-in Settings switch must not depend on Prismal App Startup or Jetpack Compose. */
 public class SystemSettingsScopeContractTest {
     private static final Path MAIN = Path.of("src/main");
 
@@ -18,7 +17,6 @@ public class SystemSettingsScopeContractTest {
         String module = read("java/com/hellovoid/liquiddock/ModuleMain.java");
         String schema = read("java/com/hellovoid/liquiddock/config/ConfigSchema.java");
         String registry = read("java/com/hellovoid/liquiddock/ThirdPartyGlassAdapterRegistry.java");
-
         assertTrue(scope.lines().anyMatch("com.android.settings"::equals));
         int settingsGate = module.indexOf("if (SETTINGS_PACKAGE.equals(packageName)) {");
         int systemUiGate = module.indexOf("if (SYSTEM_UI_PACKAGE.equals(packageName))");
@@ -27,7 +25,6 @@ public class SystemSettingsScopeContractTest {
         assertTrue(module.contains("SETTINGS_PACKAGE.equals(loadedProcessName)"));
         assertTrue(module.contains("\"OS3.0.310.0.WAOCNXM\".equals(incremental)"));
         assertTrue(module.contains("remoteKeyPresent="));
-        assertTrue(module.contains("config master="));
         assertTrue(module.contains("SystemSettingsPrismalSwitchHook.install(loader)"));
         assertTrue(schema.contains("\"system_settings_prismal_switch\", false, false, false"));
         assertTrue(schema.contains("add(keys, SystemSettings.PRISMAL_SWITCH)"));
@@ -35,60 +32,39 @@ public class SystemSettingsScopeContractTest {
     }
 
     @Test
-    public void switchExperimentRetainsNativeOwnershipAndHasAStockFallback() throws Exception {
+    public void rendererHooksOnlyNativeOnDrawAndRetainsStockBusinessAuthority() throws Exception {
         String hook = read("java/com/hellovoid/liquiddock/SystemSettingsPrismalSwitchHook.java");
-        String overlay = read("kotlin/com/hellovoid/liquiddock/SystemSettingsPrismalSwitchOverlay.kt");
+        String painter = read("java/com/hellovoid/liquiddock/SystemSettingsNativeSwitchPainter.java");
         String ui = read("kotlin/com/hellovoid/liquiddock/SystemSettingsPage.kt");
         String nav = read("kotlin/com/hellovoid/liquiddock/SettingsNavigationModel.kt");
 
         assertTrue(hook.contains("miuix.slidingwidget.widget.SlidingButton"));
-        assertTrue(hook.contains("TARGET_SWITCH = \"miuix.slidingwidget.widget.SlidingSwitch\""));
-        assertTrue(hook.contains("TARGET_SWITCH_COMPAT = \"miuix.slidingwidget.widget.SlidingSwitchCompat\""));
+        assertTrue(hook.contains("miuix.slidingwidget.widget.SlidingSwitch"));
+        assertTrue(hook.contains("miuix.slidingwidget.widget.SlidingSwitchCompat"));
         assertTrue(hook.contains("declared(target, \"onDraw\", Canvas.class)"));
-        assertTrue(hook.contains("declared(target, \"onMeasure\", int.class, int.class)"));
+        assertTrue(hook.contains("SystemSettingsNativeSwitchPainter.paint("));
+        assertTrue(hook.contains("return chain.proceed(args)"));
         assertFalse(hook.contains("CompoundButton.class.getDeclaredMethod"));
-        assertTrue(overlay.contains("original.id != android.R.id.checkbox"));
-        assertTrue(overlay.contains("original.id != android.R.id.switch_widget"));
-        assertTrue(overlay.contains("original.rootView.findViewById<View>(android.R.id.content)"));
-        assertTrue(overlay.contains("performNativePreferenceClick()"));
-        assertTrue(overlay.contains("owner.performClick()"));
-        assertTrue(overlay.contains("stock.performClick()"));
-        assertTrue(overlay.contains("stock.alpha = stockAlpha"));
-        assertTrue(overlay.contains("content.removeView(view)"));
-        assertTrue(overlay.contains("content.addView("));
-        assertTrue(overlay.contains("stock.getLocationOnScreen(stockPosition)"));
-        assertTrue(overlay.contains("stock.getGlobalVisibleRect(visibleRect)"));
-        assertFalse(overlay.contains("content.removeView(stock)"));
-        assertTrue(overlay.contains("GuiOnTouchPrismalToggle("));
-        assertFalse(overlay.contains("setOnCheckedChangeListener"));
-        assertFalse(overlay.contains("PixelCopy"));
-        assertFalse(overlay.contains("ScreenCapture"));
+        assertFalse(hook.contains("SystemSettingsPrismalSwitchOverlay"));
+        assertFalse(hook.contains("setChecked("));
+        assertFalse(hook.contains("onTouchEvent("));
+
+        assertTrue(painter.contains("android.graphics.RuntimeShader"));
+        assertTrue(painter.contains("canvas.drawRect("));
+        assertTrue(painter.contains("canvas.drawRoundRect("));
+        assertTrue(painter.contains("drawCanvasFallback("));
+        assertTrue(painter.contains("return false"));
+        assertFalse(painter.contains("ComposeView"));
+        assertFalse(painter.contains("PixelCopy"));
+        assertFalse(painter.contains("ScreenCapture"));
+        assertFalse(painter.contains("Bitmap.createBitmap"));
+        assertFalse(painter.contains("setOnCheckedChangeListener"));
         assertTrue(ui.contains("ConfigSchema.SystemSettings.PRISMAL_SWITCH"));
         assertTrue(nav.contains("Page.SystemSettings"));
-    }
-
-    @Test
-    public void composeOverlayUsesRealSettingsActivityLifecycleWithoutTouchingNativeRoot() throws Exception {
-        String overlay = read("kotlin/com/hellovoid/liquiddock/SystemSettingsPrismalSwitchOverlay.kt");
-        String bridge = read("kotlin/com/hellovoid/liquiddock/SystemSettingsComposeLifecycleBridge.kt");
-
-        assertTrue(overlay.contains("bindComposeOwners(view, content)"));
-        assertTrue(overlay.contains("activityBridges.getOrPut(target)"));
-        assertTrue(overlay.contains("view.setViewTreeLifecycleOwner(lifecycle)"));
-        assertTrue(overlay.contains("view.setViewTreeSavedStateRegistryOwner(saved)"));
-        assertFalse(overlay.contains("host.setViewTreeLifecycleOwner"));
-        assertTrue(overlay.contains("compose owners mode="));
-        assertTrue(bridge.contains("Application.ActivityLifecycleCallbacks"));
-        assertTrue(bridge.contains("stateController.performAttach()"));
-        assertTrue(bridge.contains("stateController.performRestore(null)"));
-        assertTrue(bridge.contains("Lifecycle.Event.ON_CREATE"));
-        assertTrue(bridge.contains("Lifecycle.Event.ON_START"));
-        assertTrue(bridge.contains("onActivityStarted(candidate: Activity)"));
-        assertTrue(bridge.contains("onActivityResumed(candidate: Activity)"));
-        assertTrue(bridge.contains("onActivityStopped(candidate: Activity)"));
-        assertTrue(bridge.contains("onActivityDestroyed(candidate: Activity)"));
-        assertTrue(bridge.contains("unregisterActivityLifecycleCallbacks(this)"));
-        assertTrue(bridge.contains("viewModelStore.clear()"));
+        assertFalse(Files.exists(MAIN.resolve(
+                "kotlin/com/hellovoid/liquiddock/SystemSettingsComposeLifecycleBridge.kt")));
+        assertFalse(Files.exists(MAIN.resolve(
+                "kotlin/com/hellovoid/liquiddock/SystemSettingsPrismalSwitchOverlay.kt")));
     }
 
     private static String read(String file) throws Exception {
