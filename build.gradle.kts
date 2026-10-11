@@ -29,6 +29,7 @@ android {
 
     buildTypes {
         debug {
+            proguardFiles("proguard-rules.pro")
             signingConfig = signingConfigs.getByName("hellovoidDebug")
             // CI/device-test APKs go through the same R8 code + resource optimization
             // path as release, so shrinker regressions are caught before publishing.
@@ -37,6 +38,7 @@ android {
             }
         }
         release {
+            proguardFiles("proguard-rules.pro")
             // Keep release output unsigned. The isolated liquiddock-keys workflow
             // performs zipalign + apksigner on a separate runner.
             optimization {
