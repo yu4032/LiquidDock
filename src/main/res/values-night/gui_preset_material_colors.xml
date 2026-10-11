@@ -4,16 +4,8 @@
     <color name="gui_preset_canvas">#1B2028</color>
     <color name="gui_preset_canvas_glass_off">#191E26</color>
     <color name="gui_preset_card_fill">#343B46</color>
-    <color name="gui_preset_card_rim">#FFDBEAFF</color>
-    <color name="gui_preset_card_outline">#FF566577</color>
     <color name="gui_preset_pill_fill">#454E5B</color>
-    <color name="gui_preset_pill_rim">#FFF2F8FF</color>
-    <color name="gui_preset_pill_outline">#FF586B80</color>
-    <!-- Slider/toggle thumb has a stronger independent highlight, including during drag. -->
+    <!-- Thumb fill is shared by idle and touch states; white specular is in 9-patch bitmap. -->
     <color name="gui_preset_thumb_fill">#454E5B</color>
-    <color name="gui_preset_thumb_rim">#FFFFFFFF</color>
-    <color name="gui_preset_thumb_outline">#FF667A91</color>
     <color name="gui_preset_danger_fill">#D73333</color>
-    <color name="gui_preset_danger_rim">#FFFFB5B5</color>
-    <color name="gui_preset_danger_outline">#FF9F1C24</color>
 </resources>
