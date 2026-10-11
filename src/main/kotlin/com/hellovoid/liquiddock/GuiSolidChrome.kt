@@ -35,9 +35,6 @@ internal data class GuiPresetChromePalette(
     val pillMaterial: Drawable,
     val thumbMaterial: Drawable,
     val dangerMaterial: Drawable,
-    val cardShadow: Drawable,
-    val pillShadow: Drawable,
-    val thumbShadow: Drawable,
 )
 
 internal val LocalGuiPresetChromePalette = staticCompositionLocalOf<GuiPresetChromePalette> {
@@ -64,25 +61,13 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val dangerMaterial = remember(context, canvas) {
         requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_material_danger)).mutate()
     }
-    // This is a pre-blurred 24dp, 4dp-Y-offset approximation of
-    // PrismalDepthShadow.Default (black, 10%). Three shared images
-    // include the smaller 4dp, 5%-black original thumb shadow.
-    val cardShadow = remember(context) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_depth_shadow_card)).mutate()
-    }
-    val pillShadow = remember(context) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_depth_shadow_pill)).mutate()
-    }
-    val thumbShadow = remember(context) {
-        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_depth_shadow_thumb)).mutate()
-    }
     return remember(
         canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
-        thumbMaterial, dangerMaterial, cardShadow, pillShadow, thumbShadow,
+        thumbMaterial, dangerMaterial,
     ) {
         GuiPresetChromePalette(
             canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
-            thumbMaterial, dangerMaterial, cardShadow, pillShadow, thumbShadow,
+            thumbMaterial, dangerMaterial,
         )
     }
 }
@@ -126,9 +111,8 @@ internal fun Modifier.guiSolidChrome(
         if (width <= 0 || height <= 0) {
             onDrawBehind {}
         } else if (cornerDp == 0f || sourceWidth <= 0 || sourceHeight <= 0) {
-            // Android XML <shape> drawables have no intrinsic dimensions.
-            // Previously this path returned an empty draw and completely hid
-            // the idle slider/toggle thumb and destructive actions.
+            // XML ShapeDrawable reports negative intrinsic dimensions:
+            // draw at its measured destination size instead of hiding it.
             onDrawBehind {
                 drawIntoCanvas { canvas ->
                     val native = canvas.nativeCanvas
@@ -203,71 +187,6 @@ private fun drawBakedNineSlice(
                 material.draw(native)
             } finally {
                 native.restoreToCount(saved)
-            }
-        }
-    }
-}
-
-/**
- * PrismalDepthShadow.Default: 24dp soft shadow, 4dp downward offset,
- * black at alpha 0.10. Cached as an off-line blurred RGBA mask so a Cell
- * doesn't instantiate PrismalDepthShadowNode/GraphicsLayer per row.
- *
- * This modifier MUST be placed BEFORE clip(shape), otherwise the real
- * exterior halo and the rounded corner falloff get clipped away.
- */
-internal fun Modifier.guiBakedDepthShadow(
-    style: GuiSolidChromeStyle,
-    palette: GuiPresetChromePalette,
-): Modifier {
-    val drawable = when (style) {
-        GuiSolidChromeStyle.CARD -> palette.cardShadow
-        GuiSolidChromeStyle.PILL, GuiSolidChromeStyle.DANGER -> palette.pillShadow
-        GuiSolidChromeStyle.THUMB -> palette.thumbShadow
-    }
-    val cornerDp = when (style) {
-        GuiSolidChromeStyle.CARD -> 24f
-        GuiSolidChromeStyle.THUMB -> 12f
-        else -> 18f
-    }
-    val padDp = if (style == GuiSolidChromeStyle.THUMB) 8f else 24f
-    return this.drawWithCache {
-        val width = size.width.roundToInt()
-        val height = size.height.roundToInt()
-        val sw = drawable.intrinsicWidth
-        val sh = drawable.intrinsicHeight
-        if (width <= 0 || height <= 0 || sw <= 0 || sh <= 0) {
-            onDrawBehind {}
-        } else {
-            // Source includes a 24dp transparent halo outside the fixed shape.
-            // Nine-slice the halo *with* its corner radii to preserve blur.
-            val padPx = padDp * density
-            val corner = (cornerDp + padDp) * density
-            val ox = (cornerDp + padDp) * 3f // assets baked at 3px/dp
-            val sourceX = intArrayOf(0, ox.roundToInt(), sw - ox.roundToInt(), sw)
-            val sourceY = intArrayOf(0, ox.roundToInt(), sh - ox.roundToInt(), sh)
-            val dx = floatArrayOf(
-                -padPx,
-                (-padPx + corner).coerceAtMost(width * .5f),
-                (width + padPx - corner).coerceAtLeast(width * .5f),
-                width + padPx,
-            )
-            val dy = floatArrayOf(
-                -padPx,
-                (-padPx + corner).coerceAtMost(height * .5f),
-                (height + padPx - corner).coerceAtLeast(height * .5f),
-                height + padPx,
-            )
-            onDrawBehind {
-                drawIntoCanvas { canvas ->
-                    drawBakedNineSlice(
-                        native = canvas.nativeCanvas,
-                        material = drawable,
-                        sourceWidth = sw,
-                        sourceHeight = sh,
-                        sx = sourceX, sy = sourceY, dx = dx, dy = dy,
-                    )
-                }
             }
         }
     }
