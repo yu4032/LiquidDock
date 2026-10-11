@@ -18,6 +18,11 @@ final class LauncherGlassVendorMaterialSuppressor {
     // must be weak because ScreenElementRoot can retain its View and this map has weak host keys.
     private static final Map<View, MamlBackgroundClaim> MAML_BACKGROUND_OWNERSHIP =
             Collections.synchronizedMap(new WeakHashMap<>());
+    // Only the reversible pass-window *gate* belongs to LiquidDock. The vendor blur radius,
+    // modes, blend list, and self-blur settings must survive a glass claim and an App -> HOME
+    // transition. Clearing them is irreversible on Launcher 4.50 without a vendor rebind.
+    private static final Map<View, OwnedValueState<Boolean>> PASS_WINDOW_GATE_OWNERSHIP =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private static final class MamlBackgroundClaim {
         final WeakReference<Object> rootRef;
@@ -36,11 +41,7 @@ final class LauncherGlassVendorMaterialSuppressor {
         // Capture the provider's original MAML variable before invoking any vendor blur
         // setters. Some setters themselves change enable_background_blur.
         if (isMaMlHost(host)) rememberMamlBackground(host, readMamlRoot(host));
-        MiBlurBridge.clearContentBlur(host);
-        setMaMlBlurIfSupported(host, false);
-        invokeBoolean(host, "setViewBlur", false);
-        invokeBoolean(host, "setBlurIfNeed", false);
-        invokeInt(host, "setBlurRadius", 0);
+        suppressPassWindowWithoutClearingVendorMaterial(host);
 
         // RemoteViews stores its layout id under android.R.id.widget_frame as a keyed tag on the
         // direct content root. Launcher 4.50 clears exactly that root background when native widget
@@ -89,6 +90,35 @@ final class LauncherGlassVendorMaterialSuppressor {
             }
         }
         if (isMaMlHost(host)) restoreMamlBackground(host);
+        restorePassWindowGate(host);
+    }
+
+    private static void suppressPassWindowWithoutClearingVendorMaterial(View host) {
+        Boolean current = MiBlurBridge.getPassWindowBlurEnabled(host);
+        if (current == null) {
+            // No reliable snapshot on this OS build: do not destroy undocumented vendor state.
+            return;
+        }
+        OwnedValueState<Boolean> ownership = PASS_WINDOW_GATE_OWNERSHIP
+                .computeIfAbsent(host, ignored -> new OwnedValueState<>());
+        ownership.claim(current);
+        // Reassert the gate after Launcher re-enables native blur on resume/color refresh,
+        // but never zero its blur modes/radius. Release will restore the first claimed value.
+        if (current && !MiBlurBridge.setPassWindowBlurEnabled(host, false)) {
+            // Unsuccessful setter must not claim a state that we did not modify.
+            PASS_WINDOW_GATE_OWNERSHIP.remove(host);
+        }
+    }
+
+    private static void restorePassWindowGate(View host) {
+        OwnedValueState<Boolean> ownership = PASS_WINDOW_GATE_OWNERSHIP.remove(host);
+        if (ownership == null) return;
+        Boolean current = MiBlurBridge.getPassWindowBlurEnabled(host);
+        OwnedValueState.ReleaseDecision<Boolean> decision =
+                ownership.release(Boolean.FALSE.equals(current));
+        if (decision.restoreOriginal && Boolean.TRUE.equals(decision.originalValue)) {
+            MiBlurBridge.setPassWindowBlurEnabled(host, true);
+        }
     }
 
     private static void rememberMamlBackground(View host, Object root) {
@@ -160,30 +190,6 @@ final class LauncherGlassVendorMaterialSuppressor {
 
     private static void putMaMlBackgroundBlurVariable(View host, double value) {
         invokeStringDouble(host, "putVariableNumber", "enable_background_blur", value);
-    }
-
-    private static void setMaMlBlurIfSupported(View host, boolean enabled) {
-        invokeBoolean(host, "setMaMlBlur", enabled);
-        invokeBoolean(host, "setMamlBlur", enabled);
-        invokeBoolean(host, "enableBlur", enabled);
-    }
-
-    private static void invokeBoolean(View host, String name, boolean value) {
-        try {
-            Method method = findMethod(host.getClass(), name, boolean.class);
-            if (method == null) return;
-            method.setAccessible(true);
-            method.invoke(host, value);
-        } catch (Throwable ignored) {}
-    }
-
-    private static void invokeInt(View host, String name, int value) {
-        try {
-            Method method = findMethod(host.getClass(), name, int.class);
-            if (method == null) return;
-            method.setAccessible(true);
-            method.invoke(host, value);
-        } catch (Throwable ignored) {}
     }
 
     private static void invokeStringDouble(
