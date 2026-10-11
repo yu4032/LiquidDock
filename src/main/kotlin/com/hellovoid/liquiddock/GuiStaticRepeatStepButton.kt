@@ -56,7 +56,7 @@ internal fun GuiStaticRepeatStepButton(
         modifier = Modifier
             .size(36.dp)
             .alpha(if (enabled) 1f else 0.45f)
-            .then(if (staticChrome) Modifier.guiStaticSoftShadow(shape) else Modifier)
+            .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(shape) else Modifier)
             .then(
                 if (staticChrome) {
                     Modifier.guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL, presetChrome, shape)
