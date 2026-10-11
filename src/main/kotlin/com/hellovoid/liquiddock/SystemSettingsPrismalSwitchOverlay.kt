@@ -48,6 +48,8 @@ object SystemSettingsPrismalSwitchOverlay {
     private val main = Handler(Looper.getMainLooper())
     private val active = WeakHashMap<CompoundButton, Binding>()
     private val loggedSkips = HashSet<String>()
+    // One Activity-linked lifecycle per Settings window; removed on onActivityDestroyed.
+    private val activityBridges = HashMap<android.app.Activity, SystemSettingsComposeLifecycleBridge>()
     private var lastFailedStage: String? = null
 
     /** Keep exception and actionable frame in one grep-able logcat line. */
@@ -64,7 +66,7 @@ object SystemSettingsPrismalSwitchOverlay {
             "cause=${cause.javaClass.name}: ${cause.message} at=${frame?.toString()}"
     }
 
-    /** Only use genuine owner implementations; never synthesize a fake lifecycle. */
+    /** Locate the actual vendor Activity, even behind MIUIX ContextThemeWrappers. */
     private fun findHostActivity(context: Context): android.app.Activity? {
         var current = context
         repeat(12) {
@@ -74,27 +76,44 @@ object SystemSettingsPrismalSwitchOverlay {
         return null
     }
 
-    private fun bindExistingViewTreeOwners(view: ComposeView, host: FrameLayout) {
+    private fun bindComposeOwners(view: ComposeView, host: FrameLayout) {
+        // Modern AndroidX Settings pages already provide a usable ViewTree.
         val existingLifecycle = host.findViewTreeLifecycleOwner()
         val existingSavedState = host.findViewTreeSavedStateRegistryOwner()
         val activity = findHostActivity(host.context)
-        val lifecycle = existingLifecycle ?: (activity as? LifecycleOwner)
-        val saved = existingSavedState ?: (activity as? SavedStateRegistryOwner)
-        Api101Bridge.log(
-            "[DC][SettingsSwitch] compose owners lifecycle=${lifecycle != null}" +
-                " savedState=${saved != null} activity=${activity?.javaClass?.name}" +
-                " host=${host.javaClass.name}"
-        )
-        if (lifecycle == null || saved == null) {
-            throw IllegalStateException(
-                "Settings ViewTreeLifecycleOwner/SavedStateRegistryOwner unavailable"
+        val owner: SystemSettingsComposeLifecycleBridge?
+        val lifecycle: LifecycleOwner
+        val saved: SavedStateRegistryOwner
+        if (existingLifecycle != null && existingSavedState != null) {
+            lifecycle = existingLifecycle
+            saved = existingSavedState
+            owner = null
+        } else {
+            // Canonical MIUIX Settings uses an ordinary Activity without these
+            // Jetpack owners. Bind a REAL ActivityLifecycleCallbacks-backed owner
+            // to only this new ComposeView, never Settings' original View tree.
+            val target = activity ?: throw IllegalStateException(
+                "Cannot resolve native Settings Activity from host Context"
             )
+            check(!target.isDestroyed) { "Settings Activity already destroyed" }
+            owner = activityBridges.getOrPut(target) {
+                SystemSettingsComposeLifecycleBridge(target) { destroyed, bridge ->
+                    if (activityBridges[destroyed] === bridge) activityBridges.remove(destroyed)
+                }
+            }
+            lifecycle = owner
+            saved = owner
         }
-        // Only assign to the new overlay, not to Settings' root/decor hierarchy.
         view.setViewTreeLifecycleOwner(lifecycle)
         view.setViewTreeSavedStateRegistryOwner(saved)
-        val model = host.findViewTreeViewModelStoreOwner() ?: (activity as? ViewModelStoreOwner)
+        val model = owner ?: host.findViewTreeViewModelStoreOwner()
+            ?: (activity as? ViewModelStoreOwner)
         if (model != null) view.setViewTreeViewModelStoreOwner(model)
+        Api101Bridge.log(
+            "[DC][SettingsSwitch] compose owners mode=${if (owner != null) "activity-bridge" else "existing"}" +
+                " lifecycle=true savedState=true viewModel=${model != null}" +
+                " activity=${activity?.javaClass?.name}"
+        )
     }
 
     private fun skipOnce(reason: String): Boolean {
@@ -151,7 +170,7 @@ object SystemSettingsPrismalSwitchOverlay {
         }
     }
 
-       private class Binding(
+    private class Binding(
         private val stock: CompoundButton,
         private val content: FrameLayout,
     ) : View.OnAttachStateChangeListener {
@@ -200,7 +219,7 @@ object SystemSettingsPrismalSwitchOverlay {
             }
             overlay = view
             stage = "resolve-compose-owners"
-            bindExistingViewTreeOwners(view, content)
+            bindComposeOwners(view, content)
             stage = "set-compose-content"
             view.setContent {
                     val backdrop = rememberPrismalGlassLayer()
