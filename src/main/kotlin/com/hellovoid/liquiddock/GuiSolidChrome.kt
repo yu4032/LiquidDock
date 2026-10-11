@@ -37,6 +37,7 @@ internal data class GuiPresetChromePalette(
     val dangerMaterial: Drawable,
     val cardShadow: Drawable,
     val pillShadow: Drawable,
+    val thumbShadow: Drawable,
 )
 
 internal val LocalGuiPresetChromePalette = staticCompositionLocalOf<GuiPresetChromePalette> {
@@ -71,9 +72,12 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val pillShadow = remember(context) {
         requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_depth_shadow_pill)).mutate()
     }
+    val thumbShadow = remember(context) {
+        requireNotNull(ContextCompat.getDrawable(context, R.drawable.gui_depth_shadow_thumb)).mutate()
+    }
     return remember(
         canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
-        thumbMaterial, dangerMaterial, cardShadow, pillShadow,
+        thumbMaterial, dangerMaterial, cardShadow, pillShadow, thumbShadow,
     ) {
         GuiPresetChromePalette(
             canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
@@ -218,9 +222,14 @@ internal fun Modifier.guiBakedDepthShadow(
     val drawable = when (style) {
         GuiSolidChromeStyle.CARD -> palette.cardShadow
         GuiSolidChromeStyle.PILL, GuiSolidChromeStyle.DANGER -> palette.pillShadow
-        GuiSolidChromeStyle.THUMB -> return this
+        GuiSolidChromeStyle.THUMB -> palette.thumbShadow
     }
-    val cornerDp = if (style == GuiSolidChromeStyle.CARD) 24f else 18f
+    val cornerDp = when (style) {
+        GuiSolidChromeStyle.CARD -> 24f
+        GuiSolidChromeStyle.THUMB -> 12f
+        else -> 18f
+    }
+    val padDp = if (style == GuiSolidChromeStyle.THUMB) 8f else 24f
     return this.drawWithCache {
         val width = size.width.roundToInt()
         val height = size.height.roundToInt()
@@ -231,9 +240,9 @@ internal fun Modifier.guiBakedDepthShadow(
         } else {
             // Source includes a 24dp transparent halo outside the fixed shape.
             // Nine-slice the halo *with* its corner radii to preserve blur.
-            val padPx = 24f * density
-            val corner = (cornerDp + 24f) * density
-            val ox = (cornerDp + 24f) * 3f // assets baked at 3px/dp
+            val padPx = padDp * density
+            val corner = (cornerDp + padDp) * density
+            val ox = (cornerDp + padDp) * 3f // assets baked at 3px/dp
             val sourceX = intArrayOf(0, ox.roundToInt(), sw - ox.roundToInt(), sw)
             val sourceY = intArrayOf(0, ox.roundToInt(), sh - ox.roundToInt(), sh)
             val dx = floatArrayOf(
