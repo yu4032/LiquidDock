@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
  */
 internal data class GuiPresetChromePalette(
     val canvas: Color,
+    val canvasWithoutGlass: Color,
     val cardFill: Color,
     val cardRim: Color,
     val cardOutline: Color,
@@ -38,6 +39,7 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     // Android picks values/ or values-night/ once for the current system theme.
     // Reading each static color here avoids luminance and per-cell color computations.
     val canvas = colorResource(R.color.gui_preset_canvas)
+    val canvasWithoutGlass = colorResource(R.color.gui_preset_canvas_glass_off)
     val cardFill = colorResource(R.color.gui_preset_card_fill)
     val cardRim = colorResource(R.color.gui_preset_card_rim)
     val cardOutline = colorResource(R.color.gui_preset_card_outline)
@@ -48,12 +50,12 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val dangerRim = colorResource(R.color.gui_preset_danger_rim)
     val dangerOutline = colorResource(R.color.gui_preset_danger_outline)
     return remember(
-        canvas, cardFill, cardRim, cardOutline,
+        canvas, canvasWithoutGlass, cardFill, cardRim, cardOutline,
         pillFill, pillRim, pillOutline,
         dangerFill, dangerRim, dangerOutline,
     ) {
         GuiPresetChromePalette(
-            canvas, cardFill, cardRim, cardOutline,
+            canvas, canvasWithoutGlass, cardFill, cardRim, cardOutline,
             pillFill, pillRim, pillOutline,
             dangerFill, dangerRim, dangerOutline,
         )
