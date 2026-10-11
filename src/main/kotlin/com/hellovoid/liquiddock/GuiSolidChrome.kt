@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import android.content.Context
+import androidx.compose.foundation.background
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.util.Log
@@ -42,6 +43,9 @@ import kotlin.math.roundToInt
 internal data class GuiPresetChromePalette(
     val canvas: Color,
     val canvasWithoutGlass: Color,
+    val cardFill: Color,
+    val pillFill: Color,
+    val dangerFill: Color,
     val cardMaterial: Drawable,
     val pillMaterial: Drawable,
     val thumbMaterial: Drawable,
@@ -60,6 +64,9 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val context = LocalContext.current
     val canvas = colorResource(R.color.gui_preset_canvas)
     val canvasWithoutGlass = colorResource(R.color.gui_preset_canvas_glass_off)
+    val cardFill = colorResource(R.color.gui_preset_card_fill)
+    val pillFill = colorResource(R.color.gui_preset_pill_fill)
+    val dangerFill = colorResource(R.color.gui_preset_danger_fill)
     val cardColor = colorResource(R.color.gui_preset_card_fill).toArgb()
     val pillColor = colorResource(R.color.gui_preset_pill_fill).toArgb()
     val thumbColor = colorResource(R.color.gui_preset_thumb_fill).toArgb()
@@ -96,12 +103,14 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
         )
     }
     return remember(
-        canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
+        canvas, canvasWithoutGlass, cardFill, pillFill, dangerFill,
+        cardMaterial, pillMaterial,
         thumbMaterial, dangerMaterial,
         rimStrong, rimMedium, rimWeak,
     ) {
         GuiPresetChromePalette(
-            canvas, canvasWithoutGlass, cardMaterial, pillMaterial,
+            canvas, canvasWithoutGlass, cardFill, pillFill, dangerFill,
+        cardMaterial, pillMaterial,
             thumbMaterial, dangerMaterial,
             rimStrong, rimMedium, rimWeak,
         )
@@ -109,6 +118,29 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
 }
 
 internal enum class GuiSolidChromeStyle { CARD, PILL, THUMB, DANGER }
+
+/**
+ * Original PrismalRoundedRectangle uses an extended continuous Bézier corner,
+ * unlike the source PNG's smaller superellipse. Once duplicate outlines were
+ * removed, the undersized raster corner became visible on the device.
+ *
+ * Use the actual caller-supplied Prismal Shape as the only geometry for the
+ * static fill and its ONE cached white highlight. No backdrop or AGSL work.
+ * Idle slider/toggle thumbs keep their existing separate XML drawable path.
+ */
+internal fun Modifier.guiExactPrismalCornerChrome(
+    style: GuiSolidChromeStyle,
+    palette: GuiPresetChromePalette,
+    shape: Shape,
+): Modifier {
+    val fill = when (style) {
+        GuiSolidChromeStyle.CARD -> palette.cardFill
+        GuiSolidChromeStyle.PILL -> palette.pillFill
+        GuiSolidChromeStyle.DANGER -> palette.dangerFill
+        GuiSolidChromeStyle.THUMB -> error("Idle thumb uses the original XML material")
+    }
+    return this.background(fill, shape).guiStaticSpecularRim(shape, palette)
+}
 
 /**
  * Draw the precomposited RGB underneath text/icons (never a foreground white
