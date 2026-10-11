@@ -64,6 +64,26 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(helper.contains("MiBlurBridge.setPassWindowBlurEnabled(host, true)"));
     }
 
+    @Test public void widgetSelfBlurUsesAReversibleVendorSetterGate() throws Exception {
+        String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
+        String gate = Files.readString(MAIN.resolve("LauncherWidgetNativeSelfBlurGate.java"));
+        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+
+        assertTrue(helper.contains("LauncherWidgetNativeSelfBlurGate.claim(host)"));
+        assertTrue(helper.contains("LauncherWidgetNativeSelfBlurGate.release(host)"));
+        assertTrue(hook.contains("LauncherWidgetNativeSelfBlurGate.install()"));
+        assertTrue(gate.contains("View.class.getMethod(\"setMiSelfBlur\", int.class, ArrayList.class)"));
+        assertTrue(gate.contains("state.vendorRadius"));
+        assertTrue(gate.contains("state.vendorColors"));
+        assertTrue(gate.contains("chain.proceed(new Object[]{0, null})"));
+        assertTrue(gate.contains("callNative(host, radius, colors)"));
+        assertTrue(gate.contains("if (!shouldMute)"));
+        assertFalse(gate.contains("clearContentBlur("));
+        assertFalse(gate.contains("clearPassWindowBlur("));
+        assertFalse(gate.contains("setMiBackgroundBlurRadius"));
+        assertFalse(gate.contains("setMiViewBlurMode"));
+    }
+
     @Test public void folderHookTargetsConcreteLauncher450VariantsWithoutDrawableReplacement()
             throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
