@@ -20,7 +20,7 @@ internal fun SystemSettingsPage(
         item {
             PageHeader(
                 "系统设置",
-                "HyperOS 3.0.310.0 · Prismal 开关试验。仅匹配原生 MIUIX SlidingButton；不修改系统设置中的 Compose 页面。",
+                "仅针对 OS3.0.310.0.WAOCNXM 的 MIUIX 开关（SlidingButton / SlidingSwitch / SlidingSwitchCompat）。其他 ROM 与 Compose SPA 页面保持原状。",
             )
         }
         item { SmallTitle("控件视觉") }
@@ -30,7 +30,7 @@ internal fun SystemSettingsPage(
                     prefs,
                     ConfigSchema.SystemSettings.PRISMAL_SWITCH,
                     "使用 Prismal 开关",
-                    "实验功能，默认关闭。保留系统开关的状态与点击回调；启用或关闭后需重启「系统设置」作用域。未匹配的开关继续使用原生外观。",
+                    "实验功能，默认关闭。保留系统原生开关业务逻辑，打开后重启「系统设置」作用域。无变化时在「关于」开启诊断日志，并检查 [DC][SettingsSwitch]。",
                     enabled = masterEnabled,
                 )
             }
