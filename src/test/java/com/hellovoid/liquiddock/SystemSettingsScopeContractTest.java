@@ -25,6 +25,9 @@ public class SystemSettingsScopeContractTest {
         assertTrue(settingsGate > 0 && settingsGate < systemUiGate);
         assertTrue(module.contains("ConfigSchema.SystemSettings.PRISMAL_SWITCH"));
         assertTrue(module.contains("SETTINGS_PACKAGE.equals(loadedProcessName)"));
+        assertTrue(module.contains("\"OS3.0.310.0.WAOCNXM\".equals(incremental)"));
+        assertTrue(module.contains("remoteKeyPresent="));
+        assertTrue(module.contains("config master="));
         assertTrue(module.contains("SystemSettingsPrismalSwitchHook.install(param.getClassLoader())"));
         assertTrue(schema.contains("\"system_settings_prismal_switch\", false, false, false"));
         assertTrue(schema.contains("add(keys, SystemSettings.PRISMAL_SWITCH)"));
