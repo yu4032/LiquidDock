@@ -44,3 +44,17 @@ These are *precomputed color resources*, not pre-rendered 9-patch border bitmaps
 5. Benchmark dense-page scroll with matched pages against the previous solid candidate. A CI pass does not establish real GPU performance.
 
 The entire change remains in PR #352 Draft pending user device acceptance. PR #340 and main remain untouched.
+
+## Stronger bright outline correction
+
+The user reported that **Cell, button, and slider handle bright outlines** were still effectively missing. Auditing the code found the bright rim was only 0.5dp and the dark-theme rim was muted grey-blue. Also, when a slider/toggle transitioned from idle static chrome to touch-time Prismal rendering, the static rim disappeared entirely.
+
+The new resource-only correction:
+- **Cell**: highlight is white in light mode (`#FFFFFFFF`) and ice blue-white in dark mode (`#FFDBEAFF`).
+- **Ordinary buttons**: highlight is white in light mode (`#FFFFFFFF`) and near-white in dark mode (`#FFF2F8FF`).
+- **Slider/toggle thumb**: dedicated `gui_preset_thumb_{fill,rim,outline}` trio in both `values/` and `values-night/`; the thumb highlight is bright white (`#FFFFFFFF`) in both modes.
+- **Render width**: solid materials now use a fixed 1.75dp supporting outline followed by a prominent 1dp bright rim. These are two normal Compose round-rect border operations; no dynamic specular/refraction shader, gradient, capture, extra texture or image asset.
+- **Active thumb**: the original Prismal touch rendering continues unchanged, with `guiThumbHighlight(palette)` attaching only the lightweight predetermined outline while `sampling` is true. Idle path draws the fixed thumb fill + outline. Thus touching the handle no longer drops the bright border.
+- The preset colors are still resolved **once** by `rememberGuiPresetChromePalette()` in the scaffold. No per-item luminance, RGB interpolation, or dynamic highlight calculation.
+
+This is not a claim of exact optical equivalence to dynamic Prismal specular. Recheck dark-theme contrast and make sure slider drag scaling/clipping does not shift the fixed outline.
