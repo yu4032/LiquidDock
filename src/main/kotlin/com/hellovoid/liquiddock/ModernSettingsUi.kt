@@ -84,9 +84,7 @@ private const val TOP_BAR_BOTTOM_STROKE_ALPHA = 0.10f
 internal val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 internal val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 internal val LocalTouchPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
-private val LocalFrozenPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
-// Cheap, static approximation of the existing Prismal cells. This flag never
-// gives a body component access to the live header/footer capture layers.
+// Fixed body cards use shared, precomposed native glass drawables.
 private val LocalStaticGlassChrome = staticCompositionLocalOf { false }
 
 @Composable
@@ -117,9 +115,6 @@ internal fun ModernSettingsScaffold(
     // Touch-gated controls use the original background sample, but their
     // render nodes only attach during active gestures. No third capture layer.
     val touchBackdrop = if (glassEnabled) backgroundLayer else null
-    // Real native Prismal material is rendered once and cached per body cell;
-    // the top/footer still use the original live merged sources.
-    val frozenBackdrop = if (glassEnabled) backgroundLayer else null
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
     // Header and bottom navigation share the captured background + content.
     Box(modifier = Modifier.fillMaxSize()) {
@@ -154,7 +149,6 @@ internal fun ModernSettingsScaffold(
             LocalPrismalSurfaceBackdrop provides surfaceBackdrop,
             LocalPrismalOverlayBackdrop provides activeOverlayBackdrop,
             LocalTouchPrismalBackdrop provides touchBackdrop,
-            LocalFrozenPrismalBackdrop provides frozenBackdrop,
             LocalStaticGlassChrome provides glassEnabled,
         ) {
             Scaffold(
@@ -330,7 +324,6 @@ internal fun ModernSurface(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backdrop = LocalPrismalSurfaceBackdrop.current
-    val frozenBackdrop = LocalFrozenPrismalBackdrop.current
     val staticChrome = LocalStaticGlassChrome.current
     val colors = MiuixTheme.colorScheme
     val darkTheme = colors.background.luminance() < 0.5f
@@ -340,29 +333,18 @@ internal fun ModernSurface(
     val solidCardColor = if (darkTheme) lerp(colors.surface, colors.onSurface, 0.08f) else colors.surface
     val cardStroke = colors.onSurface.copy(alpha = if (darkTheme) 0.16f else 0.09f)
     if (backdrop == null) {
-        if (staticChrome && frozenBackdrop != null) {
-            // Replay one GPU layer with full original Prismal blur, lens and
-            // specular; children and click highlights are NOT cached.
+        if (staticChrome) {
+            // Fixed cells draw one themed XML resource; content/press feedback remain live.
             Box(
                 modifier = modifier
                     .fillMaxWidth()
                     .clip(cardShape)
                     .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             ) {
-                GuiFrozenPrismalChrome(
-                    backdrop = frozenBackdrop,
-                    shape = { PrismalRoundedRectangle(24.dp) },
+                GuiStaticGlassChrome(
                     modifier = Modifier.matchParentSize(),
-                    blurRadius = 12.dp,
-                    refractionHeightPx = 16f,
-                    refractionAmountPx = 21f,
-                    chromaticAberration = 0.28f,
-                    tint = colors.surface,
-                    tintAlpha = 0.24f,
-                    saturation = 1.32f,
-                    depthEffect = true,
-                    surfaceColor = if (darkTheme) Color.White.copy(alpha = 0.055f)
-                        else Color.Unspecified,
+                    style = GuiStaticGlassStyle.CARD,
+                    darkTheme = darkTheme,
                 )
                 Column(
                     modifier = Modifier.padding(contentPadding),
@@ -554,8 +536,7 @@ internal fun Button(
 
     if (backdrop == null) {
         val buttonShape = RoundedCornerShape(minHeight / 2)
-        val frozenBackdrop = LocalFrozenPrismalBackdrop.current
-        val fillColor = if (destructive) Color(0xFFD73333)
+            val fillColor = if (destructive) Color(0xFFD73333)
             else lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f)
         val outlineColor = if (destructive) Color.White.copy(alpha = 0.16f)
             else colors.onSurface.copy(alpha = if (darkTheme) 0.30f else 0.19f)
@@ -563,23 +544,17 @@ internal fun Button(
             modifier = resolved
                 .height(minHeight)
                 .clip(buttonShape)
-                .then(if (!destructive && staticChrome && frozenBackdrop != null) Modifier
+                .then(if (!destructive && staticChrome) Modifier
                     else Modifier.background(fillColor, buttonShape))
                 .border(1.dp, outlineColor, buttonShape)
                 .clickable(enabled = enabled, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            if (!destructive && staticChrome && frozenBackdrop != null) {
-                GuiFrozenPrismalChrome(
-                    backdrop = frozenBackdrop,
-                    shape = { PrismalRoundedRectangle(minHeight / 2) },
+            if (!destructive && staticChrome) {
+                GuiStaticGlassChrome(
                     modifier = Modifier.matchParentSize(),
-                    blurRadius = 7.dp,
-                    refractionHeightPx = 9f,
-                    refractionAmountPx = 12f,
-                    tint = colors.surface,
-                    tintAlpha = 0.20f,
-                    depthEffect = false,
+                    style = GuiStaticGlassStyle.PILL,
+                    darkTheme = darkTheme,
                 )
             }
             Row(
