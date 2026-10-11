@@ -160,8 +160,8 @@ internal fun LiquidSamplingPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
-                    "表面法线可视化",
-                    "以颜色显示玻璃表面法线方向，用于检查折射、曲面与光照响应",
+                    "OS4 法线与方向光可视化",
+                    "内部显示玻璃表面法线，边缘显示 OS4 反射使用的 SDF 法线；亮度反映 OS4 方向光，不包含背景反射纹理",
                     masterEnabled && liquidEnabled,
                 )
             }
