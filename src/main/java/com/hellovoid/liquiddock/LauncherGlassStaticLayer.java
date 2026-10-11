@@ -105,6 +105,15 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         layer.session.onWorkspaceScrollMutation(beforeScrollX, afterScrollX);
     }
 
+    static void updateCompositorClipForRoot(View root, LauncherGlassCompositingBounds bounds) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer != null) layer.applyCompositorClip(bounds);
+    }
+
+    static void clearCompositorClipForRoot(View root) {
+        updateCompositorClipForRoot(root, null);
+    }
+
     static Integer captureWorkspaceScrollAnchor(View root) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null) return null;
