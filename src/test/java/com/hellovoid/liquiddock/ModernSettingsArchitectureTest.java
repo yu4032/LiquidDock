@@ -295,6 +295,8 @@ public class ModernSettingsArchitectureTest {
                 "src/main/res/values-night/gui_preset_material_colors.xml"));
         assertTrue(light.contains("<color name=\"gui_preset_canvas\">#F5F7FA</color>"));
         assertTrue(dark.contains("<color name=\"gui_preset_canvas\">#1B2028</color>"));
+        assertTrue(light.contains("<color name=\"gui_preset_canvas_glass_off\">#E6E8EB</color>"));
+        assertTrue(dark.contains("<color name=\"gui_preset_canvas_glass_off\">#191E26</color>"));
         for (String colorKey : new String[]{
                 "gui_preset_card_fill", "gui_preset_card_rim", "gui_preset_card_outline",
                 "gui_preset_pill_fill", "gui_preset_pill_rim", "gui_preset_pill_outline",
@@ -841,7 +843,7 @@ public class ModernSettingsArchitectureTest {
         // The header/footer still share the original Prismal source layers.
         assertTrue(surfaces.contains("if (glassEnabled) Modifier.background(background)"));
         assertFalse(surfaces.contains("Brush.verticalGradient("));
-        assertTrue(surfaces.contains("Modifier.background(lerp(background, Color.Black, 0.06f))"));
+        assertTrue(surfaces.contains("Modifier.background(presetChrome.canvasWithoutGlass)"));
         assertTrue(surfaces.contains("if (glassEnabled) Modifier.prismalGlassLayer(backgroundLayer)"));
         assertTrue(surfaces.contains("if (backdrop == null)"));
 
