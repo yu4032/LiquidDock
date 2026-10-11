@@ -1,6 +1,6 @@
 # LiquidDock TODO FOR AGENT
 
-基准：**2026-10-10 `main` / HyperOS 3 平板 / Launcher 4.50 / libxposed API 101**。
+基准：**2026-10-11 `main` (`1f9b29b`) / HyperOS 3 平板 / Launcher 4.50 / libxposed API 101**。
 
 活跃清单只记录仍需代码、验证或设计决策的事项；完成与主动取消的项目在末尾分别归档。
 状态以**已经合并到 `main` 的代码**为准；未合并 PR 必须显式标注，不能提前算作完成。
@@ -45,6 +45,11 @@ Perfetto 分段诊断已经进入 main：
 - layout、attach、detach、visibility、scale、translation、drag、proxy 等真实事件驱动更新；
 - 保留 Workspace scroll projection；
 - 保证 HOME spring、分页、widget、folder、proxy geometry 不回归。
+
+已完成一次多组件 App→HOME 返回动画的 Perfetto 对照（详见 `docs/workspace-empty-static-output-20261011.md`）：
+- 实测更值得优先研究的是可见 Widget 的 GL/EGL 提交及 SurfaceFlinger buffer-stuffing；`StaticNodes` CPU 消耗远小于长尾 `StaticSwap`，不能在证据不足时贸然恢复早已回退的 dirty-scene 设计。
+- PR #343 从最新主线重新整理，仅优化 **没有可绘制节点时** 的重复透明帧提交。仍为草稿，待真机验证，**未合并、未宣称修复多 Widget 掉帧**。
+- 固定延迟一个刷新周期以合并几何帧的尝试因收益不足、可能导致 HOME 缩放跟手下降而废弃，不应再加入此项。
 
 目标：静止 Workspace 从 O(N) node scan 降低到接近 O(1) bookkeeping。
 
