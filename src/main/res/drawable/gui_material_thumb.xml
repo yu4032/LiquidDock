@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Prismal original idle slider/toggle:
+     onDrawSurface = Color.White.copy(alpha = 1 - pressProgress).
+     Ambient specular alpha = pressProgress, therefore no glow at rest. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="999dp"/>
+    <solid android:color="#FFFFFFFF"/>
+</shape>

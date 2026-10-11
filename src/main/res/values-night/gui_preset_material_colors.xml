@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fixed dark GUI palette for static fills and the single cached rim. -->
+    <color name="gui_preset_canvas">#1B2028</color>
+    <color name="gui_preset_canvas_glass_off">#191E26</color>
+    <color name="gui_preset_card_fill">#343B46</color>
+    <color name="gui_preset_pill_fill">#454E5B</color>
+    <!-- Upstream idle thumb draws opaque white; Ambient alpha is pressProgress, zero at rest. -->
+    <color name="gui_preset_thumb_fill">#FFFFFF</color>
+    <color name="gui_preset_danger_fill">#D73333</color>
+    <!-- Four-corner fixed Prismal-style edge: cached color stops, not AGSL. -->
+    <color name="gui_preset_rim_strong">#FCFFFFFF</color>
+    <color name="gui_preset_rim_medium">#D8FFFFFF</color>
+    <color name="gui_preset_rim_weak">#94FFFFFF</color>
+</resources>

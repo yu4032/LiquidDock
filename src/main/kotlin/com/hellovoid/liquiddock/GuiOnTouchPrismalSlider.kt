@@ -84,6 +84,11 @@ internal fun GuiOnTouchPrismalSlider(
 ) {
     val density = LocalDensity.current
     val isLightTheme = !isSystemInDarkTheme()
+    val presetChrome = LocalGuiPresetChromePalette.current
+    val idleThumbShape = remember { PrismalCapsule() }
+    val idleThumbShadow = remember {
+        PrismalDepthShadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))
+    }
     val accentColor =
         if (isLightTheme) Color(0xFF0088FF)
         else Color(0xFF0091FF)
@@ -386,26 +391,19 @@ internal fun GuiOnTouchPrismalSlider(
                     .size(40.dp, 24.dp)
             ) {
                 if (!sampling) {
-                    // Frozen native Prismal thumb, never a flat white substitute.
+                    // Draw a plain-color thumb while keeping the original spring transform.
                     // Gestures stay on the stable outer Box.
-                    GuiFrozenPrismalChrome(
-                        backdrop = underlayBackdrop,
-                        shape = { PrismalCapsule() },
-                        // Reuse the main-branch #307 fix: transform only the frozen
-                        // cached thumb, never the live source/backdrop coordinate space.
+                    Box(
                         modifier = Modifier.matchParentSize().graphicsLayer {
                             val velocity = dampedDragAnimation.velocity / 10f
                             scaleX = dampedDragAnimation.scaleX /
                                 (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
                             scaleY = dampedDragAnimation.scaleY *
                                 (1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f))
-                        },
-                        blurRadius = 8.dp,
-                        refractionHeightPx = with(density) { 4.dp.toPx() },
-                        refractionAmountPx = with(density) { 6.dp.toPx() },
-                        chromaticAberration = 0.28f,
-                        surfaceColor = Color.White.copy(alpha = 0.75f),
-                        depthEffect = false,
+                        }
+                            .guiNativePrismalDepthShadow(idleThumbShape, idleThumbShadow)
+                            .guiIdleThumbChrome(presetChrome)
+                            .guiStaticSpecularRim(idleThumbShape, presetChrome, compact = true),
                     )
                 }
             }

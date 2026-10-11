@@ -16,6 +16,7 @@ LiquidDock 当前使用或编译依赖：
 ## Bundled / adapted renderer reference
 
 - **Prismal** — MIT License — <https://github.com/styropyr0/Prismal>
+- **PrismalAGSL v1.0.4** — MIT License, Copyright (c) 2026 Saurav Sajeev — <https://github.com/styropyr0/PrismalAGSL>. GUI 阴影节点从上游 `PrismalDepthShadowModifier.kt` 和 `internal/Paint.kt` 改写为单独 Modifier，不包含完整玻璃采样。许可证原文：`docs/licenses/PrismalAGSL-MIT.txt`。
 
 LiquidDock 仓库包含独立 `prismal` 模块，并基于 Prismal 的光学/Shader/参数设计进行适配。具体许可证与上游归属以仓库内对应声明为准。
 
