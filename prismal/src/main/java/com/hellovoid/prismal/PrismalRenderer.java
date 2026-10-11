@@ -321,6 +321,7 @@ public final class PrismalRenderer implements AutoCloseable {
             bottom = Math.max(top, Math.min(height, logicalBottom));
         }
 
+        ensureNativeOutputTarget();
         frameTarget.selectTexture(outputFramebuffer, outputWidth, outputHeight);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer);
         GLES20.glViewport(0, 0, outputWidth, outputHeight);
@@ -498,7 +499,8 @@ public final class PrismalRenderer implements AutoCloseable {
                                int nextOutputWidth, int nextOutputHeight) {
         if (renderWidth == nextRenderWidth && renderHeight == nextRenderHeight
                 && outputWidth == nextOutputWidth && outputHeight == nextOutputHeight
-                && outputTexture != 0) {
+                && sourceFramebuffer != 0 && blurFramebufferH != 0
+                && blurFramebufferV != 0) {
             return;
         }
         releaseTargets();
@@ -515,8 +517,23 @@ public final class PrismalRenderer implements AutoCloseable {
         blurFramebufferH = createFramebuffer(blurTextureH);
         blurTextureV = createTexture(blurWidth, blurHeight);
         blurFramebufferV = createFramebuffer(blurTextureV);
+        // A Workspace StaticLayer draws directly into the caller's EGL window buffer.
+        // Allocating another native RGBA texture/FBO here wastes an entire root-size buffer
+        // on every surface epoch when no Drag/Dock texture output is requested.
+        outputNeedsFullClear = true;
+    }
+
+    private void ensureNativeOutputTarget() {
+        if (outputTexture != 0 && outputFramebuffer != 0) return;
         outputTexture = createTexture(outputWidth, outputHeight);
-        outputFramebuffer = createFramebuffer(outputTexture);
+        try {
+            outputFramebuffer = createFramebuffer(outputTexture);
+        } catch (RuntimeException failure) {
+            GLES20.glDeleteTextures(1, new int[]{outputTexture}, 0);
+            outputTexture = 0;
+            outputFramebuffer = 0;
+            throw failure;
+        }
         outputNeedsFullClear = true;
     }
 
