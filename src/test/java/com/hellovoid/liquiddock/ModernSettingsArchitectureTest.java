@@ -398,8 +398,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void staticChromeKeepsPrismalDepthShadowOutsideClipAndXmlThumbsVisible()
-            throws Exception {
+    public void missingDecorativeDrawablesCannotCrashSettingsStartup() throws Exception {
         String chrome = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiSolidChrome.kt"));
         String surface = Files.readString(SURFACES);
@@ -407,50 +406,37 @@ public class ModernSettingsArchitectureTest {
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalSlider.kt"));
         String toggle = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiOnTouchPrismalToggle.kt"));
-        String stepper = Files.readString(Path.of(
-                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticRepeatStepButton.kt"));
 
-        // XML ShapeDrawable intrinsic sizes are -1. Guard ONLY empty target
-        // bounds; source-size-free drawables must go through direct draw().
+        // Regression: GUI startup previously crashed when the OEM resources
+        // returned null for R.drawable.gui_depth_shadow_card.
+        assertFalse(chrome.contains("R.drawable.gui_depth_shadow_card"));
+        assertFalse(chrome.contains("R.drawable.gui_depth_shadow_pill"));
+        assertFalse(chrome.contains("R.drawable.gui_depth_shadow_thumb"));
+        assertFalse(chrome.contains("guiBakedDepthShadow("));
+        assertFalse(surface.contains("guiBakedDepthShadow("));
+        assertFalse(slider.contains("guiBakedDepthShadow("));
+        assertFalse(toggle.contains("guiBakedDepthShadow("));
+
+        // Any future failure to decode a decorative drawable must use a
+        // theme-matched, bounded GradientDrawable rather than requireNotNull.
+        assertTrue(chrome.contains("loadGuiChromeOrSolidFallback("));
+        assertTrue(chrome.contains("if (candidate != null) return candidate.mutate()"));
+        assertTrue(chrome.contains("catch (error: RuntimeException)"));
+        assertTrue(chrome.contains("return GradientDrawable().apply"));
+        assertTrue(chrome.contains("setColor(fallbackColor)"));
+        assertFalse(chrome.contains("requireNotNull(ContextCompat.getDrawable"));
+
+        // XML ShapeDrawable has no intrinsic dimensions: still draw by
+        // measured destination bounds. Idle handles must remain visible.
         assertTrue(chrome.contains("if (width <= 0 || height <= 0)"));
-        assertTrue(chrome.contains(
-                "cornerDp == 0f || sourceWidth <= 0 || sourceHeight <= 0"));
+        assertTrue(chrome.contains("cornerDp == 0f || sourceWidth <= 0 || sourceHeight <= 0"));
         assertTrue(chrome.contains("material.setBounds(0, 0, width, height)"));
         assertTrue(chrome.contains("material.draw(native)"));
-
-        assertTrue(chrome.contains("internal fun Modifier.guiBakedDepthShadow("));
-        assertTrue(chrome.contains("R.drawable.gui_depth_shadow_card"));
-        assertTrue(chrome.contains("R.drawable.gui_depth_shadow_pill"));
-        assertTrue(chrome.contains("R.drawable.gui_depth_shadow_thumb"));
-        assertTrue(chrome.contains("GuiSolidChromeStyle.THUMB -> palette.thumbShadow"));
-        // Prismal's exterior shadow cannot be restored by drawing it after
-        // clip(shape): that would erase all four corner halo regions.
-        assertTrue(surface.contains("Modifier.guiBakedDepthShadow(GuiSolidChromeStyle.CARD, presetChrome)"));
-        assertTrue(surface.contains("if (staticChrome) Modifier.guiBakedDepthShadow("));
-        assertTrue(surface.contains(".clip(cardShape)"));
-        assertTrue(surface.contains(".clip(buttonShape)"));
-        assertTrue(stepper.contains(".guiBakedDepthShadow(GuiSolidChromeStyle.PILL, presetChrome)"));
-
-        assertTrue(slider.contains(".guiBakedDepthShadow(GuiSolidChromeStyle.THUMB, presetChrome)"));
-        assertTrue(toggle.contains(".guiBakedDepthShadow(GuiSolidChromeStyle.THUMB, presetChrome)"));
         assertTrue(slider.contains(".guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)"));
         assertTrue(toggle.contains(".guiSolidChrome(GuiSolidChromeStyle.THUMB, presetChrome)"));
-        assertTrue(slider.contains("PrismalDepthShadow("));
-        assertTrue(toggle.contains("PrismalDepthShadow("));
         assertTrue(slider.contains("PrismalSpecular.Ambient.copy("));
         assertTrue(toggle.contains("PrismalSpecular.Ambient.copy("));
 
-        // No bitmap screenshots or GPU readback: material/shadow masks are
-        // hand-baked at build time. Validate actual transparent PNG headers.
-        for (String kind : new String[]{"card", "pill", "thumb"}) {
-            byte[] shadow = Files.readAllBytes(Path.of(
-                    "src/main/res/drawable-nodpi/gui_depth_shadow_" + kind + ".png"));
-            assertTrue(shadow.length > 100);
-            assertTrue((shadow[0] & 255) == 137 && shadow[1] == 80
-                    && shadow[2] == 78 && shadow[3] == 71);
-            assertTrue((shadow[24] & 255) == 8); // RGBA 8-bit
-            assertTrue((shadow[25] & 255) == 6);
-        }
         String thumbXml = Files.readString(Path.of(
                 "src/main/res/drawable/gui_material_thumb.xml"));
         assertTrue(thumbXml.contains("<solid android:color=\"#FFFFFFFF\"/>"));
