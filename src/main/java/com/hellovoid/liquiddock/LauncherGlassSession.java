@@ -671,9 +671,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (trace) Trace.beginSection("LD.Workspace.GeometryFrame");
         try {
             if (backdropPrepared && work != 0) {
-                renderOutputs(
-                        (work & LauncherGlassOutputRenderState.STATIC) != 0,
-                        (work & LauncherGlassOutputRenderState.DRAG) != 0);
+                // Geometry/Widget alpha animators can enqueue redraws even after
+                // Launcher.onStop(). Never swap the hidden HOME TextureView here.
+                // Its return is covered by a fresh-generation source request.
+                boolean staticDirty = (work & LauncherGlassOutputRenderState.STATIC) != 0
+                        && (!launcherStopped || MainHook.isWorkstationMode());
+                boolean dragDirty = (work & LauncherGlassOutputRenderState.DRAG) != 0;
+                if (staticDirty || dragDirty) renderOutputs(staticDirty, dragDirty);
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " output redraw failed " + debugLabel() + ": " + error);
@@ -737,7 +741,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void syncSceneOnUiThreadInternal(boolean tracing) {
-        if (shuttingDown) return;
+        if (shuttingDown || (launcherStopped && !MainHook.isWorkstationMode())) return;
         View root = rootRef.get();
         if (root == null) return;
         int nextWidth = root.getWidth();
