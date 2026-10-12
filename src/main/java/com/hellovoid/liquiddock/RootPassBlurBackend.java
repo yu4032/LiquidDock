@@ -67,6 +67,10 @@ final class RootPassBlurBackend {
     private volatile boolean transitionFrameSyncEnabled;
     private volatile long sourceGeneration = -1L;
     private volatile long renderedGeneration = -1L;
+    // Render-thread counters emitted only when Perfetto is actively tracing.
+    private long tracedSourceCallbacks;
+    private long tracedSourceFramesGated;
+    private long tracedSourceFramesNormalized;
     private volatile boolean requestedSingleFramePulse;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
@@ -440,7 +444,7 @@ final class RootPassBlurBackend {
 
     void swapBuffers(EGLSurface surface) {
         requireRenderThread();
-        boolean trace = MainHook.debugLogging
+        boolean trace = Trace.isEnabled()
                 && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
         if (trace) Trace.beginSection("LD.Workspace.Swap");
         try {
@@ -583,12 +587,19 @@ final class RootPassBlurBackend {
 
     private void onFrameAvailable(SurfaceTexture input) {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
+        boolean tracing = bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
+                && Trace.isEnabled();
+        if (tracing) Trace.setCounter("LD.Workspace.SourceCallbacks", ++tracedSourceCallbacks);
         Miuix307PassBlurBridge.renewForceRefresh(binding);
         long generation = sourceGeneration;
         PassBlurSourceFrameGate gate = sourceFrameGate;
         boolean shouldRender = generation >= 0L && (gate == null || gate.shouldSchedule(
                 System.nanoTime(), renderedGeneration, generation));
         if (!shouldRender) {
+            if (tracing) {
+                Trace.setCounter("LD.Workspace.SourceFramesGated",
+                        ++tracedSourceFramesGated);
+            }
             drainSourceFrameWithoutRender(input);
             return;
         }
@@ -612,10 +623,14 @@ final class RootPassBlurBackend {
             latchSourceFrame(input);
             if (generation < 0L || generation != sourceGeneration
                     || generation != state.requestedGeneration()) return;
-            boolean trace = MainHook.debugLogging
+            boolean trace = Trace.isEnabled()
                     && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+            if (trace) {
+                Trace.setCounter("LD.Workspace.SourceFramesNormalized",
+                        ++tracedSourceFramesNormalized);
+                Trace.beginSection("LD.Workspace.Normalize");
+            }
             RootPassBlurFrame frame;
-            if (trace) Trace.beginSection("LD.Workspace.Normalize");
             try {
                 frame = normalizeFrame(generation);
             } finally {
@@ -631,7 +646,7 @@ final class RootPassBlurBackend {
     }
 
     private void latchSourceFrame(SurfaceTexture input) {
-        boolean trace = MainHook.debugLogging
+        boolean trace = Trace.isEnabled()
                 && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
         if (trace) Trace.beginSection("LD.Workspace.SourceLatch");
         try {
