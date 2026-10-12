@@ -35,10 +35,14 @@ final class LiquidDockConfig {
     }
 
     static final class Animation {
+        final boolean iosHomeSpringExperiment;
         final int workspaceVisibilityMs, dockIconRevealMs, pressInMs, pressOutMs,
                 dockResizeMs, shortcutPopupDismissFadeMs, securityCenterExitFadeMs;
 
         Animation(ConfigReader c) {
+            iosHomeSpringExperiment = c.b(
+                    ConfigSchema.Animation.IOS_HOME_SPRING_EXPERIMENT.name(),
+                    ConfigSchema.Animation.IOS_HOME_SPRING_EXPERIMENT.runtimeFallback());
             workspaceVisibilityMs = duration(c, ConfigSchema.Animation.WORKSPACE_VISIBILITY);
             dockIconRevealMs = duration(c, ConfigSchema.Animation.DOCK_ICON_REVEAL);
             pressInMs = duration(c, ConfigSchema.Animation.PRESS_IN);
