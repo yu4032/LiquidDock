@@ -115,7 +115,8 @@ final class LiveGlassConfigState {
                     ConfigSchema.Animation.DOCK_ICON_REVEAL.name(),
                     ConfigSchema.Animation.PRESS_IN.name(),
                     ConfigSchema.Animation.PRESS_OUT.name(),
-                    ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE.name())));
+                    ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE.name(),
+                    ConfigSchema.Animation.IOS_HOME_SPRING_EXPERIMENT.name())));
     private static SharedPreferences preferences;
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
     private static Map<String, ?> lastGlass = Collections.emptyMap();
@@ -231,6 +232,8 @@ final class LiveGlassConfigState {
             if (animationChanged) {
                 lastAnimation = animation;
                 AnimationRuntimeState.configure(next.animation);
+                IosHomeSpringExperiment.configure(
+                        next.enabled && next.animation.iosHomeSpringExperiment);
                 MainHook.log(TAG + " launcher animation timing updated");
             }
         } catch (Throwable error) {
