@@ -107,6 +107,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         EGLSurface eglSurface = EGL14.EGL_NO_SURFACE;
         int width;
         int height;
+        // Render-thread only. The last buffer submitted to TextureView is known blank.
+        // A fresh surface/resize always begins unknown and must submit its first clear.
+        boolean blankPresented;
 
         OutputState(Surface surface, int width, int height) {
             this.surface = surface;
@@ -625,6 +628,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             if (output != null) {
                 output.width = Math.max(1, width);
                 output.height = Math.max(1, height);
+                output.blankPresented = false;
                 scheduleOutputRender(true, false);
             }
         });
@@ -1210,12 +1214,27 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         OutputState output = staticOutput;
         if (output == null || output.eglSurface == EGL14.EGL_NO_SURFACE
                 || output.width <= 0 || output.height <= 0) return;
+        // When this exact EGL output has already presented a transparent buffer, a
+        // still-empty static scene has no pixels to update. Do not clear/swap a
+        // fullscreen transparent buffer on every unrelated PassBlur/drag frame.
+        // Once any node becomes drawable, the next redraw always swaps normally.
+        StaticNodeState[] snapshot = staticNodeStateSnapshot;
+        boolean drawable = false;
+        for (StaticNodeState state : snapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            StaticGeometryFrame frame = state.frame;
+            if (node != null && frame != null && frame.geometry != null
+                    && node.visibilityAlpha() > 0.001f) {
+                drawable = true;
+                break;
+            }
+        }
+        if (!WorkspaceStaticOutputPolicy.shouldRender(output.blankPresented, drawable)) return;
         // Background capture and blur remain downsampled, while procedural refraction
         // renders directly into the native-resolution window. The Prismal node scissor
         // limits expensive shading to occupied glass bounds.
         sourceBackend.makeCurrent(output.eglSurface);
         prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
-        StaticNodeState[] snapshot = staticNodeStateSnapshot;
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
@@ -1231,6 +1250,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
         sourceBackend.swapBuffers(output.eglSurface);
+        // Commit only after EGL accepted the buffer. Never infer blank state from
+        // node count when a previous content frame is still being displayed.
+        output.blankPresented = !drawable;
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
