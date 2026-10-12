@@ -44,8 +44,12 @@ public class PrismalBatchRendererContractTest {
         assertTrue(source.contains("private boolean outputNeedsFullClear = true;"));
         assertTrue(source.contains("if (outputNeedsFullClear) {"));
         assertTrue(source.contains("outputNeedsFullClear = false;"));
-        assertTrue(source.contains("outputFramebuffer = createFramebuffer(outputTexture);\n"
-                + "        outputNeedsFullClear = true;"));
+        int nativeOutputCreate = source.indexOf(
+                "outputFramebuffer = createFramebuffer(outputTexture);");
+        assertTrue(nativeOutputCreate >= 0);
+        // Native output is now lazy; the first use must still request a full clear.
+        assertTrue(source.indexOf("outputNeedsFullClear = true;", nativeOutputCreate)
+                > nativeOutputCreate);
         assertTrue(source.contains("glassPositionLocation = requireAttrib(glassProgram, \"a_position\")"));
         assertFalse(source.contains("int position = requireAttrib(glassProgram, \"a_position\")"));
     }
