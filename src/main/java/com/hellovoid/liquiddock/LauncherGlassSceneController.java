@@ -437,13 +437,20 @@ final class LauncherGlassSceneController {
                     || rootRef.get() != root || !root.isAttachedToWindow()) return;
             // HOME spring capture is owned by onHomePresentationPendingChanged(false).
             // Never race the first scale frame with an already doomed background pass.
-            if (homeTransitionPending) return;
-            if (framesLeft > 1) {
-                scheduleAppResumeFresh(root, serial, framesLeft - 1);
-                return;
-            }
-            if (state.shouldRequestFreshAfterPresentation()) {
-                requestFreshBackdrop(state.generation());
+            WorkspaceResumeCapturePolicy.Decision decision =
+                    WorkspaceResumeCapturePolicy.onFrame(framesLeft,
+                            isPresentationPending(), state.shouldRequestFreshAfterPresentation());
+            switch (decision) {
+                case NEXT_FRAME:
+                    scheduleAppResumeFresh(root, serial, framesLeft - 1);
+                    break;
+                case REQUEST_FRESH:
+                    requestFreshBackdrop(state.generation());
+                    break;
+                case DEFER_TO_PRESENTATION:
+                case NO_REQUEST:
+                default:
+                    break;
             }
         });
     }
