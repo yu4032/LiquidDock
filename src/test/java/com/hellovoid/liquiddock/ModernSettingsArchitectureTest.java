@@ -1283,6 +1283,16 @@ public class ModernSettingsArchitectureTest {
         assertTrue(adapter.contains("content = hitTargetContent"));
         assertTrue(adapter.contains("clipOp = ClipOp.Difference"));
         assertTrue(adapter.contains("backdrop = dropletBackdrop"));
+        // The idle lens must not collapse to a no-op. Magnification acts
+        // on the glyphs only; the page backdrop stays at native scale.
+        assertTrue(adapter.contains("rememberPrismalWrappedSource(tabsBackdrop)"));
+        assertTrue(adapter.contains("scale(scale = 1.12f, pivot = center)"));
+        assertTrue(adapter.contains("rememberPrismalMergedSource(backdrop, magnifiedGlyphs)"));
+        assertTrue(adapter.contains("(10f + 4f * progress).dp.toPx()"));
+        assertTrue(adapter.contains("(12f + 5f * progress).dp.toPx()"));
+        assertFalse(adapter.contains("14.dp.toPx() } * progress"));
+        assertTrue(adapter.contains(".height(64.dp)"));
+        assertTrue(bottom.contains("A passive sample has no clickable/semantic nodes"));
         assertTrue(bottom.contains("sampledContent = {"));
         assertTrue(bottom.contains("visibleContent = {"));
         assertFalse(bottom.contains("SideEffect {"));
