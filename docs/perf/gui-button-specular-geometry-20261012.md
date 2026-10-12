@@ -44,3 +44,11 @@ The atlas is optional. If PNG decoding fails, `GuiSolidChrome` logs a warning an
 CI verifies PNG dimensions, palette transparency and the decoded 36dp/72dp corner specular, source generator presence, resource fail-open, no runtime button shader, and unchanged existing Prismal shadow. Real-device comparison should check both light/dark buttons, the red danger action, 36dp steppers, seam-free wide pills, idle switch/slider and dense-list frame time. This approximates upstream native alpha/blur, not a pixel-exact captured native image.
 
 **PR #356 is Draft until tested on device.** Do not merge based solely on CI.
+
+## Disabled reset and stepper shadow fix
+
+The on-device screenshot of the **disabled** reset action showed a faint rectangular gray block behind a properly rounded white specular border. This matches the ordering of `.alpha(if (enabled) 1f else 0.66f)` **outside** `guiNativePrismalDepthShadow` in `ModernSettingsUi.Button`: when reset is already at its default value, `SettingsControls` passes `enabled=false`. The offscreen alpha layer then clips its blurred shadow to the button's rectangular measured bounds. The +/- steppers had the same pattern with alpha 0.45f when at their range limits.
+
+Fix: create native Prismal depth shadows **only for enabled actions/steppers**, move alpha after the shadow modifier so it applies solely to material, baked glint and content, and retain the original shape clip and layout. No changes to PNG atlas, cached thumbnail, native enabled shadows, background sampling or stepper gesture handling. Disabled elements are now deliberately shadow-free, consistent with their inactive state.
+
+Architecture tests assert the original default-value disabled condition, conditional shadow, alpha modifier ordering and continued use of the offline baked button highlight.
