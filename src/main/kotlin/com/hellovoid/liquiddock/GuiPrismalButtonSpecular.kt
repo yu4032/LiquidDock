@@ -105,6 +105,7 @@ private class GuiButtonSpecularNode(var shape: Shape) : DrawModifierNode, Modifi
             cachedDirection = layoutDirection
             cachedDensity = density
             val outline = cachedOutline ?: return
+            if (outline is Outline.Rounded && roundedClipPath == null) roundedClipPath = Path()
 
             // Identical source geometry to PrismalSpecularModifier.configurePaint.
             // Clipping removes the outer half: inner apparent width is always
@@ -154,20 +155,20 @@ private class GuiButtonSpecularNode(var shape: Shape) : DrawModifierNode, Modifi
             return
         }
         try {
-            val shader = shader ?: PrismalShader(GUI_BUTTON_PRISMAL_DEFAULT_AGSL)
-                .also { shader = it }
+            val currentShader = shader ?: PrismalShader(GUI_BUTTON_PRISMAL_DEFAULT_AGSL)
+                .also { this@GuiButtonSpecularNode.shader = it }
             val radius = if (shape is PrismalRoundedRectangularShape) {
                 (shape as PrismalRoundedRectangularShape).corners(dimensions, direction, densityScope)
                     .let { floatArrayOf(it.topLeft, it.topRight, it.bottomRight, it.bottomLeft) }
             } else {
                 FloatArray(4) { dimensions.minDimension / 2f }
             }
-            shader.setFloatUniform("size", dimensions.width, dimensions.height)
-            shader.setFloatUniform("cornerRadii", radius)
-            shader.setColorUniform("color", Color.White)
-            shader.setFloatUniform("angle", 0.7853981634f) // 45° in radians
-            shader.setFloatUniform("falloff", 1f)
-            paint.asFrameworkPaint().shader = shader.asPrismalShaderHost()
+            currentShader.setFloatUniform("size", dimensions.width, dimensions.height)
+            currentShader.setFloatUniform("cornerRadii", radius)
+            currentShader.setColorUniform("color", Color.White)
+            currentShader.setFloatUniform("angle", 0.7853981634f) // 45° in radians
+            currentShader.setFloatUniform("falloff", 1f)
+            paint.asFrameworkPaint().shader = currentShader.asPrismalShaderHost()
         } catch (error: RuntimeException) {
             Log.w("GuiPrismalSpecular", "Native specular shader unavailable; using plain rim", error)
             shaderUnavailable = true
