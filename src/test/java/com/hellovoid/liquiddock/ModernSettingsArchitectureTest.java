@@ -534,6 +534,39 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void disabledResetAndStepperNeverClipNativeShadowToRectangle() throws Exception {
+        String ui = Files.readString(SURFACES);
+        String step = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticRepeatStepButton.kt"));
+        String controls = Files.readString(CONTROLS);
+
+        // The reset action is DISABLED at its default value; alpha on the
+        // outside of the native shadow turns the soft curved halo into a
+        // hard-cropped rectangular offscreen layer.
+        assertTrue(controls.contains(
+                "enabled = enabled && kotlin.math.abs(value - resetValue) > 0.0001f"));
+        assertTrue(ui.contains("if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(buttonShape)"));
+        assertTrue(step.contains("if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(shape)"));
+        assertTrue(ui.contains(".alpha(if (enabled) 1f else 0.66f)"));
+        assertTrue(step.contains(".alpha(if (enabled) 1f else 0.45f)"));
+
+        int actionShadow = ui.indexOf(
+                "if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(buttonShape)");
+        int actionAlpha = ui.indexOf(".alpha(if (enabled) 1f else 0.66f)");
+        assertTrue(actionShadow > 0 && actionAlpha > actionShadow);
+        int stepShadow = step.indexOf(
+                "if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(shape)");
+        int stepAlpha = step.indexOf(".alpha(if (enabled) 1f else 0.45f)");
+        assertTrue(stepShadow > 0 && stepAlpha > stepShadow);
+
+        // The accepted, independently cached Prismal shadow and offline
+        // button highlighter still exist and do not stack a second rim.
+        assertTrue(ui.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
+        assertTrue(step.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
+        assertFalse(ui.contains(".alpha(if (enabled) 1f else 0.66f)\n            .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow"));
+    }
+
+    @Test
     public void workstationDockGuiOmitsBrokenControlsButKeepsTheirConfigSchema() throws Exception {
         String ui = Files.readString(UI);
         String specs = Files.readString(OPTION_SPECS);
