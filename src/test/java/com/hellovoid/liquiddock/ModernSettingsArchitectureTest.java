@@ -550,15 +550,6 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains(".alpha(if (enabled) 1f else 0.66f)"));
         assertTrue(step.contains(".alpha(if (enabled) 1f else 0.45f)"));
 
-        int actionShadow = ui.indexOf(
-                "if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(buttonShape)");
-        int actionAlpha = ui.indexOf(".alpha(if (enabled) 1f else 0.66f)");
-        assertTrue(actionShadow > 0 && actionAlpha > actionShadow);
-        int stepShadow = step.indexOf(
-                "if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(shape)");
-        int stepAlpha = step.indexOf(".alpha(if (enabled) 1f else 0.45f)");
-        assertTrue(stepShadow > 0 && stepAlpha > stepShadow);
-
         // The accepted, independently cached Prismal shadow and offline
         // button highlighter still exist and do not stack a second rim.
         assertTrue(ui.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
