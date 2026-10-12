@@ -178,6 +178,17 @@ final class LauncherGlassStaticNode {
     }
 
     View materialHost() { return materialRef.get(); }
+
+    /** A bound host is already tracked by root pre-draw. Provider content updates
+     * re-enter through the explicit RemoteViews / MAML update hooks. */
+    boolean hasLiveRootOwner() {
+        View material = materialRef.get();
+        LauncherGlassSession live = session;
+        return !disposed && material != null && material.isAttachedToWindow()
+                && live != null && !live.isShutdown()
+                && live.ownsRoot(material.getRootView());
+    }
+
     LauncherGlassDragState.Kind kind() { return kind; }
     LauncherGlassNodeKind nodeKind() { return nodeKind; }
 
