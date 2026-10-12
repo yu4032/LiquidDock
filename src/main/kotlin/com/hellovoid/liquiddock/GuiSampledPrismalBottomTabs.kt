@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -81,6 +82,7 @@ import androidx.compose.ui.util.lerp
 import com.styropyr0.prismal.PrismalBackdrop
 import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalMergedSource
+import com.styropyr0.prismal.sources.rememberPrismalWrappedSource
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 import com.styropyr0.prismal.drawPrismalGlass
 import com.styropyr0.prismal.effects.applyPrismalGlassEffects
@@ -168,8 +170,15 @@ internal fun GuiSampledPrismalBottomTabs(
     val containerColor = if (isLightTheme) Color(0xFFFAFAFA).copy(0.4f)
     else Color(0xFF121212).copy(0.4f)
 
+    // The old v1.0.4 droplet passed through the same-size glyph texture,
+    // which looks identical while idle because its lens strength was zero.
+    // Match Prismal's SegmentedControl technique: sample a magnified glyph
+    // image through the lens, without scaling the page background.
     val tabsBackdrop = rememberPrismalGlassLayer()
-    val dropletBackdrop = rememberPrismalMergedSource(backdrop, tabsBackdrop)
+    val magnifiedGlyphs = rememberPrismalWrappedSource(tabsBackdrop) { drawGlyphs ->
+        scale(scale = 1.12f, pivot = center) { drawGlyphs() }
+    }
+    val dropletBackdrop = rememberPrismalMergedSource(backdrop, magnifiedGlyphs)
 
     tabsBackdrop.readSamplingState()
     val density = LocalDensity.current
@@ -341,6 +350,9 @@ internal fun GuiSampledPrismalBottomTabs(
                 content = visibleContent
             )
 
+            // Capture only the actual glyphs, never a second frosted base
+            // (the base bar is already supplied by the merged backdrop).
+            // Both graphic passes share the exact 64dp/4dp layout coordinates.
             Row(
                 Modifier
                     .clearAndSetSemantics {}
@@ -349,30 +361,9 @@ internal fun GuiSampledPrismalBottomTabs(
                     .graphicsLayer {
                         translationX = panelOffset
                     }
-                    .drawPrismalGlass(
-                        backdrop = backdrop,
-                        shape = { PrismalCapsule() },
-                        effects = {
-                            val progress = dampedDragAnimation.pressProgress
-                            applyPrismalGlassEffects(
-                                density = density,
-                                adaptiveLuminance = adaptiveLuminance,
-                                luminance = luminance(),
-                                blurRadiusPx = with(density) { 8.dp.toPx() },
-                                refractionHeightPx = with(density) { 24.dp.toPx() } * progress,
-                                refractionAmountPx = with(density) { 24.dp.toPx() } * progress
-                            )
-                        },
-                        specular = {
-                            val progress = dampedDragAnimation.pressProgress
-                            PrismalSpecular.Default.copy(alpha = progress)
-                        },
-                        onDrawSurface = { drawRect(containerColor) }
-                    )
-                    .then(interactivePrismalSpecular.modifier)
-                    .height(56.dp)
+                    .height(64.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp)
+                    .padding(4.dp)
                     .then(
                         if (tintDropletContent) {
                             Modifier.drawWithContent {
@@ -410,10 +401,14 @@ internal fun GuiSampledPrismalBottomTabs(
                     shape = { PrismalCapsule() },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
+                        // Keep the lens optically active when not pressed;
+                        // progress enhances it during contact rather than turning
+                        // the entire distortion off at rest.
                         prismalLens(
-                            refractionHeight = with(density) { 10.dp.toPx() } * progress,
-                            refractionAmount = with(density) { 14.dp.toPx() } * progress,
-                            chromaticAberration = 1f
+                            refractionHeight = with(density) { (10f + 4f * progress).dp.toPx() },
+                            refractionAmount = with(density) { (12f + 5f * progress).dp.toPx() },
+                            chromaticAberration = 0.35f,
+                            depthEffect = true
                         )
                     },
                     specular = {
