@@ -508,7 +508,10 @@ final class MiuixLauncherStaticGlassHook {
             float radius = resolveCornerRadius(host, kind);
             node = LauncherGlassStaticNode.attachToMaterial(host, kind, radius, glassConfig);
         } else {
-            node.requestLifecycleRefresh();
+            // A page/HOME reconciliation often re-visits unchanged hosts. Geometry and
+            // visibility are already observed on root pre-draw; only a changed native
+            // radius needs an explicit optical refresh.
+            node.setNativeCornerRadiusPx(resolveCornerRadius(host, kind));
         }
         if (node == null && attempt < MAX_BIND_ATTEMPTS) {
             host.postOnAnimation(() -> scheduleBind(host, kind, glassConfig, attempt + 1));
