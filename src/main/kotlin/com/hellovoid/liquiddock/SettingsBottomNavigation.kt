@@ -92,8 +92,14 @@ internal fun ModernBottomNavigation(
                         // for the droplet lens; it does not paint on the screen.
                         val candidate = LocalPrismalBottomTabHighlightedIndex.current()
                         labels.forEachIndexed { index, label ->
-                            GuiSampledPrismalBottomTab(
-                                onClick = { if (index != selected) onSelect(index) },
+                            // A passive sample has no clickable/semantic nodes.
+                            // Only hitTargetContent receives native gestures.
+                            Column(
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                                verticalArrangement = Arrangement.spacedBy(
+                                    2.dp, Alignment.CenterVertically,
+                                ),
+                                horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 ModernTabContents(
                                     label = label,
