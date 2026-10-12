@@ -651,7 +651,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private void drainOutputRenderWork() {
         int work = outputRenderState.consumeQueuedRender();
-        boolean trace = MainHook.debugLogging && workspaceSource && work != 0;
+        // Separate geometry/alpha-driven redraws from actual new PassBlur source frames.
+        // Perfetto traces must not require synchronous MainHook.debugLogging.
+        boolean trace = workspaceSource && work != 0 && Trace.isEnabled();
         if (trace) Trace.beginSection("LD.Workspace.GeometryFrame");
         try {
             if (backdropPrepared && work != 0) {
@@ -1089,7 +1091,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             return;
         }
-        boolean trace = MainHook.debugLogging && workspaceSource;
+        boolean trace = workspaceSource && Trace.isEnabled();
         if (trace) Trace.beginSection("LD.Workspace.SourceFrame");
         try {
             boolean perf = MainHook.debugLogging;
@@ -1224,7 +1226,16 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
-        sourceBackend.swapBuffers(output.eglSurface);
+        // A full-root static swap can be caused by geometry/Widget alpha changes even
+        // when no fresh OES input was captured. Parent SourceFrame / GeometryFrame
+        // slices identify which route issued this swap.
+        boolean traceStaticSwap = workspaceSource && Trace.isEnabled();
+        if (traceStaticSwap) Trace.beginSection("LD.Workspace.StaticSwap");
+        try {
+            sourceBackend.swapBuffers(output.eglSurface);
+        } finally {
+            if (traceStaticSwap) Trace.endSection();
+        }
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
