@@ -182,8 +182,15 @@ final class MiuixLauncherStaticGlassHook {
 
     private static int reconcileStaticSubtree(View view, LiquidDockConfig.Glass glassConfig) {
         if (view == null) return 0;
-        reconcileExistingHost(view, glassConfig);
+        LauncherGlassStaticNode existing = LauncherGlassStaticNode.find(view);
+        if (existing == null || !existing.hasLiveRootOwner()) {
+            reconcileExistingHost(view, glassConfig);
+        }
         int visited = 1;
+        // RemoteViews/MAML descendants are owned by the widget provider, not
+        // separate Launcher glass hosts. Expensive provider subtrees must not
+        // be rediscovered on each App -> HOME resume.
+        if (isWidgetHost(view) || isIconHost(view)) return visited;
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) {
