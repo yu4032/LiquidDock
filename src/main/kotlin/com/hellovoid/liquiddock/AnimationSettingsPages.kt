@@ -31,6 +31,14 @@ internal fun AnimationWorkspacePage(
         stringResource(R.string.page_animation_workspace),
         "调整工作区与 Dock 的玻璃过渡动画。",
     ) {
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Animation.IOS_HOME_SPRING_EXPERIMENT,
+            "iOS 风格返回桌面弹簧（实验）",
+            "仅调整原生返回桌面窗口弹簧的阻尼与响应；保留原生图标、手势及壁纸动画。"
+                + " 不增加玻璃采样或全屏模糊；开关即时生效，若 Launcher 弹簧结构不兼容则保持原样。",
+            masterEnabled,
+        )
         IntSetting(prefs, animationWorkspaceVisibilitySpec, masterEnabled)
         IntSetting(prefs, animationDockIconRevealSpec, masterEnabled)
         IntSetting(
