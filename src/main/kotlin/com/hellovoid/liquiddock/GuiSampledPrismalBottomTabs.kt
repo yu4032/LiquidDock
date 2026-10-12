@@ -9,6 +9,11 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -17,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -30,6 +36,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -39,12 +46,12 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.styropyr0.prismal.components.LocalPrismalBottomTabHighlightedIndex
-import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
@@ -66,6 +73,39 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
+
+// PrismalAGSL's scale local is internal. Keep an equivalent local for this
+// app-owned adapter rather than reaching into the dependency's internals.
+private val LocalGuiPrismalBottomTabScale = staticCompositionLocalOf { { 1f } }
+
+@Composable
+internal fun RowScope.GuiSampledPrismalBottomTab(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val scale = LocalGuiPrismalBottomTabScale.current
+    Column(
+        modifier
+            .clip(PrismalCapsule())
+            .clickable(
+                interactionSource = null,
+                indication = null,
+                role = Role.Tab,
+                onClick = onClick,
+            )
+            .fillMaxHeight()
+            .weight(1f)
+            .graphicsLayer {
+                val value = scale()
+                scaleX = value
+                scaleY = value
+            },
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        content = content,
+    )
+}
 
 /**
  * iOS-style glass bottom tab bar with a sliding selection pill and press feedback.
@@ -201,7 +241,7 @@ internal fun GuiSampledPrismalBottomTabs(
         }
 
         CompositionLocalProvider(
-            LocalPrismalBottomTabScale provides {
+            LocalGuiPrismalBottomTabScale provides {
                 lerp(1f, 1.05f, dampedDragAnimation.pressProgress)
             },
             LocalPrismalBottomTabHighlightedIndex provides { highlightedTabIndex }
