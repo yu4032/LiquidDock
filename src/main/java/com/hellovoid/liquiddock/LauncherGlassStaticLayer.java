@@ -32,6 +32,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
     private ValueAnimator motionAnimator;
+    // Root registration/restore may call setSceneVisible for every attached node.
+    // Do not repeatedly cancel an in-flight scene fade or invalidate HWUI alpha.
+    private boolean sceneTargetKnown;
+    private boolean sceneTargetVisible;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
@@ -166,6 +170,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {
         if (disposed) return;
+        if (sceneTargetKnown && sceneTargetVisible == visible
+                && (!immediateHide || layerAlpha.sceneAlpha() == 0f)) return;
+        sceneTargetKnown = true;
+        sceneTargetVisible = visible;
         cancelSceneAnimation();
         if (!visible && immediateHide) {
             layerAlpha.setSceneAlpha(0f);
