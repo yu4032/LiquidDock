@@ -1,27 +1,46 @@
-# GUI button edge: Prismal source geometry (2026-10-12)
+# GUI button highlight — prebaked Prismal resource (2026-10-12)
 
-## Problem
+## Why
 
-The accepted GUI uses a light-weight `GuiSolidChrome.guiStaticSpecularRim` with a `Brush.sweepGradient` around the element center. For elongated action buttons, polar angle is unrelated to the **local boundary normal**. The gradient crosses straight edges and curved corners at inconsistent rates, making sections of the single stroke appear heavier or thinner. Increasing stroke width or adding a second contrasting outline does not solve the error and previously caused stacked outlines.
+The main-branch setting button rim used a polar center-angle `Brush.sweepGradient`, which gives visually uneven brightness along long straight segments and continuous corners. The earlier PR #356 revision moved buttons to a clipped, normal-lit native Prismal specular `GraphicsLayer`; while source-faithful, the user requested **all highlight computation before build, shipped as static resources**.
 
-## Source audit
+## Source and geometry
 
-Pinned upstream: [PrismalAGSL v1.0.4](https://github.com/styropyr0/PrismalAGSL/tree/v1.0.4).
+Pinned upstream [PrismalAGSL v1.0.4](https://github.com/styropyr0/PrismalAGSL/tree/v1.0.4), MIT copyright Saurav Sajeev:
 
-- `PrismalSpecularModifier.kt`: draw a **single Stroke** of width `2 * ceil(0.5.dp.toPx())`, clip it to the exact Shape outline, apply a 0.25dp blur, and draw the cached layer with `BlendMode.Plus`.
-- `default_specular.agsl` + `rounded_rect_sdf.agsl`: compute intensity using `pow(abs(dot(gradSdRoundRect, (cos(45°),sin(45°)))),1)`; **direction modulates light, never geometric stroke width**.
-- `PrismalRoundedRectangle` defaults to **Continuous** corner interpolation rather than Compose's `RoundedCornerShape`.
+- `PrismalContinuousCurvatureCornerBuilder.kt` and `PrismalRoundedRectangleOutline.kt` define three Bezier segments per corner, dependent on width/height ratios.
+- `rounded_rect_sdf.agsl` and `default_specular.agsl` compute `pow(abs(dot(gradSdRoundRect, (cos(45°),sin(45°)))),1)` on each pixel.
+- `PrismalSpecularModifier.kt`: clipped stroke of `2 * ceil(0.5dp*density)` pixels, blur radius 0.25dp, white alpha .5, `BlendMode.Plus`.
 
-## Change
+The app's action buttons and +/- stepper controls have **36dp fixed height**, radius 18dp. Upstream continuous corner profiles vary with width below about 72dp. Above 72dp, the width-normalized `tW` saturates at 1, so the *corner* curve no longer changes.
 
-Added `GuiPrismalButtonSpecular.kt` as an isolated adaptation of upstream's internal specular node and Default shader, scoped exclusively to regular/destructive action buttons and numeric +/- buttons. The static fill, external native `DepthShadow`, text, tap and repeat-on-hold logic remain untouched. Switch numeric steppers to `PrismalRoundedRectangle(18.dp)`.
+## Offline generator and output
 
-A native `GraphicsLayer` is created and released with its modifier node. The true clipped outline, normal-based shader and blur are recorded when Shape, size, layout direction or density changes; ordinary scrolling only composites the cached layer. If AGSL compilation fails on a device, the renderer gracefully draws a plain white native-width rim. No full `drawPrismalGlass`, screenshot, backdrop sampling, per-Cell lens shader or new drawable resource.
+`scripts/generate_gui_button_specular.mjs` uses only Node.js built-ins; run once from repository root:
 
-The ordinary setting Card and idle toggle/slider thumb **still use the accepted inexpensive cached sweep rim**. If they later need similar correction, review their visual defects independently rather than expanding GPU work to all Cells without measurements.
+```sh
+node scripts/generate_gui_button_specular.mjs
+```
 
-## Acceptance
+It generates `src/main/res/drawable-nodpi/gui_button_specular_atlas.png`:
 
-Run CI, verify consistent apparent border width and corner continuity on wide buttons, red destructive actions and 36dp +/- buttons in both themes, ensure no double rim and confirm touch repeat behavior. Perfetto comparison should track both GPU render target memory and dense-page frame times before merging. Native specular creates an additional offscreen GraphicsLayer **per visible button**, so performance is not guaranteed identical.
+- 37 source rows: **every integer width from 36 through 72dp**, each 36dp high, computed at 3px/dp.
+- Original continuous corner Bezier geometry, source normal field, the clipped uniform-width stroke, plus a small separable 3-tap offline blur approximation.
+- The file encodes **transparent white + baked alpha**, rather than themes/colors. The final device draw uses `BlendMode.Plus` over already fixed color fills. The *direction-dependent lighting* is finished offline.
+- Dimensions: **216×3996 px**, indexed PNG with alpha palette, ~0.87MB pre-APK resource. One instance decoded in the scaffold (~3.45MB RGBA). No handmade Android `.9.png` format.
 
-PrismalAGSL v1.0.4 MIT copyright/license already retained under `THIRD_PARTY_NOTICES.md` and `docs/licenses/PrismalAGSL-MIT.txt`.
+On-device `guiBakedPrismalButtonSpecular` only selects an atlas row and draws it. At widths above 72dp, it uses three source fragments: fixed left 34dp corner, 4dp stretchable straight middle, fixed right 34dp corner. This does **not** stretch the rounded corners or recompute lighting. 36–72dp uses nearest 1dp variant (at most 0.5dp width mismatch).
+
+## Preserved and removed
+
+Preserve the original separate `guiNativePrismalDepthShadow` (BlurMaskFilter, cached GraphicsLayer), fixed theme fills, and existing button gestures. Original small switch/slider handles and ordinary Cells are **not** changed.
+
+Delete the previous button-specific `PrismalShader`, AGSL source, `GuiButtonSpecularNode`, per-button blur/GraphicsLayer and uniform updates. The runtime button highlight adds no `GraphicsLayer`, AGSL, Gaussian blur, or background sampling. It still requires normal GPU image sampling and `Plus` blending; it is not a literally zero-work render.
+
+The atlas is optional. If PNG decoding fails, `GuiSolidChrome` logs a warning and draws no extra highlight instead of crashing the settings Activity, as occurred during a previous required shadow-resource experiment.
+
+## Verification
+
+CI verifies PNG dimensions, palette transparency and the decoded 36dp/72dp corner specular, source generator presence, resource fail-open, no runtime button shader, and unchanged existing Prismal shadow. Real-device comparison should check both light/dark buttons, the red danger action, 36dp steppers, seam-free wide pills, idle switch/slider and dense-list frame time. This approximates upstream native alpha/blur, not a pixel-exact captured native image.
+
+**PR #356 is Draft until tested on device.** Do not merge based solely on CI.
