@@ -460,8 +460,14 @@ internal fun Button(
         modifier = modifier
             .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
             .height(minHeight)
+            // Disabled buttons should be flat. If alpha wraps the shadow,
+            // Compose clips its native blurred halo to rectangular layer bounds.
+            .then(
+                if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(buttonShape)
+                else Modifier
+            )
+            // Alpha affects only the button material/content, not its shadow.
             .alpha(if (enabled) 1f else 0.66f)
-            .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(buttonShape) else Modifier)
             .then(
                 if (staticChrome) {
                     Modifier
