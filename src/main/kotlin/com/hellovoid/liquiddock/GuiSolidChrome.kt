@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -38,6 +40,7 @@ internal data class GuiPresetChromePalette(
     val thumbFill: Color,
     val dangerFill: Color,
     val thumbDrawable: Drawable,
+    val buttonSpecularAtlas: ImageBitmap?,
     val rimStrong: Color,
     val rimMedium: Color,
     val rimWeak: Color,
@@ -64,13 +67,23 @@ internal fun rememberGuiPresetChromePalette(): GuiPresetChromePalette {
     val thumbDrawable = remember(context, thumbFill) {
         loadGuiThumbOrSolidFallback(context, R.drawable.gui_material_thumb, thumbFill)
     }
+    // One offline PNG resource for all fixed-height actions and steppers.
+    // Load only once; never require a decorative resource for app startup.
+    val buttonSpecularAtlas = remember(context) {
+        try {
+            ImageBitmap.imageResource(context.resources, R.drawable.gui_button_specular_atlas)
+        } catch (error: RuntimeException) {
+            Log.w("GuiSolidChrome", "Offline specular atlas unavailable; drawing without highlight", error)
+            null
+        }
+    }
     return remember(
         canvas, canvasWithoutGlass, cardFill, pillFill, thumbFill, dangerFill,
-        thumbDrawable, rimStrong, rimMedium, rimWeak,
+        thumbDrawable, buttonSpecularAtlas, rimStrong, rimMedium, rimWeak,
     ) {
         GuiPresetChromePalette(
             canvas, canvasWithoutGlass, cardFill, pillFill, thumbFill, dangerFill,
-            thumbDrawable, rimStrong, rimMedium, rimWeak,
+            thumbDrawable, buttonSpecularAtlas, rimStrong, rimMedium, rimWeak,
         )
     }
 }
