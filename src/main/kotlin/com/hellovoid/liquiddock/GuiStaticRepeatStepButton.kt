@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.styropyr0.prismal.shapes.PrismalRoundedRectangle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,16 +50,21 @@ internal fun GuiStaticRepeatStepButton(
     val colors = MiuixTheme.colorScheme
     val presetChrome = LocalGuiPresetChromePalette.current
     val darkTheme = colors.background.luminance() < 0.5f
-    val shape = RoundedCornerShape(18.dp)
+    val shape = remember { PrismalRoundedRectangle(18.dp) }
 
     Box(
         modifier = Modifier
             .size(36.dp)
+            // An outer alpha layer crops the native Prismal shadow to a
+            // square on disabled steppers. Do not draw disabled shadows.
+            .then(
+                if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(shape)
+                else Modifier
+            )
             .alpha(if (enabled) 1f else 0.45f)
-            .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(shape) else Modifier)
             .then(
                 if (staticChrome) {
-                    Modifier.guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL, presetChrome, shape)
+                    Modifier.background(presetChrome.pillFill, shape).guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)
                 } else {
                     Modifier.background(
                         lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f),

@@ -440,8 +440,7 @@ internal fun Button(
     destructive: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    // Fixed Cell actions, including reset, draw opaque Compose fills.
-    // No drawable allocation or per-Cell render nodes. Only slider/toggle gestures use live Prismal in the page body.
+    // Fixed-color fill + pre-baked Prismal highlight atlas; native depth shadow.\n    // No runtime AGSL, specular GraphicsLayer or background capture.
     val staticChrome = LocalStaticGlassChrome.current
     val presetChrome = LocalGuiPresetChromePalette.current
     val buttonShape = PrismalRoundedRectangle(minHeight / 2)
@@ -461,15 +460,22 @@ internal fun Button(
         modifier = modifier
             .then(if (minWidth > 0.dp) Modifier.widthIn(min = minWidth) else Modifier)
             .height(minHeight)
+            // Disabled buttons should be flat. If alpha wraps the shadow,
+            // Compose clips its native blurred halo to rectangular layer bounds.
+            .then(
+                if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(buttonShape)
+                else Modifier
+            )
+            // Alpha affects only the button material/content, not its shadow.
             .alpha(if (enabled) 1f else 0.66f)
-            .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(buttonShape) else Modifier)
             .then(
                 if (staticChrome) {
-                    Modifier.guiExactPrismalCornerChrome(
-                        if (destructive) GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL,
-                        presetChrome,
-                        buttonShape,
-                    )
+                    Modifier
+                        .background(
+                            if (destructive) presetChrome.dangerFill else presetChrome.pillFill,
+                            buttonShape,
+                        )
+                        .guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)
                 } else {
                     fallbackChrome
                 }
