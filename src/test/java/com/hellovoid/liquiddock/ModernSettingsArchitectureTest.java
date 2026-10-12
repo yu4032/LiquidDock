@@ -409,8 +409,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("val cardShape = PrismalRoundedRectangle(24.dp)"));
         assertTrue(ui.contains("val buttonShape = PrismalRoundedRectangle(minHeight / 2)"));
         assertTrue(ui.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.CARD, presetChrome, cardShape)"));
-        assertTrue(ui.contains("presetChrome,\n                        buttonShape,"));
-        assertTrue(step.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL, presetChrome, shape)"));
+        assertTrue(ui.contains(".guiNativePrismalButtonSpecular(buttonShape)"));
+        assertTrue(step.contains(".guiNativePrismalButtonSpecular(shape)"));
 
         assertTrue(chrome.contains("internal fun Modifier.guiExactPrismalCornerChrome("));
         assertTrue(chrome.contains("this.background(fill, shape).guiStaticSpecularRim(shape, palette)"));
@@ -424,6 +424,50 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains(".clip(buttonShape)"));
         assertFalse(ui.contains(".guiStaticSpecularRim(cardShape, presetChrome)"));
         assertFalse(ui.contains(".guiStaticSpecularRim(buttonShape, presetChrome)"));
+    }
+
+    @Test
+    public void buttonSpecularUsesNativeUniformClippedStrokeNotCenterAngleSweep()
+            throws Exception {
+        String renderer = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalButtonSpecular.kt"));
+        String ui = Files.readString(SURFACES);
+        String step = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticRepeatStepButton.kt"));
+
+        // Upstream Prismal paints a full, constant-width stroke around its
+        // true continuous shape, then clips half of it away. Lighting changes
+        // only ALPHA, not geometry. No sweep around the button center.
+        assertTrue(renderer.contains("paint.strokeWidth = ceil(widthPx.toDouble()).toFloat() * 2f"));
+        assertTrue(renderer.contains("canvas.clipGuiSpecularOutline(outline, roundedClipPath)"));
+        assertTrue(renderer.contains("canvas.drawOutline(outline, paint)"));
+        assertTrue(renderer.contains("BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)"));
+        assertTrue(renderer.contains("specularLayer.blendMode = BlendMode.Plus"));
+        assertTrue(renderer.contains("translate(-1f, -1f) { drawLayer(specularLayer) }"));
+        assertTrue(renderer.contains("Compositing") || renderer.contains("createGraphicsLayer()"));
+        assertTrue(renderer.contains("prismalGradSdRoundRect"));
+        assertTrue(renderer.contains("pow(abs(d), falloff)"));
+        assertTrue(renderer.contains("0.7853981634f"));
+        assertFalse(renderer.contains("Brush.sweepGradient"));
+        assertFalse(renderer.contains("drawPrismalGlass("));
+        assertFalse(renderer.contains("PrismalBackdrop"));
+        assertFalse(renderer.contains("drawBakedNineSlice("));
+        assertFalse(renderer.contains("BitmapFactory"));
+        assertTrue(renderer.contains("cachedShape != shape || cachedSize != sizeNow"));
+        assertTrue(renderer.contains("releaseGraphicsLayer"));
+        assertTrue(renderer.contains("catch (error: RuntimeException)"));
+
+        // The button must not stack the old static rim on the native one.
+        assertTrue(ui.contains(".guiNativePrismalButtonSpecular(buttonShape)"));
+        assertTrue(step.contains(".guiNativePrismalButtonSpecular(shape)"));
+        assertFalse(ui.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL"));
+        assertFalse(step.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL"));
+        // The dense list of settings Cells and the thumbs retain their
+        // original inexpensive, already accepted paths.
+        assertTrue(ui.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.CARD"));
+        assertTrue(ui.contains("Modifier.guiNativePrismalDepthShadow(buttonShape)"));
+        assertTrue(step.contains("Modifier.guiNativePrismalDepthShadow(shape)"));
+        assertTrue(step.contains("val shape = remember { PrismalRoundedRectangle(18.dp) }"));
     }
 
     @Test
@@ -869,7 +913,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(step.contains("while (isActive)"));
         assertTrue(step.contains("tryAwaitRelease()"));
         assertTrue(step.contains("if (released && !repeated) callback.value()"));
-        assertTrue(step.contains(".guiExactPrismalCornerChrome("));
+        assertTrue(step.contains(".guiNativePrismalButtonSpecular(shape)"));
         assertTrue(dialog.contains("destructive = true,"));
         assertFalse(dialog.contains("PrismalGlassButton("));
     }
