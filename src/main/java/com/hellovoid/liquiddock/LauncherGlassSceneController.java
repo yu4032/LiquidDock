@@ -156,6 +156,8 @@ final class LauncherGlassSceneController {
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
+    // Bootstrap is once per stable root, not once per Widget/session acquisition.
+    private boolean bootstrapReconciled;
 
     // Wallpaper semantics stay here rather than in the generic PassBlur Session. Only one
     // wallpaper-labelled producer pulse may be in flight for a root at a time; a newer content
@@ -431,7 +433,7 @@ final class LauncherGlassSceneController {
                 || (recentsWallpaperSettlePending && !keepSourceLiveDuringRecents())) {
             session.suspendWorkspaceProducer();
         }
-        if (bootstrapPosted) return;
+        if (bootstrapPosted || bootstrapReconciled) return;
         bootstrapPosted = true;
         root.postOnAnimation(() -> {
             bootstrapPosted = false;
@@ -439,6 +441,7 @@ final class LauncherGlassSceneController {
             if (liveRoot == null || !liveRoot.isAttachedToWindow()) return;
             reconcileExistingWorkspace();
             state.onBootstrapReconciled();
+            bootstrapReconciled = true;
             applyLayerVisibility();
             requestFreshBackdrop(state.generation());
         });
