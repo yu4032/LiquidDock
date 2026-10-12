@@ -39,7 +39,7 @@ public class WorkspaceRenderPipelineFixContractTest {
         assertTrue(scene.contains("state.onGenerationInvalidated();"));
         assertTrue(scene.contains("if (launcherStopped || isPresentationPending()) return;"));
         int sharedFrame = session.indexOf("child.onSharedSourceFrame(backend, frame);");
-        int stop = session.indexOf("if (launcherStopped) return;", sharedFrame);
+        int stop = session.indexOf("if (launcherStopped && !MainHook.isWorkstationMode()) return;", sharedFrame);
         assertTrue("Recents must be served before occluded HOME skips work",
                 sharedFrame > 0 && stop > sharedFrame);
         assertTrue(session.contains("if (WorkstationProducerPolicy.shouldPauseSharedProducer("));
