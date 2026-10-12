@@ -675,7 +675,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 // Launcher.onStop(). Never swap the hidden HOME TextureView here.
                 // Its return is covered by a fresh-generation source request.
                 boolean staticDirty = (work & LauncherGlassOutputRenderState.STATIC) != 0
-                        && (!launcherStopped || MainHook.isWorkstationMode());
+                        && WorkspaceRenderEligibilityPolicy.renderHome(launcherStopped, MainHook.isWorkstationMode());
                 boolean dragDirty = (work & LauncherGlassOutputRenderState.DRAG) != 0;
                 if (staticDirty || dragDirty) renderOutputs(staticDirty, dragDirty);
             }
@@ -741,7 +741,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void syncSceneOnUiThreadInternal(boolean tracing) {
-        if (shuttingDown || (launcherStopped && !MainHook.isWorkstationMode())) return;
+        if (shuttingDown || !WorkspaceRenderEligibilityPolicy.renderHome(
+                launcherStopped, MainHook.isWorkstationMode())) return;
         View root = rootRef.get();
         if (root == null) return;
         int nextWidth = root.getWidth();
@@ -1068,8 +1069,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     public boolean needsNormalizedSourceFrame() {
         // Keep Recents capsules and Workstation explicitly live. App-covered HOME
         // otherwise only drains residual OES callbacks, with no normalize/blur/swap.
-        return !shuttingDown && (!launcherStopped || MainHook.isWorkstationMode()
-                || hasVisibleRecentsConsumer());
+        return !shuttingDown && WorkspaceRenderEligibilityPolicy.normalizeInput(
+                launcherStopped, MainHook.isWorkstationMode(), hasVisibleRecentsConsumer());
     }
 
     @Override
@@ -1084,7 +1085,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (child != null) child.onSharedSourceFrame(backend, frame);
         // HOME has no visible consumer while Launcher is stopped beneath another
         // Activity. A live Recents capsule has already consumed its shared frame.
-        if (launcherStopped && !MainHook.isWorkstationMode()) return;
+        if (!WorkspaceRenderEligibilityPolicy.renderHome(
+                launcherStopped, MainHook.isWorkstationMode())) return;
         // HOME generation/rotation constraints are separate from the Recents GPU consumer.
         if (frame.generation != sceneGeneration || rotationSettlePending) return;
         if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
