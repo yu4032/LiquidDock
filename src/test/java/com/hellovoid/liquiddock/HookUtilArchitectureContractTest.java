@@ -46,7 +46,7 @@ public class HookUtilArchitectureContractTest {
         assertFalse("LauncherGlassStaticNode is project-owned; reflective hide breaks under R8",
                 source.contains("HookUtil.tryInvoke(node, \"hideImmediately\")"));
         assertTrue("widget transition must call the project-owned StaticNode API directly",
-                source.contains("node.hideImmediately();"));
+                source.contains("node.suppressImmediatelyForWidgetReturn();"));
     }
 
     @Test public void passBlurHomeFreshnessDoesNotReflectProjectOwnedInputField()
