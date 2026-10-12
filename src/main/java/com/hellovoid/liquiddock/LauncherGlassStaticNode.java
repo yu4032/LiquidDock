@@ -246,7 +246,18 @@ final class LauncherGlassStaticNode {
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(valueAnimator -> {
             if (visibilityAnimator != valueAnimator || disposed) return;
+            boolean wasDrawable = visibilityAlpha > 0.001f;
             visibilityAlpha = (Float) valueAnimator.getAnimatedValue();
+            // Registration is pre-draw coalesced; ensure the first nonzero alpha
+            // has a valid root-space geometry snapshot even if the Widget was
+            // attached while HOME was otherwise idle.
+            if (!wasDrawable && visibilityAlpha > 0.001f) {
+                View material = materialRef.get();
+                View root = material != null ? material.getRootView() : null;
+                if (root != null && root.isAttachedToWindow()) {
+                    root.postInvalidateOnAnimation();
+                }
+            }
             LauncherGlassSession live = session;
             if (live != null) live.requestStaticRedraw();
         });
