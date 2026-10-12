@@ -442,7 +442,16 @@ public final class PrismalRenderer implements AutoCloseable {
                         PrismalOpticalEdgeShader.apply(
                                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
         String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
-        glassProgram = createProgram(glassVertex, glassFragment);
+        // Most large Widget interiors contribute exactly zero reflection/OS4 edge
+        // lighting. Skip their texture fetches, keeping all nonzero weights exact.
+        // Some GLES drivers may reject the conditional shader: retain a native
+        // fallback to the proven original program rather than losing all glass.
+        try {
+            glassProgram = createProgram(glassVertex,
+                    PrismalZeroContributionShader.apply(glassFragment));
+        } catch (IllegalStateException unsupportedShader) {
+            glassProgram = createProgram(glassVertex, glassFragment);
+        }
         glassUniformLocations.clear();
         if (sourceProgram == 0 || blurHProgram == 0 || blurVProgram == 0 || glassProgram == 0) {
             throw new IllegalStateException("Prismal shader program creation failed");
