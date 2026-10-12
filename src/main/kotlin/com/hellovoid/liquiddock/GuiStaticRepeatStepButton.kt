@@ -59,7 +59,7 @@ internal fun GuiStaticRepeatStepButton(
             .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(shape) else Modifier)
             .then(
                 if (staticChrome) {
-                    Modifier.background(presetChrome.pillFill, shape).guiNativePrismalButtonSpecular(shape)
+                    Modifier.background(presetChrome.pillFill, shape).guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)
                 } else {
                     Modifier.background(
                         lerp(colors.surface, colors.onSurface, if (darkTheme) 0.12f else 0.045f),
