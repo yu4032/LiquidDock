@@ -184,6 +184,11 @@ final class MiuixLauncherStaticGlassHook {
         if (view == null) return 0;
         reconcileExistingHost(view, glassConfig);
         int visited = 1;
+        // RemoteViews/MAML widget subtrees are provider-owned content, not
+        // Launcher glass hosts. Rewalking all their labels/layout descendants
+        // on every App -> HOME resume costs O(provider view count) with no nodes.
+        // Launcher ShortcutIcon child drawables likewise have one outer owner.
+        if (isWidgetHost(view) || isIconHost(view)) return visited;
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) {
