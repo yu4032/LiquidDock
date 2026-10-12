@@ -44,6 +44,8 @@ public class WorkspaceRenderPipelineFixContractTest {
                 sharedFrame > 0 && stop > sharedFrame);
         assertTrue(session.contains("if (WorkstationProducerPolicy.shouldPauseSharedProducer("));
         assertTrue(session.contains("public boolean needsNormalizedSourceFrame()"));
+        assertTrue(session.contains("boolean staticDirty = (work & LauncherGlassOutputRenderState.STATIC) != 0"));
+        assertTrue(session.contains("if (shuttingDown || (launcherStopped && !MainHook.isWorkstationMode())) return;"));
         assertTrue(session.contains("|| hasVisibleRecentsConsumer()"));
         String backend = javaSource("RootPassBlurBackend.java");
         assertTrue(backend.contains("default boolean needsNormalizedSourceFrame()"));
