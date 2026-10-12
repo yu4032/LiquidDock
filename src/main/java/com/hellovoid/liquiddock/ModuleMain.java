@@ -141,6 +141,8 @@ public final class ModuleMain extends XposedModule {
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
             AnimationRuntimeState.configure(runtimeConfig.animation);
+            IosHomeSpringExperiment.configure(
+                    runtimeConfig.enabled && runtimeConfig.animation.iosHomeSpringExperiment);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,
                     runtimeConfig.glass.iconEnabled,
