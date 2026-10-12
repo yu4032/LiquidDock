@@ -92,6 +92,13 @@ final class LauncherGlassSceneController {
             fadeRevealReady = false;
         }
 
+        /** An early onResume source buffer can precede the native HOME zoom spring.
+         * For a real App return, the spring must require its own terminal-fresh frame. */
+        void onAppReturnPresentationStarted() {
+            onPresentationStarted();
+            onGenerationInvalidated();
+        }
+
         boolean shouldRequestFreshAfterPresentation() {
             return state == State.HOME_WAITING_FRESH_FRAME;
         }
@@ -153,6 +160,9 @@ final class LauncherGlassSceneController {
     private boolean unlockTransitionPending;
     private boolean recentsWallpaperSettlePending;
     private boolean launcherStopped;
+    // An onResume source frame can arrive before the later native HOME spring
+    // transforms wallpaper/workspace. Require another frame once that spring ends.
+    private boolean appReturnAwaitingHomeSettle;
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
@@ -397,6 +407,7 @@ final class LauncherGlassSceneController {
         launcherStopped = stopped;
         session.setLauncherStopped(stopped);
         if (stopped) {
+            appReturnAwaitingHomeSettle = false;
             // Preserve the shared OES producer when Recents capsules are visible.
             if (WorkspaceRenderEligibilityPolicy.pauseProducerForAppCover(
                     launcherStopped, MainHook.isWorkstationMode(),
@@ -405,8 +416,9 @@ final class LauncherGlassSceneController {
             }
             return;
         }
-        // Prevent a stale wallpaper-scale cache when an app uncovers HOME.
-        // Freshness respects the existing HOME, unlock and Recents barriers.
+        // A capture taken here may precede native HOME spring zoom; invalidate
+        // again at the spring's accepted start, not at a speculative time.
+        appReturnAwaitingHomeSettle = true;
         state.onGenerationInvalidated();
         requestFreshBackdrop(state.generation());
     }
@@ -578,12 +590,17 @@ final class LauncherGlassSceneController {
         if (wasPending == pending) return;
         if (pending) {
             deferInFlightWallpaperPulse();
-            state.onPresentationStarted();
+            if (appReturnAwaitingHomeSettle) {
+                state.onAppReturnPresentationStarted();
+            } else {
+                state.onPresentationStarted();
+            }
             applyLayerVisibility();
             MainHook.log(TAG + " presentation pending reason=home source=preserved"
                     + " generation=" + state.generation());
             return;
         }
+        appReturnAwaitingHomeSettle = false;
         if (isPresentationPending()) return;
         if (state.state() != State.COVERED && state.state() != State.DETACHED) {
             MainHook.log(TAG + " presentation settled reason=home"
