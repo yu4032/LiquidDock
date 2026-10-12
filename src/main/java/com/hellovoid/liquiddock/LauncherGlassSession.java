@@ -1257,6 +1257,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             StaticGeometryFrame frame = state.frame;
             LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
             if (node == null || geometry == null) continue;
+            float alpha = node.visibilityAlpha();
+            // Exactly transparent nodes have no fragment contribution; don't run
+            // expensive Prismal shading for a suppressed/finished Widget fade.
+            if (alpha <= 0.001f) continue;
             float projectedCenterX = workspaceScrollProjection.projectCenterX(
                     geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
             PrismalGeometry prismalGeometry = resolveStaticPrismalGeometry(
@@ -1264,7 +1268,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
             prismalRenderer.drawGlass(
-                    prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
+                    prismalGeometry, params, highlights, state.interaction, alpha);
         }
         sourceBackend.swapBuffers(output.eglSurface);
         // Commit only after EGL accepted the buffer. Never infer blank state from
