@@ -42,25 +42,35 @@ final class IosHomeSpringExperiment {
     static synchronized void onHomeStarted(Object animation) {
         if (!enabled || animation == null || ACTIVE.containsKey(animation)) return;
         List<SpringSnapshot> snapshots = new ArrayList<>();
+        // HyperOS RectFSpringAnim owns SpringForce fields directly through SpringBundle /
+        // MultiSpringDynamicAnimation; AOSP RectFSpringAnim may instead own SpringAnimation.
+        // Deduplicate by identity so aliases never apply the stiffness multiplier twice.
+        java.util.IdentityHashMap<Object, Boolean> seenForces = new java.util.IdentityHashMap<>();
         Class<?> owner = animation.getClass();
         for (Class<?> type = owner; type != null && type != Object.class;
                 type = type.getSuperclass()) {
             for (Field field : type.getDeclaredFields()) {
-                if (Modifier.isStatic(field.getModifiers())
-                        || !"SpringAnimation".equals(field.getType().getSimpleName())) continue;
+                if (Modifier.isStatic(field.getModifiers())) continue;
+                String fieldType = field.getType().getSimpleName();
+                boolean directForce = "SpringForce".equals(fieldType)
+                        && isMorphForceField(field.getName());
+                boolean wrappedForce = "SpringAnimation".equals(fieldType);
+                if (!directForce && !wrappedForce) continue;
                 try {
                     field.setAccessible(true);
-                    Object springAnimation = field.get(animation);
-                    if (springAnimation == null) continue;
-                    Method getSpring = springAnimation.getClass().getMethod("getSpring");
-                    getSpring.setAccessible(true);
-                    Object force = getSpring.invoke(springAnimation);
-                    if (force == null) continue;
-                    SpringSnapshot snapshot = SpringSnapshot.capture(force);
-                    if (snapshot == null) continue;
-                    if (snapshot.apply()) {
-                        snapshots.add(snapshot);
+                    Object value = field.get(animation);
+                    if (value == null) continue;
+                    Object force;
+                    if (directForce) {
+                        force = value;
+                    } else {
+                        Method getSpring = value.getClass().getMethod("getSpring");
+                        getSpring.setAccessible(true);
+                        force = getSpring.invoke(value);
                     }
+                    if (force == null || seenForces.put(force, Boolean.TRUE) != null) continue;
+                    SpringSnapshot snapshot = SpringSnapshot.capture(force);
+                    if (snapshot != null && snapshot.apply()) snapshots.add(snapshot);
                 } catch (Throwable ignored) {
                     // Unknown Launcher internals must leave its original spring untouched.
                 }
@@ -73,6 +83,13 @@ final class IosHomeSpringExperiment {
         ACTIVE.put(animation, snapshots);
         MainHook.log(TAG + " HOME springs tuned=" + snapshots.size()
                 + " damping=" + DAMPING_RATIO + " stiffnessScale=" + STIFFNESS_SCALE);
+    }
+
+    private static boolean isMorphForceField(String fieldName) {
+        // Do not modify alpha: Launcher owns the exact window -> floating-icon handoff.
+        return fieldName != null
+                && (fieldName.startsWith("mRect") && fieldName.endsWith("Force")
+                        || "mRadiusForce".equals(fieldName));
     }
 
     static synchronized void onHomeFinished(Object animation) {
