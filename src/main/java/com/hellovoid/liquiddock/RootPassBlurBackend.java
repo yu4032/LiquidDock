@@ -35,6 +35,10 @@ final class RootPassBlurBackend {
         /** Called on the backend render thread with the backend EGL context current. */
         void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame);
         void onTerminalFailure(long generation, Throwable error);
+
+        /** No GPU normalization when every consumer is temporarily occluded.
+         * Rejected OES frames must still be latched to release BufferQueue slots. */
+        default boolean needsNormalizedSourceFrame() { return true; }
     }
 
     private static final String TAG = "[DC][RootPassBlur]";
@@ -583,6 +587,12 @@ final class RootPassBlurBackend {
 
     private void onFrameAvailable(SurfaceTexture input) {
         if (shuttingDown || input == null || input != inputSurfaceTexture) return;
+        // An App-covered Workspace may stop showing output before the producer
+        // stops its last queued callbacks. Drain, but don't normalize/blur them.
+        if (consumer != null && !consumer.needsNormalizedSourceFrame()) {
+            drainSourceFrameWithoutRender(input);
+            return;
+        }
         Miuix307PassBlurBridge.renewForceRefresh(binding);
         long generation = sourceGeneration;
         PassBlurSourceFrameGate gate = sourceFrameGate;
