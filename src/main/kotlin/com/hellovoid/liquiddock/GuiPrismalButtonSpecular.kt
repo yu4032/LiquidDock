@@ -1,11 +1,9 @@
 package com.hellovoid.liquiddock
 
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.drawscope.drawImage
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
