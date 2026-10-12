@@ -141,6 +141,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final boolean workspaceSource;
 
     private volatile boolean shuttingDown;
+    // An immutable config snapshot can be acquired by many Widget hosts without
+    // changing source quality or invalidating the same prepared backdrop.
+    private volatile LiquidDockConfig.Glass appliedGlassConfig;
     private volatile Runnable terminalFailureListener;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile launcherHighlightProfile =
@@ -312,7 +315,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
-        if (shuttingDown) return;
+        if (shuttingDown || appliedGlassConfig == glassConfig) return;
         applyGlassConfig(glassConfig);
         sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
         mainHandler.post(() -> {
@@ -342,6 +345,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void applyGlassConfig(LiquidDockConfig.Glass glassConfig) {
+        appliedGlassConfig = glassConfig;
         View root = rootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
         appliedGlassBlur = glassConfig != null ? glassConfig.blur : Float.NaN;
