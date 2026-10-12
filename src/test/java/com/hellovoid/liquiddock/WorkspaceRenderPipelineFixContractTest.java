@@ -43,6 +43,12 @@ public class WorkspaceRenderPipelineFixContractTest {
         assertTrue("Recents must be served before occluded HOME skips work",
                 sharedFrame > 0 && stop > sharedFrame);
         assertTrue(session.contains("if (WorkstationProducerPolicy.shouldPauseSharedProducer("));
+        assertTrue(session.contains("public boolean needsNormalizedSourceFrame()"));
+        assertTrue(session.contains("|| hasVisibleRecentsConsumer()"));
+        String backend = javaSource("RootPassBlurBackend.java");
+        assertTrue(backend.contains("default boolean needsNormalizedSourceFrame()"));
+        assertTrue(backend.contains("if (consumer != null && !consumer.needsNormalizedSourceFrame()) {"));
+        assertTrue(backend.contains("drainSourceFrameWithoutRender(input);"));
     }
 
     @Test public void emptyOutputHasOneClearAndNeverSkipsRealGlass() throws Exception {
