@@ -58,6 +58,10 @@ public class WorkspaceRenderPipelineFixContractTest {
         assertTrue(session.contains("output.blankPresented = false;"));
         assertTrue(session.contains("sourceBackend.swapBuffers(output.eglSurface);"));
         assertTrue(session.contains("prismalRenderer.beginGlassFrameOnSurface("));
+        assertTrue(session.contains("if (alpha <= 0.001f) continue;"));
+        String node = javaSource("LauncherGlassStaticNode.java");
+        assertTrue(node.contains("if (!wasDrawable && visibilityAlpha > 0.001f) {"));
+        assertTrue(node.contains("root.postInvalidateOnAnimation();"));
     }
 
     @Test public void repeatedSceneVisibilityDoesNotCancelNativeFade() throws Exception {
