@@ -142,6 +142,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
+    // Immutable config snapshot identity. Re-attaching N widgets must not each trigger
+    // a fresh native PassBlur source request for the same configuration.
+    private volatile LiquidDockConfig.Glass appliedGlassConfig;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile launcherHighlightProfile =
             PrismalHighlightProfile.ALL_ENABLED;
@@ -312,7 +315,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
-        if (shuttingDown) return;
+        if (shuttingDown || appliedGlassConfig == glassConfig) return;
         applyGlassConfig(glassConfig);
         sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
         mainHandler.post(() -> {
@@ -342,6 +345,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void applyGlassConfig(LiquidDockConfig.Glass glassConfig) {
+        appliedGlassConfig = glassConfig;
         View root = rootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
         appliedGlassBlur = glassConfig != null ? glassConfig.blur : Float.NaN;
@@ -397,14 +401,16 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void registerStaticNode(LauncherGlassStaticNode node) {
         if (node == null || shuttingDown) return;
         synchronized (staticNodes) {
-            if (!staticNodes.containsKey(node)) {
-                staticNodes.put(node, new StaticNodeState(node));
-                staticNodeStateSnapshot =
-                        staticNodes.values().toArray(new StaticNodeState[0]);
-            }
+            if (staticNodes.containsKey(node)) return;
+            staticNodes.put(node, new StaticNodeState(node));
+            staticNodeStateSnapshot =
+                    staticNodes.values().toArray(new StaticNodeState[0]);
         }
-        syncSceneOnUiThread();
-        requestStaticRedraw();
+        // Newly attached Workspace nodes must be captured after Launcher has laid them
+        // out. Coalesce N host registrations into the next real UI pre-draw instead
+        // of scanning 1 + 2 + ... + N nodes and swapping partially populated buffers.
+        View root = rootRef.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
 
     void unregisterStaticNode(LauncherGlassStaticNode node) {
