@@ -1277,10 +1277,8 @@ public class ModernSettingsArchitectureTest {
         // The native PrismalGlassBottomTabs implementation records its tab
         // children into the existing hidden sample layer. Do not add a
         // parallel overlaid glyph Row, custom lens, or a second capture.
-        String glassBranch = bottom.substring(
-                bottom.indexOf("if (backdrop != null) {"),
-                bottom.indexOf("} else {\n                val fallbackShape"));
-        assertFalse(glassBranch.contains("                Row("));
+        assertTrue(bottom.contains("val candidate = highlighted().coerceIn(0, labels.lastIndex)\n                            ModernTabContents("));
+        assertFalse(bottom.contains("// Draw labels and icons once above the droplet"));
         assertFalse(bottom.contains("SideEffect {"));
         assertFalse(bottom.contains("highlightedIndex.intValue"));
         assertFalse(bottom.contains("rememberPrismalGlassLayer("));
