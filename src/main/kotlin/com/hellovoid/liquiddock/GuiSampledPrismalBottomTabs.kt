@@ -324,6 +324,9 @@ internal fun GuiSampledPrismalBottomTabs(
                             (1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f))
                         val centerX = (dampedDragAnimation.value + 0.5f) * tabWidth
                         val halfWidth = tabWidth * scaleX / 2f
+                        // clipRect switches the implicit receiver to DrawScope.
+                        // Keep the ContentDrawScope draw callback explicitly.
+                        val paintGlyphs = { drawContent() }
                         clipRect(
                             left = centerX - halfWidth,
                             top = 0f,
@@ -331,7 +334,7 @@ internal fun GuiSampledPrismalBottomTabs(
                             bottom = size.height,
                             clipOp = ClipOp.Difference
                         ) {
-                            drawContent()
+                            paintGlyphs()
                         }
                     },
                 verticalAlignment = Alignment.CenterVertically,
