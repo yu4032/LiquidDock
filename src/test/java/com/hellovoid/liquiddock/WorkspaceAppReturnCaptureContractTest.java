@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.Test;
 
 /**
@@ -68,5 +70,29 @@ public class WorkspaceAppReturnCaptureContractTest {
         s.onFreshFrameReady(s.generation());
         assertTrue(s.isLayerVisible());
         assertTrue(s.consumeFadeReveal());
+    }
+
+    @Test public void perfettoDifferentiatesSourceCaptureFromGeometryAndSwap() throws Exception {
+        Path base = Path.of("src/main/java/com/hellovoid/liquiddock");
+        String session = Files.readString(base.resolve("LauncherGlassSession.java"));
+        String backend = Files.readString(base.resolve("RootPassBlurBackend.java"));
+
+        assertTrue(session.contains("LD.Workspace.SourceFrame"));
+        assertTrue(session.contains("LD.Workspace.GeometryFrame"));
+        assertTrue(session.contains("LD.Workspace.StaticSwap"));
+        assertTrue(session.contains("boolean trace = workspaceSource && Trace.isEnabled();"));
+        assertTrue(backend.contains("LD.Workspace.SourceCallbacks"));
+        assertTrue(backend.contains("LD.Workspace.SourceFramesGated"));
+        assertTrue(backend.contains("LD.Workspace.SourceFramesNormalized"));
+        assertTrue(backend.contains("LD.Workspace.SourceLatch"));
+        assertTrue(backend.contains("LD.Workspace.Normalize"));
+
+        assertFalse("Source-frame Perfetto must not require debug-file logging",
+                session.contains("boolean trace = MainHook.debugLogging && workspaceSource"));
+        assertFalse("EGL swap Perfetto must not require debug-file logging",
+                backend.contains("boolean trace = MainHook.debugLogging\n"
+                        + "                && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;"));
+        // A gate-rejected OES frame must still be drained to avoid BufferQueue stall.
+        assertTrue(backend.contains("drainSourceFrameWithoutRender(input);"));
     }
 }
