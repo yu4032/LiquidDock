@@ -440,8 +440,7 @@ internal fun Button(
     destructive: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    // Fixed Cell actions, including reset, draw opaque Compose fills.
-    // No drawable allocation or per-Cell render nodes. Only slider/toggle gestures use live Prismal in the page body.
+    // Fixed-color background, native Prismal specular edge and depth shadow.\n    // The button specular is isolated: no background capture or lens sampling.
     val staticChrome = LocalStaticGlassChrome.current
     val presetChrome = LocalGuiPresetChromePalette.current
     val buttonShape = PrismalRoundedRectangle(minHeight / 2)
@@ -465,11 +464,12 @@ internal fun Button(
             .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(buttonShape) else Modifier)
             .then(
                 if (staticChrome) {
-                    Modifier.guiExactPrismalCornerChrome(
-                        if (destructive) GuiSolidChromeStyle.DANGER else GuiSolidChromeStyle.PILL,
-                        presetChrome,
-                        buttonShape,
-                    )
+                    Modifier
+                        .background(
+                            if (destructive) presetChrome.dangerFill else presetChrome.pillFill,
+                            buttonShape,
+                        )
+                        .guiNativePrismalButtonSpecular(buttonShape)
                 } else {
                     fallbackChrome
                 }
