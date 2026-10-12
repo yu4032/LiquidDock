@@ -29,6 +29,7 @@ final class LauncherWidgetTransitionCoordinator {
         final WeakReference<LauncherGlassStaticNode> nodeRef;
         final LauncherWidgetTransitionState state = new LauncherWidgetTransitionState();
         boolean launchSuppressionOwned;
+        boolean returnHidePublished;
 
         Entry(View material, LauncherGlassStaticNode node) {
             materialRef = new WeakReference<>(material);
@@ -113,6 +114,7 @@ final class LauncherWidgetTransitionCoordinator {
 
         entry.launchSuppressionOwned = false;
         if (!entry.state.isReturnTransition()) {
+            entry.returnHidePublished = false;
             SceneSnapshot scene = readScene(material);
             long generation = scene != null && scene.homePending ? scene.generation : -1L;
             entry.state.beginReturnWaitingFresh(generation);
@@ -223,9 +225,14 @@ final class LauncherWidgetTransitionCoordinator {
         // Use the node's existing suppression flag so normal Session geometry cleanup remains
         // coherent, but cancel the fade immediately for return-to-widget: stale pixels must not be
         // exposed while HOME early-reveal is showing the previous StaticLayer generation.
-        node.setSuppressedByDrag(true);
-        node.hideImmediately();
-        node.requestLifecycleRefresh();
+        node.suppressImmediatelyForWidgetReturn();
+        // markWidgetReturnTarget() already submitted the transparent redraw.
+        // onHomeOpeningStarted() may revisit the same Widget at spring start;
+        // a second native-size EGL swap there only stalls the first zoom frame.
+        if (!entry.returnHidePublished) {
+            entry.returnHidePublished = true;
+            node.requestLifecycleRefresh();
+        }
     }
 
     private static SceneSnapshot readScene(View material) {
