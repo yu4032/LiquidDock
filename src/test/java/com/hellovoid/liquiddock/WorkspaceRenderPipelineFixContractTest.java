@@ -47,6 +47,40 @@ public class WorkspaceRenderPipelineFixContractTest {
         assertFalse(state.shouldRequestFreshAfterPresentation());
     }
 
+    @Test public void nativeHomeSpringInvalidatesEarlyAppResumeFrame() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onBootstrapReconciled();
+        state.onFreshFrameReady(state.generation());
+
+        // onResume already requested a fresh generation, and it may complete
+        // before the native spring starts moving the wallpaper.
+        state.onGenerationInvalidated();
+        long earlyGeneration = state.generation();
+        state.onFreshFrameReady(earlyGeneration);
+        assertFalse(state.shouldRequestFreshAfterPresentation());
+
+        state.onAppReturnPresentationStarted();
+        assertTrue(state.generation() > earlyGeneration);
+        state.onFreshFrameReady(earlyGeneration);
+        assertTrue(state.shouldRequestFreshAfterPresentation());
+        state.onFreshFrameReady(state.generation());
+        assertFalse(state.shouldRequestFreshAfterPresentation());
+    }
+
+    @Test public void nonAppHomePresentationDoesNotInvalidateItsSource() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onBootstrapReconciled();
+        state.onFreshFrameReady(state.generation());
+        long before = state.generation();
+        state.onPresentationStarted();
+        assertEquals(before, state.generation());
+        assertFalse(state.shouldRequestFreshAfterPresentation());
+    }
+
     @Test public void lastGlassNodeDisappearingMustPresentOneTransparentFrame() {
         assertTrue(WorkspaceStaticOutputPolicy.shouldRender(false, false));
         assertFalse(WorkspaceStaticOutputPolicy.shouldRender(true, false));
