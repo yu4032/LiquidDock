@@ -178,6 +178,17 @@ final class LauncherGlassStaticNode {
     }
 
     View materialHost() { return materialRef.get(); }
+
+    /** Cheap HOME-resume guard: a bound and attached node already owns its vendor material.
+     * Provider RemoteViews replacements are handled by updateAppWidget's explicit rebind. */
+    boolean isBoundToLiveRoot() {
+        View material = materialRef.get();
+        LauncherGlassSession live = session;
+        return !disposed && material != null && material.isAttachedToWindow()
+                && live != null && !live.isShutdown()
+                && live.ownsRoot(material.getRootView());
+    }
+
     LauncherGlassDragState.Kind kind() { return kind; }
     LauncherGlassNodeKind nodeKind() { return nodeKind; }
 
