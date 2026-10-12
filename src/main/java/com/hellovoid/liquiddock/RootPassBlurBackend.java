@@ -491,6 +491,13 @@ final class RootPassBlurBackend {
             requestRebind("fresh-request-invalid-binding");
             return;
         }
+        // A producer may bind after Launcher.onStop() while the initial
+        // bootstrap refresh is queued. Respect the current consumer authority,
+        // otherwise bind completion silently restarts App-covered capture.
+        if (consumer != null && !consumer.needsNormalizedSourceFrame()) {
+            Miuix307PassBlurBridge.pauseUpdates(current);
+            return;
+        }
         if (requestedSingleFramePulse) {
             Miuix307PassBlurBridge.requestSingleUpdate(current, root);
         } else {
