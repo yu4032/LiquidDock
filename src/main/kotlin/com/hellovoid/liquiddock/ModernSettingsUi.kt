@@ -440,7 +440,7 @@ internal fun Button(
     destructive: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    // Fixed-color background, native Prismal specular edge and depth shadow.\n    // The button specular is isolated: no background capture or lens sampling.
+    // Fixed-color fill + pre-baked Prismal highlight atlas; native depth shadow.\n    // No runtime AGSL, specular GraphicsLayer or background capture.
     val staticChrome = LocalStaticGlassChrome.current
     val presetChrome = LocalGuiPresetChromePalette.current
     val buttonShape = PrismalRoundedRectangle(minHeight / 2)
@@ -469,7 +469,7 @@ internal fun Button(
                             if (destructive) presetChrome.dangerFill else presetChrome.pillFill,
                             buttonShape,
                         )
-                        .guiNativePrismalButtonSpecular(buttonShape)
+                        .guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)
                 } else {
                     fallbackChrome
                 }
