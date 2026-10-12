@@ -55,8 +55,13 @@ internal fun GuiStaticRepeatStepButton(
     Box(
         modifier = Modifier
             .size(36.dp)
+            // An outer alpha layer crops the native Prismal shadow to a
+            // square on disabled steppers. Do not draw disabled shadows.
+            .then(
+                if (staticChrome && enabled) Modifier.guiNativePrismalDepthShadow(shape)
+                else Modifier
+            )
             .alpha(if (enabled) 1f else 0.45f)
-            .then(if (staticChrome) Modifier.guiNativePrismalDepthShadow(shape) else Modifier)
             .then(
                 if (staticChrome) {
                     Modifier.background(presetChrome.pillFill, shape).guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)
