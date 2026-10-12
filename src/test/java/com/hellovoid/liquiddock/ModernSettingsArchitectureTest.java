@@ -409,8 +409,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("val cardShape = PrismalRoundedRectangle(24.dp)"));
         assertTrue(ui.contains("val buttonShape = PrismalRoundedRectangle(minHeight / 2)"));
         assertTrue(ui.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.CARD, presetChrome, cardShape)"));
-        assertTrue(ui.contains(".guiNativePrismalButtonSpecular(buttonShape)"));
-        assertTrue(step.contains(".guiNativePrismalButtonSpecular(shape)"));
+        assertTrue(ui.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
+        assertTrue(step.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
 
         assertTrue(chrome.contains("internal fun Modifier.guiExactPrismalCornerChrome("));
         assertTrue(chrome.contains("this.background(fill, shape).guiStaticSpecularRim(shape, palette)"));
@@ -427,43 +427,106 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void buttonSpecularUsesNativeUniformClippedStrokeNotCenterAngleSweep()
+    public void buttonHighlightIsBakedBeforeBuildAndHasNoRuntimeAgslOrSpecularLayer()
             throws Exception {
         String renderer = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiPrismalButtonSpecular.kt"));
+        String chrome = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiSolidChrome.kt"));
+        String generator = Files.readString(Path.of(
+                "scripts/generate_gui_button_specular.mjs"));
         String ui = Files.readString(SURFACES);
         String step = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GuiStaticRepeatStepButton.kt"));
 
-        // Upstream Prismal paints a full, constant-width stroke around its
-        // true continuous shape, then clips half of it away. Lighting changes
-        // only ALPHA, not geometry. No sweep around the button center.
-        assertTrue(renderer.contains("paint.strokeWidth = ceil(widthPx.toDouble()).toFloat() * 2f"));
-        assertTrue(renderer.contains("canvas.clipGuiSpecularOutline(outline, roundedClipPath)"));
-        assertTrue(renderer.contains("canvas.drawOutline(outline, paint)"));
-        assertTrue(renderer.contains("BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)"));
-        assertTrue(renderer.contains("specularLayer.blendMode = BlendMode.Plus"));
-        assertTrue(renderer.contains("translate(-1f, -1f) { drawLayer(specularLayer) }"));
-        assertTrue(renderer.contains("Compositing") || renderer.contains("createGraphicsLayer()"));
-        assertTrue(renderer.contains("prismalGradSdRoundRect"));
-        assertTrue(renderer.contains("pow(abs(d), falloff)"));
-        assertTrue(renderer.contains("0.7853981634f"));
-        assertFalse(renderer.contains("Brush.sweepGradient"));
+        assertTrue(renderer.contains("internal fun Modifier.guiBakedPrismalButtonSpecular("));
+        assertTrue(renderer.contains("atlas: ImageBitmap?"));
+        assertTrue(renderer.contains("drawWithCache"));
+        assertTrue(renderer.contains("drawImage("));
+        assertTrue(renderer.contains("blendMode = BlendMode.Plus"));
+        assertTrue(renderer.contains("FilterQuality.Medium"));
+        assertTrue(renderer.contains("srcOffset = IntOffset(SIDE_DP * SCALE, rowY)"));
+        assertTrue(renderer.contains("val middleWidth = drawWidth - 2 * sideDst"));
+        assertTrue(renderer.contains("private const val SIDE_DP = 34"));
+        assertFalse(renderer.contains("PrismalShader"));
+        assertFalse(renderer.contains("GraphicsLayer"));
+        assertFalse(renderer.contains("BlurMaskFilter"));
+        assertFalse(renderer.contains("RenderEffect"));
         assertFalse(renderer.contains("drawPrismalGlass("));
-        assertFalse(renderer.contains("PrismalBackdrop"));
-        assertFalse(renderer.contains("drawBakedNineSlice("));
+        assertFalse(renderer.contains("Brush.sweepGradient"));
         assertFalse(renderer.contains("BitmapFactory"));
-        assertTrue(renderer.contains("cachedShape != shape || cachedSize != sizeNow"));
-        assertTrue(renderer.contains("releaseGraphicsLayer"));
-        assertTrue(renderer.contains("catch (error: RuntimeException)"));
 
-        // The button must not stack the old static rim on the native one.
-        assertTrue(ui.contains(".guiNativePrismalButtonSpecular(buttonShape)"));
-        assertTrue(step.contains(".guiNativePrismalButtonSpecular(shape)"));
+        // Atlas decode is shared by the Scaffold and is optional, not an
+        // unchecked resource prerequisite (regression for prior startup crash).
+        assertTrue(chrome.contains("val buttonSpecularAtlas = remember(context)"));
+        assertTrue(chrome.contains("ImageBitmap.imageResource(context.resources, R.drawable.gui_button_specular_atlas)"));
+        assertTrue(chrome.contains("catch (error: RuntimeException)"));
+        assertTrue(chrome.contains("val buttonSpecularAtlas: ImageBitmap?"));
+
+        // Original continuous Bezier shape and normal lighting are calculated
+        // by a reproducible OFFLINE Node script, not on the Android device.
+        assertTrue(generator.contains("function cornerBezier("));
+        assertTrue(generator.contains("function normalIntensity("));
+        assertTrue(generator.contains("function sampleContour("));
+        assertTrue(generator.contains("function paintRow("));
+        assertTrue(generator.contains("SCALE=3,MIN_DP=36,MAX_DP=72,HEIGHT_DP=36"));
+        assertTrue(generator.contains("writeFileSync("));
+        assertFalse(generator.contains("readback"));
+
+        byte[] png = Files.readAllBytes(Path.of(
+                "src/main/res/drawable-nodpi/gui_button_specular_atlas.png"));
+        assertTrue(png.length > 1000);
+        assertEquals(137, png[0] & 255);
+        assertEquals(80, png[1] & 255);
+        assertEquals(78, png[2] & 255);
+        assertEquals(71, png[3] & 255);
+        java.nio.ByteBuffer ihdr = java.nio.ByteBuffer.wrap(png, 16, 13)
+                .order(java.nio.ByteOrder.BIG_ENDIAN);
+        assertEquals(216, ihdr.getInt());
+        assertEquals(3996, ihdr.getInt());
+        assertEquals(8, ihdr.get() & 255); // indexed 8-bit color
+        assertEquals(3, ihdr.get() & 255);
+        java.io.ByteArrayOutputStream idat = new java.io.ByteArrayOutputStream();
+        boolean foundAlpha = false;
+        for (int offset = 8; offset + 12 <= png.length;) {
+            java.nio.ByteBuffer chunk = java.nio.ByteBuffer.wrap(png, offset, 8)
+                    .order(java.nio.ByteOrder.BIG_ENDIAN);
+            int length = chunk.getInt();
+            int type = chunk.getInt();
+            assertTrue(length >= 0 && offset + length + 12 <= png.length);
+            if (type == 0x49444154) idat.write(png, offset + 8, length);
+            if (type == 0x74524e53) {
+                foundAlpha = true;
+                assertEquals(256, length);
+                assertEquals(0, png[offset + 8] & 255);
+                assertEquals(255, png[offset + 8 + 255] & 255);
+            }
+            offset += 12 + length;
+        }
+        assertTrue(foundAlpha);
+        byte[] indices;
+        try (java.util.zip.InflaterInputStream inflater =
+                new java.util.zip.InflaterInputStream(
+                        new java.io.ByteArrayInputStream(idat.toByteArray()))) {
+            indices = inflater.readAllBytes();
+        }
+        assertEquals(3996 * (216 + 1), indices.length);
+        int firstRowMaximum = 0, lastRowMaximum = 0;
+        for (int y = 0; y < 108; y++) {
+            assertEquals(0, indices[y * 217] & 255); // no PNG filter
+            for (int x = 0; x < 108; x++)
+                firstRowMaximum = Math.max(firstRowMaximum, indices[y * 217 + 1 + x] & 255);
+            for (int x = 0; x < 216; x++)
+                lastRowMaximum = Math.max(lastRowMaximum,
+                        indices[(3996 - 108 + y) * 217 + 1 + x] & 255);
+        }
+        assertTrue("36dp button must have genuine reflected corner alpha", firstRowMaximum > 75);
+        assertTrue("72dp button must have specular alpha", lastRowMaximum > 75);
+
+        assertTrue(ui.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
+        assertTrue(step.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
         assertFalse(ui.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL"));
         assertFalse(step.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.PILL"));
-        // The dense list of settings Cells and the thumbs retain their
-        // original inexpensive, already accepted paths.
         assertTrue(ui.contains("guiExactPrismalCornerChrome(GuiSolidChromeStyle.CARD"));
         assertTrue(ui.contains("Modifier.guiNativePrismalDepthShadow(buttonShape)"));
         assertTrue(step.contains("Modifier.guiNativePrismalDepthShadow(shape)"));
@@ -639,7 +702,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains("val buttonShape = PrismalRoundedRectangle(minHeight / 2)"));
         assertTrue(surfaces.contains("destructive: Boolean = false"));
         assertTrue(surfaces.contains("if (destructive) presetChrome.dangerFill else presetChrome.pillFill"));
-        assertTrue(surfaces.contains(".guiNativePrismalButtonSpecular(buttonShape)"));
+        assertTrue(surfaces.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.CARD ->"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.PILL ->"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.DANGER -> palette.dangerFill"));
@@ -913,7 +976,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(step.contains("while (isActive)"));
         assertTrue(step.contains("tryAwaitRelease()"));
         assertTrue(step.contains("if (released && !repeated) callback.value()"));
-        assertTrue(step.contains(".guiNativePrismalButtonSpecular(shape)"));
+        assertTrue(step.contains(".guiBakedPrismalButtonSpecular(presetChrome.buttonSpecularAtlas)"));
         assertTrue(dialog.contains("destructive = true,"));
         assertFalse(dialog.contains("PrismalGlassButton("));
     }
