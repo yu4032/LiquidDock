@@ -1061,6 +1061,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     @Override
+    public boolean needsNormalizedSourceFrame() {
+        // Keep Recents capsules and Workstation explicitly live. App-covered HOME
+        // otherwise only drains residual OES callbacks, with no normalize/blur/swap.
+        return !shuttingDown && (!launcherStopped || MainHook.isWorkstationMode()
+                || hasVisibleRecentsConsumer());
+    }
+
+    @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null) return;
         View root = rootRef.get();
@@ -1072,7 +1080,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (child != null) child.onSharedSourceFrame(backend, frame);
         // HOME has no visible consumer while Launcher is stopped beneath another
         // Activity. A live Recents capsule has already consumed its shared frame.
-        if (launcherStopped) return;
+        if (launcherStopped && !MainHook.isWorkstationMode()) return;
         // HOME generation/rotation constraints are separate from the Recents GPU consumer.
         if (frame.generation != sceneGeneration || rotationSettlePending) return;
         if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
