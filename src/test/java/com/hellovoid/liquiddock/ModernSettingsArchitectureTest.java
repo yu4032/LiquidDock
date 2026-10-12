@@ -234,7 +234,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("LocalTouchPrismalBackdrop provides touchBackdrop"));
         assertTrue(ui.contains("LocalPrismalOverlayBackdrop provides activeOverlayBackdrop"));
         assertTrue(ui.contains("GuiPrismalFlatHeader("));
-        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTabs("));
         assertTrue(ui.contains("GuiOnTouchPrismalSlider("));
         assertTrue(ui.contains("GuiOnTouchPrismalToggle("));
         assertTrue(ui.contains("val backdrop = LocalPrismalOverlayBackdrop.current ?: LocalPrismalSurfaceBackdrop.current"));
@@ -306,7 +306,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(Files.exists(Path.of("src/main/res/drawable-nodpi/gui_material_card.png")));
         assertFalse(Files.exists(Path.of("src/main/res/drawable-nodpi/gui_material_pill.png")));
         assertTrue(surfaces.contains("GuiPrismalFlatHeader("));
-        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTabs("));
     }
 
     @Test
@@ -628,7 +628,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(surfaces.contains("GuiStaticPressPrismalSurface("));
         assertFalse(surfaces.contains("PrismalGlassSurface("));
         assertTrue(surfaces.contains("Modifier.prismalGlassLayer(screenLayer)"));
-        assertTrue(Files.readString(BOTTOM_NAV).contains("PrismalGlassBottomTabs("));
+        assertTrue(Files.readString(BOTTOM_NAV).contains("GuiSampledPrismalBottomTabs("));
     }
 
     @Test
@@ -747,8 +747,8 @@ public class ModernSettingsArchitectureTest {
         assertFalse("no unused MIUIX blur implementation", build.contains("miuix-blur-android"));
         assertFalse(source.contains("PrismalGlassSurface("));
         assertTrue(source.contains("PrismalGlassButton"));
-        assertTrue(bottom.contains("PrismalGlassBottomTabs"));
-        assertTrue(bottom.contains("PrismalGlassBottomTab"));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTabs"));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTab"));
         assertTrue(source.contains("GuiOnTouchPrismalToggle"));
         assertTrue(source.contains("GuiOnTouchPrismalSlider"));
         assertFalse(source.contains("PrismalGlassStepper("));
@@ -854,7 +854,7 @@ public class ModernSettingsArchitectureTest {
         // Static architecture audit; actual modifier capture order is validated
         // by real rendering rather than prohibited source-order inference.
         assertTrue(surfaces.contains("Modifier.background(background)"));
-        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTabs("));
         assertTrue(header.contains("PrismalBackdrop"));
         assertFalse(surfaces.contains("rememberLayerBackdrop {"));
         assertFalse(surfaces.contains("Modifier.layerBackdrop(barBackdrop)"));
@@ -866,11 +866,11 @@ public class ModernSettingsArchitectureTest {
         String surfaces = Files.readString(SURFACES);
         String bottom = Files.readString(BOTTOM_NAV);
 
-        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
-        assertTrue(bottom.contains("PrismalGlassBottomTab("));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTabs("));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTab("));
         assertTrue(bottom.contains("labels.indices.forEach { index ->"));
-        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
-        assertTrue(bottom.contains("PrismalGlassBottomTab("));
+        assertTrue(bottom.contains("active = index == candidate"));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTab("));
         assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
         assertTrue(bottom.contains("indication = null"));
         assertFalse(bottom.contains("Modifier.matchParentSize()\n                    .padding(4.dp)"));
@@ -921,9 +921,9 @@ public class ModernSettingsArchitectureTest {
         String source = Files.readString(SURFACES);
         String bottom = Files.readString(BOTTOM_NAV);
         assertTrue(bottom.contains("labels.indices.forEach { index ->"));
-        assertTrue(bottom.contains("PrismalGlassBottomTab("));
-        assertTrue(bottom.contains("SideEffect {"));
-        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTab("));
+        assertTrue(bottom.contains("sampledContent = {"));
+        assertTrue(bottom.contains("active = index == candidate"));
         assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex"));
         assertTrue(bottom.contains("tintDropletContent = false"));
     }
@@ -1100,7 +1100,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains(".clip(cardShape)"));
         assertFalse(surfaces.contains("import androidx.compose.ui.draw.shadow"));
         assertFalse(surfaces.contains("PrismalGlassSurface("));
-        assertTrue(Files.readString(BOTTOM_NAV).contains("PrismalGlassBottomTabs("));
+        assertTrue(Files.readString(BOTTOM_NAV).contains("GuiSampledPrismalBottomTabs("));
     }
 
     @Test
@@ -1260,20 +1260,32 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void prismalBottomTabsBridgeDragIndexWithoutDuplicatingVisibleGlyphs() throws Exception {
+    public void prismalBottomTabsSampleGlyphsAndMaskVisibleDuplicates() throws Exception {
         String bottom = Files.readString(BOTTOM_NAV);
-        assertTrue(bottom.contains("PrismalGlassBottomTabs("));
-        assertTrue(bottom.contains("PrismalGlassBottomTab("));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTabs("));
+        assertTrue(bottom.contains("GuiSampledPrismalBottomTab("));
         assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
-        assertTrue(bottom.contains("if (index == 0) {"));
-        assertTrue(bottom.contains("SideEffect {"));
-        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
-        assertTrue(bottom.contains("draggingCandidate = highlightedIndex.intValue != selected"));
+        assertTrue(bottom.contains("visibleContent = {"));
+        assertTrue(bottom.contains("sampledContent = {"));
+        assertTrue(bottom.contains("active = index == candidate"));
+        assertTrue(bottom.contains("draggingCandidate = candidate != selected"));
         assertTrue(bottom.contains("val contentColor by animateColorAsState("));
         assertTrue(bottom.contains("val contentScale by animateFloatAsState("));
         assertTrue(bottom.contains("tintDropletContent = false"));
         assertFalse(bottom.contains("rememberPrismalGlassLayer("));
         assertFalse(bottom.contains("drawPrismalGlass("));
+        String adapter = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiSampledPrismalBottomTabs.kt"));
+        assertTrue(adapter.contains("val tabsBackdrop = rememberPrismalGlassLayer()"));
+        assertTrue(adapter.contains(".prismalGlassLayer(tabsBackdrop)"));
+        assertTrue(adapter.contains("content = sampledContent"));
+        assertTrue(adapter.contains("content = visibleContent"));
+        assertTrue(adapter.contains("content = hitTargetContent"));
+        assertTrue(adapter.contains("clipOp = ClipOp.Difference"));
+        assertTrue(adapter.contains("backdrop = dropletBackdrop"));
+        assertTrue(bottom.contains("sampledContent = {"));
+        assertTrue(bottom.contains("visibleContent = {"));
+        assertFalse(bottom.contains("SideEffect {"));
     }
 
 }
