@@ -42,3 +42,17 @@
 - 为避免隐藏采样再次包含字形，原生 Tab content 只有无视觉的索引观察器，**没有 Text/Icon**；不会恢复历史两份文字。只在第一个 Tab 注册报告逻辑，避免四个 Tab 每帧都重复提交同一索引。
 - **限制**：这并不等同于完整原生 `LocalPrismalBottomTabScale` 的按压比例（其上游可见性为 internal），也不恢复 glyph 的 droplet lens 折射。不能仅凭 CI 判断拖动/长按无闪烁；须做 UI 实机验证。
 - 与此同时 #318 增加的通用 MIUIX 弹窗过渡采用 Compose spring/tween，而不是声称 Prismal v1.0.4 自带 modal 组件；共享采样链不增加任何 layer。
+
+## 2026-10-12：图文镜片采样修复（PR #361，待真机）
+
+反馈：底栏选中胶囊仅折射界面背景，没有把四个 Tab 的图标、文字送进镜片。
+
+现有原生 Tab 的 `content` 故意为空，外层独立 `Row` 负责渲染图文。现以 PrismalAGSL v1.0.4 MIT 许可代码建立独立的 `GuiSampledPrismalBottomTabs` 本地适配，不修改上游。保留 `PrismalSpringMotion`、`PrismalPressRipple`、原背景/镜片/高光和既有拖动回弹；在组件内明确分离三个通路：
+
+- 第一层 native Tab：负责实际点击命中和原胶囊基底，不填图文；
+- 第二层隐藏 `tabsBackdrop`：真实绘制 Icon/Text，提供被移动胶囊折射的采样源；
+- 第三层屏幕可见图文：与真实拖动高亮同步，只在胶囊之外绘制。动态根据胶囊位置、按压缩放和速度变形使用 `ClipOp.Difference` 屏蔽重叠区域，防止历史上的 raw/refracted 双重字形。
+
+折射胶囊仍通过 `rememberPrismalMergedSource(backdrop, tabsBackdrop)` 获取内容，没有新增全屏录制层。Glass-off fallback 不改。
+
+**限制**：遮罩使用矩形近似而胶囊是圆形，在高速/大幅按压变形时必须真机查看字形边缘、颜色切换和采样坐标。后续维护 PrismaI 版本时，此本地适配必须与上游 v1.0.4 实现核对；不能仅据静态测试判定 GPU 与视觉验收通过。
