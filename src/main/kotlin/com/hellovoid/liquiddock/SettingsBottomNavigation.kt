@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.styropyr0.prismal.components.LocalPrismalBottomTabHighlightedIndex
-import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import com.styropyr0.prismal.components.PrismalGlassBottomTabs
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
@@ -84,7 +83,7 @@ internal fun ModernBottomNavigation(
                     hitTargetContent = {
                         // Preserve native Prismal click/drag hit targets.
                         labels.indices.forEach { index ->
-                            PrismalGlassBottomTab(
+                            GuiSampledPrismalBottomTab(
                                 onClick = { if (index != selected) onSelect(index) },
                             ) {}
                         }
@@ -94,7 +93,7 @@ internal fun ModernBottomNavigation(
                         // for the droplet lens; it does not paint on the screen.
                         val candidate = LocalPrismalBottomTabHighlightedIndex.current()
                         labels.forEachIndexed { index, label ->
-                            PrismalGlassBottomTab(
+                            GuiSampledPrismalBottomTab(
                                 onClick = { if (index != selected) onSelect(index) },
                             ) {
                                 ModernTabContents(
