@@ -398,7 +398,9 @@ final class LauncherGlassSceneController {
         session.setLauncherStopped(stopped);
         if (stopped) {
             // Preserve the shared OES producer when Recents capsules are visible.
-            if (!keepSourceLiveDuringRecents() && !session.hasVisibleRecentsConsumer()) {
+            if (WorkspaceRenderEligibilityPolicy.pauseProducerForAppCover(
+                    launcherStopped, MainHook.isWorkstationMode(),
+                    session.hasVisibleRecentsConsumer() || keepSourceLiveDuringRecents())) {
                 session.suspendWorkspaceProducer();
             }
             return;
@@ -426,8 +428,9 @@ final class LauncherGlassSceneController {
         boolean coveredWithoutSharedRecents = state.state() == State.COVERED
                 && !keepSourceLiveDuringRecents();
         if (coveredWithoutSharedRecents || folderCovered
-                || (launcherStopped && !keepSourceLiveDuringRecents()
-                    && !session.hasVisibleRecentsConsumer())
+                || WorkspaceRenderEligibilityPolicy.pauseProducerForAppCover(
+                    launcherStopped, MainHook.isWorkstationMode(),
+                    session.hasVisibleRecentsConsumer() || keepSourceLiveDuringRecents())
                 || (unlockTransitionPending
                     && LauncherGlassHomePresentationHook.isUnlockProducerBlocked())
                 || (recentsWallpaperSettlePending && !keepSourceLiveDuringRecents())) {
