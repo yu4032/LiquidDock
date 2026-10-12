@@ -869,7 +869,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
         assertTrue(bottom.contains("labels.indices.forEach { index ->"));
-        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
+        assertTrue(bottom.contains("active = index == candidate"));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
         assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
         assertTrue(bottom.contains("indication = null"));
@@ -917,13 +917,13 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void bottomLabelsAreSinglePassAbovePrismalDragDroplet() throws Exception {
+    public void bottomGlyphsLiveInsideNativePrismalTabSampler() throws Exception {
         String source = Files.readString(SURFACES);
         String bottom = Files.readString(BOTTOM_NAV);
         assertTrue(bottom.contains("labels.indices.forEach { index ->"));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
-        assertTrue(bottom.contains("SideEffect {"));
-        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
+        assertTrue(bottom.contains("ModernTabContents("));
+        assertTrue(bottom.contains("active = index == candidate"));
         assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex"));
         assertTrue(bottom.contains("tintDropletContent = false"));
     }
@@ -1260,20 +1260,35 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void prismalBottomTabsBridgeDragIndexWithoutDuplicatingVisibleGlyphs() throws Exception {
+    public void prismalBottomTabsSampleGlyphsWithoutChangingOpticalParameters() throws Exception {
         String bottom = Files.readString(BOTTOM_NAV);
         assertTrue(bottom.contains("PrismalGlassBottomTabs("));
         assertTrue(bottom.contains("PrismalGlassBottomTab("));
         assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex.current"));
-        assertTrue(bottom.contains("if (index == 0) {"));
-        assertTrue(bottom.contains("SideEffect {"));
-        assertTrue(bottom.contains("active = index == highlightedIndex.intValue"));
-        assertTrue(bottom.contains("draggingCandidate = highlightedIndex.intValue != selected"));
+        assertTrue(bottom.contains("val candidate = highlighted().coerceIn(0, labels.lastIndex)"));
+        assertTrue(bottom.contains("ModernTabContents("));
+        assertTrue(bottom.contains("active = index == candidate"));
+        assertTrue(bottom.contains("draggingCandidate = candidate != selected"));
         assertTrue(bottom.contains("val contentColor by animateColorAsState("));
         assertTrue(bottom.contains("val contentScale by animateFloatAsState("));
         assertTrue(bottom.contains("tintDropletContent = false"));
+        assertTrue(bottom.contains("icon = icons[index]"));
+        assertTrue(bottom.contains("label = labels[index]"));
+        // The native PrismalGlassBottomTabs implementation records its tab
+        // children into the existing hidden sample layer. Do not add a
+        // parallel overlaid glyph Row, custom lens, or a second capture.
+        String glassBranch = bottom.substring(
+                bottom.indexOf("if (backdrop != null) {"),
+                bottom.indexOf("} else {\n                val fallbackShape"));
+        assertFalse(glassBranch.contains("                Row("));
+        assertFalse(bottom.contains("SideEffect {"));
+        assertFalse(bottom.contains("highlightedIndex.intValue"));
         assertFalse(bottom.contains("rememberPrismalGlassLayer("));
         assertFalse(bottom.contains("drawPrismalGlass("));
+        assertFalse(bottom.contains("prismalLens("));
+        assertFalse(bottom.contains("rememberPrismalWrappedSource("));
+        assertFalse(Files.exists(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GuiSampledPrismalBottomTabs.kt")));
     }
 
 }
