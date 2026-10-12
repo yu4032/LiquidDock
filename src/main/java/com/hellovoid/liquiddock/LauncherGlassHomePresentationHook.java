@@ -190,6 +190,7 @@ final class LauncherGlassHomePresentationHook {
         onLauncherNativeTransitionStarted(owner, animation, "spring-start");
         String animType = readAnimationType(animation);
         if (!isHomeCloseType(animType)) return;
+        if (owner != null) IosHomeSpringExperiment.onHomeStarted(animation);
 
         LauncherHomeTransitionState.Decision decision =
                 HOME_STATE.onHomeAnimationStarted(owner, animation);
@@ -210,15 +211,18 @@ final class LauncherGlassHomePresentationHook {
             onLauncherSpringStarted(owner, animation);
             return;
         }
+        IosHomeSpringExperiment.onHomeFinished(animation);
         releaseHomeBarrierOnMain(HOME_STATE.onAnimationRetargetedAway(owner, animation));
     }
 
     private static void onLauncherSpringPhysicalTerminal(Object animation) {
+        IosHomeSpringExperiment.onHomeFinished(animation);
         onLauncherNativeTransitionFinished(animation, "spring-terminal");
         HOME_STATE.onSpringPhysicalTerminal(animation);
     }
 
     private static void onLauncherOwnerFinishCompleted(Object owner) {
+        IosHomeSpringExperiment.onHomeFinished(readWindowElementAnimation(owner));
         releaseNativeTransitionsForOwner(owner, "owner-finish-completed");
         releaseHomeBarrierOnMain(HOME_STATE.onOwnerFinishCompleted(owner));
     }
