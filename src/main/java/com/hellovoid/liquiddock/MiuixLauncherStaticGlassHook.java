@@ -313,12 +313,25 @@ final class MiuixLauncherStaticGlassHook {
             HookUtil.hookMethod(classLoader, "com.miui.home.launcher.Launcher", "onResume",
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        LauncherGlassSceneController.setLauncherStoppedForAll(false);
                         scheduleWorkspaceResumeReconcile(chain.getThisObject(), glassConfig);
                         return result;
                     });
             MainHook.log(TAG + " Launcher HOME resume reconcile hook installed");
         } catch (Throwable error) {
             MainHook.log(TAG + " Launcher HOME resume reconcile hook unavailable: " + error);
+        }
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.Launcher", "onStop",
+                    chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        LauncherGlassSceneController.setLauncherStoppedForAll(true);
+                        return result;
+                    });
+            MainHook.log(TAG + " Launcher stopped-activity capture gate installed");
+        } catch (Throwable error) {
+            // No Stop hook means the original always-live behavior, never a stuck producer.
+            MainHook.log(TAG + " Launcher stopped-activity capture gate unavailable: " + error);
         }
     }
 
