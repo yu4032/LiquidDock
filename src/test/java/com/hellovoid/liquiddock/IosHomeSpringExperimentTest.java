@@ -42,6 +42,28 @@ public class IosHomeSpringExperimentTest {
         assertEquals(0.85f, animation.x.getSpring().getDampingRatio(), 0.001f);
     }
 
+    @Test public void hyperOsDirectForceChangesMorphButNotIconHandoffAlpha() {
+        HyperRectAnimation animation = new HyperRectAnimation();
+        IosHomeSpringExperiment.configure(true);
+        IosHomeSpringExperiment.onHomeStarted(animation);
+        assertEquals(360f, animation.mRectWidthForce.getStiffness(), 0.001f);
+        assertEquals(90f, animation.mRadiusForce.getStiffness(), 0.001f);
+        assertEquals(0.60f, animation.mRadiusForce.getDampingRatio(), 0.001f);
+        assertEquals(200f, animation.mAlphaForce.getStiffness(), 0.001f);
+        assertEquals(0.85f, animation.mAlphaForce.getDampingRatio(), 0.001f);
+        IosHomeSpringExperiment.onHomeFinished(animation);
+        assertEquals(400f, animation.mRectWidthForce.getStiffness(), 0.001f);
+        assertEquals(100f, animation.mRadiusForce.getStiffness(), 0.001f);
+        assertEquals(0.85f, animation.mRadiusForce.getDampingRatio(), 0.001f);
+    }
+
+    private static final class HyperRectAnimation {
+        final SpringForce mRectWidthForce = new SpringForce(400f);
+        final SpringForce mRectWidthAliasForce = mRectWidthForce;
+        final SpringForce mRadiusForce = new SpringForce(100f);
+        final SpringForce mAlphaForce = new SpringForce(200f);
+    }
+
     @Test public void incompatibleInternalsAreFailOpen() {
         IosHomeSpringExperiment.configure(true);
         IosHomeSpringExperiment.onHomeStarted(new Object());
