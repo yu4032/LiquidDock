@@ -16,6 +16,7 @@ final class LauncherGlassSceneController {
     private static boolean vendorHomeTransitionPending;
     private static boolean vendorUnlockTransitionPending;
     private static boolean vendorRecentsWallpaperSettlePending;
+    private static boolean vendorLauncherStopped;
 
     enum State { DETACHED, BOOTSTRAPPING, HOME_WAITING_FRESH_FRAME, HOME_VISIBLE, COVERED }
 
@@ -151,6 +152,7 @@ final class LauncherGlassSceneController {
     private boolean homeTransitionPending;
     private boolean unlockTransitionPending;
     private boolean recentsWallpaperSettlePending;
+    private boolean launcherStopped;
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
@@ -194,6 +196,8 @@ final class LauncherGlassSceneController {
         created.homeTransitionPending = vendorHomeTransitionPending;
         created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
+        created.launcherStopped = vendorLauncherStopped;
+        session.setLauncherStopped(created.launcherStopped);
         if (created.folderCovered) {
             created.state.setHardCovered(true);
         } else if (created.recentsCovered) {
@@ -268,6 +272,18 @@ final class LauncherGlassSceneController {
         }
         for (LauncherGlassSceneController controller : snapshot) {
             if (controller != null) controller.setRecentsWallpaperSettlePending(pending);
+        }
+    }
+
+    /** Activity lifecycle is distinct from Recents and folder presentation. */
+    static void setLauncherStoppedForAll(boolean stopped) {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            vendorLauncherStopped = stopped;
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller != null) controller.setLauncherStopped(stopped);
         }
     }
 
@@ -374,6 +390,23 @@ final class LauncherGlassSceneController {
     }
 
     /** Recents capsules use this same producer, regardless of Workspace layer visibility. */
+    private void setLauncherStopped(boolean stopped) {
+        if (launcherStopped == stopped) return;
+        launcherStopped = stopped;
+        session.setLauncherStopped(stopped);
+        if (stopped) {
+            // Preserve the shared OES producer when Recents capsules are visible.
+            if (!keepSourceLiveDuringRecents() && !session.hasVisibleRecentsConsumer()) {
+                session.suspendWorkspaceProducer();
+            }
+            return;
+        }
+        // Prevent a stale wallpaper-scale cache when an app uncovers HOME.
+        // Freshness respects the existing HOME, unlock and Recents barriers.
+        state.onGenerationInvalidated();
+        requestFreshBackdrop(state.generation());
+    }
+
     private boolean keepSourceLiveDuringRecents() {
         return WorkstationProducerPolicy.keepSharedSourceLiveForRecents(
                 recentsCovered, GlassRuntimeState.isRecentsCapsuleEnabled(), folderCovered);
@@ -391,6 +424,8 @@ final class LauncherGlassSceneController {
         boolean coveredWithoutSharedRecents = state.state() == State.COVERED
                 && !keepSourceLiveDuringRecents();
         if (coveredWithoutSharedRecents || folderCovered
+                || (launcherStopped && !keepSourceLiveDuringRecents()
+                    && !session.hasVisibleRecentsConsumer())
                 || (unlockTransitionPending
                     && LauncherGlassHomePresentationHook.isUnlockProducerBlocked())
                 || (recentsWallpaperSettlePending && !keepSourceLiveDuringRecents())) {
@@ -410,7 +445,7 @@ final class LauncherGlassSceneController {
     }
 
     private void requestFreshBackdrop(long generation) {
-        if (isPresentationPending()) return;
+        if (launcherStopped || isPresentationPending()) return;
         if (state.state() == State.COVERED || generation != state.generation()) return;
         deferInFlightWallpaperPulse();
         session.requestFreshBackdrop(generation);
