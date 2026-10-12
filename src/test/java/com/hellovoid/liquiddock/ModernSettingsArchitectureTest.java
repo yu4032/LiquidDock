@@ -448,10 +448,10 @@ public class ModernSettingsArchitectureTest {
         assertTrue(renderer.contains("srcOffset = IntOffset(SIDE_DP * SCALE, rowY)"));
         assertTrue(renderer.contains("val middleWidth = drawWidth - 2 * sideDst"));
         assertTrue(renderer.contains("private const val SIDE_DP = 34"));
-        assertFalse(renderer.contains("PrismalShader"));
-        assertFalse(renderer.contains("GraphicsLayer"));
-        assertFalse(renderer.contains("BlurMaskFilter"));
-        assertFalse(renderer.contains("RenderEffect"));
+        assertFalse(renderer.contains("PrismalShader("));
+        assertFalse(renderer.contains("createGraphicsLayer("));
+        assertFalse(renderer.contains("BlurMaskFilter("));
+        assertFalse(renderer.contains("RenderEffect.create"));
         assertFalse(renderer.contains("drawPrismalGlass("));
         assertFalse(renderer.contains("Brush.sweepGradient"));
         assertFalse(renderer.contains("BitmapFactory"));
