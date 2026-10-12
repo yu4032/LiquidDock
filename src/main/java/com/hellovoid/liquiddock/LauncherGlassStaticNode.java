@@ -234,6 +234,14 @@ final class LauncherGlassStaticNode {
         animateVisibilityTo(!suppressionState.isSuppressed());
     }
 
+    /** Widget App→HOME suppression is immediate by design. Avoid allocating and
+     * starting a 450ms ValueAnimator that the caller immediately cancels. */
+    void suppressImmediatelyForWidgetReturn() {
+        if (disposed) return;
+        if (suppressionState.setDrag(true)) resetPressInteraction(false);
+        hideImmediately();
+    }
+
     float visibilityAlpha() { return visibilityAlpha; }
 
     boolean retainLastGeometryDuringFade() {
