@@ -144,6 +144,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private final boolean workspaceSource;
 
     private volatile boolean shuttingDown;
+    // Activity-level occlusion, distinct from Recents/Folders; read on GL thread.
+    private volatile boolean launcherStopped;
     private volatile Runnable terminalFailureListener;
     // Immutable config snapshot identity. Re-attaching N widgets must not each trigger
     // a fresh native PassBlur source request for the same configuration.
@@ -259,6 +261,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     synchronized void detachRecentsConsumer(RecentsCapsuleGlassSession child) {
         if (recentsConsumer == child) recentsConsumer = null;
+    }
+
+    void setLauncherStopped(boolean stopped) {
+        launcherStopped = stopped;
     }
 
     boolean hasVisibleRecentsConsumer() {
@@ -1064,6 +1070,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // or a HOME-only Prismal parameter is unavailable during the Recents transition.
         RecentsCapsuleGlassSession child = recentsConsumer;
         if (child != null) child.onSharedSourceFrame(backend, frame);
+        // HOME has no visible consumer while Launcher is stopped beneath another
+        // Activity. A live Recents capsule has already consumed its shared frame.
+        if (launcherStopped) return;
         // HOME generation/rotation constraints are separate from the Recents GPU consumer.
         if (frame.generation != sceneGeneration || rotationSettlePending) return;
         if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
