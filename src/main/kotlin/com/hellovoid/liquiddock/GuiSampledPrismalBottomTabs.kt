@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -135,10 +136,12 @@ internal fun RowScope.GuiSampledPrismalBottomTab(
  * @param selectedTabIndex Index of the currently selected tab.
  * @param onTabSelected Called when the user selects a tab.
  * @param backdrop Source sampled through the tab bar glass.
- * @param tabsCount Number of tabs (must match [content] child count).
- * @param content Tab items, typically [PrismalGlassBottomTab] composables.
+ * @param tabsCount Number of tabs (must match the child count in all three slots).
+ * @param hitTargetContent Blank native tab hit targets beneath the glyph layer.
+ * @param sampledContent Icon/text tab items recorded to the invisible source.
+ * @param visibleContent Non-interactive glyphs drawn only outside the droplet.
  * @param tintDropletContent When true, tints tab content sampled by the selection
- *   droplet. Set to false to keep the colors from [content].
+ *   droplet. Set to false to keep the colors from [sampledContent].
  * @param dropletContentTint Color used when [tintDropletContent] is true. When `null`,
  *   defaults to iOS-style blue (`#0088FF` light / `#0091FF` dark). Pass any [Color]
  *   (e.g. [Color.Black]) to override.
