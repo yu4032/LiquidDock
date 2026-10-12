@@ -638,8 +638,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(surfaces.contains(".background(solidCardColor, cardShape)"));
         assertTrue(surfaces.contains("val buttonShape = PrismalRoundedRectangle(minHeight / 2)"));
         assertTrue(surfaces.contains("destructive: Boolean = false"));
-        assertTrue(surfaces.contains("GuiSolidChromeStyle.DANGER"));
-        assertTrue(surfaces.contains("GuiSolidChromeStyle.PILL"));
+        assertTrue(surfaces.contains("if (destructive) presetChrome.dangerFill else presetChrome.pillFill"));
+        assertTrue(surfaces.contains(".guiNativePrismalButtonSpecular(buttonShape)"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.CARD ->"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.PILL ->"));
         assertTrue(chrome.contains("GuiSolidChromeStyle.DANGER -> palette.dangerFill"));
