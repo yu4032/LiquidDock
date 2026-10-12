@@ -182,7 +182,13 @@ final class MiuixLauncherStaticGlassHook {
 
     private static int reconcileStaticSubtree(View view, LiquidDockConfig.Glass glassConfig) {
         if (view == null) return 0;
-        reconcileExistingHost(view, glassConfig);
+        // A provider's explicit updateAppWidget callback rebinds changed content.
+        // HOME resume must not re-run discovery/whitening/material suppression
+        // for each already live Widget while the native zoom animation begins.
+        LauncherGlassStaticNode bound = LauncherGlassStaticNode.find(view);
+        if (bound == null || !bound.isBoundToLiveRoot()) {
+            reconcileExistingHost(view, glassConfig);
+        }
         int visited = 1;
         // RemoteViews/MAML widget subtrees are provider-owned content, not
         // Launcher glass hosts. Rewalking all their labels/layout descendants
