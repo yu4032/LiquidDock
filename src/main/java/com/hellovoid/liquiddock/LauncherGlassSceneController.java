@@ -163,6 +163,10 @@ final class LauncherGlassSceneController {
     // An onResume source frame can arrive before the later native HOME spring
     // transforms wallpaper/workspace. Require another frame once that spring ends.
     private boolean appReturnAwaitingHomeSettle;
+    // A fresh capture in the same onResume frame competes with the first
+    // WindowElement spring frame. Two native vsync opportunities let the real
+    // HOME fence arm first; non-spring resumes recover automatically.
+    private int appResumeRefreshSerial;
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
@@ -405,6 +409,7 @@ final class LauncherGlassSceneController {
     private void setLauncherStopped(boolean stopped) {
         if (launcherStopped == stopped) return;
         launcherStopped = stopped;
+        appResumeRefreshSerial++;
         session.setLauncherStopped(stopped);
         if (stopped) {
             appReturnAwaitingHomeSettle = false;
@@ -420,7 +425,27 @@ final class LauncherGlassSceneController {
         // again at the spring's accepted start, not at a speculative time.
         appReturnAwaitingHomeSettle = true;
         state.onGenerationInvalidated();
-        requestFreshBackdrop(state.generation());
+        View root = rootRef.get();
+        if (root != null && root.isAttachedToWindow()) {
+            scheduleAppResumeFresh(root, appResumeRefreshSerial, 2);
+        }
+    }
+
+    private void scheduleAppResumeFresh(View root, int serial, int framesLeft) {
+        root.postOnAnimation(() -> {
+            if (launcherStopped || appResumeRefreshSerial != serial
+                    || rootRef.get() != root || !root.isAttachedToWindow()) return;
+            // HOME spring capture is owned by onHomePresentationPendingChanged(false).
+            // Never race the first scale frame with an already doomed background pass.
+            if (homeTransitionPending) return;
+            if (framesLeft > 1) {
+                scheduleAppResumeFresh(root, serial, framesLeft - 1);
+                return;
+            }
+            if (state.shouldRequestFreshAfterPresentation()) {
+                requestFreshBackdrop(state.generation());
+            }
+        });
     }
 
     private boolean keepSourceLiveDuringRecents() {
