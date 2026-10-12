@@ -22,9 +22,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -45,9 +42,9 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-// Intentional single-pass labels preserve the existing no-ghost visual contract.
-// Native Prismal tab optics and gestures still render; the original tab content
-// is empty to avoid double-refracted glyphs on long-press (see audit docs).
+// Feed the original glyphs to Prismal's native tab content: Prismal records
+// these same children in its internal sampler for the moving glass droplet.
+// No custom lens, refraction, scaling, masks, or extra capture layers.
 @Composable
 internal fun ModernBottomNavigation(
     labels: List<String>,
@@ -58,13 +55,6 @@ internal fun ModernBottomNavigation(
     val backdrop = LocalPrismalOverlayBackdrop.current
     val selected by rememberUpdatedState(selectedIndex)
     val onSelect by rememberUpdatedState(onSelected)
-    // Read the upstream drag candidate from inside the actual native tab
-    // CompositionLocal. Outside siblings cannot observe that local directly.
-    // Report only the index, never duplicate glyphs into the hidden sampler.
-    val highlightedIndex = remember { mutableIntStateOf(selectedIndex) }
-    LaunchedEffect(selectedIndex) {
-        highlightedIndex.intValue = selectedIndex
-    }
     val stableSelectedIndex = remember { { selected } }
     val stableTabChange: (Int) -> Unit = remember {
         { index -> if (index != selected) onSelect(index) }
@@ -92,55 +82,23 @@ internal fun ModernBottomNavigation(
                     modifier = Modifier.fillMaxSize(),
                     tintDropletContent = false,
                 ) {
-                    // Prismal renders tab content twice: once visibly and once in a
-                    // hidden recording layer for the droplet lens. Rendering text
-                    // there creates a second, refracted copy while long-pressing.
-                    // Keep the native capsule hit targets / spring gestures empty.
+                    // Prismal v1.0.4 draws these tab children into its native
+                    // visible Row and its hidden tabsBackdrop recording Row.
+                    // Do not render a third sibling Row above the glass: that
+                    // bypasses its sampler and can duplicate the glyphs.
                     labels.indices.forEach { index ->
                         PrismalGlassBottomTab(
                             onClick = {
                                 if (index != selected) onSelect(index)
                             },
                         ) {
-                            // The upstream body is composed twice (visible and
-                            // hidden recording pass). Only the first tab needs
-                            // to report the shared candidate; no glyph is added.
-                            if (index == 0) {
-                                val highlighted = LocalPrismalBottomTabHighlightedIndex.current
-                                val currentCandidate = highlighted().coerceIn(0, labels.lastIndex)
-                                SideEffect {
-                                    if (highlightedIndex.intValue != currentCandidate) {
-                                        highlightedIndex.intValue = currentCandidate
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Draw labels and icons once above the droplet, without a second
-                // pointer target: touches still reach Prismal's capsule tabs.
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    labels.forEachIndexed { index, label ->
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.spacedBy(
-                                2.dp, Alignment.CenterVertically,
-                            ),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
+                            val highlighted = LocalPrismalBottomTabHighlightedIndex.current
+                            val candidate = highlighted().coerceIn(0, labels.lastIndex)
                             ModernTabContents(
-                                label = label,
+                                label = labels[index],
                                 icon = icons[index],
-                                active = index == highlightedIndex.intValue,
-                                draggingCandidate = highlightedIndex.intValue != selected &&
-                                    index == highlightedIndex.intValue,
+                                active = index == candidate,
+                                draggingCandidate = candidate != selected && index == candidate,
                             )
                         }
                     }
