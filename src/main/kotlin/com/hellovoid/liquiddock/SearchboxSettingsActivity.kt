@@ -11,20 +11,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 
 class SearchboxSettingsActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
+            val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, MODE_PRIVATE) }
+            val controller = rememberSettingsUiThemeController(rememberSettingsUiPalette(uiPrefs).value)
             var showAllParameters by rememberSaveable { mutableStateOf(false) }
             BackHandler(enabled = showAllParameters) { showAllParameters = false }
             val prefs = remember { PreferenceManager.getDefaultSharedPreferences(this) }
-            val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, MODE_PRIVATE) }
             val glassEnabled by remember {
                 mutableStateOf(uiPrefs.getBoolean(SETTINGS_UI_GLASS_ENABLED, true))
             }
