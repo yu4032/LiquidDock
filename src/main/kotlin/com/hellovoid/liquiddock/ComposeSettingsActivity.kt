@@ -41,7 +41,6 @@ import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 // Shared controls and their keyed preference revisions live in SettingsControls.kt.
 
