@@ -1104,9 +1104,20 @@ public class ModernSettingsArchitectureTest {
         assertTrue(theme.contains("palette == SettingsUiPalette.SYSTEM"));
         assertTrue(theme.contains("ThemePaletteStyle.TonalSpot"));
         assertTrue(theme.contains("ThemePaletteStyle.Vibrant"));
+        assertTrue(theme.contains("internal fun SettingsUiColorTheme("));
+        assertTrue(theme.contains("if (seed == null) {"));
+        assertTrue(theme.contains("val vividColors = remember(seed, baseColors.primary, baseColors.background)"));
+        assertTrue(theme.contains("primary = accent,"));
+        assertTrue(theme.contains("primaryVariant = accent,"));
+        assertTrue(theme.contains("sliderKeyPoint = accent,"));
+        assertTrue(theme.contains("onBackgroundVariant = accent,"));
+        assertTrue(theme.contains("MiuixTheme(colors = vividColors, content = content)"));
+        assertTrue(ui.contains("SettingsUiColorTheme(controller = controller, palette = palette)"));
         assertTrue(theme.contains("preferences.registerOnSharedPreferenceChangeListener(listener)"));
-        assertTrue(search.contains("rememberSettingsUiThemeController(rememberSettingsUiPalette(uiPrefs).value)"));
-        assertTrue(widget.contains("rememberSettingsUiThemeController(rememberSettingsUiPalette(uiPrefs).value)"));
+        assertTrue(search.contains("val palette = rememberSettingsUiPalette(uiPrefs).value"));
+        assertTrue(search.contains("SettingsUiColorTheme(controller = controller, palette = palette)"));
+        assertTrue(widget.contains("val palette = rememberSettingsUiPalette(uiPrefs).value"));
+        assertTrue(widget.contains("SettingsUiColorTheme(controller = controller, palette = palette)"));
 
         // The sampler already follows upstream's moving capsule. No extra
         // glyph layer or locally synthesized spring/clip is acceptable.
