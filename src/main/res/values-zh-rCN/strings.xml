@@ -35,6 +35,16 @@
     <string name="page_animation">动画与过渡</string>
     <string name="page_data">预设</string>
     <string name="page_about">许可</string>
+    <string name="page_theme_palette">主题配色</string>
+    <string name="theme_palette_summary">选择设置界面的主题色。跟随系统时使用壁纸动态配色；固定配色即时生效，不修改桌面或玻璃材质。</string>
+    <string name="theme_palette_selected">当前选择</string>
+    <string name="theme_palette_system">跟随系统动态色</string>
+    <string name="theme_palette_blue">蓝色</string>
+    <string name="theme_palette_purple">紫色</string>
+    <string name="theme_palette_pink">粉色</string>
+    <string name="theme_palette_red">红色</string>
+    <string name="theme_palette_orange">橙色</string>
+    <string name="theme_palette_green">绿色</string>
     <string name="enable_liquiddock">启用 LiquidDock</string>
     <string name="enable_liquiddock_summary">控制 LiquidDock 的整体视觉效果；部分设置需重启桌面生效</string>
     <string name="enable_grid_8x4">启用自定义布局</string>
