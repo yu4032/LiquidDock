@@ -25,7 +25,6 @@ import java.util.HashSet
 import java.util.Locale
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class WidgetComponentDetailActivity : SettingsActivity() {
     companion object {
