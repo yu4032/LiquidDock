@@ -90,10 +90,11 @@ final class LauncherGlassVendorMaterialSuppressor {
                 }
             }
         }
-        // Native vendor rebind may rewrite enable_background_blur. Restore original MAML
-        // variable and reversible PassWindow gate *after* the verified view-blur handoff.
-        LauncherWidgetNativeViewBlurGate.release(host);
-        if (isMaMlHost(host)) restoreMamlBackground(host);
+        // Native vendor rebind may rewrite enable_background_blur. When Launcher
+        // successfully reconstructs the material, its current value is authoritative:
+        // replaying a pre-attach 0 would silently disable the new advanced background.
+        boolean vendorRebound = LauncherWidgetNativeViewBlurGate.release(host);
+        if (isMaMlHost(host)) restoreMamlBackground(host, vendorRebound);
         restorePassWindowGate(host);
     }
 
@@ -149,9 +150,17 @@ final class LauncherGlassVendorMaterialSuppressor {
                 + System.identityHashCode(root) + " originalBg=" + original);
     }
 
-    private static void restoreMamlBackground(View host) {
+    private static void restoreMamlBackground(View host, boolean vendorRebound) {
         MamlBackgroundClaim claim = MAML_BACKGROUND_OWNERSHIP.remove(host);
         if (claim == null) return;
+        // The vendor initializer just wrote enable_background_blur to the value
+        // dictated by the current native material eligibility. Do not undo it
+        // using a snapshot captured before Launcher finished initializing MAML.
+        if (vendorRebound) {
+            MainHook.log("[DC][WidgetVendor] MAML blur variable handed to Launcher"
+                    + " root=" + System.identityHashCode(readMamlRoot(host)));
+            return;
+        }
         Object currentRoot = readMamlRoot(host);
         Double current = getMaMlBackgroundBlurVariable(host);
         boolean owned = currentRoot != null && currentRoot == claim.rootRef.get()
