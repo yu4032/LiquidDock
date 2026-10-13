@@ -25,9 +25,7 @@ import java.util.HashSet
 import java.util.Locale
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 
 class WidgetComponentDetailActivity : SettingsActivity() {
     companion object {
@@ -42,7 +40,8 @@ class WidgetComponentDetailActivity : SettingsActivity() {
             return
         }
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
+            val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, Context.MODE_PRIVATE) }
+            val controller = rememberSettingsUiThemeController(rememberSettingsUiPalette(uiPrefs).value)
             MiuixTheme(controller = controller) {
                 WidgetComponentDetailScreen(this, widgetKey)
             }
