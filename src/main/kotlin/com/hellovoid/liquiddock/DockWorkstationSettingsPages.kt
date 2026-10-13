@@ -279,6 +279,13 @@ internal fun RecentsPage(padding: PaddingValues, prefs: SharedPreferences, maste
         IntSetting(prefs, recentsBlurSpec, masterEnabled)
         BooleanSetting(
             prefs,
+            ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM,
+            "禁用壁纸缩放",
+            "阻止桌面/多任务切换时系统壁纸的缩放目标，保留壁纸平移及其他过渡；首次安装该功能需重启桌面，之后切换即时生效",
+            masterEnabled,
+        )
+        BooleanSetting(
+            prefs,
             ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING,
             "取消壁纸压暗",
             "进入多任务时保留系统背景模糊与过渡动画，仅移除壁纸黑色压暗；已加载的桌面 Hook 即时生效",

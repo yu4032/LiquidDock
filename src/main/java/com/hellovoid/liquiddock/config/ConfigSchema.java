@@ -53,6 +53,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> HIDE_GESTURE_HANDLE_HOME_RECENTS = bool(
                 "animation_hide_gesture_handle_home_recents",
                 false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> DISABLE_WALLPAPER_ZOOM = bool(
+                "animation_disable_wallpaper_zoom",
+                false, false, false, ConfigKey.ExportMode.ALWAYS);
 
         private Animation() {}
     }
@@ -528,7 +531,8 @@ public final class ConfigSchema {
         add(keys, Animation.WORKSPACE_VISIBILITY, Animation.DOCK_ICON_REVEAL,
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,
-                Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS);
+                Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
+                Animation.DISABLE_WALLPAPER_ZOOM);
         add(keys, Grid.ENABLED, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
                 Grid.WIDGET_HORIZONTAL_STRETCH,

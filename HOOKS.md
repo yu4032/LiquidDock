@@ -268,6 +268,16 @@ com.miui.home.launcher.uninstall.BaseUninstallDialog
 
 Wallpaper change 和 Recents return settle 是不同 authority。
 
+`LauncherWallpaperZoomHook` 是独立的可选 Launcher 壁纸缩放门：仅在 `com.miui.home` 的
+`com.miui.home.recents.anim.WallpaperParam.getZoomOut()` 返回时，把有限且为正的目标值改为 `1.0f`。
+来源是对旧版 MIUI Launcher 对应 accessor 的公开 Hook 实践（MIUI-Extra-YukiAPI，
+`WallpaperZoomOptimizeOS1NewArch`）；本机 HyperOS 3 Launcher 4.50 的入口与实际功耗收益
+仍需真机确认。若 accessor 不存在则原生执行，不能默认为功能已命中。
+此 Hook **不替换** `LocalWallpaperElement`/`SystemWallpaperElement` 的 `setTo/animTo`，
+不取消 `HyperSpringAnimation`，不影响 `LauncherGlassRecentsHook` 的 wallpaper-settle
+authority、wallpaper freshness、壁纸平移、UI 工作区缩放、壁纸自身的特效动画。
+首次安装需要重启 Launcher 以加载 Hook；之后通过 `LiveGlassConfigState` 即时更新布尔门。
+
 ---
 
 ## 14. HOME / keyguard timing

@@ -58,6 +58,20 @@ public class LiveGlassConfigStateTest {
     }
 
     @Test
+    public void wallpaperZoomAndMasterGateRefreshInLauncherWithoutHookReinstall() {
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Core.ENABLED.name()));
+        Map<String, Object> enabled = new HashMap<>();
+        enabled.put(ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM.name(), true);
+        LiquidDockConfig config = LiquidDockConfig.from(new ConfigReader(enabled));
+        assertTrue(config.animation.disableWallpaperZoom);
+        assertTrue(config.enabled);
+        enabled.put(ConfigSchema.Core.ENABLED.name(), false);
+        assertFalse(LiquidDockConfig.from(new ConfigReader(enabled)).enabled);
+    }
+
+    @Test
     public void popupGlassPolicyIsLiveAfterOneTimeHookInstall() {
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name()));

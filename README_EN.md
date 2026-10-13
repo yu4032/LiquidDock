@@ -124,7 +124,7 @@ Gboard supports glass for the floating keyboard and related toolbars, with indep
 
 ### Configuration, animation, and backups
 
-Animation timing can be adjusted for workspace visibility, Dock icon reveal, press feedback, Dock resizing, and settings-page transitions.
+Animation timing can be adjusted for workspace visibility, Dock icon reveal, press feedback, Dock resizing, and settings-page transitions. An optional **Disable wallpaper zoom** switch constrains Launcher's wallpaper zoom target during app and Recents transitions without changing workspace animation; first-time installation requires restarting Launcher. Effectiveness depends on the vendor Launcher implementation.
 
 The settings app uses MIUIX and Prismal glass styling, with options grouped by feature. Sliders support continuous dragging, live values, and spring animations on release. You can also tap a value to enter it directly or use the plus, minus, and reset buttons. Settings dialogs have transition animations, and the bottom glass capsule supports swipe navigation with moving icon and text highlights.
 
