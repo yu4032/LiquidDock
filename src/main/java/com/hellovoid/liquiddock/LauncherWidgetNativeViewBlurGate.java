@@ -165,7 +165,8 @@ final class LauncherWidgetNativeViewBlurGate {
         try {
             if (mamlViewClass.isInstance(host)) {
                 // Launcher setMaMlBlurIfSupported() also updates enable_background_blur.
-                // Controller restores the original MAML variable *after* this call.
+                // The vendor's current enable_background_blur value is authoritative after
+                // successful rebind; only a failed rebind permits owned-value restoration.
                 setMaMlBlurIfSupported.invoke(null, host, true);
             } else {
                 setWidgetBlurIfSupported.invoke(null, host);
