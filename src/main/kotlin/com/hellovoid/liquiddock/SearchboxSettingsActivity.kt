@@ -19,7 +19,8 @@ class SearchboxSettingsActivity : SettingsActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, MODE_PRIVATE) }
-            val controller = rememberSettingsUiThemeController(rememberSettingsUiPalette(uiPrefs).value)
+            val palette = rememberSettingsUiPalette(uiPrefs).value
+            val controller = rememberSettingsUiThemeController(palette)
             var showAllParameters by rememberSaveable { mutableStateOf(false) }
             BackHandler(enabled = showAllParameters) { showAllParameters = false }
             val prefs = remember { PreferenceManager.getDefaultSharedPreferences(this) }
@@ -34,7 +35,7 @@ class SearchboxSettingsActivity : SettingsActivity() {
                     ),
                 )
             }
-            MiuixTheme(controller = controller) {
+            SettingsUiColorTheme(controller = controller, palette = palette) {
                 ModernSettingsScaffold(
                     title = if (showAllParameters) "系统搜索 · 全部参数"
                         else getString(R.string.page_searchbox),
