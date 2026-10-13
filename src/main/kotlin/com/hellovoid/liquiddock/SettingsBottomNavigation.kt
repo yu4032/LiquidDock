@@ -168,7 +168,12 @@ private fun ModernTabContents(
         targetValue = if (active && !tintThroughDroplet) {
             MiuixTheme.colorScheme.primary
         } else {
-            MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f)
+            // Prismal's native ColorFilter.tint preserves the sampled glyph alpha.
+            // 0.64f made even a vivid primary look washed out through the pill.
+            // Keep the glass-off fallback's original neutral opacity unchanged.
+            MiuixTheme.colorScheme.onSurface.copy(
+                alpha = if (tintThroughDroplet) 0.96f else 0.64f,
+            )
         },
         animationSpec = tween(130),
         label = "bottom-tab-glyph-color",
