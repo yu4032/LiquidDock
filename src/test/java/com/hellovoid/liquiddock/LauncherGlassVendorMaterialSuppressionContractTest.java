@@ -81,7 +81,15 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(gate.contains("isWidgetBlurSupported"));
         assertTrue(gate.contains("state.lastVendorMode"));
         assertTrue(gate.contains("chain.proceed(new Object[]{0})"));
-        assertTrue(gate.contains("setNativeMode(host, vendorMode)"));
+        // A transient lastVendorMode=0 from Window detach must never be
+        // replayed as the final advanced-material state.
+        assertFalse(gate.contains("setNativeMode(host, vendorMode)"));
+        assertTrue(gate.contains("if (!host.isAttachedToWindow() || !isSupportedWidget(host))"));
+        assertTrue(gate.contains("boolean restored = restoreViaVendorUtilities(host)"));
+        assertTrue(helper.contains("boolean vendorRebound = LauncherWidgetNativeViewBlurGate.release(host)"));
+        assertTrue(helper.contains("restoreMamlBackground(host, vendorRebound)"));
+        assertTrue(helper.contains("if (vendorRebound) {"));
+        assertTrue(helper.contains("MAML blur variable handed to Launcher"));
         assertTrue(gate.contains("restoreViaVendorUtilities(host)"));
         assertFalse(gate.contains("MiBlurBridge.clearContentBlur("));
         assertFalse(gate.contains("MiBlurBridge.clearPassWindowBlur("));
