@@ -36,7 +36,7 @@
     <string name="page_data">预设</string>
     <string name="page_about">许可</string>
     <string name="page_theme_palette">主题配色</string>
-    <string name="theme_palette_summary">选择设置界面的主题色。跟随系统时使用壁纸动态配色；固定配色即时生效，不修改桌面或玻璃材质。</string>
+    <string name="theme_palette_summary">使用 Apple iOS 标准系统强调色，自动匹配浅色与深色模式；跟随系统时使用壁纸动态配色。选择即时生效，不修改桌面或玻璃材质。</string>
     <string name="theme_palette_selected">当前选择</string>
     <string name="theme_palette_system">跟随系统动态色</string>
     <string name="theme_palette_blue">蓝色</string>
