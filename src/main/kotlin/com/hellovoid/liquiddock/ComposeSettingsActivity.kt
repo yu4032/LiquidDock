@@ -68,7 +68,7 @@ class ComposeSettingsActivity : SettingsActivity() {
                 onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
             }
             CompositionLocalProvider(LocalSettingsPreferenceRevisions provides revisions) {
-                MiuixTheme(controller = controller) {
+                SettingsUiColorTheme(controller = controller, palette = palette) {
                     LiquidDockSettings(
                         activity = this,
                         selectedPalette = palette,
