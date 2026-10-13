@@ -159,6 +159,10 @@ public final class ModuleMain extends XposedModule {
                     runtimeConfig.divider.enabled);
             LiveGlassConfigState.initialize(
                     Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP), runtimeConfig);
+            // Install regardless of initial toggle state, so subsequent changes
+            // take effect without rebooting Launcher. No renderer is replaced.
+            LauncherWallpaperZoomHook.onLiveConfigChanged(runtimeConfig);
+            LauncherWallpaperZoomHook.install(classLoader);
             DockMirrorShortcutHook.install(classLoader);
             DockNativeShadowBridge.install(classLoader, runtimeConfig.dock);
             Launcher450IconSizeHook.install(classLoader,
