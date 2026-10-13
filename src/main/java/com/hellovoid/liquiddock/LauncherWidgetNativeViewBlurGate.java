@@ -120,13 +120,23 @@ final class LauncherWidgetNativeViewBlurGate {
                 + " muted=" + muted);
     }
 
-    static void release(View host) {
-        if (!installed || host == null) return;
+    /**
+     * Release the gate and, for an attached eligible host, have Launcher recreate the
+     * complete native material (mode, blur radius and background blend colors).
+     *
+     * A recorded 0 from clearWidgetBlurIfSupported() can be an App / HOME detach
+     * transition, not the desired steady-state mode. Replaying only that integer
+     * drops the native plate, even after Launcher has cleared its other blur data.
+     *
+     * @return true only when Launcher has rebuilt its native material for this host.
+     */
+    static boolean release(View host) {
+        if (!installed || host == null) return false;
         State state;
         synchronized (STATES) {
             state = STATES.remove(host);
         }
-        if (state == null) return;
+        if (state == null) return false;
 
         boolean sawVendor;
         int vendorMode;
@@ -135,19 +145,22 @@ final class LauncherWidgetNativeViewBlurGate {
             sawVendor = state.sawVendorMode;
             vendorMode = state.lastVendorMode;
         }
-        if (sawVendor) {
-            // The most recent vendor request supersedes the initial known Launcher mode.
-            boolean restored = setNativeMode(host, vendorMode);
-            MainHook.log(TAG + " release latest-vendor-mode=" + vendorMode
-                    + " restored=" + restored
-                    + " host=" + host.getClass().getSimpleName());
-            return;
+        // A detached View must be initialized by Launcher's own onAttachedToWindow path.
+        // Do not fabricate a material or re-enable an ineligible widget here.
+        if (!host.isAttachedToWindow() || !isSupportedWidget(host)) {
+            MainHook.log(TAG + " release vendor-owned lifecycle host="
+                    + host.getClass().getSimpleName()
+                    + " attached=" + host.isAttachedToWindow()
+                    + " lastVendorMode=" + (sawVendor ? vendorMode : "none"));
+            return false;
         }
-        // No post-claim mode write was observed. Ask the *real* Launcher setup code to recreate
-        // its native material from support flags, not from an invented radius or color list.
+        // Always rebind: even a positive vendor mode is insufficient after detach
+        // clears the native blur radius and blend colors.
         boolean restored = restoreViaVendorUtilities(host);
         MainHook.log(TAG + " release vendor-rebind=" + restored
+                + " lastVendorMode=" + (sawVendor ? vendorMode : "none")
                 + " host=" + host.getClass().getSimpleName());
+        return restored;
     }
 
     private static boolean isSupportedWidget(View host) {
