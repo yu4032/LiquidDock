@@ -3,12 +3,12 @@ package com.hellovoid.liquiddock;
 /** Local settings-app color choices. Not part of Launcher/Hook preferences or JSON export. */
 enum SettingsUiPalette {
     SYSTEM("system", null),
-    BLUE("blue", 0xFF3478F6),
-    PURPLE("purple", 0xFF9B67DD),
-    PINK("pink", 0xFFEB62B2),
-    RED("red", 0xFFE4565D),
-    ORANGE("orange", 0xFFF28B35),
-    GREEN("green", 0xFF37A575);
+    BLUE("blue", 0xFF007AFF),
+    PURPLE("purple", 0xFFAF52DE),
+    PINK("pink", 0xFFFF2D55),
+    RED("red", 0xFFFF3B30),
+    ORANGE("orange", 0xFFFF9500),
+    GREEN("green", 0xFF34C759);
 
     private final String persistedValue;
     private final Integer seedArgb;
