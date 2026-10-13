@@ -1100,7 +1100,12 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("putString(SETTINGS_UI_THEME_PALETTE, chosen.persistedValue)"));
         assertTrue(theme.contains("ThemeController("));
         assertTrue(theme.contains("ColorSchemeMode.MonetSystem"));
-        assertTrue(theme.contains("keyColor = palette.seedArgb?.let { Color(it) }"));
+        assertTrue(theme.contains("val dark = isSystemInDarkTheme()"));
+        assertTrue(theme.contains("return remember(palette, dark) {"));
+        assertTrue(theme.contains("keyColor = palette.getSeedArgb(dark)?.let { Color(it) }"));
+        assertTrue(theme.contains("val seed = palette.getSeedArgb(dark)"));
+        assertTrue(theme.contains("val swatch = palette.getSeedArgb(dark)?.let { Color(it) } ?: systemAccent"));
+        assertTrue(theme.contains("systemPaletteController.currentColors().primary"));
         assertTrue(theme.contains("palette == SettingsUiPalette.SYSTEM"));
         assertTrue(theme.contains("ThemePaletteStyle.TonalSpot"));
         assertTrue(theme.contains("ThemePaletteStyle.Vibrant"));
