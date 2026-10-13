@@ -7,6 +7,7 @@ internal enum class Page(val titleRes: Int) {
     LayoutHub(R.string.page_layout_hub),
     GlassHub(R.string.page_glass_hub),
     MoreHub(R.string.page_more_hub),
+    ThemePalette(R.string.page_theme_palette),
 
     Grid(R.string.page_grid),
     GridBasics(R.string.page_grid_basics),
@@ -102,6 +103,7 @@ internal val glassEntries = listOf(
 )
 
 internal val moreEntries = listOf(
+    HubEntry(Page.ThemePalette, R.string.page_theme_palette, "设置页面的动态色与固定主题配色"),
     HubEntry(Page.Data, R.string.page_data, "默认配置、导入与导出"),
     HubEntry(Page.About, R.string.page_about, "第三方开源项目与许可"),
 )

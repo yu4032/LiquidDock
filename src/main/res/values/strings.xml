@@ -35,6 +35,16 @@
     <string name="page_animation">Animations &amp; transitions</string>
     <string name="page_data">Presets</string>
     <string name="page_about">Licenses</string>
+    <string name="page_theme_palette">Theme Colors</string>
+    <string name="theme_palette_summary">Choose an Apple iOS standard system accent color for Settings, with light and dark variants. System follows wallpaper dynamic color. Changes apply immediately without affecting Launcher or glass material.</string>
+    <string name="theme_palette_selected">Selected</string>
+    <string name="theme_palette_system">Follow system dynamic color</string>
+    <string name="theme_palette_blue">Blue</string>
+    <string name="theme_palette_purple">Purple</string>
+    <string name="theme_palette_pink">Pink</string>
+    <string name="theme_palette_red">Red</string>
+    <string name="theme_palette_orange">Orange</string>
+    <string name="theme_palette_green">Green</string>
     <string name="enable_liquiddock">Enable LiquidDock</string>
     <string name="enable_liquiddock_summary">Controls LiquidDock visual effects; some settings require a launcher restart to take effect</string>
     <string name="enable_grid_8x4">Enable custom home grid</string>

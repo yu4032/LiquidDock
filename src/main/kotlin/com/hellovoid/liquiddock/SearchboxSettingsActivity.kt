@@ -7,24 +7,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 
 class SearchboxSettingsActivity : SettingsActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
+            val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, MODE_PRIVATE) }
+            val palette = rememberSettingsUiPalette(uiPrefs).value
+            val controller = rememberSettingsUiThemeController(palette)
             var showAllParameters by rememberSaveable { mutableStateOf(false) }
             BackHandler(enabled = showAllParameters) { showAllParameters = false }
             val prefs = remember { PreferenceManager.getDefaultSharedPreferences(this) }
-            val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, MODE_PRIVATE) }
             val glassEnabled by remember {
                 mutableStateOf(uiPrefs.getBoolean(SETTINGS_UI_GLASS_ENABLED, true))
             }
@@ -36,7 +33,7 @@ class SearchboxSettingsActivity : SettingsActivity() {
                     ),
                 )
             }
-            MiuixTheme(controller = controller) {
+            SettingsUiColorTheme(controller = controller, palette = palette) {
                 ModernSettingsScaffold(
                     title = if (showAllParameters) "系统搜索 · 全部参数"
                         else getString(R.string.page_searchbox),
