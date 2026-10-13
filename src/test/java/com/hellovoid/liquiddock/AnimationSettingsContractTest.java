@@ -80,6 +80,19 @@ public class AnimationSettingsContractTest {
     }
 
     @Test
+    public void wallpaperZoomControlLivesWithRecentsWallpaperControls() throws Exception {
+        String animationPages = Files.readString(ANIMATION_PAGES);
+        String recentsPages = Files.readString(DOCK_WORKSTATION_PAGES);
+
+        assertFalse(animationPages.contains("ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM"));
+        int recentsStart = recentsPages.indexOf("internal fun RecentsPage(");
+        assertTrue(recentsStart >= 0);
+        String recentsPage = recentsPages.substring(recentsStart);
+        assertTrue(recentsPage.contains("ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM"));
+        assertTrue(recentsPage.contains("ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING"));
+    }
+
+    @Test
     public void ownedExitFadesReadRuntimeConfigurationInTheirOwningProcesses() throws Exception {
         String shortcut = Files.readString(JAVA.resolve("ShortcutPopupGlassLayer.java"));
         String security = Files.readString(JAVA.resolve("SecurityCenterGlassSinkView.java"));

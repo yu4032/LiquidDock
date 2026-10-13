@@ -37,6 +37,7 @@ final class LiquidDockConfig {
     static final class Animation {
         final int workspaceVisibilityMs, dockIconRevealMs, pressInMs, pressOutMs,
                 dockResizeMs, shortcutPopupDismissFadeMs, securityCenterExitFadeMs;
+        final boolean disableWallpaperZoom;
 
         Animation(ConfigReader c) {
             workspaceVisibilityMs = duration(c, ConfigSchema.Animation.WORKSPACE_VISIBILITY);
@@ -48,6 +49,9 @@ final class LiquidDockConfig {
                     duration(c, ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE);
             securityCenterExitFadeMs =
                     duration(c, ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE);
+            disableWallpaperZoom = c.b(
+                    ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM.name(),
+                    ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM.runtimeFallback());
         }
 
         private static int duration(ConfigReader c,
