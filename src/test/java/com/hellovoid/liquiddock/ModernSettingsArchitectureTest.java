@@ -925,7 +925,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(bottom.contains("ModernTabContents("));
         assertTrue(bottom.contains("active = index == candidate"));
         assertTrue(bottom.contains("LocalPrismalBottomTabHighlightedIndex"));
-        assertTrue(bottom.contains("tintDropletContent = false"));
+        assertTrue(bottom.contains("tintDropletContent = true"));
+        assertTrue(bottom.contains("dropletContentTint = MiuixTheme.colorScheme.primary"));
     }
 
     @Test
@@ -1021,6 +1022,7 @@ public class ModernSettingsArchitectureTest {
         assertTrue(zh.contains("<string name=\"tab_glass\">外观</string>"));
         assertTrue(source.contains(
                 "internal val moreEntries = listOf(\n"
+                        + "    HubEntry(Page.ThemePalette, R.string.page_theme_palette, \"设置页面的动态色与固定主题配色\"),\n"
                         + "    HubEntry(Page.Data, R.string.page_data, \"默认配置、导入与导出\"),\n"
                         + "    HubEntry(Page.About, R.string.page_about, \"第三方开源项目与许可\"),\n"
                         + ")"));
@@ -1078,6 +1080,63 @@ public class ModernSettingsArchitectureTest {
         assertTrue(widget.contains("SETTINGS_UI_GLASS_ENABLED"));
         assertTrue(widget.contains("glassEnabled = glassEnabled"));
         assertTrue(zh.contains("<string name=\"settings_glass_effect\">IOS玻璃效果</string>"));
+    }
+
+    @Test
+    public void localGuiPaletteUsesNativeMonetSeedsAndPrismalDropletTintOnly() throws Exception {
+        String ui = Files.readString(UI);
+        String theme = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsUiTheme.kt"));
+        String bottom = Files.readString(BOTTOM_NAV);
+        String nav = Files.readString(NAVIGATION_MODEL);
+        String search = Files.readString(SEARCHBOX);
+        String widget = Files.readString(WIDGET_DETAIL);
+        String config = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
+
+        assertTrue(nav.contains("Page.ThemePalette"));
+        assertTrue(ui.contains("Page.ThemePalette -> SettingsUiPalettePage("));
+        assertTrue(ui.contains("getSharedPreferences(SETTINGS_UI_PREFS, Context.MODE_PRIVATE)"));
+        assertTrue(ui.contains("putString(SETTINGS_UI_THEME_PALETTE, chosen.persistedValue)"));
+        assertTrue(theme.contains("ThemeController("));
+        assertTrue(theme.contains("ColorSchemeMode.MonetSystem"));
+        assertTrue(theme.contains("val dark = isSystemInDarkTheme()"));
+        assertTrue(theme.contains("return remember(palette, dark) {"));
+        assertTrue(theme.contains("keyColor = palette.getSeedArgb(dark)?.let { Color(it) }"));
+        assertTrue(theme.contains("val seed = palette.getSeedArgb(dark)"));
+        assertTrue(theme.contains("val swatch = palette.getSeedArgb(dark)?.let { Color(it) } ?: systemAccent"));
+        assertTrue(theme.contains("systemPaletteController.currentColors().primary"));
+        assertTrue(theme.contains("palette == SettingsUiPalette.SYSTEM"));
+        assertTrue(theme.contains("ThemePaletteStyle.TonalSpot"));
+        assertTrue(theme.contains("ThemePaletteStyle.Vibrant"));
+        assertTrue(theme.contains("internal fun SettingsUiColorTheme("));
+        assertTrue(theme.contains("if (seed == null) {"));
+        assertTrue(theme.contains("val vividColors = remember(seed, baseColors.primary, baseColors.background)"));
+        assertTrue(theme.contains("primary = accent,"));
+        assertTrue(theme.contains("primaryVariant = accent,"));
+        assertTrue(theme.contains("sliderKeyPoint = accent,"));
+        assertTrue(theme.contains("onBackgroundVariant = accent,"));
+        assertTrue(theme.contains("MiuixTheme(colors = vividColors, content = content)"));
+        assertTrue(ui.contains("SettingsUiColorTheme(controller = controller, palette = palette)"));
+        assertTrue(theme.contains("preferences.registerOnSharedPreferenceChangeListener(listener)"));
+        assertTrue(search.contains("val palette = rememberSettingsUiPalette(uiPrefs).value"));
+        assertTrue(search.contains("SettingsUiColorTheme(controller = controller, palette = palette)"));
+        assertTrue(widget.contains("val palette = rememberSettingsUiPalette(uiPrefs).value"));
+        assertTrue(widget.contains("SettingsUiColorTheme(controller = controller, palette = palette)"));
+
+        // The sampler already follows upstream's moving capsule. No extra
+        // glyph layer or locally synthesized spring/clip is acceptable.
+        assertTrue(bottom.contains("tintDropletContent = true"));
+        assertTrue(bottom.contains("dropletContentTint = MiuixTheme.colorScheme.primary"));
+        assertTrue(bottom.contains("tintThroughDroplet = true"));
+        assertTrue(bottom.contains("active && !tintThroughDroplet"));
+        // Prismal's tint filter retains the glyph alpha; the native sampler
+        // must receive nearly opaque neutral pixels for vibrant selected color.
+        assertTrue(bottom.contains("alpha = if (tintThroughDroplet) 0.96f else 0.64f"));
+        assertFalse(bottom.contains("rememberPrismalGlassLayer("));
+        assertFalse(bottom.contains("drawPrismalGlass("));
+        assertFalse(bottom.contains("clipPath("));
+        assertFalse(config.contains("theme_palette"));
     }
 
     @Test
@@ -1271,7 +1330,8 @@ public class ModernSettingsArchitectureTest {
         assertTrue(bottom.contains("draggingCandidate = candidate != selected"));
         assertTrue(bottom.contains("val contentColor by animateColorAsState("));
         assertTrue(bottom.contains("val contentScale by animateFloatAsState("));
-        assertTrue(bottom.contains("tintDropletContent = false"));
+        assertTrue(bottom.contains("tintDropletContent = true"));
+        assertTrue(bottom.contains("dropletContentTint = MiuixTheme.colorScheme.primary"));
         assertTrue(bottom.contains("icon = icons[index]"));
         assertTrue(bottom.contains("label = labels[index]"));
         // The native PrismalGlassBottomTabs implementation records its tab

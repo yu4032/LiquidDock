@@ -41,9 +41,6 @@ import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 
 // Shared controls and their keyed preference revisions live in SettingsControls.kt.
 
@@ -53,7 +50,10 @@ class ComposeSettingsActivity : SettingsActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
+            val themePrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, Context.MODE_PRIVATE) }
+            val paletteState = rememberSettingsUiPalette(themePrefs)
+            val palette = paletteState.value
+            val controller = rememberSettingsUiThemeController(palette)
             val preferences = remember { PreferenceManager.getDefaultSharedPreferences(this) }
             val revisions = remember(preferences) { mutableStateMapOf<String, Int>() }
             DisposableEffect(preferences) {
@@ -67,7 +67,18 @@ class ComposeSettingsActivity : SettingsActivity() {
                 onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
             }
             CompositionLocalProvider(LocalSettingsPreferenceRevisions provides revisions) {
-                MiuixTheme(controller = controller) { LiquidDockSettings(this) }
+                SettingsUiColorTheme(controller = controller, palette = palette) {
+                    LiquidDockSettings(
+                        activity = this,
+                        selectedPalette = palette,
+                        onPaletteSelected = { chosen ->
+                            paletteState.value = chosen
+                            themePrefs.edit()
+                                .putString(SETTINGS_UI_THEME_PALETTE, chosen.persistedValue)
+                                .apply()
+                        },
+                    )
+                }
             }
         }
     }
@@ -76,7 +87,11 @@ class ComposeSettingsActivity : SettingsActivity() {
 // Route model and menu catalogs live in SettingsNavigationModel.kt.
 
 @Composable
-private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
+private fun LiquidDockSettings(
+    activity: ComposeSettingsActivity,
+    selectedPalette: SettingsUiPalette,
+    onPaletteSelected: (SettingsUiPalette) -> Unit,
+) {
     val prefs = remember { PreferenceManager.getDefaultSharedPreferences(activity) }
     val uiPrefs = remember {
         activity.getSharedPreferences(SETTINGS_UI_PREFS, Context.MODE_PRIVATE)
@@ -363,6 +378,11 @@ private fun LiquidDockSettings(activity: ComposeSettingsActivity) {
                 Page.AnimationPopups -> AnimationPopupsPage(padding, prefs, masterEnabled)
                 Page.AnimationSystem -> AnimationSystemPage(padding, prefs, masterEnabled)
                 Page.AnimationGui -> AnimationGuiPage(padding, prefs, masterEnabled)
+                Page.ThemePalette -> SettingsUiPalettePage(
+                    padding = padding,
+                    selected = selectedPalette,
+                    onSelect = onPaletteSelected,
+                )
                 Page.Data -> DataPage(padding, activity)
                 Page.About -> AboutPage(padding, activity, prefs)
             }

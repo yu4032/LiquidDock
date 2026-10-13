@@ -70,6 +70,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
+internal const val SETTINGS_UI_THEME_PALETTE = "theme_palette"
 
 // Flat header blur uses the same Prismal source as the bottom navigation.
 // Ordinary Compose text in the page body is captured by prismalGlassLayer.
