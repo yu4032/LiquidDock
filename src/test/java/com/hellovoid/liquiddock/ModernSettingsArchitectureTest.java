@@ -1101,6 +1101,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(theme.contains("ThemeController("));
         assertTrue(theme.contains("ColorSchemeMode.MonetSystem"));
         assertTrue(theme.contains("keyColor = palette.seedArgb?.let { Color(it) }"));
+        assertTrue(theme.contains("palette == SettingsUiPalette.SYSTEM"));
+        assertTrue(theme.contains("ThemePaletteStyle.TonalSpot"));
+        assertTrue(theme.contains("ThemePaletteStyle.Vibrant"));
         assertTrue(theme.contains("preferences.registerOnSharedPreferenceChangeListener(listener)"));
         assertTrue(search.contains("rememberSettingsUiThemeController(rememberSettingsUiPalette(uiPrefs).value)"));
         assertTrue(widget.contains("rememberSettingsUiThemeController(rememberSettingsUiPalette(uiPrefs).value)"));
@@ -1111,6 +1114,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(bottom.contains("dropletContentTint = MiuixTheme.colorScheme.primary"));
         assertTrue(bottom.contains("tintThroughDroplet = true"));
         assertTrue(bottom.contains("active && !tintThroughDroplet"));
+        // Prismal's tint filter retains the glyph alpha; the native sampler
+        // must receive nearly opaque neutral pixels for vibrant selected color.
+        assertTrue(bottom.contains("alpha = if (tintThroughDroplet) 0.96f else 0.64f"));
         assertFalse(bottom.contains("rememberPrismalGlassLayer("));
         assertFalse(bottom.contains("drawPrismalGlass("));
         assertFalse(bottom.contains("clipPath("));
