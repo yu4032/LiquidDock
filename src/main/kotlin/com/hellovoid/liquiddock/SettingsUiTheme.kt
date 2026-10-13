@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -56,11 +57,12 @@ internal fun rememberSettingsUiPalette(preferences: SharedPreferences): MutableS
  * use its native Vibrant palette to retain recognizable accent hue/chroma.
  */
 @Composable
-internal fun rememberSettingsUiThemeController(palette: SettingsUiPalette): ThemeController =
-    remember(palette) {
+internal fun rememberSettingsUiThemeController(palette: SettingsUiPalette): ThemeController {
+    val dark = isSystemInDarkTheme()
+    return remember(palette, dark) {
         ThemeController(
             ColorSchemeMode.MonetSystem,
-            keyColor = palette.seedArgb?.let { Color(it) },
+            keyColor = palette.getSeedArgb(dark)?.let { Color(it) },
             paletteStyle = if (palette == SettingsUiPalette.SYSTEM) {
                 ThemePaletteStyle.TonalSpot
             } else {
@@ -68,6 +70,7 @@ internal fun rememberSettingsUiThemeController(palette: SettingsUiPalette): Them
             },
         )
     }
+}
 
 /**
  * Monet produces coherent supporting colors, but even Vibrant uses fixed
@@ -85,8 +88,9 @@ internal fun SettingsUiColorTheme(
     palette: SettingsUiPalette,
     content: @Composable () -> Unit,
 ) {
+    val dark = isSystemInDarkTheme()
     MiuixTheme(controller = controller) {
-        val seed = palette.seedArgb
+        val seed = palette.getSeedArgb(dark)
         if (seed == null) {
             // Wallpaper-derived dynamic color remains exactly the stock MIUIX theme.
             content()
@@ -125,6 +129,9 @@ internal fun SettingsUiPalettePage(
     selected: SettingsUiPalette,
     onSelect: (SettingsUiPalette) -> Unit,
 ) {
+    val dark = isSystemInDarkTheme()
+    val systemPaletteController = remember { ThemeController(ColorSchemeMode.MonetSystem) }
+    val systemAccent = systemPaletteController.currentColors().primary
     SettingsList(
         padding,
         stringResource(R.string.page_theme_palette),
@@ -133,7 +140,7 @@ internal fun SettingsUiPalettePage(
         SettingsUiPalette.values().forEachIndexed { index, palette ->
             if (index > 0) ModernListDivider()
             val chosen = palette == selected
-            val swatch = palette.seedArgb?.let { Color(it) } ?: MiuixTheme.colorScheme.primary
+            val swatch = palette.getSeedArgb(dark)?.let { Color(it) } ?: systemAccent
             BasicComponent(
                 title = stringResource(paletteLabel(palette)),
                 summary = if (chosen) stringResource(R.string.theme_palette_selected) else null,
