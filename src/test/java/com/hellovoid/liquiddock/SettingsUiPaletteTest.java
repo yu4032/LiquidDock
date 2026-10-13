@@ -25,6 +25,14 @@ public class SettingsUiPaletteTest {
                 Integer seed = palette.getSeedArgb();
                 assertNotNull(seed);
                 assertEquals(0xFF000000, seed & 0xFF000000);
+                // Every user-selected fixed color must be vivid rather than grayish.
+                int red = (seed >> 16) & 0xFF;
+                int green = (seed >> 8) & 0xFF;
+                int blue = seed & 0xFF;
+                int channelSpread = Math.max(red, Math.max(green, blue))
+                        - Math.min(red, Math.min(green, blue));
+                org.junit.Assert.assertTrue(palette + " has desaturated seed",
+                        channelSpread >= 128);
                 org.junit.Assert.assertTrue(seen.add(seed));
             }
         }
