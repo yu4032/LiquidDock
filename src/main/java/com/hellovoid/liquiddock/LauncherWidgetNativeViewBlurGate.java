@@ -30,8 +30,6 @@ final class LauncherWidgetNativeViewBlurGate {
 
     private static final class State {
         boolean claimed;
-        boolean sawVendorMode;
-        int lastVendorMode;
     }
 
     private LauncherWidgetNativeViewBlurGate() {}
@@ -70,8 +68,6 @@ final class LauncherWidgetNativeViewBlurGate {
 
                 synchronized (state) {
                     if (!state.claimed) return chain.proceed(args);
-                    state.sawVendorMode = true;
-                    state.lastVendorMode = ((Number) args[0]).intValue();
                 }
                 // Material remains opted in on the vendor side; only suppress RenderNode output.
                 return chain.proceed(new Object[]{0});
@@ -110,7 +106,6 @@ final class LauncherWidgetNativeViewBlurGate {
                 return;
             }
             state.claimed = true;
-            state.sawVendorMode = false;
         }
         boolean muted = setNativeMode(host, 0);
         if (!muted) {
@@ -138,27 +133,21 @@ final class LauncherWidgetNativeViewBlurGate {
         }
         if (state == null) return false;
 
-        boolean sawVendor;
-        int vendorMode;
         synchronized (state) {
             state.claimed = false;
-            sawVendor = state.sawVendorMode;
-            vendorMode = state.lastVendorMode;
         }
         // A detached View must be initialized by Launcher's own onAttachedToWindow path.
         // Do not fabricate a material or re-enable an ineligible widget here.
         if (!host.isAttachedToWindow() || !isSupportedWidget(host)) {
             MainHook.log(TAG + " release vendor-owned lifecycle host="
                     + host.getClass().getSimpleName()
-                    + " attached=" + host.isAttachedToWindow()
-                    + " lastVendorMode=" + (sawVendor ? vendorMode : "none"));
+                    + " attached=" + host.isAttachedToWindow());
             return false;
         }
         // Always rebind: even a positive vendor mode is insufficient after detach
         // clears the native blur radius and blend colors.
         boolean restored = restoreViaVendorUtilities(host);
         MainHook.log(TAG + " release vendor-rebind=" + restored
-                + " lastVendorMode=" + (sawVendor ? vendorMode : "none")
                 + " host=" + host.getClass().getSimpleName());
         return restored;
     }
