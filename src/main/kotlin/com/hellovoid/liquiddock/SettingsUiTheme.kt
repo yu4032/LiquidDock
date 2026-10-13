@@ -7,6 +7,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -67,6 +68,46 @@ internal fun rememberSettingsUiThemeController(palette: SettingsUiPalette): Them
             },
         )
     }
+
+/**
+ * Monet produces coherent supporting colors, but even Vibrant uses fixed
+ * Material tone steps for primary (40/80), which can look pastel/gray on
+ * some themes. Explicit fixed-color choices should show their actual seed
+ * for interactive accent roles. Keep background, surfaces, outlines, disabled
+ * colors and the entire system-dynamic-color option as MIUIX generates them.
+ *
+ * The inner MIUIX theme overrides only its color roles. This does not touch
+ * Prismal's sampling, shader, layout, motion or tab paint pipeline.
+ */
+@Composable
+internal fun SettingsUiColorTheme(
+    controller: ThemeController,
+    palette: SettingsUiPalette,
+    content: @Composable () -> Unit,
+) {
+    MiuixTheme(controller = controller) {
+        val seed = palette.seedArgb
+        if (seed == null) {
+            // Wallpaper-derived dynamic color remains exactly the stock MIUIX theme.
+            content()
+        } else {
+            val baseColors = MiuixTheme.colorScheme
+            val accent = Color(seed)
+            val onAccent = if (accent.luminance() > 0.179f) Color.Black else Color.White
+            val vividColors = remember(seed, baseColors.primary, baseColors.background) {
+                baseColors.copy(
+                    primary = accent,
+                    onPrimary = onAccent,
+                    primaryVariant = accent,
+                    onPrimaryVariant = onAccent,
+                    onBackgroundVariant = accent,
+                    sliderKeyPoint = accent,
+                )
+            }
+            MiuixTheme(colors = vividColors, content = content)
+        }
+    }
+}
 
 private fun paletteLabel(palette: SettingsUiPalette): Int = when (palette) {
     SettingsUiPalette.SYSTEM -> R.string.theme_palette_system
