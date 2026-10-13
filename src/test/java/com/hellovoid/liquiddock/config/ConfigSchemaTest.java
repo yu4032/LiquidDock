@@ -40,6 +40,17 @@ public class ConfigSchemaTest {
     }
 
     @Test
+    public void launcherWallpaperZoomIsOptInAndExported() {
+        ConfigKey<Boolean> key = ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM;
+        assertEquals("animation_disable_wallpaper_zoom", key.name());
+        assertEquals(Boolean.FALSE, key.uiDefault());
+        assertEquals(Boolean.FALSE, key.runtimeFallback());
+        assertEquals(Boolean.FALSE, key.exportDefault());
+        assertEquals(ConfigKey.ExportMode.ALWAYS, key.exportMode());
+        assertTrue(ConfigSchema.all().contains(key));
+    }
+
+    @Test
     public void recentsWallpaperDimmingSwitchPreservesVendorBehaviorByDefault() {
         assertEquals("recents_disable_wallpaper_dimming",
                 ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name());
