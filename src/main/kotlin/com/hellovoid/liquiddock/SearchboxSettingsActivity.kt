@@ -7,11 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 class SearchboxSettingsActivity : SettingsActivity() {
 
