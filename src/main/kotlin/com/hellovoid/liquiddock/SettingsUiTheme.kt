@@ -24,6 +24,7 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 import top.yukonga.miuix.kmp.theme.ThemeController
 
 /** One observable private preference, shared across all settings Activities. */
@@ -48,13 +49,22 @@ internal fun rememberSettingsUiPalette(preferences: SharedPreferences): MutableS
     return palette
 }
 
-/** Rebuild the native MIUIX Monet palette only when the selected seed changes. */
+/**
+ * Keep Android's wallpaper-derived system palette unchanged. For explicit color
+ * choices, MIUIX's default TonalSpot desaturates each seed toward neutral gray;
+ * use its native Vibrant palette to retain recognizable accent hue/chroma.
+ */
 @Composable
 internal fun rememberSettingsUiThemeController(palette: SettingsUiPalette): ThemeController =
     remember(palette) {
         ThemeController(
             ColorSchemeMode.MonetSystem,
             keyColor = palette.seedArgb?.let { Color(it) },
+            paletteStyle = if (palette == SettingsUiPalette.SYSTEM) {
+                ThemePaletteStyle.TonalSpot
+            } else {
+                ThemePaletteStyle.Vibrant
+            },
         )
     }
 
