@@ -41,8 +41,9 @@ class WidgetComponentDetailActivity : SettingsActivity() {
         }
         setContent {
             val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, Context.MODE_PRIVATE) }
-            val controller = rememberSettingsUiThemeController(rememberSettingsUiPalette(uiPrefs).value)
-            MiuixTheme(controller = controller) {
+            val palette = rememberSettingsUiPalette(uiPrefs).value
+            val controller = rememberSettingsUiThemeController(palette)
+            SettingsUiColorTheme(controller = controller, palette = palette) {
                 WidgetComponentDetailScreen(this, widgetKey)
             }
         }
