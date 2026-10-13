@@ -86,6 +86,13 @@ internal fun AnimationSystemPage(
     ) {
         BooleanSetting(
             prefs,
+            ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM,
+            "禁用壁纸缩放",
+            "阻止桌面/多任务切换时系统壁纸的缩放目标，保留壁纸平移及其他过渡；首次安装该功能需重启桌面，之后切换即时生效",
+            masterEnabled,
+        )
+        BooleanSetting(
+            prefs,
             ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
             "桌面/多任务隐藏手势小白条",
             "进入桌面或多任务后隐藏手势手柄，离开后交还系统原生显示时序；开关即时生效，首次安装此版本需重启系统界面",
