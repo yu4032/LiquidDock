@@ -85,6 +85,10 @@ final class LauncherLargeFolderFourIconHook {
                     "com.miui.home.launcher.FolderIcon", false, classLoader);
             Method fromXml = HookUtil.findMethodExact(baseFolderType, "fromXml",
                     new Class<?>[]{int.class, launcherType, ViewGroup.class, folderInfoType});
+            Method bindFolderInfo = HookUtil.findMethodExact(baseFolderType, "bindFolderInfo",
+                    new Class<?>[]{launcherType, folderInfoType});
+            Method folderChanged = HookUtil.findMethodExact(
+                    folderInfoType, "notifyDataSetChanged", new Class<?>[0]);
             Method setup = HookUtil.findMethodExact(
                     previewType, "preSetup2x2", new Class<?>[0]);
 
@@ -122,6 +126,29 @@ final class LauncherLargeFolderFourIconHook {
                 }
                 return result;
             });
+            // New folders created by dragging two shortcuts can use
+            // bindFolderInfo without the XML inflate path.
+            HookUtil.hook(bindFolderInfo, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object owner = chain.getThisObject();
+                if (owner instanceof View) scheduleNativeFootprintRepair((View) owner);
+                return result;
+            });
+            // An existing ordinary folder becomes eligible when its fourth
+            // shortcut is dropped in. No Launcher restart should be needed
+            // after that model event once the feature is installed.
+            HookUtil.hook(folderChanged, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object info = chain.getThisObject();
+                if (folderChildCount(info) == FOUR) {
+                    HookUtil.InvocationResult<Object> view =
+                            HookUtil.tryInvoke(info, "getBuddyIconView");
+                    if (view.succeeded() && view.value() instanceof View) {
+                        scheduleNativeFootprintRepair((View) view.value());
+                    }
+                }
+                return result;
+            });
             HookUtil.hook(rebind, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 Object owner = chain.getThisObject();
@@ -155,6 +182,10 @@ final class LauncherLargeFolderFourIconHook {
         if (!enabled || folderView == null
                 || (!FOUR_FOLDER.equals(folderView.getClass().getName())
                 && !SMALL_FOLDER.equals(folderView.getClass().getName()))) return;
+        if (SMALL_FOLDER.equals(folderView.getClass().getName())) {
+            Object tag = folderView.getTag();
+            if (tag == null || folderChildCount(tag) != FOUR) return;
+        }
         if (folderView.isAttachedToWindow()) {
             folderView.post(() -> repairNativeFootprintIfNeeded(folderView));
             return;
