@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -113,13 +112,17 @@ final class LauncherLargeFolderPickerHook {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     if (selected && LargeFolderPickerPolicy.mustRequestResize(
                             originalType, originalX, originalY)) {
-                        ((View) owner).post(() -> requestNativeResize(state.info));
+                        // FolderSheet.handleClose() may detach the view in the
+                        // original onClick; View.post() on a detached sheet
+                        // can remain queued forever. Use the main Looper.
+                        new android.os.Handler(android.os.Looper.getMainLooper())
+                                .post(() -> requestNativeResize(state.info));
                     }
                     return result;
                 }
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 // Stock style selections always deselect the fourth option.
-                if (clicked != cancel) {
+                if (clicked != cancel && isStockStyleControl(owner, clicked)) {
                     state.selected = false;
                     updateAppearance(state);
                 }
@@ -132,6 +135,21 @@ final class LauncherLargeFolderPickerHook {
             MainHook.log(TAG + " native FolderSheet unsupported: " + error);
             return false;
         }
+    }
+
+    private static boolean isStockStyleControl(Object owner, View clicked) {
+        if (clicked == null) return false;
+        String[] nativeStyleControls = {
+            "mDefaultFolderCheckBox", "mBigFolderCheckBox2x2_4",
+            "mBigFolderCheckBox2x2_9", "mDefaultFolderName",
+            "mBigFolderName2x2_4", "mBigFolderName2x2_9",
+            "mDefaultFolderSelectBorder", "mBigFolderSelectBorder2x2_4",
+            "mBigFolderSelectBorder2x2_9"
+        };
+        for (String field : nativeStyleControls) {
+            if (clicked == getFieldOrNull(owner, field)) return true;
+        }
+        return false;
     }
 
     private static void attachOption(Object owner, Object info) {
