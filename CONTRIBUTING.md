@@ -1,6 +1,6 @@
 # Contributing
 
-本文档面向 `main` 的开发流程。**2026-10-10 已核对构建基线：`build.gradle.kts` 为 `versionName=2.6.4`（不是 Release 发布状态）**；下文具体技术边界原始核验于 2026-10-03，涉及近期变更应以当前源码与测试为准。生产源码、设置页、`ConfigSchema`、构建配置是事实来源；`docs/superpowers/*` 是历史记录。当前未完成事项见 [TODO.md](TODO.md)，维护性核验见 [docs/maintainability-audit-20261010.md](docs/maintainability-audit-20261010.md)。
+本文档面向 LiquidDock 的开发流程。当前源码版本为 **2.7.2（versionCode 34）**，上一正式版本为 **2.7.1**。生产源码、设置页、`ConfigSchema`、构建配置是事实来源；`docs/superpowers/*` 是历史记录。当前未完成事项见 [TODO.md](TODO.md)，维护性核验见 [docs/maintainability-audit-20261010.md](docs/maintainability-audit-20261010.md)。
 
 ## 1. Build baseline
 
