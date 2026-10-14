@@ -67,7 +67,9 @@ final class LargeFolderNativeOutlineHook {
                 // Refresh ownership if the OEM swapped its background while
                 // rebinding; the map contains no strong owner reference.
                 rememberBackground(folder, drawableType);
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                LargeFolderRenderProbe.childDrawn(folder, (View) chain.getArg(1), result);
+                return result;
             });
 
             HookUtil.hook(drawBackground, chain -> {

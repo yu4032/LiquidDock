@@ -434,6 +434,8 @@ final class LauncherNativeFourFolderHook {
                                 View child = workspace.getChildAt(i);
                                 if (!eligible(child)) continue;
                                 if (child.getVisibility() == View.INVISIBLE) {
+                                    // One-shot tracing of the actual final draw path.
+                                    LargeFolderRenderProbe.drop(child);
                                     // Restore only the settled marked folder(s)
                                     // hidden by this drop, not unrelated Views.
                                     child.postOnAnimation(() -> restoreDroppedFolder(child));
@@ -474,6 +476,7 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
             }
             installed = installedHooks > 0;
+            LargeFolderRenderProbe.installMenuProbe(loader);
             return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
@@ -881,11 +884,19 @@ final class LauncherNativeFourFolderHook {
     }
 
     private static void restoreDroppedFolder(View folder) {
+        LargeFolderRenderProbe.restored(folder, "attempt");
         if (!eligible(folder) || !folder.isAttachedToWindow()) return;
         int[] frame = trustedCellFrame(folder);
-        if (frame == null) return; // Still dragging or transiently reparented.
-        if (folder.getVisibility() != View.INVISIBLE) return;
+        if (frame == null) {
+            LargeFolderRenderProbe.restored(folder, "no-trusted-cell-frame");
+            return; // Still dragging or transiently reparented.
+        }
+        if (folder.getVisibility() != View.INVISIBLE) {
+            LargeFolderRenderProbe.restored(folder, "already-visible");
+            return;
+        }
         folder.setVisibility(View.VISIBLE);
+        LargeFolderRenderProbe.restored(folder, "set-visible");
         NativeFourFolderSizing.Size sizing =
                 nativeSizing(folder, new int[]{frame[2], frame[3]});
         layoutFolderTitle(folder, sizing, frame[2], frame[3]);
