@@ -30,6 +30,17 @@ final class LauncherLargeFolderRuntimeAuditHook {
         if (installed) return true;
         if (loader == null) return false;
         try {
+            logVendorContract(loader, "com.miui.home.launcher.FolderIcon",
+                    "fromXml", "createItemIcon", "getSpanX", "getSpanY");
+            logVendorContract(loader, "com.miui.home.launcher.ItemIcon",
+                    "onMeasure", "getSpanX");
+            logVendorContract(loader, "com.miui.home.launcher.folder.FolderIcon2x2_4",
+                    "onMeasure", "onFinishInflate", "getPreviewPosition");
+            logVendorContract(loader, NATIVE_CONTENT_CLASS, "onMeasure");
+            logVendorContract(loader, "com.miui.home.launcher.DeviceConfig",
+                    "getMiuiWidgetSizeSpec", "getCellWidth");
+            logVendorContract(loader, "com.miui.home.launcher.CellLayout",
+                    "onLayout", "measureChild", "setupLayoutParam");
             Class<?> cell = Class.forName(
                     "com.miui.home.launcher.CellLayout", false, loader);
             HookUtil.hook(cell.getDeclaredMethod("onLayout",
@@ -39,40 +50,54 @@ final class LauncherLargeFolderRuntimeAuditHook {
                 if (owner instanceof ViewGroup) inspect((ViewGroup) owner);
                 return result;
             });
-            // Native binding decision. This is the discriminating boundary:
-            // a 2x2 FolderInfo can still retain a FolderIcon1x1 cached
-            // mBuddyIconView, preventing any large-folder visual hook from
-            // being reached.
+            // Inspect every native binding overload in the ACTUAL device
+            // class, rather than assuming the older public decompile's
+            // exact 4-argument FolderIcon.fromXml signature.
             try {
                 Class<?> folderIcon = Class.forName(
                         "com.miui.home.launcher.FolderIcon", false, loader);
-                Class<?> launcher = Class.forName(
-                        "com.miui.home.launcher.Launcher", false, loader);
                 Class<?> folderInfo = Class.forName(
                         "com.miui.home.launcher.FolderInfo", false, loader);
-                HookUtil.hook(folderIcon.getDeclaredMethod("fromXml",
-                        int.class, launcher, ViewGroup.class, folderInfo), chain -> {
-                    Object info = chain.getArg(3);
-                    int type = getInt(info, "itemType");
-                    boolean targeted = type == 21;
-                    Object old = targeted
-                            ? HookUtil.tryInvoke(info, "getBuddyIconView").value() : null;
-                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    if (targeted && emitted < 24 && info != null) {
-                        Api101Bridge.log(TAG + "fromXml-layout type=" + type
-                                + " span=" + getInt(info, "spanX")
-                                + "x" + getInt(info, "spanY")
-                                + " requestedRes=" + chain.getArg(0)
-                                + " oldView=" + shortClass(old)
-                                + " resultView=" + shortClass(result)
-                                + " newView=" + (old != result)
-                                + " measured=" + dims(result));
-                        emitted++;
+                int variants = 0;
+                for (java.lang.reflect.Method method : folderIcon.getDeclaredMethods()) {
+                    if (!"fromXml".equals(method.getName())
+                            || !java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+                        continue;
                     }
-                    return result;
-                });
+                    int infoIndex = -1;
+                    Class<?>[] sig = method.getParameterTypes();
+                    for (int n = 0; n < sig.length; n++) {
+                        if (folderInfo.isAssignableFrom(sig[n])) {
+                            infoIndex = n;
+                            break;
+                        }
+                    }
+                    if (infoIndex < 0) continue;
+                    final int index = infoIndex;
+                    HookUtil.hook(method, chain -> {
+                        Object info = chain.getArg(index);
+                        boolean marked = isMarkedInfo(info, loader);
+                        Object before = marked
+                                ? HookUtil.tryInvoke(info, "getBuddyIconView").value() : null;
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (marked && emitted < 80) {
+                            Api101Bridge.log(TAG + " bind signature=" + method.toGenericString()
+                                    + " marked=" + marked
+                                    + " type=" + getInt(info, "itemType")
+                                    + " span=" + getInt(info, "spanX")
+                                    + "x" + getInt(info, "spanY")
+                                    + " cached=" + shortClass(before)
+                                    + " result=" + shortClass(result)
+                                    + " root=" + dims(result));
+                            emitted++;
+                        }
+                        return result;
+                    });
+                    variants++;
+                }
+                Api101Bridge.log(TAG + " native fromXml audit variants=" + variants);
             } catch (Throwable error) {
-                Api101Bridge.log(TAG + "fromXml-audit-unavailable " + error.getClass().getSimpleName());
+                Api101Bridge.log(TAG + " fromXml-audit-unavailable " + error);
             }
             // The actual Android measure pass of the vendor's inner host,
             // instead of the visual hook's speculation about its presence.
@@ -89,7 +114,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
                     int height = View.MeasureSpec.getSize((Integer) chain.getArg(1));
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     if (folder != null && getInt(folder.getTag(), "itemType") == 21
-                            && emitted < 24) {
+                            && emitted < 80) {
                         Api101Bridge.log(TAG + "content-measure span="
                                 + getInt(folder.getTag(), "spanX") + "x"
                                 + getInt(folder.getTag(), "spanY")
@@ -113,6 +138,39 @@ final class LauncherLargeFolderRuntimeAuditHook {
         }
     }
 
+    private static void logVendorContract(ClassLoader loader, String cls, String... names) {
+        if (!Api101Bridge.isDebugLoggingEnabled()) return;
+        try {
+            Class<?> type = Class.forName(cls, false, loader);
+            for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+                for (String wanted : names) {
+                    if (wanted.equals(method.getName())) {
+                        Api101Bridge.log(TAG + " contract "
+                                + method.toGenericString());
+                        break;
+                    }
+                }
+            }
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " class-contract unavailable " + cls + " " + error);
+        }
+    }
+
+    private static boolean isMarkedInfo(Object info, ClassLoader loader) {
+        if (info == null) return false;
+        try {
+            Class<?> application = Class.forName(
+                    "com.miui.home.launcher.Application", false, loader);
+            HookUtil.InvocationResult<Object> launcher =
+                    HookUtil.tryInvokeStatic(application, "getLauncher");
+            if (launcher.succeeded() && launcher.value() instanceof android.content.Context) {
+                return LauncherLargeFolderPickerHook.isMarked(
+                        (android.content.Context) launcher.value(), info);
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
     private static View ancestorFolder(View child) {
         android.view.ViewParent parent = child.getParent();
         for (int i = 0; i < 8 && parent instanceof View; i++) {
@@ -133,7 +191,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
     }
 
     private static void inspect(ViewGroup layout) {
-        if (emitted >= 24) return;
+        if (emitted >= 80) return;
         for (int i = 0; i < layout.getChildCount() && emitted < 24; i++) {
             View child = layout.getChildAt(i);
             if (child == null) continue;
@@ -143,10 +201,10 @@ final class LauncherLargeFolderRuntimeAuditHook {
                 int type = HookUtil.getIntField(info, "itemType");
                 int spanX = HookUtil.getIntField(info, "spanX");
                 int spanY = HookUtil.getIntField(info, "spanY");
-                if (type != 21) continue;
-                long id = HookUtil.getLongField(info, "id");
                 boolean marked = LauncherLargeFolderPickerHook.isMarked(
                         child.getContext(), info);
+                if (!marked && !(type == 21 && spanX == 2 && spanY == 2)) continue;
+                long id = HookUtil.getLongField(info, "id");
                 View nativeHost = findDescendant(child, NATIVE_CONTENT_CLASS, 0);
                 ViewGroup parent = child.getParent() instanceof ViewGroup
                         ? (ViewGroup) child.getParent() : null;
@@ -173,6 +231,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
                     emitted++;
                 }
                 Api101Bridge.log(TAG + sample);
+                if (marked) Api101Bridge.log(TAG + " tree=" + viewTree(child, 0));
                 if (child.isAttachedToWindow() && (marked || spanX == 2 && spanY == 2)) {
                     child.post(() -> inspectAfterFrame(child, id));
                 }
@@ -183,7 +242,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
     }
 
     private static void inspectAfterFrame(View folder, long id) {
-        if (emitted >= 24 || folder == null || !folder.isAttachedToWindow()) return;
+        if (emitted >= 80 || folder == null || !folder.isAttachedToWindow()) return;
         Object host = findDescendant(folder, NATIVE_CONTENT_CLASS, 0);
         Object background = fieldOrNull(folder, "mIconImageView");
         Object preview = fieldOrNull(folder, "mPreviewContainer");
@@ -192,6 +251,23 @@ final class LauncherLargeFolderRuntimeAuditHook {
                 + " nativeHost=" + dims(host)
                 + " preview=" + dims(preview));
         emitted++;
+    }
+
+    private static String viewTree(View node, int depth) {
+        if (node == null) return "null";
+        StringBuilder result = new StringBuilder();
+        result.append(node.getClass().getSimpleName()).append("(")
+                .append(dims(node)).append(",xy=")
+                .append(node.getLeft()).append(",").append(node.getTop())
+                .append(",v=").append(node.getVisibility())
+                .append(")");
+        if (depth >= 5 || !(node instanceof ViewGroup)) return result.toString();
+        ViewGroup children = (ViewGroup) node;
+        int count = Math.min(12, children.getChildCount());
+        for (int i = 0; i < count; i++) {
+            result.append(">").append(viewTree(children.getChildAt(i), depth + 1));
+        }
+        return result.toString();
     }
 
     private static View findDescendant(View root, String className, int depth) {
