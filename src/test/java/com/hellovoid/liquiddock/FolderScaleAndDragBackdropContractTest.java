@@ -54,6 +54,33 @@ public class FolderScaleAndDragBackdropContractTest {
         assertFalse(hook.contains("HookUtil.hook(onMeasure, chain -> withMeasureDomain("));
     }
 
+    @Test public void folderSizingDiagnosticTracksRealBoundsAndNativeBlurWithoutChangingThem()
+            throws Exception {
+        String hook = Files.readString(MAIN.resolve("Launcher450IconSizeHook.java"));
+        String trace = Files.readString(MAIN.resolve("Launcher450SmallFolderTrace.java"));
+
+        assertTrue(hook.contains("Launcher450SmallFolderTrace.install(classLoader)"));
+        assertTrue(hook.contains("Launcher450SmallFolderTrace.measureStart("));
+        assertTrue(hook.contains("Launcher450SmallFolderTrace.measureEnd("));
+        assertTrue(trace.contains("[DC][FolderSizeTrace]"));
+        assertTrue(trace.contains("MainHook.debugLogging"));
+        assertTrue(trace.contains("measure-before"));
+        assertTrue(trace.contains("measure-after"));
+        assertTrue(trace.contains("close-animation-finish-after"));
+        assertTrue(trace.contains("close-next-frame"));
+        assertTrue(trace.contains("drawable-bind-after"));
+        assertTrue(trace.contains("refresh-background-request"));
+        assertTrue(trace.contains("setFolderIconBlur"));
+        assertTrue(trace.contains("expectedClip="));
+        assertTrue(trace.contains("intrinsic="));
+        assertTrue(trace.contains("bounds="));
+        assertTrue(trace.contains("lp="));
+        assertFalse(trace.contains("setClipChildren("));
+        assertFalse(trace.contains("setLayoutParams("));
+        assertFalse(trace.contains("setMiViewBlurMode("));
+        assertFalse(trace.contains("setBackground("));
+    }
+
     @Test public void dragGlassUsesIndependentUpperWorkspaceBackdropAuthority() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
         String source = Files.readString(MAIN.resolve("LauncherDragSourceOverlay.java"));
