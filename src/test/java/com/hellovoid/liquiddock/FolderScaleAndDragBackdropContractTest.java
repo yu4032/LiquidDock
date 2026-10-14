@@ -39,7 +39,7 @@ public class FolderScaleAndDragBackdropContractTest {
         assertFalse(folder.contains("\"setSpanX\""));
         assertFalse(folder.contains("\"setSpanY\""));
         assertTrue(geometry.contains("LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)"));
-        assertTrue(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
+        assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
         assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
         assertTrue(startup.contains("LauncherLargeFolderNativeSpanHook.install("));
         String picker = Files.readString(MAIN.resolve("LauncherLargeFolderPickerHook.java"));
