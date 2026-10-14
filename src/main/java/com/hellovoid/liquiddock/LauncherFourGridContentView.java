@@ -23,6 +23,7 @@ final class LauncherFourGridContentView extends FrameLayout {
     private static final int COUNT = 4;
 
     private final View background;
+    private final GradientDrawable fallbackPlate;
     private final ImageView[] tiles = new ImageView[COUNT];
     private final Object[] shortcuts = new Object[COUNT];
     private ViewGroup folder;
@@ -37,6 +38,7 @@ final class LauncherFourGridContentView extends FrameLayout {
 
         background = new View(context);
         GradientDrawable plate = new GradientDrawable();
+        fallbackPlate = plate;
         plate.setShape(GradientDrawable.RECTANGLE);
         plate.setCornerRadius(dp(24));
         plate.setColor(0x58939AA8);
@@ -72,6 +74,16 @@ final class LauncherFourGridContentView extends FrameLayout {
 
     void bind(ViewGroup nativeFolder, Object info, boolean refresh) {
         folder = nativeFolder;
+        // Reuse the native (possibly LiquidDock/OS4 glass) large-folder
+        // drawable, but layout it to the FULL workspace widget frame. This
+        // keeps material/colors native while eliminating OEM preview sizing.
+        HookUtil.InvocationResult<Object> nativeBackground =
+                HookUtil.tryInvoke(nativeFolder, "getFolderBackground");
+        Drawable material = nativeBackground.succeeded()
+                && nativeBackground.value() instanceof Drawable
+                ? (Drawable) nativeBackground.value() : null;
+        background.setBackground(material == null
+                ? fallbackPlate : copyDrawable(material));
         HookUtil.InvocationResult<Object> contentResult =
                 HookUtil.tryInvoke(info, "getContents");
         Object nativeItems = contentResult.succeeded() ? contentResult.value() : null;
@@ -226,15 +238,13 @@ final class LauncherFourGridContentView extends FrameLayout {
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(width, height);
 
-        int title = titleReservation(height);
-        int square = Math.max(0, Math.min(width, height - title));
-        int inset = Math.max(dp(7), square / 14);
-        int spacing = Math.max(dp(5), square / 22);
-        int icon = Math.max(0, (square - 2 * inset - spacing) / 2);
-
-        background.measure(exact(square), exact(square));
+        // No synthetic title reservation: the native widget frame includes
+        // exactly the background extent used by neighboring 2x2 widgets.
+        // The original FolderIcon remains responsible for its own title.
+        background.measure(exact(width), exact(height));
+        int[] grid = tileGrid(width, height);
         for (ImageView tile : tiles) {
-            tile.measure(exact(icon), exact(icon));
+            tile.measure(exact(grid[2]), exact(grid[3]));
         }
     }
 
@@ -242,26 +252,28 @@ final class LauncherFourGridContentView extends FrameLayout {
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         int width = right - left;
         int height = bottom - top;
-        int square = Math.max(0, Math.min(width, height - titleReservation(height)));
-        int ox = (width - square) / 2;
-        background.layout(ox, 0, ox + square, square);
-
-        int inset = Math.max(dp(7), square / 14);
-        int spacing = Math.max(dp(5), square / 22);
-        int icon = Math.max(0, (square - 2 * inset - spacing) / 2);
+        background.layout(0, 0, width, height);
+        int[] grid = tileGrid(width, height);
         for (int i = 0; i < COUNT; i++) {
-            int x = ox + inset + (i % 2) * (icon + spacing);
-            int y = inset + (i / 2) * (icon + spacing);
-            tiles[i].layout(x, y, x + icon, y + icon);
+            int x = grid[0] + (i % 2) * (grid[2] + grid[4]);
+            int y = grid[1] + (i / 2) * (grid[3] + grid[5]);
+            tiles[i].layout(x, y, x + grid[2], y + grid[3]);
+        }
+        if (background.getBackground() == fallbackPlate) {
+            fallbackPlate.setCornerRadius(Math.min(width, height) * .13f);
         }
     }
 
-    private int titleReservation(int height) {
-        Object titleView = field(folder, "mTitleContainer");
-        if (titleView instanceof View && ((View) titleView).getMeasuredHeight() > 0) {
-            return ((View) titleView).getMeasuredHeight();
-        }
-        return Math.min(height / 6, dp(24));
+    // {left, top, tileWidth, tileHeight, horizontalGap, verticalGap}
+    private int[] tileGrid(int width, int height) {
+        int horizontalPad = Math.max(dp(6), width / 15);
+        int verticalPad = Math.max(dp(6), height / 15);
+        int gapX = Math.max(dp(4), width / 25);
+        int gapY = Math.max(dp(4), height / 25);
+        int tileWidth = Math.max(0, (width - 2 * horizontalPad - gapX) / 2);
+        int tileHeight = Math.max(0, (height - 2 * verticalPad - gapY) / 2);
+        return new int[]{horizontalPad, verticalPad,
+                tileWidth, tileHeight, gapX, gapY};
     }
 
     private static int exact(int size) {
