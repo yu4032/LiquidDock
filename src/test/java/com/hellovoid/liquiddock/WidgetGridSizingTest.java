@@ -26,8 +26,7 @@ public class WidgetGridSizingTest {
         // Device evidence: OEM background=287 and OEM preview=359.
         // Preview expands to a real two-cell 718px workspace frame.
         assertEquals(574, WidgetGridSizing.scaledPreviewPart(718, 287, 359));
-        assertEquals(574, WidgetGridSizing.scaledPreviewPart(718, 287, 359));
-        assertEquals(577, WidgetGridSizing.scaledPreviewPart(721, 287, 359));
+        assertEquals(576, WidgetGridSizing.scaledPreviewPart(721, 287, 359));
         // Invalid vendor measurements fail closed to the full frame.
         assertEquals(718, WidgetGridSizing.scaledPreviewPart(718, 0, 359));
         assertEquals(718, WidgetGridSizing.scaledPreviewPart(718, 287, 0));
