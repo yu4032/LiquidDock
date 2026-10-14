@@ -40,7 +40,11 @@ final class LauncherFourGridLayoutHook {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 Object owner = chain.getThisObject();
                 if (owner instanceof ViewGroup) {
-                    inspect((ViewGroup) owner);
+                    try {
+                        inspect((ViewGroup) owner);
+                    } catch (Throwable error) {
+                        Log.e(TAG, "four-grid-attach-failed", error);
+                    }
                 }
                 return result;
             });
@@ -74,7 +78,8 @@ final class LauncherFourGridLayoutHook {
     }
 
     private static void inspect(ViewGroup cell) {
-        for (int i = 0; i < cell.getChildCount(); i++) {
+        int childCount = cell.getChildCount();
+        for (int i = 0; i < childCount; i++) {
             View root = cell.getChildAt(i);
             if (!(root instanceof ViewGroup)) continue;
             Object info = root.getTag();
@@ -91,14 +96,24 @@ final class LauncherFourGridLayoutHook {
         }
     }
 
+    static boolean isFourGridInfo(Object info) {
+        if (info == null) return false;
+        try {
+            return LargeFolderFootprintPolicy.hasRealTwoByTwoFootprint(
+                    HookUtil.getIntField(info, "itemType"),
+                    HookUtil.getIntField(info, "spanX"),
+                    HookUtil.getIntField(info, "spanY"));
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     private static boolean eligible(View root, Object info) {
         if (info == null) return false;
         String name = root.getClass().getName();
         if (!name.contains("FolderIcon")) return false;
         try {
-            return HookUtil.getIntField(info, "itemType") == FOUR_TYPE
-                    && HookUtil.getIntField(info, "spanX") == 2
-                    && HookUtil.getIntField(info, "spanY") == 2
+            return isFourGridInfo(info)
                     && LauncherLargeFolderPickerHook.isMarked(root.getContext(), info);
         } catch (Throwable ignored) {
             return false;
