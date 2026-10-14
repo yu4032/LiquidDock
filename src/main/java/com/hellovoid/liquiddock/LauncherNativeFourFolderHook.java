@@ -165,11 +165,21 @@ final class LauncherNativeFourFolderHook {
                 if (frame == null) {
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
+                // Device-confirmed defect (2026-10-14):
+                // native host=718x721, icon background=287x287,
+                // preview=359x359. These are *child* layout parameters
+                // inherited from the stock compact folder, not a span,
+                // CellLayout or host measurement problem. Adjust the
+                // actual native children BEFORE FrameLayout measures them.
+                // The native FolderIconPreviewContainer2X2_4 still owns its
+                // three-large + fourth-quadrant four-small icon algorithm.
+                resizeNativePreviewChildren(child, frame[0], frame[1]);
                 int[] previous = NATIVE_SIZE.get();
                 NATIVE_SIZE.set(frame);
                 try {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     traceMeasure("inner", child, frame);
+                    tracePreviewChildren("after-inner-measure", child);
                     return result;
                 } finally {
                     if (previous == null) NATIVE_SIZE.remove();
@@ -270,6 +280,47 @@ final class LauncherNativeFourFolderHook {
             Api101Bridge.log(TAG + " vendor class missing: " + name + " " + error);
             return null;
         }
+    }
+
+    private static final Set<View> PREVIEW_LOGGED =
+            Collections.newSetFromMap(new WeakHashMap<>());
+
+    private static void resizeNativePreviewChildren(View container, int width, int height) {
+        if (!(container instanceof ViewGroup) || width <= 0 || height <= 0) return;
+        ViewGroup group = (ViewGroup) container;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View view = group.getChildAt(i);
+            String name = view.getClass().getName();
+            boolean iconSurface = name.endsWith(".LauncherFolder2x2IconImageView");
+            boolean preview = name.endsWith(".FolderIconPreviewContainer2X2_4");
+            if (!iconSurface && !preview) continue;
+            ViewGroup.LayoutParams params = view.getLayoutParams();
+            if (params == null) continue;
+            if (params.width != width || params.height != height) {
+                params.width = width;
+                params.height = height;
+                view.setLayoutParams(params);
+            }
+        }
+    }
+
+    private static void tracePreviewChildren(String stage, View container) {
+        if (!(container instanceof ViewGroup) || !PREVIEW_LOGGED.add(container)) return;
+        ViewGroup group = (ViewGroup) container;
+        StringBuilder log = new StringBuilder(TAG).append(" ").append(stage)
+                .append(" host=").append(group.getMeasuredWidth())
+                .append("x").append(group.getMeasuredHeight());
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            ViewGroup.LayoutParams params = child.getLayoutParams();
+            log.append(" ").append(child.getClass().getSimpleName())
+                    .append("[").append(child.getMeasuredWidth())
+                    .append("x").append(child.getMeasuredHeight()).append("/")
+                    .append(params == null ? "null"
+                            : params.width + "x" + params.height)
+                    .append("]");
+        }
+        Api101Bridge.log(log.toString());
     }
 
     private static final Set<View> MEASURE_LOGGED =
@@ -377,6 +428,9 @@ final class LauncherNativeFourFolderHook {
         }
         ViewGroup.LayoutParams innerParams = inner.getLayoutParams();
         if (innerParams == null) return;
+        // Also fix pre-existing folder views created before the first
+        // measured 2x2 binding; subsequent layouts then stay native.
+        resizeNativePreviewChildren(inner, w, h);
         // The native folder preview owns three normal large icons plus the
         // small 2x2 group in quadrant four. Let its original preSetup2x2 and
         // onMeasureChild2x2 determine the SAME icon sizes as OEM.
