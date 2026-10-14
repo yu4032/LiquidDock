@@ -53,8 +53,10 @@ final class NativeFolderPreviewScale {
         int dy = largeHeight - h;
         // Preserve all native 2-column / 3-column cell centers. Increasing
         // inter-icon spacing compensates for smaller icons (and vice versa).
-        int newEdgeX = edgeX + Math.round(dx / 2f);
-        int newEdgeY = edgeY + Math.round(dy / 2f);
+        // Floor the split delta so integer rounding cannot extend the
+        // outermost preview icon one pixel beyond the background bounds.
+        int newEdgeX = edgeX + Math.floorDiv(dx, 2);
+        int newEdgeY = edgeY + Math.floorDiv(dy, 2);
         int newGapX = gapX + dx;
         int newGapY = gapY + dy;
         int newSmallGap = Math.max(0, Math.round(smallGap * ratio));

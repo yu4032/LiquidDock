@@ -37,9 +37,9 @@ public class NativeFolderPreviewScaleTest {
         assertTrue(scaled.smallWidth * 2 + scaled.smallGap <= scaled.largeWidth);
         assertTrue(scaled.smallHeight * 2 + scaled.smallGap <= scaled.largeHeight);
         assertTrue(scaled.edgeX >= 0 && scaled.edgeY >= 0);
-        assertTrue(scaled.edgeX + columns * scaled.largeWidth
+        assertTrue(2 * scaled.edgeX + columns * scaled.largeWidth
                 + (columns - 1) * scaled.gapX <= width);
-        assertTrue(scaled.edgeY + columns * scaled.largeHeight
+        assertTrue(2 * scaled.edgeY + columns * scaled.largeHeight
                 + (columns - 1) * scaled.gapY <= height);
         // The slot centers must not drift by more than one pixel.
         float oldCenterX = base.edgeX + base.largeWidth / 2f;
