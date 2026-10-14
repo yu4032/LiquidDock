@@ -31,7 +31,8 @@ final class LauncherWidgetBackgroundController {
                 || !GlassRuntimeState.isWidgetEnabled()
                 || !LauncherGlassHierarchy.isWorkspace(host)) return;
         LauncherManualDiscoveryBridge.ensureRegistered(host.getContext());
-        LauncherGlassVendorMaterialSuppressor.claimLoadedMamlRoot(host, root);
+        // Native MAML enable_background_blur belongs to Launcher and is not a
+        // LiquidDock claim; the loaded root only needs visual component rules.
         LauncherMamlBackgroundRuleExecutor.claimLoadedRoot(host, root);
         LauncherWidgetComponentSelectionExecutor.claimLoadedMamlRoot(host, root);
     }
