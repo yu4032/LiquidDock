@@ -1,24 +1,13 @@
 package com.hellovoid.liquiddock;
 
 /**
- * One frame policy for settled 2x2 native folders. The two occupied CellLayout
+ * A single two-cell frame calculator for initial measure and settled layout. The two occupied CellLayout
  * cells are authoritative; transient drag/fullscreen dimensions are never input.
  */
 final class NativeFourFolderFramePolicy {
-    static final class Frame {
-        final int left, top, width, height;
-
-        Frame(int left, int top, int width, int height) {
-            this.left = left;
-            this.top = top;
-            this.width = width;
-            this.height = height;
-        }
-    }
-
     private NativeFourFolderFramePolicy() {}
 
-    static Frame resolve(int[] xs, int[] ys, int cellX, int cellY,
+    static int[] resolve(int[] xs, int[] ys, int cellX, int cellY,
             int cellWidth, int cellHeight, int parentWidth, int parentHeight,
             int leftMargin, int topMargin, int rightMargin, int bottomMargin) {
         return calculate(xs, ys, cellX, cellY, cellWidth, cellHeight,
@@ -27,14 +16,14 @@ final class NativeFourFolderFramePolicy {
     }
 
     /** The first OEM measure can run before CellLayout has nonzero bounds. */
-    static Frame forInitialMeasure(int[] xs, int[] ys, int cellX, int cellY,
+    static int[] forInitialMeasure(int[] xs, int[] ys, int cellX, int cellY,
             int cellWidth, int cellHeight,
             int leftMargin, int topMargin, int rightMargin, int bottomMargin) {
         return calculate(xs, ys, cellX, cellY, cellWidth, cellHeight,
                 0, 0, leftMargin, topMargin, rightMargin, bottomMargin, false);
     }
 
-    private static Frame calculate(int[] xs, int[] ys, int cellX, int cellY,
+    private static int[] calculate(int[] xs, int[] ys, int cellX, int cellY,
             int cellWidth, int cellHeight, int parentWidth, int parentHeight,
             int leftMargin, int topMargin, int rightMargin, int bottomMargin,
             boolean requireSettledBounds) {
@@ -55,6 +44,6 @@ final class NativeFourFolderFramePolicy {
         if (requireSettledBounds && ((long) frame[0] + frame[2] > parentWidth
                 || (long) frame[1] + frame[3] > parentHeight)) return null;
 
-        return new Frame(frame[0], frame[1], frame[2], frame[3]);
+        return frame;
     }
 }
