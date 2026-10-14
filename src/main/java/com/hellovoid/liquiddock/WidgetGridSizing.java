@@ -60,7 +60,7 @@ final class WidgetGridSizing {
         if (originalPart <= 0 || originalWhole <= 0
                 || originalPart > originalWhole) return available;
         return Math.max(1, Math.min(available,
-                Math.round((double) available * originalPart / originalWhole)));
+                (int) Math.round((double) available * originalPart / originalWhole)));
     }
 
     static int[] centeredFrame(int[] allocation,
