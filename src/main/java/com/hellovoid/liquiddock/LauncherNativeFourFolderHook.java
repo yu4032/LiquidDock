@@ -408,8 +408,29 @@ final class LauncherNativeFourFolderHook {
             }
 
             if (cell != null) {
+                // onDropChild may run while native drag visual state is still
+                // active. The later OEM drop-completed callback is the correct
+                // point to restore ItemIcon's title drawing flags. Keep the
+                // earlier callback for launcher variants lacking this method.
                 try {
-                    // Native onDropChild is the terminal placement notification:
+                    HookUtil.hook(cell.getDeclaredMethod("onDropCompleted"), chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object target = chain.getThisObject();
+                        if (target instanceof ViewGroup) {
+                            ViewGroup workspace = (ViewGroup) target;
+                            for (int i = 0; i < workspace.getChildCount(); i++) {
+                                View child = workspace.getChildAt(i);
+                                if (eligible(child)) queueTitleRestore(child);
+                            }
+                        }
+                        return result;
+                    });
+                    installedHooks++;
+                } catch (Throwable ignored) {
+                    // Optional OEM lifecycle entry point; onDropChild/onLayout remain.
+                }
+                try {
+                    // onDropChild is a placement signal, sometimes before drag finishes.
                     // CellLayout.onLayout may have happened BEFORE drag ends.
                     HookUtil.hook(cell.getDeclaredMethod("onDropChild", View.class), chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -897,12 +918,18 @@ final class LauncherNativeFourFolderHook {
                 LauncherLargeFolderPickerHook.shouldShowTitle(folder.getContext(), folder.getTag()),
                 modelHidden);
         if (!show) {
+            restoreNativeTitleDrawing(folder, false);
             if (title.getVisibility() != View.INVISIBLE) title.setVisibility(View.INVISIBLE);
             return;
         }
         int top = size.insetY + size.backgroundHeight;
         int available = height - top;
         if (available <= 0) return;
+        // ItemIcon.drawChild() can skip the title entirely while its internal
+        // mIsHideTitle/mDrawOutline flags remain set after a drag, regardless
+        // of the title View's VISIBLE state. Clear those transient draw gates
+        // only for an attached, settled, explicitly selected real folder.
+        restoreNativeTitleDrawing(folder, true);
         if (title.getVisibility() != View.VISIBLE) title.setVisibility(View.VISIBLE);
         if (title.getMeasuredWidth() != size.backgroundWidth
                 || title.getMeasuredHeight() > available
@@ -916,6 +943,26 @@ final class LauncherNativeFourFolderHook {
                 || title.getHeight() != title.getMeasuredHeight()) {
             title.layout(left, top, left + size.backgroundWidth, top + title.getMeasuredHeight());
         }
+    }
+
+    private static void restoreNativeTitleDrawing(View folder, boolean show) {
+        boolean changed = false;
+        HookUtil.InvocationResult<Object> hidden =
+                HookUtil.tryInvoke(folder, "getIsHideTitle");
+        if (hidden.succeeded() && hidden.value() instanceof Boolean
+                && ((Boolean) hidden.value()) == show) {
+            changed |= HookUtil.tryInvoke(folder, "setIsHideTitle", !show).succeeded();
+        }
+        if (show) {
+            HookUtil.InvocationResult<Object> outlined =
+                    HookUtil.tryInvoke(folder, "isDrawOutline");
+            if (outlined.succeeded() && Boolean.TRUE.equals(outlined.value())) {
+                changed |= HookUtil.tryInvoke(folder, "setDrawOutline", false).succeeded();
+            }
+        }
+        // The vendor setters only change draw flags; they do not invalidate.
+        // No repeated work is required once the drawing state is correct.
+        if (changed) folder.invalidate();
     }
 
     private static int exact(int size) {
