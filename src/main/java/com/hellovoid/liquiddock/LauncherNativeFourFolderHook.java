@@ -522,7 +522,6 @@ final class LauncherNativeFourFolderHook {
             // Both OEM setupLayoutParam overloads are attached to this folder owner.
             // The grid module applies this method only to widgets.
             if (cell != null) {
-                int folderSetupHookCount = 0;
                 Class<?> itemInfoClass = vendorClass(loader, "com.miui.home.launcher.ItemInfo");
                 Class<?> cellParamsClass = vendorClass(
                         loader, "com.miui.home.launcher.CellLayout$LayoutParams");
@@ -541,14 +540,15 @@ final class LauncherNativeFourFolderHook {
                                         return result;
                                     });
                             installedHooks++;
-                            folderSetupHookCount++;
+                            // Launcher 4.50 can omit the four-arg overload; the
+                            // edit-aware five-arg signature is the required one.
+                            if (signature.length == 5) {
+                                capabilities.add(Capability.FOLDER_LAYOUT_PARAMS);
+                            }
                         } catch (Throwable error) {
                             Api101Bridge.log(TAG + " native folder setupLayoutParam unavailable", error);
                         }
                     }
-                }
-                if (folderSetupHookCount == 2) {
-                    capabilities.add(Capability.FOLDER_LAYOUT_PARAMS);
                 }
             }
 
@@ -646,8 +646,7 @@ final class LauncherNativeFourFolderHook {
                     "com.miui.home.launcher.ItemInfo", false, loader);
             Class<?> cellParams = Class.forName(
                     "com.miui.home.launcher.CellLayout$LayoutParams", false, loader);
-            cell.getDeclaredMethod("setupLayoutParam",
-                    int.class, int.class, itemInfoClass, cellParams);
+            // Only the edit-aware signature is guaranteed on Launcher 4.50.
             cell.getDeclaredMethod("setupLayoutParam",
                     int.class, int.class, itemInfoClass, boolean.class, cellParams);
             for (String name : new String[]{PREVIEW_FOUR, PREVIEW_NINE}) {
