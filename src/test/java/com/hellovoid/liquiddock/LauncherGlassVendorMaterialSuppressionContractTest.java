@@ -99,6 +99,26 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertFalse(gate.contains("setMiBackgroundBlendColors("));
     }
 
+    @Test public void appToHomeRebindsOnlyPreviouslyOwnedReleasedWidgetMaterial()
+            throws Exception {
+        String hook = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
+        String gate = Files.readString(MAIN.resolve("LauncherWidgetNativeViewBlurGate.java"));
+
+        // HOME resume is distinct from glass disable: the native material can
+        // disappear again without a new glass ownership transition.
+        assertTrue(hook.contains("Launcher\", \"onResume\""));
+        assertTrue(hook.contains("restoreReleasedHostsAfterHomeResume(workspace)"));
+        assertTrue(gate.contains("PREVIOUSLY_OWNED_HOSTS.put(host, Boolean.TRUE)"));
+        assertTrue(gate.contains("GlassRuntimeState.isWidgetEnabled()"));
+        assertTrue(gate.contains("!host.isAttachedToWindow()"));
+        assertTrue(gate.contains("host.getRootView() != workspaceRoot"));
+        assertTrue(gate.contains("!LauncherGlassHierarchy.isWorkspace(host)"));
+        assertTrue(gate.contains("if (STATES.containsKey(host)) continue"));
+        assertTrue(gate.contains("if (!isSupportedWidget(host)) continue"));
+        assertTrue(gate.contains("boolean rebound = restoreViaVendorUtilities(host)"));
+        assertFalse(gate.contains("setNativeMode(host, vendorMode)"));
+    }
+
     @Test public void folderHookTargetsConcreteLauncher450VariantsWithoutDrawableReplacement()
             throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
