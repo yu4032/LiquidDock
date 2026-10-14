@@ -314,30 +314,29 @@ final class LauncherNativeFourFolderHook {
         // small 2x2 group in quadrant four. Let its original preSetup2x2 and
         // onMeasureChild2x2 determine the SAME icon sizes as OEM.
         // Only expand the parent content frame to the widget allocation.
-        int side = Math.min(w, h);
+        // Do not square the widget frame! On tablets and custom HomeGrid
+        // configurations, a 2x2 allocation can be wider than it is tall.
+        // Using min(w, h) recreated the appearance of a small centered
+        // folder despite the full 2x2 workspace reservation.
         ViewParent wrapperParent = inner.getParent();
         if (wrapperParent instanceof View) {
-            // icon_container is a separate wrap_content FrameLayout centered
-            // by the native FolderIcon2x2 RelativeLayout. Expanding ONLY its
-            // child causes the large preview to be offset from the grid.
             View wrapper = (View) wrapperParent;
             ViewGroup.LayoutParams wrapperParams = wrapper.getLayoutParams();
             if (wrapperParams != null
-                    && (wrapperParams.width != side || wrapperParams.height != side
-                    || wrapper.getWidth() != side || wrapper.getHeight() != side)) {
-                wrapperParams.width = side;
-                wrapperParams.height = side;
-                wrapper.measure(exact(side), exact(side));
-                int x = (w - side) / 2;
-                wrapper.layout(x, 0, x + side, side);
+                    && (wrapperParams.width != w || wrapperParams.height != h
+                    || wrapper.getWidth() != w || wrapper.getHeight() != h)) {
+                wrapperParams.width = w;
+                wrapperParams.height = h;
+                wrapper.measure(exact(w), exact(h));
+                wrapper.layout(0, 0, w, h);
             }
         }
-        if (innerParams.width != side || innerParams.height != side
-                || inner.getWidth() != side || inner.getHeight() != side) {
-            innerParams.width = side;
-            innerParams.height = side;
-            inner.measure(exact(side), exact(side));
-            inner.layout(0, 0, side, side);
+        if (innerParams.width != w || innerParams.height != h
+                || inner.getWidth() != w || inner.getHeight() != h) {
+            innerParams.width = w;
+            innerParams.height = h;
+            inner.measure(exact(w), exact(h));
+            inner.layout(0, 0, w, h);
         }
     }
 
