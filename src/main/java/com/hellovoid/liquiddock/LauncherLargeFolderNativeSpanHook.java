@@ -18,8 +18,8 @@ final class LauncherLargeFolderNativeSpanHook {
 
     private LauncherLargeFolderNativeSpanHook() {}
 
-    static boolean install(ClassLoader loader, boolean requested) {
-        if (!requested || loader == null) return false;
+    static boolean install(ClassLoader loader) {
+        if (loader == null) return false;
         if (installed) return enabled;
         try {
             Class<?> controller = Class.forName(
