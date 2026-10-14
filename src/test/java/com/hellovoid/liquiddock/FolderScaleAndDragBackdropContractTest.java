@@ -20,7 +20,7 @@ public class FolderScaleAndDragBackdropContractTest {
 
         assertTrue(folder.contains("FolderIcon2x2_4"));
         assertTrue(folder.contains("FolderIcon1x1"));
-        assertTrue(folder.contains("LargeFolderFootprintPolicy.needsNativePromotion("));
+        assertTrue(folder.contains("LauncherLargeFolderPickerHook.isMarked("));
         assertTrue(folder.contains("FolderIconPreviewContainer2X2_4"));
         assertTrue(folder.contains("\"setMItemsMaxCount\", FOUR"));
         assertTrue(folder.contains("\"setMLargeIconNum\", FOUR"));
@@ -36,6 +36,7 @@ public class FolderScaleAndDragBackdropContractTest {
         assertFalse(folder.contains("\"setSpanY\""));
         assertTrue(geometry.contains("LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)"));
         assertTrue(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
+        assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
     }
 
     @Test public void smallFolderPreviewContainerOwnsItsScaledRemeasureDomain() throws Exception {
