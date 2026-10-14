@@ -55,7 +55,14 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("FolderIconPreviewContainer2X2_4"));
         assertTrue(nativeHook.contains("params.width = width"));
         assertTrue(nativeHook.contains("params.height = height"));
-        assertTrue(nativeHook.contains("view.setLayoutParams(params)"));
+        assertFalse(nativeHook.contains("view.setLayoutParams(params)"));
+        assertTrue(nativeHook.contains("trustedCellFrame(folder)"));
+        assertTrue(nativeHook.contains("frame = trustedCellFrame(folder)"));
+        assertTrue(nativeHook.contains("folder.getParent() != workspace"));
+        assertTrue(nativeHook.contains("com.miui.home.launcher.CellLayout"));
+        assertTrue(nativeHook.contains("frame[0] + frame[2] > cell.getWidth()"));
+        assertTrue(nativeHook.contains("frame[1] + frame[3] > cell.getHeight()"));
+        assertFalse(nativeHook.contains("lp.width : requestedWidth"));
         assertTrue(nativeHook.contains("installedHooks++"));
         assertTrue(nativeHook.contains("vendorClass(loader"));
         assertTrue(nativeHook.contains("class-specific compatibility requires runtime trace"));
@@ -75,7 +82,9 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("args[1] = exact(frame[1])"));
         assertTrue(nativeHook.contains("frame = ROOT_FRAME.get()"));
         assertTrue(nativeHook.contains("desiredFrame(host,"));
-        assertTrue(nativeHook.contains("lp != null && lp.width > 0"));
+        assertTrue(nativeHook.contains("return new int[]{frame[2], frame[3]}"));
+        assertTrue(nativeHook.contains("No LayoutParams"));
+        assertFalse(nativeHook.contains("lp != null && lp.width > 0"));
         assertFalse(nativeHook.contains("NATIVE_SIZE.set(new int[]{width, height})"));
         assertTrue(nativeHook.contains("traceMeasure(\"inner\""));
         assertTrue(nativeHook.contains("traceMeasure(\"root\""));
