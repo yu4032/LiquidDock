@@ -42,7 +42,8 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(content.contains("extends FrameLayout"));
         assertTrue(content.contains("new ImageView(context)"));
         assertTrue(content.contains("getContents"));
-        assertTrue(content.contains("getIconDrawable"));
+        assertTrue(content.contains("getIconAsync"));
+        assertFalse(content.contains("\"getIconDrawable\""));
         assertTrue(content.contains("handleClick"));
         assertTrue(content.contains("tile.setOnLongClickListener"));
         assertTrue(content.contains("background.layout"));
