@@ -32,7 +32,8 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("getMiuiWidgetSizeSpec"));
         assertTrue(nativeHook.contains("FolderIcon.fromXml()"));
         assertTrue(nativeHook.contains("getBuddyIconView"));
-        assertTrue(nativeHook.contains("discarded stale compact icon view"));
+        assertTrue(nativeHook.contains("invalidated cached native icon"));
+        assertTrue(nativeHook.contains("CUSTOM_SIZED.remove(old)"));
         assertTrue(nativeHook.contains("mXs"));
         assertTrue(nativeHook.contains("mYs"));
         assertTrue(nativeHook.contains("WidgetGridSizing.centeredFrame"));
