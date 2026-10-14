@@ -149,7 +149,6 @@ public final class PresetManager {
         source.put("launcher450_icon_size_enabled", Boolean.TRUE);
         source.put("launcher450_icon_size_percent", 100);
         source.put("grid_widget_horizontal_stretch", Boolean.FALSE);
-        source.put("grid_large_folder_four_icons", Boolean.FALSE);
         source.put("grid_landscape_horizontal_distance", 0);
         source.put("grid_landscape_top_distance", -8);
         source.put("grid_landscape_bottom_distance", 8);
