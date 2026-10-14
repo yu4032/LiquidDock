@@ -23,6 +23,8 @@ final class LauncherLargeFolderFourIconHook {
     private static final String TAG = "[DC][FolderFour]";
     private static final String LARGE_FOLDER =
             "com.miui.home.launcher.folder.FolderIcon2x2";
+    private static final String SMALL_FOLDER =
+            "com.miui.home.launcher.folder.FolderIcon1x1";
     private static final String FOUR_FOLDER =
             "com.miui.home.launcher.folder.FolderIcon2x2_4";
     private static final String FOUR_PREVIEW =
@@ -60,6 +62,7 @@ final class LauncherLargeFolderFourIconHook {
         try {
             Class<?> folderType = Class.forName(LARGE_FOLDER, false, classLoader);
             Class<?> fourFolderType = Class.forName(FOUR_FOLDER, false, classLoader);
+            Class<?> smallFolderType = Class.forName(SMALL_FOLDER, false, classLoader);
             Class<?> previewType = Class.forName(FOUR_PREVIEW, false, classLoader);
 
             // Resolve every member before installing any hook. An unknown Launcher
@@ -109,9 +112,13 @@ final class LauncherLargeFolderFourIconHook {
             // subsequent model rebinds before considering the feature installed.
             HookUtil.hook(fromXml, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (result instanceof View && fourFolderType.isInstance(result)) {
-                    configureFolder(result);
-                    scheduleNativeFootprintRepair((View) result);
+                if (result instanceof View) {
+                    if (fourFolderType.isInstance(result)) {
+                        configureFolder(result);
+                        scheduleNativeFootprintRepair((View) result);
+                    } else if (smallFolderType.isInstance(result)) {
+                        scheduleNativeFootprintRepair((View) result);
+                    }
                 }
                 return result;
             });
@@ -146,7 +153,8 @@ final class LauncherLargeFolderFourIconHook {
      */
     private static void scheduleNativeFootprintRepair(View folderView) {
         if (!enabled || folderView == null
-                || !FOUR_FOLDER.equals(folderView.getClass().getName())) return;
+                || (!FOUR_FOLDER.equals(folderView.getClass().getName())
+                && !SMALL_FOLDER.equals(folderView.getClass().getName()))) return;
         if (folderView.isAttachedToWindow()) {
             folderView.post(() -> repairNativeFootprintIfNeeded(folderView));
             return;
@@ -177,8 +185,13 @@ final class LauncherLargeFolderFourIconHook {
             long id = HookUtil.getLongField(info, "id");
             long screenId = HookUtil.getLongField(info, "screenId");
             long container = HookUtil.getLongField(info, "container");
-            if (!LargeFolderFootprintPolicy.needsNativeConversion(
-                    type, spanX, spanY, id, screenId, container)) return;
+            boolean repairFour = LargeFolderFootprintPolicy.needsNativeConversion(
+                    type, spanX, spanY, id, screenId, container);
+            boolean promoteSmall = SMALL_FOLDER.equals(folderView.getClass().getName())
+                    && LargeFolderFootprintPolicy.needsNativePromotion(
+                            type, spanX, spanY, folderChildCount(info),
+                            id, screenId, container);
+            if (!repairFour && !promoteSmall) return;
         } catch (Throwable ignored) {
             return;
         }
@@ -190,8 +203,14 @@ final class LauncherLargeFolderFourIconHook {
         if (!result.succeeded()) {
             MainHook.log(TAG + " native 2x2 footprint conversion failed: " + result.failure());
         } else {
-            MainHook.log(TAG + " delegated 1x1 -> 2x2 size/occupancy to Launcher");
+            MainHook.log(TAG + " delegated normal 1x1 -> real 2x2 size/occupancy to Launcher");
         }
+    }
+
+    private static int folderChildCount(Object folderInfo) {
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(folderInfo, "count");
+        return result.succeeded() && result.value() instanceof Integer
+                ? (Integer) result.value() : -1;
     }
 
     private static void configureFolder(Object owner) {
