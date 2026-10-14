@@ -51,9 +51,9 @@ final class LauncherNativeFourFolderHook {
             Collections.newSetFromMap(new WeakHashMap<>());
     /** Geometry is inert until every required OEM capability has installed. */
     private enum Capability {
-        IMAGE_MEASURE, PREVIEW_PREMEASURE, PREVIEW_MEASURE,
-        DEVICE_CELL_WIDTH, DEVICE_WIDGET_SIZE,
-        ROOT_MEASURE, CONTENT_MEASURE, MODEL_BINDING, FINAL_LAYOUT
+        IMAGE_MEASURE, ORIGINAL_IMAGE_SIZE, PREVIEW_PREMEASURE, PREVIEW_MEASURE,
+        DEVICE_CELL_WIDTH, DEVICE_WIDGET_SIZE, ROOT_MEASURE,
+        CONTENT_MEASURE, MODEL_BINDING, FOLDER_LAYOUT_PARAMS, FINAL_LAYOUT
     }
 
     private static boolean installed;
@@ -198,6 +198,7 @@ final class LauncherNativeFourFolderHook {
                                 : new int[]{size.backgroundWidth, size.backgroundHeight};
                     });
                     installedHooks++;
+                    capabilities.add(Capability.ORIGINAL_IMAGE_SIZE);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native original image size unavailable", error);
                 }
@@ -521,6 +522,7 @@ final class LauncherNativeFourFolderHook {
             // Both OEM setupLayoutParam overloads are attached to this folder owner.
             // The grid module applies this method only to widgets.
             if (cell != null) {
+                int folderSetupHookCount = 0;
                 Class<?> itemInfoClass = vendorClass(loader, "com.miui.home.launcher.ItemInfo");
                 Class<?> cellParamsClass = vendorClass(
                         loader, "com.miui.home.launcher.CellLayout$LayoutParams");
@@ -539,10 +541,14 @@ final class LauncherNativeFourFolderHook {
                                         return result;
                                     });
                             installedHooks++;
+                            folderSetupHookCount++;
                         } catch (Throwable error) {
                             Api101Bridge.log(TAG + " native folder setupLayoutParam unavailable", error);
                         }
                     }
+                }
+                if (folderSetupHookCount == 2) {
+                    capabilities.add(Capability.FOLDER_LAYOUT_PARAMS);
                 }
             }
 
@@ -626,6 +632,7 @@ final class LauncherNativeFourFolderHook {
         }
         try {
             requireNativeOverride(nativeImageClass, "onMeasure", int.class, int.class);
+            nativeImageClass.getDeclaredMethod("getOriginalSize");
             requireNativeOverride(itemIcon, "onMeasure", int.class, int.class);
             requireNativeOverride(content, "onMeasure", int.class, int.class);
             config.getDeclaredMethod("getCellWidth");
@@ -635,6 +642,14 @@ final class LauncherNativeFourFolderHook {
                     boolean.class, int.class, int.class, int.class, int.class);
             folderIcon.getDeclaredMethod("fromXml",
                     int.class, launcher, ViewGroup.class, infoType);
+            Class<?> itemInfoClass = Class.forName(
+                    "com.miui.home.launcher.ItemInfo", false, loader);
+            Class<?> cellParams = Class.forName(
+                    "com.miui.home.launcher.CellLayout$LayoutParams", false, loader);
+            cell.getDeclaredMethod("setupLayoutParam",
+                    int.class, int.class, itemInfoClass, cellParams);
+            cell.getDeclaredMethod("setupLayoutParam",
+                    int.class, int.class, itemInfoClass, boolean.class, cellParams);
             for (String name : new String[]{PREVIEW_FOUR, PREVIEW_NINE}) {
                 Class<?> preview = Class.forName(name, false, loader);
                 requireNativeOverride(preview, "preMeasure2x2", int.class, int.class);
