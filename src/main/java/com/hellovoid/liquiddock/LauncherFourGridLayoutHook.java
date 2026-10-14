@@ -90,6 +90,7 @@ final class LauncherFourGridLayoutHook {
             ViewGroup nativeFolder = (ViewGroup) root;
             LauncherFourGridContentView previous = lookup(nativeFolder);
             if (eligible(root, info)) {
+                synchronizeWidgetFrame(cell, nativeFolder, info);
                 attach(nativeFolder, info);
             } else if (previous != null) {
                 CONTENTS.remove(nativeFolder);
@@ -98,6 +99,74 @@ final class LauncherFourGridLayoutHook {
                 Api101Bridge.log(TAG + "four-grid-restored-native-layout");
             }
         }
+    }
+
+    /**
+     * Match a neighboring 2x2 widget EXACTLY: both position and outer frame
+     * are computed from the same CellLayout mXs/mYs origins and margins.
+     * WidgetGridSizing.gridRect is gated by optional HomeGrid settings, so
+     * read the native grid directly for this always-on folder style.
+     */
+    private static void synchronizeWidgetFrame(
+            ViewGroup cell, ViewGroup folder, Object info) {
+        try {
+            ViewGroup.LayoutParams generic = folder.getLayoutParams();
+            if (generic == null) return;
+            try {
+                if (HookUtil.getBooleanField(generic, "isDragging")) return;
+            } catch (Throwable ignored) {}
+            int[] xs = (int[]) HookUtil.getField(cell, "mXs");
+            int[] ys = (int[]) HookUtil.getField(cell, "mYs");
+            int cx = HookUtil.getIntField(info, "cellX");
+            int cy = HookUtil.getIntField(info, "cellY");
+            int cw = HookUtil.getIntField(cell, "mCellWidth");
+            int ch = HookUtil.getIntField(cell, "mCellHeight");
+            if (cx < 0 || cy < 0 || xs == null || ys == null
+                    || cx + 1 >= xs.length || cy + 1 >= ys.length
+                    || cw <= 0 || ch <= 0) return;
+            int[] allocation = new int[]{
+                    xs[cx], ys[cy], xs[cx + 1] + cw - xs[cx],
+                    ys[cy + 1] + ch - ys[cy]};
+            int[] bounds = allocation;
+            if (generic instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams params =
+                        (ViewGroup.MarginLayoutParams) generic;
+                bounds = WidgetGridSizing.centeredFrame(
+                        allocation, params.leftMargin, params.topMargin,
+                        params.rightMargin, params.bottomMargin);
+            }
+            if (bounds[2] <= 0 || bounds[3] <= 0) return;
+            // Same positioning rule as 2x2 widgets, including user-defined
+            // asymmetric grid pitch and per-item CellLayout margins.
+            if (generic.width != bounds[2] || generic.height != bounds[3]) {
+                generic.width = bounds[2];
+                generic.height = bounds[3];
+            }
+            try {
+                HookUtil.setIntField(generic, "x", bounds[0]);
+                HookUtil.setIntField(generic, "y", bounds[1]);
+            } catch (Throwable ignored) {}
+            if (folder.getMeasuredWidth() != bounds[2]
+                    || folder.getMeasuredHeight() != bounds[3]) {
+                folder.measure(
+                        View.MeasureSpec.makeMeasureSpec(
+                                bounds[2], View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(
+                                bounds[3], View.MeasureSpec.EXACTLY));
+            }
+            if (folder.getLeft() != bounds[0] || folder.getTop() != bounds[1]
+                    || folder.getWidth() != bounds[2]
+                    || folder.getHeight() != bounds[3]) {
+                folder.layout(bounds[0], bounds[1],
+                        bounds[0] + bounds[2], bounds[1] + bounds[3]);
+            }
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " widget-frame alignment unavailable: " + error);
+        }
+    }
+
+    static LauncherFourGridContentView currentContent(View folder) {
+        return folder instanceof ViewGroup ? lookup((ViewGroup) folder) : null;
     }
 
     static boolean isFourGridInfo(Object info) {
