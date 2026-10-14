@@ -285,7 +285,9 @@ final class LauncherNativeFourFolderHook {
                 View folder = (View) owner;
                 int[] frame = desiredFrame(folder);
                 if (frame == null) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    restoreTitleAfterNativeMeasure(folder);
+                    return result;
                 }
                 int[] previous = ROOT_FRAME.get();
                 ROOT_FRAME.set(frame);
@@ -294,6 +296,7 @@ final class LauncherNativeFourFolderHook {
                 args[1] = exact(frame[1]);
                 try {
                     Object result = chain.proceed(args);
+                    restoreTitleAfterNativeMeasure(folder);
                     return result;
                 } finally {
                     if (previous == null) ROOT_FRAME.remove();
@@ -434,8 +437,6 @@ final class LauncherNativeFourFolderHook {
                                 View child = workspace.getChildAt(i);
                                 if (!eligible(child)) continue;
                                 if (child.getVisibility() == View.INVISIBLE) {
-                                    // One-shot tracing of the actual final draw path.
-                                    LargeFolderRenderProbe.drop(child);
                                     // Restore only the settled marked folder(s)
                                     // hidden by this drop, not unrelated Views.
                                     child.postOnAnimation(() -> restoreDroppedFolder(child));
@@ -476,7 +477,6 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
             }
             installed = installedHooks > 0;
-            LargeFolderRenderProbe.installMenuProbe(loader);
             return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
@@ -884,19 +884,11 @@ final class LauncherNativeFourFolderHook {
     }
 
     private static void restoreDroppedFolder(View folder) {
-        LargeFolderRenderProbe.restored(folder, "attempt");
         if (!eligible(folder) || !folder.isAttachedToWindow()) return;
         int[] frame = trustedCellFrame(folder);
-        if (frame == null) {
-            LargeFolderRenderProbe.restored(folder, "no-trusted-cell-frame");
-            return; // Still dragging or transiently reparented.
-        }
-        if (folder.getVisibility() != View.INVISIBLE) {
-            LargeFolderRenderProbe.restored(folder, "already-visible");
-            return;
-        }
+        if (frame == null) return; // Still dragging or transiently reparented.
+        if (folder.getVisibility() != View.INVISIBLE) return;
         folder.setVisibility(View.VISIBLE);
-        LargeFolderRenderProbe.restored(folder, "set-visible");
         NativeFourFolderSizing.Size sizing =
                 nativeSizing(folder, new int[]{frame[2], frame[3]});
         layoutFolderTitle(folder, sizing, frame[2], frame[3]);
@@ -930,6 +922,30 @@ final class LauncherNativeFourFolderHook {
                 nativeSizing(folder, new int[]{frame[2], frame[3]});
         layoutFolderTitle(folder, size, frame[2], frame[3]);
         folder.postInvalidateOnAnimation();
+    }
+
+    /**
+     * Launcher 4.50 ItemIcon.onMeasure -> executeChildrenVisibility sets
+     * mTitleContainer INVISIBLE for every span > 1, overriding the custom
+     * folder title that was positioned by CellLayout.onLayout.
+     *
+     * Reconcile immediately after the already-hooked native onMeasure, not
+     * at an unrelated drag/menu callback. Keep OEM GONE (no-word/hotseat)
+     * and explicit ItemInfo title-hide semantics.
+     */
+    private static void restoreTitleAfterNativeMeasure(View folder) {
+        if (!eligible(folder)) return;
+        Object value = HookUtil.tryInvoke(folder, "getTitleContainer").value();
+        if (!(value instanceof View)) return;
+        View title = (View) value;
+        if (title.getVisibility() != View.INVISIBLE) return;
+        boolean modelHidden = Boolean.TRUE.equals(
+                HookUtil.tryInvoke(folder.getTag(), "needHideTitleByFlags").value());
+        if (LargeFolderTitlePolicy.shouldRestoreAfterNativeMeasure(true,
+                LauncherLargeFolderPickerHook.shouldShowTitle(folder.getContext(), folder.getTag()),
+                modelHidden, title.getVisibility())) {
+            title.setVisibility(View.VISIBLE);
+        }
     }
 
     private static void layoutFolderTitle(View folder, NativeFourFolderSizing.Size size, int width, int height) {
