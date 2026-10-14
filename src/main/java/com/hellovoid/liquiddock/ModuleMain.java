@@ -155,8 +155,7 @@ public final class ModuleMain extends XposedModule {
                     // Fourth folder style has its own view hierarchy and
                     // ShortcutInfo renderer; do not install the historical
                     // FolderIcon2x2_4 count or OEM widget-size overrides.
-                    LauncherFourGridLayoutHook.install(classLoader);
-                    LauncherFourGridAnimationHook.install(classLoader);
+                    LauncherNativeFourFolderHook.install(classLoader);
                 } catch (Throwable error) {
                     Api101Bridge.log("[DC][FolderFour] independent bootstrap failed", error);
                 }
