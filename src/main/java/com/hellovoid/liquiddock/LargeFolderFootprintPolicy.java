@@ -1,10 +1,16 @@
 package com.hellovoid.liquiddock;
 
-/** Model predicate only; ownership and user selection are checked at the View boundary. */
+/** Explicit native large-folder types; only marked 2x2 models are customized. */
 final class LargeFolderFootprintPolicy {
+    static final int FOUR = 21;
+    static final int NINE = 22;
     private LargeFolderFootprintPolicy() {}
 
+    static boolean supportsType(int type) {
+        return type == FOUR || type == NINE;
+    }
+
     static boolean hasRealTwoByTwoFootprint(int itemType, int spanX, int spanY) {
-        return itemType == 21 && spanX == 2 && spanY == 2;
+        return supportsType(itemType) && spanX == 2 && spanY == 2;
     }
 }

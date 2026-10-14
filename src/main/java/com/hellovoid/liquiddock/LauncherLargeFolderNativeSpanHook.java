@@ -10,7 +10,7 @@ import android.view.View;
  */
 final class LauncherLargeFolderNativeSpanHook {
     private static final String TAG = "[DC][FolderFourSpan]";
-    private static final int FOUR_TYPE = 21;
+
     private static final ThreadLocal<Boolean> FORCE_LARGE = new ThreadLocal<>();
 
     private static boolean installed;
@@ -39,7 +39,7 @@ final class LauncherLargeFolderNativeSpanHook {
             HookUtil.hook(spanX, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 if (enabled && Boolean.TRUE.equals(FORCE_LARGE.get())
-                        && ((Integer) chain.getArg(0)) == FOUR_TYPE) {
+                        && LargeFolderFootprintPolicy.supportsType((Integer) chain.getArg(0))) {
                     return 2;
                 }
                 return result;
@@ -47,7 +47,7 @@ final class LauncherLargeFolderNativeSpanHook {
             HookUtil.hook(spanY, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 if (enabled && Boolean.TRUE.equals(FORCE_LARGE.get())
-                        && ((Integer) chain.getArg(0)) == FOUR_TYPE) {
+                        && LargeFolderFootprintPolicy.supportsType((Integer) chain.getArg(0))) {
                     return 2;
                 }
                 return result;
@@ -55,7 +55,7 @@ final class LauncherLargeFolderNativeSpanHook {
             HookUtil.hook(convert, chain -> {
                 Object info = chain.getThisObject();
                 boolean force = enabled
-                        && ((Integer) chain.getArg(0)) == FOUR_TYPE
+                        && LargeFolderFootprintPolicy.supportsType((Integer) chain.getArg(0))
                         && isExplicitlySelected(info);
                 Boolean previous = FORCE_LARGE.get();
                 if (force) FORCE_LARGE.set(Boolean.TRUE);

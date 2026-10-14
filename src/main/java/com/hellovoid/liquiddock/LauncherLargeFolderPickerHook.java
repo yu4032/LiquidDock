@@ -22,8 +22,10 @@ import java.lang.reflect.Constructor;
 final class LauncherLargeFolderPickerHook {
     private static final String TAG = "[DC][FolderFourPicker]";
     private static final String PREFS = "liquiddock_folder_styles";
-    private static final String PREFIX = "four_large_";
-    private static final int NATIVE_FOUR_TYPE = 21;
+    private static final String PREFIX = "four_large_"; // Existing per-folder key, retained.
+    private static final String TITLE_PREFIX = "large_title_";
+    private static final int PRIMARY_TOGGLE_ID = View.generateViewId();
+    private static final int TITLE_TOGGLE_ID = View.generateViewId();
     // The row lives in exactly one FolderSheet. Its tag owns the state.
     // No global map can retain the sheet through a value -> View -> parent path.
     private static final int ROW_ID = View.generateViewId();
@@ -32,12 +34,14 @@ final class LauncherLargeFolderPickerHook {
     private static final class PickerState {
         Object info;
         boolean selected;
+        boolean titleSelected;
         boolean syncing;
         boolean selectingNativeStyle;
 
-        PickerState(Object info, boolean selected) {
+        PickerState(Object info, boolean selected, boolean titleSelected) {
             this.info = info;
             this.selected = selected;
+            this.titleSelected = titleSelected;
         }
     }
 
@@ -58,6 +62,25 @@ final class LauncherLargeFolderPickerHook {
         long id = stableId(info);
         return id >= 0 && context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(PREFIX + id, false);
+    }
+
+    static boolean shouldShowTitle(Context context, Object info) {
+        if (!isMarked(context, info)) return false;
+        long id = stableId(info);
+        return id >= 0 && context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(TITLE_PREFIX + id, true);
+    }
+
+    private static boolean titlePreference(Context context, Object info) {
+        long id = stableId(info);
+        return id < 0 || context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(TITLE_PREFIX + id, true);
+    }
+
+    private static void saveTitlePreference(Context context, Object info, boolean enabled) {
+        long id = stableId(info);
+        if (id >= 0) context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(TITLE_PREFIX + id, enabled).apply();
     }
 
     private static long stableId(Object info) {
@@ -128,33 +151,31 @@ final class LauncherLargeFolderPickerHook {
                 if (clicked == ok) {
                     boolean selected = state.selected;
                     boolean wasCustom = isMarked(((View) owner).getContext(), state.info);
-                    if (selected) {
-                        HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
-                    }
                     int targetType = HookUtil.getIntField(owner, "mFolderType");
+                    if (selected && !LargeFolderFootprintPolicy.supportsType(targetType)) {
+                        targetType = LargeFolderFootprintPolicy.FOUR;
+                        HookUtil.setIntField(owner, "mFolderType", targetType);
+                    }
                     // Marker must be visible before the native asynchronous
                     // bindFolderResize constructs the replacement FolderIcon.
                     setMarked(((View) owner).getContext(), state.info, selected);
+                    saveTitlePreference(((View) owner).getContext(), state.info, state.titleSelected);
                     int originalType = getItemType(state.info);
                     int originalX = getSpan(state.info, "spanX");
                     int originalY = getSpan(state.info, "spanY");
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     if (selected && LargeFolderPickerPolicy.mustRequestResize(
-                            originalType, originalX, originalY)) {
-                        // The current editor can detach after handleClose().
+                            originalType, targetType, originalX, originalY)) {
+                        final int typeToResize = targetType;
                         new android.os.Handler(android.os.Looper.getMainLooper())
-                                .post(() -> requestNativeResize(state.info));
-                    } else if (!selected && wasCustom
-                            && targetType == NATIVE_FOUR_TYPE
-                            && originalType == NATIVE_FOUR_TYPE
-                            && originalX == 2 && originalY == 2) {
-                        // The stock 2x2_4 and our expanded variant intentionally
-                        // share itemType=21. MIUI's onClick only converts if
-                        // itemType changes; force its native conversion when
-                        // the selection changes back to stock size (1x1).
+                                .post(() -> requestNativeResize(state.info, typeToResize));
+                    } else if (LargeFolderPickerPolicy.mustRestoreCompact(
+                            originalType, targetType, originalX, originalY,
+                            wasCustom, selected)) {
+                        final int typeToRestore = targetType;
                         new android.os.Handler(android.os.Looper.getMainLooper())
                                 .post(() -> HookUtil.tryInvoke(
-                                        state.info, "convertIconSize", NATIVE_FOUR_TYPE));
+                                        state.info, "convertIconSize", typeToRestore));
                     }
                     return result;
                 }
@@ -162,7 +183,7 @@ final class LauncherLargeFolderPickerHook {
                 // Switching to an incompatible native folder style disables the 2x2 expansion.
                 if (clicked != cancel && !state.selectingNativeStyle
                         && isStockStyleControl(owner, clicked)
-                        && !isNativeFourStyleControl(owner, clicked)) {
+                        && !isNativeLargeStyleControl(owner, clicked)) {
                     state.selected = false;
                     updateAppearance(owner, state);
                 }
@@ -205,10 +226,13 @@ final class LauncherLargeFolderPickerHook {
         return false;
     }
 
-    private static boolean isNativeFourStyleControl(Object owner, View clicked) {
-        return clicked == getFieldOrNull(owner, "mBigFolderCheckBox2x2_4")
-                || clicked == getFieldOrNull(owner, "mBigFolderName2x2_4")
-                || clicked == getFieldOrNull(owner, "mBigFolderSelectBorder2x2_4");
+    private static boolean isNativeLargeStyleControl(Object owner, View clicked) {
+        for (String field : new String[]{"mBigFolderCheckBox2x2_4", "mBigFolderName2x2_4",
+                "mBigFolderSelectBorder2x2_4", "mBigFolderCheckBox2x2_9",
+                "mBigFolderName2x2_9", "mBigFolderSelectBorder2x2_9"}) {
+            if (clicked == getFieldOrNull(owner, field)) return true;
+        }
+        return false;
     }
 
     private static void attachOption(Object owner, Object info) {
@@ -218,6 +242,7 @@ final class LauncherLargeFolderPickerHook {
         if (existing != null) {
             existing.info = info;
             existing.selected = isMarked(sheet.getContext(), info);
+            existing.titleSelected = titlePreference(sheet.getContext(), info);
             updateAppearance(owner, existing);
             return;
         }
@@ -263,52 +288,32 @@ final class LauncherLargeFolderPickerHook {
             Api101Bridge.log(TAG + " cannot reproduce OEM switch class");
             return;
         }
-        LinearLayout row = new LinearLayout(sheet.getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(predictionField.getMinimumHeight());
-        row.setPadding(predictionField.getPaddingLeft(), predictionField.getPaddingTop(),
-                predictionField.getPaddingRight(), predictionField.getPaddingBottom());
-        row.setId(ROW_ID);
-        TextView label = new TextView(sheet.getContext());
-        label.setText("开启真实大文件夹");
+        CompoundButton titleToggle = makeNativeToggle(sheet.getContext(), exemplar);
+        if (titleToggle == null) return;
+        toggle.setId(PRIMARY_TOGGLE_ID);
+        titleToggle.setId(TITLE_TOGGLE_ID);
         TextView nativeLabel = findNativeLabel(predictionField, 0);
-        if (nativeLabel != null) {
-            label.setTextSize(TypedValue.COMPLEX_UNIT_PX, nativeLabel.getTextSize());
-            label.setTextColor(nativeLabel.getTextColors());
-            label.setTypeface(nativeLabel.getTypeface());
-            label.setGravity(nativeLabel.getGravity());
-            label.setIncludeFontPadding(nativeLabel.getIncludeFontPadding());
-            label.setLetterSpacing(nativeLabel.getLetterSpacing());
-        } else {
-            label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-            label.setTextColor(themeColor(sheet.getContext(),
-                    android.R.attr.textColorPrimary, 0xffeeeeee));
-        }
-        row.addView(label, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        ViewGroup.LayoutParams exemplarParams = exemplar.getLayoutParams();
-        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(
-                exemplarParams == null ? ViewGroup.LayoutParams.WRAP_CONTENT : exemplarParams.width,
-                exemplarParams == null ? ViewGroup.LayoutParams.WRAP_CONTENT : exemplarParams.height);
-        if (exemplarParams instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) exemplarParams;
-            toggleParams.setMargins(margins.leftMargin, margins.topMargin,
-                    margins.rightMargin, margins.bottomMargin);
-        }
-        row.addView(toggle, toggleParams);
-        PickerState state = new PickerState(info, isMarked(sheet.getContext(), info));
+        LinearLayout row = new LinearLayout(sheet.getContext());
+        row.setId(ROW_ID);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.addView(makeOptionRow(sheet.getContext(), predictionField, exemplar,
+                nativeLabel, "开启真实大文件夹", toggle));
+        row.addView(makeOptionRow(sheet.getContext(), predictionField, exemplar,
+                nativeLabel, "开启大文件夹标题", titleToggle));
+
+        PickerState state = new PickerState(info, isMarked(sheet.getContext(), info),
+                titlePreference(sheet.getContext(), info));
         row.setTag(state);
         updateAppearance(row, state);
         toggle.setOnCheckedChangeListener((button, checked) -> {
             if (state.syncing) return;
             state.selected = checked;
-            if (checked) selectNativeFourStyle(owner, state);
+            if (checked) selectNativeLargeStyle(owner, state);
+            updateAppearance(row, state);
         });
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setContentDescription("开启真实大文件夹");
-        row.setOnClickListener(v -> toggle.setChecked(!toggle.isChecked()));
+        titleToggle.setOnCheckedChangeListener((button, checked) -> {
+            if (!state.syncing) state.titleSelected = checked;
+        });
 
         try {
             Class<?> lpClass = Class.forName(
@@ -316,7 +321,7 @@ final class LauncherLargeFolderPickerHook {
                     false, panel.getClass().getClassLoader());
             ViewGroup.MarginLayoutParams rowLp = (ViewGroup.MarginLayoutParams)
                     lpClass.getConstructor(int.class, int.class).newInstance(
-                            predictionLp.width, predictionLp.height);
+                            predictionLp.width, ViewGroup.LayoutParams.WRAP_CONTENT);
             // Copy horizontal anchors and margins from the vendor's own row.
             for (String anchor : new String[]{"startToStart", "endToEnd",
                     "leftToLeft", "rightToRight", "startToEnd", "endToStart",
@@ -347,12 +352,11 @@ final class LauncherLargeFolderPickerHook {
         }
     }
 
-    private static void selectNativeFourStyle(Object owner, PickerState state) {
-        // This toggle operates on FolderIcon2x2_4. When enabled from another
-        // style, select that real stock style through the vendor click path.
+    private static void selectNativeLargeStyle(Object owner, PickerState state) {
+        int selectedType = HookUtil.getIntField(owner, "mFolderType");
+        if (LargeFolderFootprintPolicy.supportsType(selectedType)) return;
         Object nativeFour = getFieldOrNull(owner, "mBigFolderCheckBox2x2_4");
-        if (nativeFour instanceof View && HookUtil.getIntField(owner, "mFolderType")
-                != NATIVE_FOUR_TYPE) {
+        if (nativeFour instanceof View) {
             state.selectingNativeStyle = true;
             try {
                 ((View) nativeFour).performClick();
@@ -360,7 +364,50 @@ final class LauncherLargeFolderPickerHook {
                 state.selectingNativeStyle = false;
             }
         }
-        HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
+        HookUtil.setIntField(owner, "mFolderType", LargeFolderFootprintPolicy.FOUR);
+    }
+
+    private static LinearLayout makeOptionRow(Context context, View originalRow,
+            CompoundButton exemplar, TextView originalLabel,
+            String text, CompoundButton toggle) {
+        LinearLayout line = new LinearLayout(context);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setMinimumHeight(originalRow.getMinimumHeight());
+        line.setPadding(originalRow.getPaddingLeft(), originalRow.getPaddingTop(),
+                originalRow.getPaddingRight(), originalRow.getPaddingBottom());
+        TextView title = new TextView(context);
+        title.setText(text);
+        if (originalLabel != null) {
+            title.setTextSize(TypedValue.COMPLEX_UNIT_PX, originalLabel.getTextSize());
+            title.setTextColor(originalLabel.getTextColors());
+            title.setTypeface(originalLabel.getTypeface());
+            title.setGravity(originalLabel.getGravity());
+            title.setIncludeFontPadding(originalLabel.getIncludeFontPadding());
+            title.setLetterSpacing(originalLabel.getLetterSpacing());
+        } else {
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            title.setTextColor(themeColor(context, android.R.attr.textColorPrimary, 0xffeeeeee));
+        }
+        line.addView(title, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        ViewGroup.LayoutParams originalParams = exemplar.getLayoutParams();
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                originalParams == null ? ViewGroup.LayoutParams.WRAP_CONTENT : originalParams.width,
+                originalParams == null ? ViewGroup.LayoutParams.WRAP_CONTENT : originalParams.height);
+        if (originalParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams margin = (ViewGroup.MarginLayoutParams) originalParams;
+            params.setMargins(margin.leftMargin, margin.topMargin,
+                    margin.rightMargin, margin.bottomMargin);
+        }
+        line.addView(toggle, params);
+        line.setClickable(true);
+        line.setFocusable(true);
+        line.setContentDescription(text);
+        line.setOnClickListener(v -> {
+            if (toggle.isEnabled()) toggle.setChecked(!toggle.isChecked());
+        });
+        return line;
     }
 
     private static View findAppPredict(View root) {
@@ -481,30 +528,24 @@ final class LauncherLargeFolderPickerHook {
     private static void updateAppearance(Object scope, PickerState state) {
         View row = scope instanceof View && ((View) scope).getId() == ROW_ID
                 ? (View) scope : optionRow(scope);
-        if (!(row instanceof ViewGroup)) return;
-        ViewGroup group = (ViewGroup) row;
-        CompoundButton toggle = null;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            if (group.getChildAt(i) instanceof CompoundButton) {
-                toggle = (CompoundButton) group.getChildAt(i);
-                break;
-            }
-        }
-        if (toggle == null) return;
+        if (row == null) return;
+        View primary = row.findViewById(PRIMARY_TOGGLE_ID);
+        View title = row.findViewById(TITLE_TOGGLE_ID);
+        if (!(primary instanceof CompoundButton) || !(title instanceof CompoundButton)) return;
         state.syncing = true;
         try {
-            toggle.setChecked(state.selected);
+            ((CompoundButton) primary).setChecked(state.selected);
+            ((CompoundButton) title).setChecked(state.titleSelected);
+            title.setEnabled(state.selected);
         } finally {
             state.syncing = false;
         }
     }
 
-    private static void requestNativeResize(Object info) {
-        if (info == null) return;
-        int x = getSpan(info, "spanX"), y = getSpan(info, "spanY");
-        if (x == 2 && y == 2) return;
-        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(
-                info, "convertIconSize", NATIVE_FOUR_TYPE);
+    private static void requestNativeResize(Object info, int type) {
+        if (info == null || !LargeFolderFootprintPolicy.supportsType(type)) return;
+        if (getSpan(info, "spanX") == 2 && getSpan(info, "spanY") == 2) return;
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(info, "convertIconSize", type);
         if (!result.succeeded()) {
             Api101Bridge.log(TAG + " native resize failed: " + result.failure());
         }
