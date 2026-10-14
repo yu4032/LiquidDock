@@ -35,6 +35,11 @@ final class LauncherWidgetBackgroundController {
         // LiquidDock claim; the loaded root only needs visual component rules.
         LauncherMamlBackgroundRuleExecutor.claimLoadedRoot(host, root);
         LauncherWidgetComponentSelectionExecutor.claimLoadedMamlRoot(host, root);
+        // MAML may finish initializing *after* the first Workspace bind. Apply the
+        // dark-content preference only to this loaded provider root generation.
+        if (GlassRuntimeState.isWidgetDarkContentEnabled()) {
+            LauncherWidgetDarkContentAdapter.apply(host);
+        }
     }
 
     static void release(View host) {
