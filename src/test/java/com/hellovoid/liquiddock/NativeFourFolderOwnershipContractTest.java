@@ -26,14 +26,16 @@ public class NativeFourFolderOwnershipContractTest {
         String nativeHook = source("LauncherNativeFourFolderHook.java");
         assertTrue(nativeHook.contains("NativeFourFolderFramePolicy.resolve("));
         assertTrue(nativeHook.contains("prepareFolderLayoutParams("));
-        assertTrue(nativeHook.contains("preflightGeometryAbi("));
         String module = source("ModuleMain.java");
-        assertTrue("Picker must not activate before the native geometry contract",
+        assertFalse("Missing optional native geometry must never hide both folder toggles",
                 module.contains("if (LauncherNativeFourFolderHook.install(classLoader)) {"));
         assertTrue(module.contains("LauncherLargeFolderPickerHook.install(classLoader);"));
-        assertTrue(nativeHook.contains("capabilities.containsAll(EnumSet.allOf(Capability.class))"));
-        assertTrue(nativeHook.contains("if (!installed || !nativeFolderClass(folder)"));
-        assertFalse("Partial hook installation must never signal readiness",
+        assertTrue(module.contains("LauncherLargeFolderNativeSpanHook.install(classLoader);"));
+        assertTrue("Independent working OEM hooks must remain active",
                 nativeHook.contains("installed = installedHooks > 0"));
+        assertFalse("Do not require every optional vendor method",
+                nativeHook.contains("capabilities.containsAll("));
+        assertFalse("Do not reject Launcher builds during strict ABI preflight",
+                nativeHook.contains("preflightGeometryAbi("));
     }
 }
