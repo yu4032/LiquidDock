@@ -32,6 +32,7 @@ public class FolderScaleAndDragBackdropContractTest {
         // scale decision as the actual FolderIcon1x1, not a global FOLDER domain.
         assertTrue(hook.contains("smallFolderMeasureDomain((View) owner)"));
         assertTrue(hook.contains("LauncherGlassHierarchy.isWorkspace(view)"));
+        assertTrue(hook.contains("if (domain == null) ACTIVE_DOMAIN.remove()"));
         assertTrue(hook.contains("installFolderPreviewMeasureTransaction"));
         assertFalse(hook.contains("HookUtil.hook(onMeasure, chain -> withMeasureDomain("));
         assertFalse(hook.contains("withMeasureDomain(\\n                MeasureDomain.FOLDER"));
