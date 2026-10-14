@@ -92,6 +92,20 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertFalse(gate.contains("setMiBackgroundBlendColors("));
     }
 
+    @Test public void darkContentDoesNotRestoreAnOldMamlRootOrOverwriteProviderColors()
+            throws Exception {
+        String dark = Files.readString(MAIN.resolve("LauncherWidgetDarkContentAdapter.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
+
+        assertTrue(dark.contains("WeakReference<Object> root"));
+        assertTrue(dark.contains("claim.root.get()"));
+        assertTrue(dark.contains("root == claim.root.get()"));
+        assertTrue(dark.contains("Double.isFinite(original)"));
+        assertTrue(dark.contains("text.getCurrentTextColor() == Color.WHITE"));
+        assertFalse(dark.contains("((Number) value).doubleValue() : 0.0d"));
+        assertTrue(controller.contains("LauncherWidgetDarkContentAdapter.apply(host)"));
+    }
+
     @Test public void folderHookTargetsConcreteLauncher450VariantsWithoutDrawableReplacement()
             throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
