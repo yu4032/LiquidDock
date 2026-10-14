@@ -30,6 +30,17 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("FolderIcon2x2_4"));
         assertTrue(nativeHook.contains("LauncherFolder2x2IconContainer"));
         assertTrue(nativeHook.contains("getMiuiWidgetSizeSpec"));
+        assertTrue(nativeHook.contains("installedHooks++"));
+        assertTrue(nativeHook.contains("vendorClass(loader"));
+        assertTrue(nativeHook.contains("class-specific compatibility requires runtime trace"));
+        assertTrue(nativeHook.contains("class unavailable"));
+        String audit = Files.readString(MAIN.resolve(
+                "LauncherLargeFolderRuntimeAuditHook.java"));
+        assertTrue(audit.contains("logVendorContract("));
+        assertTrue(audit.contains("native fromXml audit variants="));
+        assertTrue(audit.contains("viewTree(child, 0)"));
+        assertTrue(audit.contains("getDeclaredMethods()"));
+        assertTrue(audit.contains("if (!marked && !(type == 21 && spanX == 2 && spanY == 2)) continue"));
         assertTrue(nativeHook.contains("itemIcon.getDeclaredMethod("));
         assertTrue(nativeHook.contains("\"onMeasure\", int.class, int.class"));
         assertTrue(nativeHook.contains("\"getCellWidth\""));
