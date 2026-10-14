@@ -931,15 +931,13 @@ final class LauncherNativeFourFolderHook {
             rightMargin = margins.rightMargin;
             bottomMargin = margins.bottomMargin;
         }
-        NativeFourFolderFramePolicy.Frame frame = settled
+        return settled
                 ? NativeFourFolderFramePolicy.resolve(xs, ys, cellX, cellY,
                         cellWidth, cellHeight, cell.getWidth(), cell.getHeight(),
                         leftMargin, topMargin, rightMargin, bottomMargin)
                 : NativeFourFolderFramePolicy.forInitialMeasure(xs, ys, cellX, cellY,
                         cellWidth, cellHeight, leftMargin, topMargin,
                         rightMargin, bottomMargin);
-        return frame == null ? null
-                : new int[]{frame.left, frame.top, frame.width, frame.height};
     }
 
     /**
