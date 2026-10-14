@@ -59,7 +59,48 @@ final class LauncherNativeFourFolderHook {
             Class<?> launcher = vendorClass(loader, "com.miui.home.launcher.Launcher");
             Class<?> infoType = vendorClass(loader, "com.miui.home.launcher.FolderInfo");
             Class<?> itemIcon = vendorClass(loader, "com.miui.home.launcher.ItemIcon");
+            Class<?> imageBase = vendorClass(loader,
+                    "com.miui.home.launcher.LauncherIconImageView");
             int installedHooks = 0;
+
+            // The 287x287 native background from the device trace is NOT
+            // just a small LayoutParams. LauncherFolder2x2IconImageView
+            // inherits LauncherIconImageView#onMeasure, whose width/height
+            // getters override the incoming EXACT MeasureSpec with a fixed
+            // IconSizeProvider value. Apply the real 2x2 view frame only to
+            // those two native background/cover image instances.
+            if (imageBase != null) {
+                for (String dimension : new String[]{
+                        "getWidthMeasureSpec", "getHeightMeasureSpec"}) {
+                    try {
+                        final boolean horizontal = "getWidthMeasureSpec".equals(dimension);
+                        HookUtil.hook(imageBase.getDeclaredMethod(dimension, int.class),
+                                chain -> {
+                            Object target = chain.getThisObject();
+                            if (target instanceof View
+                                    && ((View) target).getClass().getName().equals(
+                                    "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView")) {
+                                View folder = ancestorFolder((View) target);
+                                if (folder != null && eligible(folder)) {
+                                    int[] frame = desiredFrame(folder,
+                                            (Integer) chain.getArg(0),
+                                            (Integer) chain.getArg(0));
+                                    if (frame != null) {
+                                        return exact(horizontal ? frame[0] : frame[1]);
+                                    }
+                                }
+                            }
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        });
+                        installedHooks++;
+                        Api101Bridge.log(TAG + " installed LauncherIconImageView#"
+                                + dimension + " for native folder background");
+                    } catch (Throwable error) {
+                        Api101Bridge.log(TAG + " native background measure " + dimension
+                                + " unavailable", error);
+                    }
+                }
+            }
 
             // FolderIcon#getSpanX/Y already returns FolderInfo.spanX/Y.
             // The actual remaining clamp is ItemIcon#onMeasure, where the
@@ -265,7 +306,7 @@ final class LauncherNativeFourFolderHook {
             }
             installed = installedHooks > 0;
             Api101Bridge.log(TAG + " native folder hook coverage=" + installedHooks
-                    + "/6; class-specific compatibility requires runtime trace");
+                    + "/8; class-specific compatibility requires runtime trace");
             return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
