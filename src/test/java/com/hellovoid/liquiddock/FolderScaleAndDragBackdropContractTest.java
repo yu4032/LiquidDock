@@ -82,8 +82,8 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(picker.contains("\"onAttachedToWindow\""));
         assertTrue(picker.contains("findScrollView(sheet)"));
         assertTrue(picker.contains("findNativeCheckGroup(panel)"));
-        assertTrue(picker.contains("ConstraintLayout.LayoutParams"));
-        assertTrue(picker.contains("predictLp.topToBottom = option.getId()"));
+        assertTrue(picker.contains("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams"));
+        assertTrue(picker.contains("HookUtil.setIntField(predictLp, \"topToBottom\", option.getId())"));
         assertFalse(picker.contains("root.addView(original"));
         assertTrue(picker.contains("PREFIX + id"));
         assertTrue(picker.contains("\"onClick\""));
