@@ -59,8 +59,8 @@ final class LauncherNativeFourFolderHook {
             Class<?> launcher = vendorClass(loader, "com.miui.home.launcher.Launcher");
             Class<?> infoType = vendorClass(loader, "com.miui.home.launcher.FolderInfo");
             Class<?> itemIcon = vendorClass(loader, "com.miui.home.launcher.ItemIcon");
-            Class<?> imageBase = vendorClass(loader,
-                    "com.miui.home.launcher.LauncherIconImageView");
+            Class<?> nativeImageClass = vendorClass(loader,
+                    "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView");
             int installedHooks = 0;
 
             // Device log 13:55:05:
@@ -70,10 +70,10 @@ final class LauncherNativeFourFolderHook {
             // Launcher 4.50 has no hookable getWidth/HeightMeasureSpec
             // methods (the preceding approach installed 0/2 hooks).
             // Hook the actual onMeasure implementations instead.
-            if (imageBase != null) {
+            if (nativeImageClass != null) {
                 try {
                     java.lang.reflect.Method measure = HookUtil.findMethodExact(
-                            imageBase, "onMeasure",
+                            nativeImageClass, "onMeasure",
                             new Class<?>[]{int.class, int.class});
                     HookUtil.hook(measure, chain -> {
                         Object instance = chain.getThisObject();
@@ -105,12 +105,12 @@ final class LauncherNativeFourFolderHook {
                     Api101Bridge.log(TAG + " native image onMeasure unavailable", error);
                 }
             }
-            Class<?> previewBase = vendorClass(loader,
-                    "com.miui.home.launcher.folder.BaseFolderIconPreviewContainer2X2");
-            if (previewBase != null) {
+            Class<?> nativePreviewClass = vendorClass(loader,
+                    "com.miui.home.launcher.folder.FolderIconPreviewContainer2X2_4");
+            if (nativePreviewClass != null) {
                 try {
                     java.lang.reflect.Method measure = HookUtil.findMethodExact(
-                            previewBase, "onMeasure",
+                            nativePreviewClass, "onMeasure",
                             new Class<?>[]{int.class, int.class});
                     HookUtil.hook(measure, chain -> {
                         Object instance = chain.getThisObject();
