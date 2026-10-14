@@ -80,14 +80,34 @@ final class LauncherLargeFolderPickerHook {
             Class<?> info = Class.forName(
                     "com.miui.home.launcher.FolderInfo", false, loader);
 
-            // These public vendor entry points are both required. Fail closed
-            // rather than inject an option that never receives confirmation.
-            HookUtil.hook(HookUtil.findMethodExact(
-                    sheet, "initListener", new Class<?>[]{info}), chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                attachOption(chain.getThisObject(), chain.getArg(0));
-                return result;
-            });
+            // Independent lifecycle hooks: Android variants can inline
+            // initListener(), while attached FolderSheet remains the actual
+            // visible UI. Either entry point is sufficient to add the row.
+            boolean initialized = installOptional(
+                    sheet, "initListener", new Class<?>[]{info}, chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        attachOption(chain.getThisObject(), chain.getArg(0));
+                        return result;
+                    });
+            boolean attached = installOptional(
+                    sheet, "onAttachedToWindow", new Class<?>[0], chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object owner = chain.getThisObject();
+                        if (owner instanceof View) {
+                            View shown = (View) owner;
+                            Object infoValue = getFieldOrNull(owner, "mFolderInfo");
+                            if (infoValue != null) attachOption(owner, infoValue);
+                            shown.post(() -> {
+                                Object latest = getFieldOrNull(owner, "mFolderInfo");
+                                if (latest != null) attachOption(owner, latest);
+                            });
+                        }
+                        return result;
+                    });
+            if (!initialized && !attached) {
+                MainHook.log(TAG + " no FolderSheet lifecycle hook available");
+                return false;
+            }
             HookUtil.hook(HookUtil.findMethodExact(
                     sheet, "onClick", new Class<?>[]{View.class}), chain -> {
                 Object owner = chain.getThisObject();
@@ -128,33 +148,23 @@ final class LauncherLargeFolderPickerHook {
                 }
                 return result;
             });
-            // Asynchronous inflation and vendor UI variants may populate
-            // the picker body after initListener(). The attached view itself
-            // is the final authority that this sheet is actually displayed.
-            try {
-                HookUtil.hook(HookUtil.findMethodExact(
-                        sheet, "onAttachedToWindow", new Class<?>[0]), chain -> {
-                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    Object owner = chain.getThisObject();
-                    if (owner instanceof View) {
-                        View shown = (View) owner;
-                        Object infoValue = getFieldOrNull(owner, "mFolderInfo");
-                        if (infoValue != null) attachOption(owner, infoValue);
-                        shown.post(() -> {
-                            Object latest = getFieldOrNull(owner, "mFolderInfo");
-                            if (latest != null) attachOption(owner, latest);
-                        });
-                    }
-                    return result;
-                });
-            } catch (Throwable error) {
-                MainHook.log(TAG + " attach lifecycle unavailable: " + error);
-            }
             installed = true;
             MainHook.log(TAG + " native FolderSheet fourth-choice hook installed");
             return true;
         } catch (Throwable error) {
             MainHook.log(TAG + " native FolderSheet unsupported: " + error);
+            return false;
+        }
+    }
+
+    private static boolean installOptional(
+            Class<?> owner, String name, Class<?>[] signature,
+            io.github.libxposed.api.XposedInterface.Hooker callback) {
+        try {
+            HookUtil.hook(HookUtil.findMethodExact(owner, name, signature), callback);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " optional " + name + " unavailable: " + error);
             return false;
         }
     }
