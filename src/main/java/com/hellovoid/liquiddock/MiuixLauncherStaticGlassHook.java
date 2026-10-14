@@ -324,14 +324,21 @@ final class MiuixLauncherStaticGlassHook {
 
     private static void scheduleWorkspaceResumeReconcile(
             Object launcher, LiquidDockConfig.Glass glassConfig) {
-        if (!GlassRuntimeState.isEnabled() || launcher == null) return;
+        // Keep the HOME handoff even when the glass master was turned off:
+        // previously owned widget native material can still need vendor rebind.
+        if (launcher == null) return;
         HookUtil.InvocationResult<Object> workspaceResult =
                 HookUtil.tryInvoke(launcher, "getWorkspace");
         Object value = workspaceResult.succeeded() ? workspaceResult.value() : null;
         if (!(value instanceof View)) return;
         View workspace = (View) value;
         workspace.postOnAnimation(() -> {
-            if (!GlassRuntimeState.isEnabled() || !workspace.isAttachedToWindow()) return;
+            if (!workspace.isAttachedToWindow()) return;
+            // App -> HOME does not imply a widget-glass release. Launcher can clear
+            // the native blur plate while the widget stays attached; recover it only
+            // for hosts that LiquidDock once muted and no longer owns.
+            LauncherWidgetNativeViewBlurGate.restoreReleasedHostsAfterHomeResume(workspace);
+            if (!GlassRuntimeState.isEnabled()) return;
             reconcileCurrentWorkspacePage(workspace, glassConfig);
             // Resume is not a source invalidation. The invalidate only schedules normal pre-draw
             // geometry reconciliation; Surface/wallpaper/rotation freshness stays with its owner.
