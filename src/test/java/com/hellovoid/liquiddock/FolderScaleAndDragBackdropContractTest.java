@@ -46,14 +46,26 @@ public class FolderScaleAndDragBackdropContractTest {
 
         assertTrue(picker.contains("findNativeCheckGroup"));
         assertTrue(picker.contains("makeNativeSizeOption"));
-        assertTrue(picker.contains("group.addView(newOption, lp)"));
+        assertTrue(picker.contains("panel.addView(newOption, optionLp)"));
+        assertTrue(picker.contains("\"topToBottom\", stockRow.getId()"));
+        assertTrue(picker.contains("\"startToStart\", stockRow.getId()"));
+        assertTrue(picker.contains("\"topToBottom\", newOption.getId()"));
+        assertFalse(picker.contains("stockRow.addView(newOption"));
+        assertFalse(picker.contains("fitFourChoices("));
+        assertTrue(picker.contains("preview.setOnClickListener(v -> nativeCheck.performClick())"));
+        assertTrue(picker.contains("newOption.setOnClickListener(v ->"));
+        assertTrue(picker.contains("state.selected = true"));
+        assertTrue(picker.contains("clearStockChecks(owner)"));
+        assertTrue(picker.contains("setMarked(((View) owner).getContext(), state.info, selected)"));
+        assertTrue(picker.contains("if (state.selected) clearStockChecks(owner)"));
+        assertTrue(picker.contains("state.option.setBackground(outline)"));
         assertTrue(picker.contains("sample.getClass().getConstructor("));
         assertTrue(picker.contains("2×2 四宫格"));
         assertTrue(picker.contains("PREFIX + id"));
         assertTrue(picker.contains("boolean wasCustom = isMarked("));
         assertTrue(picker.contains("!selected && wasCustom"));
         assertTrue(picker.contains("convertIconSize"));
-        assertTrue(picker.contains("group.getChildCount() != 4"));
+        assertFalse(picker.contains("group.getChildCount() != 4"));
         assertFalse(picker.contains("root.addView(original"));
         assertFalse(picker.contains("panel.addView(option"));
         assertTrue(nativeSpan.contains("FolderIconConvertSizeController"));
