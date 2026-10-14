@@ -90,7 +90,6 @@ final class LauncherNativeFourFolderHook {
 
     static boolean install(ClassLoader loader) {
         if (installed || loader == null) return installed;
-        LargeFolderDebugTrace.log("install", "native folder hooks begin");
         try {
             // Vendor 4.50 may rename or inline *one* method. Never let
             // that disable unrelated geometry, model and view binding hooks.
@@ -421,78 +420,33 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " FolderIcon#fromXml class unavailable");
             }
 
-            if (folderIcon != null) {
-                try {
-                    Class<?> dropTarget = vendorClass(loader, "com.miui.home.launcher.DropTarget");
-                    Class<?> dragObject = vendorClass(loader, "com.miui.home.launcher.DragObject");
-                    if (dropTarget != null && dragObject != null) {
-                        HookUtil.hook(folderIcon.getDeclaredMethod(
-                                "onDragCompleted", dropTarget, dragObject), chain -> {
-                            Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                            if (chain.getThisObject() instanceof View) {
-                                View icon = (View) chain.getThisObject();
-                                LargeFolderDebugTrace.drop("FolderIcon.onDragCompleted", icon);
-                                if (eligible(icon)) queueTitleRestore(icon);
-                            }
-                            return result;
-                        });
-                        installedHooks++;
-                        LargeFolderDebugTrace.log("install", "FolderIcon.onDragCompleted installed");
-                    } else {
-                        LargeFolderDebugTrace.log("install", "FolderIcon.onDragCompleted classes unavailable");
-                    }
-                } catch (Throwable error) {
-                    LargeFolderDebugTrace.log("install", "FolderIcon.onDragCompleted FAILED "
-                            + LargeFolderDebugTrace.shortError(error));
-                }
-            }
             if (cell != null) {
-                // onDropChild may run while native drag visual state is still
-                // active. The later OEM drop-completed callback is the correct
-                // point to restore ItemIcon's title drawing flags. Keep the
-                // earlier callback for launcher variants lacking this method.
+                // OEM may leave the dragged FolderIcon root INVISIBLE after
+                // reattaching it to the desktop. The label itself is VISIBLE,
+                // so title-only invalidation cannot make it appear.
                 try {
                     HookUtil.hook(cell.getDeclaredMethod("onDropCompleted"), chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         Object target = chain.getThisObject();
                         if (target instanceof ViewGroup) {
                             ViewGroup workspace = (ViewGroup) target;
-                            LargeFolderDebugTrace.log("drop", "CellLayout.onDropCompleted childCount="
-                                    + workspace.getChildCount());
                             for (int i = 0; i < workspace.getChildCount(); i++) {
                                 View child = workspace.getChildAt(i);
-                                if (nativeFolderClass(child)) {
-                                    LargeFolderDebugTrace.drop("CellLayout.onDropCompleted", child);
+                                if (!eligible(child)) continue;
+                                if (child.getVisibility() == View.INVISIBLE) {
+                                    // Restore only the settled marked folder(s)
+                                    // hidden by this drop, not unrelated Views.
+                                    child.postOnAnimation(() -> restoreDroppedFolder(child));
+                                } else {
+                                    queueTitleRestore(child);
                                 }
-                                if (eligible(child)) queueTitleRestore(child);
                             }
                         }
                         return result;
                     });
                     installedHooks++;
-                    LargeFolderDebugTrace.log("install", "CellLayout.onDropCompleted installed");
                 } catch (Throwable error) {
-                    LargeFolderDebugTrace.log("install", "CellLayout.onDropCompleted FAILED "
-                            + LargeFolderDebugTrace.shortError(error));
-                }
-                try {
-                    // onDropChild is a placement signal, sometimes before drag finishes.
-                    // CellLayout.onLayout may have happened BEFORE drag ends.
-                    HookUtil.hook(cell.getDeclaredMethod("onDropChild", View.class), chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        Object dropped = chain.getArg(0);
-                        if (dropped instanceof View) {
-                            LargeFolderDebugTrace.drop("CellLayout.onDropChild", (View) dropped);
-                            if (eligible((View) dropped)) queueTitleRestore((View) dropped);
-                        }
-                        return result;
-                    });
-                    installedHooks++;
-                    LargeFolderDebugTrace.log("install", "CellLayout.onDropChild installed");
-                } catch (Throwable error) {
-                    LargeFolderDebugTrace.log("install", "CellLayout.onDropChild FAILED "
-                            + LargeFolderDebugTrace.shortError(error));
-                    Api101Bridge.log(TAG + " CellLayout#onDropChild unavailable", error);
+                    Api101Bridge.log(TAG + " CellLayout#onDropCompleted unavailable", error);
                 }
                 try {
             HookUtil.hook(cell.getDeclaredMethod("onLayout",
@@ -520,50 +474,10 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
             }
             installed = installedHooks > 0;
-            LargeFolderDebugTrace.log("install", "native hooks total=" + installedHooks
-                    + " installed=" + installed);
-            installTemporaryTitleAndMenuProbes(loader);
             return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
             return false;
-        }
-    }
-
-    private static void installTemporaryTitleAndMenuProbes(ClassLoader loader) {
-        try {
-            Class<?> item = Class.forName("com.miui.home.launcher.ItemIcon", false, loader);
-            HookUtil.hook(item.getDeclaredMethod("setTextAlpha", float.class), chain -> {
-                Object owner = chain.getThisObject();
-                if (owner instanceof View && nativeFolderClass((View) owner)) {
-                    LargeFolderDebugTrace.snapshot("ItemIcon.setTextAlpha/before="
-                            + chain.getArg(0), (View) owner);
-                }
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (owner instanceof View && nativeFolderClass((View) owner)) {
-                    LargeFolderDebugTrace.snapshot("ItemIcon.setTextAlpha/after", (View) owner);
-                }
-                return result;
-            });
-            LargeFolderDebugTrace.log("install", "ItemIcon.setTextAlpha installed");
-        } catch (Throwable error) {
-            LargeFolderDebugTrace.log("install", "ItemIcon.setTextAlpha FAILED "
-                    + LargeFolderDebugTrace.shortError(error));
-        }
-        try {
-            Class<?> menu = Class.forName("com.miui.home.launcher.ShortcutMenuLayer", false, loader);
-            Class<?> reason = Class.forName(
-                    "com.miui.home.launcher.EditStateChangeReason", false, loader);
-            HookUtil.hook(menu.getDeclaredMethod("hideShortcutMenu", reason), chain -> {
-                LargeFolderDebugTrace.menu("shortcutMenu.hide/before");
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                LargeFolderDebugTrace.menu("shortcutMenu.hide/after");
-                return result;
-            });
-            LargeFolderDebugTrace.log("install", "ShortcutMenuLayer.hideShortcutMenu installed");
-        } catch (Throwable error) {
-            LargeFolderDebugTrace.log("install", "ShortcutMenuLayer.hideShortcutMenu FAILED "
-                    + LargeFolderDebugTrace.shortError(error));
         }
     }
 
@@ -966,30 +880,33 @@ final class LauncherNativeFourFolderHook {
         queueTitleRestore(folder);
     }
 
+    private static void restoreDroppedFolder(View folder) {
+        if (!eligible(folder) || !folder.isAttachedToWindow()) return;
+        int[] frame = trustedCellFrame(folder);
+        if (frame == null) return; // Still dragging or transiently reparented.
+        if (folder.getVisibility() != View.INVISIBLE) return;
+        folder.setVisibility(View.VISIBLE);
+        NativeFourFolderSizing.Size sizing =
+                nativeSizing(folder, new int[]{frame[2], frame[3]});
+        layoutFolderTitle(folder, sizing, frame[2], frame[3]);
+        folder.postInvalidateOnAnimation();
+    }
+
     private static final Set<View> TITLE_RESTORE_PENDING =
             Collections.newSetFromMap(new WeakHashMap<>());
 
     private static void queueTitleRestore(View folder) {
-        if (!TITLE_RESTORE_PENDING.add(folder)) {
-            LargeFolderDebugTrace.log("restore", "queue skipped pending "
-                    + folder.getClass().getSimpleName());
-            return;
-        }
-        LargeFolderDebugTrace.snapshot("queueTitleRestore", folder);
+        if (!TITLE_RESTORE_PENDING.add(folder)) return;
         folder.postOnAnimation(() -> restoreTitleAfterPlacement(folder, 0));
     }
 
     private static void restoreTitleAfterPlacement(View folder, int attempts) {
         if (!folder.isAttachedToWindow() || !eligible(folder)) {
-            LargeFolderDebugTrace.snapshot("restore/aborted", folder);
             TITLE_RESTORE_PENDING.remove(folder);
             return;
         }
         int[] frame = trustedCellFrame(folder);
         if (frame == null) {
-            if (attempts == 0 || attempts == 6 || attempts == 12) {
-                LargeFolderDebugTrace.snapshot("restore/frame-null/" + attempts, folder);
-            }
             if (attempts < 12) {
                 folder.postOnAnimation(() -> restoreTitleAfterPlacement(folder, attempts + 1));
             } else {
@@ -998,11 +915,9 @@ final class LauncherNativeFourFolderHook {
             return;
         }
         TITLE_RESTORE_PENDING.remove(folder);
-        LargeFolderDebugTrace.snapshot("restore/settled", folder);
         NativeFourFolderSizing.Size size =
                 nativeSizing(folder, new int[]{frame[2], frame[3]});
         layoutFolderTitle(folder, size, frame[2], frame[3]);
-        LargeFolderDebugTrace.snapshot("restore/after-layout", folder);
         folder.postInvalidateOnAnimation();
     }
 
@@ -1019,9 +934,6 @@ final class LauncherNativeFourFolderHook {
         boolean show = LargeFolderTitlePolicy.shouldShow(true,
                 LauncherLargeFolderPickerHook.shouldShowTitle(folder.getContext(), folder.getTag()),
                 modelHidden);
-        LargeFolderDebugTrace.log("decision", "layoutFolderTitle show=" + show
-                + " modelHidden=" + modelHidden + " bounds=" + width + "x" + height
-                + " available=" + (height - size.insetY - size.backgroundHeight));
         if (!show) {
             restoreNativeTitleDrawing(folder, false);
             if (title.getVisibility() != View.INVISIBLE) title.setVisibility(View.INVISIBLE);
@@ -1084,10 +996,7 @@ final class LauncherNativeFourFolderHook {
                 changed |= HookUtil.tryInvoke(folder, "setTextAlpha", 1f).succeeded();
             }
         }
-        if (changed) {
-            LargeFolderDebugTrace.snapshot("restore/native-state-changed show=" + show, folder);
-            folder.invalidate();
-        }
+        if (changed) folder.invalidate();
     }
 
     private static int exact(int size) {
