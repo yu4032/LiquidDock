@@ -122,6 +122,7 @@ final class LauncherLargeFolderPickerHook {
                 Object cancel = getFieldOrNull(owner, "mFolderPickerCancel");
                 if (clicked == ok) {
                     boolean selected = state.selected;
+                    boolean wasCustom = isMarked(((View) owner).getContext(), state.info);
                     if (selected) {
                         HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
                     }
@@ -134,11 +135,19 @@ final class LauncherLargeFolderPickerHook {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     if (selected && LargeFolderPickerPolicy.mustRequestResize(
                             originalType, originalX, originalY)) {
-                        // FolderSheet.handleClose() may detach the view in the
-                        // original onClick; View.post() on a detached sheet
-                        // can remain queued forever. Use the main Looper.
+                        // The current editor can detach after handleClose().
                         new android.os.Handler(android.os.Looper.getMainLooper())
                                 .post(() -> requestNativeResize(state.info));
+                    } else if (!selected && wasCustom
+                            && originalType == NATIVE_FOUR_TYPE
+                            && originalX == 2 && originalY == 2) {
+                        // The stock 2x2_4 and our fourth size intentionally
+                        // share itemType=21. MIUI's onClick only converts if
+                        // itemType changes; force its native conversion when
+                        // the selection changes back to stock size (1x1).
+                        new android.os.Handler(android.os.Looper.getMainLooper())
+                                .post(() -> HookUtil.tryInvoke(
+                                        state.info, "convertIconSize", NATIVE_FOUR_TYPE));
                     }
                     return result;
                 }
