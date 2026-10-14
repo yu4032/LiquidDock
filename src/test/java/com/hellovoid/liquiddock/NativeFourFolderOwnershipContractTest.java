@@ -27,6 +27,10 @@ public class NativeFourFolderOwnershipContractTest {
         assertTrue(nativeHook.contains("NativeFourFolderFramePolicy.resolve("));
         assertTrue(nativeHook.contains("prepareFolderLayoutParams("));
         assertTrue(nativeHook.contains("preflightGeometryAbi("));
+        String module = source("ModuleMain.java");
+        assertTrue("Picker must not activate before the native geometry contract",
+                module.contains("if (LauncherNativeFourFolderHook.install(classLoader)) {"));
+        assertTrue(module.contains("LauncherLargeFolderPickerHook.install(classLoader);"));
         assertTrue(nativeHook.contains("capabilities.containsAll(EnumSet.allOf(Capability.class))"));
         assertTrue(nativeHook.contains("if (!installed || !nativeFolderClass(folder)"));
         assertFalse("Partial hook installation must never signal readiness",
