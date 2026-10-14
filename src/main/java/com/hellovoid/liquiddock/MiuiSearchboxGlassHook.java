@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
 import java.lang.reflect.Method;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.WeakHashMap;
 
@@ -22,7 +23,15 @@ final class MiuiSearchboxGlassHook {
     private static final String BACKGROUND_ID_NAME = "search_activity_view_background";
     private static final String SEARCHBOX_PACKAGE = "com.android.quicksearchbox";
 
-    private static final WeakHashMap<ViewGroup, State> STATES = new WeakHashMap<>();
+    // The background retains State through its attach listener. Weak values prevent
+    // this static lookup from retaining the Searchbox view tree via State.
+    private static final WeakHashMap<ViewGroup, WeakReference<State>> STATES =
+            new WeakHashMap<>();
+
+    private static State stateOf(ViewGroup background) {
+        WeakReference<State> reference = STATES.get(background);
+        return reference == null ? null : reference.get();
+    }
     private static final WeakHashMap<Activity, Boolean> OBSERVED_ACTIVITIES = new WeakHashMap<>();
     private static Class<?> observedBackgroundClass;
     private static Method observedBlurEnabledMethod;
@@ -37,7 +46,8 @@ final class MiuiSearchboxGlassHook {
                 MiuiSearchboxGlassPreferences.resolve(reader, config.glass);
         boolean enabled = config.enabled && config.glass.enabled && appearance.enabled;
         synchronized (STATES) {
-            for (State state : new ArrayList<>(STATES.values())) {
+            for (WeakReference<State> reference : new ArrayList<>(STATES.values())) {
+                State state = reference == null ? null : reference.get();
                 if (state == null || state.disposed) continue;
                 if (!enabled) state.dispose(true);
                 else state.session.applyLiveGlassConfig(config.glass, appearance);
@@ -154,7 +164,7 @@ final class MiuiSearchboxGlassHook {
             observer = null;
             preDrawListener = null;
             synchronized (STATES) {
-                if (STATES.get(background) == this) STATES.remove(background);
+                if (stateOf(background) == this) STATES.remove(background);
             }
             glassView.dispose();
             session.shutdown();
@@ -255,7 +265,7 @@ final class MiuiSearchboxGlassHook {
                     * background.getResources().getDisplayMetrics().density;
         }
         synchronized (STATES) {
-            State existing = STATES.get(background);
+            State existing = stateOf(background);
             if (existing != null && !existing.disposed) return;
             State state = new State(
                     background,
@@ -265,7 +275,7 @@ final class MiuiSearchboxGlassHook {
                     config.glass,
                     appearance,
                     cornerRadius);
-            STATES.put(background, state);
+            STATES.put(background, new WeakReference<>(state));
             state.attach();
         }
     }
@@ -274,7 +284,7 @@ final class MiuiSearchboxGlassHook {
         ViewGroup background = resolveBackground(activity, backgroundClass);
         if (background == null) return;
         synchronized (STATES) {
-            State state = STATES.get(background);
+            State state = stateOf(background);
             if (state != null && !state.disposed) state.refreshOnResume();
         }
     }
@@ -297,7 +307,7 @@ final class MiuiSearchboxGlassHook {
     private static boolean isOwned(Object object) {
         if (!(object instanceof ViewGroup)) return false;
         synchronized (STATES) {
-            State state = STATES.get((ViewGroup) object);
+            State state = stateOf((ViewGroup) object);
             return state != null && !state.disposed;
         }
     }
