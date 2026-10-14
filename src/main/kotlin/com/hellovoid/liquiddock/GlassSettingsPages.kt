@@ -399,6 +399,7 @@ internal fun GlassFoldersPage(
         ) { largeFolderGlass = it }
         IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
         IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
+        IntSetting(prefs, largeFolderPreviewIconScaleSpec, masterEnabled)
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,

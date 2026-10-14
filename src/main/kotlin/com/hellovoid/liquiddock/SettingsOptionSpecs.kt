@@ -244,6 +244,12 @@ internal val smallFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.SMALL_FOLDER
 internal val smallFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS, "小文件夹圆角", "dp")
 internal val largeFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_SIZE_OFFSET, "大文件夹尺寸偏移", "dp/边")
 internal val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")
+internal val largeFolderPreviewIconScaleSpec = IntSpec(
+    ConfigSchema.Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
+    "2×2 文件夹内图标大小",
+    "%",
+    summary = "调整真实 2×2 四宫格和九宫格的内部图标比例；100% 为原生效果，不改变文件夹占位和背景",
+)
 internal val passBlurCaptureScaleSpec = IntSpec(
     ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE,
     "工作区背景采样分辨率",
