@@ -94,6 +94,16 @@ final class LauncherFourGridAnimationHook {
                         }
                         return result;
                     });
+            hooks += hookIfPresent(base, "getPreviewHeight", new Class<?>[0],
+                    chain -> {
+                        LauncherFourGridContentView custom = customFor(chain.getThisObject());
+                        if (custom != null && custom.previewArea().getHeight() > 0) {
+                            View first = custom.nativeAnimationTile(0);
+                            float padding = first != null ? first.getTop() * 2f : 0f;
+                            return Math.max(0f, custom.previewArea().getHeight() - padding);
+                        }
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    });
             hooks += hookIfPresent(base, "getPreviewCount", new Class<?>[0],
                     chain -> {
                         LauncherFourGridContentView custom = customFor(chain.getThisObject());
@@ -101,6 +111,33 @@ final class LauncherFourGridAnimationHook {
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
                     });
 
+            try {
+                Class<?> compact = Class.forName(
+                        "com.miui.home.launcher.folder.FolderIcon1x1",
+                        false, loader);
+                hooks += hookIfPresent(compact, "showPreview",
+                        new Class<?>[]{boolean.class}, chain -> {
+                            Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                            LauncherFourGridContentView custom = customFor(chain.getThisObject());
+                            if (custom != null) custom.setAlpha(
+                                    (Boolean) chain.getArg(0) ? 1f : 0f);
+                            return result;
+                        });
+                hooks += hookIfPresent(compact, "getPreviewHeight", new Class<?>[0],
+                        chain -> {
+                            LauncherFourGridContentView custom = customFor(chain.getThisObject());
+                            if (custom != null) return (float) custom.previewArea().getHeight();
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        });
+                hooks += hookIfPresent(compact, "getPreviewIconHeight", new Class<?>[0],
+                        chain -> {
+                            LauncherFourGridContentView custom = customFor(chain.getThisObject());
+                            if (custom != null && custom.nativeAnimationTile(0) != null) {
+                                return (float) custom.nativeAnimationTile(0).getHeight();
+                            }
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        });
+            } catch (Throwable ignored) {}
             for (String cls : new String[]{
                     "com.miui.home.launcher.folder.FolderIcon2x2",
                     "com.miui.home.launcher.folder.FolderIcon2x2_4",
