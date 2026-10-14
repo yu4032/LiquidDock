@@ -42,6 +42,23 @@ public class FolderScaleAndDragBackdropContractTest {
         assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
         assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
         assertTrue(startup.contains("LauncherLargeFolderNativeSpanHook.install("));
+        assertTrue(startup.contains("LauncherLargeFolderVisualHook.install("));
+        String visual = Files.readString(MAIN.resolve("LauncherLargeFolderVisualHook.java"));
+        assertTrue(visual.contains("\"onMeasure\""));
+        assertTrue(visual.contains("\"getCellWidth\""));
+        assertTrue(visual.contains("MEASURING_CELL_WIDTH"));
+        assertTrue(visual.contains("resizeNativeLargeFolderContents"));
+        assertTrue(visual.contains("\"mIconImageView\""));
+        assertTrue(visual.contains("\"mFolderCover\""));
+        assertTrue(visual.contains("\"getMPreviewContainer\""));
+        assertTrue(visual.contains("\"getBuddyIconView\""));
+        assertTrue(visual.contains("\"setBuddyIconView\""));
+        assertTrue(visual.contains("!FOUR_CLASS.equals(old.getClass().getName())"));
+        String gridCell = Files.readString(MAIN.resolve("HomeGridCellGeometryHook.java"));
+        assertTrue(gridCell.contains("boolean.class, layoutParams"));
+        assertTrue(gridCell.contains("\"measureChild\""));
+        assertTrue(gridCell.contains("LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)"));
+
         assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
         String schema = Files.readString(MAIN.resolve("config/ConfigSchema.java"));
         assertFalse(schema.contains("LARGE_FOLDER_FOUR_ICONS"));
