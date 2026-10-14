@@ -290,11 +290,11 @@ final class LauncherLargeFolderPickerHook {
         int width = parent == null ? 0 : parent.getWidth()
                 - parent.getPaddingLeft() - parent.getPaddingRight();
         if (width <= 0) return;
-        int childWidth = Math.max(1, width / 4);
+        int childWidth = Math.max(1, (width - dp(group.getContext(), 12)) / 4);
         for (int i = 0; i < 4; i++) {
             View v = group.getChildAt(i);
             ViewGroup.LayoutParams p = v.getLayoutParams();
-            if (p != null && p.width > childWidth) {
+            if (p != null && p.width != childWidth) {
                 p.width = childWidth;
                 v.setLayoutParams(p);
             }
@@ -401,7 +401,11 @@ final class LauncherLargeFolderPickerHook {
     private static void updateAppearance(PickerState state) {
         state.option.setSelected(state.selected);
         if (state.option instanceof android.widget.Checkable) {
-            ((android.widget.Checkable) state.option).setChecked(state.selected);
+            try {
+                ((android.widget.Checkable) state.option).setChecked(state.selected);
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " native fourth check state unavailable: " + error);
+            }
         }
     }
 
