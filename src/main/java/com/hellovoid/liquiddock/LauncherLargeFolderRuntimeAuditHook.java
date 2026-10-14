@@ -31,11 +31,19 @@ final class LauncherLargeFolderRuntimeAuditHook {
         if (loader == null) return false;
         try {
             logVendorContract(loader, "com.miui.home.launcher.FolderIcon",
-                    "fromXml", "createItemIcon", "getSpanX", "getSpanY");
+                    "fromXml", "createItemIcon", "getSpanX", "getSpanY",
+                    "onMeasure", "setIconImageView");
             logVendorContract(loader, "com.miui.home.launcher.ItemIcon",
                     "onMeasure", "getSpanX");
+            logVendorContract(loader, "com.miui.home.launcher.folder.FolderIcon2x2",
+                    "onMeasure", "onFinishInflate", "getPreviewPosition",
+                    "getPreviewItems", "getMPreviewContainer");
             logVendorContract(loader, "com.miui.home.launcher.folder.FolderIcon2x2_4",
                     "onMeasure", "onFinishInflate", "getPreviewPosition");
+            logVendorContract(loader, "com.miui.home.launcher.folder.BaseFolderIconPreviewContainer2X2",
+                    "onMeasure", "onMeasureChildCustom", "preSetup2x2");
+            logVendorContract(loader, "com.miui.home.launcher.folder.FolderIconPreviewContainer2X2_4",
+                    "onMeasure", "preSetup2x2", "onMeasureChild2x2");
             logVendorContract(loader, NATIVE_CONTENT_CLASS, "onMeasure");
             logVendorContract(loader, "com.miui.home.launcher.DeviceConfig",
                     "getMiuiWidgetSizeSpec", "getCellWidth");
