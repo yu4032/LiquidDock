@@ -156,6 +156,15 @@ final class LauncherNativeFourFolderHook {
                         frame = new int[]{size.backgroundWidth, size.backgroundHeight};
                         // Launcher 4.50 explicitly supports per-view custom dimensions.
                         // Let ImageView measure normally so its drawable matrix also updates.
+                        // LauncherIconImageView.onMeasure always measures 1x1
+                        // unless mCustomWidth/Height remain set. A locked-workspace
+                        // long press can trigger a new native pass while the
+                        // CellLayout coordinate arrays are temporarily invalid.
+                        // Persist the override only for the actual workspace
+                        // folder; native folder-animation copies keep ownership
+                        // of their own transient interpolated dimensions.
+                        boolean workspaceOwner = NativeFourFolderSizing.shouldPersistImageSize(
+                                workspaceSource(root) == root, frame[0], frame[1]);
                         int previousWidth = HookUtil.getIntField(surface, "mCustomWidth");
                         int previousHeight = HookUtil.getIntField(surface, "mCustomHeight");
                         HookUtil.setIntField(surface, "mCustomWidth", frame[0]);
@@ -165,8 +174,10 @@ final class LauncherNativeFourFolderHook {
                             forceMeasuredFrame(surface, frame, "image");
                             return result;
                         } finally {
-                            HookUtil.setIntField(surface, "mCustomWidth", previousWidth);
-                            HookUtil.setIntField(surface, "mCustomHeight", previousHeight);
+                            if (!workspaceOwner) {
+                                HookUtil.setIntField(surface, "mCustomWidth", previousWidth);
+                                HookUtil.setIntField(surface, "mCustomHeight", previousHeight);
+                            }
                         }
                     });
                     installedHooks++;
@@ -180,8 +191,18 @@ final class LauncherNativeFourFolderHook {
                         if (root == null || !eligible(root)) return chain.proceed();
                         int[] frame = visualFrame(root);
                         NativeFourFolderSizing.Size size = frame == null ? null : nativeSizing(root, frame);
-                        return size == null ? chain.proceed()
-                                : new int[]{size.backgroundWidth, size.backgroundHeight};
+                        if (size != null) {
+                            return new int[]{size.backgroundWidth, size.backgroundHeight};
+                        }
+                        // Transient native remeasures must not regress the
+                        // workspace original-size metadata to the stock 1x1.
+                        if (workspaceSource(root) == root) {
+                            int width = HookUtil.getIntField(surface, "mCustomWidth");
+                            int height = HookUtil.getIntField(surface, "mCustomHeight");
+                            if (NativeFourFolderSizing.shouldPersistImageSize(
+                                    true, width, height)) return new int[]{width, height};
+                        }
+                        return chain.proceed();
                     });
                     installedHooks++;
                 } catch (Throwable error) {
@@ -770,6 +791,8 @@ final class LauncherNativeFourFolderHook {
         NativeFourFolderSizing.Size size = nativeSizing(ancestorFolder(container), new int[]{width, height});
         if (size == null) return;
         ViewGroup group = (ViewGroup) container;
+        View folder = ancestorFolder(container);
+        boolean workspaceOwner = workspaceSource(folder) == folder;
         for (int i = 0; i < group.getChildCount(); i++) {
             View view = group.getChildAt(i);
             String name = view.getClass().getName();
@@ -784,6 +807,18 @@ final class LauncherNativeFourFolderHook {
             } else {
                 params.width = size.backgroundWidth;
                 params.height = size.backgroundHeight;
+                // The OEM image's own measure method otherwise ignores its
+                // parent MeasureSpec and falls back to widgetSize(1).
+                // Store the stable size on the real workspace instance.
+                if (NativeFourFolderSizing.shouldPersistImageSize(
+                        workspaceOwner, size.backgroundWidth, size.backgroundHeight)) {
+                    if (HookUtil.getIntField(view, "mCustomWidth") != size.backgroundWidth) {
+                        HookUtil.setIntField(view, "mCustomWidth", size.backgroundWidth);
+                    }
+                    if (HookUtil.getIntField(view, "mCustomHeight") != size.backgroundHeight) {
+                        HookUtil.setIntField(view, "mCustomHeight", size.backgroundHeight);
+                    }
+                }
                 // Parent is already measuring or laying out these native
                 // children. LayoutParams is a live object; do not call
                 // setLayoutParams() here (which requests another layout and
