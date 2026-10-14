@@ -23,6 +23,9 @@ final class LauncherNativeFourFolderHook {
             "com.miui.home.launcher.folder.FolderIcon2x2_4";
     private static final String CONTENT_HOST =
             "com.miui.home.launcher.folder.LauncherFolder2x2IconContainer";
+    // A single source of dimensions: the CellLayout item frame (not the
+    // already-constrained inner icon's incoming MeasureSpec).
+    private static final ThreadLocal<int[]> ROOT_FRAME = new ThreadLocal<>();
     private static final ThreadLocal<int[]> NATIVE_SIZE = new ThreadLocal<>();
     private static final Set<View> WARNED =
             Collections.newSetFromMap(new WeakHashMap<>());
@@ -58,15 +61,61 @@ final class LauncherNativeFourFolderHook {
                     "com.miui.home.launcher.Launcher", false, loader);
             Class<?> infoType = Class.forName(
                     "com.miui.home.launcher.FolderInfo", false, loader);
+            Class<?> itemIcon = Class.forName(
+                    "com.miui.home.launcher.ItemIcon", false, loader);
 
-            // The built-in 2x2 folder content reads DeviceConfig's fixed
-            // widget size during onMeasure. Replace that size ONLY while
-            // measuring our selected native folder, and nowhere else.
+            // FolderIcon#getSpanX/Y already returns FolderInfo.spanX/Y.
+            // The actual remaining clamp is ItemIcon#onMeasure, where the
+            // DeviceConfig single-cell width can differ from the custom
+            // workspace grid pitch. Scope the width override to the actual
+            // native four-folder root measurement; never affect other icons.
+            HookUtil.hook(config.getDeclaredMethod("getCellWidth"), chain -> {
+                Object original = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                int[] frame = ROOT_FRAME.get();
+                if (frame == null || frame[0] <= 0) return original;
+                int minCellWidth = (frame[0] + 1) / 2;
+                return Math.max(((Number) original).intValue(), minCellWidth);
+            });
+            HookUtil.hook(itemIcon.getDeclaredMethod(
+                    "onMeasure", int.class, int.class), chain -> {
+                Object owner = chain.getThisObject();
+                if (!(owner instanceof View) || !eligible((View) owner)) {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                }
+                View folder = (View) owner;
+                int[] frame = desiredFrame(folder,
+                        (Integer) chain.getArg(0), (Integer) chain.getArg(1));
+                if (frame == null) {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                }
+                int[] previous = ROOT_FRAME.get();
+                ROOT_FRAME.set(frame);
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                args[0] = exact(frame[0]);
+                args[1] = exact(frame[1]);
+                try {
+                    Object result = chain.proceed(args);
+                    traceMeasure("root", folder, frame);
+                    return result;
+                } finally {
+                    if (previous == null) ROOT_FRAME.remove();
+                    else ROOT_FRAME.set(previous);
+                }
+            });
+
+            // The built-in 2x2 content also calls DeviceConfig for widget
+            // dimensions. Previously NATIVE_SIZE was taken from the inner
+            // MeasureSpec, which was already 1x1 -- feeding that value back
+            // reproduced the shrinking forever. Use the ROOT 2x2 allocation.
+
             HookUtil.hook(config.getDeclaredMethod("getMiuiWidgetSizeSpec",
                     int.class, int.class, boolean.class), chain -> {
                 int[] size = NATIVE_SIZE.get();
                 Object nativeValue = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (size == null) return nativeValue;
+                if (size == null
+                        || ((Integer) chain.getArg(0)) != 2
+                        || ((Integer) chain.getArg(1)) != 2
+                        || !Boolean.TRUE.equals(chain.getArg(2))) return nativeValue;
                 return ((long) size[0] << 32) | (size[1] & 0xffffffffL);
             });
             HookUtil.hook(content.getDeclaredMethod(
@@ -76,15 +125,23 @@ final class LauncherNativeFourFolderHook {
                 if (host == null || !eligible(host)) {
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
-                int width = View.MeasureSpec.getSize((Integer) chain.getArg(0));
-                int height = View.MeasureSpec.getSize((Integer) chain.getArg(1));
-                if (width <= 0 || height <= 0) {
+                // Do NOT feed the child's incoming MeasureSpec back into
+                // DeviceConfig. It may be only one cell due to wrap_content.
+                int[] frame = ROOT_FRAME.get();
+                if (frame == null) {
+                    frame = desiredFrame(host,
+                            (Integer) chain.getArg(0),
+                            (Integer) chain.getArg(1));
+                }
+                if (frame == null) {
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
                 int[] previous = NATIVE_SIZE.get();
-                NATIVE_SIZE.set(new int[]{width, height});
+                NATIVE_SIZE.set(frame);
                 try {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    traceMeasure("inner", child, frame);
+                    return result;
                 } finally {
                     if (previous == null) NATIVE_SIZE.remove();
                     else NATIVE_SIZE.set(previous);
@@ -146,6 +203,30 @@ final class LauncherNativeFourFolderHook {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
             return false;
         }
+    }
+
+    private static final Set<View> MEASURE_LOGGED =
+            Collections.newSetFromMap(new WeakHashMap<>());
+
+    private static int[] desiredFrame(View folder, int incomingWidthSpec,
+            int incomingHeightSpec) {
+        ViewGroup.LayoutParams lp = folder.getLayoutParams();
+        int requestedWidth = View.MeasureSpec.getSize(incomingWidthSpec);
+        int requestedHeight = View.MeasureSpec.getSize(incomingHeightSpec);
+        // ItemIcon's LayoutParams comes from CellLayout.setupLayoutParam;
+        // it expresses the full multi-cell width, unlike the native
+        // wrap_content inner child measured later.
+        int width = lp != null && lp.width > 0 ? lp.width : requestedWidth;
+        int height = lp != null && lp.height > 0 ? lp.height : requestedHeight;
+        if (width <= 0 || height <= 0) return null;
+        return new int[]{width, height};
+    }
+
+    private static void traceMeasure(String stage, View view, int[] expected) {
+        if (!MEASURE_LOGGED.add(view)) return;
+        Api101Bridge.log(TAG + " " + stage + " expected="
+                + expected[0] + "x" + expected[1] + " measured="
+                + view.getMeasuredWidth() + "x" + view.getMeasuredHeight());
     }
 
     private static boolean eligible(View folder) {
