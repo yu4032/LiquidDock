@@ -57,6 +57,7 @@ final class LauncherNativeFourFolderHook {
     }
 
     private static boolean installed;
+    private static boolean installAttempted;
     private static volatile int previewScalePercent = NativeFolderPreviewScale.DEFAULT_PERCENT;
     private static SharedPreferences scalePreferences;
     private static SharedPreferences.OnSharedPreferenceChangeListener scaleListener;
@@ -107,10 +108,10 @@ final class LauncherNativeFourFolderHook {
     }
 
     static boolean install(ClassLoader loader) {
-        if (installed || loader == null) return installed;
+        if (installed || installAttempted || loader == null) return installed;
         try {
-            // Vendor 4.50 may rename or inline *one* method. Never let
-            // that disable unrelated geometry, model and view binding hooks.
+            // Missing required methods must disable the whole custom folder
+            // pipeline, not leave an arbitrary subset of geometry hooks active.
             Class<?> cell = vendorClass(loader, "com.miui.home.launcher.CellLayout");
             Class<?> content = vendorClass(loader, CONTENT_HOST);
             Class<?> config = vendorClass(loader, "com.miui.home.launcher.DeviceConfig");
@@ -124,6 +125,9 @@ final class LauncherNativeFourFolderHook {
             // Missing mandatory anchors must not leave a half-installed folder pipeline.
             if (!preflightGeometryAbi(loader, cell, content, config, folderIcon,
                     launcher, infoType, itemIcon, nativeImageClass)) return false;
+            // If an individual hook later fails, its already registered siblings
+            // are inert. Never register duplicates on a second install call.
+            installAttempted = true;
             EnumSet<Capability> capabilities = EnumSet.noneOf(Capability.class);
             int installedHooks = 0;
 
@@ -519,7 +523,7 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " FolderIcon#fromXml class unavailable");
             }
 
-            // Both OEM setupLayoutParam overloads are attached to this folder owner.
+            // Available OEM setupLayoutParam overloads belong to this folder owner.
             // The grid module applies this method only to widgets.
             if (cell != null) {
                 Class<?> itemInfoClass = vendorClass(loader, "com.miui.home.launcher.ItemInfo");
