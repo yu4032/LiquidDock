@@ -75,9 +75,6 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> WIDGET_HORIZONTAL_STRETCH = bool(
                 "grid_widget_horizontal_stretch", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Boolean> LARGE_FOLDER_FOUR_ICONS = bool(
-                "grid_large_folder_four_icons", false, false, false,
-                ConfigKey.ExportMode.ALWAYS);
 
         public static final ConfigKey<Integer> LANDSCAPE_HORIZONTAL_DISTANCE = dp(
                 "grid_landscape_horizontal_distance", 0, 0, 0, -600, 600,
