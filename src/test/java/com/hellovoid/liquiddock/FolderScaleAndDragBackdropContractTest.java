@@ -19,6 +19,8 @@ public class FolderScaleAndDragBackdropContractTest {
         String startup = Files.readString(MAIN.resolve("ModuleMain.java"));
 
         assertTrue(folder.contains("FolderIcon2x2_4"));
+        assertTrue(folder.contains("FolderIcon1x1"));
+        assertTrue(folder.contains("LargeFolderFootprintPolicy.needsNativePromotion("));
         assertTrue(folder.contains("FolderIconPreviewContainer2X2_4"));
         assertTrue(folder.contains("\"setMItemsMaxCount\", FOUR"));
         assertTrue(folder.contains("\"setMLargeIconNum\", FOUR"));
