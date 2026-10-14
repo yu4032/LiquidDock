@@ -37,6 +37,14 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(geometry.contains("LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)"));
         assertTrue(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
         assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
+        String picker = Files.readString(MAIN.resolve("LauncherLargeFolderPickerHook.java"));
+        assertTrue(picker.contains("\"initListener\""));
+        assertTrue(picker.contains("\"onClick\""));
+        assertTrue(picker.contains("2×2 四宫格大文件夹"));
+        assertTrue(picker.contains("mFolderPickerBody"));
+        assertTrue(picker.contains("LargeFolderPickerPolicy.mustRequestResize("));
+        assertTrue(picker.contains("android.os.Looper.getMainLooper()"));
+        assertFalse(picker.contains("\"itemType\", 23"));
     }
 
     @Test public void smallFolderPreviewContainerOwnsItsScaledRemeasureDomain() throws Exception {
