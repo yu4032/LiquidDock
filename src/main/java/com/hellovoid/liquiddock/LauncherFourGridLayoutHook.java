@@ -3,10 +3,10 @@ package com.hellovoid.liquiddock;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
+import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -21,7 +21,7 @@ import java.util.WeakHashMap;
 final class LauncherFourGridLayoutHook {
     private static final String TAG = "LiquidDockFolder4";
     private static final int FOUR_TYPE = 21;
-    private static final Map<ViewGroup, LauncherFourGridContentView> CONTENTS =
+    private static final Map<ViewGroup, WeakReference<LauncherFourGridContentView>> CONTENTS =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Integer> COVERED_VISIBILITY =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -58,7 +58,7 @@ final class LauncherFourGridLayoutHook {
                             HookUtil.tryInvoke(changed, "getBuddyIconView");
                     if (bound.succeeded() && bound.value() instanceof ViewGroup) {
                         ViewGroup root = (ViewGroup) bound.value();
-                        LauncherFourGridContentView content = CONTENTS.get(root);
+                        LauncherFourGridContentView content = lookup(root);
                         if (content != null) {
                             root.post(() -> content.bind(root, changed, true));
                         }
@@ -77,6 +77,11 @@ final class LauncherFourGridLayoutHook {
         }
     }
 
+    private static LauncherFourGridContentView lookup(ViewGroup folder) {
+        WeakReference<LauncherFourGridContentView> ref = CONTENTS.get(folder);
+        return ref == null ? null : ref.get();
+    }
+
     private static void inspect(ViewGroup cell) {
         int childCount = cell.getChildCount();
         for (int i = 0; i < childCount; i++) {
@@ -84,7 +89,7 @@ final class LauncherFourGridLayoutHook {
             if (!(root instanceof ViewGroup)) continue;
             Object info = root.getTag();
             ViewGroup nativeFolder = (ViewGroup) root;
-            LauncherFourGridContentView previous = CONTENTS.get(nativeFolder);
+            LauncherFourGridContentView previous = lookup(nativeFolder);
             if (eligible(root, info)) {
                 attach(nativeFolder, info);
             } else if (previous != null) {
@@ -121,7 +126,7 @@ final class LauncherFourGridLayoutHook {
     }
 
     private static void attach(ViewGroup folder, Object info) {
-        LauncherFourGridContentView content = CONTENTS.get(folder);
+        LauncherFourGridContentView content = lookup(folder);
         if (content == null) {
             content = new LauncherFourGridContentView(folder.getContext());
             ViewGroup.LayoutParams lp = createParams(folder);
@@ -129,7 +134,7 @@ final class LauncherFourGridLayoutHook {
             // content fills the same full-size FolderIcon host but reserves
             // the native title band in its own 2x2 measurement.
             folder.addView(content, lp);
-            CONTENTS.put(folder, content);
+            CONTENTS.put(folder, new WeakReference<>(content));
             hideOriginal(folder);
             Log.i(TAG, "four-grid-attached root=" + folder.getClass().getName()
                     + " rootSize=" + folder.getWidth() + "x" + folder.getHeight()
