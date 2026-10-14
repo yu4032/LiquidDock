@@ -50,6 +50,19 @@ final class WidgetGridSizing {
         };
     }
 
+    /**
+     * Preserve a native folder drawable's inset relative to the OEM preview.
+     * Example from Launcher 4.50: 287px background / 359px preview.
+     * A 718px preview should use a 574px background, NOT 718px.
+     */
+    static int scaledPreviewPart(int available, int originalPart, int originalWhole) {
+        if (available <= 0) return 0;
+        if (originalPart <= 0 || originalWhole <= 0
+                || originalPart > originalWhole) return available;
+        return Math.max(1, Math.min(available,
+                Math.round((double) available * originalPart / originalWhole)));
+    }
+
     static int[] centeredFrame(int[] allocation,
                                int leftMargin, int topMargin,
                                int rightMargin, int bottomMargin) {
