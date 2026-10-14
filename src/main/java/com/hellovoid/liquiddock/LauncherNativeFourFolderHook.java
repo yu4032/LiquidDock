@@ -1005,6 +1005,13 @@ final class LauncherNativeFourFolderHook {
                     changed = true;
                 }
             }
+            // ItemIcon.setTextAlpha changes mTitleView, not mTitleContainer.
+            // A dragged folder may therefore have a VISIBLE parent but a
+            // fully transparent title even after the container is restored.
+            Object text = HookUtil.tryInvoke(folder, "getTitleView").value();
+            if (text instanceof View && ((View) text).getAlpha() == 0f) {
+                changed |= HookUtil.tryInvoke(folder, "setTextAlpha", 1f).succeeded();
+            }
         }
         if (changed) folder.invalidate();
     }
