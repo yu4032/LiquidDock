@@ -26,6 +26,8 @@ final class LauncherNativeFourFolderHook {
     private static final ThreadLocal<int[]> NATIVE_SIZE = new ThreadLocal<>();
     private static final Set<View> WARNED =
             Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Set<View> CUSTOM_SIZED =
+            Collections.newSetFromMap(new WeakHashMap<>());
     private static boolean installed;
 
     private LauncherNativeFourFolderHook() {}
@@ -96,19 +98,23 @@ final class LauncherNativeFourFolderHook {
                     int.class, launcher, ViewGroup.class, infoType), chain -> {
                 Object info = chain.getArg(3);
                 ViewGroup parent = (ViewGroup) chain.getArg(2);
-                if (info != null && LauncherLargeFolderPickerHook.isMarked(
-                        parent.getContext(), info)
-                        && isFourGridInfo(info)) {
+                if (info != null) {
+                    boolean marked = LauncherLargeFolderPickerHook.isMarked(
+                            parent.getContext(), info);
                     HookUtil.InvocationResult<Object> cached =
                             HookUtil.tryInvoke(info, "getBuddyIconView");
                     if (cached.succeeded() && cached.value() instanceof View) {
                         View old = (View) cached.value();
-                        if (!NATIVE_FOUR.equals(old.getClass().getName())) {
+                        boolean wrongClass = marked && isFourGridInfo(info)
+                                && !NATIVE_FOUR.equals(old.getClass().getName());
+                        boolean previouslyCustom = !marked && CUSTOM_SIZED.remove(old);
+                        if (wrongClass || previouslyCustom) {
                             ViewParent p = old.getParent();
                             if (p == null || p == parent) {
                                 if (p == parent) parent.removeView(old);
                                 HookUtil.tryInvoke(info, "setBuddyIconView", (Object) null);
-                                Api101Bridge.log(TAG + " discarded stale compact icon view");
+                                Api101Bridge.log(TAG + " invalidated cached native icon "
+                                        + (previouslyCustom ? "after reverting size" : "after resize"));
                             }
                         }
                     }
@@ -197,6 +203,7 @@ final class LauncherNativeFourFolderHook {
                     allocation, p.leftMargin, p.topMargin,
                     p.rightMargin, p.bottomMargin);
         }
+        CUSTOM_SIZED.add(folder);
         int w = frame[2], h = frame[3];
         if (w <= 0 || h <= 0) return;
         lp.width = w;
