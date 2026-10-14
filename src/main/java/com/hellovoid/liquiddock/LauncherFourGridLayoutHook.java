@@ -140,11 +140,19 @@ final class LauncherFourGridLayoutHook {
                     + " content=" + content.getClass().getSimpleName());
         }
         content.bind(folder, info, false);
-        // We never scale the old 1x1 image. The independent layout is measured
-        // by the real 2x2 FolderIcon host on its next native layout pass.
-        if (content.getWidth() != folder.getWidth()
-                || content.getHeight() != folder.getHeight()) {
-            content.requestLayout();
+        // CellLayout has just laid out the native drag host. Independently
+        // measure the new content to the host's ACTUAL frame now; a small
+        // wrap_content native icon subtree must not constrain our 2x2 view.
+        // This also works when the optional HomeGrid feature is disabled.
+        int width = folder.getWidth(), height = folder.getHeight();
+        if (width > 0 && height > 0 && (content.getWidth() != width
+                || content.getHeight() != height
+                || content.getMeasuredWidth() != width
+                || content.getMeasuredHeight() != height)) {
+            content.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            content.layout(0, 0, width, height);
+            Api101Bridge.log(TAG + " four-grid-content-frame=" + width + "x" + height);
         }
     }
 
