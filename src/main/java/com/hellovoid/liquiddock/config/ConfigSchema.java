@@ -535,7 +535,7 @@ public final class ConfigSchema {
                 Animation.DISABLE_WALLPAPER_ZOOM);
         add(keys, Grid.ENABLED, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
-                Grid.WIDGET_HORIZONTAL_STRETCH, Grid.LARGE_FOLDER_FOUR_ICONS,
+                Grid.WIDGET_HORIZONTAL_STRETCH,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 Grid.PORTRAIT_TOP_DISTANCE, Grid.PORTRAIT_BOTTOM_DISTANCE,
