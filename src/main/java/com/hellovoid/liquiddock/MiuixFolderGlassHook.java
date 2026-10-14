@@ -95,8 +95,8 @@ final class MiuixFolderGlassHook {
                     if (isFolderLiveEnabled(material)) {
                         LauncherGlassStaticNode sink = claimedSink(material);
                         if (sink == null) sink = attachMaterial(material, glassConfig);
-                        if (sink != null) {
-                            LauncherWidgetNativeViewBlurGate.claimFolder(material);
+                        if (sink != null
+                                && LauncherWidgetNativeViewBlurGate.claimFolder(material)) {
                             LauncherWidgetNativeViewBlurGate.rememberFolderInitializer(
                                     material, args);
                         }
@@ -535,7 +535,10 @@ final class MiuixFolderGlassHook {
 
         LauncherGlassStaticNode existing = claimedSink(material);
         if (existing != null) {
-            LauncherWidgetNativeViewBlurGate.claimFolder(material);
+            if (!LauncherWidgetNativeViewBlurGate.claimFolder(material)) {
+                releaseMaterialOwnership(material);
+                return null;
+            }
             makeMaterialTransparent(material);
             suppressLargeFolderDrawablePaint(material);
             coverNativeViewIfNeeded(material);
@@ -551,9 +554,12 @@ final class MiuixFolderGlassHook {
         LauncherGlassStaticNode sink = LauncherGlassStaticNode.attachFolderMaterial(
                 material, smallFolder, radius, glassConfig);
         if (sink != null) {
+            if (!LauncherWidgetNativeViewBlurGate.claimFolder(material)) {
+                sink.dispose();
+                return null;
+            }
             CLAIMED.put(material, new WeakReference<>(sink));
             MiuixLauncherDragOverlayHook.observeStaticNode(sink);
-            LauncherWidgetNativeViewBlurGate.claimFolder(material);
             makeMaterialTransparent(material);
             suppressLargeFolderDrawablePaint(material);
             coverNativeViewIfNeeded(material);
