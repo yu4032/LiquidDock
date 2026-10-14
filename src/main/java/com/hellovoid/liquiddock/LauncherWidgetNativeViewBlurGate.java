@@ -18,6 +18,11 @@ final class LauncherWidgetNativeViewBlurGate {
     private static final String TAG = "[DC][WidgetViewBlur]";
     private static final Map<View, State> STATES =
             Collections.synchronizedMap(new WeakHashMap<>());
+    // Keep only hosts whose native material LiquidDock actually muted. A released
+    // widget can lose its restored mode/radius/blend colors on a later App -> HOME
+    // transition without passing through another glass release.
+    private static final Map<View, Boolean> PREVIOUSLY_OWNED_HOSTS =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<Boolean> OUR_SETTER = new ThreadLocal<>();
 
     private static Method setViewBlurMode;
@@ -110,6 +115,8 @@ final class LauncherWidgetNativeViewBlurGate {
         boolean muted = setNativeMode(host, 0);
         if (!muted) {
             synchronized (STATES) { STATES.remove(host); }
+        } else {
+            PREVIOUSLY_OWNED_HOSTS.put(host, Boolean.TRUE);
         }
         MainHook.log(TAG + " claim host=" + host.getClass().getSimpleName()
                 + " muted=" + muted);
@@ -150,6 +157,34 @@ final class LauncherWidgetNativeViewBlurGate {
         MainHook.log(TAG + " release vendor-rebind=" + restored
                 + " host=" + host.getClass().getSimpleName());
         return restored;
+    }
+
+    /**
+     * Launcher 4.50 may clear its native widget blur during an App transition without
+     * detaching the widget and without triggering a LiquidDock glass-state change.
+     * Restore only previously muted widgets after Launcher has resumed HOME.
+     *
+     * Glass-enabled widgets remain owned and must not regain a duplicate native plate.
+     * Ineligible, detached, non-Workspace and foreign-window Views are not touched.
+     */
+    static void restoreReleasedHostsAfterHomeResume(View workspace) {
+        if (!installed || workspace == null || !workspace.isAttachedToWindow()
+                || GlassRuntimeState.isWidgetEnabled()) return;
+        View workspaceRoot = workspace.getRootView();
+        for (View host : new java.util.ArrayList<>(PREVIOUSLY_OWNED_HOSTS.keySet())) {
+            if (host == null || !host.isAttachedToWindow()
+                    || host.getRootView() != workspaceRoot
+                    || !LauncherGlassHierarchy.isWorkspace(host)) continue;
+            // Do not overwrite an active glass claim even if the runtime switch changed
+            // while a deferred HOME callback was queued.
+            synchronized (STATES) {
+                if (STATES.containsKey(host)) continue;
+            }
+            if (!isSupportedWidget(host)) continue;
+            boolean rebound = restoreViaVendorUtilities(host);
+            MainHook.log(TAG + " HOME resume vendor-rebind=" + rebound
+                    + " host=" + host.getClass().getSimpleName());
+        }
     }
 
     private static boolean isSupportedWidget(View host) {
