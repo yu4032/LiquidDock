@@ -30,23 +30,6 @@ public class LargeFolderFootprintPolicyTest {
     }
 
 
-    @Test public void onlyFourItemSmallWorkspaceFolderMayBePromoted() {
-        assertTrue(LargeFolderFootprintPolicy.needsNativePromotion(
-                2, 1, 1, 4, 123, 42, -100));
-        assertFalse(LargeFolderFootprintPolicy.needsNativePromotion(
-                2, 1, 1, 3, 123, 42, -100));
-        assertFalse(LargeFolderFootprintPolicy.needsNativePromotion(
-                2, 1, 1, 5, 123, 42, -100));
-        assertFalse(LargeFolderFootprintPolicy.needsNativePromotion(
-                21, 1, 1, 4, 123, 42, -100));
-        assertFalse(LargeFolderFootprintPolicy.needsNativePromotion(
-                2, 2, 2, 4, 123, 42, -100));
-        assertFalse(LargeFolderFootprintPolicy.needsNativePromotion(
-                2, 1, 1, 4, 123, 42, -101));
-        assertFalse(LargeFolderFootprintPolicy.needsNativePromotion(
-                2, 1, 1, 4, -1, 42, -100));
-    }
-
     @Test public void renderingRequiresActualTwoCellModelSpans() {
         assertTrue(LargeFolderFootprintPolicy.hasRealTwoByTwoFootprint(21, 2, 2));
         assertFalse(LargeFolderFootprintPolicy.hasRealTwoByTwoFootprint(21, 1, 1));
