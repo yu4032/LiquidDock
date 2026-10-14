@@ -175,14 +175,17 @@ public final class ModuleMain extends XposedModule {
             new MainHook().install(classLoader);
             boolean fourIconFolderEnabled =
                     runtimeConfig.enabled && runtimeConfig.grid.largeFolderFourIcons;
+            boolean sizeMappingReady =
+                    LauncherLargeFolderNativeSpanHook.install(classLoader, fourIconFolderEnabled);
             boolean previewHooksReady =
                     LauncherLargeFolderFourIconHook.install(classLoader, fourIconFolderEnabled);
             // The user-visible fourth style must not disappear merely because
             // a vendor preview callback is missing. The picker runs the
             // native conversion independently; log preview compatibility.
             boolean pickerReady =
-                    LauncherLargeFolderPickerHook.install(classLoader, fourIconFolderEnabled);
-            MainHook.log("[DC][FolderFour] preview=" + previewHooksReady
+                    LauncherLargeFolderPickerHook.install(classLoader, sizeMappingReady);
+            MainHook.log("[DC][FolderFour] scopedSpan=" + sizeMappingReady
+                    + " preview=" + previewHooksReady
                     + " picker=" + pickerReady);
 
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
