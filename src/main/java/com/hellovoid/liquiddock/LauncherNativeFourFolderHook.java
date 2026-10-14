@@ -538,10 +538,28 @@ final class LauncherNativeFourFolderHook {
         }
     }
 
+    private static final Set<View> FULLSCREEN_REJECT_LOGGED =
+            Collections.newSetFromMap(new WeakHashMap<>());
+
     private static int[] desiredFrame(View folder, int incomingWidthSpec,
             int incomingHeightSpec) {
         int[] frame = trustedCellFrame(folder);
         if (frame == null) return null;
+        int requestedWidth = View.MeasureSpec.getSize(incomingWidthSpec);
+        int requestedHeight = View.MeasureSpec.getSize(incomingHeightSpec);
+        ViewGroup.LayoutParams lp = folder.getLayoutParams();
+        int layoutWidth = lp == null ? -1 : lp.width;
+        int layoutHeight = lp == null ? -1 : lp.height;
+        if ((requestedWidth > frame[2] * 2L
+                || requestedHeight > frame[3] * 2L
+                || layoutWidth > frame[2] * 2L
+                || layoutHeight > frame[3] * 2L)
+                && FULLSCREEN_REJECT_LOGGED.add(folder)) {
+            Api101Bridge.log(TAG + " rejected fullscreen folder spec "
+                    + requestedWidth + "x" + requestedHeight
+                    + " layoutParams=" + layoutWidth + "x" + layoutHeight
+                    + " workspace2x2=" + frame[2] + "x" + frame[3]);
+        }
         return new int[]{frame[2], frame[3]};
     }
 
