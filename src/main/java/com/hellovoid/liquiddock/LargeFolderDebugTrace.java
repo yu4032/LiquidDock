@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.drawable.Drawable;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -12,13 +11,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * TEMPORARY PR #376 device diagnostics. Intentionally uses Log.i instead of
- * the user-facing debug switch so the first failing drag is captured.
+ * TEMPORARY PR #376 device diagnostics. Obeys the existing user debug
+ * switch through Api101Bridge, as required by LoggingGateContractTest.
  * Strict per-category budgets; no folder titles, packages or app names logged.
  * Remove the entire file and its call sites after the diagnosis.
  */
 final class LargeFolderDebugTrace {
-    private static final String TAG = "LiquidDockFolderDiag";
     private static final Map<String, Integer> COUNTS = new HashMap<>();
     private static WeakReference<View> lastDropped = new WeakReference<>(null);
     private static final int MAX_PER_CATEGORY = 24;
@@ -26,10 +24,11 @@ final class LargeFolderDebugTrace {
     private LargeFolderDebugTrace() {}
 
     static synchronized void log(String category, String message) {
+        if (!Api101Bridge.isDebugLoggingEnabled()) return;
         int n = COUNTS.containsKey(category) ? COUNTS.get(category) : 0;
         if (n >= MAX_PER_CATEGORY) return;
         COUNTS.put(category, n + 1);
-        Log.i(TAG, category + " #" + (n + 1) + " " + message);
+        Api101Bridge.log("[DC][FolderDiag] " + category + " #" + (n + 1) + " " + message);
     }
 
     static String shortError(Throwable e) {
