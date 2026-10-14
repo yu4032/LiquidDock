@@ -104,13 +104,8 @@ final class LauncherNativeFourFolderHook {
                     "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView");
             int installedHooks = 0;
 
-            // Device log 13:55:05:
-            // background/cover [measured=287, params=718] and
-            // preview [measured=359, params=718]. The OEM onMeasure,
-            // not LayoutParams, is the source of the remaining 1x1 result.
-            // Launcher 4.50 has no hookable getWidth/HeightMeasureSpec
-            // methods (the preceding approach installed 0/2 hooks).
-            // Hook the actual onMeasure implementations instead.
+            // Hook the OEM measurement boundary; LayoutParams alone do
+            // not establish the native image or preview's measured size.
             if (nativeImageClass != null) {
                 try {
                     java.lang.reflect.Method measure = HookUtil.findMethodExact(
@@ -909,10 +904,8 @@ final class LauncherNativeFourFolderHook {
         // Also fix pre-existing folder views created before the first
         // measured 2x2 binding; subsequent layouts then stay native.
         resizeNativePreviewChildren(inner, w, h);
-        // The native folder preview owns three normal large icons plus the
-        // small 2x2 group in quadrant four. Let its original preSetup2x2 and
-        // onMeasureChild2x2 determine the SAME icon sizes as OEM.
-        // Only expand the parent content frame to the widget allocation.
+        // Preserve each native preview's own child placement (3+4 or 8+4);
+        // only expand the parent content frame to the real 2x2 allocation.
         // Do not square the widget frame! On tablets and custom HomeGrid
         // configurations, a 2x2 allocation can be wider than it is tall.
         // Using min(w, h) recreated the appearance of a small centered
@@ -938,8 +931,8 @@ final class LauncherNativeFourFolderHook {
             inner.layout(0, 0, w, h);
         }
         layoutFolderTitle(folder, nativeSizing(folder, new int[]{w, h}), w, h);
-        // Native drag/drop can change title visibility AFTER CellLayout.onLayout.
-        // Reassert only after the folder has settled back into its real cell.
+        // Reconcile title geometry after placement. The OEM span visibility
+        // decision is handled separately in executeChildrenVisibility.
         queueTitleRestore(folder);
     }
 
