@@ -157,7 +157,7 @@ final class Launcher450IconSizeHook {
         HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(folder, "getIconContainer");
         if (!result.succeeded() || !(result.value() instanceof ViewGroup)) return;
         ViewGroup outer = (ViewGroup) result.value();
-        if (outer.getChildCount() != 1 || !(outer.getChildAt(0) instanceof ViewGroup)) return;
+        if (outer.getChildCount() < 1 || !(outer.getChildAt(0) instanceof ViewGroup)) return;
         ViewGroup inner = (ViewGroup) outer.getChildAt(0);
         if (inner.getChildCount() < 3 || !(inner.getChildAt(0) instanceof ImageView)
                 || !(inner.getChildAt(2) instanceof ImageView)
