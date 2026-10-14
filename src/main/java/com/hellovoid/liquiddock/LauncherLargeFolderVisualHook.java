@@ -45,6 +45,7 @@ final class LauncherLargeFolderVisualHook {
             // based on the vendor's fixed grid, so it keeps a small preview
             // centered within our correctly allocated 2x2 folder frame.
             // Redirect only the nested container's own measurement request.
+            try {
             Class<?> nativeContainer = Class.forName(
                     "com.miui.home.launcher.folder.LauncherFolder2x2IconContainer",
                     false, loader);
@@ -88,6 +89,9 @@ final class LauncherLargeFolderVisualHook {
                     else NATIVE_CONTENT_SPEC.set(previous);
                 }
             });
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " native fixed widget-size transaction unavailable: " + error);
+            }
             HookUtil.hook(iconClass.getDeclaredMethod(
                     "onMeasure", int.class, int.class), chain -> {
                 Object owner = chain.getThisObject();
@@ -221,15 +225,15 @@ final class LauncherLargeFolderVisualHook {
         // (icon_top_container) between icon_container and the background,
         // preview and cover. The old implementation resized only the outer
         // FrameLayout, leaving this measured inner host at stock dimensions.
-        HookUtil.InvocationResult<Object> nativePreview =
-                HookUtil.tryInvoke(folder, "getMPreviewContainer");
-        if (nativePreview.succeeded() && nativePreview.value() instanceof View) {
-            ViewParent topContainer = ((View) nativePreview.value()).getParent();
-            if (topContainer instanceof View
-                    && "com.miui.home.launcher.folder.LauncherFolder2x2IconContainer"
-                    .equals(topContainer.getClass().getName())) {
-                sizeSquare(topContainer, square);
-            }
+        // Traverse the rendered XML instead of relying on a protected
+        // getMPreviewContainer() accessor. This resolves the intermediate
+        // WRAP_CONTENT host even when the vendor renamed the accessor.
+        View nativeHost = findNativeContentHost(folder, 0);
+        if (nativeHost != null) {
+            sizeSquare(nativeHost, square);
+        } else {
+            Api101Bridge.log(TAG + " nested 2x2 content host unavailable "
+                    + folder.getClass().getName());
         }
         sizeSquare(fieldOrNull(folder, "mIconImageView"), square);
         sizeSquare(fieldOrNull(folder, "mImageView"), square);
@@ -237,6 +241,19 @@ final class LauncherLargeFolderVisualHook {
         HookUtil.InvocationResult<Object> container =
                 HookUtil.tryInvoke(folder, "getMPreviewContainer");
         if (container.succeeded()) sizeSquare(container.value(), square);
+    }
+
+    private static View findNativeContentHost(View root, int depth) {
+        if (root == null || depth > 7) return null;
+        if ("com.miui.home.launcher.folder.LauncherFolder2x2IconContainer"
+                .equals(root.getClass().getName())) return root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View match = findNativeContentHost(group.getChildAt(i), depth + 1);
+            if (match != null) return match;
+        }
+        return null;
     }
 
     private static View findFourFolderAncestor(View child) {
