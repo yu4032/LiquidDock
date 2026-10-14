@@ -277,6 +277,11 @@ final class LauncherNativeFourFolderHook {
                 NATIVE_SIZE.set(frame);
                 try {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    // This parent onMeasure IS confirmed executing on the
+                    // device. If a vendor subclass ignores the child hook
+                    // (inlined/renamed in Launcher 4.50), reconcile measured
+                    // dimensions here before FrameLayout performs layout.
+                    reconcileNativeMeasuredChildren(child, frame);
                     traceMeasure("inner", child, frame);
                     tracePreviewChildren("after-inner-measure", child);
                     return result;
@@ -420,6 +425,28 @@ final class LauncherNativeFourFolderHook {
                 params.height = height;
                 view.setLayoutParams(params);
             }
+        }
+    }
+
+    private static void reconcileNativeMeasuredChildren(View container, int[] frame) {
+        if (!(container instanceof ViewGroup) || frame[0] <= 0 || frame[1] <= 0) return;
+        ViewGroup group = (ViewGroup) container;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            String name = child.getClass().getName();
+            boolean preview = name.endsWith(".FolderIconPreviewContainer2X2_4");
+            boolean image = name.endsWith(".LauncherFolder2x2IconImageView");
+            if (!preview && !image) continue;
+            if (child.getMeasuredWidth() == frame[0]
+                    && child.getMeasuredHeight() == frame[1]) continue;
+            if (preview) {
+                // Re-enter OEM preview onMeasure with the correct width
+                // so its own preMeasure2x2/preSetup2x2 recompute icon
+                // positions. Do not manually draw or scale any preview.
+                child.measure(exact(frame[0]), exact(frame[1]));
+            }
+            forceMeasuredFrame(child, frame,
+                    preview ? "fallback-preview" : "fallback-image");
         }
     }
 
