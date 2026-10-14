@@ -6,6 +6,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -14,8 +15,20 @@ import java.util.WeakHashMap;
 final class LauncherWidgetDarkContentAdapter {
     private static final Map<TextView, ColorStateList> ORIGINAL_TEXT_COLORS =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<View, Double> ORIGINAL_MAML_DARK_MODE =
+    // MAML root replacement is asynchronous. Never replay a dark-mode snapshot
+    // taken from a previous ScreenElementRoot generation onto a new provider root.
+    private static final Map<View, MamlDarkClaim> ORIGINAL_MAML_DARK_MODE =
             Collections.synchronizedMap(new WeakHashMap<>());
+
+    private static final class MamlDarkClaim {
+        final WeakReference<Object> root;
+        final double originalValue;
+
+        MamlDarkClaim(Object root, double originalValue) {
+            this.root = new WeakReference<>(root);
+            this.originalValue = originalValue;
+        }
+    }
 
     private LauncherWidgetDarkContentAdapter() {}
 
@@ -34,10 +47,16 @@ final class LauncherWidgetDarkContentAdapter {
     static void release(View host) {
         if (host == null) return;
         if (isMaMlHost(host)) {
-            Double original = ORIGINAL_MAML_DARK_MODE.remove(host);
-            if (original != null) {
-                invokeOptional(host, "putVariableNumber", "__darkmode", original);
-                invokeOptional(host, "requestUpdate");
+            MamlDarkClaim claim = ORIGINAL_MAML_DARK_MODE.remove(host);
+            if (claim != null) {
+                Object root = readMamlRoot(host);
+                Object current = invokeOptional(host, "getVariableNumber", "__darkmode");
+                if (root != null && root == claim.root.get()
+                        && current instanceof Number
+                        && Double.compare(((Number) current).doubleValue(), 1.0d) == 0) {
+                    invokeOptional(host, "putVariableNumber", "__darkmode", claim.originalValue);
+                    invokeOptional(host, "requestUpdate");
+                }
             }
             return;
         }
@@ -46,13 +65,23 @@ final class LauncherWidgetDarkContentAdapter {
     }
 
     private static void applyMaml(View host) {
-        if (!ORIGINAL_MAML_DARK_MODE.containsKey(host)) {
+        Object root = readMamlRoot(host);
+        if (root == null) return;
+        MamlDarkClaim claim = ORIGINAL_MAML_DARK_MODE.get(host);
+        if (claim == null || claim.root.get() != root) {
             Object value = invokeOptional(host, "getVariableNumber", "__darkmode");
-            ORIGINAL_MAML_DARK_MODE.put(host, value instanceof Number
-                    ? ((Number) value).doubleValue() : 0.0d);
+            if (!(value instanceof Number)) return;
+            double original = ((Number) value).doubleValue();
+            if (!Double.isFinite(original)) return;
+            ORIGINAL_MAML_DARK_MODE.put(host, new MamlDarkClaim(root, original));
         }
         invokeOptional(host, "putVariableNumber", "__darkmode", 1.0d);
         invokeOptional(host, "requestUpdate");
+    }
+
+    private static Object readMamlRoot(View host) {
+        try { return HookUtil.getField(host, "mRoot"); }
+        catch (Throwable ignored) { return null; }
     }
 
     private static Object invokeOptional(Object target, String methodName, Object... args) {
@@ -85,7 +114,8 @@ final class LauncherWidgetDarkContentAdapter {
         if (view instanceof TextView) {
             TextView text = (TextView) view;
             ColorStateList original = ORIGINAL_TEXT_COLORS.remove(text);
-            if (original != null) text.setTextColor(original);
+            if (original != null
+                    && text.getCurrentTextColor() == Color.WHITE) text.setTextColor(original);
         }
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
