@@ -44,20 +44,51 @@ final class HomeGridCellGeometryHook {
                     "com.miui.home.launcher.ItemInfo", false, classLoader);
             Class<?> layoutParams = Class.forName(
                     "com.miui.home.launcher.CellLayout$LayoutParams", false, classLoader);
+            // MIUI's actual setupLayoutParam signature includes the edit-mode
+            // boolean. The old four-argument lookup silently failed, so the
+            // pre-measure geometry remained 1x1 despite 2x2 model occupancy.
             HookUtil.hookMethod(cellLayout, "setupLayoutParam",
-                    new Class<?>[]{int.class, int.class, itemInfo, layoutParams}, chain -> {
+                    new Class<?>[]{int.class, int.class, itemInfo,
+                            boolean.class, layoutParams}, chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object result = chain.proceed(args);
                         applyWidgetGridSize(
                                 chain.getThisObject(),
-                                (Integer) args[0],
-                                (Integer) args[1],
-                                args[2],
-                                args[3]);
+                                (Integer) args[0], (Integer) args[1],
+                                args[2], args[4]);
+                        return result;
+                    });
+            // The real CellLayout.measureChild reads LayoutParams immediately
+            // after setupLayoutParam. Ensure any host-specific remeasurement
+            // follows the full 2x2 frame, not only the final onLayout.
+            HookUtil.hookMethod(cellLayout, "measureChild",
+                    new Class<?>[]{View.class}, chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        View view = (View) chain.getArg(0);
+                        Object info = view.getTag();
+                        if (info != null && (isWidget(info)
+                                || LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info))) {
+                            Object lp = view.getLayoutParams();
+                            applyWidgetGridSize(chain.getThisObject(),
+                                    HookUtil.getIntField(info, "cellX"),
+                                    HookUtil.getIntField(info, "cellY"), info, lp);
+                            if (lp instanceof ViewGroup.LayoutParams) {
+                                ViewGroup.LayoutParams params = (ViewGroup.LayoutParams) lp;
+                                if (params.width > 0 && params.height > 0
+                                        && (view.getMeasuredWidth() != params.width
+                                        || view.getMeasuredHeight() != params.height)) {
+                                    view.measure(
+                                            View.MeasureSpec.makeMeasureSpec(
+                                                    params.width, View.MeasureSpec.EXACTLY),
+                                            View.MeasureSpec.makeMeasureSpec(
+                                                    params.height, View.MeasureSpec.EXACTLY));
+                                }
+                            }
+                        }
                         return result;
                     });
         } catch (Throwable error) {
-            MainHook.log("[DC] widget span sizing hook unavailable: " + error);
+            MainHook.log("[DC] multi-cell premeasure sizing hook unavailable: " + error);
         }
 
         HookUtil.hookMethod(cellLayout, "onLayout",
