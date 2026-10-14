@@ -289,9 +289,7 @@ final class LauncherLargeFolderFourIconHook {
         Object info;
         try { info = HookUtil.getField(owner, "mInfo"); }
         catch (Throwable ignored) { return; }
-        if (!LauncherLargeFolderPickerHook.isMarked(((View) owner).getContext(), info)) {
-            return;
-        }
+        boolean selected = LauncherLargeFolderPickerHook.isMarked(((View) owner).getContext(), info);
         // The container is bound during onFinishInflate. Never act on an
         // uninitialized instance or on the native nine-icon folder variant.
         HookUtil.InvocationResult<Object> lookup =
@@ -300,7 +298,7 @@ final class LauncherLargeFolderFourIconHook {
                 || !FOUR_PREVIEW.equals(lookup.value().getClass().getName())) {
             return;
         }
-        if (!setCounts(owner) || !setCounts(lookup.value())) {
+        if (!setCounts(owner, selected) || !setCounts(lookup.value(), selected)) {
             reportFailure();
         }
     }
@@ -314,19 +312,22 @@ final class LauncherLargeFolderFourIconHook {
             View candidate = (View) parent;
             if (FOUR_FOLDER.equals(candidate.getClass().getName())) {
                 Object info = candidate.getTag();
-                if (LauncherLargeFolderPickerHook.isMarked(view.getContext(), info)
-                        && !setCounts(preview)) reportFailure();
+                boolean selected = LauncherLargeFolderPickerHook.isMarked(view.getContext(), info);
+                if (!setCounts(preview, selected)) reportFailure();
                 return;
             }
             parent = candidate.getParent();
         }
     }
 
-    private static boolean setCounts(Object target) {
+    private static boolean setCounts(Object target, boolean selected) {
         // Native FolderIcon2x2.addItemOnclickListener() makes indices below
         // mLargeIconNum clickable. Four means all four are direct app targets.
-        return HookUtil.tryInvoke(target, "setMItemsMaxCount", FOUR).succeeded()
-                && HookUtil.tryInvoke(target, "setMLargeIconNum", FOUR).succeeded();
+        int count = selected ? FOUR : 7;
+        int large = selected ? FOUR : 3;
+        boolean first = HookUtil.tryInvoke(target, "setMItemsMaxCount", count).succeeded();
+        boolean second = HookUtil.tryInvoke(target, "setMLargeIconNum", large).succeeded();
+        return first && second;
     }
 
     private static void reportFailure() {
