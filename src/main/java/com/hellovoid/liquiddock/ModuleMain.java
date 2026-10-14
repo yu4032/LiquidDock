@@ -142,10 +142,12 @@ public final class ModuleMain extends XposedModule {
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
             if (runtimeConfig.enabled) {
                 // Folder picker/model hooks are independent of the glass renderers.
+                // Establish the OEM background's stroke state before any
+                // folder view is inflated or rebound in the Launcher process.
+                LargeFolderNativeOutlineHook.install(classLoader);
                 LauncherLargeFolderPickerHook.install(classLoader);
                 LauncherLargeFolderNativeSpanHook.install(classLoader);
                 LauncherNativeFourFolderHook.install(classLoader);
-                LargeFolderNativeOutlineHook.install(classLoader);
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
