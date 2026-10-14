@@ -73,11 +73,18 @@ final class LauncherFourGridContentView extends FrameLayout {
         folder = nativeFolder;
         HookUtil.InvocationResult<Object> contentResult =
                 HookUtil.tryInvoke(info, "getContents");
-        if (!contentResult.succeeded() || !(contentResult.value() instanceof List)) {
-            Api101Bridge.log("[DC][FolderFourGrid] vendor FolderInfo.getContents unavailable");
+        Object nativeItems = contentResult.succeeded() ? contentResult.value() : null;
+        if (!(nativeItems instanceof List)) {
+            // Reference Launcher exposes mContents as its persistent data
+            // field. Use that same native list when an OEM build inlines or
+            // removes the getContents() accessor.
+            nativeItems = field(info, "mContents");
+        }
+        if (!(nativeItems instanceof List)) {
+            Api101Bridge.log("[DC][FolderFourGrid] folder shortcut list unavailable");
             return;
         }
-        List<?> contents = (List<?>) contentResult.value();
+        List<?> contents = (List<?>) nativeItems;
         if (!refresh && contents.size() == boundCount) {
             boolean same = true;
             for (int i = 0; i < COUNT; i++) {
