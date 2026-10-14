@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.content.Context;
 
 /**
@@ -15,6 +16,7 @@ final class LauncherLargeFolderVisualHook {
     private static final String FOUR_CLASS =
             "com.miui.home.launcher.folder.FolderIcon2x2_4";
     private static final ThreadLocal<Integer> MEASURING_CELL_WIDTH = new ThreadLocal<>();
+    private static final ThreadLocal<int[]> NATIVE_CONTENT_SPEC = new ThreadLocal<>();
     private static boolean installed;
 
     private LauncherLargeFolderVisualHook() {}
@@ -36,6 +38,55 @@ final class LauncherLargeFolderVisualHook {
                 Integer needed = MEASURING_CELL_WIDTH.get();
                 return needed != null && nativeSize instanceof Integer
                         ? Math.max((Integer) nativeSize, needed) : nativeSize;
+            });
+            // Root cause: native LauncherFolder2x2IconContainer ignores the
+            // dynamically allocated Workspace size and obtains another 2x2
+            // size from DeviceConfig.getMiuiWidgetSizeSpec(). That value is
+            // based on the vendor's fixed grid, so it keeps a small preview
+            // centered within our correctly allocated 2x2 folder frame.
+            // Redirect only the nested container's own measurement request.
+            Class<?> nativeContainer = Class.forName(
+                    "com.miui.home.launcher.folder.LauncherFolder2x2IconContainer",
+                    false, loader);
+            HookUtil.hook(deviceConfig.getDeclaredMethod("getMiuiWidgetSizeSpec",
+                    int.class, int.class, boolean.class), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                int[] content = NATIVE_CONTENT_SPEC.get();
+                if (content == null || ((Integer) chain.getArg(0)) != 2
+                        || ((Integer) chain.getArg(1)) != 2) return result;
+                return ((long) content[0] << 32) | (content[1] & 0xffffffffL);
+            });
+            HookUtil.hook(nativeContainer.getDeclaredMethod(
+                    "onMeasure", int.class, int.class), chain -> {
+                Object owner = chain.getThisObject();
+                if (!(owner instanceof View)) {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                }
+                View container = (View) owner;
+                View folder = findFourFolderAncestor(container);
+                if (folder == null || !isSelectedTwoByTwo(folder)) {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                }
+                int[] nativeContent = actualContainerSize(
+                        folder, container, (Integer) chain.getArg(0),
+                        (Integer) chain.getArg(1));
+                int[] previous = NATIVE_CONTENT_SPEC.get();
+                if (nativeContent != null) NATIVE_CONTENT_SPEC.set(nativeContent);
+                try {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    if (nativeContent != null
+                            && (container.getMeasuredWidth() < nativeContent[0] * 3 / 4
+                            || container.getMeasuredHeight() < nativeContent[1] * 3 / 4)) {
+                        Api101Bridge.log(TAG + " native preview undersized: allocated="
+                                + nativeContent[0] + "x" + nativeContent[1]
+                                + " actual=" + container.getMeasuredWidth()
+                                + "x" + container.getMeasuredHeight());
+                    }
+                    return result;
+                } finally {
+                    if (previous == null) NATIVE_CONTENT_SPEC.remove();
+                    else NATIVE_CONTENT_SPEC.set(previous);
+                }
             });
             HookUtil.hook(iconClass.getDeclaredMethod(
                     "onMeasure", int.class, int.class), chain -> {
@@ -166,12 +217,59 @@ final class LauncherLargeFolderVisualHook {
         // the OEM grid. Derive their bounds from the actual 2x2 CellLayout
         // allocation, preserving each node's native drawable and padding.
         sizeSquare(fieldOrNull(folder, "mIconContainer"), square);
+        // folder_icon_2x2_4.xml has a second WRAP_CONTENT FrameLayout
+        // (icon_top_container) between icon_container and the background,
+        // preview and cover. The old implementation resized only the outer
+        // FrameLayout, leaving this measured inner host at stock dimensions.
+        HookUtil.InvocationResult<Object> nativePreview =
+                HookUtil.tryInvoke(folder, "getMPreviewContainer");
+        if (nativePreview.succeeded() && nativePreview.value() instanceof View) {
+            ViewParent topContainer = ((View) nativePreview.value()).getParent();
+            if (topContainer instanceof View
+                    && "com.miui.home.launcher.folder.LauncherFolder2x2IconContainer"
+                    .equals(topContainer.getClass().getName())) {
+                sizeSquare(topContainer, square);
+            }
+        }
         sizeSquare(fieldOrNull(folder, "mIconImageView"), square);
         sizeSquare(fieldOrNull(folder, "mImageView"), square);
         sizeSquare(fieldOrNull(folder, "mFolderCover"), square);
         HookUtil.InvocationResult<Object> container =
                 HookUtil.tryInvoke(folder, "getMPreviewContainer");
         if (container.succeeded()) sizeSquare(container.value(), square);
+    }
+
+    private static View findFourFolderAncestor(View child) {
+        ViewParent parent = child.getParent();
+        for (int depth = 0; parent instanceof View && depth < 8; depth++) {
+            View current = (View) parent;
+            if (FOUR_CLASS.equals(current.getClass().getName())) return current;
+            parent = current.getParent();
+        }
+        return null;
+    }
+
+    private static int[] actualContainerSize(
+            View folder, View container, int widthSpec, int heightSpec) {
+        int width = View.MeasureSpec.getSize(widthSpec);
+        int height = View.MeasureSpec.getSize(heightSpec);
+        // Explicit dimensions installed on the actual native
+        // icon_top_container take precedence over its old vendor widget spec.
+        ViewGroup.LayoutParams params = container.getLayoutParams();
+        if (params != null && params.width > 0) width = params.width;
+        if (params != null && params.height > 0) height = params.height;
+        if (width <= 0 || height <= 0) {
+            Object top = fieldOrNull(folder, "mIconContainer");
+            if (top instanceof View) {
+                ViewGroup.LayoutParams outer = ((View) top).getLayoutParams();
+                if (outer != null) {
+                    if (width <= 0) width = outer.width;
+                    if (height <= 0) height = outer.height;
+                }
+            }
+        }
+        if (width <= 0 || height <= 0) return null;
+        return new int[]{width, height};
     }
 
     private static Object fieldOrNull(Object target, String name) {
