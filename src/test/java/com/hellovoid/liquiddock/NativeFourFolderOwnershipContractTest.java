@@ -29,7 +29,7 @@ public class NativeFourFolderOwnershipContractTest {
         assertTrue(nativeHook.contains("NativeFourFolderFramePolicy.resolve("));
         assertTrue(nativeHook.contains("prepareFolderLayoutParams("));
         assertTrue("First OEM measurement must still expand restored folder views",
-                nativeHook.contains("getDeclaredMethod(\"measureChild\", View.class)"));
+                nativeHook.contains("HookUtil.hookMethod(cell, \"measureChild\""));
         assertTrue("Initial sizing must not require a parent already laid out",
                 nativeHook.contains("NativeFourFolderFramePolicy.forInitialMeasure("));
         assertFalse("Avoid a second four-argument setupLayoutParam hook",
