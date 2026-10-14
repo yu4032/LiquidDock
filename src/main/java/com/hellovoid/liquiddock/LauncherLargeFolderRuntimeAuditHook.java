@@ -1,0 +1,143 @@
+package com.hellovoid.liquiddock;
+
+import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Temporary scoped runtime evidence for the four-large-icon folder feature.
+ *
+ * The CellLayout owns the real 2x2 reservation; unlike preview hooks, this
+ * observer runs even when vendor FolderIcon methods have changed. It is
+ * strictly read-only and samples only native four-preview itemType=21.
+ * Never logs app names, titles, icon pixels, or other personal content.
+ */
+final class LauncherLargeFolderRuntimeAuditHook {
+    private static final String TAG = "LiquidDockFolder4";
+    private static final String FOUR_ICON_CLASS =
+            "com.miui.home.launcher.folder.FolderIcon2x2_4";
+    private static final String NATIVE_CONTENT_CLASS =
+            "com.miui.home.launcher.folder.LauncherFolder2x2IconContainer";
+    private static final Map<Long, String> LAST_SAMPLE = new HashMap<>();
+    private static int emitted;
+    private static boolean installed;
+
+    private LauncherLargeFolderRuntimeAuditHook() {}
+
+    static boolean install(ClassLoader loader) {
+        if (installed) return true;
+        if (loader == null) return false;
+        try {
+            Class<?> cell = Class.forName(
+                    "com.miui.home.launcher.CellLayout", false, loader);
+            HookUtil.hook(cell.getDeclaredMethod("onLayout",
+                    boolean.class, int.class, int.class, int.class, int.class), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object owner = chain.getThisObject();
+                if (owner instanceof ViewGroup) inspect((ViewGroup) owner);
+                return result;
+            });
+            installed = true;
+            Log.i(TAG, "audit-installed CellLayout#onLayout; build=folder4");
+            return true;
+        } catch (Throwable error) {
+            Log.e(TAG, "audit-install-failed " + error.getClass().getSimpleName()
+                    + ": " + error.getMessage());
+            return false;
+        }
+    }
+
+    private static void inspect(ViewGroup layout) {
+        if (emitted >= 24) return;
+        for (int i = 0; i < layout.getChildCount() && emitted < 24; i++) {
+            View child = layout.getChildAt(i);
+            if (child == null) continue;
+            Object info = child.getTag();
+            if (info == null) continue;
+            try {
+                int type = HookUtil.getIntField(info, "itemType");
+                int spanX = HookUtil.getIntField(info, "spanX");
+                int spanY = HookUtil.getIntField(info, "spanY");
+                if (type != 21) continue;
+                long id = HookUtil.getLongField(info, "id");
+                boolean marked = LauncherLargeFolderPickerHook.isMarked(
+                        child.getContext(), info);
+                View nativeHost = findDescendant(child, NATIVE_CONTENT_CLASS, 0);
+                ViewGroup parent = child.getParent() instanceof ViewGroup
+                        ? (ViewGroup) child.getParent() : null;
+                Object icon = fieldOrNull(child, "mIconContainer");
+                Object bg = fieldOrNull(child, "mIconImageView");
+                Object preview = fieldOrNull(child, "mPreviewContainer");
+                String sample = "folder=" + id
+                        + " marked=" + marked
+                        + " span=" + spanX + "x" + spanY
+                        + " class=" + child.getClass().getSimpleName()
+                        + " classMatch=" + FOUR_ICON_CLASS.equals(child.getClass().getName())
+                        + " root=" + dims(child)
+                        + " alloc=" + layoutParams(child)
+                        + " cellParent=" + (parent == null ? "none" : parent.getClass().getSimpleName())
+                        + " iconHost=" + dims(icon)
+                        + " background=" + dims(bg)
+                        + " nativeHost=" + dims(nativeHost)
+                        + " preview=" + dims(preview);
+                String prior;
+                synchronized (LAST_SAMPLE) {
+                    prior = LAST_SAMPLE.put(id, sample);
+                    if (sample.equals(prior)) continue;
+                    if (LAST_SAMPLE.size() > 32) LAST_SAMPLE.clear();
+                    emitted++;
+                }
+                Log.i(TAG, sample);
+                if (child.isAttachedToWindow() && (marked || spanX == 2 && spanY == 2)) {
+                    child.post(() -> inspectAfterFrame(child, id));
+                }
+            } catch (Throwable ignored) {
+                // Vendor layout pass must never fail due to diagnostic code.
+            }
+        }
+    }
+
+    private static void inspectAfterFrame(View folder, long id) {
+        if (emitted >= 24 || folder == null || !folder.isAttachedToWindow()) return;
+        Object host = findDescendant(folder, NATIVE_CONTENT_CLASS, 0);
+        Object background = fieldOrNull(folder, "mIconImageView");
+        Object preview = fieldOrNull(folder, "mPreviewContainer");
+        Log.i(TAG, "after-layout folder=" + id + " root=" + dims(folder)
+                + " background=" + dims(background)
+                + " nativeHost=" + dims(host)
+                + " preview=" + dims(preview));
+        emitted++;
+    }
+
+    private static View findDescendant(View root, String className, int depth) {
+        if (root == null || depth > 8) return null;
+        if (className.equals(root.getClass().getName())) return root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View found = findDescendant(group.getChildAt(i), className, depth + 1);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static Object fieldOrNull(Object root, String name) {
+        try { return HookUtil.getField(root, name); }
+        catch (Throwable ignored) { return null; }
+    }
+
+    private static String dims(Object o) {
+        if (!(o instanceof View)) return "missing";
+        View view = (View) o;
+        return view.getMeasuredWidth() + "x" + view.getMeasuredHeight()
+                + "/" + view.getWidth() + "x" + view.getHeight();
+    }
+
+    private static String layoutParams(View view) {
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        return lp == null ? "missing" : lp.width + "x" + lp.height;
+    }
+}
