@@ -49,6 +49,17 @@ public class NativeFourFolderSizingTest {
         assertTrue(Math.abs(size.largeWidth - (size.smallWidth * 2 + size.smallGap)) <= 1);
     }
 
+    @Test public void crossPageDropMustReconcileChildDespiteCorrectParentSize() {
+        // OEM reuses a full 2x2 FolderIcon, but a child may retain 1x1 geometry.
+        assertTrue(NativeFourFolderSizing.childNeedsLayout(
+                287, 287, 287, 287, 646, 649));
+        // Even a correctly measured child may have the old drawn bounds.
+        assertTrue(NativeFourFolderSizing.childNeedsLayout(
+                646, 649, 287, 287, 646, 649));
+        assertFalse(NativeFourFolderSizing.childNeedsLayout(
+                646, 649, 646, 649, 646, 649));
+    }
+
     @Test public void compactFolderRetainsItsNativeGeometry() {
         NativeFourFolderSizing.Size size = NativeFourFolderSizing.calculate(359, 359, 359, 287);
         assertEquals(287, size.backgroundWidth);
