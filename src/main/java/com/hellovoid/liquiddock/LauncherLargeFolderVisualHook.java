@@ -75,6 +75,52 @@ final class LauncherLargeFolderVisualHook {
                     else MEASURING_CELL_WIDTH.set(prior);
                 }
             });
+            // MIUI caches FolderInfo.mBuddyIconView. After a native resize
+            // the persisted model can say 2x2 while fromXml silently returns
+            // its old 1x1 view, including the old background and drag image.
+            // Invalidate that stale view only at the vendor rebind boundary.
+            try {
+                Class<?> folderIcon = Class.forName(
+                        "com.miui.home.launcher.FolderIcon", false, loader);
+                Class<?> launcher = Class.forName(
+                        "com.miui.home.launcher.Launcher", false, loader);
+                Class<?> folderInfo = Class.forName(
+                        "com.miui.home.launcher.FolderInfo", false, loader);
+                HookUtil.hook(folderIcon.getDeclaredMethod("fromXml",
+                        int.class, launcher, ViewGroup.class, folderInfo), chain -> {
+                    Object info = chain.getArg(3);
+                    Object group = chain.getArg(2);
+                    if (group instanceof ViewGroup && info != null
+                            && LauncherLargeFolderPickerHook.isMarked(
+                                    ((ViewGroup) group).getContext(), info)) {
+                        int type = HookUtil.getIntField(info, "itemType");
+                        int sx = HookUtil.getIntField(info, "spanX");
+                        int sy = HookUtil.getIntField(info, "spanY");
+                        if (type == 21 && sx == 2 && sy == 2) {
+                            HookUtil.InvocationResult<Object> cached =
+                                    HookUtil.tryInvoke(info, "getBuddyIconView");
+                            if (cached.succeeded() && cached.value() instanceof View) {
+                                View old = (View) cached.value();
+                                if (!FOUR_CLASS.equals(old.getClass().getName())) {
+                                    android.view.ViewParent parent = old.getParent();
+                                    if (parent == null
+                                            || parent == group && old.getTag() == info) {
+                                        if (parent == group) {
+                                            ((ViewGroup) parent).removeView(old);
+                                        }
+                                        HookUtil.tryInvoke(info, "setBuddyIconView", (Object) null);
+                                        MainHook.log(TAG + " replaced stale small-folder binding "
+                                                + old.getClass().getName());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                });
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " old buddy view compatibility: " + error);
+            }
             installed = true;
             Api101Bridge.log(TAG + " native large-folder measurement installed");
             return true;
