@@ -19,11 +19,9 @@ import java.util.WeakHashMap;
  */
 final class Launcher450SmallFolderTrace {
     private static final String TAG = "[DC][FolderSizeTrace]";
-    private static final String LOG_TAG = "LD-FolderTrace";
     private static final String BUILD = "[v2-independent-20261014]";
-    // This diagnostic-only build intentionally bypasses the app-wide debug switch.
-    // It is independent of the icon-scale installer so even a failed installer is visible.
-    private static final boolean ENABLED = true;
+    // Independent bootstrap from ModuleMain; honor the existing debug-logging switch.
+    // Hook-install failures are reported through the existing always-on error API.
     private static final String SMALL_FOLDER = "com.miui.home.launcher.folder.FolderIcon1x1";
     private static final Map<View, Map<String, String>> LAST =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -34,12 +32,12 @@ final class Launcher450SmallFolderTrace {
     static synchronized void install(ClassLoader loader) {
         if (installed || loader == null) return;
         installed = true;
-        android.util.Log.w(LOG_TAG, TAG + BUILD + " install-enter loader=" + loader.getClass().getSimpleName());
+        Api101Bridge.log(TAG + BUILD + " install-enter loader=" + loader.getClass().getSimpleName());
         hookMeasurements(loader);
         hookLifecycle(loader);
         hookBackgroundBinds(loader);
         hookNativeClip(loader);
-        android.util.Log.w(LOG_TAG, TAG + BUILD + " install-complete");
+        Api101Bridge.log(TAG + BUILD + " install-complete");
     }
 
     /**
@@ -61,9 +59,9 @@ final class Launcher450SmallFolderTrace {
                     if (folder != null) sample("host-measure-after", folder, "host-measure-after", false);
                 }
             });
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " hook-installed FolderIcon1x1.onMeasure");
+            Api101Bridge.log(TAG + BUILD + " hook-installed FolderIcon1x1.onMeasure");
         } catch (Throwable error) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " hook-FAILED FolderIcon1x1.onMeasure", error);
+            Api101Bridge.errorAlways(TAG + BUILD + " hook-FAILED FolderIcon1x1.onMeasure", error);
         }
         try {
             Class<?> preview = Class.forName(
@@ -82,20 +80,20 @@ final class Launcher450SmallFolderTrace {
                     if (folder != null) sample("preview-measure-after", folder, "preview-measure-after", false);
                 }
             });
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " hook-installed FolderIconPreviewContainer1X1.onMeasure");
+            Api101Bridge.log(TAG + BUILD + " hook-installed FolderIconPreviewContainer1X1.onMeasure");
         } catch (Throwable error) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " hook-FAILED preview.onMeasure", error);
+            Api101Bridge.errorAlways(TAG + BUILD + " hook-FAILED preview.onMeasure", error);
         }
     }
 
     static void measureStart(View folder, boolean enabled, int percent, boolean workspace) {
-        if (!ENABLED) return;
+        if (!Api101Bridge.isDebugLoggingEnabled()) return;
         sample("measure-before sizeOn=" + enabled + " pct=" + percent
                 + " workspace=" + workspace, folder, "measure-before", false);
     }
 
     static void measureEnd(View folder, boolean enabled, int percent, boolean workspace) {
-        if (!ENABLED) return;
+        if (!Api101Bridge.isDebugLoggingEnabled()) return;
         sample("measure-after sizeOn=" + enabled + " pct=" + percent
                 + " workspace=" + workspace, folder, "measure-after", false);
     }
@@ -107,7 +105,7 @@ final class Launcher450SmallFolderTrace {
                     new Class<?>[]{boolean.class, int.class, int.class, int.class, int.class});
             HookUtil.hook(layout, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (ENABLED && chain.getThisObject() instanceof View) {
+                if (Api101Bridge.isDebugLoggingEnabled() && chain.getThisObject() instanceof View) {
                     View icon = (View) chain.getThisObject();
                     if (isSmallFolder(icon)) sample("layout", icon, "layout", false);
                 }
@@ -117,18 +115,18 @@ final class Launcher450SmallFolderTrace {
                 Method method = HookUtil.findMethodExact(folderIcon, methodName, new Class<?>[0]);
                 HookUtil.hook(method, chain -> {
                     Object object = chain.getThisObject();
-                    if (ENABLED && object instanceof View && isSmallFolder((View) object)) {
+                    if (Api101Bridge.isDebugLoggingEnabled() && object instanceof View && isSmallFolder((View) object)) {
                         sample(methodName + "-before", (View) object, methodName, true);
                     }
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    if (ENABLED && object instanceof View && isSmallFolder((View) object)) {
+                    if (Api101Bridge.isDebugLoggingEnabled() && object instanceof View && isSmallFolder((View) object)) {
                         sample(methodName + "-after", (View) object, methodName, true);
                     }
                     return result;
                 });
             }
         } catch (Throwable error) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " folder lifecycle hooks unavailable: " + error);
+            Api101Bridge.log(TAG + BUILD + " folder lifecycle hooks unavailable: " + error);
         }
         try {
             Class<?> folder = Class.forName("com.miui.home.launcher.Folder", false, loader);
@@ -136,15 +134,15 @@ final class Launcher450SmallFolderTrace {
                     new Class<?>[0]);
             HookUtil.hook(finish, chain -> {
                 View icon = resolveBuddyIcon(chain.getThisObject());
-                if (ENABLED && icon != null) {
+                if (Api101Bridge.isDebugLoggingEnabled() && icon != null) {
                     sample("close-animation-finish-before", icon, "close", true);
                 }
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (ENABLED && icon != null) {
+                if (Api101Bridge.isDebugLoggingEnabled() && icon != null) {
                     sample("close-animation-finish-after", icon, "close", true);
                     // One observation after the vendor's layout is committed; not a repair.
                     icon.postOnAnimation(() -> {
-                        if (ENABLED && icon.isAttachedToWindow()) {
+                        if (Api101Bridge.isDebugLoggingEnabled() && icon.isAttachedToWindow()) {
                             sample("close-next-frame", icon, "close-next-frame", true);
                         }
                     });
@@ -152,7 +150,7 @@ final class Launcher450SmallFolderTrace {
                 return result;
             });
         } catch (Throwable error) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " folder close completion hook unavailable: " + error);
+            Api101Bridge.log(TAG + BUILD + " folder close completion hook unavailable: " + error);
         }
     }
 
@@ -164,14 +162,14 @@ final class Launcher450SmallFolderTrace {
             HookUtil.hook(imageBind, chain -> {
                 View icon = chain.getThisObject() instanceof View
                         ? (View) chain.getThisObject() : null;
-                boolean trace = ENABLED && isSmallFolder(icon);
+                boolean trace = Api101Bridge.isDebugLoggingEnabled() && isSmallFolder(icon);
                 if (trace) sample("drawable-bind-before", icon, "bind", true);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 if (trace) sample("drawable-bind-after", icon, "bind", true);
                 return result;
             });
         } catch (Throwable error) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " drawable rebind hook unavailable: " + error);
+            Api101Bridge.log(TAG + BUILD + " drawable rebind hook unavailable: " + error);
         }
         try {
             Class<?> small = Class.forName(SMALL_FOLDER, false, loader);
@@ -180,13 +178,13 @@ final class Launcher450SmallFolderTrace {
             HookUtil.hook(refresh, chain -> {
                 View icon = chain.getThisObject() instanceof View
                         ? (View) chain.getThisObject() : null;
-                if (ENABLED && icon != null) {
+                if (Api101Bridge.isDebugLoggingEnabled() && icon != null) {
                     sample("refresh-background-request", icon, "refresh", true);
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
         } catch (Throwable error) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " background refresh hook unavailable: " + error);
+            Api101Bridge.log(TAG + BUILD + " background refresh hook unavailable: " + error);
         }
     }
 
@@ -203,7 +201,7 @@ final class Launcher450SmallFolderTrace {
                 View material = args.length == 11 && args[0] instanceof View
                         ? (View) args[0] : null;
                 View icon = enclosingSmallFolder(material);
-                boolean trace = ENABLED && icon != null;
+                boolean trace = Api101Bridge.isDebugLoggingEnabled() && icon != null;
                 Object result = chain.proceed(args);
                 if (trace) {
                     String clip = "radius=" + args[1] + " mode=" + args[10]
@@ -219,7 +217,7 @@ final class Launcher450SmallFolderTrace {
                 return result;
             });
         } catch (Throwable error) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " native folder clip hook unavailable: " + error);
+            Api101Bridge.log(TAG + BUILD + " native folder clip hook unavailable: " + error);
         }
     }
 
@@ -249,7 +247,7 @@ final class Launcher450SmallFolderTrace {
     }
 
     private static void sample(String event, View folder, String key, boolean force) {
-        if (folder == null || !ENABLED) return;
+        if (folder == null || !Api101Bridge.isDebugLoggingEnabled()) return;
         try {
         String metrics = "icon=" + label(folder)
                 + " parent=" + (folder.getParent() instanceof View
@@ -273,18 +271,18 @@ final class Launcher450SmallFolderTrace {
         if (cover instanceof View) metrics += " cover=" + metric((View) cover) + drawable((View) cover);
         if (preview instanceof View) metrics += " preview=" + metric((View) preview);
         if (force) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " " + event + " " + metrics);
+            Api101Bridge.log(TAG + BUILD + " " + event + " " + metrics);
         } else {
             logChanged(key, folder, metrics, event + " " + metrics);
         }
         } catch (Throwable error) {
-            android.util.Log.w(LOG_TAG, TAG + BUILD + " trace-snapshot-failed "
+            Api101Bridge.log(TAG + BUILD + " trace-snapshot-failed "
                     + event + " folder=" + label(folder), error);
         }
     }
 
     private static void logChanged(String key, View icon, String state, String message) {
-        if (!ENABLED || icon == null) return;
+        if (!Api101Bridge.isDebugLoggingEnabled() || icon == null) return;
         synchronized (LAST) {
             Map<String, String> last = LAST.get(icon);
             if (last == null) {
@@ -293,7 +291,7 @@ final class Launcher450SmallFolderTrace {
             }
             if (state.equals(last.put(key, state))) return;
         }
-        android.util.Log.w(LOG_TAG, TAG + BUILD + " " + message);
+        Api101Bridge.log(TAG + BUILD + " " + message);
     }
 
     private static String label(View view) {
