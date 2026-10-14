@@ -25,10 +25,14 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(folder.contains("\"setMItemsMaxCount\", count"));
         assertTrue(folder.contains("\"setMLargeIconNum\", large"));
         assertTrue(folder.contains("\"convertIconSize\""));
-        assertTrue(folder.contains("FolderIconConvertSizeController"));
-        assertTrue(folder.contains("\"getFolderSpanXFromType\""));
-        assertTrue(folder.contains("\"getFolderSpanYFromType\""));
-        assertTrue(folder.contains("spanXHook && spanYHook"));
+        String nativeSpan = Files.readString(MAIN.resolve("LauncherLargeFolderNativeSpanHook.java"));
+        assertTrue(nativeSpan.contains("FolderIconConvertSizeController"));
+        assertTrue(nativeSpan.contains("\"getFolderSpanXFromType\""));
+        assertTrue(nativeSpan.contains("\"getFolderSpanYFromType\""));
+        assertTrue(nativeSpan.contains("ThreadLocal<Boolean> FORCE_LARGE"));
+        assertTrue(nativeSpan.contains("\"convertIconSize\""));
+        assertTrue(nativeSpan.contains("LauncherLargeFolderPickerHook.isMarked("));
+        assertFalse(folder.contains("getFolderSpanXFromType"));
         assertTrue(folder.contains("\"fromXml\""));
         assertTrue(folder.contains("\"rebindInfo\""));
         assertTrue(folder.contains("LargeFolderFootprintPolicy.needsNativeConversion("));
@@ -37,6 +41,7 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(geometry.contains("LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)"));
         assertTrue(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
         assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
+        assertTrue(startup.contains("LauncherLargeFolderNativeSpanHook.install("));
         String picker = Files.readString(MAIN.resolve("LauncherLargeFolderPickerHook.java"));
         assertTrue(picker.contains("\"initListener\""));
         assertTrue(picker.contains("\"onClick\""));
