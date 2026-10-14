@@ -16,7 +16,6 @@ final class LauncherGlassVendorMaterialSuppressor {
     // RemoteViews fallback drawables are separate from the native compositor material.
     // The actual View blur mode, radius, blend colors, PassWindow gate, and MAML
     // enable_background_blur variable remain owned by Launcher throughout App/HOME.
-    
     private LauncherGlassVendorMaterialSuppressor() {}
 
     static void claimWidgetMaterial(View host) {
@@ -38,7 +37,6 @@ final class LauncherGlassVendorMaterialSuppressor {
             }
             remoteViewsContent.setBackground(null);
         }
-
     }
 
     static void releaseWidgetMaterial(View host) {
@@ -86,16 +84,6 @@ final class LauncherGlassVendorMaterialSuppressor {
             if (method == null) return;
             method.setAccessible(true);
             method.invoke(host, value);
-        } catch (Throwable ignored) {}
-    }
-
-    private static void invokeStringDouble(
-            View host, String name, String key, double value) {
-        try {
-            Method method = findMethod(host.getClass(), name, String.class, double.class);
-            if (method == null) return;
-            method.setAccessible(true);
-            method.invoke(host, key, value);
         } catch (Throwable ignored) {}
     }
 
