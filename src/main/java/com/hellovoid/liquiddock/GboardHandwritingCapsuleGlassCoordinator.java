@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
+import java.lang.ref.WeakReference;
 import java.util.WeakHashMap;
 
 /** Owns zero-copy Prismal output below one Gboard companion toolbar's controls. */
@@ -15,7 +16,15 @@ final class GboardHandwritingCapsuleGlassCoordinator {
     // PrismalRasterGuardShader expands the procedural silhouette by two logical pixels per side.
     // Keep the output domain large enough for that AA footprint instead of clipping at the toolbar.
     private static final float RASTER_GUARD_PX = 2f;
-    private static final WeakHashMap<ViewGroup, State> STATES = new WeakHashMap<>();
+    // The host owns an attach listener capturing State until release/detach.
+    // Weak values stop the static lookup from retaining the toolbar view tree.
+    private static final WeakHashMap<ViewGroup, WeakReference<State>> STATES =
+            new WeakHashMap<>();
+
+    private static State stateOf(ViewGroup host) {
+        WeakReference<State> reference = STATES.get(host);
+        return reference == null ? null : reference.get();
+    }
 
     private static final class SinkPlacement {
         final ViewGroup sinkHost;
@@ -69,7 +78,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
             int configSnapshotHash) {
         if (host == null || glassConfig == null || nativeRadiusPx <= 0f
                 || Float.isNaN(nativeRadiusPx) || Float.isInfinite(nativeRadiusPx)) return;
-        State existing = STATES.get(host);
+        State existing = stateOf(host);
         if (existing != null && !existing.released) {
             if (existing.configSnapshotHash != configSnapshotHash) {
                 release(existing);
@@ -90,19 +99,20 @@ final class GboardHandwritingCapsuleGlassCoordinator {
                 release(state);
             }
         };
-        STATES.put(host, state);
+        STATES.put(host, new WeakReference<>(state));
         host.addOnAttachStateChangeListener(state.attachListener);
         if (host.isAttachedToWindow()) attachNow(state);
     }
 
     static synchronized void onHidden(ViewGroup host) {
         if (host == null) return;
-        State state = STATES.remove(host);
+        State state = stateOf(host);
+        STATES.remove(host);
         if (state != null) release(state);
     }
 
     static synchronized boolean isActive(ViewGroup host) {
-        State state = host == null ? null : STATES.get(host);
+        State state = host == null ? null : stateOf(host);
         return state != null
                 && !state.released
                 && state.presented
@@ -218,7 +228,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
 
     private static synchronized void markPresented(State state) {
         if (state == null || state.released || state.presented
-                || STATES.get(state.host) != state) return;
+                || stateOf(state.host) != state) return;
         View bodyArea = state.bodyArea;
         if (bodyArea == null || !bodyArea.isAttachedToWindow()
                 || bodyArea.getParent() != state.host) {
@@ -274,7 +284,7 @@ final class GboardHandwritingCapsuleGlassCoordinator {
         if (state == null || state.released) return;
         state.released = true;
         state.presented = false;
-        if (STATES.get(state.host) == state) STATES.remove(state.host);
+        if (stateOf(state.host) == state) STATES.remove(state.host);
 
         View bodyArea = state.bodyArea;
         if (bodyArea != null && state.bodyBackgroundHidden) {
