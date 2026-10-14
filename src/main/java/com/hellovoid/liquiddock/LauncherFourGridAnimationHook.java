@@ -73,6 +73,27 @@ final class LauncherFourGridAnimationHook {
                         }
                         return chain.proceed(chain.getArgs().toArray(new Object[0]));
                     });
+            // Folder opening/closing and workspace transitions change the
+            // native preview alpha through showPreview(). Mirror that on our
+            // independent view; otherwise a second static copy remains
+            // visible over the animated native folder.
+            hooks += hookIfPresent(base, "showPreview",
+                    new Class<?>[]{boolean.class}, chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        LauncherFourGridContentView custom = customFor(chain.getThisObject());
+                        if (custom != null) {
+                            boolean show = (Boolean) chain.getArg(0);
+                            HookUtil.InvocationResult<Object> nativeAlpha =
+                                    HookUtil.tryInvoke(chain.getThisObject(),
+                                            "getFolderPreviewAlpha", show);
+                            float alpha = nativeAlpha.succeeded()
+                                    && nativeAlpha.value() instanceof Number
+                                    ? ((Number) nativeAlpha.value()).floatValue()
+                                    : (show ? 1f : 0f);
+                            custom.setAlpha(alpha);
+                        }
+                        return result;
+                    });
             hooks += hookIfPresent(base, "getPreviewCount", new Class<?>[0],
                     chain -> {
                         LauncherFourGridContentView custom = customFor(chain.getThisObject());
