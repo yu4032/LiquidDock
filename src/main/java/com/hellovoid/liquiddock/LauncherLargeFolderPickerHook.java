@@ -108,8 +108,7 @@ final class LauncherLargeFolderPickerHook {
                 Api101Bridge.log(TAG + " no FolderSheet lifecycle hook available");
                 return false;
             }
-            HookUtil.hook(HookUtil.findMethodExact(
-                    sheet, "onClick", new Class<?>[]{View.class}), chain -> {
+            HookUtil.hook(sheet.getDeclaredMethod("onClick", View.class), chain -> {
                 Object owner = chain.getThisObject();
                 PickerState state = STATES.get(owner);
                 if (state == null || !(owner instanceof View)) {
@@ -161,7 +160,9 @@ final class LauncherLargeFolderPickerHook {
             Class<?> owner, String name, Class<?>[] signature,
             io.github.libxposed.api.XposedInterface.Hooker callback) {
         try {
-            HookUtil.hook(HookUtil.findMethodExact(owner, name, signature), callback);
+            // Do not walk up to android.view.View: intercepting a
+            // framework-wide onAttachedToWindow would be catastrophic.
+            HookUtil.hook(owner.getDeclaredMethod(name, signature), callback);
             return true;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " optional " + name + " unavailable: " + error);
