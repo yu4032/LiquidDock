@@ -3,7 +3,6 @@ package com.hellovoid.liquiddock;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.widget.CompoundButton;
-import android.widget.Switch;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -255,22 +254,51 @@ final class LauncherLargeFolderPickerHook {
             return;
         }
 
-        CompoundButton toggle = makeNativeToggle(sheet.getContext(), sheet);
+        // Derive the component from the actual OEM option row. No platform Switch fallback.
+        CompoundButton exemplar = findNativeToggle(predictionField, 0);
+        if (exemplar == null) {
+            Api101Bridge.log(TAG + " no OEM switch inside app-prediction row");
+            return;
+        }
+        CompoundButton toggle = makeNativeToggle(sheet.getContext(), exemplar);
+        if (toggle == null) {
+            Api101Bridge.log(TAG + " cannot reproduce OEM switch class");
+            return;
+        }
         LinearLayout row = new LinearLayout(sheet.getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(sheet.getContext(), 52));
-        row.setPadding(dp(sheet.getContext(), 12), 0, dp(sheet.getContext(), 12), 0);
+        row.setMinimumHeight(predictionField.getMinimumHeight());
+        row.setPadding(predictionField.getPaddingLeft(), predictionField.getPaddingTop(),
+                predictionField.getPaddingRight(), predictionField.getPaddingBottom());
         row.setId(View.generateViewId());
         TextView label = new TextView(sheet.getContext());
         label.setText("开启真实大文件夹");
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        label.setTextColor(themeColor(sheet.getContext(),
-                android.R.attr.textColorPrimary, 0xffeeeeee));
+        TextView nativeLabel = findNativeLabel(predictionField, 0);
+        if (nativeLabel != null) {
+            label.setTextSize(TypedValue.COMPLEX_UNIT_PX, nativeLabel.getTextSize());
+            label.setTextColor(nativeLabel.getTextColors());
+            label.setTypeface(nativeLabel.getTypeface());
+            label.setGravity(nativeLabel.getGravity());
+            label.setIncludeFontPadding(nativeLabel.getIncludeFontPadding());
+            label.setLetterSpacing(nativeLabel.getLetterSpacing());
+        } else {
+            label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            label.setTextColor(themeColor(sheet.getContext(),
+                    android.R.attr.textColorPrimary, 0xffeeeeee));
+        }
         row.addView(label, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(toggle, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        ViewGroup.LayoutParams exemplarParams = exemplar.getLayoutParams();
+        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(
+                exemplarParams == null ? ViewGroup.LayoutParams.WRAP_CONTENT : exemplarParams.width,
+                exemplarParams == null ? ViewGroup.LayoutParams.WRAP_CONTENT : exemplarParams.height);
+        if (exemplarParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) exemplarParams;
+            toggleParams.setMargins(margins.leftMargin, margins.topMargin,
+                    margins.rightMargin, margins.bottomMargin);
+        }
+        row.addView(toggle, toggleParams);
         PickerState state = new PickerState(info, row, toggle,
                 isMarked(sheet.getContext(), info));
         updateAppearance(state);
@@ -290,15 +318,28 @@ final class LauncherLargeFolderPickerHook {
                     false, panel.getClass().getClassLoader());
             ViewGroup.MarginLayoutParams rowLp = (ViewGroup.MarginLayoutParams)
                     lpClass.getConstructor(int.class, int.class).newInstance(
-                            0, ViewGroup.LayoutParams.WRAP_CONTENT);
-            HookUtil.setIntField(rowLp, "startToStart", nativeGroup.getId());
-            HookUtil.setIntField(rowLp, "endToEnd", nativeGroup.getId());
+                            predictionLp.width, predictionLp.height);
+            // Copy horizontal anchors and margins from the vendor's own row.
+            for (String anchor : new String[]{"startToStart", "endToEnd",
+                    "leftToLeft", "rightToRight", "startToEnd", "endToStart",
+                    "leftToRight", "rightToLeft"}) {
+                try {
+                    HookUtil.setIntField(rowLp, anchor, HookUtil.getIntField(predictionLp, anchor));
+                } catch (Throwable ignored) {}
+            }
+            if (predictionLp instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams old = (ViewGroup.MarginLayoutParams) predictionLp;
+                rowLp.leftMargin = old.leftMargin;
+                rowLp.rightMargin = old.rightMargin;
+                rowLp.topMargin = old.topMargin;
+                rowLp.bottomMargin = old.bottomMargin;
+                // Section spacing belongs above the first option only.
+                old.topMargin = successorTopMargin(panel, predictionField);
+            }
             HookUtil.setIntField(rowLp, "topToBottom", nativeGroup.getId());
-            rowLp.topMargin = dp(sheet.getContext(), 8);
             panel.addView(row, rowLp);
 
-            // Insert BEFORE the original "外露应用智能排序" and "今日推荐" rows.
-            // Only move the native first row's constraint; its switch/behavior remains OEM.
+            // Leave the two vendor toggles and their click listeners untouched.
             HookUtil.setIntField(predictionLp, "topToBottom", row.getId());
             predictionField.setLayoutParams(predictionLp);
             STATES.put(owner, state);
@@ -336,22 +377,47 @@ final class LauncherLargeFolderPickerHook {
         }
     }
 
-    private static CompoundButton makeNativeToggle(Context context, View sheet) {
-        CompoundButton reference = findNativeToggle(sheet, 0);
-        if (reference != null) {
-            CompoundButton copy = instantiateToggle(reference.getClass(), context);
-            if (copy != null) return copy;
+    private static int successorTopMargin(ViewGroup panel, View anchor) {
+        if (anchor.getId() == View.NO_ID) return 0;
+        for (int i = 0; i < panel.getChildCount(); i++) {
+            View view = panel.getChildAt(i);
+            if (view == anchor) continue;
+            ViewGroup.LayoutParams lp = view.getLayoutParams();
+            if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
+            try {
+                if (HookUtil.getIntField(lp, "topToBottom") == anchor.getId())
+                    return ((ViewGroup.MarginLayoutParams) lp).topMargin;
+            } catch (Throwable ignored) {}
         }
-        try {
-            Class<?> nativeType = Class.forName(
-                    "miuix.slidingwidget.widget.SlidingButton", false,
-                    context.getClassLoader());
-            CompoundButton nativeToggle = instantiateToggle(nativeType, context);
-            if (nativeToggle != null) return nativeToggle;
-        } catch (Throwable ignored) {
-            // Use the platform switch only on Launcher builds without MIUIX.
+        return 0;
+    }
+
+    private static TextView findNativeLabel(View root, int depth) {
+        if (root instanceof TextView && !(root instanceof CompoundButton)) return (TextView) root;
+        if (!(root instanceof ViewGroup) || depth >= 9) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TextView result = findNativeLabel(group.getChildAt(i), depth + 1);
+            if (result != null) return result;
         }
-        return new Switch(context);
+        return null;
+    }
+
+    private static CompoundButton makeNativeToggle(Context context, CompoundButton exemplar) {
+        CompoundButton copy = instantiateToggle(exemplar.getClass(), context);
+        if (copy == null || copy.getClass() != exemplar.getClass()) return null;
+        copy.setLayoutDirection(exemplar.getLayoutDirection());
+        copy.setPadding(exemplar.getPaddingLeft(), exemplar.getPaddingTop(),
+                exemplar.getPaddingRight(), exemplar.getPaddingBottom());
+        copy.setButtonTintList(exemplar.getButtonTintList());
+        copy.setBackgroundTintList(exemplar.getBackgroundTintList());
+        if (exemplar instanceof android.widget.Switch && copy instanceof android.widget.Switch) {
+            android.widget.Switch original = (android.widget.Switch) exemplar;
+            android.widget.Switch next = (android.widget.Switch) copy;
+            next.setThumbTintList(original.getThumbTintList());
+            next.setTrackTintList(original.getTrackTintList());
+        }
+        return copy;
     }
 
     private static CompoundButton instantiateToggle(Class<?> type, Context context) {
@@ -369,7 +435,9 @@ final class LauncherLargeFolderPickerHook {
     }
 
     private static CompoundButton findNativeToggle(View root, int depth) {
-        if (root instanceof CompoundButton) return (CompoundButton) root;
+        if (root instanceof CompoundButton
+                && !root.getClass().getName().contains("VisualCheckBox"))
+            return (CompoundButton) root;
         if (!(root instanceof ViewGroup) || depth >= 9) return null;
         ViewGroup group = (ViewGroup) root;
         for (int i = 0; i < group.getChildCount(); i++) {

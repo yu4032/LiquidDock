@@ -100,6 +100,11 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("wrapperParams.height = h"));
         assertTrue(nativeHook.contains("innerParams.width = w"));
         assertTrue(nativeHook.contains("innerParams.height = h"));
+        assertTrue(nativeHook.contains("queueTitleRestore(folder)"));
+        assertTrue(nativeHook.contains("TITLE_RESTORE_PENDING"));
+        assertTrue(nativeHook.contains("layoutFolderTitle(folder, size, frame[2], frame[3])"));
+        assertTrue(nativeHook.contains("needHideTitleByFlags"));
+        assertFalse(nativeHook.contains("if (title.getVisibility() == View.GONE) return;"));
         assertTrue(nativeHook.contains("preSetup2x2"));
         assertTrue(nativeHook.contains("onMeasureChild2x2"));
         assertFalse(nativeHook.contains("new ImageView("));
@@ -110,7 +115,13 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(picker.contains("findNativeCheckGroup"));
         assertTrue(picker.contains("开启真实大文件夹"));
         assertTrue(picker.contains("makeNativeToggle("));
-        assertTrue(picker.contains("miuix.slidingwidget.widget.SlidingButton"));
+        assertTrue(picker.contains("findNativeToggle(predictionField, 0)"));
+        assertTrue(picker.contains("makeNativeToggle(sheet.getContext(), exemplar)"));
+        assertTrue(picker.contains("findNativeLabel(predictionField, 0)"));
+        assertTrue(picker.contains("successorTopMargin(panel, predictionField)"));
+        assertTrue(picker.contains("predictionLp.width, predictionLp.height"));
+        assertTrue(picker.contains("setBackgroundTintList(exemplar.getBackgroundTintList())"));
+        assertFalse(picker.contains("new Switch(context)"));
         assertTrue(picker.contains("row.setOnClickListener("));
         assertTrue(picker.contains("toggle.setOnCheckedChangeListener("));
         assertTrue(picker.contains("predictionField.setLayoutParams(predictionLp)"));

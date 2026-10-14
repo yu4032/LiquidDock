@@ -814,6 +814,25 @@ final class LauncherNativeFourFolderHook {
             inner.layout(0, 0, w, h);
         }
         layoutFolderTitle(folder, nativeSizing(folder, new int[]{w, h}), w, h);
+        // Native drag/drop can change title visibility AFTER CellLayout.onLayout.
+        // Reassert only after the folder has settled back into its real cell.
+        queueTitleRestore(folder);
+    }
+
+    private static final Set<View> TITLE_RESTORE_PENDING =
+            Collections.newSetFromMap(new WeakHashMap<>());
+
+    private static void queueTitleRestore(View folder) {
+        if (!TITLE_RESTORE_PENDING.add(folder)) return;
+        folder.post(() -> {
+            TITLE_RESTORE_PENDING.remove(folder);
+            if (!eligible(folder)) return;
+            int[] frame = trustedCellFrame(folder);
+            if (frame == null) return;
+            NativeFourFolderSizing.Size size =
+                    nativeSizing(folder, new int[]{frame[2], frame[3]});
+            layoutFolderTitle(folder, size, frame[2], frame[3]);
+        });
     }
 
     private static void layoutFolderTitle(View folder, NativeFourFolderSizing.Size size, int width, int height) {
@@ -821,10 +840,11 @@ final class LauncherNativeFourFolderHook {
         Object value = HookUtil.tryInvoke(folder, "getTitleContainer").value();
         if (!(value instanceof View)) return;
         View title = (View) value;
-        // Preserve no-label mode and explicit per-item hide flags. Only
-        // override the OEM's automatic INVISIBLE rule for multi-cell items.
-        if (title.getVisibility() == View.GONE) return;
-        if (Boolean.TRUE.equals(HookUtil.tryInvoke(folder.getTag(), "needHideTitleByFlags").value())) return;
+        // GONE is also used temporarily by native drag and rebind logic.
+        // It is not evidence of an explicit no-title preference. Honor the
+        // model's persistent title-hide flag rather than a stale view state.
+        if (Boolean.TRUE.equals(HookUtil.tryInvoke(folder.getTag(),
+                "needHideTitleByFlags").value())) return;
         int top = size.insetY + size.backgroundHeight;
         int available = height - top;
         if (available <= 0) return;
