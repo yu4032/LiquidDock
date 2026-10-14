@@ -4,12 +4,11 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 
-import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** Low-level Launcher material ownership; contains no widget-specific MAML rules. */
+/** Reversible RemoteViews fallback drawable ownership; native materials belong to Launcher. */
 final class LauncherGlassVendorMaterialSuppressor {
     private static final Map<View, OwnedValueState<Drawable>> WIDGET_BACKGROUND_OWNERSHIP =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -59,13 +58,6 @@ final class LauncherGlassVendorMaterialSuppressor {
         LauncherWidgetNativeViewBlurGate.release(host);
     }
 
-    static void claimFolderMaterial(View material) {
-        if (material == null) return;
-        MiBlurBridge.clearContentBlur(material);
-        invokeBoolean(material, "setViewBlur", false);
-        invokeBoolean(material, "setBlurIfNeed", false);
-    }
-
     private static View resolveRemoteViewsContent(View host) {
         if (!(host instanceof ViewGroup)) return null;
         ViewGroup group = (ViewGroup) host;
@@ -78,21 +70,4 @@ final class LauncherGlassVendorMaterialSuppressor {
         return null;
     }
 
-    private static void invokeBoolean(View host, String name, boolean value) {
-        try {
-            Method method = findMethod(host.getClass(), name, boolean.class);
-            if (method == null) return;
-            method.setAccessible(true);
-            method.invoke(host, value);
-        } catch (Throwable ignored) {}
-    }
-
-    private static Method findMethod(Class<?> type, String name, Class<?>... parameters) {
-        Class<?> current = type;
-        while (current != null) {
-            try { return current.getDeclaredMethod(name, parameters); }
-            catch (NoSuchMethodException ignored) { current = current.getSuperclass(); }
-        }
-        return null;
-    }
 }
