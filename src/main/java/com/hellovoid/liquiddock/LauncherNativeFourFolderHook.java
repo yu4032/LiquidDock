@@ -227,6 +227,23 @@ final class LauncherNativeFourFolderHook {
         // onMeasureChild2x2 determine the SAME icon sizes as OEM.
         // Only expand the parent content frame to the widget allocation.
         int side = Math.min(w, h);
+        ViewParent wrapperParent = inner.getParent();
+        if (wrapperParent instanceof View) {
+            // icon_container is a separate wrap_content FrameLayout centered
+            // by the native FolderIcon2x2 RelativeLayout. Expanding ONLY its
+            // child causes the large preview to be offset from the grid.
+            View wrapper = (View) wrapperParent;
+            ViewGroup.LayoutParams wrapperParams = wrapper.getLayoutParams();
+            if (wrapperParams != null
+                    && (wrapperParams.width != side || wrapperParams.height != side
+                    || wrapper.getWidth() != side || wrapper.getHeight() != side)) {
+                wrapperParams.width = side;
+                wrapperParams.height = side;
+                wrapper.measure(exact(side), exact(side));
+                int x = (w - side) / 2;
+                wrapper.layout(x, 0, x + side, side);
+            }
+        }
         if (innerParams.width != side || innerParams.height != side
                 || inner.getWidth() != side || inner.getHeight() != side) {
             innerParams.width = side;
