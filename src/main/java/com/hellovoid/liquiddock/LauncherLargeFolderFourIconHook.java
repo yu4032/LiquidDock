@@ -71,25 +71,6 @@ final class LauncherLargeFolderFourIconHook {
                     "com.miui.home.launcher.FolderInfo", false, classLoader);
             Class<?> baseFolderType = Class.forName(
                     "com.miui.home.launcher.FolderIcon", false, classLoader);
-            Class<?> convertSizeType = Class.forName(
-                    "com.miui.home.launcher.convertsize.FolderIconConvertSizeController",
-                    false, classLoader);
-            // This mapping is the vendor's authoritative input to collision
-            // checks, layout allocation and persistent FolderInfo resize.
-            // A visual scale or raw spanX assignment cannot replace it.
-            boolean spanXHook = installOptional(convertSizeType, "getFolderSpanXFromType",
-                    new Class<?>[]{int.class}, chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        return enabled && ((Integer) chain.getArg(0)) == NATIVE_2X2_FOUR_FOLDER_TYPE
-                                ? 2 : result;
-                    });
-            boolean spanYHook = installOptional(convertSizeType, "getFolderSpanYFromType",
-                    new Class<?>[]{int.class}, chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        return enabled && ((Integer) chain.getArg(0)) == NATIVE_2X2_FOUR_FOLDER_TYPE
-                                ? 2 : result;
-                    });
-
             // Vendor 4.50 variants sometimes inline or rename individual methods.
             // Do not let a missing optional lifecycle callback suppress all
             // remaining hooks. Check minimum viable coverage before enabling.
@@ -169,13 +150,10 @@ final class LauncherLargeFolderFourIconHook {
                     });
             // If preview or model conversion coverage is incomplete, fail closed.
             // Individual callbacks remain registered but will return stock results.
-            enabled = spanXHook && spanYHook
-                    && setup && bindClicks && (inflate || createOrRemove)
+            enabled = setup && bindClicks && (inflate || createOrRemove)
                     && (fromXml || bindFolder || folderChanged);
             installed = true;
             MainHook.log(TAG + " installed=" + enabled
-                    + " spanXMap=" + spanXHook
-                    + " spanYMap=" + spanYHook
                     + " inflate=" + inflate
                     + " previewCreate=" + createOrRemove
                     + " click=" + bindClicks
