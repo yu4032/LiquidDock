@@ -56,6 +56,20 @@ public class PrismalComponentGateShaderTest {
                 "if (u_componentPressGlow > 0.5 && pressGlow > 0.001) {"));
     }
 
+    @Test public void deepCoreCausticsRetainCoverageWithoutChangingHeightOrAlpha() {
+        String upstream = PrismalShaderSources.FRAGMENT;
+        String shader = transformed();
+        assertTrue("Keep the vendored Prismal source unchanged",
+                upstream.contains("* u_causticIntensity * height;"));
+        assertEquals(1, occurrences(shader, "* mix(height, 1.0, 0.30 * coreBlend);"));
+        assertFalse(shader.contains("* u_causticIntensity * height;"));
+        assertTrue(shader.contains("float coreBlend = smoothstep(0.0, 0.38, tDeep);"));
+        assertTrue(shader.contains("float height = mix(hSlab, hDome, domeW);"));
+        assertTrue(shader.contains("if (u_componentCaustics > 0.5 && u_causticIntensity > 0.001) {"));
+        assertTrue("Caustics must not affect framebuffer alpha",
+                shader.contains("vec4(color, opacity * u_transmittance)"));
+    }
+
     @Test public void enabledFamiliesRetainEveryOriginalColorContributionExactlyOnce() {
         String shader = transformed();
         String[] statements = {
