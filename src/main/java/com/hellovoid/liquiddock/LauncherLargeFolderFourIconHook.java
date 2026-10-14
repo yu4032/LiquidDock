@@ -43,9 +43,10 @@ final class LauncherLargeFolderFourIconHook {
     static boolean isNativeFourFolderInfo(Object info) {
         if (!enabled || info == null) return false;
         try {
-            return HookUtil.getIntField(info, "itemType") == NATIVE_2X2_FOUR_FOLDER_TYPE
-                    && HookUtil.getIntField(info, "spanX") == 2
-                    && HookUtil.getIntField(info, "spanY") == 2;
+            return LargeFolderFootprintPolicy.hasRealTwoByTwoFootprint(
+                    HookUtil.getIntField(info, "itemType"),
+                    HookUtil.getIntField(info, "spanX"),
+                    HookUtil.getIntField(info, "spanY"));
         } catch (Throwable ignored) {
             return false;
         }
