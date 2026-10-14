@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import androidx.constraintlayout.widget.ConstraintLayout;
 
 import java.util.Collections;
 import java.util.Map;
@@ -31,7 +32,7 @@ final class LauncherLargeFolderPickerHook {
     private static boolean installed;
 
     private static final class PickerState {
-        final Object info;
+        Object info;
         final LinearLayout option;
         boolean selected;
 
@@ -191,7 +192,14 @@ final class LauncherLargeFolderPickerHook {
     private static void attachOption(Object owner, Object info) {
         if (!(owner instanceof View) || info == null) return;
         View sheet = (View) owner;
-        if (STATES.containsKey(owner)) return;
+        PickerState existing = STATES.get(owner);
+        if (existing != null && existing.option.getParent() != null) {
+            existing.info = info;
+            existing.selected = isMarked(sheet.getContext(), info);
+            updateAppearance(existing);
+            return;
+        }
+        if (existing != null) STATES.remove(owner);
         Object scroller = getFieldOrNull(owner, "mFolderPickerBody");
         ScrollView scroll = scroller instanceof ScrollView
                 ? (ScrollView) scroller : findScrollView(sheet);
@@ -200,16 +208,28 @@ final class LauncherLargeFolderPickerHook {
                     + sheet.getClass().getName());
             return;
         }
-        if (scroll.getChildCount() != 1) {
-            Api101Bridge.log(TAG + " unexpected picker scroll child count=" + scroll.getChildCount());
+        // The vendor folder_sheet.xml places three native VisualCheckBoxes
+        // inside a ConstraintLayout, then a native app-prediction row below
+        // their VisualCheckGroup. Add our actual FOURTH selectable choice to
+        // that same layout; never wrap/reparent its ConstraintLayout inside
+        // another scrolling root (that broke its existing constraints).
+        View root = scroll.getChildCount() == 1 ? scroll.getChildAt(0) : null;
+        if (!(root instanceof ConstraintLayout)) {
+            Api101Bridge.log(TAG + " unsupported FolderSheet root="
+                    + (root == null ? "null" : root.getClass().getName()));
             return;
         }
-        View original = scroll.getChildAt(0);
-        if (original == null) return;
+        ConstraintLayout panel = (ConstraintLayout) root;
+        View checkGroup = findNativeCheckGroup(panel);
+        Object predictionField = getFieldOrNull(owner, "mFolderPickerAppPredictExposed");
+        View prediction = predictionField instanceof View ? (View) predictionField : null;
+        if (checkGroup == null) {
+            Api101Bridge.log(TAG + " native style check group unavailable");
+            return;
+        }
 
-        LinearLayout root = new LinearLayout(sheet.getContext());
-        root.setOrientation(LinearLayout.VERTICAL);
         LinearLayout option = buildOption(sheet.getContext());
+        option.setId(View.generateViewId());
         PickerState state = new PickerState(
                 info, option, isMarked(sheet.getContext(), info));
         updateAppearance(state);
@@ -217,46 +237,52 @@ final class LauncherLargeFolderPickerHook {
             state.selected = true;
             updateAppearance(state);
             HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
-            // This is an independent picker state, not one of MIUI's
-            // three mutually-exclusive native checked views.
-            Object defaultCheck = getFieldOrNull(owner, "mDefaultFolderCheckBox");
-            Object fourCheck = getFieldOrNull(owner, "mBigFolderCheckBox2x2_4");
-            Object nineCheck = getFieldOrNull(owner, "mBigFolderCheckBox2x2_9");
-            for (Object check : new Object[]{defaultCheck, fourCheck, nineCheck}) {
+            // Keep native styles mutually exclusive in the UI. The custom
+            // checked state is persisted independently of MIUI's itemType.
+            for (String field : new String[]{
+                    "mDefaultFolderCheckBox", "mBigFolderCheckBox2x2_4",
+                    "mBigFolderCheckBox2x2_9"}) {
+                Object check = getFieldOrNull(owner, field);
                 if (check instanceof android.widget.Checkable) {
                     ((android.widget.Checkable) check).setChecked(false);
                 }
             }
         });
-        ViewGroup.LayoutParams oldParams = original.getLayoutParams();
         try {
-            scroll.removeView(original);
-            // Put the added style first, rather than after an arbitrary
-            // height vendor layout where it could be outside the visible
-            // ScrollView viewport without an obvious scroll affordance.
-            root.addView(option, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            root.addView(original, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            scroll.addView(root, oldParams == null
-                    ? new ScrollView.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT)
-                    : oldParams);
+            ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
+            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+            lp.topToBottom = checkGroup.getId();
+            lp.topMargin = dp(sheet.getContext(), 12);
+            lp.bottomMargin = dp(sheet.getContext(), 12);
+            panel.addView(option, lp);
+            if (prediction != null && prediction.getParent() == panel
+                    && prediction.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
+                ConstraintLayout.LayoutParams predictLp =
+                        (ConstraintLayout.LayoutParams) prediction.getLayoutParams();
+                predictLp.topToBottom = option.getId();
+                prediction.setLayoutParams(predictLp);
+            }
             STATES.put(owner, state);
-            Api101Bridge.log(TAG + " added independent four-large-icon folder choice");
+            Api101Bridge.log(TAG + " fourth native FolderSheet choice attached"
+                    + " group=" + checkGroup.getId()
+                    + " option=" + option.getId());
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + " picker row attachment failed: " + error);
-            // Avoid leaving the stock picker detached on a layout variant.
-            if (original.getParent() instanceof ViewGroup) {
-                ((ViewGroup) original.getParent()).removeView(original);
-            }
-            if (scroll.getChildCount() == 0) {
-                scroll.addView(original);
-            }
+            Api101Bridge.log(TAG + " fourth choice injection failed", error);
+            if (option.getParent() == panel) panel.removeView(option);
         }
+    }
+
+    private static View findNativeCheckGroup(View root) {
+        if (root.getClass().getName().endsWith("VisualCheckGroup")) return root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View result = findNativeCheckGroup(group.getChildAt(i));
+            if (result != null) return result;
+        }
+        return null;
     }
 
     private static ScrollView findScrollView(View root) {
