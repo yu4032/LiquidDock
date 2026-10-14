@@ -220,7 +220,7 @@ internal fun GridBasicsPage(
             prefs,
             ConfigSchema.Grid.LARGE_FOLDER_FOUR_ICONS,
             "大文件夹四宫格",
-            "长按文件夹→编辑文件夹→选择放大，可占用真正的 2×2 桌面网格，显示四个放大的可点击图标；原生避让与位置保存，重启桌面后生效",
+            "开启后将桌面中恰好含四个应用的普通 1×1 文件夹升级为真正占用 2×2 网格的四宫格；原生处理空位与位置保存；重启桌面生效",
             masterEnabled,
         )
     }
