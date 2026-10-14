@@ -13,83 +13,51 @@ public class FolderScaleAndDragBackdropContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
 
-    @Test public void fourIconLargeFolderUsesIndependentFourTileLayout() throws Exception {
-        String holder = Files.readString(MAIN.resolve("LauncherFourGridLayoutHook.java"));
-        String content = Files.readString(MAIN.resolve("LauncherFourGridContentView.java"));
-        String geometry = Files.readString(MAIN.resolve("HomeGridCellGeometryHook.java"));
+    @Test public void fourthSizeUsesTheSingleNativeTwoByTwoFolder() throws Exception {
+        String nativeHook = Files.readString(MAIN.resolve("LauncherNativeFourFolderHook.java"));
         String startup = Files.readString(MAIN.resolve("ModuleMain.java"));
         String picker = Files.readString(MAIN.resolve("LauncherLargeFolderPickerHook.java"));
         String nativeSpan = Files.readString(MAIN.resolve("LauncherLargeFolderNativeSpanHook.java"));
+        String geometry = Files.readString(MAIN.resolve("HomeGridCellGeometryHook.java"));
 
         assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
         assertTrue(startup.contains("LauncherLargeFolderNativeSpanHook.install("));
-        assertTrue(startup.contains("LauncherFourGridLayoutHook.install("));
-        assertTrue(startup.contains("LauncherFourGridAnimationHook.install("));
-        String animations = Files.readString(MAIN.resolve("LauncherFourGridAnimationHook.java"));
-        assertTrue(animations.contains("getPreviewByComponentName"));
-        assertTrue(animations.contains("getPreviewPosition"));
-        assertTrue(animations.contains("getPreviewItems"));
-        assertTrue(animations.contains("updateNativeFolderOpenAnchor("));
-        assertTrue(animations.contains("LaunchAppAndBackHomeAnimTarget"));
-        assertFalse(animations.contains("createBitmap"));
-        assertFalse(startup.contains("LauncherLargeFolderFourIconHook.install("));
+        assertTrue(startup.contains("LauncherNativeFourFolderHook.install("));
+        assertFalse(startup.contains("LauncherFourGridLayoutHook.install("));
+        assertFalse(startup.contains("LauncherFourGridAnimationHook.install("));
         assertFalse(startup.contains("LauncherLargeFolderVisualHook.install("));
-        assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
 
-        assertTrue(holder.contains("com.miui.home.launcher.CellLayout"));
-        assertTrue(holder.contains("\"onLayout\""));
-        assertTrue(holder.contains("LauncherLargeFolderPickerHook.isMarked("));
-        assertTrue(holder.contains("LauncherFourGridContentView("));
-        assertTrue(holder.contains("folder.addView(content, lp)"));
-        assertTrue(holder.contains("hideOriginal(folder)"));
-        assertTrue(holder.contains("restoreOriginal(nativeFolder)"));
-        assertTrue(holder.contains("isFourGridInfo(info)"));
-        assertTrue(holder.contains("notifyDataSetChanged"));
-        assertTrue(holder.contains("LargeFolderFootprintPolicy.hasRealTwoByTwoFootprint"));
+        assertTrue(nativeHook.contains("FolderIcon2x2_4"));
+        assertTrue(nativeHook.contains("LauncherFolder2x2IconContainer"));
+        assertTrue(nativeHook.contains("getMiuiWidgetSizeSpec"));
+        assertTrue(nativeHook.contains("FolderIcon.fromXml()"));
+        assertTrue(nativeHook.contains("getBuddyIconView"));
+        assertTrue(nativeHook.contains("discarded stale compact icon view"));
+        assertTrue(nativeHook.contains("mXs"));
+        assertTrue(nativeHook.contains("mYs"));
+        assertTrue(nativeHook.contains("WidgetGridSizing.centeredFrame"));
+        assertTrue(nativeHook.contains("preSetup2x2"));
+        assertTrue(nativeHook.contains("onMeasureChild2x2"));
+        assertFalse(nativeHook.contains("new ImageView("));
+        assertFalse(nativeHook.contains("addView("));
+        assertFalse(nativeHook.contains("setScaleX("));
+        assertFalse(nativeHook.contains("Bitmap"));
 
-        assertTrue(content.contains("extends FrameLayout"));
-        assertTrue(content.contains("new ImageView(context)"));
-        assertTrue(content.contains("getContents"));
-        assertTrue(content.contains("getIconAsync"));
-        assertFalse(content.contains("\"getIconDrawable\""));
-        assertTrue(content.contains("handleClick"));
-        assertTrue(content.contains("tile.setOnLongClickListener"));
-        assertTrue(content.contains("background.layout"));
-        assertTrue(content.contains("background.layout(0, 0, width, height)"));
-        assertFalse(content.contains("titleReservation(height)"));
-        assertTrue(content.contains("FolderPreviewIconView"));
-        assertTrue(content.contains("setMBuddyInfo"));
-        assertTrue(holder.contains("synchronizeWidgetFrame(cell, nativeFolder, info)"));
-        assertTrue(holder.contains("WidgetGridSizing.centeredFrame"));
-        assertTrue(holder.contains("xs[cx + 1] + cw - xs[cx]"));
-        assertFalse(content.contains("Bitmap"));
-        assertFalse(content.contains("PixelCopy"));
-        assertFalse(content.contains("setScaleX"));
-        assertFalse(content.contains("setScaleY"));
-
-        assertTrue(geometry.contains("LauncherFourGridLayoutHook.isFourGridInfo(info)"));
-        assertTrue(geometry.contains("boolean.class, layoutParams"));
-        assertTrue(geometry.contains("\"measureChild\""));
-
-        assertTrue(nativeSpan.contains("FolderIconConvertSizeController"));
-        assertTrue(nativeSpan.contains("\"getFolderSpanXFromType\""));
-        assertTrue(nativeSpan.contains("\"getFolderSpanYFromType\""));
-        assertTrue(nativeSpan.contains("ThreadLocal<Boolean> FORCE_LARGE"));
-        assertTrue(nativeSpan.contains("\"convertIconSize\""));
-        assertTrue(nativeSpan.contains("LauncherLargeFolderPickerHook.isMarked("));
-
-        assertTrue(picker.contains("\"initListener\""));
-        assertTrue(picker.contains("\"onAttachedToWindow\""));
-        assertTrue(picker.contains("findScrollView(sheet)"));
-        assertTrue(picker.contains("findNativeCheckGroup(panel)"));
-        assertTrue(picker.contains("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams"));
-        assertTrue(picker.contains("HookUtil.setIntField(predictLp, \"topToBottom\", option.getId())"));
-        assertFalse(picker.contains("root.addView(original"));
+        assertTrue(picker.contains("findNativeCheckGroup"));
+        assertTrue(picker.contains("makeNativeSizeOption"));
+        assertTrue(picker.contains("group.addView(newOption, lp)"));
+        assertTrue(picker.contains("sample.getClass().getConstructor("));
+        assertTrue(picker.contains("2×2 四宫格"));
         assertTrue(picker.contains("PREFIX + id"));
-        assertTrue(picker.contains("\"onClick\""));
-        assertTrue(picker.contains("2×2 四宫格大文件夹"));
-        assertTrue(picker.contains("LargeFolderPickerPolicy.mustRequestResize("));
-        assertFalse(picker.contains("featureEnabled"));
+        assertFalse(picker.contains("root.addView(original"));
+        assertFalse(picker.contains("panel.addView(option"));
+        assertTrue(nativeSpan.contains("FolderIconConvertSizeController"));
+        assertTrue(nativeSpan.contains("ThreadLocal<Boolean> FORCE_LARGE"));
+        assertTrue(nativeSpan.contains("LauncherLargeFolderPickerHook.isMarked("));
+        assertTrue(geometry.contains("LauncherNativeFourFolderHook.isFourGridInfo(info)"));
+        assertFalse(Files.exists(MAIN.resolve("LauncherFourGridContentView.java")));
+        assertFalse(Files.exists(MAIN.resolve("LauncherFourGridLayoutHook.java")));
+        assertFalse(Files.exists(MAIN.resolve("LauncherFourGridAnimationHook.java")));
 
         String schema = Files.readString(MAIN.resolve("config/ConfigSchema.java"));
         assertFalse(schema.contains("LARGE_FOLDER_FOUR_ICONS"));
