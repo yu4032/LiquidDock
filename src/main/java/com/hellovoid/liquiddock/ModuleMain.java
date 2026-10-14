@@ -152,8 +152,10 @@ public final class ModuleMain extends XposedModule {
                 try {
                     LauncherLargeFolderPickerHook.install(classLoader);
                     LauncherLargeFolderNativeSpanHook.install(classLoader);
-                    LauncherLargeFolderFourIconHook.install(classLoader);
-                    LauncherLargeFolderVisualHook.install(classLoader);
+                    // Fourth folder style has its own view hierarchy and
+                    // ShortcutInfo renderer; do not install the historical
+                    // FolderIcon2x2_4 count or OEM widget-size overrides.
+                    LauncherFourGridLayoutHook.install(classLoader);
                 } catch (Throwable error) {
                     Api101Bridge.log("[DC][FolderFour] independent bootstrap failed", error);
                 }
