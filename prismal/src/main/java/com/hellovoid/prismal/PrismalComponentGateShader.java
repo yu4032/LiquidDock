@@ -112,6 +112,14 @@ final class PrismalComponentGateShader {
                 "if (u_causticIntensity > 0.001) {",
                 "if (u_componentCaustics > 0.5 && u_causticIntensity > 0.001) {",
                 "caustic block gate");
+        // Deep large-surface cores have very low dome height; do not let that suppress
+        // nearly all caustic illumination while the curved edge keeps its original weight.
+        corrected = replaceExactlyOnce(
+                corrected,
+                "float caust = pow(max(causticDot, 0.0), 7.0) * u_causticIntensity * height;",
+                "float caust = pow(max(causticDot, 0.0), 7.0) * u_causticIntensity "
+                        + "* mix(height, 1.0, 0.30 * coreBlend);",
+                "caustic core coverage");
         corrected = replaceExactlyOnce(
                 corrected,
                 "if (pressGlow > 0.001) {",
