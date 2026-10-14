@@ -63,42 +63,86 @@ final class LauncherNativeFourFolderHook {
                     "com.miui.home.launcher.LauncherIconImageView");
             int installedHooks = 0;
 
-            // The 287x287 native background from the device trace is NOT
-            // just a small LayoutParams. LauncherFolder2x2IconImageView
-            // inherits LauncherIconImageView#onMeasure, whose width/height
-            // getters override the incoming EXACT MeasureSpec with a fixed
-            // IconSizeProvider value. Apply the real 2x2 view frame only to
-            // those two native background/cover image instances.
+            // Device log 13:55:05:
+            // background/cover [measured=287, params=718] and
+            // preview [measured=359, params=718]. The OEM onMeasure,
+            // not LayoutParams, is the source of the remaining 1x1 result.
+            // Launcher 4.50 has no hookable getWidth/HeightMeasureSpec
+            // methods (the preceding approach installed 0/2 hooks).
+            // Hook the actual onMeasure implementations instead.
             if (imageBase != null) {
-                for (String dimension : new String[]{
-                        "getWidthMeasureSpec", "getHeightMeasureSpec"}) {
-                    try {
-                        final boolean horizontal = "getWidthMeasureSpec".equals(dimension);
-                        HookUtil.hook(imageBase.getDeclaredMethod(dimension, int.class),
-                                chain -> {
-                            Object target = chain.getThisObject();
-                            if (target instanceof View
-                                    && ((View) target).getClass().getName().equals(
-                                    "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView")) {
-                                View folder = ancestorFolder((View) target);
-                                if (folder != null && eligible(folder)) {
-                                    int[] frame = desiredFrame(folder,
-                                            (Integer) chain.getArg(0),
-                                            (Integer) chain.getArg(0));
-                                    if (frame != null) {
-                                        return exact(horizontal ? frame[0] : frame[1]);
-                                    }
-                                }
-                            }
+                try {
+                    java.lang.reflect.Method measure = HookUtil.findMethodExact(
+                            imageBase, "onMeasure",
+                            new Class<?>[]{int.class, int.class});
+                    HookUtil.hook(measure, chain -> {
+                        Object instance = chain.getThisObject();
+                        if (!(instance instanceof View)
+                                || !instance.getClass().getName().equals(
+                                "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView")) {
                             return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        });
-                        installedHooks++;
-                        Api101Bridge.log(TAG + " installed LauncherIconImageView#"
-                                + dimension + " for native folder background");
-                    } catch (Throwable error) {
-                        Api101Bridge.log(TAG + " native background measure " + dimension
-                                + " unavailable", error);
-                    }
+                        }
+                        View surface = (View) instance;
+                        View root = ancestorFolder(surface);
+                        if (root == null || !eligible(root)) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        int[] frame = desiredFrame(root,
+                                (Integer) chain.getArg(0),
+                                (Integer) chain.getArg(1));
+                        if (frame == null) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        Object result = chain.proceed(new Object[]{
+                                exact(frame[0]), exact(frame[1])});
+                        forceMeasuredFrame(surface, frame, "image");
+                        return result;
+                    });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed native image onMeasure "
+                            + measure.toGenericString());
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " native image onMeasure unavailable", error);
+                }
+            }
+            Class<?> previewBase = vendorClass(loader,
+                    "com.miui.home.launcher.folder.BaseFolderIconPreviewContainer2X2");
+            if (previewBase != null) {
+                try {
+                    java.lang.reflect.Method measure = HookUtil.findMethodExact(
+                            previewBase, "onMeasure",
+                            new Class<?>[]{int.class, int.class});
+                    HookUtil.hook(measure, chain -> {
+                        Object instance = chain.getThisObject();
+                        if (!(instance instanceof View)
+                                || !instance.getClass().getName().equals(
+                                "com.miui.home.launcher.folder.FolderIconPreviewContainer2X2_4")) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        View previewView = (View) instance;
+                        View root = ancestorFolder(previewView);
+                        if (root == null || !eligible(root)) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        int[] frame = desiredFrame(root,
+                                (Integer) chain.getArg(0),
+                                (Integer) chain.getArg(1));
+                        if (frame == null) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        // OEM preMeasure2x2() runs inside this call. Feed it
+                        // the full widget frame so large/small icon rectangles
+                        // are recomputed before their native onLayout2x2().
+                        Object result = chain.proceed(new Object[]{
+                                exact(frame[0]), exact(frame[1])});
+                        forceMeasuredFrame(previewView, frame, "preview");
+                        return result;
+                    });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed native preview onMeasure "
+                            + measure.toGenericString());
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " native preview onMeasure unavailable", error);
                 }
             }
 
@@ -320,6 +364,26 @@ final class LauncherNativeFourFolderHook {
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " vendor class missing: " + name + " " + error);
             return null;
+        }
+    }
+
+    private static final Set<View> CORRECTION_LOGGED =
+            Collections.newSetFromMap(new WeakHashMap<>());
+
+    private static void forceMeasuredFrame(View child, int[] frame, String layer) {
+        int beforeWidth = child.getMeasuredWidth();
+        int beforeHeight = child.getMeasuredHeight();
+        if (beforeWidth == frame[0] && beforeHeight == frame[1]) return;
+        HookUtil.InvocationResult<Object> resized = HookUtil.tryInvoke(
+                child, "setMeasuredDimension", frame[0], frame[1]);
+        if (CORRECTION_LOGGED.add(child)) {
+            Api101Bridge.log(TAG + " measured-frame " + layer
+                    + " before=" + beforeWidth + "x" + beforeHeight
+                    + " target=" + frame[0] + "x" + frame[1]
+                    + " after=" + child.getMeasuredWidth()
+                    + "x" + child.getMeasuredHeight()
+                    + " success=" + resized.succeeded()
+                    + (resized.succeeded() ? "" : " failure=" + resized.failure()));
         }
     }
 
