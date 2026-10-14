@@ -171,7 +171,11 @@ final class LauncherWidgetNativeViewBlurGate {
         if (!installed || workspace == null || !workspace.isAttachedToWindow()
                 || GlassRuntimeState.isWidgetEnabled()) return;
         View workspaceRoot = workspace.getRootView();
-        for (View host : new java.util.ArrayList<>(PREVIOUSLY_OWNED_HOSTS.keySet())) {
+        java.util.ArrayList<View> hosts;
+        synchronized (PREVIOUSLY_OWNED_HOSTS) {
+            hosts = new java.util.ArrayList<>(PREVIOUSLY_OWNED_HOSTS.keySet());
+        }
+        for (View host : hosts) {
             if (host == null || !host.isAttachedToWindow()
                     || host.getRootView() != workspaceRoot
                     || !LauncherGlassHierarchy.isWorkspace(host)) continue;
@@ -180,7 +184,7 @@ final class LauncherWidgetNativeViewBlurGate {
             synchronized (STATES) {
                 if (STATES.containsKey(host)) continue;
             }
-            if (!isSupportedWidget(host)) continue;
+            if (!isSupportedWidget(host) || GlassRuntimeState.isWidgetEnabled()) continue;
             boolean rebound = restoreViaVendorUtilities(host);
             MainHook.log(TAG + " HOME resume vendor-rebind=" + rebound
                     + " host=" + host.getClass().getSimpleName());
