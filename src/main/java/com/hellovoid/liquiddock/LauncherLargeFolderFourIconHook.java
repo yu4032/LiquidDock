@@ -74,6 +74,14 @@ final class LauncherLargeFolderFourIconHook {
                     "com.miui.home.launcher.ItemInfo", false, classLoader);
             Method rebind = HookUtil.findMethodExact(folderType, "rebindInfo",
                     new Class<?>[]{itemInfoType, ViewGroup.class});
+            Class<?> launcherType = Class.forName(
+                    "com.miui.home.launcher.Launcher", false, classLoader);
+            Class<?> folderInfoType = Class.forName(
+                    "com.miui.home.launcher.FolderInfo", false, classLoader);
+            Class<?> baseFolderType = Class.forName(
+                    "com.miui.home.launcher.FolderIcon", false, classLoader);
+            Method fromXml = HookUtil.findMethodExact(baseFolderType, "fromXml",
+                    new Class<?>[]{int.class, launcherType, ViewGroup.class, folderInfoType});
             Method setup = HookUtil.findMethodExact(
                     previewType, "preSetup2x2", new Class<?>[0]);
 
@@ -95,6 +103,17 @@ final class LauncherLargeFolderFourIconHook {
                     configureFolder(chain.getThisObject());
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            });
+            // Initial Workspace binding uses FolderIcon.fromXml() directly,
+            // not necessarily rebindInfo(). Cover both first placement and
+            // subsequent model rebinds before considering the feature installed.
+            HookUtil.hook(fromXml, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (result instanceof View && fourFolderType.isInstance(result)) {
+                    configureFolder(result);
+                    scheduleNativeFootprintRepair((View) result);
+                }
+                return result;
             });
             HookUtil.hook(rebind, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
