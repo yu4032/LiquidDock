@@ -16,16 +16,26 @@ public class NativeFourFolderOwnershipContractTest {
         assertTrue(grid.contains("enforceWidgetGridFrames(layout)"));
         assertTrue(grid.contains("if (info == null || !isWidget(info)) continue;"));
         assertTrue(grid.contains("if (!isWidget(info)) return;"));
-        assertFalse("Folder geometry must not be written from the widget owner",
-                grid.contains("LauncherNativeFourFolderHook"));
-        assertFalse("No duplicate CellLayout.measureChild hook for folders",
+        assertTrue("Existing four-arg setup forwards custom folder writes to its owner",
+                grid.contains("LauncherNativeFourFolderHook.prepareFolderLayoutParams("));
+        assertFalse("HomeGrid must not independently re-measure native folders",
                 grid.contains("\"measureChild\""));
+        assertFalse("HomeGrid must not own the edit-aware native folder setup",
+                grid.contains("boolean.class, paramsType"));
     }
 
     @Test public void nativeFolderHasOneGridPolicyAndIndependentPickerInstallation() throws Exception {
         String nativeHook = source("LauncherNativeFourFolderHook.java");
         assertTrue(nativeHook.contains("NativeFourFolderFramePolicy.resolve("));
         assertTrue(nativeHook.contains("prepareFolderLayoutParams("));
+        assertTrue("First OEM measurement must still expand restored folder views",
+                nativeHook.contains("getDeclaredMethod(\"measureChild\", View.class)"));
+        assertTrue("Initial sizing must not require a parent already laid out",
+                nativeHook.contains("NativeFourFolderFramePolicy.forInitialMeasure("));
+        assertFalse("Avoid a second four-argument setupLayoutParam hook",
+                nativeHook.contains("itemInfoClass, paramsClass),"));
+        assertFalse("No permanent retry suppression state",
+                nativeHook.contains("installAttempted"));
         String module = source("ModuleMain.java");
         assertFalse("Missing optional native geometry must never hide both folder toggles",
                 module.contains("if (LauncherNativeFourFolderHook.install(classLoader)) {"));
