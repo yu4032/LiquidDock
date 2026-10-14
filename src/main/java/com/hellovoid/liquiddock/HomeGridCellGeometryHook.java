@@ -49,8 +49,17 @@ final class HomeGridCellGeometryHook {
                     new Class<?>[]{int.class, int.class, itemInfo, layoutParams}, chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object result = chain.proceed(args);
-                        applyWidgetGridSize(chain.getThisObject(),
-                                (Integer) args[0], (Integer) args[1], args[2], args[3]);
+                        Object owner = chain.getThisObject();
+                        if (owner instanceof View && LauncherNativeFourFolderHook
+                                .isCustomFolderInfo((View) owner, args[2])) {
+                            // This existing OEM entry point now only dispatches.
+                            // NativeFourFolder owns every custom folder size write.
+                            LauncherNativeFourFolderHook.prepareFolderLayoutParams(
+                                    owner, (Integer) args[0], (Integer) args[1], args[2], args[3]);
+                        } else {
+                            applyWidgetGridSize(owner,
+                                    (Integer) args[0], (Integer) args[1], args[2], args[3]);
+                        }
                         return result;
                     });
         } catch (Throwable error) {
