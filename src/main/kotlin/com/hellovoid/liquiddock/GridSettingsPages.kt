@@ -216,6 +216,13 @@ internal fun GridBasicsPage(
             "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
             masterEnabled && customGrid,
         )
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Grid.LARGE_FOLDER_FOUR_ICONS,
+            "大文件夹四宫格",
+            "将系统 2×2（四图标式）大文件夹的预览改为四枚同尺寸、可直接点击的图标；不影响九图标式与普通文件夹；重启桌面后生效",
+            masterEnabled,
+        )
     }
     AnimatedSettingsWindowDialog(
         show = gridWarning != null,
