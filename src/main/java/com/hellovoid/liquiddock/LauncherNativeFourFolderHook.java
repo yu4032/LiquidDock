@@ -487,6 +487,34 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " FolderIcon#fromXml class unavailable");
             }
 
+            // Both OEM setupLayoutParam overloads are attached to this folder owner.
+            // The grid module applies this method only to widgets.
+            if (cell != null) {
+                Class<?> itemInfoClass = vendorClass(loader, "com.miui.home.launcher.ItemInfo");
+                Class<?> cellParamsClass = vendorClass(
+                        loader, "com.miui.home.launcher.CellLayout$LayoutParams");
+                if (itemInfoClass != null && cellParamsClass != null) {
+                    for (Class<?>[] signature : new Class<?>[][]{
+                            {int.class, int.class, itemInfoClass, cellParamsClass},
+                            {int.class, int.class, itemInfoClass, boolean.class, cellParamsClass}
+                    }) {
+                        try {
+                            HookUtil.hook(cell.getDeclaredMethod("setupLayoutParam", signature),
+                                    chain -> {
+                                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                                        Object result = chain.proceed(args);
+                                        prepareFolderLayoutParams(chain.getThisObject(),
+                                                args[2], args[args.length - 1]);
+                                        return result;
+                                    });
+                            installedHooks++;
+                        } catch (Throwable error) {
+                            Api101Bridge.log(TAG + " native folder setupLayoutParam unavailable", error);
+                        }
+                    }
+                }
+            }
+
             if (cell != null) {
                 // OEM may leave the dragged FolderIcon root INVISIBLE after
                 // reattaching it to the desktop. The label itself is VISIBLE,
@@ -833,58 +861,75 @@ final class LauncherNativeFourFolderHook {
         if (folder == null) return null;
         ViewParent parent = folder.getParent();
         if (!(parent instanceof ViewGroup)
-                || !"com.miui.home.launcher.CellLayout".equals(
-                        parent.getClass().getName())) {
+                || !"com.miui.home.launcher.CellLayout".equals(parent.getClass().getName())) {
             return null;
         }
-        ViewGroup cell = (ViewGroup) parent;
         Object info = folder.getTag();
-        if (info == null) return null;
         ViewGroup.LayoutParams lp = folder.getLayoutParams();
-        if (lp == null) return null;
+        if (info == null || lp == null || isDragging(lp)) return null;
         try {
-            if (HookUtil.getBooleanField(lp, "isDragging")) return null;
-        } catch (Throwable ignored) {
-            // Some vendor LayoutParams variants do not expose isDragging.
-        }
-        try {
-            int[] xs = (int[]) HookUtil.getField(cell, "mXs");
-            int[] ys = (int[]) HookUtil.getField(cell, "mYs");
-            int cx = HookUtil.getIntField(info, "cellX");
-            int cy = HookUtil.getIntField(info, "cellY");
-            int cw = HookUtil.getIntField(cell, "mCellWidth");
-            int ch = HookUtil.getIntField(cell, "mCellHeight");
-            if (xs == null || ys == null || cx < 0 || cy < 0
-                    || cx + 1 >= xs.length || cy + 1 >= ys.length
-                    || cw <= 0 || ch <= 0) return null;
-            int[] allocation = {xs[cx], ys[cy],
-                    xs[cx + 1] + cw - xs[cx],
-                    ys[cy + 1] + ch - ys[cy]};
-            int[] frame = allocation;
-            if (lp instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams margins =
-                        (ViewGroup.MarginLayoutParams) lp;
-                frame = WidgetGridSizing.centeredFrame(allocation,
-                        margins.leftMargin, margins.topMargin,
-                        margins.rightMargin, margins.bottomMargin);
-            }
-            if (frame[2] <= 0 || frame[3] <= 0) return null;
-            // The two-cell rectangle must fit the actual desktop grid.
-            // A transient drag/fullscreen host is not a valid cell frame.
-            if (frame[0] < 0 || frame[1] < 0
-                    || frame[0] + frame[2] > cell.getWidth()
-                    || frame[1] + frame[3] > cell.getHeight()) {
-                // Parent may not have completed its first layout yet.
-                // Defer correction to CellLayout.onLayout instead of
-                // falling back to a screen-sized incoming MeasureSpec.
-                return null;
-            }
-            return frame;
+            return resolveCellFrame((ViewGroup) parent, info, lp);
         } catch (Throwable error) {
             if (WARNED.add(folder)) {
                 Api101Bridge.log(TAG + " trusted CellLayout frame unavailable: " + error);
             }
             return null;
+        }
+    }
+
+    private static boolean isDragging(Object layoutParams) {
+        try {
+            return HookUtil.getBooleanField(layoutParams, "isDragging");
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /** Shared settled frame for model binding and final CellLayout placement. */
+    private static int[] resolveCellFrame(
+            ViewGroup cell, Object info, ViewGroup.LayoutParams lp) {
+        int[] xs = (int[]) HookUtil.getField(cell, "mXs");
+        int[] ys = (int[]) HookUtil.getField(cell, "mYs");
+        int cellX = HookUtil.getIntField(info, "cellX");
+        int cellY = HookUtil.getIntField(info, "cellY");
+        int cellWidth = HookUtil.getIntField(cell, "mCellWidth");
+        int cellHeight = HookUtil.getIntField(cell, "mCellHeight");
+        int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
+        if (lp instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) lp;
+            leftMargin = margins.leftMargin;
+            topMargin = margins.topMargin;
+            rightMargin = margins.rightMargin;
+            bottomMargin = margins.bottomMargin;
+        }
+        NativeFourFolderFramePolicy.Frame frame = NativeFourFolderFramePolicy.resolve(
+                xs, ys, cellX, cellY, cellWidth, cellHeight,
+                cell.getWidth(), cell.getHeight(),
+                leftMargin, topMargin, rightMargin, bottomMargin);
+        return frame == null ? null
+                : new int[]{frame.left, frame.top, frame.width, frame.height};
+    }
+
+    /**
+     * Folder-only LayoutParams writer. HomeGrid owns widgets exclusively and
+     * must never re-measure or place native 2x2 FolderIcons.
+     */
+    private static void prepareFolderLayoutParams(
+            Object cell, Object info, Object paramsObject) {
+        if (!installed || !(cell instanceof ViewGroup)
+                || !(paramsObject instanceof ViewGroup.LayoutParams)
+                || !isCustomFolderInfo((View) cell, info)
+                || isDragging(paramsObject)) return;
+        try {
+            ViewGroup.LayoutParams lp = (ViewGroup.LayoutParams) paramsObject;
+            int[] frame = resolveCellFrame((ViewGroup) cell, info, lp);
+            if (frame == null) return;
+            lp.width = frame[2];
+            lp.height = frame[3];
+            HookUtil.setIntField(paramsObject, "x", frame[0]);
+            HookUtil.setIntField(paramsObject, "y", frame[1]);
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " native folder LayoutParams unavailable: " + error);
         }
     }
 
