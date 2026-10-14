@@ -46,7 +46,7 @@ final class LauncherFourGridContentView extends FrameLayout {
         addView(background);
 
         for (int i = 0; i < COUNT; i++) {
-            ImageView tile = new ImageView(context);
+            ImageView tile = createNativeAnimTile(context);
             tile.setScaleType(ImageView.ScaleType.FIT_CENTER);
             tile.setClickable(true);
             tile.setFocusable(true);
@@ -128,6 +128,12 @@ final class LauncherFourGridContentView extends FrameLayout {
             }
             tile.setTag(shortcut);
             tile.setVisibility(VISIBLE);
+            // FolderPreviewIconView itself is the vendor
+            // LaunchAppAndBackHomeAnimTarget: keep BuddyInfo consistent with
+            // the rendered icon for the app launch/return transition.
+            if (tile.getClass().getName().endsWith(".FolderPreviewIconView")) {
+                HookUtil.tryInvoke(tile, "setMBuddyInfo", shortcut);
+            }
             // getIconDrawable() explicitly asserts NON-UI-THREAD in MIUI
             // Launcher. Its native getIconAsync() is the authoritative safe
             // path: cached drawables return immediately, otherwise Launcher
@@ -158,6 +164,47 @@ final class LauncherFourGridContentView extends FrameLayout {
                 tile.setContentDescription((CharSequence) title);
             }
         }
+    }
+
+    /**
+     * Reuse only the vendor's per-icon animation TARGET, not its 2x2 layout,
+     * PreviewContainer or item placement. Its native interface supplies
+     * location/radius/visibility to Quickstep animation code.
+     */
+    private static ImageView createNativeAnimTile(Context context) {
+        try {
+            Class<?> type = Class.forName(
+                    "com.miui.home.launcher.folder.FolderPreviewIconView",
+                    false, context.getClassLoader());
+            Object view = type.getConstructor(Context.class).newInstance(context);
+            if (view instanceof ImageView) return (ImageView) view;
+        } catch (Throwable error) {
+            Api101Bridge.log("[DC][FolderFourGrid] animation tile class unavailable: " + error);
+        }
+        return new ImageView(context);
+    }
+
+    View nativeAnimationTile(int index) {
+        if (index < 0 || index >= COUNT) return null;
+        ImageView tile = tiles[index];
+        return tile.getClass().getName().endsWith(".FolderPreviewIconView")
+                ? tile : null;
+    }
+
+    Object shortcutAt(int index) {
+        return index >= 0 && index < COUNT ? shortcuts[index] : null;
+    }
+
+    int visibleTileCount() {
+        int count = 0;
+        for (int i = 0; i < COUNT; i++) {
+            if (shortcuts[i] != null && tiles[i].getVisibility() == VISIBLE) count++;
+        }
+        return count;
+    }
+
+    View previewArea() {
+        return background;
     }
 
     private Drawable copyDrawable(Drawable input) {
