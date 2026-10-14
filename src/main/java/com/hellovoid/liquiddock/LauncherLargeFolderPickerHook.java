@@ -128,6 +128,28 @@ final class LauncherLargeFolderPickerHook {
                 }
                 return result;
             });
+            // Asynchronous inflation and vendor UI variants may populate
+            // the picker body after initListener(). The attached view itself
+            // is the final authority that this sheet is actually displayed.
+            try {
+                HookUtil.hook(HookUtil.findMethodExact(
+                        sheet, "onAttachedToWindow", new Class<?>[0]), chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof View) {
+                        View shown = (View) owner;
+                        Object infoValue = getFieldOrNull(owner, "mFolderInfo");
+                        if (infoValue != null) attachOption(owner, infoValue);
+                        shown.post(() -> {
+                            Object latest = getFieldOrNull(owner, "mFolderInfo");
+                            if (latest != null) attachOption(owner, latest);
+                        });
+                    }
+                    return result;
+                });
+            } catch (Throwable error) {
+                MainHook.log(TAG + " attach lifecycle unavailable: " + error);
+            }
             installed = true;
             MainHook.log(TAG + " native FolderSheet fourth-choice hook installed");
             return true;
@@ -157,12 +179,17 @@ final class LauncherLargeFolderPickerHook {
         View sheet = (View) owner;
         if (STATES.containsKey(owner)) return;
         Object scroller = getFieldOrNull(owner, "mFolderPickerBody");
-        if (!(scroller instanceof ScrollView)) {
-            MainHook.log(TAG + " folder picker scroll container not found");
+        ScrollView scroll = scroller instanceof ScrollView
+                ? (ScrollView) scroller : findScrollView(sheet);
+        if (scroll == null) {
+            MainHook.log(TAG + " folder picker scroll container not found for "
+                    + sheet.getClass().getName());
             return;
         }
-        ScrollView scroll = (ScrollView) scroller;
-        if (scroll.getChildCount() != 1) return;
+        if (scroll.getChildCount() != 1) {
+            MainHook.log(TAG + " unexpected picker scroll child count=" + scroll.getChildCount());
+            return;
+        }
         View original = scroll.getChildAt(0);
         if (original == null) return;
 
@@ -213,6 +240,17 @@ final class LauncherLargeFolderPickerHook {
                 scroll.addView(original);
             }
         }
+    }
+
+    private static ScrollView findScrollView(View root) {
+        if (root instanceof ScrollView) return (ScrollView) root;
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            ScrollView candidate = findScrollView(group.getChildAt(i));
+            if (candidate != null) return candidate;
+        }
+        return null;
     }
 
     private static LinearLayout buildOption(Context context) {
