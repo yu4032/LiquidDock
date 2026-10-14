@@ -543,6 +543,28 @@ final class LauncherNativeFourFolderHook {
             }
 
             if (cell != null) {
+                // The destination CellLayout can commit a cross-page edit-mode
+                // move without another onLayout pass. Reconcile only after the
+                // OEM has persisted the new model positions; never rely on a
+                // delayed whole-workspace refresh or source-page drop callback.
+                try {
+                    HookUtil.hookMethod(cell, "saveCurrentLayout",
+                            new Class<?>[]{boolean.class, boolean.class}, chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (Boolean.TRUE.equals(chain.getArg(1))
+                                && chain.getThisObject() instanceof ViewGroup) {
+                            scheduleCommittedFolderReconcile(
+                                    (ViewGroup) chain.getThisObject());
+                        }
+                        return result;
+                    });
+                    installedHooks++;
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " CellLayout committed folder sizing unavailable", error);
+                }
+            }
+
+            if (cell != null) {
                 // OEM may leave the dragged FolderIcon root INVISIBLE after
                 // reattaching it to the desktop. The label itself is VISIBLE,
                 // so title-only invalidation cannot make it appear.
@@ -552,6 +574,7 @@ final class LauncherNativeFourFolderHook {
                         Object target = chain.getThisObject();
                         if (target instanceof ViewGroup) {
                             ViewGroup workspace = (ViewGroup) target;
+                            scheduleCommittedFolderReconcile(workspace);
                             for (int i = 0; i < workspace.getChildCount(); i++) {
                                 View child = workspace.getChildAt(i);
                                 if (!eligible(child)) continue;
@@ -1075,6 +1098,56 @@ final class LauncherNativeFourFolderHook {
         // Reconcile title geometry after placement. The OEM span visibility
         // decision is handled separately in executeChildrenVisibility.
         queueTitleRestore(folder);
+    }
+
+    /**
+     * A native CellLayout commit/drop event is the missing invalidation
+     * authority for edit-mode cross-page moves. OEM may finish clearing its
+     * drag flag during the current dispatch, so perform this reconciliation
+     * on the next animation traversal of the *destination page only*.
+     */
+    private static void scheduleCommittedFolderReconcile(ViewGroup page) {
+        if (page == null || !page.isAttachedToWindow()) return;
+        boolean hasFolder = false;
+        for (int i = 0; i < page.getChildCount(); i++) {
+            if (eligible(page.getChildAt(i))) {
+                hasFolder = true;
+                break;
+            }
+        }
+        if (!hasFolder) return;
+        page.postOnAnimation(() -> reconcileCommittedFolderPage(page));
+    }
+
+    private static void reconcileCommittedFolderPage(ViewGroup page) {
+        if (!page.isAttachedToWindow()) return;
+        boolean needsLayout = false;
+        for (int i = 0; i < page.getChildCount(); i++) {
+            View folder = page.getChildAt(i);
+            if (!eligible(folder) || folder.getParent() != page) continue;
+            ViewGroup.LayoutParams lp = folder.getLayoutParams();
+            if (lp == null) continue;
+            if (isDragging(lp)) {
+                // OEM still owns the in-flight drag geometry. Request its
+                // normal next layout instead of writing over the animation.
+                folder.requestLayout();
+                needsLayout = true;
+                continue;
+            }
+            int[] frame = trustedCellFrame(folder);
+            if (frame == null) {
+                // Newly inserted pages may not have laid out yet.
+                folder.requestLayout();
+                needsLayout = true;
+                continue;
+            }
+            try {
+                alignNativeFolderToWidget(page, folder);
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " committed 2x2 folder alignment failed: " + error);
+            }
+        }
+        if (needsLayout) page.requestLayout();
     }
 
     private static void restoreDroppedFolder(View folder) {
