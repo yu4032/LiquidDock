@@ -11,18 +11,18 @@ public class LargeFolderTitlePolicyTest {
         assertFalse(LargeFolderTitlePolicy.shouldShow(false, true, false));
     }
 
-    @Test public void onlyOverrideNativeSpanInvisibleAfterMeasure() {
-        assertTrue(LargeFolderTitlePolicy.shouldRestoreAfterNativeMeasure(
+    @Test public void onlyOverrideNativeSpanInvisibleFromBothMeasureAndDraw() {
+        assertTrue(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
                 true, true, false, 4));
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeMeasure(
+        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
                 true, true, false, 8)); // No-word mode is a GONE decision.
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeMeasure(
+        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
                 true, true, false, 0));
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeMeasure(
+        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
                 true, false, false, 4));
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeMeasure(
+        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
                 true, true, true, 4));
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeMeasure(
+        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
                 false, true, false, 4));
     }
 }

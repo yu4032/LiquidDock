@@ -285,9 +285,7 @@ final class LauncherNativeFourFolderHook {
                 View folder = (View) owner;
                 int[] frame = desiredFrame(folder);
                 if (frame == null) {
-                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    restoreTitleAfterNativeMeasure(folder);
-                    return result;
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
                 int[] previous = ROOT_FRAME.get();
                 ROOT_FRAME.set(frame);
@@ -296,7 +294,6 @@ final class LauncherNativeFourFolderHook {
                 args[1] = exact(frame[1]);
                 try {
                     Object result = chain.proceed(args);
-                    restoreTitleAfterNativeMeasure(folder);
                     return result;
                 } finally {
                     if (previous == null) ROOT_FRAME.remove();
@@ -309,6 +306,45 @@ final class LauncherNativeFourFolderHook {
                 }
             } else {
                 Api101Bridge.log(TAG + " ItemIcon#onMeasure class unavailable");
+            }
+
+            // Launcher 4.50 ItemIcon invokes executeChildrenVisibility not only
+            // from onMeasure, but AGAIN from onDraw before dispatchDraw.
+            // The native span>1 rule hides every real 2x2 title on each draw.
+            // Install one policy at the actual OEM decision boundary so both
+            // call sites agree, without a recurring post-frame visibility fix.
+            if (itemIcon != null) {
+                try {
+                    Class<?> gridConfig = Class.forName(
+                            "com.miui.home.launcher.grid.GridConfig", false, loader);
+                    java.lang.reflect.Method visibility = itemIcon.getDeclaredMethod(
+                            "executeChildrenVisibility", gridConfig);
+                    HookUtil.hook(visibility, chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object owner = chain.getThisObject();
+                        if (!(owner instanceof View)) return result;
+                        View folder = (View) owner;
+                        // Exit immediately for all ordinary icons and folders.
+                        if (!nativeFolderClass(folder)) return result;
+                        Object titleValue = HookUtil.tryInvoke(folder, "getTitleContainer").value();
+                        if (!(titleValue instanceof View)) return result;
+                        View title = (View) titleValue;
+                        // OEM no-word/hotseat uses GONE, which must be preserved.
+                        if (title.getVisibility() != View.INVISIBLE || !eligible(folder)) return result;
+                        boolean modelHidden = Boolean.TRUE.equals(HookUtil.tryInvoke(
+                                folder.getTag(), "needHideTitleByFlags").value());
+                        if (LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(true,
+                                LauncherLargeFolderPickerHook.shouldShowTitle(
+                                        folder.getContext(), folder.getTag()),
+                                modelHidden, title.getVisibility())) {
+                            title.setVisibility(View.VISIBLE);
+                        }
+                        return result;
+                    });
+                    installedHooks++;
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " ItemIcon#executeChildrenVisibility unavailable", error);
+                }
             }
 
             // The built-in 2x2 content also calls DeviceConfig for widget
@@ -922,30 +958,6 @@ final class LauncherNativeFourFolderHook {
                 nativeSizing(folder, new int[]{frame[2], frame[3]});
         layoutFolderTitle(folder, size, frame[2], frame[3]);
         folder.postInvalidateOnAnimation();
-    }
-
-    /**
-     * Launcher 4.50 ItemIcon.onMeasure -> executeChildrenVisibility sets
-     * mTitleContainer INVISIBLE for every span > 1, overriding the custom
-     * folder title that was positioned by CellLayout.onLayout.
-     *
-     * Reconcile immediately after the already-hooked native onMeasure, not
-     * at an unrelated drag/menu callback. Keep OEM GONE (no-word/hotseat)
-     * and explicit ItemInfo title-hide semantics.
-     */
-    private static void restoreTitleAfterNativeMeasure(View folder) {
-        if (!eligible(folder)) return;
-        Object value = HookUtil.tryInvoke(folder, "getTitleContainer").value();
-        if (!(value instanceof View)) return;
-        View title = (View) value;
-        if (title.getVisibility() != View.INVISIBLE) return;
-        boolean modelHidden = Boolean.TRUE.equals(
-                HookUtil.tryInvoke(folder.getTag(), "needHideTitleByFlags").value());
-        if (LargeFolderTitlePolicy.shouldRestoreAfterNativeMeasure(true,
-                LauncherLargeFolderPickerHook.shouldShowTitle(folder.getContext(), folder.getTag()),
-                modelHidden, title.getVisibility())) {
-            title.setVisibility(View.VISIBLE);
-        }
     }
 
     private static void layoutFolderTitle(View folder, NativeFourFolderSizing.Size size, int width, int height) {
