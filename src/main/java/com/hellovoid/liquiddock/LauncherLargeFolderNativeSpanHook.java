@@ -68,10 +68,10 @@ final class LauncherLargeFolderNativeSpanHook {
             });
             enabled = true;
             installed = true;
-            MainHook.log(TAG + " scoped FolderInfo.convertIconSize(21) span mapping installed");
+            Api101Bridge.log(TAG + " scoped FolderInfo.convertIconSize(21) span mapping installed");
             return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " unavailable: " + error);
+            Api101Bridge.log(TAG + " unavailable: " + error);
             return false;
         }
     }
@@ -95,7 +95,7 @@ final class LauncherLargeFolderNativeSpanHook {
                     && LauncherLargeFolderPickerHook.isMarked(
                             (Context) launcher.value(), info);
         } catch (Throwable error) {
-            MainHook.log(TAG + " folder selection lookup failed: " + error);
+            Api101Bridge.log(TAG + " folder selection lookup failed: " + error);
             return false;
         }
     }
