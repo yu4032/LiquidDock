@@ -102,7 +102,11 @@ final class LauncherNativeFourFolderHook {
                         }
                         Object result = chain.proceed(new Object[]{
                                 exact(frame[0]), exact(frame[1])});
-                        forceMeasuredFrame(surface, frame, "image");
+                        recordNativeVisualSize(root, surface, true);
+                        // The OEM drawable is intentionally smaller than
+                        // its preview (287 vs 359 on Launcher 4.50).
+                        // Defer final size until the parent has measured
+                        // BOTH surfaces and knows that native ratio.
                         return result;
                     });
                     installedHooks++;
@@ -149,7 +153,7 @@ final class LauncherNativeFourFolderHook {
                         // are recomputed before their native onLayout2x2().
                         Object result = chain.proceed(new Object[]{
                                 exact(frame[0]), exact(frame[1])});
-                        forceMeasuredFrame(previewView, frame, "preview");
+                        recordNativeVisualSize(root, previewView, false);
                         return result;
                     });
                     installedHooks++;
@@ -409,24 +413,73 @@ final class LauncherNativeFourFolderHook {
     private static final Set<View> PREVIEW_LOGGED =
             Collections.newSetFromMap(new WeakHashMap<>());
 
+    // Per-native-folder intrinsic background/preview dimensions measured by
+    // Launcher itself, before LiquidDock applies a larger 2x2 widget frame.
+    // Weak keys keep old folder Views collectible after native conversion.
+    private static final java.util.Map<View, int[]> NATIVE_VISUAL_SIZES =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Set<View> RATIO_LOGGED =
+            Collections.newSetFromMap(new WeakHashMap<>());
+
+    private static void recordNativeVisualSize(View root, View child, boolean image) {
+        int width = child.getMeasuredWidth();
+        int height = child.getMeasuredHeight();
+        if (width <= 0 || height <= 0) return;
+        synchronized (NATIVE_VISUAL_SIZES) {
+            int[] values = NATIVE_VISUAL_SIZES.get(root);
+            if (values == null) {
+                values = new int[4];
+                NATIVE_VISUAL_SIZES.put(root, values);
+            }
+            if (image) {
+                values[0] = width;
+                values[1] = height;
+            } else {
+                values[2] = width;
+                values[3] = height;
+            }
+        }
+    }
+
+    private static int[] backgroundFrame(View root, int[] frame) {
+        if (root == null || frame == null) return frame;
+        int[] nativeSizes = NATIVE_VISUAL_SIZES.get(root);
+        if (nativeSizes == null || nativeSizes[0] <= 0
+                || nativeSizes[1] <= 0 || nativeSizes[2] <= 0
+                || nativeSizes[3] <= 0) return frame;
+        int w = WidgetGridSizing.scaledPreviewPart(
+                frame[0], nativeSizes[0], nativeSizes[2]);
+        int h = WidgetGridSizing.scaledPreviewPart(
+                frame[1], nativeSizes[1], nativeSizes[3]);
+        if (RATIO_LOGGED.add(root)) {
+            Api101Bridge.log(TAG + " native visual inset background="
+                    + nativeSizes[0] + "x" + nativeSizes[1]
+                    + " preview=" + nativeSizes[2] + "x" + nativeSizes[3]
+                    + " targetBg=" + w + "x" + h
+                    + " previewFrame=" + frame[0] + "x" + frame[1]);
+        }
+        return new int[]{w, h};
+    }
+
     private static void resizeNativePreviewChildren(View container, int width, int height) {
         if (!(container instanceof ViewGroup) || width <= 0 || height <= 0) return;
         ViewGroup group = (ViewGroup) container;
+        View root = ancestorFolder(group);
+        int[] backgroundSize = backgroundFrame(root, new int[]{width, height});
         for (int i = 0; i < group.getChildCount(); i++) {
             View view = group.getChildAt(i);
             String name = view.getClass().getName();
-            boolean iconSurface = name.endsWith(".LauncherFolder2x2IconImageView");
+            boolean image = name.endsWith(".LauncherFolder2x2IconImageView");
             boolean preview = name.endsWith(".FolderIconPreviewContainer2X2_4");
-            if (!iconSurface && !preview) continue;
+            if (!image && !preview) continue;
+            int[] size = preview ? new int[]{width, height} : backgroundSize;
             ViewGroup.LayoutParams params = view.getLayoutParams();
             if (params == null) continue;
-            if (params.width != width || params.height != height) {
-                params.width = width;
-                params.height = height;
-                // Parent is already measuring or laying out these native
-                // children. LayoutParams is a live object; do not call
-                // setLayoutParams() here (which requests another layout and
-                // can cause repeated measure passes during transitions).
+            if (params.width != size[0] || params.height != size[1]) {
+                // Already inside native measure/layout. Changing the live
+                // params directly avoids a re-entrant requestLayout loop.
+                params.width = size[0];
+                params.height = size[1];
             }
         }
     }
@@ -434,22 +487,28 @@ final class LauncherNativeFourFolderHook {
     private static void reconcileNativeMeasuredChildren(View container, int[] frame) {
         if (!(container instanceof ViewGroup) || frame[0] <= 0 || frame[1] <= 0) return;
         ViewGroup group = (ViewGroup) container;
+        View root = ancestorFolder(group);
+        int[] backgroundSize = backgroundFrame(root, frame);
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
             String name = child.getClass().getName();
             boolean preview = name.endsWith(".FolderIconPreviewContainer2X2_4");
             boolean image = name.endsWith(".LauncherFolder2x2IconImageView");
             if (!preview && !image) continue;
-            if (child.getMeasuredWidth() == frame[0]
-                    && child.getMeasuredHeight() == frame[1]) continue;
-            if (preview) {
-                // Re-enter OEM preview onMeasure with the correct width
-                // so its own preMeasure2x2/preSetup2x2 recompute icon
-                // positions. Do not manually draw or scale any preview.
-                child.measure(exact(frame[0]), exact(frame[1]));
+            int[] target = preview ? frame : backgroundSize;
+            ViewGroup.LayoutParams params = child.getLayoutParams();
+            if (params != null) {
+                params.width = target[0];
+                params.height = target[1];
             }
-            forceMeasuredFrame(child, frame,
-                    preview ? "fallback-preview" : "fallback-image");
+            if (child.getMeasuredWidth() == target[0]
+                    && child.getMeasuredHeight() == target[1]) continue;
+            if (preview) {
+                // Let native preMeasure2x2/preSetup2x2 place seven icons.
+                child.measure(exact(target[0]), exact(target[1]));
+            }
+            forceMeasuredFrame(child, target,
+                    preview ? "fallback-preview" : "native-inset-background");
         }
     }
 
