@@ -1,10 +1,10 @@
 package com.hellovoid.liquiddock;
 
-/** Native outline suppression applies only inside a large-folder draw transaction. */
+/** Effective OEM stroke color, preserving its original RGB and alpha. */
 final class NativeFolderOutlinePolicy {
     private NativeFolderOutlinePolicy() {}
 
-    static boolean shouldSuppress(boolean showNativeOutline, boolean drawingLargeFolder) {
-        return !showNativeOutline && drawingLargeFolder;
+    static int strokeColor(int originalColor, boolean showNativeOutline) {
+        return showNativeOutline ? originalColor : originalColor & 0x00ffffff;
     }
 }
