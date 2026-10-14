@@ -122,21 +122,33 @@ final class LauncherLargeFolderFourIconHook {
             boolean bindFolder = installOptional(baseFolderType, "bindFolderInfo",
                     new Class<?>[]{launcherType, folderInfoType},
                     chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         Object owner = chain.getThisObject();
-                        if (owner instanceof View) scheduleNativeFootprintRepair((View) owner);
+                        Object info = chain.getArg(1);
+                        if (owner instanceof View && fourFolderType.isInstance(owner)) {
+                            configureFolderForInfo(owner, info);
+                        }
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (owner instanceof View) {
+                            configureFolder(owner);
+                            scheduleNativeFootprintRepair((View) owner);
+                        }
                         return result;
                     });
             boolean folderChanged = installOptional(folderInfoType, "notifyDataSetChanged",
                     new Class<?>[0], chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         Object info = chain.getThisObject();
-                        if (folderChildCount(info) == FOUR) {
-                            HookUtil.InvocationResult<Object> view =
-                                    HookUtil.tryInvoke(info, "getBuddyIconView");
-                            if (view.succeeded() && view.value() instanceof View) {
-                                scheduleNativeFootprintRepair((View) view.value());
-                            }
+                        HookUtil.InvocationResult<Object> bound =
+                                HookUtil.tryInvoke(info, "getBuddyIconView");
+                        // The vendor constructs its preview children during
+                        // notifyDataSetChanged; set the four-item limit BEFORE
+                        // that happens. A post-bind count update alone never
+                        // removes the stock extra preview children.
+                        if (bound.succeeded() && bound.value() instanceof View) {
+                            configureFolder(bound.value());
+                        }
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (bound.succeeded() && bound.value() instanceof View) {
+                            scheduleNativeFootprintRepair((View) bound.value());
                         }
                         return result;
                     });
@@ -260,6 +272,19 @@ final class LauncherLargeFolderFourIconHook {
         HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(folderInfo, "count");
         return result.succeeded() && result.value() instanceof Integer
                 ? (Integer) result.value() : -1;
+    }
+
+    private static void configureFolderForInfo(Object owner, Object info) {
+        if (!(owner instanceof View) || info == null
+                || !FOUR_FOLDER.equals(owner.getClass().getName())) return;
+        HookUtil.InvocationResult<Object> lookup =
+                HookUtil.tryInvoke(owner, "getMPreviewContainer");
+        if (!lookup.succeeded() || lookup.value() == null) return;
+        boolean selected = LauncherLargeFolderPickerHook.isMarked(
+                ((View) owner).getContext(), info);
+        if (!setCounts(owner, selected) || !setCounts(lookup.value(), selected)) {
+            reportFailure();
+        }
     }
 
     private static void configureFolder(Object owner) {
