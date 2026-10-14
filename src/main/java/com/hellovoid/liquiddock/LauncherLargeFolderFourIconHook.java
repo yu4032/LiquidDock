@@ -168,7 +168,7 @@ final class LauncherLargeFolderFourIconHook {
             enabled = setup && bindClicks && (inflate || createOrRemove)
                     && (fromXml || bindFolder || folderChanged);
             installed = true;
-            MainHook.log(TAG + " installed=" + enabled
+            android.util.Log.i("LiquidDockFolder4", "preview-hook-installed enabled=" + enabled
                     + " inflate=" + inflate
                     + " previewCreate=" + createOrRemove
                     + " click=" + bindClicks
@@ -179,7 +179,7 @@ final class LauncherLargeFolderFourIconHook {
                     + " rebind=" + rebind);
             return enabled;
         } catch (Throwable error) {
-            MainHook.log(TAG + " unavailable, preserving stock layout: " + error);
+            android.util.Log.e("LiquidDockFolder4", "preview-hook-install-failed", error);
             return false;
         }
     }
