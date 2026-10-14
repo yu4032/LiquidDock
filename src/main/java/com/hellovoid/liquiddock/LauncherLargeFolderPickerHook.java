@@ -71,8 +71,8 @@ final class LauncherLargeFolderPickerHook {
         MainHook.log(TAG + " folderId=" + id + " selected=" + marked);
     }
 
-    static boolean install(ClassLoader loader, boolean featureEnabled) {
-        if (!featureEnabled || loader == null) return false;
+    static boolean install(ClassLoader loader) {
+        if (loader == null) return false;
         if (installed) return true;
         try {
             Class<?> sheet = Class.forName(
