@@ -31,7 +31,7 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("LauncherFolder2x2IconContainer"));
         assertTrue(nativeHook.contains("getMiuiWidgetSizeSpec"));
         assertTrue(nativeHook.contains("resizeNativePreviewChildren(child, frame[0], frame[1])"));
-        assertTrue(nativeHook.contains("LauncherIconImageView"));
+        assertTrue(nativeHook.contains("LauncherFolder2x2IconImageView"));
         assertFalse(nativeHook.contains("imageBase.getDeclaredMethod(dimension, int.class)"));
         assertTrue(nativeHook.contains("HookUtil.findMethodExact("));
         assertTrue(nativeHook.contains("nativeImageClass, \"onMeasure\""));
