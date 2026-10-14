@@ -144,6 +144,11 @@ public final class ModuleMain extends XposedModule {
             // own error boundary. An unrelated Launcher visual hook must not
             // prevent the menu option from appearing.
             if (runtimeConfig.enabled) {
+                // Read-only sample of the real Launcher workspace view and
+                // nested folder sizes, independent of optional preview/visual
+                // hook availability. Required to diagnose the device report:
+                // 2x2 occupied, but a 1x1 image centered inside it.
+                LauncherLargeFolderRuntimeAuditHook.install(classLoader);
                 try {
                     LauncherLargeFolderPickerHook.install(classLoader);
                     LauncherLargeFolderNativeSpanHook.install(classLoader);
