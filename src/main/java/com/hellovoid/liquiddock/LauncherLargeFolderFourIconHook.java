@@ -42,7 +42,10 @@ final class LauncherLargeFolderFourIconHook {
     }
 
     static boolean isNativeFourFolderInfo(Object info) {
-        if (!enabled || info == null) return false;
+        // CellLayout geometry must follow a persisted 2x2 model even when
+        // optional vendor preview setters cannot be hooked. Menu availability
+        // and real workspace occupancy do not depend on preview compatibility.
+        if (info == null) return false;
         try {
             return LargeFolderFootprintPolicy.hasRealTwoByTwoFootprint(
                     HookUtil.getIntField(info, "itemType"),
