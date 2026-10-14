@@ -68,7 +68,7 @@ final class LauncherLargeFolderPickerHook {
         if (marked) edit.putBoolean(PREFIX + id, true);
         else edit.remove(PREFIX + id);
         edit.apply();
-        MainHook.log(TAG + " folderId=" + id + " selected=" + marked);
+        Api101Bridge.log(TAG + " folderId=" + id + " selected=" + marked);
     }
 
     static boolean install(ClassLoader loader) {
@@ -105,7 +105,7 @@ final class LauncherLargeFolderPickerHook {
                         return result;
                     });
             if (!initialized && !attached) {
-                MainHook.log(TAG + " no FolderSheet lifecycle hook available");
+                Api101Bridge.log(TAG + " no FolderSheet lifecycle hook available");
                 return false;
             }
             HookUtil.hook(HookUtil.findMethodExact(
@@ -149,10 +149,10 @@ final class LauncherLargeFolderPickerHook {
                 return result;
             });
             installed = true;
-            MainHook.log(TAG + " native FolderSheet fourth-choice hook installed");
+            Api101Bridge.log(TAG + " native FolderSheet fourth-choice hook installed");
             return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " native FolderSheet unsupported: " + error);
+            Api101Bridge.log(TAG + " native FolderSheet unsupported: " + error);
             return false;
         }
     }
@@ -164,7 +164,7 @@ final class LauncherLargeFolderPickerHook {
             HookUtil.hook(HookUtil.findMethodExact(owner, name, signature), callback);
             return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " optional " + name + " unavailable: " + error);
+            Api101Bridge.log(TAG + " optional " + name + " unavailable: " + error);
             return false;
         }
     }
@@ -192,12 +192,12 @@ final class LauncherLargeFolderPickerHook {
         ScrollView scroll = scroller instanceof ScrollView
                 ? (ScrollView) scroller : findScrollView(sheet);
         if (scroll == null) {
-            MainHook.log(TAG + " folder picker scroll container not found for "
+            Api101Bridge.log(TAG + " folder picker scroll container not found for "
                     + sheet.getClass().getName());
             return;
         }
         if (scroll.getChildCount() != 1) {
-            MainHook.log(TAG + " unexpected picker scroll child count=" + scroll.getChildCount());
+            Api101Bridge.log(TAG + " unexpected picker scroll child count=" + scroll.getChildCount());
             return;
         }
         View original = scroll.getChildAt(0);
@@ -242,9 +242,9 @@ final class LauncherLargeFolderPickerHook {
                             ViewGroup.LayoutParams.WRAP_CONTENT)
                     : oldParams);
             STATES.put(owner, state);
-            MainHook.log(TAG + " added independent four-large-icon folder choice");
+            Api101Bridge.log(TAG + " added independent four-large-icon folder choice");
         } catch (Throwable error) {
-            MainHook.log(TAG + " picker row attachment failed: " + error);
+            Api101Bridge.log(TAG + " picker row attachment failed: " + error);
             // Avoid leaving the stock picker detached on a layout variant.
             if (original.getParent() instanceof ViewGroup) {
                 ((ViewGroup) original.getParent()).removeView(original);
@@ -344,7 +344,7 @@ final class LauncherLargeFolderPickerHook {
         if (x == 2 && y == 2) return;
         HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(
                 info, "convertIconSize", NATIVE_FOUR_TYPE);
-        MainHook.log(TAG + " explicit native resize status=" + result.succeeded()
+        Api101Bridge.log(TAG + " explicit native resize status=" + result.succeeded()
                 + " before=" + x + "x" + y
                 + (result.succeeded() ? "" : " failure=" + result.failure()));
     }
