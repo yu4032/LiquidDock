@@ -32,10 +32,10 @@ final class LauncherLargeFolderPickerHook {
 
     private static final class PickerState {
         Object info;
-        final LinearLayout option;
+        final View option;
         boolean selected;
 
-        PickerState(Object info, LinearLayout option, boolean selected) {
+        PickerState(Object info, View option, boolean selected) {
             this.info = info;
             this.option = option;
             this.selected = selected;
@@ -207,79 +207,97 @@ final class LauncherLargeFolderPickerHook {
                     + sheet.getClass().getName());
             return;
         }
-        // The vendor folder_sheet.xml places three native VisualCheckBoxes
-        // inside a ConstraintLayout, then a native app-prediction row below
-        // their VisualCheckGroup. Add our actual FOURTH selectable choice to
-        // that same layout; never wrap/reparent its ConstraintLayout inside
-        // another scrolling root (that broke its existing constraints).
+        // The fourth size must be a CHILD of MIUI's VisualCheckGroup, not
+        // an extra card beneath the group. The first three are native
+        // VisualCheckBoxes in folder_sheet.xml.
         View root = scroll.getChildCount() == 1 ? scroll.getChildAt(0) : null;
-        if (root == null || !"androidx.constraintlayout.widget.ConstraintLayout"
-                .equals(root.getClass().getName())
-                || !(root instanceof ViewGroup)) {
-            Api101Bridge.log(TAG + " unsupported FolderSheet root="
-                    + (root == null ? "null" : root.getClass().getName()));
+        View nativeGroup = root == null ? null : findNativeCheckGroup(root);
+        if (!(nativeGroup instanceof ViewGroup)) {
+            Api101Bridge.log(TAG + " VisualCheckGroup unavailable");
             return;
         }
-        ViewGroup panel = (ViewGroup) root;
-        View checkGroup = findNativeCheckGroup(panel);
-        Object predictionField = getFieldOrNull(owner, "mFolderPickerAppPredictExposed");
-        View prediction = predictionField instanceof View ? (View) predictionField : null;
-        if (checkGroup == null) {
-            Api101Bridge.log(TAG + " native style check group unavailable");
+        ViewGroup group = (ViewGroup) nativeGroup;
+        View newOption = makeNativeSizeOption(sheet.getContext(), group);
+        if (newOption == null) {
+            Api101Bridge.log(TAG + " fourth native size option unavailable");
             return;
         }
-
-        LinearLayout option = buildOption(sheet.getContext());
-        option.setId(View.generateViewId());
+        newOption.setId(View.generateViewId());
         PickerState state = new PickerState(
-                info, option, isMarked(sheet.getContext(), info));
+                info, newOption, isMarked(sheet.getContext(), info));
         updateAppearance(state);
-        option.setOnClickListener(v -> {
+        newOption.setOnClickListener(v -> {
             state.selected = true;
-            updateAppearance(state);
             HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
-            // Keep native styles mutually exclusive in the UI. The custom
-            // checked state is persisted independently of MIUI's itemType.
             for (String field : new String[]{
                     "mDefaultFolderCheckBox", "mBigFolderCheckBox2x2_4",
                     "mBigFolderCheckBox2x2_9"}) {
-                Object check = getFieldOrNull(owner, field);
-                if (check instanceof android.widget.Checkable) {
-                    ((android.widget.Checkable) check).setChecked(false);
+                Object stock = getFieldOrNull(owner, field);
+                if (stock instanceof android.widget.Checkable) {
+                    ((android.widget.Checkable) stock).setChecked(false);
                 }
             }
+            updateAppearance(state);
         });
         try {
-            // ConstraintLayout belongs to the OEM Launcher and is not an
-            // AndroidX compile dependency of LiquidDock. Construct vendor
-            // layout parameters in the *target* class loader instead.
-            Class<?> lpClass = Class.forName(
-                    "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
-                    false, panel.getClass().getClassLoader());
-            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams)
-                    lpClass.getConstructor(int.class, int.class)
-                            .newInstance(0, ViewGroup.LayoutParams.WRAP_CONTENT);
-            HookUtil.setIntField(lp, "startToStart", 0);
-            HookUtil.setIntField(lp, "endToEnd", 0);
-            HookUtil.setIntField(lp, "topToBottom", checkGroup.getId());
-            lp.topMargin = dp(sheet.getContext(), 12);
-            lp.bottomMargin = dp(sheet.getContext(), 12);
-            panel.addView(option, lp);
-            if (prediction != null && prediction.getParent() == panel) {
-                ViewGroup.LayoutParams predictLp = prediction.getLayoutParams();
-                if (predictLp != null && predictLp.getClass().getName().contains(
-                        "ConstraintLayout$LayoutParams")) {
-                    HookUtil.setIntField(predictLp, "topToBottom", option.getId());
-                    prediction.setLayoutParams(predictLp);
-                }
-            }
+            // Match vendor VisualCheckBox layout rules and let native group
+            // manage its fourth child exactly like the first three options.
+            View reference = group.getChildCount() > 0 ? group.getChildAt(0) : null;
+            ViewGroup.LayoutParams lp = reference == null
+                    ? new ViewGroup.LayoutParams(dp(sheet.getContext(), 76),
+                            ViewGroup.LayoutParams.WRAP_CONTENT)
+                    : new ViewGroup.LayoutParams(reference.getLayoutParams());
+            group.addView(newOption, lp);
+            group.post(() -> fitFourChoices(group));
             STATES.put(owner, state);
-            Api101Bridge.log(TAG + " fourth native FolderSheet choice attached"
-                    + " group=" + checkGroup.getId()
-                    + " option=" + option.getId());
+            Api101Bridge.log(TAG + " fourth native folder size option added inside VisualCheckGroup");
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + " fourth choice injection failed", error);
-            if (option.getParent() == panel) panel.removeView(option);
+            Api101Bridge.log(TAG + " native picker choice failed: " + error);
+            if (newOption.getParent() == group) group.removeView(newOption);
+        }
+    }
+
+    private static View makeNativeSizeOption(Context context, ViewGroup group) {
+        if (group.getChildCount() == 0) return null;
+        View sample = group.getChildAt(0);
+        try {
+            java.lang.reflect.Constructor<?> constructor =
+                    sample.getClass().getConstructor(Context.class, android.util.AttributeSet.class);
+            Object o = constructor.newInstance(context, null);
+            if (!(o instanceof ViewGroup)) return null;
+            ViewGroup nativeCheck = (ViewGroup) o;
+            nativeCheck.setFocusable(true);
+            nativeCheck.setClickable(true);
+            nativeCheck.setContentDescription("2×2 四宫格大文件夹");
+            // Build only the chooser thumbnail INSIDE the native checkbox.
+            // Actual desktop content is NEVER custom drawn.
+            LinearLayout preview = buildOption(context);
+            nativeCheck.addView(preview, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            preview.setClickable(false);
+            return nativeCheck;
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " native VisualCheckBox constructor unavailable: " + error);
+            return null;
+        }
+    }
+
+    private static void fitFourChoices(ViewGroup group) {
+        if (group.getChildCount() != 4) return;
+        ViewGroup parent = group.getParent() instanceof ViewGroup
+                ? (ViewGroup) group.getParent() : null;
+        int width = parent == null ? 0 : parent.getWidth()
+                - parent.getPaddingLeft() - parent.getPaddingRight();
+        if (width <= 0) return;
+        int childWidth = Math.max(1, width / 4);
+        for (int i = 0; i < 4; i++) {
+            View v = group.getChildAt(i);
+            ViewGroup.LayoutParams p = v.getLayoutParams();
+            if (p != null && p.width > childWidth) {
+                p.width = childWidth;
+                v.setLayoutParams(p);
+            }
         }
     }
 
@@ -306,52 +324,65 @@ final class LauncherLargeFolderPickerHook {
     }
 
     private static LinearLayout buildOption(Context context) {
-        LinearLayout row = new LinearLayout(context);
-        row.setPadding(dp(context, 18), dp(context, 14), dp(context, 18), dp(context, 14));
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout option = new LinearLayout(context);
+        option.setOrientation(LinearLayout.VERTICAL);
+        option.setGravity(Gravity.CENTER);
+        option.setPadding(dp(context, 3), dp(context, 6),
+                dp(context, 3), dp(context, 6));
 
-        LinearLayout squares = new LinearLayout(context);
-        squares.setOrientation(LinearLayout.VERTICAL);
-        for (int y = 0; y < 2; y++) {
+        // Selector sample only: three normal icons, with a 2x2 miniature
+        // icon grid in quadrant four just like MIUI FolderIcon2x2_4.
+        LinearLayout sample = new LinearLayout(context);
+        sample.setOrientation(LinearLayout.VERTICAL);
+        for (int row = 0; row < 2; row++) {
             LinearLayout line = new LinearLayout(context);
-            for (int x = 0; x < 2; x++) {
-                View square = new View(context);
-                GradientDrawable tile = new GradientDrawable();
-                tile.setColor(0x998DA0C2);
-                tile.setCornerRadius(dp(context, 6));
-                square.setBackground(tile);
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                        dp(context, 22), dp(context, 22));
-                lp.setMargins(dp(context, 2), dp(context, 2),
+            line.setGravity(Gravity.CENTER);
+            for (int col = 0; col < 2; col++) {
+                View icon;
+                if (row == 1 && col == 1) {
+                    LinearLayout mini = new LinearLayout(context);
+                    mini.setOrientation(LinearLayout.VERTICAL);
+                    for (int y = 0; y < 2; y++) {
+                        LinearLayout strip = new LinearLayout(context);
+                        for (int x = 0; x < 2; x++) {
+                            View dot = new View(context);
+                            dot.setBackground(previewDrawable(context, 0x998DA0C2, 2));
+                            LinearLayout.LayoutParams dotLp =
+                                    new LinearLayout.LayoutParams(dp(context, 9), dp(context, 9));
+                            dotLp.setMargins(1, 1, 1, 1);
+                            strip.addView(dot, dotLp);
+                        }
+                        mini.addView(strip);
+                    }
+                    icon = mini;
+                } else {
+                    icon = new View(context);
+                    icon.setBackground(previewDrawable(context, 0x998DA0C2, 5));
+                }
+                LinearLayout.LayoutParams cell =
+                        new LinearLayout.LayoutParams(dp(context, 22), dp(context, 22));
+                cell.setMargins(dp(context, 2), dp(context, 2),
                         dp(context, 2), dp(context, 2));
-                line.addView(square, lp);
+                line.addView(icon, cell);
             }
-            squares.addView(line);
+            sample.addView(line);
         }
-        row.addView(squares, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout labels = new LinearLayout(context);
-        labels.setPadding(dp(context, 14), 0, 0, 0);
-        labels.setOrientation(LinearLayout.VERTICAL);
+        option.addView(sample);
         TextView title = new TextView(context);
-        title.setText("2×2 四宫格大文件夹");
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        TextView detail = new TextView(context);
-        detail.setText("四个等大的快捷图标 · 独立的 2×2 占位");
-        detail.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        title.setText("2×2 四宫格");
+        title.setGravity(Gravity.CENTER);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        title.setMaxLines(2);
         title.setTextColor(themeColor(context, android.R.attr.textColorPrimary, 0xffeeeeee));
-        detail.setTextColor(themeColor(context, android.R.attr.textColorSecondary, 0xff999999));
-        labels.addView(title);
-        labels.addView(detail);
-        row.addView(labels, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        row.setMinimumHeight(dp(context, 84));
-        row.setClickable(true);
-        row.setFocusable(true);
-        return row;
+        option.addView(title);
+        return option;
+    }
+
+    private static GradientDrawable previewDrawable(Context c, int color, int radiusDp) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(dp(c, radiusDp));
+        return bg;
     }
 
     private static int themeColor(Context context, int attr, int fallback) {
@@ -368,13 +399,10 @@ final class LauncherLargeFolderPickerHook {
     }
 
     private static void updateAppearance(PickerState state) {
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(dp(state.option.getContext(), 18));
-        background.setColor(state.selected ? 0x222F72DB : 0x11000000);
-        background.setStroke(dp(state.option.getContext(), state.selected ? 2 : 1),
-                state.selected ? 0xff6696ed : 0x33777777);
-        state.option.setBackground(background);
         state.option.setSelected(state.selected);
+        if (state.option instanceof android.widget.Checkable) {
+            ((android.widget.Checkable) state.option).setChecked(state.selected);
+        }
     }
 
     private static void requestNativeResize(Object info) {
