@@ -79,6 +79,9 @@ final class Launcher450IconSizeHook {
                 Object owner = chain.getThisObject();
                 View folder = owner instanceof View ? (View) owner : null;
                 MeasureDomain domain = smallFolderMeasureDomain(folder);
+                boolean trace = MainHook.debugLogging && folder != null;
+                if (trace) Launcher450SmallFolderTrace.measureStart(folder, enabled,
+                        percent, domain == MeasureDomain.FOLDER);
                 if (domain != null && percent != Launcher450IconSizePolicy.DEFAULT_PERCENT) {
                     // The OEM layout's inner FrameLayout, native blur ImageView and
                     // cover are wrap_content. Scaling only ItemIcon.mIconContainer
@@ -86,8 +89,13 @@ final class Launcher450IconSizeHook {
                     // stencil back to the drawable's unscaled intrinsic size.
                     bindSmallFolderMaterialToIconSize(folder);
                 }
-                return withMeasureDomain(domain,
-                        () -> chain.proceed(chain.getArgs().toArray(new Object[0])));
+                try {
+                    return withMeasureDomain(domain,
+                            () -> chain.proceed(chain.getArgs().toArray(new Object[0])));
+                } finally {
+                    if (trace) Launcher450SmallFolderTrace.measureEnd(folder, enabled,
+                            percent, domain == MeasureDomain.FOLDER);
+                }
             });
             installFolderScaleTransactions(shortcutIcon, baseProgressShortcutIcon);
             installFolderPreviewMeasureTransaction(folderPreviewContainer);
@@ -103,6 +111,9 @@ final class Launcher450IconSizeHook {
             });
 
             installed = true;
+            // Diagnostics are isolated from the icon-size hook; failed optional
+            // tracing must never prevent icon scaling from installing.
+            Launcher450SmallFolderTrace.install(classLoader);
             MainHook.log(TAG + " installed enabled=" + enabled + " percent=" + percent);
             return true;
         } catch (Throwable error) {
