@@ -140,6 +140,18 @@ public final class ModuleMain extends XposedModule {
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+            // Install the native FolderSheet fourth choice first and in its
+            // own error boundary. An unrelated Launcher visual hook must not
+            // prevent the menu option from appearing.
+            if (runtimeConfig.enabled) {
+                try {
+                    LauncherLargeFolderPickerHook.install(classLoader);
+                    LauncherLargeFolderNativeSpanHook.install(classLoader);
+                    LauncherLargeFolderFourIconHook.install(classLoader);
+                } catch (Throwable error) {
+                    Api101Bridge.log("[DC][FolderFour] independent bootstrap failed", error);
+                }
+            }
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,
@@ -173,15 +185,6 @@ public final class ModuleMain extends XposedModule {
             }
             Launcher450DockFunctionalIconRegistry.install(classLoader);
             new MainHook().install(classLoader);
-            // Folder style is a native Launcher menu capability, not an
-            // app-level preference. Never hide the fourth choice if optional
-            // preview or resize hooks are unavailable on a vendor build.
-            boolean fourIconPicker = LauncherLargeFolderPickerHook.install(classLoader);
-            boolean fourIconSpan = LauncherLargeFolderNativeSpanHook.install(classLoader);
-            boolean fourIconPreview = LauncherLargeFolderFourIconHook.install(classLoader);
-            MainHook.log("[DC][FolderFour] picker=" + fourIconPicker
-                    + " scopedSpan=" + fourIconSpan + " preview=" + fourIconPreview);
-
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
             MiuixFolderGlassHook.install(classLoader, runtimeConfig);
             MiuixShortcutMenuGlassHook.install(classLoader, runtimeConfig);
