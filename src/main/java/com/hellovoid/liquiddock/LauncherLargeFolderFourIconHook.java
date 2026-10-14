@@ -16,7 +16,7 @@ import java.util.WeakHashMap;
  * supports a fourth large item: the two preview limits become four. Native
  * FolderInfo.convertIconSize(21) is used to repair any inconsistent 1x1
  * footprint, retaining vendor collision checks and database persistence.
- * The 2x2_9 variant and ordinary folders are never touched.</p>
+ * Ordinary one-cell four-app folders are promoted only after explicit feature opt-in.\n * Nine-icon and non-four-app folders are left untouched.</p>
  */
 final class LauncherLargeFolderFourIconHook {
     private static final String TAG = "[DC][FolderFour]";
@@ -263,6 +263,7 @@ final class LauncherLargeFolderFourIconHook {
         HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(
                 info, "convertIconSize", NATIVE_2X2_FOUR_FOLDER_TYPE);
         if (!result.succeeded()) {
+            CONVERSION_ATTEMPTED.remove(folderView);
             MainHook.log(TAG + " native 2x2 footprint conversion failed: " + result.failure());
         } else {
             MainHook.log(TAG + " delegated normal 1x1 -> real 2x2 size/occupancy to Launcher");
