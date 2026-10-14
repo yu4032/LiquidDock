@@ -10,6 +10,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Dedicated view tree for the FOUR-LARGE folder style.
@@ -123,27 +124,43 @@ final class LauncherFourGridContentView extends FrameLayout {
             }
             tile.setTag(shortcut);
             tile.setVisibility(VISIBLE);
-            Drawable icon = null;
+            // getIconDrawable() explicitly asserts NON-UI-THREAD in MIUI
+            // Launcher. Its native getIconAsync() is the authoritative safe
+            // path: cached drawables return immediately, otherwise Launcher
+            // resolves them on its own executor and delivers on UI.
+            final Object expected = shortcut;
+            Drawable cached = field(shortcut, "mIconDrawable") instanceof Drawable
+                    ? (Drawable) field(shortcut, "mIconDrawable") : null;
+            tile.setImageDrawable(cached);
             if (iconCache != null) {
-                HookUtil.InvocationResult<Object> drawable =
-                        HookUtil.tryInvoke(shortcut, "getIconDrawable",
-                                getContext(), iconCache, (Drawable) null);
-                if (drawable.succeeded() && drawable.value() instanceof Drawable) {
-                    icon = (Drawable) drawable.value();
+                Consumer<Drawable> apply = drawable -> {
+                    if (shortcuts[indexOf(tile)] != expected) return;
+                    tile.post(() -> {
+                        if (tile.getTag() == expected) {
+                            tile.setImageDrawable(drawable);
+                        }
+                    });
+                };
+                HookUtil.InvocationResult<Object> loading = HookUtil.tryInvoke(
+                        shortcut, "getIconAsync",
+                        getContext(), iconCache, (Drawable) null, apply);
+                if (!loading.succeeded()) {
+                    Api101Bridge.log("[DC][FolderFourGrid] native async icon unavailable "
+                            + loading.failure());
                 }
-            }
-            if (icon != null) {
-                tile.setImageDrawable(icon);
-            } else {
-                // Null icons must not be painted as unrelated shortcuts.
-                tile.setImageDrawable(null);
-                Api101Bridge.log("[DC][FolderFourGrid] drawable not available index=" + i);
             }
             Object title = field(shortcut, "title");
             if (title instanceof CharSequence) {
                 tile.setContentDescription((CharSequence) title);
             }
         }
+    }
+
+    private int indexOf(ImageView tile) {
+        for (int i = 0; i < COUNT; i++) {
+            if (tiles[i] == tile) return i;
+        }
+        return -1;
     }
 
     @Override
