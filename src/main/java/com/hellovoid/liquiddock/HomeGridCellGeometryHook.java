@@ -66,6 +66,7 @@ final class HomeGridCellGeometryHook {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         View view = (View) chain.getArg(0);
                         Object info = view.getTag();
+                        try {
                         if (info != null && (isWidget(info)
                                 || LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info))) {
                             Object lp = view.getLayoutParams();
@@ -84,6 +85,9 @@ final class HomeGridCellGeometryHook {
                                                     params.height, View.MeasureSpec.EXACTLY));
                                 }
                             }
+                        }
+                        } catch (Throwable error) {
+                            MainHook.log("[DC] multi-cell remeasure unavailable: " + error);
                         }
                         return result;
                     });
