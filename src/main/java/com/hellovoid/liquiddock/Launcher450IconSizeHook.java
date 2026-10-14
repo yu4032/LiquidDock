@@ -1,7 +1,9 @@
 package com.hellovoid.liquiddock;
 
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.widget.ImageView;
 
 import java.lang.reflect.Method;
 
@@ -19,6 +21,7 @@ final class Launcher450IconSizeHook {
     private static final String SMALL_FOLDER = "com.miui.home.launcher.folder.FolderIcon1x1";
     private static final String FOLDER_PREVIEW_CONTAINER_1X1 =
             "com.miui.home.launcher.folder.FolderIconPreviewContainer1X1";
+    private static final String CELL_LAYOUT = "com.miui.home.launcher.CellLayout";
     private static final String BASE_PROGRESS_SHORTCUT_ICON =
             "com.miui.home.launcher.BaseProgressShortcutIcon";
     private static final String FOLDER_GRID_VIEW = "com.miui.home.launcher.FolderGridView";
@@ -74,18 +77,17 @@ final class Launcher450IconSizeHook {
             });
             HookUtil.hook(folderMeasure, chain -> {
                 Object owner = chain.getThisObject();
-                MeasureDomain domain = owner instanceof View
-                        && enabled
-                        && LauncherGlassHierarchy.isWorkspace((View) owner)
-                        ? MeasureDomain.FOLDER : null;
-                MeasureDomain previous = ACTIVE_DOMAIN.get();
-                if (domain != null) ACTIVE_DOMAIN.set(domain);
-                try {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                } finally {
-                    if (previous == null) ACTIVE_DOMAIN.remove();
-                    else ACTIVE_DOMAIN.set(previous);
+                View folder = owner instanceof View ? (View) owner : null;
+                MeasureDomain domain = smallFolderMeasureDomain(folder);
+                if (domain != null && percent != Launcher450IconSizePolicy.DEFAULT_PERCENT) {
+                    // The OEM layout's inner FrameLayout, native blur ImageView and
+                    // cover are wrap_content. Scaling only ItemIcon.mIconContainer
+                    // lets an async folder background rebind shrink its native blur
+                    // stencil back to the drawable's unscaled intrinsic size.
+                    bindSmallFolderMaterialToIconSize(folder);
                 }
+                return withMeasureDomain(domain,
+                        () -> chain.proceed(chain.getArgs().toArray(new Object[0])));
             });
             installFolderScaleTransactions(shortcutIcon, baseProgressShortcutIcon);
             installFolderPreviewMeasureTransaction(folderPreviewContainer);
@@ -113,7 +115,10 @@ final class Launcher450IconSizeHook {
 
     private static Object withMeasureDomain(MeasureDomain domain, DomainAction action) throws Throwable {
         MeasureDomain previous = ACTIVE_DOMAIN.get();
-        if (domain != null) ACTIVE_DOMAIN.set(domain);
+        // The temporary FolderCling animation icon must not inherit the real
+        // Workspace icon's size context through nested vendor callbacks.
+        if (domain == null) ACTIVE_DOMAIN.remove();
+        else ACTIVE_DOMAIN.set(domain);
         try { return action.run(); }
         finally {
             if (previous == null) ACTIVE_DOMAIN.remove();
@@ -121,13 +126,69 @@ final class Launcher450IconSizeHook {
         }
     }
 
+    /** Match Launcher's own FolderIcon1x1.onMeasure() ownership: direct CellLayout parent. */
+    private static MeasureDomain smallFolderMeasureDomain(View view) {
+        if (!enabled || view == null) return null;
+        View cursor = view;
+        while (cursor != null) {
+            if (SMALL_FOLDER.equals(cursor.getClass().getName())) {
+                ViewParent parent = cursor.getParent();
+                return parent instanceof View && CELL_LAYOUT.equals(parent.getClass().getName())
+                        ? MeasureDomain.FOLDER : null;
+            }
+            ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return null;
+    }
+
+    /**
+     * OEM folder_icon_1x1.xml uses a fixed-size outer icon_container, but its inner
+     * FrameLayout, icon_icon (native blur target) and cover are wrap_content.
+     * On a new drawable load they therefore shrink to the stock intrinsic bounds,
+     * regardless of the scaled parent. Convert these three dependent layout nodes
+     * to MATCH_PARENT; ItemIcon remains the sole authority for parent icon size.
+     *
+     * Only genuine CellLayout-owned 1x1 folders are adjusted; FolderCling's cloned
+     * animation icon (setUseCustomWidth=true) retains all its stock layout rules.
+     */
+    private static void bindSmallFolderMaterialToIconSize(View folder) {
+        if (folder == null) return;
+        HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(folder, "getIconContainer");
+        if (!result.succeeded() || !(result.value() instanceof ViewGroup)) return;
+        ViewGroup outer = (ViewGroup) result.value();
+        if (outer.getChildCount() != 1 || !(outer.getChildAt(0) instanceof ViewGroup)) return;
+        ViewGroup inner = (ViewGroup) outer.getChildAt(0);
+        if (inner.getChildCount() < 3 || !(inner.getChildAt(0) instanceof ImageView)
+                || !(inner.getChildAt(2) instanceof ImageView)
+                || !FOLDER_PREVIEW_CONTAINER_1X1.equals(inner.getChildAt(1).getClass().getName())) {
+            return;
+        }
+        useParentIconSize(inner);
+        useParentIconSize(inner.getChildAt(0));
+        useParentIconSize(inner.getChildAt(2));
+    }
+
+    private static void useParentIconSize(View child) {
+        ViewGroup.LayoutParams params = child.getLayoutParams();
+        if (params == null || (params.width == ViewGroup.LayoutParams.MATCH_PARENT
+                && params.height == ViewGroup.LayoutParams.MATCH_PARENT)) return;
+        params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+        params.height = ViewGroup.LayoutParams.MATCH_PARENT;
+        child.setLayoutParams(params);
+    }
+
     private static void installFolderPreviewMeasureTransaction(
             Class<?> folderPreviewContainer) throws NoSuchMethodException {
         Method onMeasure = HookUtil.findMethodExact(
                 folderPreviewContainer, "onMeasure", new Class<?>[]{int.class, int.class});
-        HookUtil.hook(onMeasure, chain -> withMeasureDomain(
-                MeasureDomain.FOLDER,
-                () -> chain.proceed(chain.getArgs().toArray(new Object[0]))));
+        HookUtil.hook(onMeasure, chain -> {
+            Object owner = chain.getThisObject();
+            MeasureDomain domain = owner instanceof View
+                    ? smallFolderMeasureDomain((View) owner) : null;
+            return withMeasureDomain(domain,
+                    () -> chain.proceed(chain.getArgs().toArray(new Object[0])));
+        });
     }
 
     private static void installFolderScaleTransactions(
