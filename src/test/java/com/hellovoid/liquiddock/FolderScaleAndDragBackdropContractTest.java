@@ -52,8 +52,8 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(visual.contains("getMiuiWidgetSizeSpec"));
         assertTrue(visual.contains("NATIVE_CONTENT_SPEC"));
         assertTrue(visual.contains("actualContainerSize("));
-        assertTrue(visual.contains("nativePreview.value()).getParent()"));
-        assertTrue(visual.contains("sizeSquare(topContainer, square)"));
+        assertTrue(visual.contains("findNativeContentHost(folder, 0)"));
+        assertTrue(visual.contains("sizeSquare(nativeHost, square)"));
         assertTrue(visual.contains("content[0] << 32"));
 
         assertTrue(visual.contains("\"mIconImageView\""));
