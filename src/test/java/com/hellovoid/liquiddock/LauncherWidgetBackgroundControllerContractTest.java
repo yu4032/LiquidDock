@@ -40,7 +40,8 @@ public class LauncherWidgetBackgroundControllerContractTest {
 
         assertTrue(vendor.contains("claimWidgetMaterial"));
         assertTrue(vendor.contains("releaseWidgetMaterial"));
-        assertTrue(vendor.contains("claimFolderMaterial"));
+        assertFalse(vendor.contains("claimFolderMaterial"));
+        assertTrue(vendor.contains("LauncherWidgetNativeViewBlurGate.claim(host)"));
         assertFalse(vendor.contains("LauncherMamlBackgroundRuleExecutor"));
         assertFalse(vendor.contains("LauncherMamlBackground"));
         assertFalse(vendor.contains("WidgetBackgroundRule"));
