@@ -126,7 +126,7 @@ final class Launcher450SmallFolderTrace {
                 });
             }
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + BUILD + " folder lifecycle hooks unavailable: " + error);
+            Api101Bridge.errorAlways(TAG + BUILD + " folder lifecycle hooks unavailable", error);
         }
         try {
             Class<?> folder = Class.forName("com.miui.home.launcher.Folder", false, loader);
@@ -150,7 +150,7 @@ final class Launcher450SmallFolderTrace {
                 return result;
             });
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + BUILD + " folder close completion hook unavailable: " + error);
+            Api101Bridge.errorAlways(TAG + BUILD + " folder close completion hook unavailable", error);
         }
     }
 
@@ -169,7 +169,7 @@ final class Launcher450SmallFolderTrace {
                 return result;
             });
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + BUILD + " drawable rebind hook unavailable: " + error);
+            Api101Bridge.errorAlways(TAG + BUILD + " drawable rebind hook unavailable", error);
         }
         try {
             Class<?> small = Class.forName(SMALL_FOLDER, false, loader);
@@ -184,7 +184,7 @@ final class Launcher450SmallFolderTrace {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + BUILD + " background refresh hook unavailable: " + error);
+            Api101Bridge.errorAlways(TAG + BUILD + " background refresh hook unavailable", error);
         }
     }
 
@@ -217,7 +217,7 @@ final class Launcher450SmallFolderTrace {
                 return result;
             });
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + BUILD + " native folder clip hook unavailable: " + error);
+            Api101Bridge.errorAlways(TAG + BUILD + " native folder clip hook unavailable", error);
         }
     }
 
