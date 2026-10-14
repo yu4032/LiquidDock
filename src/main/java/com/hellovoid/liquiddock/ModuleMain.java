@@ -173,9 +173,17 @@ public final class ModuleMain extends XposedModule {
             }
             Launcher450DockFunctionalIconRegistry.install(classLoader);
             new MainHook().install(classLoader);
-            boolean fourIconFolderReady = LauncherLargeFolderFourIconHook.install(classLoader,
-                    runtimeConfig.enabled && runtimeConfig.grid.largeFolderFourIcons);
-            LauncherLargeFolderPickerHook.install(classLoader, fourIconFolderReady);
+            boolean fourIconFolderEnabled =
+                    runtimeConfig.enabled && runtimeConfig.grid.largeFolderFourIcons;
+            boolean previewHooksReady =
+                    LauncherLargeFolderFourIconHook.install(classLoader, fourIconFolderEnabled);
+            // The user-visible fourth style must not disappear merely because
+            // a vendor preview callback is missing. The picker runs the
+            // native conversion independently; log preview compatibility.
+            boolean pickerReady =
+                    LauncherLargeFolderPickerHook.install(classLoader, fourIconFolderEnabled);
+            MainHook.log("[DC][FolderFour] preview=" + previewHooksReady
+                    + " picker=" + pickerReady);
 
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
             MiuixFolderGlassHook.install(classLoader, runtimeConfig);
