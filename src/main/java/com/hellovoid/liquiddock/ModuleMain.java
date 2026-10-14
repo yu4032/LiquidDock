@@ -168,6 +168,8 @@ public final class ModuleMain extends XposedModule {
             Launcher450IconSizeHook.install(classLoader,
                     runtimeConfig.enabled && runtimeConfig.grid.iconSizeEnabled,
                     runtimeConfig.grid.iconSizePercent);
+            LauncherLargeFolderFourIconHook.install(classLoader,
+                    runtimeConfig.enabled && runtimeConfig.grid.largeFolderFourIcons);
             if (runtimeConfig.enabled && SideSlideHoldFeatureConfig.isEnabled(configReader)) {
                 Launcher450SideSlideHoldHook.install(classLoader);
             }
