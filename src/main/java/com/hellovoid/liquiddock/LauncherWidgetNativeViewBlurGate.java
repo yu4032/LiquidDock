@@ -119,8 +119,8 @@ final class LauncherWidgetNativeViewBlurGate {
         return Boolean.TRUE.equals(FOLDER_REBIND.get());
     }
 
-    static void claimFolder(View material) {
-        if (!installed || material == null) return;
+    static boolean claimFolder(View material) {
+        if (!installed || material == null) return false;
         FolderState state;
         synchronized (FOLDER_STATES) {
             state = FOLDER_STATES.get(material);
@@ -130,7 +130,7 @@ final class LauncherWidgetNativeViewBlurGate {
             }
         }
         synchronized (state) {
-            if (state.claimed) return;
+            if (state.claimed) return true;
             state.claimed = true;
         }
         // Only mute the actual RenderNode blur output; native mode/outline/blend
@@ -141,7 +141,9 @@ final class LauncherWidgetNativeViewBlurGate {
             }
             MainHook.log(TAG + " folder output claim failed material="
                     + material.getClass().getSimpleName());
+            return false;
         }
+        return true;
     }
 
     static void rememberFolderInitializer(View material, Object[] vendorArgs) {
