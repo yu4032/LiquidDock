@@ -50,25 +50,24 @@ final class LauncherNativeFourFolderHook {
     static boolean install(ClassLoader loader) {
         if (installed || loader == null) return installed;
         try {
-            Class<?> cell = Class.forName(
-                    "com.miui.home.launcher.CellLayout", false, loader);
-            Class<?> content = Class.forName(CONTENT_HOST, false, loader);
-            Class<?> config = Class.forName(
-                    "com.miui.home.launcher.DeviceConfig", false, loader);
-            Class<?> folderIcon = Class.forName(
-                    "com.miui.home.launcher.FolderIcon", false, loader);
-            Class<?> launcher = Class.forName(
-                    "com.miui.home.launcher.Launcher", false, loader);
-            Class<?> infoType = Class.forName(
-                    "com.miui.home.launcher.FolderInfo", false, loader);
-            Class<?> itemIcon = Class.forName(
-                    "com.miui.home.launcher.ItemIcon", false, loader);
+            // Vendor 4.50 may rename or inline *one* method. Never let
+            // that disable unrelated geometry, model and view binding hooks.
+            Class<?> cell = vendorClass(loader, "com.miui.home.launcher.CellLayout");
+            Class<?> content = vendorClass(loader, CONTENT_HOST);
+            Class<?> config = vendorClass(loader, "com.miui.home.launcher.DeviceConfig");
+            Class<?> folderIcon = vendorClass(loader, "com.miui.home.launcher.FolderIcon");
+            Class<?> launcher = vendorClass(loader, "com.miui.home.launcher.Launcher");
+            Class<?> infoType = vendorClass(loader, "com.miui.home.launcher.FolderInfo");
+            Class<?> itemIcon = vendorClass(loader, "com.miui.home.launcher.ItemIcon");
+            int installedHooks = 0;
 
             // FolderIcon#getSpanX/Y already returns FolderInfo.spanX/Y.
             // The actual remaining clamp is ItemIcon#onMeasure, where the
             // DeviceConfig single-cell width can differ from the custom
             // workspace grid pitch. Scope the width override to the actual
             // native four-folder root measurement; never affect other icons.
+            if (config != null) {
+                try {
             HookUtil.hook(config.getDeclaredMethod("getCellWidth"), chain -> {
                 Object original = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 int[] frame = ROOT_FRAME.get();
@@ -76,6 +75,16 @@ final class LauncherNativeFourFolderHook {
                 int minCellWidth = (frame[0] + 1) / 2;
                 return Math.max(((Number) original).intValue(), minCellWidth);
             });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed DeviceConfig#getCellWidth");
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " DeviceConfig#getCellWidth unavailable on this launcher", error);
+                }
+            } else {
+                Api101Bridge.log(TAG + " DeviceConfig#getCellWidth class unavailable");
+            }
+            if (itemIcon != null) {
+                try {
             HookUtil.hook(itemIcon.getDeclaredMethod(
                     "onMeasure", int.class, int.class), chain -> {
                 Object owner = chain.getThisObject();
@@ -102,12 +111,22 @@ final class LauncherNativeFourFolderHook {
                     else ROOT_FRAME.set(previous);
                 }
             });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed ItemIcon#onMeasure");
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " ItemIcon#onMeasure unavailable on this launcher", error);
+                }
+            } else {
+                Api101Bridge.log(TAG + " ItemIcon#onMeasure class unavailable");
+            }
 
             // The built-in 2x2 content also calls DeviceConfig for widget
             // dimensions. Previously NATIVE_SIZE was taken from the inner
             // MeasureSpec, which was already 1x1 -- feeding that value back
             // reproduced the shrinking forever. Use the ROOT 2x2 allocation.
 
+            if (config != null) {
+                try {
             HookUtil.hook(config.getDeclaredMethod("getMiuiWidgetSizeSpec",
                     int.class, int.class, boolean.class), chain -> {
                 int[] size = NATIVE_SIZE.get();
@@ -118,6 +137,16 @@ final class LauncherNativeFourFolderHook {
                         || !Boolean.TRUE.equals(chain.getArg(2))) return nativeValue;
                 return ((long) size[0] << 32) | (size[1] & 0xffffffffL);
             });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed DeviceConfig#getMiuiWidgetSizeSpec");
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " DeviceConfig#getMiuiWidgetSizeSpec unavailable on this launcher", error);
+                }
+            } else {
+                Api101Bridge.log(TAG + " DeviceConfig#getMiuiWidgetSizeSpec class unavailable");
+            }
+            if (content != null) {
+                try {
             HookUtil.hook(content.getDeclaredMethod(
                     "onMeasure", int.class, int.class), chain -> {
                 View child = (View) chain.getThisObject();
@@ -147,10 +176,20 @@ final class LauncherNativeFourFolderHook {
                     else NATIVE_SIZE.set(previous);
                 }
             });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed LauncherFolder2x2IconContainer#onMeasure");
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " LauncherFolder2x2IconContainer#onMeasure unavailable on this launcher", error);
+                }
+            } else {
+                Api101Bridge.log(TAG + " LauncherFolder2x2IconContainer#onMeasure class unavailable");
+            }
 
             // Native FolderIcon.fromXml() caches mBuddyIconView across resize.
             // If it still points to a 1x1 folder after conversion, force the
             // correct OEM 2x2_4 binding instead of layering another renderer.
+            if (folderIcon != null && launcher != null && infoType != null) {
+                try {
             HookUtil.hook(folderIcon.getDeclaredMethod("fromXml",
                     int.class, launcher, ViewGroup.class, infoType), chain -> {
                 Object info = chain.getArg(3);
@@ -178,7 +217,17 @@ final class LauncherNativeFourFolderHook {
                 }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed FolderIcon#fromXml");
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " FolderIcon#fromXml unavailable on this launcher", error);
+                }
+            } else {
+                Api101Bridge.log(TAG + " FolderIcon#fromXml class unavailable");
+            }
 
+            if (cell != null) {
+                try {
             HookUtil.hook(cell.getDeclaredMethod("onLayout",
                     boolean.class, int.class, int.class, int.class, int.class), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -196,12 +245,30 @@ final class LauncherNativeFourFolderHook {
                 }
                 return result;
             });
-            installed = true;
-            Api101Bridge.log(TAG + " native 2x2_4 preview and widget-frame hooks ready");
-            return true;
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed CellLayout#onLayout");
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " CellLayout#onLayout unavailable on this launcher", error);
+                }
+            } else {
+                Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
+            }
+            installed = installedHooks > 0;
+            Api101Bridge.log(TAG + " native folder hook coverage=" + installedHooks
+                    + "/6; class-specific compatibility requires runtime trace");
+            return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
             return false;
+        }
+    }
+
+    private static Class<?> vendorClass(ClassLoader loader, String name) {
+        try {
+            return Class.forName(name, false, loader);
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " vendor class missing: " + name + " " + error);
+            return null;
         }
     }
 
