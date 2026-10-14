@@ -22,6 +22,38 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(hook.contains("MeasureDomain.FOLDER"));
     }
 
+    @Test public void realSmallFolderNativeMaterialFillsTheScaledOuterIconContainer()
+            throws Exception {
+        String hook = Files.readString(MAIN.resolve("Launcher450IconSizeHook.java"));
+        // Actual Launcher 4.50 folder_icon_1x1.xml: the inner FrameLayout,
+        // icon_icon and cover are wrap_content; icon_container is enlarged by
+        // ItemIcon.onMeasure. On drawable refresh those children must follow
+        // the scaled parent, or native blur remains cropped at stock bounds.
+        assertTrue(hook.contains("bindSmallFolderMaterialToIconSize(folder)"));
+        assertTrue(hook.contains("HookUtil.tryInvoke(folder, \"getIconContainer\")"));
+        assertTrue(hook.contains("FOLDER_PREVIEW_CONTAINER_1X1.equals"));
+        assertTrue(hook.contains("useParentIconSize(inner)"));
+        assertTrue(hook.contains("useParentIconSize(inner.getChildAt(0))"));
+        assertTrue(hook.contains("useParentIconSize(inner.getChildAt(2))"));
+        assertTrue(hook.contains("ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertFalse(hook.contains("setClipChildren(false)"));
+        assertFalse(hook.contains("setScaleX("));
+        assertFalse(hook.contains("setScaleY("));
+    }
+
+    @Test public void folderSizePolicyUsesVendorCellLayoutAndExcludesTheAnimationClone()
+            throws Exception {
+        String hook = Files.readString(MAIN.resolve("Launcher450IconSizeHook.java"));
+        assertTrue(hook.contains("com.miui.home.launcher.CellLayout"));
+        assertTrue(hook.contains("SMALL_FOLDER.equals(cursor.getClass().getName())"));
+        assertTrue(hook.contains("CELL_LAYOUT.equals(parent.getClass().getName())"));
+        assertTrue(hook.contains("smallFolderMeasureDomain((View) owner)"));
+        assertTrue(hook.contains("if (domain == null) ACTIVE_DOMAIN.remove()"));
+        // FolderCling wraps its temporary icon in FolderCling, not CellLayout.
+        // Changing the temporary animation proxy's preview alone is insufficient.
+        assertFalse(hook.contains("HookUtil.hook(onMeasure, chain -> withMeasureDomain(\n                MeasureDomain.FOLDER"));
+    }
+
     @Test public void dragGlassUsesIndependentUpperWorkspaceBackdropAuthority() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
         String source = Files.readString(MAIN.resolve("LauncherDragSourceOverlay.java"));
