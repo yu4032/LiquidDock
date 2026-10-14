@@ -68,7 +68,6 @@ final class LauncherLargeFolderNativeSpanHook {
             });
             enabled = true;
             installed = true;
-            Api101Bridge.log(TAG + " scoped FolderInfo.convertIconSize(21) span mapping installed");
             return true;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " unavailable: " + error);

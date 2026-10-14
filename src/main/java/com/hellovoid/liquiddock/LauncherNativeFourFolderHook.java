@@ -134,8 +134,6 @@ final class LauncherNativeFourFolderHook {
                         }
                     });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed native image onMeasure "
-                            + measure.toGenericString());
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native image onMeasure unavailable", error);
                 }
@@ -150,7 +148,6 @@ final class LauncherNativeFourFolderHook {
                                 : new int[]{size.backgroundWidth, size.backgroundHeight};
                     });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed native image getOriginalSize");
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native original image size unavailable", error);
                 }
@@ -185,7 +182,6 @@ final class LauncherNativeFourFolderHook {
                         return result;
                     });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed native preview preMeasure2x2 geometry");
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native preview geometry unavailable", error);
                 }
@@ -225,8 +221,6 @@ final class LauncherNativeFourFolderHook {
                         return result;
                     });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed native preview onMeasure "
-                            + measure.toGenericString());
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native preview onMeasure unavailable", error);
                 }
@@ -247,7 +241,6 @@ final class LauncherNativeFourFolderHook {
                 return Math.max(((Number) original).intValue(), minCellWidth);
             });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed DeviceConfig#getCellWidth");
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " DeviceConfig#getCellWidth unavailable on this launcher", error);
                 }
@@ -281,7 +274,6 @@ final class LauncherNativeFourFolderHook {
                 }
             });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed ItemIcon#onMeasure");
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " ItemIcon#onMeasure unavailable on this launcher", error);
                 }
@@ -307,7 +299,6 @@ final class LauncherNativeFourFolderHook {
                 return ((long) size[0] << 32) | (size[1] & 0xffffffffL);
             });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed DeviceConfig#getMiuiWidgetSizeSpec");
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " DeviceConfig#getMiuiWidgetSizeSpec unavailable on this launcher", error);
                 }
@@ -357,7 +348,6 @@ final class LauncherNativeFourFolderHook {
                 }
             });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed LauncherFolder2x2IconContainer#onMeasure");
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " LauncherFolder2x2IconContainer#onMeasure unavailable on this launcher", error);
                 }
@@ -389,8 +379,6 @@ final class LauncherNativeFourFolderHook {
                             if (p == null || p == parent) {
                                 if (p == parent) parent.removeView(old);
                                 HookUtil.tryInvoke(info, "setBuddyIconView", (Object) null);
-                                Api101Bridge.log(TAG + " invalidated cached native icon "
-                                        + (previouslyCustom ? "after reverting size" : "after resize"));
                             }
                         }
                     }
@@ -398,7 +386,6 @@ final class LauncherNativeFourFolderHook {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed FolderIcon#fromXml");
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " FolderIcon#fromXml unavailable on this launcher", error);
                 }
@@ -426,7 +413,6 @@ final class LauncherNativeFourFolderHook {
                 return result;
             });
                     installedHooks++;
-                    Api101Bridge.log(TAG + " installed CellLayout#onLayout");
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " CellLayout#onLayout unavailable on this launcher", error);
                 }
@@ -434,7 +420,6 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
             }
             installed = installedHooks > 0;
-            Api101Bridge.log(TAG + " native folder hooks installed=" + installedHooks);
             return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
@@ -456,7 +441,7 @@ final class LauncherNativeFourFolderHook {
                 && view.getMeasuredHeight() == expected[1]) return;
         HookUtil.InvocationResult<Object> adjusted = HookUtil.tryInvoke(
                 view, "setMeasuredDimension", expected[0], expected[1]);
-        if (!adjusted.succeeded()) {
+        if (!adjusted.succeeded() && WARNED.add(view)) {
             Api101Bridge.log(TAG + " failed to measure " + layer + ": " + adjusted.failure());
         }
     }
@@ -715,7 +700,9 @@ final class LauncherNativeFourFolderHook {
             }
             return frame;
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + " trusted CellLayout frame unavailable: " + error);
+            if (WARNED.add(folder)) {
+                Api101Bridge.log(TAG + " trusted CellLayout frame unavailable: " + error);
+            }
             return null;
         }
     }

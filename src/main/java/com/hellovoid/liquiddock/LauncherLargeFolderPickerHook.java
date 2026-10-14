@@ -77,10 +77,6 @@ final class LauncherLargeFolderPickerHook {
         if (marked) edit.putBoolean(PREFIX + id, true);
         else edit.remove(PREFIX + id);
         edit.apply();
-        Api101Bridge.log(TAG + "picker-confirm folder=" + id
-                + " selected=" + marked
-                + " type=" + getItemType(info)
-                + " span=" + getSpan(info, "spanX") + "x" + getSpan(info, "spanY"));
     }
 
     static boolean install(ClassLoader loader) {
@@ -173,7 +169,6 @@ final class LauncherLargeFolderPickerHook {
                 return result;
             });
             installed = true;
-            Api101Bridge.log(TAG + "picker-hook-installed");
             return true;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " native FolderSheet unsupported: " + error);
@@ -346,7 +341,6 @@ final class LauncherLargeFolderPickerHook {
             HookUtil.setIntField(predictionLp, "topToBottom", row.getId());
             predictionField.setLayoutParams(predictionLp);
             panel.requestLayout();
-            Api101Bridge.log(TAG + " real-large-folder toggle inserted before native switches");
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " native folder toggle injection failed: " + error);
             if (row.getParent() == panel) panel.removeView(row);
@@ -511,9 +505,9 @@ final class LauncherLargeFolderPickerHook {
         if (x == 2 && y == 2) return;
         HookUtil.InvocationResult<Object> result = HookUtil.tryInvoke(
                 info, "convertIconSize", NATIVE_FOUR_TYPE);
-        Api101Bridge.log(TAG + " explicit native resize status=" + result.succeeded()
-                + " before=" + x + "x" + y
-                + (result.succeeded() ? "" : " failure=" + result.failure()));
+        if (!result.succeeded()) {
+            Api101Bridge.log(TAG + " native resize failed: " + result.failure());
+        }
     }
 
     private static int getItemType(Object info) {
