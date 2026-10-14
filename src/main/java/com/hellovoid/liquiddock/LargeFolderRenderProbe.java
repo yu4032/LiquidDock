@@ -16,11 +16,16 @@ final class LargeFolderRenderProbe {
     private static WeakReference<View> focus = new WeakReference<>(null);
     private static int generation;
     private static int drawBudget;
+    private static int writerBudget;
+    private static int noWordBudget;
+    private static WeakReference<View> titleFocus = new WeakReference<>(null);
 
     private LargeFolderRenderProbe() {}
 
     static void installMenuProbe(ClassLoader loader) {
         if (!Api101Bridge.isDebugLoggingEnabled()) return;
+        installVisibilityWriterTrace();
+        installNoWordDrawTrace(loader);
         try {
             Class<?> menu = Class.forName(
                     "com.miui.home.launcher.ShortcutMenuLayer", false, loader);
@@ -47,6 +52,10 @@ final class LargeFolderRenderProbe {
         focus = new WeakReference<>(folder);
         generation++;
         drawBudget = 8;
+        writerBudget = 12;
+        noWordBudget = 8;
+        Object title = HookUtil.tryInvoke(folder, "getTitleContainer").value();
+        titleFocus = new WeakReference<>(title instanceof View ? (View) title : null);
         snapshot("drop/completed", folder);
         scheduleFrames(folder, 6);
     }
@@ -61,6 +70,70 @@ final class LargeFolderRenderProbe {
         if (child != title) return;
         drawBudget--;
         snapshot("title/drawChild-result=" + String.valueOf(result), folder);
+    }
+
+    /**
+     * TEMPORARY SOURCE TRACE: hook the actual Android setter only when the
+     * Launcher diagnostics switch is enabled. All unrelated views fall
+     * through without reflection, allocations or logging.
+     */
+    private static void installVisibilityWriterTrace() {
+        try {
+            HookUtil.hook(View.class.getDeclaredMethod("setVisibility", int.class), chain -> {
+                Object owner = chain.getThisObject();
+                View watched = titleFocus.get();
+                if (watched == null || owner != watched || writerBudget <= 0) {
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                }
+                int requested = (Integer) chain.getArg(0);
+                int before = watched.getVisibility();
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                int after = watched.getVisibility();
+                if (before != after || requested != before) {
+                    writerBudget--;
+                    StringBuilder source = new StringBuilder();
+                    StackTraceElement[] frames = Thread.currentThread().getStackTrace();
+                    for (int i = 0, found = 0; i < frames.length && found < 8; i++) {
+                        String name = frames[i].getClassName();
+                        if (!name.startsWith("com.miui.home.")
+                                && !name.startsWith("miuix.")
+                                && !name.startsWith("com.hellovoid.liquiddock.")) continue;
+                        if (source.length() > 0) source.append(" <- ");
+                        source.append(frames[i].getClassName()).append(".")
+                                .append(frames[i].getMethodName())
+                                .append(":").append(frames[i].getLineNumber());
+                        found++;
+                    }
+                    note("title/setVisibility " + before + " -> " + after
+                            + " requested=" + requested + " source=" + source);
+                }
+                return result;
+            });
+            note("title visibility writer hook installed");
+        } catch (Throwable e) {
+            note("title visibility writer hook unavailable: " + e.getClass().getSimpleName());
+        }
+    }
+
+    private static void installNoWordDrawTrace(ClassLoader loader) {
+        try {
+            Class<?> adapter = Class.forName(
+                    "com.miui.home.launcher.util.noword.NoWordLauncherElementAdapter",
+                    false, loader);
+            HookUtil.hook(adapter.getDeclaredMethod("preDrawChild", View.class), chain -> {
+                View child = chain.getArg(0) instanceof View ? (View) chain.getArg(0) : null;
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                if (child != null && child == titleFocus.get() && noWordBudget > 0) {
+                    noWordBudget--;
+                    note("title/no-word preDrawChild=" + result + " vis="
+                            + child.getVisibility());
+                }
+                return result;
+            });
+            note("no-word draw probe installed");
+        } catch (Throwable e) {
+            note("no-word draw probe unavailable: " + e.getClass().getSimpleName());
+        }
     }
 
     private static void scheduleFrames(View folder, int count) {
