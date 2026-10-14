@@ -217,10 +217,13 @@ final class LauncherLargeFolderPickerHook {
         ViewGroup.LayoutParams oldParams = original.getLayoutParams();
         try {
             scroll.removeView(original);
-            root.addView(original, new LinearLayout.LayoutParams(
+            // Put the added style first, rather than after an arbitrary
+            // height vendor layout where it could be outside the visible
+            // ScrollView viewport without an obvious scroll affordance.
+            root.addView(option, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT));
-            root.addView(option, new LinearLayout.LayoutParams(
+            root.addView(original, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT));
             scroll.addView(root, oldParams == null
