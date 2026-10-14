@@ -51,7 +51,7 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(hook.contains("if (domain == null) ACTIVE_DOMAIN.remove()"));
         // FolderCling wraps its temporary icon in FolderCling, not CellLayout.
         // Changing the temporary animation proxy's preview alone is insufficient.
-        assertFalse(hook.contains("HookUtil.hook(onMeasure, chain -> withMeasureDomain(\n                MeasureDomain.FOLDER"));
+        assertFalse(hook.contains("HookUtil.hook(onMeasure, chain -> withMeasureDomain("));
     }
 
     @Test public void dragGlassUsesIndependentUpperWorkspaceBackdropAuthority() throws Exception {
