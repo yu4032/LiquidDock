@@ -5,7 +5,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 
-import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -480,47 +479,15 @@ final class LauncherNativeFourFolderHook {
      * orientation, layout direction, density and theme UI mode. Ordinary
      * onMeasure calls reuse the dimensions without scanning workspace items.
      */
-    private static final WeakHashMap<ViewGroup, WorkspaceIconMetrics> ICON_METRICS =
+    private static final WeakHashMap<ViewGroup, NativeFourFolderWorkspaceMetrics> ICON_METRICS =
             new WeakHashMap<>();
-
-    private static final class WorkspaceIconMetrics {
-        final WeakReference<Object> grid;
-        final int cellW, cellH, iconBase, iconScaled, orientation, density, uiMode, direction;
-        final int iconW, iconH;
-        final boolean sampledSibling;
-
-        WorkspaceIconMetrics(Object grid, int cellW, int cellH, int base, int scaled,
-                int orientation, int density, int uiMode, int direction, int iconW, int iconH,
-                boolean sampledSibling) {
-            this.grid = new WeakReference<>(grid);
-            this.cellW = cellW;
-            this.cellH = cellH;
-            iconBase = base;
-            iconScaled = scaled;
-            this.orientation = orientation;
-            this.density = density;
-            this.uiMode = uiMode;
-            this.direction = direction;
-            this.iconW = iconW;
-            this.iconH = iconH;
-            this.sampledSibling = sampledSibling;
-        }
-
-        boolean matches(Object currentGrid, int cw, int ch, int base, int scaled,
-                int orientation, int density, int uiMode, int direction) {
-            return grid.get() == currentGrid && cellW == cw && cellH == ch
-                    && iconBase == base && iconScaled == scaled
-                    && this.orientation == orientation && this.density == density
-                    && this.uiMode == uiMode && this.direction == direction;
-        }
-    }
 
     private static final Set<ViewGroup> RETRIED_UNMEASURED =
             Collections.newSetFromMap(new WeakHashMap<>());
 
     /** A single post-layout retry handles initial binds before icons are measured. */
     private static void refreshUnmeasuredMetricsAfterLayout(ViewGroup workspace) {
-        WorkspaceIconMetrics cached = ICON_METRICS.get(workspace);
+        NativeFourFolderWorkspaceMetrics cached = ICON_METRICS.get(workspace);
         if (cached != null && !cached.sampledSibling
                 && RETRIED_UNMEASURED.add(workspace)) {
             ICON_METRICS.remove(workspace);
@@ -544,7 +511,7 @@ final class LauncherNativeFourFolderHook {
             int density = config.densityDpi;
             int uiMode = config.uiMode;
             int direction = root.getLayoutDirection();
-            WorkspaceIconMetrics metrics = ICON_METRICS.get(workspace);
+            NativeFourFolderWorkspaceMetrics metrics = ICON_METRICS.get(workspace);
             if (metrics == null || !metrics.matches(grid, cellW, cellH, baseIcon,
                     scaledIcon, orientation, density, uiMode, direction)) {
                 if (metrics != null) RETRIED_UNMEASURED.remove(workspace);
@@ -571,7 +538,7 @@ final class LauncherNativeFourFolderHook {
                     }
                 }
                 if (iconW <= 0 || iconH <= 0) return null;
-                metrics = new WorkspaceIconMetrics(grid, cellW, cellH, baseIcon,
+                metrics = new NativeFourFolderWorkspaceMetrics(grid, cellW, cellH, baseIcon,
                         scaledIcon, orientation, density, uiMode, direction, iconW, iconH,
                         sampledSibling);
                 ICON_METRICS.put(workspace, metrics);
