@@ -370,7 +370,12 @@ final class HomeGridCellGeometryHook {
             HomeGridInstallConfig current = installConfig;
             if (current == null || !current.enabled || info == null || layoutParams == null) return;
 
-            if (!isWidget(info)) return;
+            // A native enlarged folder with persisted 2x2 spans is also
+            // a multi-cell allocation. Never apply this to a 1x1 FolderInfo:
+            // that must first go through Launcher.convertIconSize(21).
+            if (!isWidget(info) && !LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)) {
+                return;
+            }
             int spanX = HookUtil.getIntField(info, "spanX");
             int spanY = HookUtil.getIntField(info, "spanY");
             if (!WidgetGridSizing.isSupportedSpec(spanX, spanY)
@@ -403,7 +408,7 @@ final class HomeGridCellGeometryHook {
             HookUtil.setIntField(layoutParams, "x", rect[0]);
             HookUtil.setIntField(layoutParams, "y", rect[1]);
         } catch (Throwable error) {
-            MainHook.log("[DC] widget grid bounds failed: " + error);
+            MainHook.log("[DC] multi-cell grid bounds failed: " + error);
         }
     }
 
@@ -423,7 +428,10 @@ final class HomeGridCellGeometryHook {
                 View child = cellLayout.getChildAt(i);
                 if (child == null || child.getVisibility() == View.GONE) continue;
                 Object info = child.getTag();
-                if (info == null || !isWidget(info)) continue;
+                if (info == null || (!isWidget(info)
+                        && !LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info))) {
+                    continue;
+                }
 
                 Object paramsObject = child.getLayoutParams();
                 if (paramsObject == null) continue;
@@ -488,7 +496,7 @@ final class HomeGridCellGeometryHook {
                 }
             }
         } catch (Throwable error) {
-            MainHook.log("[DC] final widget frame enforcement failed: " + error);
+            MainHook.log("[DC] final multi-cell frame enforcement failed: " + error);
         }
     }
 
