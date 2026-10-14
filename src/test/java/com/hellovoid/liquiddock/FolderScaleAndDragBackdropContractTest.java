@@ -25,6 +25,10 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(folder.contains("\"setMItemsMaxCount\", FOUR"));
         assertTrue(folder.contains("\"setMLargeIconNum\", FOUR"));
         assertTrue(folder.contains("\"convertIconSize\""));
+        assertTrue(folder.contains("FolderIconConvertSizeController"));
+        assertTrue(folder.contains("\"getFolderSpanXFromType\""));
+        assertTrue(folder.contains("\"getFolderSpanYFromType\""));
+        assertTrue(folder.contains("spanXHook && spanYHook"));
         assertTrue(folder.contains("\"fromXml\""));
         assertTrue(folder.contains("\"rebindInfo\""));
         assertTrue(folder.contains("LargeFolderFootprintPolicy.needsNativeConversion("));
