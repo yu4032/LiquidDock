@@ -54,8 +54,7 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
         assertFalse(helper.contains("MiBlurBridge.clearContentBlur(host)"));
         assertFalse(helper.contains("MiBlurBridge.clearPassWindowBlur(host)"));
-        assertFalse(helper.contains("invokeBoolean(host, \\"setViewBlur\\""));
-        assertFalse(helper.contains("invokeBoolean(host, \\"setBlurIfNeed\\""));
+        assertFalse(helper.contains("invokeBoolean(host,"));
         assertFalse(helper.contains("setMaMlBlurIfSupported(host, false)"));
     }
 
