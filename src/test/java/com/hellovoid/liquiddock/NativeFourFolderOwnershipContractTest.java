@@ -22,7 +22,7 @@ public class NativeFourFolderOwnershipContractTest {
                 grid.contains("\"measureChild\""));
     }
 
-    @Test public void nativeFolderHasOneGridPolicyAndFailClosedInstallation() throws Exception {
+    @Test public void nativeFolderHasOneGridPolicyAndIndependentPickerInstallation() throws Exception {
         String nativeHook = source("LauncherNativeFourFolderHook.java");
         assertTrue(nativeHook.contains("NativeFourFolderFramePolicy.resolve("));
         assertTrue(nativeHook.contains("prepareFolderLayoutParams("));
@@ -31,6 +31,9 @@ public class NativeFourFolderOwnershipContractTest {
                 module.contains("if (LauncherNativeFourFolderHook.install(classLoader)) {"));
         assertTrue(module.contains("LauncherLargeFolderPickerHook.install(classLoader);"));
         assertTrue(module.contains("LauncherLargeFolderNativeSpanHook.install(classLoader);"));
+        String picker = source("LauncherLargeFolderPickerHook.java");
+        assertTrue("Custom 2x2 toggle remains present", picker.contains("PRIMARY_TOGGLE_ID"));
+        assertTrue("Title toggle remains present", picker.contains("TITLE_TOGGLE_ID"));
         assertTrue("Independent working OEM hooks must remain active",
                 nativeHook.contains("installed = installedHooks > 0"));
         assertFalse("Do not require every optional vendor method",
