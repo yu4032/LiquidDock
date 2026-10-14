@@ -13,89 +13,66 @@ public class FolderScaleAndDragBackdropContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
 
-    @Test public void fourIconLargeFolderUsesNativeTwoByTwoModelAndGeometry() throws Exception {
-        String folder = Files.readString(MAIN.resolve("LauncherLargeFolderFourIconHook.java"));
+    @Test public void fourIconLargeFolderUsesIndependentFourTileLayout() throws Exception {
+        String holder = Files.readString(MAIN.resolve("LauncherFourGridLayoutHook.java"));
+        String content = Files.readString(MAIN.resolve("LauncherFourGridContentView.java"));
         String geometry = Files.readString(MAIN.resolve("HomeGridCellGeometryHook.java"));
         String startup = Files.readString(MAIN.resolve("ModuleMain.java"));
-
-        assertTrue(folder.contains("FolderIcon2x2_4"));
-        assertTrue(folder.contains("FolderIcon1x1"));
-        assertTrue(folder.contains("LauncherLargeFolderPickerHook.isMarked("));
-        assertTrue(folder.contains("FolderIconPreviewContainer2X2_4"));
-        assertTrue(folder.contains("\"setMItemsMaxCount\", count"));
-        assertTrue(folder.contains("\"setMLargeIconNum\", large"));
-        assertTrue(folder.contains("\"convertIconSize\""));
+        String picker = Files.readString(MAIN.resolve("LauncherLargeFolderPickerHook.java"));
         String nativeSpan = Files.readString(MAIN.resolve("LauncherLargeFolderNativeSpanHook.java"));
+
+        assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
+        assertTrue(startup.contains("LauncherLargeFolderNativeSpanHook.install("));
+        assertTrue(startup.contains("LauncherFourGridLayoutHook.install("));
+        assertFalse(startup.contains("LauncherLargeFolderFourIconHook.install("));
+        assertFalse(startup.contains("LauncherLargeFolderVisualHook.install("));
+        assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
+
+        assertTrue(holder.contains("\"CellLayout\""));
+        assertTrue(holder.contains("\"onLayout\""));
+        assertTrue(holder.contains("LauncherLargeFolderPickerHook.isMarked("));
+        assertTrue(holder.contains("LauncherFourGridContentView("));
+        assertTrue(holder.contains("folder.addView(content, lp)"));
+        assertTrue(holder.contains("hideOriginal(folder)"));
+        assertTrue(holder.contains("restoreOriginal(nativeFolder)"));
+        assertTrue(holder.contains("isFourGridInfo(info)"));
+        assertTrue(holder.contains("notifyDataSetChanged"));
+        assertTrue(holder.contains("LargeFolderFootprintPolicy.hasRealTwoByTwoFootprint"));
+
+        assertTrue(content.contains("extends FrameLayout"));
+        assertTrue(content.contains("new ImageView(context)"));
+        assertTrue(content.contains("getContents"));
+        assertTrue(content.contains("getIconDrawable"));
+        assertTrue(content.contains("handleClick"));
+        assertTrue(content.contains("tile.setOnLongClickListener"));
+        assertTrue(content.contains("background.layout"));
+        assertTrue(content.contains("titleReservation(height)"));
+        assertFalse(content.contains("Bitmap"));
+        assertFalse(content.contains("PixelCopy"));
+        assertFalse(content.contains("setScaleX"));
+        assertFalse(content.contains("setScaleY"));
+
+        assertTrue(geometry.contains("LauncherFourGridLayoutHook.isFourGridInfo(info)"));
+        assertTrue(geometry.contains("boolean.class, layoutParams"));
+        assertTrue(geometry.contains("\"measureChild\""));
+
         assertTrue(nativeSpan.contains("FolderIconConvertSizeController"));
         assertTrue(nativeSpan.contains("\"getFolderSpanXFromType\""));
         assertTrue(nativeSpan.contains("\"getFolderSpanYFromType\""));
         assertTrue(nativeSpan.contains("ThreadLocal<Boolean> FORCE_LARGE"));
         assertTrue(nativeSpan.contains("\"convertIconSize\""));
         assertTrue(nativeSpan.contains("LauncherLargeFolderPickerHook.isMarked("));
-        assertFalse(folder.contains("getFolderSpanXFromType"));
-        assertTrue(folder.contains("\"fromXml\""));
-        assertTrue(folder.contains("\"rebindInfo\""));
-        assertTrue(folder.contains("LargeFolderFootprintPolicy.needsNativeConversion("));
-        assertFalse(folder.contains("\"setSpanX\""));
-        assertFalse(folder.contains("\"setSpanY\""));
-        assertTrue(geometry.contains("LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)"));
-        assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
-        assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
-        assertTrue(startup.contains("LauncherLargeFolderNativeSpanHook.install("));
-        assertTrue(startup.contains("LauncherLargeFolderVisualHook.install("));
-        assertTrue(startup.contains("LauncherLargeFolderRuntimeAuditHook.install("));
-        String audit = Files.readString(MAIN.resolve("LauncherLargeFolderRuntimeAuditHook.java"));
-        assertTrue(audit.contains("CellLayout"));
-        assertTrue(audit.contains("\"onLayout\""));
-        assertTrue(audit.contains("itemType"));
-        assertTrue(audit.contains("marked="));
-        assertTrue(audit.contains("nativeHost="));
-        assertTrue(audit.contains("classMatch="));
-        assertTrue(audit.contains("after-layout folder="));
-        assertTrue(audit.contains("emitted >= 24"));
-        assertFalse(audit.contains("Bitmap"));
-        assertFalse(audit.contains("setScale"));
 
-        String visual = Files.readString(MAIN.resolve("LauncherLargeFolderVisualHook.java"));
-        assertTrue(visual.contains("\"onMeasure\""));
-        assertTrue(visual.contains("\"getCellWidth\""));
-        assertTrue(visual.contains("MEASURING_CELL_WIDTH"));
-        assertTrue(visual.contains("resizeNativeLargeFolderContents"));
-        assertTrue(visual.contains("LauncherFolder2x2IconContainer"));
-        assertTrue(visual.contains("getMiuiWidgetSizeSpec"));
-        assertTrue(visual.contains("NATIVE_CONTENT_SPEC"));
-        assertTrue(visual.contains("actualContainerSize("));
-        assertTrue(visual.contains("findNativeContentHost(folder, 0)"));
-        assertTrue(visual.contains("sizeSquare(nativeHost, square)"));
-        assertTrue(visual.contains("content[0] << 32"));
-
-        assertTrue(visual.contains("\"mIconImageView\""));
-        assertTrue(visual.contains("\"mFolderCover\""));
-        assertTrue(visual.contains("\"getMPreviewContainer\""));
-        assertTrue(visual.contains("\"getBuddyIconView\""));
-        assertTrue(visual.contains("\"setBuddyIconView\""));
-        assertTrue(visual.contains("!FOUR_CLASS.equals(old.getClass().getName())"));
-        String gridCell = Files.readString(MAIN.resolve("HomeGridCellGeometryHook.java"));
-        assertTrue(gridCell.contains("boolean.class, layoutParams"));
-        assertTrue(gridCell.contains("\"measureChild\""));
-        assertTrue(gridCell.contains("LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)"));
-
-        assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
-        String schema = Files.readString(MAIN.resolve("config/ConfigSchema.java"));
-        assertFalse(schema.contains("LARGE_FOLDER_FOUR_ICONS"));
-
-        String picker = Files.readString(MAIN.resolve("LauncherLargeFolderPickerHook.java"));
         assertTrue(picker.contains("\"initListener\""));
         assertTrue(picker.contains("\"onAttachedToWindow\""));
         assertTrue(picker.contains("findScrollView(sheet)"));
-        assertFalse(picker.contains("featureEnabled"));
-
         assertTrue(picker.contains("\"onClick\""));
         assertTrue(picker.contains("2×2 四宫格大文件夹"));
-        assertTrue(picker.contains("mFolderPickerBody"));
         assertTrue(picker.contains("LargeFolderPickerPolicy.mustRequestResize("));
-        assertTrue(picker.contains("android.os.Looper.getMainLooper()"));
-        assertFalse(picker.contains("\"itemType\", 23"));
+        assertFalse(picker.contains("featureEnabled"));
+
+        String schema = Files.readString(MAIN.resolve("config/ConfigSchema.java"));
+        assertFalse(schema.contains("LARGE_FOLDER_FOUR_ICONS"));
     }
 
     @Test public void smallFolderPreviewContainerOwnsItsScaledRemeasureDomain() throws Exception {
