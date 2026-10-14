@@ -12,6 +12,24 @@ import org.junit.Test;
 public class FolderScaleAndDragBackdropContractTest {
     private static final Path MAIN = Path.of("src/main/java/com/hellovoid/liquiddock");
 
+
+    @Test public void fourIconLargeFolderUsesNativeTwoByTwoModelAndGeometry() throws Exception {
+        String folder = Files.readString(MAIN.resolve("LauncherLargeFolderFourIconHook.java"));
+        String geometry = Files.readString(MAIN.resolve("HomeGridCellGeometryHook.java"));
+        String startup = Files.readString(MAIN.resolve("ModuleMain.java"));
+
+        assertTrue(folder.contains("FolderIcon2x2_4"));
+        assertTrue(folder.contains("FolderIconPreviewContainer2X2_4"));
+        assertTrue(folder.contains("\"setMItemsMaxCount\", FOUR"));
+        assertTrue(folder.contains("\"setMLargeIconNum\", FOUR"));
+        assertTrue(folder.contains("\"convertIconSize\""));
+        assertTrue(folder.contains("LargeFolderFootprintPolicy.needsNativeConversion("));
+        assertFalse(folder.contains("\"setSpanX\""));
+        assertFalse(folder.contains("\"setSpanY\""));
+        assertTrue(geometry.contains("LauncherLargeFolderFourIconHook.isNativeFourFolderInfo(info)"));
+        assertTrue(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
+    }
+
     @Test public void smallFolderPreviewContainerOwnsItsScaledRemeasureDomain() throws Exception {
         String hook = Files.readString(MAIN.resolve("Launcher450IconSizeHook.java"));
 
