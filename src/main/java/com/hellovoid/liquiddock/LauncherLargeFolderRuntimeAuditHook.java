@@ -40,6 +40,70 @@ final class LauncherLargeFolderRuntimeAuditHook {
                 if (owner instanceof ViewGroup) inspect((ViewGroup) owner);
                 return result;
             });
+            // Native binding decision. This is the discriminating boundary:
+            // a 2x2 FolderInfo can still retain a FolderIcon1x1 cached
+            // mBuddyIconView, preventing any large-folder visual hook from
+            // being reached.
+            try {
+                Class<?> folderIcon = Class.forName(
+                        "com.miui.home.launcher.FolderIcon", false, loader);
+                Class<?> launcher = Class.forName(
+                        "com.miui.home.launcher.Launcher", false, loader);
+                Class<?> folderInfo = Class.forName(
+                        "com.miui.home.launcher.FolderInfo", false, loader);
+                HookUtil.hook(folderIcon.getDeclaredMethod("fromXml",
+                        int.class, launcher, ViewGroup.class, folderInfo), chain -> {
+                    Object info = chain.getArg(3);
+                    int type = getInt(info, "itemType");
+                    boolean targeted = type == 21;
+                    Object old = targeted
+                            ? HookUtil.tryInvoke(info, "getBuddyIconView").value() : null;
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    if (targeted && emitted < 24 && info != null) {
+                        Log.i(TAG, "fromXml-layout type=" + type
+                                + " span=" + getInt(info, "spanX")
+                                + "x" + getInt(info, "spanY")
+                                + " requestedRes=" + chain.getArg(0)
+                                + " oldView=" + shortClass(old)
+                                + " resultView=" + shortClass(result)
+                                + " newView=" + (old != result)
+                                + " measured=" + dims(result));
+                        emitted++;
+                    }
+                    return result;
+                });
+            } catch (Throwable error) {
+                Log.e(TAG, "fromXml-audit-unavailable " + error.getClass().getSimpleName());
+            }
+            // The actual Android measure pass of the vendor's inner host,
+            // instead of the visual hook's speculation about its presence.
+            try {
+                Class<?> contentHost = Class.forName(
+                        "com.miui.home.launcher.folder.LauncherFolder2x2IconContainer",
+                        false, loader);
+                HookUtil.hook(contentHost.getDeclaredMethod(
+                        "onMeasure", int.class, int.class), chain -> {
+                    Object view = chain.getThisObject();
+                    View folder = view instanceof View
+                            ? ancestorFolder((View) view) : null;
+                    int width = View.MeasureSpec.getSize((Integer) chain.getArg(0));
+                    int height = View.MeasureSpec.getSize((Integer) chain.getArg(1));
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    if (folder != null && getInt(folder.getTag(), "itemType") == 21
+                            && emitted < 24) {
+                        Log.i(TAG, "content-measure span="
+                                + getInt(folder.getTag(), "spanX") + "x"
+                                + getInt(folder.getTag(), "spanY")
+                                + " root=" + dims(folder)
+                                + " incoming=" + width + "x" + height
+                                + " nativeContent=" + dims(view));
+                        emitted++;
+                    }
+                    return result;
+                });
+            } catch (Throwable error) {
+                Log.e(TAG, "content-audit-unavailable " + error.getClass().getSimpleName());
+            }
             installed = true;
             Log.i(TAG, "audit-installed CellLayout#onLayout; build=folder4");
             return true;
@@ -48,6 +112,25 @@ final class LauncherLargeFolderRuntimeAuditHook {
                     + ": " + error.getMessage());
             return false;
         }
+    }
+
+    private static View ancestorFolder(View child) {
+        android.view.ViewParent parent = child.getParent();
+        for (int i = 0; i < 8 && parent instanceof View; i++) {
+            View view = (View) parent;
+            if (view.getClass().getName().contains("FolderIcon2x2")) return view;
+            parent = view.getParent();
+        }
+        return null;
+    }
+
+    private static String shortClass(Object item) {
+        return item == null ? "null" : item.getClass().getSimpleName();
+    }
+
+    private static int getInt(Object item, String name) {
+        try { return HookUtil.getIntField(item, name); }
+        catch (Throwable ignored) { return -1; }
     }
 
     private static void inspect(ViewGroup layout) {
