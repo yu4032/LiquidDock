@@ -792,10 +792,11 @@ final class LauncherNativeFourFolderHook {
         }
     }
 
-    private static void reconcileNativeMeasuredChildren(View container, int[] frame) {
-        if (!(container instanceof ViewGroup) || frame[0] <= 0 || frame[1] <= 0) return;
+    private static boolean reconcileNativeMeasuredChildren(View container, int[] frame) {
+        if (!(container instanceof ViewGroup) || frame[0] <= 0 || frame[1] <= 0) return false;
         NativeFourFolderSizing.Size size = nativeSizing(ancestorFolder(container), frame);
-        if (size == null) return;
+        if (size == null) return false;
+        boolean needsLayout = false;
         ViewGroup group = (ViewGroup) container;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
@@ -808,17 +809,22 @@ final class LauncherNativeFourFolderHook {
                     && (HookUtil.getIntField(child, "mCustomWidth") > 0
                     || HookUtil.getIntField(child, "mCustomHeight") > 0)) continue;
             int[] target = preview ? frame : new int[]{size.backgroundWidth, size.backgroundHeight};
-            if (child.getMeasuredWidth() == target[0]
-                    && child.getMeasuredHeight() == target[1]) continue;
-            if (preview) {
-                // Re-enter OEM preview onMeasure with the correct width
-                // so its own preMeasure2x2/preSetup2x2 recompute icon
-                // positions. Do not manually draw or scale any preview.
-                child.measure(exact(frame[0]), exact(frame[1]));
+            // A cross-page rebind may preserve the parent's full 2x2
+            // measurement while leaving its children at stock 1x1 sizes.
+            // Re-enter OEM onMeasure for both views: the image needs its
+            // drawable matrix updated, and the preview owns its icon grid.
+            if (!NativeFourFolderSizing.childNeedsLayout(
+                    child.getMeasuredWidth(), child.getMeasuredHeight(),
+                    child.getWidth(), child.getHeight(), target[0], target[1])) continue;
+            if (child.getMeasuredWidth() != target[0]
+                    || child.getMeasuredHeight() != target[1]) {
+                child.measure(exact(target[0]), exact(target[1]));
+                forceMeasuredFrame(child, target,
+                        preview ? "fallback-preview" : "fallback-image");
             }
-            forceMeasuredFrame(child, target,
-                    preview ? "fallback-preview" : "fallback-image");
+            needsLayout = true;
         }
+        return needsLayout;
     }
 
 
@@ -994,6 +1000,12 @@ final class LauncherNativeFourFolderHook {
             innerParams.height = h;
             inner.measure(exact(w), exact(h));
             inner.layout(0, 0, w, h);
+        }
+        // A reparented folder can already measure as 2x2 while its native
+        // image/preview still occupy the stock single-cell dimensions. The
+        // parent's equality guards above must not skip child reconciliation.
+        if (reconcileNativeMeasuredChildren(inner, new int[]{w, h})) {
+            inner.requestLayout();
         }
         layoutFolderTitle(folder, nativeSizing(folder, new int[]{w, h}), w, h);
         // Reconcile title geometry after placement. The OEM span visibility
