@@ -30,6 +30,18 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("FolderIcon2x2_4"));
         assertTrue(nativeHook.contains("LauncherFolder2x2IconContainer"));
         assertTrue(nativeHook.contains("getMiuiWidgetSizeSpec"));
+        assertTrue(nativeHook.contains("itemIcon.getDeclaredMethod("));
+        assertTrue(nativeHook.contains("\"onMeasure\", int.class, int.class"));
+        assertTrue(nativeHook.contains("\"getCellWidth\""));
+        assertTrue(nativeHook.contains("ROOT_FRAME.set(frame)"));
+        assertTrue(nativeHook.contains("args[0] = exact(frame[0])"));
+        assertTrue(nativeHook.contains("args[1] = exact(frame[1])"));
+        assertTrue(nativeHook.contains("frame = ROOT_FRAME.get()"));
+        assertTrue(nativeHook.contains("desiredFrame(host,"));
+        assertTrue(nativeHook.contains("lp != null && lp.width > 0"));
+        assertFalse(nativeHook.contains("NATIVE_SIZE.set(new int[]{width, height})"));
+        assertTrue(nativeHook.contains("traceMeasure(\"inner\""));
+        assertTrue(nativeHook.contains("traceMeasure(\"root\""));
         assertTrue(nativeHook.contains("FolderIcon.fromXml()"));
         assertTrue(nativeHook.contains("getBuddyIconView"));
         assertTrue(nativeHook.contains("invalidated cached native icon"));
