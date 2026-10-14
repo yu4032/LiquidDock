@@ -1,12 +1,18 @@
 package com.hellovoid.liquiddock;
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 import java.util.WeakHashMap;
 
 /** Scales native four- and nine-preview folders to a real 2x2 workspace footprint.
@@ -43,6 +49,10 @@ final class LauncherNativeFourFolderHook {
     private static final Set<View> CUSTOM_SIZED =
             Collections.newSetFromMap(new WeakHashMap<>());
     private static boolean installed;
+    private static volatile int previewScalePercent = NativeFolderPreviewScale.DEFAULT_PERCENT;
+    private static SharedPreferences scalePreferences;
+    private static SharedPreferences.OnSharedPreferenceChangeListener scaleListener;
+    private static final AtomicBoolean SCALE_UPDATE_PENDING = new AtomicBoolean();
 
     private LauncherNativeFourFolderHook() {}
 
@@ -531,6 +541,7 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
             }
             installed = installedHooks > 0;
+            if (installed) bindPreviewScale();
             return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
@@ -664,39 +675,93 @@ final class LauncherNativeFourFolderHook {
     }
 
     private static void applyFourPreviewGeometry(View preview, NativeFourFolderSizing.Size size) {
-        HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeHor", size.edgeX);
-        HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeVer", size.edgeY);
-        HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerHor", size.gapX);
-        HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerVer", size.gapY);
-        HookUtil.setIntField(preview, "mLargeItemWith", size.largeWidth);
-        HookUtil.setIntField(preview, "mLargeItemHeight", size.largeHeight);
-        HookUtil.setIntField(preview, "mSmall2x2ItemMergeInner", size.smallGap);
-        HookUtil.setIntField(preview, "mSmallItemWith", size.smallWidth);
-        HookUtil.setIntField(preview, "mSmallItemHeight", size.smallHeight);
+        NativeFolderPreviewScale.Geometry icon =
+                NativeFolderPreviewScale.four(size, previewScalePercent);
+        applyPreviewGeometry(preview, icon);
     }
 
     private static void applyNinePreviewGeometry(View preview, NativeFourFolderSizing.Size size) {
-        // OEM 2X2_9: 8 large icons + a 2x2 group of four smaller icons.
-        // Preserve the Launcher 4.50 preMeasure2x2 proportions, including
-        // its device-dependent edge percent and rectangular centering.
-        NativeNineFolderSizing.Geometry nine = NativeNineFolderSizing.calculate(
+        NativeNineFolderSizing.Geometry base = NativeNineFolderSizing.calculate(
                 size.backgroundWidth, size.backgroundHeight,
                 "turner".equals(android.os.Build.DEVICE));
-        if (nine == null) return;
+        if (base == null) return;
+        applyPreviewGeometry(preview, NativeFolderPreviewScale.nine(base, previewScalePercent));
+    }
+
+    /** The two OEM preview types share dimension field names, but not child layout. */
+    private static void applyPreviewGeometry(View preview, NativeFolderPreviewScale.Geometry g) {
         try {
-            HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeHor", nine.edgeX);
-            HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeVer", nine.edgeY);
-            HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerHor", nine.gapX);
-            HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerVer", nine.gapY);
-            HookUtil.setIntField(preview, "mLargeItemWith", nine.largeWidth);
-            HookUtil.setIntField(preview, "mLargeItemHeight", nine.largeHeight);
-            HookUtil.setIntField(preview, "mSmall2x2ItemMergeInner", nine.smallGap);
-            HookUtil.setIntField(preview, "mSmallItemWith", nine.smallWidth);
-            HookUtil.setIntField(preview, "mSmallItemHeight", nine.smallHeight);
+            HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeHor", g.edgeX);
+            HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeVer", g.edgeY);
+            HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerHor", g.gapX);
+            HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerVer", g.gapY);
+            HookUtil.setIntField(preview, "mLargeItemWith", g.largeWidth);
+            HookUtil.setIntField(preview, "mLargeItemHeight", g.largeHeight);
+            HookUtil.setIntField(preview, "mSmall2x2ItemMergeInner", g.smallGap);
+            HookUtil.setIntField(preview, "mSmallItemWith", g.smallWidth);
+            HookUtil.setIntField(preview, "mSmallItemHeight", g.smallHeight);
         } catch (Throwable error) {
             if (WARNED.add(preview)) {
-                Api101Bridge.log(TAG + " nine-preview geometry unsupported", error);
+                Api101Bridge.log(TAG + " native preview geometry unsupported", error);
             }
+        }
+    }
+
+    private static void bindPreviewScale() {
+        SharedPreferences prefs = Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP);
+        if (prefs == null) return;
+        scalePreferences = prefs;
+        String key = ConfigSchema.Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT.name();
+        previewScalePercent = constrainedPreviewScale(prefs);
+        scaleListener = (changed, name) -> {
+            if (name != null && !key.equals(name)) return;
+            int next = constrainedPreviewScale(changed);
+            if (previewScalePercent == next) return;
+            previewScalePercent = next;
+            if (SCALE_UPDATE_PENDING.compareAndSet(false, true)) {
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    SCALE_UPDATE_PENDING.set(false);
+                    invalidatePreviewLayouts();
+                });
+            }
+        };
+        prefs.registerOnSharedPreferenceChangeListener(scaleListener);
+    }
+
+    private static int constrainedPreviewScale(SharedPreferences prefs) {
+        int value = prefs.getInt(
+                ConfigSchema.Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT.name(),
+                NativeFolderPreviewScale.DEFAULT_PERCENT);
+        return Math.max(NativeFolderPreviewScale.MIN_PERCENT,
+                Math.min(NativeFolderPreviewScale.MAX_PERCENT, value));
+    }
+
+    /** Only a settings change triggers this traversal, never native onMeasure. */
+    private static void invalidatePreviewLayouts() {
+        ArrayList<ViewGroup> workspaces = new ArrayList<>(ICON_METRICS.keySet());
+        for (ViewGroup workspace : workspaces) {
+            if (!workspace.isAttachedToWindow()) continue;
+            for (int i = 0; i < workspace.getChildCount(); i++) {
+                View folder = workspace.getChildAt(i);
+                if (!eligible(folder)) continue;
+                invalidatePreviewChildren(folder, 0);
+                folder.requestLayout();
+                folder.postInvalidateOnAnimation();
+            }
+        }
+    }
+
+    private static void invalidatePreviewChildren(View node, int depth) {
+        if (depth > 8) return;
+        if (nativePreviewClass(node)) {
+            node.requestLayout();
+            node.invalidate();
+            return;
+        }
+        if (!(node instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) node;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            invalidatePreviewChildren(group.getChildAt(i), depth + 1);
         }
     }
 
