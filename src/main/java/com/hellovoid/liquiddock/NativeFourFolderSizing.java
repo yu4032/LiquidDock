@@ -36,4 +36,11 @@ final class NativeFourFolderSizing {
             int iconWidth, int iconHeight) {
         return new Size(width, height, cellWidth, cellHeight, iconWidth, iconHeight);
     }
+
+    /** Parent 2x2 bounds may survive reparenting while a native child stays 1x1. */
+    static boolean childNeedsLayout(int measuredW, int measuredH, int laidW, int laidH,
+            int expectedW, int expectedH) {
+        return measuredW != expectedW || measuredH != expectedH
+                || laidW != expectedW || laidH != expectedH;
+    }
 }
