@@ -47,6 +47,10 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("native folder hook coverage="));
         assertTrue(nativeHook.contains("resizeNativePreviewChildren(inner, w, h)"));
         assertTrue(nativeHook.contains("tracePreviewChildren("));
+        assertTrue(nativeHook.contains("reconcileNativeMeasuredChildren(child, frame)"));
+        assertTrue(nativeHook.contains("child.measure(exact(frame[0]), exact(frame[1]))"));
+        assertTrue(nativeHook.contains("fallback-preview"));
+        assertTrue(nativeHook.contains("fallback-image"));
         assertTrue(nativeHook.contains("LauncherFolder2x2IconImageView"));
         assertTrue(nativeHook.contains("FolderIconPreviewContainer2X2_4"));
         assertTrue(nativeHook.contains("params.width = width"));
