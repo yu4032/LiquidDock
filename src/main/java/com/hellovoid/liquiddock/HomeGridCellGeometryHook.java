@@ -57,63 +57,6 @@ final class HomeGridCellGeometryHook {
             MainHook.log("[DC] widget sizing hook unavailable: " + error);
         }
 
-        try {
-            // Re-measure only the explicitly marked 2x2 native folder. Widgets
-            // retain their established system measurement transaction.
-            HookUtil.hookMethod(cellLayout, "measureChild",
-                    new Class<?>[]{View.class}, chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        View child = (View) chain.getArg(0);
-                        if (!LauncherNativeFourFolderHook.isCustomFolder(child)) return result;
-                        Object info = child.getTag();
-                        try {
-                            ViewGroup.LayoutParams params = child.getLayoutParams();
-                            applyWidgetGridSize(chain.getThisObject(),
-                                    HookUtil.getIntField(info, "cellX"),
-                                    HookUtil.getIntField(info, "cellY"), info, params);
-                            if (params != null && params.width > 0 && params.height > 0
-                                    && (child.getMeasuredWidth() != params.width
-                                    || child.getMeasuredHeight() != params.height)) {
-                                child.measure(
-                                        View.MeasureSpec.makeMeasureSpec(
-                                                params.width, View.MeasureSpec.EXACTLY),
-                                        View.MeasureSpec.makeMeasureSpec(
-                                                params.height, View.MeasureSpec.EXACTLY));
-                            }
-                        } catch (Throwable error) {
-                            MainHook.log("[DC] real folder premeasure failed: " + error);
-                        }
-                        return result;
-                    });
-        } catch (Throwable error) {
-            MainHook.log("[DC] 2x2 folder measureChild unavailable: " + error);
-        }
-
-        // Launcher 4.50 also exposes an edit-mode-aware five-argument
-        // overload. Hook it independently and ONLY for the marked folder;
-        // an absent four-argument OEM method must not disable this hook.
-        try {
-            Class<?> itemInfo = Class.forName(
-                    "com.miui.home.launcher.ItemInfo", false, classLoader);
-            Class<?> paramsType = Class.forName(
-                    "com.miui.home.launcher.CellLayout$LayoutParams", false, classLoader);
-            HookUtil.hookMethod(cellLayout, "setupLayoutParam",
-                    new Class<?>[]{int.class, int.class, itemInfo,
-                            boolean.class, paramsType}, chain -> {
-                        Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object result = chain.proceed(args);
-                        if (chain.getThisObject() instanceof View
-                                && LauncherNativeFourFolderHook.isCustomFolderInfo(
-                                        (View) chain.getThisObject(), args[2])) {
-                            applyWidgetGridSize(chain.getThisObject(),
-                                    (Integer) args[0], (Integer) args[1], args[2], args[4]);
-                        }
-                        return result;
-                    });
-        } catch (Throwable error) {
-            MainHook.log("[DC] 2x2 folder setupLayoutParam unavailable: " + error);
-        }
-
         HookUtil.hookMethod(cellLayout, "onLayout",
                 new Class<?>[]{boolean.class, int.class, int.class, int.class, int.class},
                 chain -> {
@@ -424,14 +367,9 @@ final class HomeGridCellGeometryHook {
             HomeGridInstallConfig current = installConfig;
             if (current == null || !current.enabled || info == null || layoutParams == null) return;
 
-            // A native enlarged folder with persisted 2x2 spans is also
-            // a multi-cell allocation. Never apply this to a 1x1 FolderInfo:
-            // that must first go through Launcher.convertIconSize(21).
-            if (!isWidget(info) && !(cellLayout instanceof View
-                    && LauncherNativeFourFolderHook.isCustomFolderInfo(
-                            (View) cellLayout, info))) {
-                return;
-            }
+            // This owner adjusts widgets only. The native 2x2 folder owns
+            // its frame, measurement, and post-layout reconciliation.
+            if (!isWidget(info)) return;
             int spanX = HookUtil.getIntField(info, "spanX");
             int spanY = HookUtil.getIntField(info, "spanY");
             if (!WidgetGridSizing.isSupportedSpec(spanX, spanY)
@@ -484,10 +422,7 @@ final class HomeGridCellGeometryHook {
                 View child = cellLayout.getChildAt(i);
                 if (child == null || child.getVisibility() == View.GONE) continue;
                 Object info = child.getTag();
-                if (info == null || (!isWidget(info)
-                        && !LauncherNativeFourFolderHook.isCustomFolder(child))) {
-                    continue;
-                }
+                if (info == null || !isWidget(info)) continue;
 
                 Object paramsObject = child.getLayoutParams();
                 if (paramsObject == null) continue;
