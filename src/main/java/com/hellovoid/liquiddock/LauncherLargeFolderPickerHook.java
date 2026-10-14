@@ -204,6 +204,7 @@ final class LauncherLargeFolderPickerHook {
         if (existing != null && existing.option.getParent() != null) {
             existing.info = info;
             existing.selected = isMarked(sheet.getContext(), info);
+            if (existing.selected) clearStockChecks(owner);
             updateAppearance(existing);
             return;
         }
@@ -244,14 +245,7 @@ final class LauncherLargeFolderPickerHook {
             HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
             // The fourth tile is on its own second line. It is not a child
             // of the stock radio group, so explicitly clear native checks.
-            for (String field : new String[]{
-                    "mDefaultFolderCheckBox", "mBigFolderCheckBox2x2_4",
-                    "mBigFolderCheckBox2x2_9"}) {
-                Object stock = getFieldOrNull(owner, field);
-                if (stock instanceof android.widget.Checkable) {
-                    ((android.widget.Checkable) stock).setChecked(false);
-                }
-            }
+            clearStockChecks(owner);
             updateAppearance(state);
             Api101Bridge.log(TAG + " fourth folder-size tile clicked");
         });
@@ -283,12 +277,24 @@ final class LauncherLargeFolderPickerHook {
                 }
             }
             STATES.put(owner, state);
+            if (state.selected) clearStockChecks(owner);
             updateAppearance(state);
             panel.requestLayout();
             Api101Bridge.log(TAG + " fourth folder-size tile in second row");
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " fourth option injection failed: " + error);
             if (newOption.getParent() == panel) panel.removeView(newOption);
+        }
+    }
+
+    private static void clearStockChecks(Object sheet) {
+        for (String field : new String[]{
+                "mDefaultFolderCheckBox", "mBigFolderCheckBox2x2_4",
+                "mBigFolderCheckBox2x2_9"}) {
+            Object stock = getFieldOrNull(sheet, field);
+            if (stock instanceof android.widget.Checkable) {
+                ((android.widget.Checkable) stock).setChecked(false);
+            }
         }
     }
 
