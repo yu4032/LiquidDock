@@ -24,6 +24,23 @@ public class NativeFourFolderOwnershipContractTest {
                 grid.contains("boolean.class, paramsType"));
     }
 
+    @Test public void committedDestinationPageReconcilesEditModeMoves() throws Exception {
+        String nativeHook = source("LauncherNativeFourFolderHook.java");
+        // A destination page may persist the new item position without another
+        // CellLayout.onLayout. Reconcile only after a committed OEM layout.
+        assertTrue(nativeHook.contains("HookUtil.hookMethod(cell, \"saveCurrentLayout\""));
+        assertTrue(nativeHook.contains("Boolean.TRUE.equals(chain.getArg(1))"));
+        assertTrue(nativeHook.contains("scheduleCommittedFolderReconcile("));
+        assertTrue(nativeHook.contains("page.postOnAnimation(() -> reconcileCommittedFolderPage(page))"));
+        assertTrue(nativeHook.contains("alignNativeFolderToWidget(page, folder)"));
+        assertTrue(nativeHook.contains("if (isDragging(lp)) {"));
+        assertTrue("Do not add time-based workspace refreshes",
+                !nativeHook.contains("postDelayed("));
+        String committed = source("HomeGridCommittedLayoutCaptureHook.java");
+        assertTrue("Reuse the OEM's existing persisted-layout boundary",
+                committed.contains("saveCurrentLayout"));
+    }
+
     @Test public void nativeFolderHasOneGridPolicyAndIndependentPickerInstallation() throws Exception {
         String nativeHook = source("LauncherNativeFourFolderHook.java");
         assertTrue(nativeHook.contains("NativeFourFolderFramePolicy.resolve("));
