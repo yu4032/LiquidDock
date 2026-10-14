@@ -156,6 +156,7 @@ public final class ModuleMain extends XposedModule {
                     // ShortcutInfo renderer; do not install the historical
                     // FolderIcon2x2_4 count or OEM widget-size overrides.
                     LauncherFourGridLayoutHook.install(classLoader);
+                    LauncherFourGridAnimationHook.install(classLoader);
                 } catch (Throwable error) {
                     Api101Bridge.log("[DC][FolderFour] independent bootstrap failed", error);
                 }
