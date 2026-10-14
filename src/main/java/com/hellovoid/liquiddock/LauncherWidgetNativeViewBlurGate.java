@@ -8,28 +8,39 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Owns the native MiViewBlurMode output of glass-backed Launcher widget hosts.
+ * Owns the native MiViewBlurMode output for glass-backed widgets and folder icons.
  *
- * <p>Launcher 4.50's BlurUtilities.setWidgetOrMaMlBlur() sets View.setMiViewBlurMode(1);
- * it does NOT use setMiSelfBlur. Leave the native blend list/radius untouched and hand those
- * values back through Launcher BlurUtilities when glass releases ownership.
+ * <p>Launcher 4.50 configures material mode, blend colors, outline and radius through
+ * its own BlurUtilities. LiquidDock suppresses only the final View blur output for an
+ * explicitly claimed host; it never destroys the vendor configuration. Widget and folder
+ * releases both use their respective Launcher material initializer.
  */
 final class LauncherWidgetNativeViewBlurGate {
     private static final String TAG = "[DC][WidgetViewBlur]";
     private static final Map<View, State> STATES =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, FolderState> FOLDER_STATES =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<Boolean> OUR_SETTER = new ThreadLocal<>();
+    private static final ThreadLocal<Boolean> FOLDER_REBIND = new ThreadLocal<>();
 
     private static Method setViewBlurMode;
     private static Method isWidgetBlurSupported;
     private static Method supportsWidgetBackgroundBlur;
     private static Method setWidgetBlurIfSupported;
     private static Method setMaMlBlurIfSupported;
+    private static Method setFolderIconBlur;
     private static Class<?> mamlViewClass;
     private static boolean installed;
 
     private static final class State {
         boolean claimed;
+    }
+
+    private static final class FolderState {
+        boolean claimed;
+        // Latest actual Launcher material request, not a snapshot of rendered properties.
+        Object[] latestVendorCall;
     }
 
     private LauncherWidgetNativeViewBlurGate() {}
@@ -64,13 +75,22 @@ final class LauncherWidgetNativeViewBlurGate {
                 synchronized (STATES) {
                     state = STATES.get(view);
                 }
-                if (state == null) return chain.proceed(args);
-
-                synchronized (state) {
-                    if (!state.claimed) return chain.proceed(args);
+                if (state != null) {
+                    synchronized (state) {
+                        if (state.claimed) return chain.proceed(new Object[]{0});
+                    }
                 }
-                // Material remains opted in on the vendor side; only suppress RenderNode output.
-                return chain.proceed(new Object[]{0});
+                FolderState folder;
+                synchronized (FOLDER_STATES) {
+                    folder = FOLDER_STATES.get(view);
+                }
+                if (folder != null) {
+                    synchronized (folder) {
+                        if (folder.claimed) return chain.proceed(new Object[]{0});
+                    }
+                }
+                // Unowned Views and Launcher lifecycle clears always pass through unchanged.
+                return chain.proceed(args);
             });
 
             setViewBlurMode = nativeSetter;
@@ -80,10 +100,99 @@ final class LauncherWidgetNativeViewBlurGate {
             setMaMlBlurIfSupported = restoreMaml;
             mamlViewClass = mamlView;
             installed = true;
-            MainHook.log(TAG + " Launcher 4.50 native MiViewBlurMode ownership installed");
+            MainHook.log(TAG + " Launcher 4.50 widget/folder native MiViewBlurMode gate installed");
         } catch (Throwable error) {
             // Do not clear mode/radius/blend lists if the verified native boundary is unavailable.
             MainHook.log(TAG + " native view-blur ownership unavailable: " + error);
+        }
+    }
+
+    /**
+     * Folder materials use the exact same View setter gate as widgets, but not the
+     * widget supportBackgroundBlur predicate (folder icons have no MIUIWidgetBasicInfo).
+     */
+    static void installFolderInitializer(Method vendorInitializer) {
+        if (installed && vendorInitializer != null) setFolderIconBlur = vendorInitializer;
+    }
+
+    static boolean isRestoringFolder() {
+        return Boolean.TRUE.equals(FOLDER_REBIND.get());
+    }
+
+    static boolean claimFolder(View material) {
+        if (!installed || material == null) return false;
+        FolderState state;
+        synchronized (FOLDER_STATES) {
+            state = FOLDER_STATES.get(material);
+            if (state == null) {
+                state = new FolderState();
+                FOLDER_STATES.put(material, state);
+            }
+        }
+        synchronized (state) {
+            if (state.claimed) return true;
+            state.claimed = true;
+        }
+        // Only mute the actual RenderNode blur output; native mode/outline/blend
+        // inputs stay under Launcher control and are updated by its initializer.
+        if (!setNativeMode(material, 0)) {
+            synchronized (FOLDER_STATES) {
+                if (FOLDER_STATES.get(material) == state) FOLDER_STATES.remove(material);
+            }
+            MainHook.log(TAG + " folder output claim failed material="
+                    + material.getClass().getSimpleName());
+            return false;
+        }
+        return true;
+    }
+
+    static void rememberFolderInitializer(View material, Object[] vendorArgs) {
+        if (material == null || vendorArgs == null || vendorArgs.length != 11
+                || vendorArgs[0] != material
+                || material.getMeasuredWidth() <= 0 || material.getMeasuredHeight() <= 0) {
+            return;
+        }
+        FolderState state;
+        synchronized (FOLDER_STATES) {
+            state = FOLDER_STATES.get(material);
+        }
+        if (state == null) return;
+        synchronized (state) {
+            if (state.claimed) state.latestVendorCall = vendorArgs.clone();
+        }
+    }
+
+    static void releaseFolder(View material) {
+        if (material == null) return;
+        FolderState state;
+        synchronized (FOLDER_STATES) {
+            state = FOLDER_STATES.remove(material);
+        }
+        if (state == null) return;
+        Object[] latestRequest;
+        synchronized (state) {
+            state.claimed = false;
+            latestRequest = state.latestVendorCall;
+            state.latestVendorCall = null;
+        }
+        // No invented blur colors or modes: restore by invoking the latest actual
+        // Launcher folder material request only if this View is still live.
+        if (!material.isAttachedToWindow() || latestRequest == null
+                || setFolderIconBlur == null) {
+            MainHook.log(TAG + " folder release handed to vendor lifecycle material="
+                    + material.getClass().getSimpleName()
+                    + " attached=" + material.isAttachedToWindow()
+                    + " requestAvailable=" + (latestRequest != null));
+            return;
+        }
+        FOLDER_REBIND.set(Boolean.TRUE);
+        try {
+            setFolderIconBlur.invoke(null, latestRequest);
+            MainHook.log(TAG + " folder material restored via Launcher initializer");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " folder material initializer failed: " + error);
+        } finally {
+            FOLDER_REBIND.remove();
         }
     }
 

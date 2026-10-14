@@ -105,6 +105,31 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(controller.contains("LauncherWidgetDarkContentAdapter.apply(host)"));
     }
 
+    @Test public void folderUsesTheSameNonDestructiveNativeOutputGateAsWidgets()
+            throws Exception {
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+        String gate = Files.readString(MAIN.resolve("LauncherWidgetNativeViewBlurGate.java"));
+        String vendor = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
+
+        // The vendor's setFolderIconBlur establishes mode, color blend and outline.
+        // LiquidDock may mute the owned RenderNode output, not skip initialization
+        // or erase vendor blur configuration on App -> HOME.
+        assertTrue(folder.contains("LauncherWidgetNativeViewBlurGate.install(classLoader)"));
+        assertTrue(folder.contains("installFolderInitializer(vendorInitializer)"));
+        assertTrue(folder.contains("rememberFolderInitializer("));
+        assertTrue(folder.contains("return chain.proceed(args)"));
+        assertTrue(folder.contains("LauncherWidgetNativeViewBlurGate.claimFolder(material)"));
+        assertTrue(folder.contains("LauncherWidgetNativeViewBlurGate.releaseFolder(material)"));
+        assertTrue(gate.contains("FOLDER_STATES"));
+        assertTrue(gate.contains("setFolderIconBlur.invoke(null, latestRequest)"));
+        assertTrue(gate.contains("folder.claimed"));
+        assertFalse(folder.contains("clearVendorBlur(material)"));
+        assertFalse(folder.contains("MiBlurBridge.clearContentBlur(material)"));
+        assertFalse(folder.contains("clearMiBackgroundBlendColor"));
+        assertFalse(vendor.contains("claimFolderMaterial"));
+        assertFalse(vendor.contains("MiBlurBridge.clearContentBlur(material)"));
+    }
+
     @Test public void folderHookTargetsConcreteLauncher450VariantsWithoutDrawableReplacement()
             throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
