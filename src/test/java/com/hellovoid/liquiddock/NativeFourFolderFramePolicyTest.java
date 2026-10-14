@@ -42,6 +42,22 @@ public class NativeFourFolderFramePolicyTest {
                 new int[]{0, 362}, 1, 0, 359, 359, 1000, 1000, 0, 0, 0, 0));
     }
 
+    @Test public void firstMeasureUsesRealTwoCellFrameBeforeParentLayout() {
+        // Fresh Launcher restore: CellLayout has built its mXs/mYs but
+        // has not yet received a final nonzero measured frame.
+        NativeFourFolderFramePolicy.Frame early =
+                NativeFourFolderFramePolicy.forInitialMeasure(
+                        new int[]{0, 359, 718}, new int[]{0, 362, 724},
+                        0, 0, 359, 359, 0, 0, 0, 0);
+        assertNotNull(early);
+        assertEquals(718, early.width);
+        assertEquals(721, early.height);
+        // The post-layout authority still rejects a parent with no bounds.
+        assertNull(NativeFourFolderFramePolicy.resolve(
+                new int[]{0, 359, 718}, new int[]{0, 362, 724},
+                0, 0, 359, 359, 0, 0, 0, 0, 0, 0));
+    }
+
     @Test public void portraitAndLandscapeCalculateFromTheirOwnGrid() {
         NativeFourFolderFramePolicy.Frame portrait = NativeFourFolderFramePolicy.resolve(
                 new int[]{0, 360}, new int[]{0, 358},
