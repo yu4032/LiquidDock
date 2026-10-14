@@ -423,7 +423,10 @@ final class LauncherNativeFourFolderHook {
             if (params.width != width || params.height != height) {
                 params.width = width;
                 params.height = height;
-                view.setLayoutParams(params);
+                // Parent is already measuring or laying out these native
+                // children. LayoutParams is a live object; do not call
+                // setLayoutParams() here (which requests another layout and
+                // can cause repeated measure passes during transitions).
             }
         }
     }
@@ -472,18 +475,74 @@ final class LauncherNativeFourFolderHook {
     private static final Set<View> MEASURE_LOGGED =
             Collections.newSetFromMap(new WeakHashMap<>());
 
+    /**
+     * Accept geometry only from the REAL workspace CellLayout. A folder
+     * opening/drag transition can temporarily assign full-screen
+     * LayoutParams (3008x1880 in the 2026-10-14 trace), which must NEVER
+     * be mistaken for the 2x2 widget allocation (718x721).
+     */
+    private static int[] trustedCellFrame(View folder) {
+        if (folder == null) return null;
+        ViewParent parent = folder.getParent();
+        if (!(parent instanceof ViewGroup)
+                || !"com.miui.home.launcher.CellLayout".equals(
+                        parent.getClass().getName())) {
+            return null;
+        }
+        ViewGroup cell = (ViewGroup) parent;
+        Object info = folder.getTag();
+        if (info == null) return null;
+        ViewGroup.LayoutParams lp = folder.getLayoutParams();
+        if (lp == null) return null;
+        try {
+            if (HookUtil.getBooleanField(lp, "isDragging")) return null;
+        } catch (Throwable ignored) {
+            // Some vendor LayoutParams variants do not expose isDragging.
+        }
+        try {
+            int[] xs = (int[]) HookUtil.getField(cell, "mXs");
+            int[] ys = (int[]) HookUtil.getField(cell, "mYs");
+            int cx = HookUtil.getIntField(info, "cellX");
+            int cy = HookUtil.getIntField(info, "cellY");
+            int cw = HookUtil.getIntField(cell, "mCellWidth");
+            int ch = HookUtil.getIntField(cell, "mCellHeight");
+            if (xs == null || ys == null || cx < 0 || cy < 0
+                    || cx + 1 >= xs.length || cy + 1 >= ys.length
+                    || cw <= 0 || ch <= 0) return null;
+            int[] allocation = {xs[cx], ys[cy],
+                    xs[cx + 1] + cw - xs[cx],
+                    ys[cy + 1] + ch - ys[cy]};
+            int[] frame = allocation;
+            if (lp instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams margins =
+                        (ViewGroup.MarginLayoutParams) lp;
+                frame = WidgetGridSizing.centeredFrame(allocation,
+                        margins.leftMargin, margins.topMargin,
+                        margins.rightMargin, margins.bottomMargin);
+            }
+            if (frame[2] <= 0 || frame[3] <= 0) return null;
+            // The two-cell rectangle must fit the actual desktop grid.
+            // A transient drag/fullscreen host is not a valid cell frame.
+            if (frame[0] < 0 || frame[1] < 0
+                    || frame[0] + frame[2] > cell.getWidth()
+                    || frame[1] + frame[3] > cell.getHeight()) {
+                // Parent may not have completed its first layout yet.
+                // Defer correction to CellLayout.onLayout instead of
+                // falling back to a screen-sized incoming MeasureSpec.
+                return null;
+            }
+            return frame;
+        } catch (Throwable error) {
+            Api101Bridge.log(TAG + " trusted CellLayout frame unavailable: " + error);
+            return null;
+        }
+    }
+
     private static int[] desiredFrame(View folder, int incomingWidthSpec,
             int incomingHeightSpec) {
-        ViewGroup.LayoutParams lp = folder.getLayoutParams();
-        int requestedWidth = View.MeasureSpec.getSize(incomingWidthSpec);
-        int requestedHeight = View.MeasureSpec.getSize(incomingHeightSpec);
-        // ItemIcon's LayoutParams comes from CellLayout.setupLayoutParam;
-        // it expresses the full multi-cell width, unlike the native
-        // wrap_content inner child measured later.
-        int width = lp != null && lp.width > 0 ? lp.width : requestedWidth;
-        int height = lp != null && lp.height > 0 ? lp.height : requestedHeight;
-        if (width <= 0 || height <= 0) return null;
-        return new int[]{width, height};
+        int[] frame = trustedCellFrame(folder);
+        if (frame == null) return null;
+        return new int[]{frame[2], frame[3]};
     }
 
     private static void traceMeasure(String stage, View view, int[] expected) {
@@ -523,31 +582,13 @@ final class LauncherNativeFourFolderHook {
     }
 
     private static void alignNativeFolderToWidget(ViewGroup workspace, View folder) {
-        Object info = folder.getTag();
+        // Measurement, final layout and the drawable children MUST use
+        // one identical CellLayout-derived rectangle. No LayoutParams
+        // fallback: those can become fullscreen during folder animations.
+        if (folder.getParent() != workspace) return;
+        int[] frame = trustedCellFrame(folder);
+        if (frame == null) return;
         ViewGroup.LayoutParams lp = folder.getLayoutParams();
-        if (lp == null) return;
-        try {
-            if (HookUtil.getBooleanField(lp, "isDragging")) return;
-        } catch (Throwable ignored) {}
-        int[] xs = (int[]) HookUtil.getField(workspace, "mXs");
-        int[] ys = (int[]) HookUtil.getField(workspace, "mYs");
-        int cx = HookUtil.getIntField(info, "cellX");
-        int cy = HookUtil.getIntField(info, "cellY");
-        int cw = HookUtil.getIntField(workspace, "mCellWidth");
-        int ch = HookUtil.getIntField(workspace, "mCellHeight");
-        if (xs == null || ys == null || cx < 0 || cy < 0
-                || cx + 1 >= xs.length || cy + 1 >= ys.length
-                || cw <= 0 || ch <= 0) return;
-        int[] allocation = {xs[cx], ys[cy],
-                xs[cx + 1] + cw - xs[cx],
-                ys[cy + 1] + ch - ys[cy]};
-        int[] frame = allocation;
-        if (lp instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams p = (ViewGroup.MarginLayoutParams) lp;
-            frame = WidgetGridSizing.centeredFrame(
-                    allocation, p.leftMargin, p.topMargin,
-                    p.rightMargin, p.bottomMargin);
-        }
         CUSTOM_SIZED.add(folder);
         int w = frame[2], h = frame[3];
         if (w <= 0 || h <= 0) return;
