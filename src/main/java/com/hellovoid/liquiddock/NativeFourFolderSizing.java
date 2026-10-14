@@ -37,6 +37,15 @@ final class NativeFourFolderSizing {
         return new Size(width, height, cellWidth, cellHeight, iconWidth, iconHeight);
     }
 
+    /**
+     * OEM LauncherIconImageView defaults to a 1x1 widget measurement whenever
+     * its custom fields are zero. Keep the corrected size only on the real,
+     * attached workspace folder, not the FolderAnimController's copy.
+     */
+    static boolean shouldPersistImageSize(boolean workspaceOwner, int width, int height) {
+        return workspaceOwner && width > 0 && height > 0;
+    }
+
     /** Parent 2x2 bounds may survive reparenting while a native child stays 1x1. */
     static boolean childNeedsLayout(int measuredW, int measuredH, int laidW, int laidH,
             int expectedW, int expectedH) {

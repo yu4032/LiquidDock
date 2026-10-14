@@ -145,6 +145,9 @@ public final class ModuleMain extends XposedModule {
                 // Establish the OEM background's stroke state before any
                 // folder view is inflated or rebound in the Launcher process.
                 LargeFolderNativeOutlineHook.install(classLoader);
+                // The picker and persisted span conversion are independent of
+                // vendor preview measurement APIs. Never hide these controls
+                // because an optional 4.50 geometry method is unavailable.
                 LauncherLargeFolderPickerHook.install(classLoader);
                 LauncherLargeFolderNativeSpanHook.install(classLoader);
                 LauncherNativeFourFolderHook.install(classLoader);
