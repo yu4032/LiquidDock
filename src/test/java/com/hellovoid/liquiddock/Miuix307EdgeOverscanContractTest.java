@@ -53,7 +53,8 @@ public class Miuix307EdgeOverscanContractTest {
                 view.contains("mapping.validSampleLeft, mapping.validSampleBottom")
                         && view.contains("mapping.validSampleRight, mapping.validSampleTop"));
         assertTrue("final coverage/scissor must remain tied to the visible Dock",
-                view.contains("producerCoverage = dock.coverage")
+                view.contains("currentSnapshot.coverage == dock.coverage")
+                        && view.contains("dock.coverage);")
                         && view.contains("mapping.validDockLeft * mapping.visibleWidth")
                         && view.contains("mapping.validDockBottom * mapping.visibleHeight"));
     }
