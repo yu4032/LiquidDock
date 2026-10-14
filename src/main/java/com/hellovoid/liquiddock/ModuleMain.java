@@ -145,6 +145,7 @@ public final class ModuleMain extends XposedModule {
                 LauncherLargeFolderPickerHook.install(classLoader);
                 LauncherLargeFolderNativeSpanHook.install(classLoader);
                 LauncherNativeFourFolderHook.install(classLoader);
+                LargeFolderNativeOutlineHook.install(classLoader);
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),

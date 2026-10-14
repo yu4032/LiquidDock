@@ -46,6 +46,19 @@ final class LauncherNativeFourFolderHook {
 
     private LauncherNativeFourFolderHook() {}
 
+    /** Called only while a native large folder is about to draw its title child. */
+    static void reconcileTitleDrawingBeforeChild(View folder, View child) {
+        if (!eligible(folder) || child == null) return;
+        Object candidate = HookUtil.tryInvoke(folder, "getTitleContainer").value();
+        if (candidate != child || trustedCellFrame(folder) == null) return;
+        boolean modelHidden = Boolean.TRUE.equals(
+                HookUtil.tryInvoke(folder.getTag(), "needHideTitleByFlags").value());
+        boolean show = LargeFolderTitlePolicy.shouldShow(true,
+                LauncherLargeFolderPickerHook.shouldShowTitle(folder.getContext(), folder.getTag()),
+                modelHidden);
+        if (show) restoreNativeTitleDrawing(folder, true);
+    }
+
     static void refreshTitle(Object info) {
         if (info == null) return;
         Object view = HookUtil.tryInvoke(info, "getBuddyIconView").value();
@@ -407,6 +420,26 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " FolderIcon#fromXml class unavailable");
             }
 
+            if (folderIcon != null) {
+                try {
+                    Class<?> dropTarget = vendorClass(loader, "com.miui.home.launcher.DropTarget");
+                    Class<?> dragObject = vendorClass(loader, "com.miui.home.launcher.DragObject");
+                    if (dropTarget != null && dragObject != null) {
+                        HookUtil.hook(folderIcon.getDeclaredMethod(
+                                "onDragCompleted", dropTarget, dragObject), chain -> {
+                            Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                            if (chain.getThisObject() instanceof View
+                                    && eligible((View) chain.getThisObject())) {
+                                queueTitleRestore((View) chain.getThisObject());
+                            }
+                            return result;
+                        });
+                        installedHooks++;
+                    }
+                } catch (Throwable ignored) {
+                    // Optional native completion signal; CellLayout fallbacks remain.
+                }
+            }
             if (cell != null) {
                 // onDropChild may run while native drag visual state is still
                 // active. The later OEM drop-completed callback is the correct
@@ -902,6 +935,7 @@ final class LauncherNativeFourFolderHook {
         NativeFourFolderSizing.Size size =
                 nativeSizing(folder, new int[]{frame[2], frame[3]});
         layoutFolderTitle(folder, size, frame[2], frame[3]);
+        folder.postInvalidateOnAnimation();
     }
 
     private static void layoutFolderTitle(View folder, NativeFourFolderSizing.Size size, int width, int height) {
@@ -962,6 +996,16 @@ final class LauncherNativeFourFolderHook {
         }
         // The vendor setters only change draw flags; they do not invalidate.
         // No repeated work is required once the drawing state is correct.
+        if (show) {
+            Object container = HookUtil.tryInvoke(folder, "getTitleContainer").value();
+            if (container instanceof View) {
+                View title = (View) container;
+                if (title.getAlpha() == 0f) {
+                    title.setAlpha(1f);
+                    changed = true;
+                }
+            }
+        }
         if (changed) folder.invalidate();
     }
 
