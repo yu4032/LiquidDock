@@ -493,7 +493,16 @@ final class HomeGridCellGeometryHook {
 
     private static boolean isWidget(Object info) {
         HookUtil.InvocationResult<Object> widgetResult = HookUtil.tryInvoke(info, "isWidget");
-        if (widgetResult.succeeded() && Boolean.TRUE.equals(widgetResult.value())) return true;
+        if (widgetResult.succeeded() && Boolean.TRUE.equals(widgetResult.value())) {
+            // An OEM isWidget() implementation must not turn a native 2x2
+            // FolderInfo into a second geometry writer.
+            try {
+                return !LargeFolderFootprintPolicy.supportsType(
+                        HookUtil.getIntField(info, "itemType"));
+            } catch (Throwable ignored) {
+                return true;
+            }
+        }
         try {
             int itemType = HookUtil.getIntField(info, "itemType");
             return itemType == 4 || itemType == 5 || itemType == 19;
