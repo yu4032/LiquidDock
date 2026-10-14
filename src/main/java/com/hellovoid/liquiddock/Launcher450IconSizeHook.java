@@ -76,14 +76,8 @@ final class Launcher450IconSizeHook {
                 Object owner = chain.getThisObject();
                 MeasureDomain domain = owner instanceof View
                         ? smallFolderMeasureDomain((View) owner) : null;
-                MeasureDomain previous = ACTIVE_DOMAIN.get();
-                if (domain != null) ACTIVE_DOMAIN.set(domain);
-                try {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                } finally {
-                    if (previous == null) ACTIVE_DOMAIN.remove();
-                    else ACTIVE_DOMAIN.set(previous);
-                }
+                return withMeasureDomain(domain,
+                        () -> chain.proceed(chain.getArgs().toArray(new Object[0])));
             });
             installFolderScaleTransactions(shortcutIcon, baseProgressShortcutIcon);
             installFolderPreviewMeasureTransaction(folderPreviewContainer);
@@ -111,7 +105,10 @@ final class Launcher450IconSizeHook {
 
     private static Object withMeasureDomain(MeasureDomain domain, DomainAction action) throws Throwable {
         MeasureDomain previous = ACTIVE_DOMAIN.get();
-        if (domain != null) ACTIVE_DOMAIN.set(domain);
+        // A FolderCling animation proxy is not a Workspace folder. Explicitly clear
+        // any enclosing icon/drag transaction so it cannot inherit scaled dimensions.
+        if (domain == null) ACTIVE_DOMAIN.remove();
+        else ACTIVE_DOMAIN.set(domain);
         try { return action.run(); }
         finally {
             if (previous == null) ACTIVE_DOMAIN.remove();
