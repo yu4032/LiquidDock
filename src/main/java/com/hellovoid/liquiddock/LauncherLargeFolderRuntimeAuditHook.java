@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -60,7 +59,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
                             ? HookUtil.tryInvoke(info, "getBuddyIconView").value() : null;
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     if (targeted && emitted < 24 && info != null) {
-                        Log.i(TAG, "fromXml-layout type=" + type
+                        Api101Bridge.log(TAG + "fromXml-layout type=" + type
                                 + " span=" + getInt(info, "spanX")
                                 + "x" + getInt(info, "spanY")
                                 + " requestedRes=" + chain.getArg(0)
@@ -73,7 +72,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
                     return result;
                 });
             } catch (Throwable error) {
-                Log.e(TAG, "fromXml-audit-unavailable " + error.getClass().getSimpleName());
+                Api101Bridge.log(TAG + "fromXml-audit-unavailable " + error.getClass().getSimpleName());
             }
             // The actual Android measure pass of the vendor's inner host,
             // instead of the visual hook's speculation about its presence.
@@ -91,7 +90,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     if (folder != null && getInt(folder.getTag(), "itemType") == 21
                             && emitted < 24) {
-                        Log.i(TAG, "content-measure span="
+                        Api101Bridge.log(TAG + "content-measure span="
                                 + getInt(folder.getTag(), "spanX") + "x"
                                 + getInt(folder.getTag(), "spanY")
                                 + " root=" + dims(folder)
@@ -102,13 +101,13 @@ final class LauncherLargeFolderRuntimeAuditHook {
                     return result;
                 });
             } catch (Throwable error) {
-                Log.e(TAG, "content-audit-unavailable " + error.getClass().getSimpleName());
+                Api101Bridge.log(TAG + "content-audit-unavailable " + error.getClass().getSimpleName());
             }
             installed = true;
-            Log.i(TAG, "audit-installed CellLayout#onLayout; build=folder4");
+            Api101Bridge.log(TAG + "audit-installed CellLayout#onLayout; build=folder4");
             return true;
         } catch (Throwable error) {
-            Log.e(TAG, "audit-install-failed " + error.getClass().getSimpleName()
+            Api101Bridge.log(TAG + "audit-install-failed " + error.getClass().getSimpleName()
                     + ": " + error.getMessage());
             return false;
         }
@@ -173,7 +172,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
                     if (LAST_SAMPLE.size() > 32) LAST_SAMPLE.clear();
                     emitted++;
                 }
-                Log.i(TAG, sample);
+                Api101Bridge.log(TAG + sample);
                 if (child.isAttachedToWindow() && (marked || spanX == 2 && spanY == 2)) {
                     child.post(() -> inspectAfterFrame(child, id));
                 }
@@ -188,7 +187,7 @@ final class LauncherLargeFolderRuntimeAuditHook {
         Object host = findDescendant(folder, NATIVE_CONTENT_CLASS, 0);
         Object background = fieldOrNull(folder, "mIconImageView");
         Object preview = fieldOrNull(folder, "mPreviewContainer");
-        Log.i(TAG, "after-layout folder=" + id + " root=" + dims(folder)
+        Api101Bridge.log(TAG + "after-layout folder=" + id + " root=" + dims(folder)
                 + " background=" + dims(background)
                 + " nativeHost=" + dims(host)
                 + " preview=" + dims(preview));
