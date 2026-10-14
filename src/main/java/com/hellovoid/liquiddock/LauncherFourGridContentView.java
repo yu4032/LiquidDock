@@ -3,9 +3,7 @@ package com.hellovoid.liquiddock;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
@@ -27,7 +25,6 @@ final class LauncherFourGridContentView extends FrameLayout {
     private final ImageView[] tiles = new ImageView[COUNT];
     private final Object[] shortcuts = new Object[COUNT];
     private ViewGroup folder;
-    private Object folderInfo;
     private int boundCount = -1;
 
     LauncherFourGridContentView(Context context) {
@@ -74,7 +71,6 @@ final class LauncherFourGridContentView extends FrameLayout {
 
     void bind(ViewGroup nativeFolder, Object info, boolean refresh) {
         folder = nativeFolder;
-        folderInfo = info;
         HookUtil.InvocationResult<Object> contentResult =
                 HookUtil.tryInvoke(info, "getContents");
         if (!contentResult.succeeded() || !(contentResult.value() instanceof List)) {
@@ -131,13 +127,13 @@ final class LauncherFourGridContentView extends FrameLayout {
             final Object expected = shortcut;
             Drawable cached = field(shortcut, "mIconDrawable") instanceof Drawable
                     ? (Drawable) field(shortcut, "mIconDrawable") : null;
-            tile.setImageDrawable(cached);
+            tile.setImageDrawable(copyDrawable(cached));
             if (iconCache != null) {
                 Consumer<Drawable> apply = drawable -> {
                     if (shortcuts[indexOf(tile)] != expected) return;
                     tile.post(() -> {
                         if (tile.getTag() == expected) {
-                            tile.setImageDrawable(drawable);
+                            tile.setImageDrawable(copyDrawable(drawable));
                         }
                     });
                 };
@@ -154,6 +150,12 @@ final class LauncherFourGridContentView extends FrameLayout {
                 tile.setContentDescription((CharSequence) title);
             }
         }
+    }
+
+    private Drawable copyDrawable(Drawable input) {
+        if (input == null) return null;
+        Drawable.ConstantState state = input.getConstantState();
+        return state == null ? input : state.newDrawable(getResources()).mutate();
     }
 
     private int indexOf(ImageView tile) {
