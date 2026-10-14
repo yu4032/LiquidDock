@@ -94,20 +94,36 @@ final class LauncherNativeFourFolderHook {
                         if (root == null || !eligible(root)) {
                             return chain.proceed(chain.getArgs().toArray(new Object[0]));
                         }
-                        int[] frame = desiredFrame(root,
+                        int[] frame = visualFrame(root,
                                 (Integer) chain.getArg(0),
                                 (Integer) chain.getArg(1));
                         if (frame == null) {
                             return chain.proceed(chain.getArgs().toArray(new Object[0]));
                         }
-                        Object result = chain.proceed(new Object[]{
-                                exact(frame[0]), exact(frame[1])});
-                        recordNativeVisualSize(root, surface, true);
-                        // The OEM drawable is intentionally smaller than
-                        // its preview (287 vs 359 on Launcher 4.50).
-                        // Defer final size until the parent has measured
-                        // BOTH surfaces and knows that native ratio.
-                        return result;
+                        NativeFourFolderSizing.Size size = nativeSizing(root, frame);
+                        if (size == null) return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        // FolderAnimController interpolates mCustomWidth/Height on
+                        // its own native copy. Preserve those per-frame values.
+                        if (workspaceSource(root) != root
+                                && (HookUtil.getIntField(surface, "mCustomWidth") > 0
+                                || HookUtil.getIntField(surface, "mCustomHeight") > 0)) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        frame = new int[]{size.backgroundWidth, size.backgroundHeight};
+                        // Launcher 4.50 explicitly supports per-view custom dimensions.
+                        // Let ImageView measure normally so its drawable matrix also updates.
+                        int previousWidth = HookUtil.getIntField(surface, "mCustomWidth");
+                        int previousHeight = HookUtil.getIntField(surface, "mCustomHeight");
+                        HookUtil.setIntField(surface, "mCustomWidth", frame[0]);
+                        HookUtil.setIntField(surface, "mCustomHeight", frame[1]);
+                        try {
+                            Object result = chain.proceed(new Object[]{exact(frame[0]), exact(frame[1])});
+                            forceMeasuredFrame(surface, frame, "image");
+                            return result;
+                        } finally {
+                            HookUtil.setIntField(surface, "mCustomWidth", previousWidth);
+                            HookUtil.setIntField(surface, "mCustomHeight", previousHeight);
+                        }
                     });
                     installedHooks++;
                     Api101Bridge.log(TAG + " installed native image onMeasure "
@@ -115,10 +131,57 @@ final class LauncherNativeFourFolderHook {
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native image onMeasure unavailable", error);
                 }
+                try {
+                    HookUtil.hook(nativeImageClass.getDeclaredMethod("getOriginalSize"), chain -> {
+                        View surface = (View) chain.getThisObject();
+                        View root = ancestorFolder(surface);
+                        if (root == null || !eligible(root)) return chain.proceed();
+                        int[] frame = visualFrame(root, 0, 0);
+                        NativeFourFolderSizing.Size size = frame == null ? null : nativeSizing(root, frame);
+                        return size == null ? chain.proceed()
+                                : new int[]{size.backgroundWidth, size.backgroundHeight};
+                    });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed native image getOriginalSize");
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " native original image size unavailable", error);
+                }
             }
             Class<?> nativePreviewClass = vendorClass(loader,
                     "com.miui.home.launcher.folder.FolderIconPreviewContainer2X2_4");
             if (nativePreviewClass != null) {
+                try {
+                    HookUtil.hook(nativePreviewClass.getDeclaredMethod("preMeasure2x2",
+                            int.class, int.class), chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        View preview = (View) chain.getThisObject();
+                        View root = ancestorFolder(preview);
+                        if (root == null || !eligible(root)) return result;
+                        int[] frame = visualFrame(root, (Integer) chain.getArg(0),
+                                (Integer) chain.getArg(1));
+                        if (frame == null) return result;
+                        NativeFourFolderSizing.Size size = nativeSizing(root, frame);
+                        if (size == null) return result;
+                        // On this APK preMeasure2x2 ignores its arguments and reads
+                        // GridConfig.getWidgetSize(1). Change its geometry inputs before
+                        // native preSetup2x2 builds the click/animation rectangles.
+                        preview.setPadding(size.insetX, size.insetY, size.insetX, size.insetY);
+                        HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeHor", size.edgeX);
+                        HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeVer", size.edgeY);
+                        HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerHor", size.gapX);
+                        HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerVer", size.gapY);
+                        HookUtil.setIntField(preview, "mLargeItemWith", size.largeWidth);
+                        HookUtil.setIntField(preview, "mLargeItemHeight", size.largeHeight);
+                        HookUtil.setIntField(preview, "mSmall2x2ItemMergeInner", size.smallGap);
+                        HookUtil.setIntField(preview, "mSmallItemWith", size.smallWidth);
+                        HookUtil.setIntField(preview, "mSmallItemHeight", size.smallHeight);
+                        return result;
+                    });
+                    installedHooks++;
+                    Api101Bridge.log(TAG + " installed native preview preMeasure2x2 geometry");
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " native preview geometry unavailable", error);
+                }
                 try {
                     java.lang.reflect.Method measure = HookUtil.findMethodExact(
                             nativePreviewClass, "onMeasure",
@@ -142,7 +205,7 @@ final class LauncherNativeFourFolderHook {
                         if (root == null || !eligible(root)) {
                             return chain.proceed(chain.getArgs().toArray(new Object[0]));
                         }
-                        int[] frame = desiredFrame(root,
+                        int[] frame = visualFrame(root,
                                 (Integer) chain.getArg(0),
                                 (Integer) chain.getArg(1));
                         if (frame == null) {
@@ -153,7 +216,7 @@ final class LauncherNativeFourFolderHook {
                         // are recomputed before their native onLayout2x2().
                         Object result = chain.proceed(new Object[]{
                                 exact(frame[0]), exact(frame[1])});
-                        recordNativeVisualSize(root, previewView, false);
+                        forceMeasuredFrame(previewView, frame, "preview");
                         return result;
                     });
                     installedHooks++;
@@ -261,7 +324,7 @@ final class LauncherNativeFourFolderHook {
                 // DeviceConfig. It may be only one cell due to wrap_content.
                 int[] frame = ROOT_FRAME.get();
                 if (frame == null) {
-                    frame = desiredFrame(host,
+                    frame = visualFrame(host,
                             (Integer) chain.getArg(0),
                             (Integer) chain.getArg(1));
                 }
@@ -280,7 +343,7 @@ final class LauncherNativeFourFolderHook {
                 int[] previous = NATIVE_SIZE.get();
                 NATIVE_SIZE.set(frame);
                 try {
-                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object result = chain.proceed(new Object[]{exact(frame[0]), exact(frame[1])});
                     // This parent onMeasure IS confirmed executing on the
                     // device. If a vendor subclass ignores the child hook
                     // (inlined/renamed in Launcher 4.50), reconcile measured
@@ -288,6 +351,13 @@ final class LauncherNativeFourFolderHook {
                     reconcileNativeMeasuredChildren(child, frame);
                     traceMeasure("inner", child, frame);
                     tracePreviewChildren("after-inner-measure", child);
+                    if (workspaceSource(host) != host && ANIMATION_LOGGED.add(child)) {
+                        NativeFourFolderSizing.Size size = nativeSizing(host, frame);
+                        Api101Bridge.log(TAG + " animation source=" + frame[0] + "x" + frame[1]
+                                + " background=" + (size == null ? "unavailable"
+                                : size.backgroundWidth + "x" + size.backgroundHeight)
+                                + " preview=" + child.getMeasuredWidth() + "x" + child.getMeasuredHeight());
+                    }
                     return result;
                 } finally {
                     if (previous == null) NATIVE_SIZE.remove();
@@ -373,7 +443,7 @@ final class LauncherNativeFourFolderHook {
             }
             installed = installedHooks > 0;
             Api101Bridge.log(TAG + " native folder hook coverage=" + installedHooks
-                    + "/8; class-specific compatibility requires runtime trace");
+                    + "/10; class-specific compatibility requires runtime trace");
             return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
@@ -412,103 +482,123 @@ final class LauncherNativeFourFolderHook {
 
     private static final Set<View> PREVIEW_LOGGED =
             Collections.newSetFromMap(new WeakHashMap<>());
-
-    // Per-native-folder intrinsic background/preview dimensions measured by
-    // Launcher itself, before LiquidDock applies a larger 2x2 widget frame.
-    // Weak keys keep old folder Views collectible after native conversion.
-    private static final java.util.Map<View, int[]> NATIVE_VISUAL_SIZES =
-            Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Set<View> RATIO_LOGGED =
+    private static final Set<View> ANIMATION_LOGGED =
             Collections.newSetFromMap(new WeakHashMap<>());
 
-    private static void recordNativeVisualSize(View root, View child, boolean image) {
-        int width = child.getMeasuredWidth();
-        int height = child.getMeasuredHeight();
-        if (width <= 0 || height <= 0) return;
-        synchronized (NATIVE_VISUAL_SIZES) {
-            int[] values = NATIVE_VISUAL_SIZES.get(root);
-            if (values == null) {
-                values = new int[4];
-                NATIVE_VISUAL_SIZES.put(root, values);
-            }
-            if (image) {
-                values[0] = width;
-                values[1] = height;
-            } else {
-                values[2] = width;
-                values[3] = height;
-            }
+    /** Resolve only the OEM animation copy's explicit original FolderInfo link. */
+    private static View workspaceSource(View folder) {
+        if (folder == null) return null;
+        ViewParent parent = folder.getParent();
+        if (parent != null && "com.miui.home.launcher.CellLayout".equals(parent.getClass().getName())) {
+            return folder;
         }
+        try {
+            Object originalInfo = HookUtil.getField(folder, "mCopiedInfo");
+            Object buddy = originalInfo == null ? null
+                    : HookUtil.tryInvoke(originalInfo, "getBuddyIconView").value();
+            if (buddy instanceof View && buddy != folder && eligible((View) buddy)) {
+                View source = (View) buddy;
+                ViewParent sourceParent = source.getParent();
+                if (sourceParent != null && "com.miui.home.launcher.CellLayout".equals(
+                        sourceParent.getClass().getName())) return source;
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
 
-    private static int[] backgroundFrame(View root, int[] frame) {
-        if (root == null || frame == null) return frame;
-        int[] nativeSizes = NATIVE_VISUAL_SIZES.get(root);
-        if (nativeSizes == null || nativeSizes[0] <= 0
-                || nativeSizes[1] <= 0 || nativeSizes[2] <= 0
-                || nativeSizes[3] <= 0) return frame;
-        int w = WidgetGridSizing.scaledPreviewPart(
-                frame[0], nativeSizes[0], nativeSizes[2]);
-        int h = WidgetGridSizing.scaledPreviewPart(
-                frame[1], nativeSizes[1], nativeSizes[3]);
-        if (RATIO_LOGGED.add(root)) {
-            Api101Bridge.log(TAG + " native visual inset background="
-                    + nativeSizes[0] + "x" + nativeSizes[1]
-                    + " preview=" + nativeSizes[2] + "x" + nativeSizes[3]
-                    + " targetBg=" + w + "x" + h
-                    + " previewFrame=" + frame[0] + "x" + frame[1]);
+    private static int[] visualFrame(View folder, int incomingWidth, int incomingHeight) {
+        View source = workspaceSource(folder);
+        return source == null ? null : desiredFrame(source, incomingWidth, incomingHeight);
+    }
+
+    private static NativeFourFolderSizing.Size nativeSizing(View root, int[] frame) {
+        root = workspaceSource(root);
+        if (root == null || !(root.getParent() instanceof View)) return null;
+        try {
+            Object grid = HookUtil.getField(root.getParent(), "mGridConfig");
+            int cellWidth = HookUtil.getIntField(root.getParent(), "mCellWidth");
+            int cellHeight = HookUtil.getIntField(root.getParent(), "mCellHeight");
+            int nativeIcon = ((Number) HookUtil.requireInvoke(grid, "getIconSize")).intValue();
+            int iconWidth = Launcher450IconSizeHook.workspaceIconSize(nativeIcon);
+            int iconHeight = iconWidth;
+            // Use an already measured ordinary workspace icon when available, so
+            // icon-size hooks and theme sizing participate in the four-icon bounds.
+            ViewGroup workspace = (ViewGroup) root.getParent();
+            int iconId = root.getResources().getIdentifier("icon_icon", "id", "com.miui.home");
+            for (int i = 0; i < workspace.getChildCount(); i++) {
+                View sibling = workspace.getChildAt(i);
+                if (sibling == root || sibling.getVisibility() != View.VISIBLE) continue;
+                String name = sibling.getClass().getName();
+                if (!name.endsWith(".ShortcutIcon") && !name.endsWith(".ProgressShortcutIcon")) continue;
+                View image = iconId == 0 ? null : sibling.findViewById(iconId);
+                if (image != null && image.getMeasuredWidth() > 0 && image.getMeasuredHeight() > 0) {
+                    iconWidth = image.getMeasuredWidth();
+                    iconHeight = image.getMeasuredHeight();
+                    break;
+                }
+            }
+            if (cellWidth <= 0 || cellHeight <= 0 || iconWidth <= 0 || iconHeight <= 0) return null;
+            return NativeFourFolderSizing.calculate(frame[0], frame[1], cellWidth, cellHeight,
+                    iconWidth, iconHeight);
+        } catch (Throwable error) {
+            if (WARNED.add(root)) Api101Bridge.log(TAG + " workspace icon bounds unavailable", error);
+            return null;
         }
-        return new int[]{w, h};
     }
 
     private static void resizeNativePreviewChildren(View container, int width, int height) {
         if (!(container instanceof ViewGroup) || width <= 0 || height <= 0) return;
+        NativeFourFolderSizing.Size size = nativeSizing(ancestorFolder(container), new int[]{width, height});
+        if (size == null) return;
         ViewGroup group = (ViewGroup) container;
-        View root = ancestorFolder(group);
-        int[] backgroundSize = backgroundFrame(root, new int[]{width, height});
         for (int i = 0; i < group.getChildCount(); i++) {
             View view = group.getChildAt(i);
             String name = view.getClass().getName();
-            boolean image = name.endsWith(".LauncherFolder2x2IconImageView");
+            boolean iconSurface = name.endsWith(".LauncherFolder2x2IconImageView");
             boolean preview = name.endsWith(".FolderIconPreviewContainer2X2_4");
-            if (!image && !preview) continue;
-            int[] size = preview ? new int[]{width, height} : backgroundSize;
+            if (!iconSurface && !preview) continue;
             ViewGroup.LayoutParams params = view.getLayoutParams();
             if (params == null) continue;
-            if (params.width != size[0] || params.height != size[1]) {
-                // Already inside native measure/layout. Changing the live
-                // params directly avoids a re-entrant requestLayout loop.
-                params.width = size[0];
-                params.height = size[1];
+            if (preview) {
+                params.width = width;
+                params.height = height;
+            } else {
+                params.width = size.backgroundWidth;
+                params.height = size.backgroundHeight;
+                // Parent is already measuring or laying out these native
+                // children. LayoutParams is a live object; do not call
+                // setLayoutParams() here (which requests another layout and
+                // can cause repeated measure passes during transitions).
             }
         }
     }
 
     private static void reconcileNativeMeasuredChildren(View container, int[] frame) {
         if (!(container instanceof ViewGroup) || frame[0] <= 0 || frame[1] <= 0) return;
+        NativeFourFolderSizing.Size size = nativeSizing(ancestorFolder(container), frame);
+        if (size == null) return;
         ViewGroup group = (ViewGroup) container;
-        View root = ancestorFolder(group);
-        int[] backgroundSize = backgroundFrame(root, frame);
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
             String name = child.getClass().getName();
             boolean preview = name.endsWith(".FolderIconPreviewContainer2X2_4");
             boolean image = name.endsWith(".LauncherFolder2x2IconImageView");
             if (!preview && !image) continue;
-            int[] target = preview ? frame : backgroundSize;
-            ViewGroup.LayoutParams params = child.getLayoutParams();
-            if (params != null) {
-                params.width = target[0];
-                params.height = target[1];
-            }
+            View root = ancestorFolder(container);
+            if (image && workspaceSource(root) != root
+                    && (HookUtil.getIntField(child, "mCustomWidth") > 0
+                    || HookUtil.getIntField(child, "mCustomHeight") > 0)) continue;
+            int[] target = preview ? frame : new int[]{size.backgroundWidth, size.backgroundHeight};
             if (child.getMeasuredWidth() == target[0]
                     && child.getMeasuredHeight() == target[1]) continue;
             if (preview) {
-                // Let native preMeasure2x2/preSetup2x2 place seven icons.
-                child.measure(exact(target[0]), exact(target[1]));
+                // Re-enter OEM preview onMeasure with the correct width
+                // so its own preMeasure2x2/preSetup2x2 recompute icon
+                // positions. Do not manually draw or scale any preview.
+                child.measure(exact(frame[0]), exact(frame[1]));
             }
             forceMeasuredFrame(child, target,
-                    preview ? "fallback-preview" : "native-inset-background");
+                    preview ? "fallback-preview" : "fallback-image");
         }
     }
 
@@ -723,6 +813,26 @@ final class LauncherNativeFourFolderHook {
             inner.measure(exact(w), exact(h));
             inner.layout(0, 0, w, h);
         }
+        layoutFolderTitle(folder, nativeSizing(folder, new int[]{w, h}), w, h);
+    }
+
+    private static void layoutFolderTitle(View folder, NativeFourFolderSizing.Size size, int width, int height) {
+        if (size == null) return;
+        Object value = HookUtil.tryInvoke(folder, "getTitleContainer").value();
+        if (!(value instanceof View)) return;
+        View title = (View) value;
+        // Preserve no-label mode and explicit per-item hide flags. Only
+        // override the OEM's automatic INVISIBLE rule for multi-cell items.
+        if (title.getVisibility() == View.GONE) return;
+        if (Boolean.TRUE.equals(HookUtil.tryInvoke(folder.getTag(), "needHideTitleByFlags").value())) return;
+        int top = size.insetY + size.backgroundHeight;
+        int available = height - top;
+        if (available <= 0) return;
+        title.setVisibility(View.VISIBLE);
+        title.measure(exact(size.backgroundWidth), View.MeasureSpec.makeMeasureSpec(available,
+                View.MeasureSpec.AT_MOST));
+        int left = (width - size.backgroundWidth) / 2;
+        title.layout(left, top, left + size.backgroundWidth, top + title.getMeasuredHeight());
     }
 
     private static int exact(int size) {
