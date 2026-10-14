@@ -148,6 +148,7 @@ public final class ModuleMain extends XposedModule {
                     LauncherLargeFolderPickerHook.install(classLoader);
                     LauncherLargeFolderNativeSpanHook.install(classLoader);
                     LauncherLargeFolderFourIconHook.install(classLoader);
+                    LauncherLargeFolderVisualHook.install(classLoader);
                 } catch (Throwable error) {
                     Api101Bridge.log("[DC][FolderFour] independent bootstrap failed", error);
                 }
