@@ -177,10 +177,10 @@ final class LauncherLargeFolderVisualHook {
                 Api101Bridge.log(TAG + " old buddy view compatibility: " + error);
             }
             installed = true;
-            Api101Bridge.log(TAG + " native large-folder measurement installed");
+            android.util.Log.i("LiquidDockFolder4", "visual-hook-installed");
             return true;
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + " native measurement unavailable: " + error);
+            android.util.Log.e("LiquidDockFolder4", "visual-hook-install-failed", error);
             return false;
         }
     }
