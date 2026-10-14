@@ -43,6 +43,19 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
         assertTrue(startup.contains("LauncherLargeFolderNativeSpanHook.install("));
         assertTrue(startup.contains("LauncherLargeFolderVisualHook.install("));
+        assertTrue(startup.contains("LauncherLargeFolderRuntimeAuditHook.install("));
+        String audit = Files.readString(MAIN.resolve("LauncherLargeFolderRuntimeAuditHook.java"));
+        assertTrue(audit.contains("CellLayout"));
+        assertTrue(audit.contains("\"onLayout\""));
+        assertTrue(audit.contains("itemType"));
+        assertTrue(audit.contains("marked="));
+        assertTrue(audit.contains("nativeHost="));
+        assertTrue(audit.contains("classMatch="));
+        assertTrue(audit.contains("after-layout folder="));
+        assertTrue(audit.contains("emitted >= 24"));
+        assertFalse(audit.contains("Bitmap"));
+        assertFalse(audit.contains("setScale"));
+
         String visual = Files.readString(MAIN.resolve("LauncherLargeFolderVisualHook.java"));
         assertTrue(visual.contains("\"onMeasure\""));
         assertTrue(visual.contains("\"getCellWidth\""));
