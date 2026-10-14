@@ -58,116 +58,127 @@ final class LauncherLargeFolderFourIconHook {
 
     static boolean install(ClassLoader classLoader, boolean featureEnabled) {
         if (!featureEnabled || classLoader == null) return false;
-        if (installed) return true;
+        if (installed) return enabled;
         try {
             Class<?> folderType = Class.forName(LARGE_FOLDER, false, classLoader);
             Class<?> fourFolderType = Class.forName(FOUR_FOLDER, false, classLoader);
             Class<?> smallFolderType = Class.forName(SMALL_FOLDER, false, classLoader);
             Class<?> previewType = Class.forName(FOUR_PREVIEW, false, classLoader);
-
-            // Resolve every member before installing any hook. An unknown Launcher
-            // variant must retain the original native layout.
-            Method inflate = HookUtil.findMethodExact(
-                    folderType, "onFinishInflate", new Class<?>[0]);
-            Method createOrRemove = HookUtil.findMethodExact(
-                    folderType, "createOrRemoveView", new Class<?>[0]);
-            Method bindClicks = HookUtil.findMethodExact(
-                    folderType, "addItemOnclickListener", new Class<?>[0]);
             Class<?> itemInfoType = Class.forName(
                     "com.miui.home.launcher.ItemInfo", false, classLoader);
-            Method rebind = HookUtil.findMethodExact(folderType, "rebindInfo",
-                    new Class<?>[]{itemInfoType, ViewGroup.class});
             Class<?> launcherType = Class.forName(
                     "com.miui.home.launcher.Launcher", false, classLoader);
             Class<?> folderInfoType = Class.forName(
                     "com.miui.home.launcher.FolderInfo", false, classLoader);
             Class<?> baseFolderType = Class.forName(
                     "com.miui.home.launcher.FolderIcon", false, classLoader);
-            Method fromXml = HookUtil.findMethodExact(baseFolderType, "fromXml",
-                    new Class<?>[]{int.class, launcherType, ViewGroup.class, folderInfoType});
-            Method bindFolderInfo = HookUtil.findMethodExact(baseFolderType, "bindFolderInfo",
-                    new Class<?>[]{launcherType, folderInfoType});
-            Method folderChanged = HookUtil.findMethodExact(
-                    folderInfoType, "notifyDataSetChanged", new Class<?>[0]);
-            Method setup = HookUtil.findMethodExact(
-                    previewType, "preSetup2x2", new Class<?>[0]);
 
-            HookUtil.hook(inflate, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (fourFolderType.isInstance(chain.getThisObject())) {
-                    configureFolder(chain.getThisObject());
-                }
-                return result;
-            });
-            HookUtil.hook(createOrRemove, chain -> {
-                if (fourFolderType.isInstance(chain.getThisObject())) {
-                    configureFolder(chain.getThisObject());
-                }
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-            });
-            HookUtil.hook(bindClicks, chain -> {
-                if (fourFolderType.isInstance(chain.getThisObject())) {
-                    configureFolder(chain.getThisObject());
-                }
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-            });
-            // Initial Workspace binding uses FolderIcon.fromXml() directly,
-            // not necessarily rebindInfo(). Cover both first placement and
-            // subsequent model rebinds before considering the feature installed.
-            HookUtil.hook(fromXml, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (result instanceof View) {
-                    if (fourFolderType.isInstance(result)) {
-                        configureFolder(result);
-                        scheduleNativeFootprintRepair((View) result);
-                    } else if (smallFolderType.isInstance(result)) {
-                        scheduleNativeFootprintRepair((View) result);
-                    }
-                }
-                return result;
-            });
-            // New folders created by dragging two shortcuts can use
-            // bindFolderInfo without the XML inflate path.
-            HookUtil.hook(bindFolderInfo, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                Object owner = chain.getThisObject();
-                if (owner instanceof View) scheduleNativeFootprintRepair((View) owner);
-                return result;
-            });
-            // An existing ordinary folder becomes eligible when its fourth
-            // shortcut is dropped in. No Launcher restart should be needed
-            // after that model event once the feature is installed.
-            HookUtil.hook(folderChanged, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                Object info = chain.getThisObject();
-                if (folderChildCount(info) == FOUR) {
-                    HookUtil.InvocationResult<Object> view =
-                            HookUtil.tryInvoke(info, "getBuddyIconView");
-                    if (view.succeeded() && view.value() instanceof View) {
-                        scheduleNativeFootprintRepair((View) view.value());
-                    }
-                }
-                return result;
-            });
-            HookUtil.hook(rebind, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                Object owner = chain.getThisObject();
-                if (fourFolderType.isInstance(owner) && owner instanceof View) {
-                    configureFolder(owner);
-                    scheduleNativeFootprintRepair((View) owner);
-                }
-                return result;
-            });
-            HookUtil.hook(setup, chain -> {
-                configurePreview(chain.getThisObject());
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-            });
-            enabled = true;
+            // Vendor 4.50 variants sometimes inline or rename individual methods.
+            // Do not let a missing optional lifecycle callback suppress all
+            // remaining hooks. Check minimum viable coverage before enabling.
+            boolean inflate = installOptional(folderType, "onFinishInflate",
+                    new Class<?>[0], chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (fourFolderType.isInstance(chain.getThisObject())) {
+                            configureFolder(chain.getThisObject());
+                        }
+                        return result;
+                    });
+            boolean createOrRemove = installOptional(folderType, "createOrRemoveView",
+                    new Class<?>[0], chain -> {
+                        if (fourFolderType.isInstance(chain.getThisObject())) {
+                            configureFolder(chain.getThisObject());
+                        }
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    });
+            boolean bindClicks = installOptional(folderType, "addItemOnclickListener",
+                    new Class<?>[0], chain -> {
+                        if (fourFolderType.isInstance(chain.getThisObject())) {
+                            configureFolder(chain.getThisObject());
+                        }
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    });
+            boolean setup = installOptional(previewType, "preSetup2x2",
+                    new Class<?>[0], chain -> {
+                        configurePreview(chain.getThisObject());
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    });
+
+            boolean fromXml = installOptional(baseFolderType, "fromXml",
+                    new Class<?>[]{int.class, launcherType, ViewGroup.class, folderInfoType},
+                    chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        if (result instanceof View) {
+                            if (fourFolderType.isInstance(result)) {
+                                configureFolder(result);
+                                scheduleNativeFootprintRepair((View) result);
+                            } else if (smallFolderType.isInstance(result)) {
+                                scheduleNativeFootprintRepair((View) result);
+                            }
+                        }
+                        return result;
+                    });
+            boolean bindFolder = installOptional(baseFolderType, "bindFolderInfo",
+                    new Class<?>[]{launcherType, folderInfoType},
+                    chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object owner = chain.getThisObject();
+                        if (owner instanceof View) scheduleNativeFootprintRepair((View) owner);
+                        return result;
+                    });
+            boolean folderChanged = installOptional(folderInfoType, "notifyDataSetChanged",
+                    new Class<?>[0], chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object info = chain.getThisObject();
+                        if (folderChildCount(info) == FOUR) {
+                            HookUtil.InvocationResult<Object> view =
+                                    HookUtil.tryInvoke(info, "getBuddyIconView");
+                            if (view.succeeded() && view.value() instanceof View) {
+                                scheduleNativeFootprintRepair((View) view.value());
+                            }
+                        }
+                        return result;
+                    });
+            boolean rebind = installOptional(folderType, "rebindInfo",
+                    new Class<?>[]{itemInfoType, ViewGroup.class},
+                    chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object owner = chain.getThisObject();
+                        if (fourFolderType.isInstance(owner) && owner instanceof View) {
+                            configureFolder(owner);
+                            scheduleNativeFootprintRepair((View) owner);
+                        }
+                        return result;
+                    });
+            // If preview or model conversion coverage is incomplete, fail closed.
+            // Individual callbacks remain registered but will return stock results.
+            enabled = setup && bindClicks && (inflate || createOrRemove)
+                    && (fromXml || bindFolder || folderChanged);
             installed = true;
-            MainHook.log(TAG + " native 2x2_4 four-icon preview enabled");
-            return true;
+            MainHook.log(TAG + " installed=" + enabled
+                    + " inflate=" + inflate
+                    + " previewCreate=" + createOrRemove
+                    + " click=" + bindClicks
+                    + " previewSetup=" + setup
+                    + " fromXml=" + fromXml
+                    + " bind=" + bindFolder
+                    + " changed=" + folderChanged
+                    + " rebind=" + rebind);
+            return enabled;
         } catch (Throwable error) {
             MainHook.log(TAG + " unavailable, preserving stock layout: " + error);
+            return false;
+        }
+    }
+
+    private static boolean installOptional(Class<?> owner, String name, Class<?>[] signature,
+                                           io.github.libxposed.api.XposedInterface.Hooker callback) {
+        try {
+            HookUtil.hook(HookUtil.findMethodExact(owner, name, signature), callback);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " optional " + owner.getSimpleName()
+                    + "#" + name + " unavailable: " + error);
             return false;
         }
     }
