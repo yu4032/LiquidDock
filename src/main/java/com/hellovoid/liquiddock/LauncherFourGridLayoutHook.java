@@ -1,0 +1,176 @@
+package com.hellovoid.liquiddock;
+
+import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.widget.FrameLayout;
+import android.widget.RelativeLayout;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
+
+/**
+ * Binds the fourth folder style to a NEW layout tree, not to MIUI's
+ * FolderIcon2x2_4 preview layout and not to an upscaled FolderIcon1x1.
+ *
+ * Its original FolderIcon stays as a native workspace drag/folder-open host.
+ * CellLayout is the authority for its real 2x2 geometry and drag footprint.
+ */
+final class LauncherFourGridLayoutHook {
+    private static final String TAG = "LiquidDockFolder4";
+    private static final int FOUR_TYPE = 21;
+    private static final Map<ViewGroup, LauncherFourGridContentView> CONTENTS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, Integer> COVERED_VISIBILITY =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static boolean installed;
+
+    private LauncherFourGridLayoutHook() {}
+
+    static boolean install(ClassLoader loader) {
+        if (installed) return true;
+        if (loader == null) return false;
+        try {
+            Class<?> cellLayout = Class.forName(
+                    "com.miui.home.launcher.CellLayout", false, loader);
+            HookUtil.hook(cellLayout.getDeclaredMethod("onLayout",
+                    boolean.class, int.class, int.class, int.class, int.class), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object owner = chain.getThisObject();
+                if (owner instanceof ViewGroup) {
+                    inspect((ViewGroup) owner);
+                }
+                return result;
+            });
+            try {
+                Class<?> info = Class.forName(
+                        "com.miui.home.launcher.FolderInfo", false, loader);
+                HookUtil.hook(info.getDeclaredMethod("notifyDataSetChanged"), chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object changed = chain.getThisObject();
+                    HookUtil.InvocationResult<Object> bound =
+                            HookUtil.tryInvoke(changed, "getBuddyIconView");
+                    if (bound.succeeded() && bound.value() instanceof ViewGroup) {
+                        ViewGroup root = (ViewGroup) bound.value();
+                        LauncherFourGridContentView content = CONTENTS.get(root);
+                        if (content != null) {
+                            root.post(() -> content.bind(root, changed, true));
+                        }
+                    }
+                    return result;
+                });
+            } catch (Throwable error) {
+                Log.w(TAG, "four-grid-data-refresh-unavailable " + error.getClass().getSimpleName());
+            }
+            installed = true;
+            Log.i(TAG, "four-grid-independent-layout-installed");
+            return true;
+        } catch (Throwable error) {
+            Log.e(TAG, "four-grid-layout-install-failed", error);
+            return false;
+        }
+    }
+
+    private static void inspect(ViewGroup cell) {
+        for (int i = 0; i < cell.getChildCount(); i++) {
+            View root = cell.getChildAt(i);
+            if (!(root instanceof ViewGroup)) continue;
+            Object info = root.getTag();
+            ViewGroup nativeFolder = (ViewGroup) root;
+            LauncherFourGridContentView previous = CONTENTS.get(nativeFolder);
+            if (eligible(root, info)) {
+                attach(nativeFolder, info);
+            } else if (previous != null) {
+                CONTENTS.remove(nativeFolder);
+                nativeFolder.removeView(previous);
+                restoreOriginal(nativeFolder);
+                Log.i(TAG, "four-grid-restored-native-layout");
+            }
+        }
+    }
+
+    private static boolean eligible(View root, Object info) {
+        if (info == null) return false;
+        String name = root.getClass().getName();
+        if (!name.contains("FolderIcon")) return false;
+        try {
+            return HookUtil.getIntField(info, "itemType") == FOUR_TYPE
+                    && HookUtil.getIntField(info, "spanX") == 2
+                    && HookUtil.getIntField(info, "spanY") == 2
+                    && LauncherLargeFolderPickerHook.isMarked(root.getContext(), info);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static void attach(ViewGroup folder, Object info) {
+        LauncherFourGridContentView content = CONTENTS.get(folder);
+        if (content == null) {
+            content = new LauncherFourGridContentView(folder.getContext());
+            ViewGroup.LayoutParams lp = createParams(folder);
+            // Native title remains on the existing FolderIcon. The custom
+            // content fills the same full-size FolderIcon host but reserves
+            // the native title band in its own 2x2 measurement.
+            folder.addView(content, lp);
+            CONTENTS.put(folder, content);
+            hideOriginal(folder);
+            Log.i(TAG, "four-grid-attached root=" + folder.getClass().getName()
+                    + " rootSize=" + folder.getWidth() + "x" + folder.getHeight()
+                    + " content=" + content.getClass().getSimpleName());
+        }
+        content.bind(folder, info, false);
+        // We never scale the old 1x1 image. The independent layout is measured
+        // by the real 2x2 FolderIcon host on its next native layout pass.
+        if (content.getWidth() != folder.getWidth()
+                || content.getHeight() != folder.getHeight()) {
+            content.requestLayout();
+        }
+    }
+
+    private static ViewGroup.LayoutParams createParams(ViewGroup folder) {
+        if (folder instanceof RelativeLayout) {
+            RelativeLayout.LayoutParams p = new RelativeLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+            p.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+            p.addRule(RelativeLayout.CENTER_HORIZONTAL);
+            return p;
+        }
+        if (folder instanceof FrameLayout) {
+            return new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+        }
+        return new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT);
+    }
+
+    private static void hideOriginal(ViewGroup folder) {
+        Object target = field(folder, "mIconContainer");
+        if (target instanceof View) {
+            View iconContainer = (View) target;
+            COVERED_VISIBILITY.put(iconContainer, iconContainer.getVisibility());
+            iconContainer.setVisibility(View.INVISIBLE);
+        } else {
+            // The native field may be renamed: still show the independent
+            // background and icons, never mutate an unknown view hierarchy.
+            Log.w(TAG, "four-grid-native-icon-container-not-found");
+        }
+    }
+
+    private static void restoreOriginal(ViewGroup folder) {
+        Object target = field(folder, "mIconContainer");
+        if (!(target instanceof View)) return;
+        View iconContainer = (View) target;
+        Integer previous = COVERED_VISIBILITY.remove(iconContainer);
+        if (previous != null) iconContainer.setVisibility(previous);
+    }
+
+    private static Object field(Object target, String name) {
+        try { return HookUtil.getField(target, name); }
+        catch (Throwable ignored) { return null; }
+    }
+}
