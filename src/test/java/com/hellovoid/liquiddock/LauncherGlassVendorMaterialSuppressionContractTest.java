@@ -114,7 +114,7 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(gate.contains("host.getRootView() != workspaceRoot"));
         assertTrue(gate.contains("!LauncherGlassHierarchy.isWorkspace(host)"));
         assertTrue(gate.contains("if (STATES.containsKey(host)) continue"));
-        assertTrue(gate.contains("if (!isSupportedWidget(host)) continue"));
+        assertTrue(gate.contains("if (!isSupportedWidget(host) || GlassRuntimeState.isWidgetEnabled()) continue"));
         assertTrue(gate.contains("boolean rebound = restoreViaVendorUtilities(host)"));
         assertFalse(gate.contains("setNativeMode(host, vendorMode)"));
     }
