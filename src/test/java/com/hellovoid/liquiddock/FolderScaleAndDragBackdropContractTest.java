@@ -28,7 +28,7 @@ public class FolderScaleAndDragBackdropContractTest {
         assertFalse(startup.contains("LauncherLargeFolderVisualHook.install("));
         assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
 
-        assertTrue(holder.contains("\"CellLayout\""));
+        assertTrue(holder.contains("com.miui.home.launcher.CellLayout"));
         assertTrue(holder.contains("\"onLayout\""));
         assertTrue(holder.contains("LauncherLargeFolderPickerHook.isMarked("));
         assertTrue(holder.contains("LauncherFourGridContentView("));
