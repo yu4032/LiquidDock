@@ -19,7 +19,15 @@ import java.util.WeakHashMap;
 
 /** One transparent static Launcher glass output for an entire stable Launcher root. */
 final class LauncherGlassStaticLayer extends TextureView implements TextureView.SurfaceTextureListener {
-    private static final WeakHashMap<View, LauncherGlassStaticLayer> BY_ROOT = new WeakHashMap<>();
+    // Root owns this TextureView as a child. Weak values avoid retaining the root
+    // through the static registry's layer-to-parent path.
+    private static final WeakHashMap<View, WeakReference<LauncherGlassStaticLayer>> BY_ROOT =
+            new WeakHashMap<>();
+
+    private static LauncherGlassStaticLayer layerOf(View root) {
+        WeakReference<LauncherGlassStaticLayer> reference = BY_ROOT.get(root);
+        return reference == null ? null : reference.get();
+    }
 
     private static final WeakHashMap<View, Long> UNLOCK_END_BY_ROOT = new WeakHashMap<>();
 
@@ -66,13 +74,13 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     static synchronized LauncherGlassStaticLayer acquire(View root, LauncherGlassSession session) {
         if (root == null || session == null || !(root instanceof ViewGroup)
                 || !root.isAttachedToWindow()) return null;
-        LauncherGlassStaticLayer existing = BY_ROOT.get(root);
+        LauncherGlassStaticLayer existing = layerOf(root);
         if (existing != null && !existing.disposed && existing.getParent() == root) return existing;
         ViewGroup rootGroup = (ViewGroup) root;
         LauncherGlassStaticLayer layer = new LauncherGlassStaticLayer(root.getContext(), root, session);
         rootGroup.addView(layer, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        BY_ROOT.put(root, layer);
+        BY_ROOT.put(root, new WeakReference<>(layer));
         Long endAt = UNLOCK_END_BY_ROOT.get(root);
         if (endAt != null) layer.startMotionReveal(endAt);
         MainHook.log("[DC][LauncherGlass] shared static root layer attached root="
@@ -81,12 +89,12 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     private static synchronized LauncherGlassStaticLayer find(View root) {
-        LauncherGlassStaticLayer layer = root != null ? BY_ROOT.get(root) : null;
+        LauncherGlassStaticLayer layer = root != null ? layerOf(root) : null;
         return layer != null && !layer.disposed ? layer : null;
     }
 
     private static synchronized void forget(View root, LauncherGlassStaticLayer layer) {
-        if (root != null && BY_ROOT.get(root) == layer) BY_ROOT.remove(root);
+        if (root != null && layerOf(root) == layer) BY_ROOT.remove(root);
     }
 
     static void onWorkspaceScrollMutation(View workspace, int beforeScrollX, int afterScrollX) {
