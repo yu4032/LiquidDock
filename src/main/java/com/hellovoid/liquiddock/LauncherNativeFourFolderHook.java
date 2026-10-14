@@ -496,9 +496,9 @@ final class LauncherNativeFourFolderHook {
                         loader, "com.miui.home.launcher.CellLayout$LayoutParams");
                 if (itemInfoClass != null && paramsClass != null) {
                     try {
-                        HookUtil.hook(cell.getDeclaredMethod("setupLayoutParam",
-                                int.class, int.class, itemInfoClass, boolean.class, paramsClass),
-                                chain -> {
+                        HookUtil.hookMethod(cell, "setupLayoutParam",
+                                new Class<?>[]{int.class, int.class, itemInfoClass,
+                                        boolean.class, paramsClass}, chain -> {
                                     Object[] args = chain.getArgs().toArray(new Object[0]);
                                     Object result = chain.proceed(args);
                                     prepareFolderLayoutParams(chain.getThisObject(),
@@ -514,7 +514,8 @@ final class LauncherNativeFourFolderHook {
                 // preview. Restore the previously working post-measure correction
                 // here rather than removing it under the single-owner refactor.
                 try {
-                    HookUtil.hook(cell.getDeclaredMethod("measureChild", View.class), chain -> {
+                    HookUtil.hookMethod(cell, "measureChild",
+                            new Class<?>[]{View.class}, chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         View child = (View) chain.getArg(0);
                         if (!eligible(child)) return result;
