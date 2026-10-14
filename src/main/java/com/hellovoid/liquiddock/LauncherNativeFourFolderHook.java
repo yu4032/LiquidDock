@@ -183,9 +183,9 @@ final class LauncherNativeFourFolderHook {
                     Api101Bridge.log(TAG + " native original image size unavailable", error);
                 }
             }
-            // Preview geometry is vendor-owned; hook each concrete preview type.
-            // Nine-preview uses a 3x3 grid and must not inherit four-preview's
-            // three-large + four-small parameters.
+            // Each OEM preview type owns its child count and positioning.
+            // Four-preview uses 3 large + 4 small; nine-preview uses
+            // 8 large + 4 small in the bottom-right cell.
             java.util.Set<java.lang.reflect.Method> hookedMeasures = new java.util.HashSet<>();
             java.util.Set<java.lang.reflect.Method> hookedPreMeasures = new java.util.HashSet<>();
             for (String previewName : new String[]{PREVIEW_FOUR, PREVIEW_NINE}) {
@@ -681,23 +681,24 @@ final class LauncherNativeFourFolderHook {
     }
 
     private static void applyNinePreviewGeometry(View preview, NativeFourFolderSizing.Size size) {
+        // OEM 2X2_9: 8 large icons + a 2x2 group of four smaller icons.
+        // Preserve the Launcher 4.50 preMeasure2x2 proportions, including
+        // its device-dependent edge percent and rectangular centering.
         NativeNineFolderSizing.Geometry nine = NativeNineFolderSizing.calculate(
-                size.backgroundWidth, size.backgroundHeight);
+                size.backgroundWidth, size.backgroundHeight,
+                "turner".equals(android.os.Build.DEVICE));
+        if (nine == null) return;
         try {
-        // These are the shared OEM geometry inputs. Let 2X2_9's own
-        // preSetup2x2/onLayout2x2 select and lay out its nine native children.
-        HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeHor", nine.edgeX);
-        HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeVer", nine.edgeY);
-        HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerHor", nine.gapX);
-        HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerVer", nine.gapY);
-        HookUtil.setIntField(preview, "mLargeItemWith", nine.iconWidth);
-        HookUtil.setIntField(preview, "mLargeItemHeight", nine.iconHeight);
-        HookUtil.setIntField(preview, "mSmall2x2ItemMergeInner", nine.gapX);
-        HookUtil.setIntField(preview, "mSmallItemWith", nine.iconWidth);
-        HookUtil.setIntField(preview, "mSmallItemHeight", nine.iconHeight);
+            HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeHor", nine.edgeX);
+            HookUtil.setIntField(preview, "mLarge2x2ItemMergeEdgeVer", nine.edgeY);
+            HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerHor", nine.gapX);
+            HookUtil.setIntField(preview, "mLarge2x2ItemMergeInnerVer", nine.gapY);
+            HookUtil.setIntField(preview, "mLargeItemWith", nine.largeWidth);
+            HookUtil.setIntField(preview, "mLargeItemHeight", nine.largeHeight);
+            HookUtil.setIntField(preview, "mSmall2x2ItemMergeInner", nine.smallGap);
+            HookUtil.setIntField(preview, "mSmallItemWith", nine.smallWidth);
+            HookUtil.setIntField(preview, "mSmallItemHeight", nine.smallHeight);
         } catch (Throwable error) {
-            // The 2X2_9 implementation is vendor-specific. If this APK lacks
-            // a shared geometry field, retain its original native layout.
             if (WARNED.add(preview)) {
                 Api101Bridge.log(TAG + " nine-preview geometry unsupported", error);
             }
