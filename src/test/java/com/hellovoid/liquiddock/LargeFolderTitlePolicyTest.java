@@ -11,18 +11,18 @@ public class LargeFolderTitlePolicyTest {
         assertFalse(LargeFolderTitlePolicy.shouldShow(false, true, false));
     }
 
-    @Test public void onlyOverrideNativeSpanInvisibleFromBothMeasureAndDraw() {
-        assertTrue(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
-                true, true, false, 4));
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
-                true, true, false, 8)); // No-word mode is a GONE decision.
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
-                true, true, false, 0));
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
-                true, false, false, 4));
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
-                true, true, true, 4));
-        assertFalse(LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(
-                false, true, false, 4));
+    @Test public void overrideOnlyNativeSpanSuppressionForEnabledRealFolder() {
+        assertTrue(LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(
+                true, true, false, false, false));
+        assertFalse(LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(
+                false, true, false, false, false));
+        assertFalse(LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(
+                true, false, false, false, false));
+        assertFalse(LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(
+                true, true, true, false, false));
+        assertFalse(LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(
+                true, true, false, true, false));
+        assertFalse(LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(
+                true, true, false, false, true));
     }
 }

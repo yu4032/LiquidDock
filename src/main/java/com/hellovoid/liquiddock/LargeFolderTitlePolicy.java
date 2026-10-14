@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** Per-folder title policy, independent of transient drag/view state. */
+/** Per-folder title policy; the native multi-span hide is one shared decision. */
 final class LargeFolderTitlePolicy {
     private LargeFolderTitlePolicy() {}
 
@@ -9,11 +9,12 @@ final class LargeFolderTitlePolicy {
     }
 
     /**
-     * OEM measurement AND draw hide every multi-cell ItemIcon via INVISIBLE=4.
-     * Do not override GONE=8: it is the platform no-word/hotseat policy.
+     * Only override Launcher 4.50's span>1 title suppression.
+     * Its no-word and hotseat branches must remain native (GONE).
      */
-    static boolean shouldRestoreAfterNativeVisibility(boolean realFolder, boolean userEnabled,
-            boolean hiddenByModel, int nativeVisibility) {
-        return nativeVisibility == 4 && shouldShow(realFolder, userEnabled, hiddenByModel);
+    static boolean shouldOverrideNativeSpanHide(boolean realFolder, boolean userEnabled,
+            boolean hiddenByModel, boolean noWord, boolean inHotseat) {
+        return shouldShow(realFolder, userEnabled, hiddenByModel)
+                && !noWord && !inHotseat;
     }
 }

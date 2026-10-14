@@ -308,38 +308,61 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " ItemIcon#onMeasure class unavailable");
             }
 
-            // Launcher 4.50 ItemIcon invokes executeChildrenVisibility not only
-            // from onMeasure, but AGAIN from onDraw before dispatchDraw.
-            // The native span>1 rule hides every real 2x2 title on each draw.
-            // Install one policy at the actual OEM decision boundary so both
-            // call sites agree, without a recurring post-frame visibility fix.
+            // Launcher 4.50 calls this private title visibility decision
+            // from BOTH onMeasure and onDraw. Intercept that decision once,
+            // leaving unrelated native items and no-word mode unchanged.
             if (itemIcon != null) {
                 try {
                     Class<?> gridConfig = Class.forName(
                             "com.miui.home.launcher.grid.GridConfig", false, loader);
                     java.lang.reflect.Method visibility = itemIcon.getDeclaredMethod(
                             "executeChildrenVisibility", gridConfig);
+                    java.lang.reflect.Method noWord = Class.forName(
+                            "com.miui.home.launcher.common.Utilities", false, loader)
+                            .getDeclaredMethod("isNoWordModel");
                     HookUtil.hook(visibility, chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         Object owner = chain.getThisObject();
-                        if (!(owner instanceof View)) return result;
+                        if (!(owner instanceof View)) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
                         View folder = (View) owner;
-                        // Exit immediately for all ordinary icons and folders.
-                        if (!nativeFolderClass(folder)) return result;
+                        // Every stock ItemIcon keeps the unmodified native path.
+                        if (!nativeFolderClass(folder) || !eligible(folder)) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        Object info = folder.getTag();
+                        HookUtil.InvocationResult<Object> hiddenResult =
+                                HookUtil.tryInvoke(info, "needHideTitleByFlags");
+                        HookUtil.InvocationResult<Object> hotseatResult =
+                                HookUtil.tryInvoke(folder, "isInHotSeat");
                         Object titleValue = HookUtil.tryInvoke(folder, "getTitleContainer").value();
-                        if (!(titleValue instanceof View)) return result;
-                        View title = (View) titleValue;
-                        // OEM no-word/hotseat uses GONE, which must be preserved.
-                        if (title.getVisibility() != View.INVISIBLE || !eligible(folder)) return result;
-                        boolean modelHidden = Boolean.TRUE.equals(HookUtil.tryInvoke(
-                                folder.getTag(), "needHideTitleByFlags").value());
-                        if (LargeFolderTitlePolicy.shouldRestoreAfterNativeVisibility(true,
+                        Object titleText = HookUtil.tryInvoke(folder, "getTitleView").value();
+                        if (!hiddenResult.succeeded() || !hotseatResult.succeeded()
+                                || !(titleValue instanceof View) || !(titleText instanceof View)) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        boolean noWordEnabled;
+                        try {
+                            noWordEnabled = Boolean.TRUE.equals(noWord.invoke(null));
+                        } catch (Throwable ignored) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        if (!LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(true,
                                 LauncherLargeFolderPickerHook.shouldShowTitle(
-                                        folder.getContext(), folder.getTag()),
-                                modelHidden, title.getVisibility())) {
+                                        folder.getContext(), info),
+                                Boolean.TRUE.equals(hiddenResult.value()), noWordEnabled,
+                                Boolean.TRUE.equals(hotseatResult.value()))) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        // This exact OEM method ONLY decides title visibility.
+                        // Bypass its span>1 INVISIBLE branch for a selected
+                        // folder. Reusing the same View state avoids setting
+                        // INVISIBLE then VISIBLE on every draw frame.
+                        View title = (View) titleValue;
+                        if (title.getVisibility() != View.VISIBLE) {
                             title.setVisibility(View.VISIBLE);
                         }
-                        return result;
+                        return null; // void OEM executeChildrenVisibility
                     });
                     installedHooks++;
                 } catch (Throwable error) {
