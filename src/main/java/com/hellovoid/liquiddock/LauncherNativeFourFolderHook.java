@@ -10,7 +10,6 @@ import android.view.ViewParent;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.hellovoid.liquiddock.config.ConfigSchema;
@@ -49,13 +48,6 @@ final class LauncherNativeFourFolderHook {
             Collections.newSetFromMap(new WeakHashMap<>());
     private static final Set<View> CUSTOM_SIZED =
             Collections.newSetFromMap(new WeakHashMap<>());
-    /** Geometry is inert until every required OEM capability has installed. */
-    private enum Capability {
-        IMAGE_MEASURE, ORIGINAL_IMAGE_SIZE, PREVIEW_PREMEASURE, PREVIEW_MEASURE,
-        DEVICE_CELL_WIDTH, DEVICE_WIDGET_SIZE, ROOT_MEASURE,
-        CONTENT_MEASURE, MODEL_BINDING, FOLDER_LAYOUT_PARAMS, FINAL_LAYOUT
-    }
-
     private static boolean installed;
     private static boolean installAttempted;
     private static volatile int previewScalePercent = NativeFolderPreviewScale.DEFAULT_PERCENT;
@@ -110,8 +102,8 @@ final class LauncherNativeFourFolderHook {
     static boolean install(ClassLoader loader) {
         if (installed || installAttempted || loader == null) return installed;
         try {
-            // Missing required methods must disable the whole custom folder
-            // pipeline, not leave an arbitrary subset of geometry hooks active.
+            // Launcher revisions may inline individual OEM helpers: install
+            // independently instead of disabling the entire custom folder.
             Class<?> cell = vendorClass(loader, "com.miui.home.launcher.CellLayout");
             Class<?> content = vendorClass(loader, CONTENT_HOST);
             Class<?> config = vendorClass(loader, "com.miui.home.launcher.DeviceConfig");
@@ -121,14 +113,9 @@ final class LauncherNativeFourFolderHook {
             Class<?> itemIcon = vendorClass(loader, "com.miui.home.launcher.ItemIcon");
             Class<?> nativeImageClass = vendorClass(loader,
                     "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView");
-            // Preflight the required Launcher ABI before installing any hooks.
-            // Missing mandatory anchors must not leave a half-installed folder pipeline.
-            if (!preflightGeometryAbi(loader, cell, content, config, folderIcon,
-                    launcher, infoType, itemIcon, nativeImageClass)) return false;
-            // If an individual hook later fails, its already registered siblings
-            // are inert. Never register duplicates on a second install call.
+            // A failed optional hook must not deactivate successfully installed
+            // peers. Avoid duplicate registration on repeated installation calls.
             installAttempted = true;
-            EnumSet<Capability> capabilities = EnumSet.noneOf(Capability.class);
             int installedHooks = 0;
 
             // Hook the OEM measurement boundary; LayoutParams alone do
@@ -187,7 +174,6 @@ final class LauncherNativeFourFolderHook {
                         }
                     });
                     installedHooks++;
-                    capabilities.add(Capability.IMAGE_MEASURE);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native image onMeasure unavailable", error);
                 }
@@ -202,7 +188,6 @@ final class LauncherNativeFourFolderHook {
                                 : new int[]{size.backgroundWidth, size.backgroundHeight};
                     });
                     installedHooks++;
-                    capabilities.add(Capability.ORIGINAL_IMAGE_SIZE);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native original image size unavailable", error);
                 }
@@ -212,8 +197,6 @@ final class LauncherNativeFourFolderHook {
             // 8 large + 4 small in the bottom-right cell.
             java.util.Set<java.lang.reflect.Method> hookedMeasures = new java.util.HashSet<>();
             java.util.Set<java.lang.reflect.Method> hookedPreMeasures = new java.util.HashSet<>();
-            int previewPreMeasureCount = 0;
-            int previewMeasureCount = 0;
             for (String previewName : new String[]{PREVIEW_FOUR, PREVIEW_NINE}) {
                 Class<?> previewType = vendorClass(loader, previewName);
                 if (previewType == null) continue;
@@ -243,7 +226,6 @@ final class LauncherNativeFourFolderHook {
                         });
                         installedHooks++;
                     }
-                    if (hookedPreMeasures.contains(pre)) previewPreMeasureCount++;
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native preview geometry unavailable " + previewName, error);
                 }
@@ -275,17 +257,9 @@ final class LauncherNativeFourFolderHook {
                         });
                         installedHooks++;
                     }
-                    if (hookedMeasures.contains(measure)) previewMeasureCount++;
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " native preview onMeasure unavailable " + previewName, error);
                 }
-            }
-
-            if (previewPreMeasureCount == 2) {
-                capabilities.add(Capability.PREVIEW_PREMEASURE);
-            }
-            if (previewMeasureCount == 2) {
-                capabilities.add(Capability.PREVIEW_MEASURE);
             }
 
             // FolderIcon#getSpanX/Y already returns FolderInfo.spanX/Y.
@@ -303,7 +277,6 @@ final class LauncherNativeFourFolderHook {
                 return Math.max(((Number) original).intValue(), minCellWidth);
             });
                     installedHooks++;
-                    capabilities.add(Capability.DEVICE_CELL_WIDTH);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " DeviceConfig#getCellWidth unavailable on this launcher", error);
                 }
@@ -337,7 +310,6 @@ final class LauncherNativeFourFolderHook {
                 }
             });
                     installedHooks++;
-                    capabilities.add(Capability.ROOT_MEASURE);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " ItemIcon#onMeasure unavailable on this launcher", error);
                 }
@@ -425,7 +397,6 @@ final class LauncherNativeFourFolderHook {
                 return ((long) size[0] << 32) | (size[1] & 0xffffffffL);
             });
                     installedHooks++;
-                    capabilities.add(Capability.DEVICE_WIDGET_SIZE);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " DeviceConfig#getMiuiWidgetSizeSpec unavailable on this launcher", error);
                 }
@@ -475,7 +446,6 @@ final class LauncherNativeFourFolderHook {
                 }
             });
                     installedHooks++;
-                    capabilities.add(Capability.CONTENT_MEASURE);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " LauncherFolder2x2IconContainer#onMeasure unavailable on this launcher", error);
                 }
@@ -490,7 +460,6 @@ final class LauncherNativeFourFolderHook {
                 try {
             HookUtil.hook(folderIcon.getDeclaredMethod("fromXml",
                     int.class, launcher, ViewGroup.class, infoType), chain -> {
-                if (!installed) return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 Object info = chain.getArg(3);
                 ViewGroup parent = (ViewGroup) chain.getArg(2);
                 if (info != null) {
@@ -515,7 +484,6 @@ final class LauncherNativeFourFolderHook {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
                     installedHooks++;
-                    capabilities.add(Capability.MODEL_BINDING);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " FolderIcon#fromXml unavailable on this launcher", error);
                 }
@@ -544,11 +512,6 @@ final class LauncherNativeFourFolderHook {
                                         return result;
                                     });
                             installedHooks++;
-                            // Launcher 4.50 can omit the four-arg overload; the
-                            // edit-aware five-arg signature is the required one.
-                            if (signature.length == 5) {
-                                capabilities.add(Capability.FOLDER_LAYOUT_PARAMS);
-                            }
                         } catch (Throwable error) {
                             Api101Bridge.log(TAG + " native folder setupLayoutParam unavailable", error);
                         }
@@ -603,73 +566,19 @@ final class LauncherNativeFourFolderHook {
                 return result;
             });
                     installedHooks++;
-                    capabilities.add(Capability.FINAL_LAYOUT);
                 } catch (Throwable error) {
                     Api101Bridge.log(TAG + " CellLayout#onLayout unavailable on this launcher", error);
                 }
             } else {
                 Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
             }
-            installed = capabilities.containsAll(EnumSet.allOf(Capability.class));
-            if (!installed) {
-                Api101Bridge.log(TAG + " required native 2x2 geometry capabilities absent: "
-                        + EnumSet.complementOf(capabilities)
-                        + "; " + installedHooks + " hooks inactive (fail closed)");
-                return false;
-            }
-            bindPreviewScale();
-            return true;
+            // Exactly the original independent OEM-hook activation contract.
+            installed = installedHooks > 0;
+            if (installed) bindPreviewScale();
+            return installed;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
             return false;
-        }
-    }
-
-    private static boolean preflightGeometryAbi(ClassLoader loader, Class<?> cell,
-            Class<?> content, Class<?> config, Class<?> folderIcon, Class<?> launcher,
-            Class<?> infoType, Class<?> itemIcon, Class<?> nativeImageClass) {
-        if (cell == null || content == null || config == null || folderIcon == null
-                || launcher == null || infoType == null || itemIcon == null
-                || nativeImageClass == null) {
-            Api101Bridge.log(TAG + " missing mandatory Launcher 4.50 geometry class; fail closed");
-            return false;
-        }
-        try {
-            requireNativeOverride(nativeImageClass, "onMeasure", int.class, int.class);
-            nativeImageClass.getDeclaredMethod("getOriginalSize");
-            requireNativeOverride(itemIcon, "onMeasure", int.class, int.class);
-            requireNativeOverride(content, "onMeasure", int.class, int.class);
-            config.getDeclaredMethod("getCellWidth");
-            config.getDeclaredMethod("getMiuiWidgetSizeSpec",
-                    int.class, int.class, boolean.class);
-            cell.getDeclaredMethod("onLayout",
-                    boolean.class, int.class, int.class, int.class, int.class);
-            folderIcon.getDeclaredMethod("fromXml",
-                    int.class, launcher, ViewGroup.class, infoType);
-            Class<?> itemInfoClass = Class.forName(
-                    "com.miui.home.launcher.ItemInfo", false, loader);
-            Class<?> cellParams = Class.forName(
-                    "com.miui.home.launcher.CellLayout$LayoutParams", false, loader);
-            // Only the edit-aware signature is guaranteed on Launcher 4.50.
-            cell.getDeclaredMethod("setupLayoutParam",
-                    int.class, int.class, itemInfoClass, boolean.class, cellParams);
-            for (String name : new String[]{PREVIEW_FOUR, PREVIEW_NINE}) {
-                Class<?> preview = Class.forName(name, false, loader);
-                requireNativeOverride(preview, "preMeasure2x2", int.class, int.class);
-                requireNativeOverride(preview, "onMeasure", int.class, int.class);
-            }
-            return true;
-        } catch (Throwable error) {
-            Api101Bridge.log(TAG + " required native folder geometry ABI missing; fail closed", error);
-            return false;
-        }
-    }
-
-    private static void requireNativeOverride(Class<?> owner, String method,
-            Class<?>... parameters) throws NoSuchMethodException {
-        java.lang.reflect.Method found = HookUtil.findMethodExact(owner, method, parameters);
-        if (!found.getDeclaringClass().getName().startsWith("com.miui.home.")) {
-            throw new NoSuchMethodException("vendor method missing: " + found);
         }
     }
 
@@ -1035,8 +944,7 @@ final class LauncherNativeFourFolderHook {
     }
 
     private static boolean eligible(View folder) {
-        if (!installed || !nativeFolderClass(folder)
-                || !isFourGridInfo(folder.getTag())) return false;
+        if (!nativeFolderClass(folder) || !isFourGridInfo(folder.getTag())) return false;
         int type = HookUtil.getIntField(folder.getTag(), "itemType");
         if (type == LargeFolderFootprintPolicy.FOUR
                 && !NATIVE_FOUR.equals(folder.getClass().getName())) return false;
