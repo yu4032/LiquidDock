@@ -49,6 +49,11 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("mXs"));
         assertTrue(nativeHook.contains("mYs"));
         assertTrue(nativeHook.contains("WidgetGridSizing.centeredFrame"));
+        assertFalse(nativeHook.contains("int side = Math.min(w, h)"));
+        assertTrue(nativeHook.contains("wrapperParams.width = w"));
+        assertTrue(nativeHook.contains("wrapperParams.height = h"));
+        assertTrue(nativeHook.contains("innerParams.width = w"));
+        assertTrue(nativeHook.contains("innerParams.height = h"));
         assertTrue(nativeHook.contains("preSetup2x2"));
         assertTrue(nativeHook.contains("onMeasureChild2x2"));
         assertFalse(nativeHook.contains("new ImageView("));
