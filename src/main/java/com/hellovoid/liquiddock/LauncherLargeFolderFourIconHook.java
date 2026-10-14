@@ -55,8 +55,8 @@ final class LauncherLargeFolderFourIconHook {
 
     private LauncherLargeFolderFourIconHook() {}
 
-    static boolean install(ClassLoader classLoader, boolean featureEnabled) {
-        if (!featureEnabled || classLoader == null) return false;
+    static boolean install(ClassLoader classLoader) {
+        if (classLoader == null) return false;
         if (installed) return enabled;
         try {
             Class<?> folderType = Class.forName(LARGE_FOLDER, false, classLoader);
