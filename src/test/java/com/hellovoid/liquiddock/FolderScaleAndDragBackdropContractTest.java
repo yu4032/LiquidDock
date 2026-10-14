@@ -42,8 +42,16 @@ public class FolderScaleAndDragBackdropContractTest {
         assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
         assertTrue(startup.contains("LauncherLargeFolderPickerHook.install("));
         assertTrue(startup.contains("LauncherLargeFolderNativeSpanHook.install("));
+        assertFalse(startup.contains("runtimeConfig.grid.largeFolderFourIcons"));
+        String schema = Files.readString(MAIN.resolve("config/ConfigSchema.java"));
+        assertFalse(schema.contains("LARGE_FOLDER_FOUR_ICONS"));
+
         String picker = Files.readString(MAIN.resolve("LauncherLargeFolderPickerHook.java"));
         assertTrue(picker.contains("\"initListener\""));
+        assertTrue(picker.contains("\"onAttachedToWindow\""));
+        assertTrue(picker.contains("findScrollView(sheet)"));
+        assertFalse(picker.contains("featureEnabled"));
+
         assertTrue(picker.contains("\"onClick\""));
         assertTrue(picker.contains("2×2 四宫格大文件夹"));
         assertTrue(picker.contains("mFolderPickerBody"));
