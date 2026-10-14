@@ -68,7 +68,10 @@ final class LauncherLargeFolderPickerHook {
         if (marked) edit.putBoolean(PREFIX + id, true);
         else edit.remove(PREFIX + id);
         edit.apply();
-        Api101Bridge.log(TAG + " folderId=" + id + " selected=" + marked);
+        android.util.Log.i("LiquidDockFolder4", "picker-confirm folder=" + id
+                + " selected=" + marked
+                + " type=" + getItemType(info)
+                + " span=" + getSpan(info, "spanX") + "x" + getSpan(info, "spanY"));
     }
 
     static boolean install(ClassLoader loader) {
@@ -148,7 +151,7 @@ final class LauncherLargeFolderPickerHook {
                 return result;
             });
             installed = true;
-            Api101Bridge.log(TAG + " native FolderSheet fourth-choice hook installed");
+            android.util.Log.i("LiquidDockFolder4", "picker-hook-installed");
             return true;
         } catch (Throwable error) {
             Api101Bridge.log(TAG + " native FolderSheet unsupported: " + error);
