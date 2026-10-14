@@ -6,6 +6,7 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.ViewOutlineProvider;
 import android.widget.ImageView;
 
 import java.lang.reflect.Method;
@@ -139,7 +140,8 @@ final class Launcher450FolderSizeDiagnostic {
                     .append(" cover=").append(viewInfo(cover));
             if (image != null) {
                 Outline outline = new Outline();
-                image.getOutline(outline);
+                ViewOutlineProvider provider = image.getOutlineProvider();
+                if (provider != null) provider.getOutline(image, outline);
                 Rect rect = new Rect();
                 result.append(" outlineRect=")
                         .append(outline.getRect(rect) ? rect.toShortString() : "nonRect")
