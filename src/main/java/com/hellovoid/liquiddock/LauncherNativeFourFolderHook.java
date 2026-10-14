@@ -101,8 +101,8 @@ final class LauncherNativeFourFolderHook {
     static boolean install(ClassLoader loader) {
         if (installed || loader == null) return installed;
         try {
-            // Launcher revisions may inline individual OEM helpers: install
-            // independently instead of disabling the entire custom folder.
+            // Vendor 4.50 may rename or inline *one* method. Never let
+            // that disable unrelated geometry, model and view binding hooks.
             Class<?> cell = vendorClass(loader, "com.miui.home.launcher.CellLayout");
             Class<?> content = vendorClass(loader, CONTENT_HOST);
             Class<?> config = vendorClass(loader, "com.miui.home.launcher.DeviceConfig");
@@ -487,83 +487,6 @@ final class LauncherNativeFourFolderHook {
                 Api101Bridge.log(TAG + " FolderIcon#fromXml class unavailable");
             }
 
-            // The original HomeGrid four-argument hook delegates marked-folder
-            // sizing here. This owner installs only the edit-aware OEM overload,
-            // so no method is intercepted twice.
-            if (cell != null) {
-                Class<?> itemInfoClass = vendorClass(loader, "com.miui.home.launcher.ItemInfo");
-                Class<?> paramsClass = vendorClass(
-                        loader, "com.miui.home.launcher.CellLayout$LayoutParams");
-                if (itemInfoClass != null && paramsClass != null) {
-                    try {
-                        HookUtil.hookMethod(cell, "setupLayoutParam",
-                                new Class<?>[]{int.class, int.class, itemInfoClass,
-                                        boolean.class, paramsClass}, chain -> {
-                                    Object[] args = chain.getArgs().toArray(new Object[0]);
-                                    Object result = chain.proceed(args);
-                                    prepareFolderLayoutParams(chain.getThisObject(),
-                                            (Integer) args[0], (Integer) args[1], args[2], args[4]);
-                                    return result;
-                                });
-                        installedHooks++;
-                    } catch (Throwable error) {
-                        Api101Bridge.log(TAG + " edit-aware folder setupLayoutParam unavailable", error);
-                    }
-                }
-                // OEM initial measurement can permanently cache a compact
-                // preview. Restore the previously working post-measure correction
-                // here rather than removing it under the single-owner refactor.
-                try {
-                    HookUtil.hookMethod(cell, "measureChild",
-                            new Class<?>[]{View.class}, chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        View child = (View) chain.getArg(0);
-                        if (!eligible(child)) return result;
-                        ViewGroup.LayoutParams params = child.getLayoutParams();
-                        Object info = child.getTag();
-                        if (params == null || info == null || isDragging(params)) return result;
-                        try {
-                            prepareFolderLayoutParams(chain.getThisObject(),
-                                    HookUtil.getIntField(info, "cellX"),
-                                    HookUtil.getIntField(info, "cellY"), info, params);
-                            if (params.width > 0 && params.height > 0
-                                    && (child.getMeasuredWidth() != params.width
-                                    || child.getMeasuredHeight() != params.height)) {
-                                child.measure(exact(params.width), exact(params.height));
-                            }
-                        } catch (Throwable error) {
-                            Api101Bridge.log(TAG + " native folder first measure unavailable", error);
-                        }
-                        return result;
-                    });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " CellLayout#measureChild unavailable", error);
-                }
-            }
-
-            if (cell != null) {
-                // The destination CellLayout can commit a cross-page edit-mode
-                // move without another onLayout pass. Reconcile only after the
-                // OEM has persisted the new model positions; never rely on a
-                // delayed whole-workspace refresh or source-page drop callback.
-                try {
-                    HookUtil.hookMethod(cell, "saveCurrentLayout",
-                            new Class<?>[]{boolean.class, boolean.class}, chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        if (Boolean.TRUE.equals(chain.getArg(1))
-                                && chain.getThisObject() instanceof ViewGroup) {
-                            scheduleCommittedFolderReconcile(
-                                    (ViewGroup) chain.getThisObject());
-                        }
-                        return result;
-                    });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " CellLayout committed folder sizing unavailable", error);
-                }
-            }
-
             if (cell != null) {
                 // OEM may leave the dragged FolderIcon root INVISIBLE after
                 // reattaching it to the desktop. The label itself is VISIBLE,
@@ -574,7 +497,6 @@ final class LauncherNativeFourFolderHook {
                         Object target = chain.getThisObject();
                         if (target instanceof ViewGroup) {
                             ViewGroup workspace = (ViewGroup) target;
-                            scheduleCommittedFolderReconcile(workspace);
                             for (int i = 0; i < workspace.getChildCount(); i++) {
                                 View child = workspace.getChildAt(i);
                                 if (!eligible(child)) continue;
@@ -618,7 +540,6 @@ final class LauncherNativeFourFolderHook {
             } else {
                 Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
             }
-            // Exactly the original independent OEM-hook activation contract.
             installed = installedHooks > 0;
             if (installed) bindPreviewScale();
             return installed;
@@ -912,78 +833,58 @@ final class LauncherNativeFourFolderHook {
         if (folder == null) return null;
         ViewParent parent = folder.getParent();
         if (!(parent instanceof ViewGroup)
-                || !"com.miui.home.launcher.CellLayout".equals(parent.getClass().getName())) {
+                || !"com.miui.home.launcher.CellLayout".equals(
+                        parent.getClass().getName())) {
             return null;
         }
+        ViewGroup cell = (ViewGroup) parent;
         Object info = folder.getTag();
+        if (info == null) return null;
         ViewGroup.LayoutParams lp = folder.getLayoutParams();
-        if (info == null || lp == null || isDragging(lp)) return null;
+        if (lp == null) return null;
         try {
-            return resolveCellFrame((ViewGroup) parent,
-                    HookUtil.getIntField(info, "cellX"),
-                    HookUtil.getIntField(info, "cellY"), lp, true);
+            if (HookUtil.getBooleanField(lp, "isDragging")) return null;
+        } catch (Throwable ignored) {
+            // Some vendor LayoutParams variants do not expose isDragging.
+        }
+        try {
+            int[] xs = (int[]) HookUtil.getField(cell, "mXs");
+            int[] ys = (int[]) HookUtil.getField(cell, "mYs");
+            int cx = HookUtil.getIntField(info, "cellX");
+            int cy = HookUtil.getIntField(info, "cellY");
+            int cw = HookUtil.getIntField(cell, "mCellWidth");
+            int ch = HookUtil.getIntField(cell, "mCellHeight");
+            if (xs == null || ys == null || cx < 0 || cy < 0
+                    || cx + 1 >= xs.length || cy + 1 >= ys.length
+                    || cw <= 0 || ch <= 0) return null;
+            int[] allocation = {xs[cx], ys[cy],
+                    xs[cx + 1] + cw - xs[cx],
+                    ys[cy + 1] + ch - ys[cy]};
+            int[] frame = allocation;
+            if (lp instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams margins =
+                        (ViewGroup.MarginLayoutParams) lp;
+                frame = WidgetGridSizing.centeredFrame(allocation,
+                        margins.leftMargin, margins.topMargin,
+                        margins.rightMargin, margins.bottomMargin);
+            }
+            if (frame[2] <= 0 || frame[3] <= 0) return null;
+            // The two-cell rectangle must fit the actual desktop grid.
+            // A transient drag/fullscreen host is not a valid cell frame.
+            if (frame[0] < 0 || frame[1] < 0
+                    || frame[0] + frame[2] > cell.getWidth()
+                    || frame[1] + frame[3] > cell.getHeight()) {
+                // Parent may not have completed its first layout yet.
+                // Defer correction to CellLayout.onLayout instead of
+                // falling back to a screen-sized incoming MeasureSpec.
+                return null;
+            }
+            return frame;
         } catch (Throwable error) {
             if (WARNED.add(folder)) {
                 Api101Bridge.log(TAG + " trusted CellLayout frame unavailable: " + error);
             }
             return null;
-        }
-    }
-
-    private static boolean isDragging(Object layoutParams) {
-        try {
-            return HookUtil.getBooleanField(layoutParams, "isDragging");
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    /** One geometry computation for initial measurement and settled layout. */
-    private static int[] resolveCellFrame(
-            ViewGroup cell, int cellX, int cellY,
-            ViewGroup.LayoutParams lp, boolean settled) {
-        int[] xs = (int[]) HookUtil.getField(cell, "mXs");
-        int[] ys = (int[]) HookUtil.getField(cell, "mYs");
-        int cellWidth = HookUtil.getIntField(cell, "mCellWidth");
-        int cellHeight = HookUtil.getIntField(cell, "mCellHeight");
-        int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
-        if (lp instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) lp;
-            leftMargin = margins.leftMargin;
-            topMargin = margins.topMargin;
-            rightMargin = margins.rightMargin;
-            bottomMargin = margins.bottomMargin;
-        }
-        return settled
-                ? NativeFourFolderFramePolicy.resolve(xs, ys, cellX, cellY,
-                        cellWidth, cellHeight, cell.getWidth(), cell.getHeight(),
-                        leftMargin, topMargin, rightMargin, bottomMargin)
-                : NativeFourFolderFramePolicy.forInitialMeasure(xs, ys, cellX, cellY,
-                        cellWidth, cellHeight, leftMargin, topMargin,
-                        rightMargin, bottomMargin);
-    }
-
-    /**
-     * The only custom 2x2 folder LayoutParams writer. Called by the existing
-     * four-argument HomeGrid dispatcher, the edit-mode hook, and measureChild.
-     * Stock folders and drag/fullscreen animation copies are never changed.
-     */
-    static void prepareFolderLayoutParams(
-            Object cell, int cellX, int cellY, Object info, Object paramsObject) {
-        if (!(cell instanceof ViewGroup)
-                || !(paramsObject instanceof ViewGroup.LayoutParams)
-                || !isCustomFolderInfo((View) cell, info)
-                || isDragging(paramsObject)) return;
-        try {
-            ViewGroup.LayoutParams lp = (ViewGroup.LayoutParams) paramsObject;
-            int[] frame = resolveCellFrame((ViewGroup) cell, cellX, cellY, lp, false);
-            if (frame == null) return;
-            lp.width = frame[2];
-            lp.height = frame[3];
-            HookUtil.setIntField(paramsObject, "x", frame[0]);
-            HookUtil.setIntField(paramsObject, "y", frame[1]);
-        } catch (Throwable error) {
-            Api101Bridge.log(TAG + " native folder LayoutParams unavailable: " + error);
         }
     }
 
@@ -1098,56 +999,6 @@ final class LauncherNativeFourFolderHook {
         // Reconcile title geometry after placement. The OEM span visibility
         // decision is handled separately in executeChildrenVisibility.
         queueTitleRestore(folder);
-    }
-
-    /**
-     * A native CellLayout commit/drop event is the missing invalidation
-     * authority for edit-mode cross-page moves. OEM may finish clearing its
-     * drag flag during the current dispatch, so perform this reconciliation
-     * on the next animation traversal of the *destination page only*.
-     */
-    private static void scheduleCommittedFolderReconcile(ViewGroup page) {
-        if (page == null) return;
-        boolean hasFolder = false;
-        for (int i = 0; i < page.getChildCount(); i++) {
-            if (eligible(page.getChildAt(i))) {
-                hasFolder = true;
-                break;
-            }
-        }
-        if (!hasFolder) return;
-        page.postOnAnimation(() -> reconcileCommittedFolderPage(page));
-    }
-
-    private static void reconcileCommittedFolderPage(ViewGroup page) {
-        if (!page.isAttachedToWindow()) return;
-        boolean needsLayout = false;
-        for (int i = 0; i < page.getChildCount(); i++) {
-            View folder = page.getChildAt(i);
-            if (!eligible(folder) || folder.getParent() != page) continue;
-            ViewGroup.LayoutParams lp = folder.getLayoutParams();
-            if (lp == null) continue;
-            if (isDragging(lp)) {
-                // OEM still owns the in-flight drag geometry. Request its
-                // normal next layout instead of writing over the animation.
-                folder.requestLayout();
-                needsLayout = true;
-                continue;
-            }
-            int[] frame = trustedCellFrame(folder);
-            if (frame == null) {
-                // Newly inserted pages may not have laid out yet.
-                folder.requestLayout();
-                needsLayout = true;
-                continue;
-            }
-            try {
-                alignNativeFolderToWidget(page, folder);
-            } catch (Throwable error) {
-                Api101Bridge.log(TAG + " committed 2x2 folder alignment failed: " + error);
-            }
-        }
-        if (needsLayout) page.requestLayout();
     }
 
     private static void restoreDroppedFolder(View folder) {
