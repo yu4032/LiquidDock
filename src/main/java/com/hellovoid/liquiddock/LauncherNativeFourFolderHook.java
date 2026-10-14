@@ -1107,7 +1107,7 @@ final class LauncherNativeFourFolderHook {
      * on the next animation traversal of the *destination page only*.
      */
     private static void scheduleCommittedFolderReconcile(ViewGroup page) {
-        if (page == null || !page.isAttachedToWindow()) return;
+        if (page == null) return;
         boolean hasFolder = false;
         for (int i = 0; i < page.getChildCount(); i++) {
             if (eligible(page.getChildAt(i))) {
