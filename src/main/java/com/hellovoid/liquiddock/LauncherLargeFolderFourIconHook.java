@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.view.View;
 import android.view.ViewGroup;
-import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
