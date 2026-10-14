@@ -211,6 +211,9 @@ final class LauncherLargeFolderFourIconHook {
      */
     private static void scheduleNativeFootprintRepair(View folderView) {
         if (!enabled || folderView == null
+                || !LauncherLargeFolderPickerHook.isMarked(
+                        folderView.getContext(), folderView.getTag())) return;
+        if (!enabled || folderView == null
                 || (!FOUR_FOLDER.equals(folderView.getClass().getName())
                 && !SMALL_FOLDER.equals(folderView.getClass().getName()))) return;
         if (SMALL_FOLDER.equals(folderView.getClass().getName())) {
@@ -249,10 +252,12 @@ final class LauncherLargeFolderFourIconHook {
             long container = HookUtil.getLongField(info, "container");
             boolean repairFour = LargeFolderFootprintPolicy.needsNativeConversion(
                     type, spanX, spanY, id, screenId, container);
+            // Explicitly marked folders may contain any number of shortcuts;
+            // only the first four are previewed, and the remaining children
+            // stay accessible when the folder opens.
             boolean promoteSmall = SMALL_FOLDER.equals(folderView.getClass().getName())
-                    && LargeFolderFootprintPolicy.needsNativePromotion(
-                            type, spanX, spanY, folderChildCount(info),
-                            id, screenId, container);
+                    && type == 2 && spanX == 1 && spanY == 1
+                    && id >= 0 && screenId >= 0 && container == -100;
             if (!repairFour && !promoteSmall) return;
         } catch (Throwable ignored) {
             return;
@@ -277,7 +282,14 @@ final class LauncherLargeFolderFourIconHook {
     }
 
     private static void configureFolder(Object owner) {
-        if (!enabled || owner == null || !FOUR_FOLDER.equals(owner.getClass().getName())) {
+        if (!enabled || owner == null || !FOUR_FOLDER.equals(owner.getClass().getName())
+                || !(owner instanceof View)) {
+            return;
+        }
+        Object info;
+        try { info = HookUtil.getField(owner, "mInfo"); }
+        catch (Throwable ignored) { return; }
+        if (!LauncherLargeFolderPickerHook.isMarked(((View) owner).getContext(), info)) {
             return;
         }
         // The container is bound during onFinishInflate. Never act on an
@@ -294,11 +306,20 @@ final class LauncherLargeFolderFourIconHook {
     }
 
     private static void configurePreview(Object preview) {
-        if (!enabled || preview == null
-                || !FOUR_PREVIEW.equals(preview.getClass().getName())) {
-            return;
+        if (!enabled || !(preview instanceof View)
+                || !FOUR_PREVIEW.equals(preview.getClass().getName())) return;
+        View view = (View) preview;
+        android.view.ViewParent parent = view.getParent();
+        while (parent instanceof View) {
+            View candidate = (View) parent;
+            if (FOUR_FOLDER.equals(candidate.getClass().getName())) {
+                Object info = candidate.getTag();
+                if (LauncherLargeFolderPickerHook.isMarked(view.getContext(), info)
+                        && !setCounts(preview)) reportFailure();
+                return;
+            }
+            parent = candidate.getParent();
         }
-        if (!setCounts(preview)) reportFailure();
     }
 
     private static boolean setCounts(Object target) {
