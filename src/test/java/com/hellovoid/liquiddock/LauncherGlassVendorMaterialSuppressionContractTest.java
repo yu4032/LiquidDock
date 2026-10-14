@@ -25,43 +25,37 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertFalse(helper.contains("setVisibility(View.GONE"));
     }
 
-    @Test public void mamlUsesLaunchersBackgroundBlurVariableBoundary() throws Exception {
+    @Test public void widgetDoesNotMutateVendorOwnedMaterialConfiguration()
+            throws Exception {
         String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
+        String launcher = Files.readString(MAIN.resolve("MiuixLauncherStaticGlassHook.java"));
 
-        assertTrue(helper.contains("putVariableNumber"));
-        assertTrue(helper.contains("enable_background_blur"));
-        assertFalse(helper.contains("LauncherMamlBackgroundRuleExecutor"));
-        assertFalse(helper.contains("WidgetBackgroundRule"));
-        assertFalse(helper.contains("findElement"));
-    }
-
-    @Test public void mamlReleaseRestoresOwnedRootValueNotAssumedZero() throws Exception {
-        String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
-        assertTrue(helper.contains("MAML_BACKGROUND_OWNERSHIP"));
-        assertTrue(helper.contains("getMaMlBackgroundBlurVariable(host)"));
-        assertTrue(helper.contains("rememberMamlBackground(host, readMamlRoot(host))"));
-        assertTrue(helper.contains("claimLoadedMamlRoot(View host, Object root)"));
-        assertTrue(helper.contains("currentRoot == claim.rootRef.get()"));
-        assertTrue(helper.contains("claim.value.release(owned)"));
-        assertTrue(helper.contains("decision.restoreOriginal"));
-        assertTrue(helper.contains("putMaMlBackgroundBlurVariable(host, decision.originalValue)"));
-        assertFalse(helper.contains("if (isMaMlHost(host)) putMaMlBackgroundBlurVariable(host, 0.0d)"));
+        // Source of truth: Launcher 4.50 writes the current native material across
+        // attach/detach, App -> HOME, updateColor and asynchronous MAML root loads.
+        // Glass only gates the *output* mode and claims the RemoteViews drawable.
+        assertTrue(helper.contains("LauncherWidgetNativeViewBlurGate.claim(host)"));
+        assertTrue(helper.contains("LauncherWidgetNativeViewBlurGate.release(host)"));
+        assertTrue(helper.contains("WIDGET_BACKGROUND_OWNERSHIP"));
+        assertFalse(helper.contains("MAML_BACKGROUND_OWNERSHIP"));
+        assertFalse(helper.contains("PASS_WINDOW_GATE_OWNERSHIP"));
+        assertFalse(helper.contains("getPassWindowBlurEnabled(host)"));
+        assertFalse(helper.contains("setPassWindowBlurEnabled(host"));
+        assertFalse(helper.contains("putMaMlBackgroundBlurVariable"));
+        assertFalse(helper.contains("getMaMlBackgroundBlurVariable"));
+        assertFalse(helper.contains("enable_background_blur\""));
+        assertFalse(controller.contains("LauncherGlassVendorMaterialSuppressor.claimLoadedMamlRoot"));
+        assertTrue(controller.contains("LauncherMamlBackgroundRuleExecutor.claimLoadedRoot"));
+        assertTrue(launcher.contains("installMamlBackgroundOwnershipHooks"));
     }
 
     @Test public void widgetClaimBansDestructiveNativeMaterialApis()
             throws Exception {
         String helper = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
-        // A static API boundary only: no source slicing or inferred runtime call ordering.
-        // The folder path still has its own material contract, hence the explicit host scope.
-        assertTrue(helper.contains("suppressPassWindowWithoutClearingVendorMaterial(host)"));
         assertFalse(helper.contains("MiBlurBridge.clearContentBlur(host)"));
         assertFalse(helper.contains("MiBlurBridge.clearPassWindowBlur(host)"));
-        assertFalse(helper.contains("invokeBoolean(host, \"setViewBlur\""));
-        assertFalse(helper.contains("invokeBoolean(host, \"setBlurIfNeed\""));
-        assertFalse(helper.contains("invokeInt(host, \"setBlurRadius\""));
+        assertFalse(helper.contains("invokeBoolean(host,"));
         assertFalse(helper.contains("setMaMlBlurIfSupported(host, false)"));
-        assertTrue(helper.contains("MiBlurBridge.getPassWindowBlurEnabled(host)"));
-        assertTrue(helper.contains("MiBlurBridge.setPassWindowBlurEnabled(host, true)"));
     }
 
     @Test public void widgetGlassGatesActualLauncher450ViewBlurNotSelfBlur()
@@ -87,16 +81,53 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertFalse(gate.contains("setNativeMode(host, vendorMode)"));
         assertTrue(gate.contains("if (!host.isAttachedToWindow() || !isSupportedWidget(host))"));
         assertTrue(gate.contains("boolean restored = restoreViaVendorUtilities(host)"));
-        assertTrue(helper.contains("boolean vendorRebound = LauncherWidgetNativeViewBlurGate.release(host)"));
-        assertTrue(helper.contains("restoreMamlBackground(host, vendorRebound)"));
-        assertTrue(helper.contains("if (vendorRebound) {"));
-        assertTrue(helper.contains("MAML blur variable handed to Launcher"));
+        assertFalse(helper.contains("restoreMamlBackground(host"));
+        assertFalse(helper.contains("restorePassWindowGate(host"));
         assertTrue(gate.contains("restoreViaVendorUtilities(host)"));
         assertFalse(gate.contains("MiBlurBridge.clearContentBlur("));
         assertFalse(gate.contains("MiBlurBridge.clearPassWindowBlur("));
         assertFalse(gate.contains("setMiSelfBlur("));
         assertFalse(gate.contains("setMiBackgroundBlurRadius("));
         assertFalse(gate.contains("setMiBackgroundBlendColors("));
+    }
+
+    @Test public void darkContentDoesNotRestoreAnOldMamlRootOrOverwriteProviderColors()
+            throws Exception {
+        String dark = Files.readString(MAIN.resolve("LauncherWidgetDarkContentAdapter.java"));
+        String controller = Files.readString(MAIN.resolve("LauncherWidgetBackgroundController.java"));
+
+        assertTrue(dark.contains("WeakReference<Object> root"));
+        assertTrue(dark.contains("claim.root.get()"));
+        assertTrue(dark.contains("root == claim.root.get()"));
+        assertTrue(dark.contains("Double.isFinite(original)"));
+        assertTrue(dark.contains("text.getCurrentTextColor() == Color.WHITE"));
+        assertFalse(dark.contains("((Number) value).doubleValue() : 0.0d"));
+        assertTrue(controller.contains("LauncherWidgetDarkContentAdapter.apply(host)"));
+    }
+
+    @Test public void folderUsesTheSameNonDestructiveNativeOutputGateAsWidgets()
+            throws Exception {
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+        String gate = Files.readString(MAIN.resolve("LauncherWidgetNativeViewBlurGate.java"));
+        String vendor = Files.readString(MAIN.resolve("LauncherGlassVendorMaterialSuppressor.java"));
+
+        // The vendor's setFolderIconBlur establishes mode, color blend and outline.
+        // LiquidDock may mute the owned RenderNode output, not skip initialization
+        // or erase vendor blur configuration on App -> HOME.
+        assertTrue(folder.contains("LauncherWidgetNativeViewBlurGate.install(classLoader)"));
+        assertTrue(folder.contains("installFolderInitializer(vendorInitializer)"));
+        assertTrue(folder.contains("rememberFolderInitializer("));
+        assertTrue(folder.contains("return chain.proceed(args)"));
+        assertTrue(folder.contains("LauncherWidgetNativeViewBlurGate.claimFolder(material)"));
+        assertTrue(folder.contains("LauncherWidgetNativeViewBlurGate.releaseFolder(material)"));
+        assertTrue(gate.contains("FOLDER_STATES"));
+        assertTrue(gate.contains("setFolderIconBlur.invoke(null, latestRequest)"));
+        assertTrue(gate.contains("folder.claimed"));
+        assertFalse(folder.contains("clearVendorBlur(material)"));
+        assertFalse(folder.contains("MiBlurBridge.clearContentBlur(material)"));
+        assertFalse(folder.contains("clearMiBackgroundBlendColor"));
+        assertFalse(vendor.contains("claimFolderMaterial"));
+        assertFalse(vendor.contains("MiBlurBridge.clearContentBlur(material)"));
     }
 
     @Test public void folderHookTargetsConcreteLauncher450VariantsWithoutDrawableReplacement()

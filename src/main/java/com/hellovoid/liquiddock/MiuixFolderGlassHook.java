@@ -78,21 +78,32 @@ final class MiuixFolderGlassHook {
                     "com.miui.home.launcher.common.BlurUtilities", false, classLoader);
             Class<?>[] params = new Class<?>[]{View.class, int.class, int.class, int.class,
                     int.class, int.class, int.class, int.class, int.class, int.class, int.class};
-            HookUtil.hook(HookUtil.findMethodExact(utilities, "setFolderIconBlur", params), chain -> {
-                Object target = chain.getArgs().isEmpty() ? null : chain.getArgs().get(0);
-                if (target instanceof View) {
-                    View material = (View) target;
-                    if (!isFolderLiveEnabled(material)) {
-                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    }
-                    LauncherGlassStaticNode sink = claimedSink(material);
-                    if (sink == null) sink = attachMaterial(material, glassConfig);
-                    if (sink != null) {
-                        clearVendorBlur(material);
-                        return null;
+            // Folder and widget output now share one non-destructive View setter gate.
+            // Keep the original Launcher 4.50 folder initializer: it owns the current
+            // blend colors and rounded-rect clip, even during App -> HOME transitions.
+            LauncherWidgetNativeViewBlurGate.install(classLoader);
+            Method vendorInitializer =
+                    HookUtil.findMethodExact(utilities, "setFolderIconBlur", params);
+            LauncherWidgetNativeViewBlurGate.installFolderInitializer(vendorInitializer);
+            HookUtil.hook(vendorInitializer, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (LauncherWidgetNativeViewBlurGate.isRestoringFolder()) {
+                    return chain.proceed(args);
+                }
+                if (args.length > 0 && args[0] instanceof View) {
+                    View material = (View) args[0];
+                    if (isFolderLiveEnabled(material)) {
+                        LauncherGlassStaticNode sink = claimedSink(material);
+                        if (sink == null) sink = attachMaterial(material, glassConfig);
+                        if (sink != null
+                                && LauncherWidgetNativeViewBlurGate.claimFolder(material)) {
+                            LauncherWidgetNativeViewBlurGate.rememberFolderInitializer(
+                                    material, args);
+                        }
                     }
                 }
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                // Never swallow Launcher material initialization again.
+                return chain.proceed(args);
             });
             installed = true;
             MainHook.log(TAG + " shared FolderIcon glass hook installed");
@@ -524,7 +535,10 @@ final class MiuixFolderGlassHook {
 
         LauncherGlassStaticNode existing = claimedSink(material);
         if (existing != null) {
-            clearVendorBlur(material);
+            if (!LauncherWidgetNativeViewBlurGate.claimFolder(material)) {
+                releaseMaterialOwnership(material);
+                return null;
+            }
             makeMaterialTransparent(material);
             suppressLargeFolderDrawablePaint(material);
             coverNativeViewIfNeeded(material);
@@ -540,9 +554,12 @@ final class MiuixFolderGlassHook {
         LauncherGlassStaticNode sink = LauncherGlassStaticNode.attachFolderMaterial(
                 material, smallFolder, radius, glassConfig);
         if (sink != null) {
+            if (!LauncherWidgetNativeViewBlurGate.claimFolder(material)) {
+                sink.dispose();
+                return null;
+            }
             CLAIMED.put(material, new WeakReference<>(sink));
             MiuixLauncherDragOverlayHook.observeStaticNode(sink);
-            clearVendorBlur(material);
             makeMaterialTransparent(material);
             suppressLargeFolderDrawablePaint(material);
             coverNativeViewIfNeeded(material);
@@ -633,6 +650,7 @@ final class MiuixFolderGlassHook {
         LauncherGlassStaticNode sink = claimedSink(material);
         if (sink != null) sink.dispose();
         CLAIMED.remove(material);
+        LauncherWidgetNativeViewBlurGate.releaseFolder(material);
         restoreCoveredVisibility(material);
         restoreMaterial(material);
     }
@@ -788,10 +806,4 @@ final class MiuixFolderGlassHook {
         }
     }
 
-    private static void clearVendorBlur(View material) {
-        LauncherGlassVendorMaterialSuppressor.claimFolderMaterial(material);
-        MiBlurBridge.clearContentBlur(material);
-        try { View.class.getMethod("clearMiBackgroundBlendColor").invoke(material); }
-        catch (Throwable ignored) {}
-    }
 }
