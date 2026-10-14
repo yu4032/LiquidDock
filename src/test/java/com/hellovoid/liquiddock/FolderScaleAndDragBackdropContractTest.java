@@ -34,8 +34,8 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(nativeHook.contains("LauncherIconImageView"));
         assertFalse(nativeHook.contains("imageBase.getDeclaredMethod(dimension, int.class)"));
         assertTrue(nativeHook.contains("HookUtil.findMethodExact("));
-        assertTrue(nativeHook.contains("imageBase, \"onMeasure\""));
-        assertTrue(nativeHook.contains("previewBase, \"onMeasure\""));
+        assertTrue(nativeHook.contains("nativeImageClass, \"onMeasure\""));
+        assertTrue(nativeHook.contains("nativePreviewClass, \"onMeasure\""));
         assertTrue(nativeHook.contains("BaseFolderIconPreviewContainer2X2"));
         assertTrue(nativeHook.contains("forceMeasuredFrame(surface, frame, \"image\")"));
         assertTrue(nativeHook.contains("forceMeasuredFrame(previewView, frame, \"preview\")"));
