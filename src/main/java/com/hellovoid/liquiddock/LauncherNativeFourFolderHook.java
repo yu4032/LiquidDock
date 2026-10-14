@@ -75,6 +75,13 @@ final class LauncherNativeFourFolderHook {
                     java.lang.reflect.Method measure = HookUtil.findMethodExact(
                             nativeImageClass, "onMeasure",
                             new Class<?>[]{int.class, int.class});
+                    // Do not hook Android framework ImageView/ViewGroup
+                    // onMeasure globally if OEM removed its override.
+                    if (!measure.getDeclaringClass().getName().startsWith(
+                            "com.miui.home.")) {
+                        throw new NoSuchMethodException("vendor onMeasure absent: "
+                                + measure.toGenericString());
+                    }
                     HookUtil.hook(measure, chain -> {
                         Object instance = chain.getThisObject();
                         if (!(instance instanceof View)
@@ -112,6 +119,13 @@ final class LauncherNativeFourFolderHook {
                     java.lang.reflect.Method measure = HookUtil.findMethodExact(
                             nativePreviewClass, "onMeasure",
                             new Class<?>[]{int.class, int.class});
+                    // Do not hook Android framework ImageView/ViewGroup
+                    // onMeasure globally if OEM removed its override.
+                    if (!measure.getDeclaringClass().getName().startsWith(
+                            "com.miui.home.")) {
+                        throw new NoSuchMethodException("vendor onMeasure absent: "
+                                + measure.toGenericString());
+                    }
                     HookUtil.hook(measure, chain -> {
                         Object instance = chain.getThisObject();
                         if (!(instance instanceof View)
