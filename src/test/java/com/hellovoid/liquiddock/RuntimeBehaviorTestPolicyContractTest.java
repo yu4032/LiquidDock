@@ -46,7 +46,6 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "GboardHandwritingCapsuleGlassContractTest.java",
             "MiuiSearchboxGlassContractTest.java",
             "ModernSettingsArchitectureTest.java",
-            "NativeFourFolderOwnershipContractTest.java",
             "ThirdPartyAppRestartDescriptorTest.java",
             "HookUtilArchitectureContractTest.java",
             "Launcher450IconSizeContractTest.java",
