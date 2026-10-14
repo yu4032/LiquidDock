@@ -140,6 +140,13 @@ public final class ModuleMain extends XposedModule {
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+            if (runtimeConfig.enabled) {
+                // Folder picker/model hooks are independent of the glass renderers.
+                LauncherLargeFolderPickerHook.install(classLoader);
+                LauncherLargeFolderNativeSpanHook.install(classLoader);
+                LauncherNativeFourFolderHook.install(classLoader);
+                LargeFolderNativeOutlineHook.install(classLoader);
+            }
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
                     runtimeConfig.enabled && runtimeConfig.glass.enabled,

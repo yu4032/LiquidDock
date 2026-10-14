@@ -399,6 +399,13 @@ internal fun GlassFoldersPage(
         ) { largeFolderGlass = it }
         IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
         IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,
+            "显示原生大文件夹描边",
+            "关闭后移除系统默认灰黑色圆角描边，保留玻璃与背景效果",
+            masterEnabled,
+        )
     }
 }
 

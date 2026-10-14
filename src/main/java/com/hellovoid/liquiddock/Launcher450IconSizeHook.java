@@ -37,6 +37,10 @@ final class Launcher450IconSizeHook {
 
     private Launcher450IconSizeHook() {}
 
+    static int workspaceIconSize(int nativeSize) {
+        return Launcher450IconSizePolicy.scaledPx(nativeSize, enabled, percent);
+    }
+
     static boolean install(ClassLoader classLoader, boolean iconSizeEnabled, int iconSizePercent) {
         enabled = iconSizeEnabled;
         percent = Math.max(Launcher450IconSizePolicy.MIN_PERCENT,

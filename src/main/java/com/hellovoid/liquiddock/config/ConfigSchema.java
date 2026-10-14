@@ -278,6 +278,8 @@ public final class ConfigSchema {
                 "liquid_small_folder_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SMALL_FOLDER_CORNER_RADIUS = dp(
                 "liquid_small_folder_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> LARGE_FOLDER_NATIVE_OUTLINE = bool(
+                "large_folder_native_outline", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> LARGE_FOLDER_GLASS = bool(
                 "liquid_large_folder_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LARGE_FOLDER_SIZE_OFFSET = dp(
@@ -568,6 +570,7 @@ public final class ConfigSchema {
                 Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS,
                 Glass.SMALL_FOLDER_GLASS, Glass.SMALL_FOLDER_SIZE_OFFSET,
                 Glass.SMALL_FOLDER_CORNER_RADIUS, Glass.LARGE_FOLDER_GLASS,
+                Glass.LARGE_FOLDER_NATIVE_OUTLINE,
                 Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
                 Glass.BLUR_MODE,
                 Glass.BLUR, Glass.CHROMATIC,
