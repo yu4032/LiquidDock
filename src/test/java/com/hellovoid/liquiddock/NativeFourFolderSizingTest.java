@@ -49,6 +49,16 @@ public class NativeFourFolderSizingTest {
         assertTrue(Math.abs(size.largeWidth - (size.smallWidth * 2 + size.smallGap)) <= 1);
     }
 
+    @Test public void lockedWorkspaceRemeasureKeepsTheNativeImageOverride() {
+        // A second native measurement can happen without CellLayout geometry.
+        // Once the 2x2 workspace size is known, the vendor custom dimensions
+        // must survive the first measure callback's completion.
+        assertTrue(NativeFourFolderSizing.shouldPersistImageSize(true, 646, 649));
+        assertFalse(NativeFourFolderSizing.shouldPersistImageSize(false, 646, 649));
+        assertFalse(NativeFourFolderSizing.shouldPersistImageSize(true, 0, 649));
+        assertFalse(NativeFourFolderSizing.shouldPersistImageSize(true, 646, 0));
+    }
+
     @Test public void crossPageDropMustReconcileChildDespiteCorrectParentSize() {
         // OEM reuses a full 2x2 FolderIcon, but a child may retain 1x1 geometry.
         assertTrue(NativeFourFolderSizing.childNeedsLayout(
