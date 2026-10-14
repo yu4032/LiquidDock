@@ -100,6 +100,9 @@ final class Launcher450IconSizeHook {
                 return Launcher450IconSizePolicy.scaledPx((Integer) result, true, percent);
             });
 
+            // Temporary debug-only geometry probes. Disabled at runtime unless
+            // debug logging is enabled; never mutate folder layout or blur state.
+            Launcher450FolderSizeDiagnostic.install(classLoader);
             installed = true;
             MainHook.log(TAG + " installed enabled=" + enabled + " percent=" + percent);
             return true;
