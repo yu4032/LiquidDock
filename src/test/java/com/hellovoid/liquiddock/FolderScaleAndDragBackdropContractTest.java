@@ -22,6 +22,28 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(hook.contains("MeasureDomain.FOLDER"));
     }
 
+    @Test public void debugGeometryProbeMeasuresNativeClipAndNeverRewritesIt()
+            throws Exception {
+        String hook = Files.readString(MAIN.resolve("Launcher450IconSizeHook.java"));
+        String probe = Files.readString(MAIN.resolve("Launcher450FolderSizeDiagnostic.java"));
+
+        assertTrue(hook.contains("Launcher450FolderSizeDiagnostic.install(classLoader)"));
+        assertTrue(probe.contains("Api101Bridge.isDebugLoggingEnabled()"));
+        assertTrue(probe.contains("phase="));
+        assertTrue(probe.contains("close-finished"));
+        assertTrue(probe.contains("vendor-blur-write"));
+        assertTrue(probe.contains("drawable-rebind"));
+        assertTrue(probe.contains("outline.getRect(rect)"));
+        assertTrue(probe.contains("getMeasuredWidth()"));
+        assertTrue(probe.contains("getIconContainer"));
+        assertFalse(probe.contains("setLayoutParams("));
+        assertFalse(probe.contains("setClipToOutline("));
+        assertFalse(probe.contains("setOutlineProvider("));
+        assertFalse(probe.contains("setMiViewBlurMode("));
+        assertFalse(probe.contains("setScaleX("));
+        assertFalse(probe.contains("setScaleY("));
+    }
+
     @Test public void dragGlassUsesIndependentUpperWorkspaceBackdropAuthority() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
         String source = Files.readString(MAIN.resolve("LauncherDragSourceOverlay.java"));
