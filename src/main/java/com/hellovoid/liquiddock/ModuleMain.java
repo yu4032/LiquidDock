@@ -173,8 +173,9 @@ public final class ModuleMain extends XposedModule {
             }
             Launcher450DockFunctionalIconRegistry.install(classLoader);
             new MainHook().install(classLoader);
-            LauncherLargeFolderFourIconHook.install(classLoader,
+            boolean fourIconFolderReady = LauncherLargeFolderFourIconHook.install(classLoader,
                     runtimeConfig.enabled && runtimeConfig.grid.largeFolderFourIcons);
+            LauncherLargeFolderPickerHook.install(classLoader, fourIconFolderReady);
 
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
             MiuixFolderGlassHook.install(classLoader, runtimeConfig);
