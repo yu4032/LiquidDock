@@ -177,6 +177,10 @@ final class LauncherLargeFolderPickerHook {
                                 .post(() -> HookUtil.tryInvoke(
                                         state.info, "convertIconSize", typeToRestore));
                     }
+                    // Updating just the title setting does not necessarily
+                    // cause a native folder resize or CellLayout pass.
+                    new android.os.Handler(android.os.Looper.getMainLooper())
+                            .post(() -> LauncherNativeFourFolderHook.refreshTitle(state.info));
                     return result;
                 }
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -565,7 +569,4 @@ final class LauncherLargeFolderPickerHook {
         catch (Throwable ignored) { return null; }
     }
 
-    private static int dp(Context context, int value) {
-        return (int) (value * context.getResources().getDisplayMetrics().density + 0.5f);
-    }
 }

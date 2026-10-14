@@ -46,6 +46,14 @@ final class LauncherNativeFourFolderHook {
 
     private LauncherNativeFourFolderHook() {}
 
+    static void refreshTitle(Object info) {
+        if (info == null) return;
+        Object view = HookUtil.tryInvoke(info, "getBuddyIconView").value();
+        if (view instanceof View && eligible((View) view)) {
+            queueTitleRestore((View) view);
+        }
+    }
+
     static boolean isCustomFolder(View folder) {
         return eligible(folder);
     }
