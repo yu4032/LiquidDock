@@ -145,15 +145,12 @@ public final class ModuleMain extends XposedModule {
                 // Establish the OEM background's stroke state before any
                 // folder view is inflated or rebound in the Launcher process.
                 LargeFolderNativeOutlineHook.install(classLoader);
-                // Do not expose custom 2x2 conversion when the native geometry
-                // contract is incomplete. Stock Launcher folder styles remain available.
-                if (LauncherNativeFourFolderHook.install(classLoader)) {
-                    LauncherLargeFolderPickerHook.install(classLoader);
-                    LauncherLargeFolderNativeSpanHook.install(classLoader);
-                } else {
-                    Api101Bridge.log("[DC][FolderFourNative] required geometry hooks absent; "
-                            + "custom folder conversion disabled");
-                }
+                // The picker and persisted span conversion are independent of
+                // vendor preview measurement APIs. Never hide these controls
+                // because an optional 4.50 geometry method is unavailable.
+                LauncherLargeFolderPickerHook.install(classLoader);
+                LauncherLargeFolderNativeSpanHook.install(classLoader);
+                LauncherNativeFourFolderHook.install(classLoader);
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
