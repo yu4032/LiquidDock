@@ -2,7 +2,8 @@ package com.hellovoid.liquiddock;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.graphics.drawable.GradientDrawable;
+import android.widget.CompoundButton;
+import android.widget.Switch;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -10,16 +11,17 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.util.AttributeSet;
 
+import java.lang.reflect.Constructor;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Adds a fourth, explicitly selected style to the native Launcher FolderSheet.
- * FolderInfo.itemType=21 is already the vendor four-preview type, so its
- * custom four-large-icon variant needs a per-folder marker rather than a
- * made-up itemType that the vendor model cannot persist or render.
+ * Adds a per-folder real-2x2 toggle ABOVE the vendor recommendation switches.
+ * The three native folder size choices and both original switches remain intact.
+ * Reuses FolderIcon2x2_4 (itemType 21), with a persisted per-folder marker.
  */
 final class LauncherLargeFolderPickerHook {
     private static final String TAG = "[DC][FolderFourPicker]";
@@ -32,12 +34,16 @@ final class LauncherLargeFolderPickerHook {
 
     private static final class PickerState {
         Object info;
-        final View option;
+        final LinearLayout row;
+        final CompoundButton toggle;
         boolean selected;
+        boolean syncing;
+        boolean selectingNativeStyle;
 
-        PickerState(Object info, View option, boolean selected) {
+        PickerState(Object info, LinearLayout row, CompoundButton toggle, boolean selected) {
             this.info = info;
-            this.option = option;
+            this.row = row;
+            this.toggle = toggle;
             this.selected = selected;
         }
     }
@@ -126,6 +132,7 @@ final class LauncherLargeFolderPickerHook {
                     if (selected) {
                         HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
                     }
+                    int targetType = HookUtil.getIntField(owner, "mFolderType");
                     // Marker must be visible before the native asynchronous
                     // bindFolderResize constructs the replacement FolderIcon.
                     setMarked(((View) owner).getContext(), state.info, selected);
@@ -139,9 +146,10 @@ final class LauncherLargeFolderPickerHook {
                         new android.os.Handler(android.os.Looper.getMainLooper())
                                 .post(() -> requestNativeResize(state.info));
                     } else if (!selected && wasCustom
+                            && targetType == NATIVE_FOUR_TYPE
                             && originalType == NATIVE_FOUR_TYPE
                             && originalX == 2 && originalY == 2) {
-                        // The stock 2x2_4 and our fourth size intentionally
+                        // The stock 2x2_4 and our expanded variant intentionally
                         // share itemType=21. MIUI's onClick only converts if
                         // itemType changes; force its native conversion when
                         // the selection changes back to stock size (1x1).
@@ -152,8 +160,10 @@ final class LauncherLargeFolderPickerHook {
                     return result;
                 }
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                // Stock style selections always deselect the fourth option.
-                if (clicked != cancel && isStockStyleControl(owner, clicked)) {
+                // Switching to an incompatible native folder style disables the 2x2 expansion.
+                if (clicked != cancel && !state.selectingNativeStyle
+                        && isStockStyleControl(owner, clicked)
+                        && !isNativeFourStyleControl(owner, clicked)) {
                     state.selected = false;
                     updateAppearance(state);
                 }
@@ -197,146 +207,176 @@ final class LauncherLargeFolderPickerHook {
         return false;
     }
 
+    private static boolean isNativeFourStyleControl(Object owner, View clicked) {
+        return clicked == getFieldOrNull(owner, "mBigFolderCheckBox2x2_4")
+                || clicked == getFieldOrNull(owner, "mBigFolderName2x2_4")
+                || clicked == getFieldOrNull(owner, "mBigFolderSelectBorder2x2_4");
+    }
+
     private static void attachOption(Object owner, Object info) {
         if (!(owner instanceof View) || info == null) return;
         View sheet = (View) owner;
         PickerState existing = STATES.get(owner);
-        if (existing != null && existing.option.getParent() != null) {
+        if (existing != null && existing.row.getParent() != null) {
             existing.info = info;
             existing.selected = isMarked(sheet.getContext(), info);
-            if (existing.selected) clearStockChecks(owner);
             updateAppearance(existing);
             return;
         }
         if (existing != null) STATES.remove(owner);
+
         Object scroller = getFieldOrNull(owner, "mFolderPickerBody");
         ScrollView scroll = scroller instanceof ScrollView
                 ? (ScrollView) scroller : findScrollView(sheet);
         if (scroll == null) {
-            Api101Bridge.log(TAG + " folder picker scroll container not found for "
-                    + sheet.getClass().getName());
+            Api101Bridge.log(TAG + " folder picker scroll container unavailable");
             return;
         }
-        // folder_sheet.xml: the stock three VisualCheckBoxes live in a
-        // horizontal VisualCheckGroup inside the root ConstraintLayout.
-        // DO NOT append a fourth child to that row; it has no wrapping and
-        // the stock tiles must retain their original exact widths.
         View root = scroll.getChildCount() == 1 ? scroll.getChildAt(0) : null;
         View nativeGroup = root == null ? null : findNativeCheckGroup(root);
         if (!(root instanceof ViewGroup) || !(nativeGroup instanceof ViewGroup)
-                || nativeGroup.getParent() != root) {
-            Api101Bridge.log(TAG + " stock folder-size row unavailable");
+                || nativeGroup.getParent() != root || nativeGroup.getId() == View.NO_ID) {
+            Api101Bridge.log(TAG + " native folder size section unavailable");
             return;
         }
         ViewGroup panel = (ViewGroup) root;
-        ViewGroup stockRow = (ViewGroup) nativeGroup;
-        View newOption = makeNativeSizeOption(sheet.getContext(), stockRow);
-        if (newOption == null) {
-            Api101Bridge.log(TAG + " fourth native size option unavailable");
+        View predictionField = getFieldOrNull(owner, "mFolderPickerAppPredictExposed") instanceof View
+                ? (View) getFieldOrNull(owner, "mFolderPickerAppPredictExposed")
+                : findAppPredict(panel);
+        // Keep both vendor switches and their native listeners untouched.
+        if (predictionField == null || predictionField.getParent() != panel) {
+            Api101Bridge.log(TAG + " native app-prediction row unavailable");
             return;
         }
-        newOption.setId(View.generateViewId());
-        PickerState state = new PickerState(info, newOption,
+        ViewGroup.LayoutParams predictionLp = predictionField.getLayoutParams();
+        if (predictionLp == null || !predictionLp.getClass().getName()
+                .contains("ConstraintLayout$LayoutParams")) {
+            Api101Bridge.log(TAG + " native app-prediction constraint unavailable");
+            return;
+        }
+
+        CompoundButton toggle = makeNativeToggle(sheet.getContext(), sheet);
+        LinearLayout row = new LinearLayout(sheet.getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(sheet.getContext(), 52));
+        row.setPadding(dp(sheet.getContext(), 12), 0, dp(sheet.getContext(), 12), 0);
+        row.setId(View.generateViewId());
+        TextView label = new TextView(sheet.getContext());
+        label.setText("开启真实大文件夹");
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        label.setTextColor(themeColor(sheet.getContext(),
+                android.R.attr.textColorPrimary, 0xffeeeeee));
+        row.addView(label, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(toggle, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        PickerState state = new PickerState(info, row, toggle,
                 isMarked(sheet.getContext(), info));
-        newOption.setClickable(true);
-        newOption.setFocusable(true);
-        newOption.setOnClickListener(v -> {
-            state.selected = true;
-            HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
-            // The fourth tile is on its own second line. It is not a child
-            // of the stock radio group, so explicitly clear native checks.
-            clearStockChecks(owner);
-            updateAppearance(state);
-            Api101Bridge.log(TAG + " fourth folder-size tile clicked");
+        updateAppearance(state);
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            if (state.syncing) return;
+            state.selected = checked;
+            if (checked) selectNativeFourStyle(owner, state);
         });
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setContentDescription("开启真实大文件夹");
+        row.setOnClickListener(v -> toggle.setChecked(!toggle.isChecked()));
+
         try {
             Class<?> lpClass = Class.forName(
                     "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
                     false, panel.getClass().getClassLoader());
-            ViewGroup.MarginLayoutParams optionLp = (ViewGroup.MarginLayoutParams)
+            ViewGroup.MarginLayoutParams rowLp = (ViewGroup.MarginLayoutParams)
                     lpClass.getConstructor(int.class, int.class).newInstance(
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT);
-            // A separate SECOND row directly beneath the three stock sizes,
-            // within the same "文件夹尺寸" section and above app prediction.
-            HookUtil.setIntField(optionLp, "startToStart", stockRow.getId());
-            HookUtil.setIntField(optionLp, "topToBottom", stockRow.getId());
-            optionLp.topMargin = dp(sheet.getContext(), 12);
-            optionLp.bottomMargin = dp(sheet.getContext(), 12);
-            panel.addView(newOption, optionLp);
-            Object predictionField = getFieldOrNull(owner,
-                    "mFolderPickerAppPredictExposed");
-            View prediction = predictionField instanceof View
-                    ? (View) predictionField : findAppPredict(panel);
-            if (prediction != null && prediction.getParent() == panel) {
-                ViewGroup.LayoutParams lp = prediction.getLayoutParams();
-                if (lp != null && lp.getClass().getName().contains(
-                        "ConstraintLayout$LayoutParams")) {
-                    HookUtil.setIntField(lp, "topToBottom", newOption.getId());
-                    prediction.setLayoutParams(lp);
-                }
-            }
+                            0, ViewGroup.LayoutParams.WRAP_CONTENT);
+            HookUtil.setIntField(rowLp, "startToStart", nativeGroup.getId());
+            HookUtil.setIntField(rowLp, "endToEnd", nativeGroup.getId());
+            HookUtil.setIntField(rowLp, "topToBottom", nativeGroup.getId());
+            rowLp.topMargin = dp(sheet.getContext(), 8);
+            panel.addView(row, rowLp);
+
+            // Insert BEFORE the original "外露应用智能排序" and "今日推荐" rows.
+            // Only move the native first row's constraint; its switch/behavior remains OEM.
+            HookUtil.setIntField(predictionLp, "topToBottom", row.getId());
+            predictionField.setLayoutParams(predictionLp);
             STATES.put(owner, state);
-            if (state.selected) clearStockChecks(owner);
-            updateAppearance(state);
             panel.requestLayout();
-            Api101Bridge.log(TAG + " fourth folder-size tile in second row");
+            Api101Bridge.log(TAG + " real-large-folder toggle inserted before native switches");
         } catch (Throwable error) {
-            Api101Bridge.log(TAG + " fourth option injection failed: " + error);
-            if (newOption.getParent() == panel) panel.removeView(newOption);
+            Api101Bridge.log(TAG + " native folder toggle injection failed: " + error);
+            if (row.getParent() == panel) panel.removeView(row);
         }
     }
 
-    private static void clearStockChecks(Object sheet) {
-        for (String field : new String[]{
-                "mDefaultFolderCheckBox", "mBigFolderCheckBox2x2_4",
-                "mBigFolderCheckBox2x2_9"}) {
-            Object stock = getFieldOrNull(sheet, field);
-            if (stock instanceof android.widget.Checkable) {
-                ((android.widget.Checkable) stock).setChecked(false);
+    private static void selectNativeFourStyle(Object owner, PickerState state) {
+        // This toggle operates on FolderIcon2x2_4. When enabled from another
+        // style, select that real stock style through the vendor click path.
+        Object nativeFour = getFieldOrNull(owner, "mBigFolderCheckBox2x2_4");
+        if (nativeFour instanceof View && HookUtil.getIntField(owner, "mFolderType")
+                != NATIVE_FOUR_TYPE) {
+            state.selectingNativeStyle = true;
+            try {
+                ((View) nativeFour).performClick();
+            } finally {
+                state.selectingNativeStyle = false;
             }
         }
+        HookUtil.setIntField(owner, "mFolderType", NATIVE_FOUR_TYPE);
     }
 
     private static View findAppPredict(View root) {
-        if (root.getId() != View.NO_ID) {
-            try {
-                int id = root.getResources().getIdentifier(
-                        "folder_picker_app_predict", "id",
-                        root.getContext().getPackageName());
-                if (id != 0) return root.findViewById(id);
-            } catch (Throwable ignored) {}
+        try {
+            int id = root.getResources().getIdentifier(
+                    "folder_picker_app_predict", "id", root.getContext().getPackageName());
+            return id == 0 ? null : root.findViewById(id);
+        } catch (Throwable ignored) {
+            return null;
         }
+    }
+
+    private static CompoundButton makeNativeToggle(Context context, View sheet) {
+        CompoundButton reference = findNativeToggle(sheet, 0);
+        if (reference != null) {
+            CompoundButton copy = instantiateToggle(reference.getClass(), context);
+            if (copy != null) return copy;
+        }
+        try {
+            Class<?> nativeType = Class.forName(
+                    "miuix.slidingwidget.widget.SlidingButton", false,
+                    context.getClassLoader());
+            CompoundButton nativeToggle = instantiateToggle(nativeType, context);
+            if (nativeToggle != null) return nativeToggle;
+        } catch (Throwable ignored) {
+            // Use the platform switch only on Launcher builds without MIUIX.
+        }
+        return new Switch(context);
+    }
+
+    private static CompoundButton instantiateToggle(Class<?> type, Context context) {
+        try {
+            Constructor<?> ctor = type.getConstructor(Context.class, AttributeSet.class);
+            Object result = ctor.newInstance(context, null);
+            if (result instanceof CompoundButton) return (CompoundButton) result;
+        } catch (Throwable ignored) {}
+        try {
+            Constructor<?> ctor = type.getConstructor(Context.class);
+            Object result = ctor.newInstance(context);
+            if (result instanceof CompoundButton) return (CompoundButton) result;
+        } catch (Throwable ignored) {}
         return null;
     }
 
-    private static View makeNativeSizeOption(Context context, ViewGroup group) {
-        if (group.getChildCount() == 0) return null;
-        View sample = group.getChildAt(0);
-        try {
-            java.lang.reflect.Constructor<?> constructor =
-                    sample.getClass().getConstructor(Context.class, android.util.AttributeSet.class);
-            Object o = constructor.newInstance(context, null);
-            if (!(o instanceof ViewGroup)) return null;
-            ViewGroup nativeCheck = (ViewGroup) o;
-            nativeCheck.setFocusable(true);
-            nativeCheck.setClickable(true);
-            nativeCheck.setContentDescription("2×2 四宫格大文件夹");
-            // Build only the chooser thumbnail INSIDE the native checkbox.
-            // Actual desktop content is NEVER custom drawn.
-            LinearLayout preview = buildOption(context);
-            nativeCheck.addView(preview, new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            // VisualCheckBox is instantiated dynamically, so do not rely
-            // on XML descendant wiring for touch delivery.
-            preview.setClickable(true);
-            preview.setOnClickListener(v -> nativeCheck.performClick());
-            return nativeCheck;
-        } catch (Throwable error) {
-            Api101Bridge.log(TAG + " native VisualCheckBox constructor unavailable: " + error);
-            return null;
+    private static CompoundButton findNativeToggle(View root, int depth) {
+        if (root instanceof CompoundButton) return (CompoundButton) root;
+        if (!(root instanceof ViewGroup) || depth >= 9) return null;
+        ViewGroup group = (ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            CompoundButton result = findNativeToggle(group.getChildAt(i), depth + 1);
+            if (result != null) return result;
         }
+        return null;
     }
 
     private static View findNativeCheckGroup(View root) {
@@ -361,68 +401,6 @@ final class LauncherLargeFolderPickerHook {
         return null;
     }
 
-    private static LinearLayout buildOption(Context context) {
-        LinearLayout option = new LinearLayout(context);
-        option.setOrientation(LinearLayout.VERTICAL);
-        option.setGravity(Gravity.CENTER);
-        option.setPadding(dp(context, 3), dp(context, 6),
-                dp(context, 3), dp(context, 6));
-
-        // Selector sample only: three normal icons, with a 2x2 miniature
-        // icon grid in quadrant four just like MIUI FolderIcon2x2_4.
-        LinearLayout sample = new LinearLayout(context);
-        sample.setOrientation(LinearLayout.VERTICAL);
-        for (int row = 0; row < 2; row++) {
-            LinearLayout line = new LinearLayout(context);
-            line.setGravity(Gravity.CENTER);
-            for (int col = 0; col < 2; col++) {
-                View icon;
-                if (row == 1 && col == 1) {
-                    LinearLayout mini = new LinearLayout(context);
-                    mini.setOrientation(LinearLayout.VERTICAL);
-                    for (int y = 0; y < 2; y++) {
-                        LinearLayout strip = new LinearLayout(context);
-                        for (int x = 0; x < 2; x++) {
-                            View dot = new View(context);
-                            dot.setBackground(previewDrawable(context, 0x998DA0C2, 2));
-                            LinearLayout.LayoutParams dotLp =
-                                    new LinearLayout.LayoutParams(dp(context, 9), dp(context, 9));
-                            dotLp.setMargins(1, 1, 1, 1);
-                            strip.addView(dot, dotLp);
-                        }
-                        mini.addView(strip);
-                    }
-                    icon = mini;
-                } else {
-                    icon = new View(context);
-                    icon.setBackground(previewDrawable(context, 0x998DA0C2, 5));
-                }
-                LinearLayout.LayoutParams cell =
-                        new LinearLayout.LayoutParams(dp(context, 22), dp(context, 22));
-                cell.setMargins(dp(context, 2), dp(context, 2),
-                        dp(context, 2), dp(context, 2));
-                line.addView(icon, cell);
-            }
-            sample.addView(line);
-        }
-        option.addView(sample);
-        TextView title = new TextView(context);
-        title.setText("2×2 四宫格");
-        title.setGravity(Gravity.CENTER);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        title.setMaxLines(2);
-        title.setTextColor(themeColor(context, android.R.attr.textColorPrimary, 0xffeeeeee));
-        option.addView(title);
-        return option;
-    }
-
-    private static GradientDrawable previewDrawable(Context c, int color, int radiusDp) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(color);
-        bg.setCornerRadius(dp(c, radiusDp));
-        return bg;
-    }
-
     private static int themeColor(Context context, int attr, int fallback) {
         TypedValue value = new TypedValue();
         if (context.getTheme().resolveAttribute(attr, value, true)) {
@@ -437,36 +415,11 @@ final class LauncherLargeFolderPickerHook {
     }
 
     private static void updateAppearance(PickerState state) {
-        state.option.setSelected(state.selected);
-        if (state.option instanceof android.widget.Checkable) {
-            try {
-                ((android.widget.Checkable) state.option).setChecked(state.selected);
-            } catch (Throwable error) {
-                Api101Bridge.log(TAG + " fourth size check unavailable: " + error);
-            }
-        }
-        // Unlike the three XML-inflated stock choices, the fourth native
-        // checkbox has no vendor XML BorderLayoutModeChangable child. Give
-        // its selection a visible boundary, without painting any desktop
-        // folder content or introducing another folder renderer.
-        if (state.selected) {
-            int id = state.option.getResources().getIdentifier(
-                    "folder_picker_visualcheckbox_bg_shape_select", "drawable",
-                    state.option.getContext().getPackageName());
-            if (id != 0) {
-                try {
-                    state.option.setBackground(
-                            state.option.getContext().getDrawable(id));
-                    return;
-                } catch (Throwable ignored) {}
-            }
-            GradientDrawable outline = new GradientDrawable();
-            outline.setColor(0x0);
-            outline.setCornerRadius(dp(state.option.getContext(), 14));
-            outline.setStroke(dp(state.option.getContext(), 2), 0xff8497c6);
-            state.option.setBackground(outline);
-        } else {
-            state.option.setBackground(null);
+        state.syncing = true;
+        try {
+            state.toggle.setChecked(state.selected);
+        } finally {
+            state.syncing = false;
         }
     }
 
