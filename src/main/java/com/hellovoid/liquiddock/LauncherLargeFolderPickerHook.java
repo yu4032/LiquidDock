@@ -10,7 +10,6 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import androidx.constraintlayout.widget.ConstraintLayout;
 
 import java.util.Collections;
 import java.util.Map;
@@ -214,12 +213,14 @@ final class LauncherLargeFolderPickerHook {
         // that same layout; never wrap/reparent its ConstraintLayout inside
         // another scrolling root (that broke its existing constraints).
         View root = scroll.getChildCount() == 1 ? scroll.getChildAt(0) : null;
-        if (!(root instanceof ConstraintLayout)) {
+        if (root == null || !"androidx.constraintlayout.widget.ConstraintLayout"
+                .equals(root.getClass().getName())
+                || !(root instanceof ViewGroup)) {
             Api101Bridge.log(TAG + " unsupported FolderSheet root="
                     + (root == null ? "null" : root.getClass().getName()));
             return;
         }
-        ConstraintLayout panel = (ConstraintLayout) root;
+        ViewGroup panel = (ViewGroup) root;
         View checkGroup = findNativeCheckGroup(panel);
         Object predictionField = getFieldOrNull(owner, "mFolderPickerAppPredictExposed");
         View prediction = predictionField instanceof View ? (View) predictionField : null;
@@ -249,20 +250,28 @@ final class LauncherLargeFolderPickerHook {
             }
         });
         try {
-            ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
-            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
-            lp.topToBottom = checkGroup.getId();
+            // ConstraintLayout belongs to the OEM Launcher and is not an
+            // AndroidX compile dependency of LiquidDock. Construct vendor
+            // layout parameters in the *target* class loader instead.
+            Class<?> lpClass = Class.forName(
+                    "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
+                    false, panel.getClass().getClassLoader());
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams)
+                    lpClass.getConstructor(int.class, int.class)
+                            .newInstance(0, ViewGroup.LayoutParams.WRAP_CONTENT);
+            HookUtil.setIntField(lp, "startToStart", 0);
+            HookUtil.setIntField(lp, "endToEnd", 0);
+            HookUtil.setIntField(lp, "topToBottom", checkGroup.getId());
             lp.topMargin = dp(sheet.getContext(), 12);
             lp.bottomMargin = dp(sheet.getContext(), 12);
             panel.addView(option, lp);
-            if (prediction != null && prediction.getParent() == panel
-                    && prediction.getLayoutParams() instanceof ConstraintLayout.LayoutParams) {
-                ConstraintLayout.LayoutParams predictLp =
-                        (ConstraintLayout.LayoutParams) prediction.getLayoutParams();
-                predictLp.topToBottom = option.getId();
-                prediction.setLayoutParams(predictLp);
+            if (prediction != null && prediction.getParent() == panel) {
+                ViewGroup.LayoutParams predictLp = prediction.getLayoutParams();
+                if (predictLp != null && predictLp.getClass().getName().contains(
+                        "ConstraintLayout$LayoutParams")) {
+                    HookUtil.setIntField(predictLp, "topToBottom", option.getId());
+                    prediction.setLayoutParams(predictLp);
+                }
             }
             STATES.put(owner, state);
             Api101Bridge.log(TAG + " fourth native FolderSheet choice attached"
