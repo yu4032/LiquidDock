@@ -22,6 +22,24 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(hook.contains("MeasureDomain.FOLDER"));
     }
 
+    @Test public void folderAnimationProxyCannotReceiveScaledPreviewInsideStockSizedHost()
+            throws Exception {
+        String hook = Files.readString(MAIN.resolve("Launcher450IconSizeHook.java"));
+
+        // Launcher 4.50 FolderCling constructs a separate FolderIcon1x1 and marks
+        // it setUseCustomWidth(true). Its ItemIcon measurement never resizes the
+        // stock host. The preview must therefore use the same Workspace-scoped
+        // scale decision as the actual FolderIcon1x1, not a global FOLDER domain.
+        assertTrue(hook.contains("smallFolderMeasureDomain((View) owner)"));
+        assertTrue(hook.contains("LauncherGlassHierarchy.isWorkspace(view)"));
+        assertTrue(hook.contains("installFolderPreviewMeasureTransaction"));
+        assertFalse(hook.contains("HookUtil.hook(onMeasure, chain -> withMeasureDomain("));
+        assertFalse(hook.contains("withMeasureDomain(\\n                MeasureDomain.FOLDER"));
+        assertFalse(hook.contains("setClipChildren(false)"));
+        assertFalse(hook.contains("setScaleX("));
+        assertFalse(hook.contains("setScaleY("));
+    }
+
     @Test public void dragGlassUsesIndependentUpperWorkspaceBackdropAuthority() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
         String source = Files.readString(MAIN.resolve("LauncherDragSourceOverlay.java"));
