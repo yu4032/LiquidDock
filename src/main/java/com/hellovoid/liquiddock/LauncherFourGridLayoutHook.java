@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -43,7 +42,7 @@ final class LauncherFourGridLayoutHook {
                     try {
                         inspect((ViewGroup) owner);
                     } catch (Throwable error) {
-                        Log.e(TAG, "four-grid-attach-failed", error);
+                        Api101Bridge.log(TAG + "four-grid-attach-failed", error);
                     }
                 }
                 return result;
@@ -66,13 +65,13 @@ final class LauncherFourGridLayoutHook {
                     return result;
                 });
             } catch (Throwable error) {
-                Log.w(TAG, "four-grid-data-refresh-unavailable " + error.getClass().getSimpleName());
+                Api101Bridge.log(TAG + "four-grid-data-refresh-unavailable " + error.getClass().getSimpleName());
             }
             installed = true;
-            Log.i(TAG, "four-grid-independent-layout-installed");
+            Api101Bridge.log(TAG + "four-grid-independent-layout-installed");
             return true;
         } catch (Throwable error) {
-            Log.e(TAG, "four-grid-layout-install-failed", error);
+            Api101Bridge.log(TAG + "four-grid-layout-install-failed", error);
             return false;
         }
     }
@@ -96,7 +95,7 @@ final class LauncherFourGridLayoutHook {
                 CONTENTS.remove(nativeFolder);
                 nativeFolder.removeView(previous);
                 restoreOriginal(nativeFolder);
-                Log.i(TAG, "four-grid-restored-native-layout");
+                Api101Bridge.log(TAG + "four-grid-restored-native-layout");
             }
         }
     }
@@ -136,7 +135,7 @@ final class LauncherFourGridLayoutHook {
             folder.addView(content, lp);
             CONTENTS.put(folder, new WeakReference<>(content));
             hideOriginal(folder);
-            Log.i(TAG, "four-grid-attached root=" + folder.getClass().getName()
+            Api101Bridge.log(TAG + "four-grid-attached root=" + folder.getClass().getName()
                     + " rootSize=" + folder.getWidth() + "x" + folder.getHeight()
                     + " content=" + content.getClass().getSimpleName());
         }
@@ -177,7 +176,7 @@ final class LauncherFourGridLayoutHook {
         } else {
             // The native field may be renamed: still show the independent
             // background and icons, never mutate an unknown view hierarchy.
-            Log.w(TAG, "four-grid-native-icon-container-not-found");
+            Api101Bridge.log(TAG + "four-grid-native-icon-container-not-found");
         }
     }
 
