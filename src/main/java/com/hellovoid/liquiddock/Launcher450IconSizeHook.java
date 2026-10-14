@@ -75,9 +75,7 @@ final class Launcher450IconSizeHook {
             HookUtil.hook(folderMeasure, chain -> {
                 Object owner = chain.getThisObject();
                 MeasureDomain domain = owner instanceof View
-                        && enabled
-                        && LauncherGlassHierarchy.isWorkspace((View) owner)
-                        ? MeasureDomain.FOLDER : null;
+                        ? smallFolderMeasureDomain((View) owner) : null;
                 MeasureDomain previous = ACTIVE_DOMAIN.get();
                 if (domain != null) ACTIVE_DOMAIN.set(domain);
                 try {
@@ -121,13 +119,28 @@ final class Launcher450IconSizeHook {
         }
     }
 
+    /**
+     * FolderIcon1x1 and its preview must share a single size authority. Launcher
+     * creates a second, custom-width FolderIcon1x1 in FolderCling during open/close;
+     * that animation proxy is not part of Workspace and must retain its vendor
+     * preview size rather than receive a larger preview cropped by the proxy host.
+     */
+    private static MeasureDomain smallFolderMeasureDomain(View view) {
+        return enabled && view != null && LauncherGlassHierarchy.isWorkspace(view)
+                ? MeasureDomain.FOLDER : null;
+    }
+
     private static void installFolderPreviewMeasureTransaction(
             Class<?> folderPreviewContainer) throws NoSuchMethodException {
         Method onMeasure = HookUtil.findMethodExact(
                 folderPreviewContainer, "onMeasure", new Class<?>[]{int.class, int.class});
-        HookUtil.hook(onMeasure, chain -> withMeasureDomain(
-                MeasureDomain.FOLDER,
-                () -> chain.proceed(chain.getArgs().toArray(new Object[0]))));
+        HookUtil.hook(onMeasure, chain -> {
+            Object owner = chain.getThisObject();
+            MeasureDomain domain = owner instanceof View
+                    ? smallFolderMeasureDomain((View) owner) : null;
+            return withMeasureDomain(domain,
+                    () -> chain.proceed(chain.getArgs().toArray(new Object[0])));
+        });
     }
 
     private static void installFolderScaleTransactions(
