@@ -49,6 +49,10 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(picker.contains("sample.getClass().getConstructor("));
         assertTrue(picker.contains("2×2 四宫格"));
         assertTrue(picker.contains("PREFIX + id"));
+        assertTrue(picker.contains("boolean wasCustom = isMarked("));
+        assertTrue(picker.contains("!selected && wasCustom"));
+        assertTrue(picker.contains("convertIconSize"));
+        assertTrue(picker.contains("group.getChildCount() != 4"));
         assertFalse(picker.contains("root.addView(original"));
         assertFalse(picker.contains("panel.addView(option"));
         assertTrue(nativeSpan.contains("FolderIconConvertSizeController"));
