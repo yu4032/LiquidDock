@@ -43,7 +43,7 @@ final class OpenFolderGlassHook {
                     new Class<?>[]{info, View.class}), chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
-                    safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1]));
+                    safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
                 return chain.proceed(args);
             });
@@ -52,9 +52,16 @@ final class OpenFolderGlassHook {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             HookUtil.hook(HookUtil.findMethodExact(cling, "open", new Class<?>[0]), chain -> {
-                safe(() -> OpenFolderGlassCoordinator.onOpening((View) chain.getThisObject()));
-                try { return chain.proceed(chain.getArgs().toArray(new Object[0])); }
-                catch (Throwable error) { OpenFolderGlassCoordinator.releaseAll(); throw error; }
+                try {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    // The native open() initializes its folder reference. Install our
+                    // pre-draw observer after that initialization, before its first draw.
+                    safe(() -> OpenFolderGlassCoordinator.onOpening((View) chain.getThisObject()));
+                    return result;
+                } catch (Throwable error) {
+                    OpenFolderGlassCoordinator.releaseAll();
+                    throw error;
+                }
             });
             HookUtil.hook(HookUtil.findMethodExact(cling, "onFolderOpenAnimationFinish", new Class<?>[0]), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));

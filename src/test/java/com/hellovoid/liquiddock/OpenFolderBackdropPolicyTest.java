@@ -4,6 +4,13 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class OpenFolderBackdropPolicyTest {
+    @Test public void acceptsSafeLatchedFrameEvenWhenBlurFinishesAfterNativeFirstDraw() {
+        assertTrue(OpenFolderBackdropPolicy.acceptsCapturedFrame(10L, 20L));
+        assertTrue(OpenFolderBackdropPolicy.acceptsCapturedFrame(30L, Long.MAX_VALUE));
+        assertFalse(OpenFolderBackdropPolicy.acceptsCapturedFrame(21L, 20L));
+        assertFalse(OpenFolderBackdropPolicy.acceptsCapturedFrame(0L, Long.MAX_VALUE));
+    }
+
     @Test public void progressUsesNativeTranslationAndFallsBackToYForVerticalOnlyExpansion() throws Exception {
         java.lang.reflect.Method progress = OpenFolderBackdropPolicy.class.getDeclaredMethod("nativeProgress",
                 float.class, float.class, float.class, float.class);

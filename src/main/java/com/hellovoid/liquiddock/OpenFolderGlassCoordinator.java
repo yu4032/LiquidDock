@@ -37,9 +37,11 @@ final class OpenFolderGlassCoordinator {
     }
 
     /** Accessibility and programmatic launches may bypass icon touch events. */
-    static void ensurePrepared(ViewGroup icon) {
+    static void ensurePrepared(ViewGroup icon, Object folderInfo) {
         State state = current;
         if (state == null || state.icon.get() != icon) prepare(icon);
+        state = current;
+        if (state != null && state.icon.get() == icon) state.expectedFolderInfo = folderInfo;
     }
 
     static void prepare(ViewGroup sourceIcon) {
@@ -106,9 +108,15 @@ final class OpenFolderGlassCoordinator {
         View sourceIcon = state.icon.get();
         View folder = view(invoke(folderCling, "getFolder"));
         Object info = folder != null ? invoke(folder, "getInfo") : null;
-        Object actualSource = field(info, "icon");
-        if (actualSource != sourceIcon || !(folderCling instanceof ViewGroup)
-                || !enabled(sourceIcon)) {
+        if (info == null) info = field(folder, "mInfo");
+        Object sourceFolder = invoke(sourceIcon, "getFolder");
+        // Launcher.openFolder supplies the authoritative source/info pair. FolderInfo.icon
+        // is not a stable OEM field and must not invalidate a valid opened-folder owner.
+        if (folder == null || !(folderCling instanceof ViewGroup) || !enabled(sourceIcon)
+                || (sourceFolder != null && sourceFolder != folder)
+                || (state.expectedFolderInfo != null && info != null
+                        && state.expectedFolderInfo != info)) {
+            MainHook.log(TAG + " native folder/source mismatch; retaining OEM material");
             releaseAll();
             return;
         }
@@ -395,6 +403,7 @@ final class OpenFolderGlassCoordinator {
         WeakReference<View> cling = new WeakReference<>(null), folder = new WeakReference<>(null);
         WeakReference<View> animationCling = new WeakReference<>(null);
         final long serial;
+        Object expectedFolderInfo;
         final int width, height, rotation;
         LiquidDockConfig.Glass glass;
         final Matrix toGlobal = new Matrix(), rootToGlobal = new Matrix(), toRoot = new Matrix();

@@ -28,6 +28,13 @@ final class OpenFolderBackdropPolicy {
         return Float.NaN;
     }
 
+    /** A pre-open latched frame remains safe after native pre-draw while GPU blur finishes. */
+    static boolean acceptsCapturedFrame(long latchedAtNanos, long firstNativeDrawNanos) {
+        return latchedAtNanos > 0L
+                && (firstNativeDrawNanos == Long.MAX_VALUE
+                    || latchedAtNanos <= firstNativeDrawNanos);
+    }
+
     static float backdropOpacity(float progress) {
         return Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
     }
