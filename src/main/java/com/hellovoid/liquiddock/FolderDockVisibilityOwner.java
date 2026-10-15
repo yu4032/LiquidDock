@@ -8,9 +8,10 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * Folder-scoped presentation of the native DockContainerView.
- * OEM FolderState remains authoritative for the Dock window transaction.
- * No synthetic state-chart events or Dock window relocation.
+ * Folder-scoped presentation ownership of DockControllerImpl.mHotSeatsView.
+ * DockWindowManager receives HotSeats, DockContainerView and dockViewContainer
+ * separately: hiding only DockContainerView misses the view-switch path.
+ * OEM FolderState remains authoritative for native window transactions.
  */
 final class FolderDockVisibilityOwner {
     private static final String TAG = "[DC][FolderDockVisibility]";
@@ -24,7 +25,7 @@ final class FolderDockVisibilityOwner {
         View root = rootRef.get();
         if (open && root != null && root.getAlpha() != 0f) {
             root.setAlpha(0f);
-            MainHook.log(TAG + " competing Dock root-alpha write corrected");
+            MainHook.log(TAG + " competing HotSeats alpha write corrected");
         }
         return true;
     };
@@ -85,16 +86,16 @@ final class FolderDockVisibilityOwner {
                 MainHook.log(TAG + " native Dock controller not initialized");
                 return;
             }
-            // DockControllerImpl#getDockRootView() is the public interface
-            // implementation returning getMDockRootView() and has a stable
-            // ViewGroup result. Resolve this one exact zero-argument method,
-            // never every method in DockControllerImpl or Launcher.
-            Method dockRootGetter = controller.getClass().getDeclaredMethod("getDockRootView");
-            dockRootGetter.setAccessible(true);
-            Object candidate = dockRootGetter.invoke(controller);
+            // Decompiled DockControllerImpl#setupDockEnv passes mHotSeatsView
+            // to DockWindowManager next to DockContainerView and
+            // dockViewContainer. HotSeats owns the real visual content in
+            // either hosting mode, whereas DockContainerView owns only one.
+            Field hotSeatsField = controller.getClass().getDeclaredField("mHotSeatsView");
+            hotSeatsField.setAccessible(true);
+            Object candidate = hotSeatsField.get(controller);
             if (!(candidate instanceof View)) {
-                MainHook.log(TAG + " native Dock root not a View controller="
-                        + controller.getClass().getName());
+                MainHook.log(TAG + " native HotSeats unavailable type="
+                        + (candidate == null ? "null" : candidate.getClass().getName()));
                 return;
             }
             View root = (View) candidate;
@@ -109,10 +110,13 @@ final class FolderDockVisibilityOwner {
             root.addOnAttachStateChangeListener(ATTACH);
             observe(root);
             root.setAlpha(0f);
-            MainHook.log(TAG + " DockContainerView covered during folder"
-                    + " attached=" + root.isAttachedToWindow());
+            MainHook.log(TAG + " HotSeats covered during folder"
+                    + " attached=" + root.isAttachedToWindow()
+                    + " parent=" + (root.getParent() == null ? "none"
+                    : root.getParent().getClass().getSimpleName())
+                    + " id=" + Integer.toHexString(System.identityHashCode(root)));
         } catch (Throwable error) {
-            MainHook.log(TAG + " native Dock root resolution failed: "
+            MainHook.log(TAG + " native HotSeats resolution failed: "
                     + error.getClass().getName() + ": " + error.getMessage());
         }
     }
@@ -130,7 +134,7 @@ final class FolderDockVisibilityOwner {
         if (root == null) return;
         root.removeOnAttachStateChangeListener(ATTACH);
         root.setAlpha(originalAlpha);
-        MainHook.log(TAG + " DockContainerView restored alpha=" + originalAlpha);
+        MainHook.log(TAG + " HotSeats restored alpha=" + originalAlpha);
         originalAlpha = 1f;
     }
 
