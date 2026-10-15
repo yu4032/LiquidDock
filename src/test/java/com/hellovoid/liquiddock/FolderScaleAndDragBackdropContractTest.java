@@ -22,6 +22,35 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(hook.contains("MeasureDomain.FOLDER"));
     }
 
+    @Test public void folderTraceIsIndependentlyWiredAndFailuresAreAlwaysReported()
+            throws Exception {
+        String module = Files.readString(MAIN.resolve("ModuleMain.java"));
+        String tracer = Files.readString(MAIN.resolve("Launcher450SmallFolderTrace.java"));
+        String iconHook = Files.readString(MAIN.resolve("Launcher450IconSizeHook.java"));
+
+        assertTrue(module.contains("Launcher450SmallFolderTrace.install(classLoader)"));
+        assertTrue(module.contains("Launcher450IconSizeHook.install(classLoader"));
+        assertTrue(tracer.contains("Api101Bridge.log(TAG + BUILD"));
+        assertTrue(tracer.contains("v2-independent-20261014"));
+        assertTrue(tracer.contains("install-enter"));
+        assertTrue(tracer.contains("hook-installed FolderIcon1x1.onMeasure"));
+        assertTrue(tracer.contains("hook-FAILED FolderIcon1x1.onMeasure"));
+        assertTrue(tracer.contains("install-complete"));
+        assertTrue(tracer.contains("Api101Bridge.errorAlways(TAG + BUILD"));
+        assertTrue(tracer.contains("close-next-frame"));
+        assertTrue(tracer.contains("vendor-setFolderIconBlur"));
+        assertTrue(tracer.contains("drawable-bind-after"));
+        assertTrue(tracer.contains("Api101Bridge.isDebugLoggingEnabled()"));
+        assertFalse(tracer.contains("android.util.Log.w("));
+        assertFalse(tracer.contains("setLayoutParams("));
+        assertFalse(tracer.contains("setClipChildren("));
+        assertFalse(tracer.contains("setMiViewBlurMode("));
+        assertFalse(tracer.contains("setImageDrawable("));
+        // Diagnose the old geometry rather than reintroducing PR #372's
+        // unvalidated MATCH_PARENT mutation.
+        assertFalse(iconHook.contains("bindSmallFolderMaterialToIconSize("));
+    }
+
     @Test public void dragGlassUsesIndependentUpperWorkspaceBackdropAuthority() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
         String source = Files.readString(MAIN.resolve("LauncherDragSourceOverlay.java"));

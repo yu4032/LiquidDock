@@ -138,6 +138,9 @@ public final class ModuleMain extends XposedModule {
         try {
             initializeCurrentProfileIfEmpty();
             ClassLoader classLoader = param.getClassLoader();
+            // Diagnostic-only: install independently of icon-size/GridConfig hooks.
+            // Emit a logcat marker even if normal Launcher module setup fails later.
+            Launcher450SmallFolderTrace.install(classLoader);
             ConfigReader configReader = ConfigReader.load();
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
             if (runtimeConfig.enabled) {
