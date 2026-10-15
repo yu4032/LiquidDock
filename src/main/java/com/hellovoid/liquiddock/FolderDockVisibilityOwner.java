@@ -4,6 +4,8 @@ import android.view.View;
 import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 /**
  * Folder-scoped presentation of the native DockContainerView.
@@ -57,7 +59,12 @@ final class FolderDockVisibilityOwner {
                 // is also used by the original vendor listener implementation.
                 Class<?> application = Class.forName("com.miui.home.launcher.Application",
                         false, nativeDispatcher.getClass().getClassLoader());
-                launcher = HookUtil.requireInvokeStatic(application, "getLauncher");
+                // Resolving all methods on Launcher/Application can load
+                // unrelated optional NewHomeView signatures and fail before
+                // getLauncher() is even invoked. Resolve only the known method.
+                Method getLauncher = application.getDeclaredMethod("getLauncher");
+                getLauncher.setAccessible(true);
+                launcher = getLauncher.invoke(null);
                 rememberLauncher(launcher);
             } catch (Throwable error) {
                 MainHook.log(TAG + " Launcher fallback unavailable: " + error);
@@ -65,13 +72,31 @@ final class FolderDockVisibilityOwner {
         }
         if (launcher == null) return;
         try {
-            Object controller = HookUtil.requireInvoke(launcher, "getDockController");
-            if (controller == null) return;
-            // Do NOT gate on DockStateManager.getState() == HOME_STATE:
-            // native window transitions are independent of FolderCling.open,
-            // and the state can still be settling as the folder appears.
-            Object candidate = HookUtil.requireInvoke(controller, "getMDockRootView");
-            if (!(candidate instanceof View)) return;
+            // Launcher#getDockController() is exactly 'return mDockController'.
+            // Do not use HookUtil.requireInvoke here: VendorMemberResolver
+            // scans every declared Launcher method. Launcher 4.50 contains a
+            // getNewHomeView(): NewHomeView method whose optional class is
+            // absent on this device. Enumeration throws NoClassDefFoundError
+            // before the unrelated getDockController can be resolved.
+            Field dockControllerField = launcher.getClass().getDeclaredField("mDockController");
+            dockControllerField.setAccessible(true);
+            Object controller = dockControllerField.get(launcher);
+            if (controller == null) {
+                MainHook.log(TAG + " native Dock controller not initialized");
+                return;
+            }
+            // DockControllerImpl#getDockRootView() is the public interface
+            // implementation returning getMDockRootView() and has a stable
+            // ViewGroup result. Resolve this one exact zero-argument method,
+            // never every method in DockControllerImpl or Launcher.
+            Method dockRootGetter = controller.getClass().getDeclaredMethod("getDockRootView");
+            dockRootGetter.setAccessible(true);
+            Object candidate = dockRootGetter.invoke(controller);
+            if (!(candidate instanceof View)) {
+                MainHook.log(TAG + " native Dock root not a View controller="
+                        + controller.getClass().getName());
+                return;
+            }
             View root = (View) candidate;
             if (open && rootRef.get() == root) {
                 if (root.getAlpha() != 0f) root.setAlpha(0f);
@@ -87,7 +112,8 @@ final class FolderDockVisibilityOwner {
             MainHook.log(TAG + " DockContainerView covered during folder"
                     + " attached=" + root.isAttachedToWindow());
         } catch (Throwable error) {
-            MainHook.log(TAG + " native Dock root unavailable; OEM FolderState remains: " + error);
+            MainHook.log(TAG + " native Dock root resolution failed: "
+                    + error.getClass().getName() + ": " + error.getMessage());
         }
     }
 
