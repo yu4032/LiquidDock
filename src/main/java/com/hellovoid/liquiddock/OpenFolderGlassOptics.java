@@ -17,6 +17,15 @@ final class OpenFolderGlassOptics {
         return b.build();
     }
 
+    /** Reuse the normal Workspace blur while retaining folder-only lens optics. */
+    static PrismalParams restoreWorkspaceBlur(PrismalParams folder, float workspaceBlurPx) {
+        if (folder == null) throw new IllegalArgumentException("folder == null");
+        if (!Float.isFinite(workspaceBlurPx)) return folder;
+        PrismalParams.Builder b = PrismalParams.builder(folder);
+        b.blurRadiusPx = Math.max(0f, workspaceBlurPx);
+        return b.build();
+    }
+
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }

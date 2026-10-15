@@ -207,6 +207,10 @@ final class OpenFolderGlassCoordinator {
         }
         OWNER.beginClose(state.serial);
         state.motion.beginClose();
+        // Native reverse spring supplies geometry, but from its first frame
+        // the prepared wallpaper must use Workspace rather than folder blur.
+        // Re-blur the frozen input once; never recapture a desktop-in-folder frame.
+        if (state.session != null) state.session.beginFolderClose();
         onClosingAnimationMaterialUpdated();
     }
 

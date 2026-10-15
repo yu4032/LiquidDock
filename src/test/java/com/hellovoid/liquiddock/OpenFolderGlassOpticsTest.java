@@ -15,6 +15,18 @@ public class OpenFolderGlassOpticsTest {
         assertEquals(base.causticIntensity, result.causticIntensity, 0.0001f);
         assertEquals(base.blurRadiusPx, PrismalParams.builder(base).build().blurRadiusPx, 0.0001f);
     }
+    @Test public void closingUsesWorkspaceBlurAndRetainsFolderLensSettings() {
+        PrismalParams base = PrismalParams.builder().build();
+        PrismalParams folder = OpenFolderGlassOptics.apply(base, 45, 180, 26, 125, 2f);
+        PrismalParams closing = OpenFolderGlassOptics.restoreWorkspaceBlur(folder, 5.5f);
+        assertEquals(5.5f, closing.blurRadiusPx, .0001f);
+        assertEquals(1.8f, closing.ior, .0001f);
+        assertEquals(52f, closing.glassThicknessPx, .0001f);
+        assertEquals(125f / 255f, closing.tintA, .0001f);
+        assertEquals("Immutable original folder material", 45f, folder.blurRadiusPx, .0001f);
+        assertSame("Invalid Workspace settings must not overwrite the folder",
+                folder, OpenFolderGlassOptics.restoreWorkspaceBlur(folder, Float.NaN));
+    }
     @Test public void folderOpticsClampToSchemaLimits() {
         PrismalParams params = OpenFolderGlassOptics.apply(PrismalParams.builder().build(),
                 -500, 9999, -4, 999, 1f);
