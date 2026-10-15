@@ -42,6 +42,7 @@ public class FolderFrozenGlassHandoffContractTest {
         assertFalse(renderer.contains("if (!frozen) requestDockSceneRefresh()"));
         assertTrue(output.contains("awaitingPostFolderProducer"));
         assertTrue(output.contains("frameAvailable.set(false)"));
+        assertTrue(output.contains("if (folderRenderFrozen) {"));
         assertTrue(output.contains("awaitingPostFolderProducer && !frameAvailable.get()"));
         assertTrue(output.contains("if (folderRenderFrozen) return;"));
     }
