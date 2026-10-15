@@ -25,10 +25,20 @@ final class LauncherGlassVisibility {
     }
 
     static float effectiveAlpha(View host, View sceneRoot) {
+        return effectiveAlpha(host, sceneRoot, true);
+    }
+
+    /** The output is already a child of sceneRoot, so its opacity must not be multiplied twice. */
+    static float alphaBelowRoot(View host, View sceneRoot) {
+        return effectiveAlpha(host, sceneRoot, false);
+    }
+
+    private static float effectiveAlpha(View host, View sceneRoot, boolean includeRoot) {
         if (host == null || sceneRoot == null || !host.isAttachedToWindow()) return 0f;
         float result = 1f;
         View cursor = host;
         while (cursor != null) {
+            if (cursor == sceneRoot && !includeRoot) return result;
             if (cursor.getVisibility() != View.VISIBLE) return 0f;
             float alpha = cursor.getAlpha();
             if (!Float.isFinite(alpha) || alpha <= 0f) return 0f;

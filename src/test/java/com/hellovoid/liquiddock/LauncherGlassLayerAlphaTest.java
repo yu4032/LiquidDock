@@ -52,4 +52,60 @@ public class LauncherGlassLayerAlphaTest {
         state.setMotionAlpha(Float.NaN);
         assertEquals(0f, state.alpha(), 0f);
     }
+
+    @Test public void workspaceFadeTracksEveryNativeFrameAndGestureCancellation() throws Exception {
+        LauncherGlassLayerAlpha state = new LauncherGlassLayerAlpha();
+        state.setSceneAlpha(1f);
+        setWorkspaceAlpha(state, 0.7f, false);
+        assertEquals(0.7f, state.alpha(), 0.0001f);
+        setWorkspaceAlpha(state, 0.15f, false);
+        assertEquals(0.15f, state.alpha(), 0.0001f);
+        setWorkspaceAlpha(state, 0f, false);
+        assertEquals(0f, state.alpha(), 0f);
+        setWorkspaceAlpha(state, 0.6f, false);
+        assertEquals(0.6f, state.alpha(), 0.0001f);
+        setWorkspaceAlpha(state, 1f, false);
+        assertEquals(1f, state.alpha(), 0f);
+    }
+
+    @Test public void workspaceUpdatesCannotRevealHardCoveredOrUnlockHiddenScene() throws Exception {
+        LauncherGlassLayerAlpha state = new LauncherGlassLayerAlpha();
+        setWorkspaceAlpha(state, 1f, false);
+        assertEquals(0f, state.alpha(), 0f);
+        state.setSceneAlpha(1f);
+        state.startMotionReveal(450L);
+        setWorkspaceAlpha(state, 1f, false);
+        assertEquals(0f, state.alpha(), 0f);
+        state.setMotionAlpha(0.5f);
+        setWorkspaceAlpha(state, 0.4f, false);
+        assertEquals(0.2f, state.alpha(), 0.0001f);
+    }
+
+    @Test public void floatingLaunchProxyKeepsItsOwnPresentationWhenWorkspaceIsHidden() throws Exception {
+        LauncherGlassLayerAlpha state = new LauncherGlassLayerAlpha();
+        state.setSceneAlpha(1f);
+        setWorkspaceAlpha(state, 0f, true);
+        assertEquals(1f, state.alpha(), 0f);
+        state.setSceneAlpha(0f);
+        assertEquals(0f, state.alpha(), 0f);
+        state.setSceneAlpha(1f);
+        setWorkspaceAlpha(state, 0f, false);
+        assertEquals(0f, state.alpha(), 0f);
+    }
+
+    @Test public void invalidWorkspaceAlphaCannotLeaveGlassVisible() throws Exception {
+        LauncherGlassLayerAlpha state = new LauncherGlassLayerAlpha();
+        state.setSceneAlpha(1f);
+        setWorkspaceAlpha(state, Float.NaN, false);
+        assertEquals(0f, state.alpha(), 0f);
+        setWorkspaceAlpha(state, -1f, false);
+        assertEquals(0f, state.alpha(), 0f);
+        setWorkspaceAlpha(state, 2f, false);
+        assertEquals(1f, state.alpha(), 0f);
+    }
+
+    private static void setWorkspaceAlpha(
+            LauncherGlassLayerAlpha state, float alpha, boolean launchProxyActive) throws Exception {
+        state.setWorkspaceAlpha(alpha, launchProxyActive);
+    }
 }

@@ -225,6 +225,8 @@ final class LauncherGlassStaticNode {
 
     float visibilityAlpha() { return visibilityAlpha; }
 
+    boolean isLaunchProxyActive() { return visualOwnerState.isLaunchProxyActive(); }
+
     boolean retainLastGeometryDuringFade() {
         return visibilityAlpha > 0.001f && suppressionState.isSuppressed();
     }
