@@ -53,6 +53,7 @@ final class OpenFolderGlassState {
     }
 
     boolean maySuppressNative() { return phase != Phase.CLOSED && presented; }
+    boolean isClosing() { return phase == Phase.CLOSING; }
 
     Runnable guardCompletion(long value, Runnable completion) {
         return () -> { if (owns(value)) completion.run(); };

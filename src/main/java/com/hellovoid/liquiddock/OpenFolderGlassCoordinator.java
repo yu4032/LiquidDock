@@ -222,6 +222,7 @@ final class OpenFolderGlassCoordinator {
         if (anim instanceof ImageView) {
             track(state, ((ImageView) anim).getDrawable());
         }
+        if (anim != null) track(state, anim.getBackground());
         claimNativeBlur(state);
     }
 
@@ -364,6 +365,15 @@ final class OpenFolderGlassCoordinator {
             track(state, folder.getBackground());
             track(state, panel != null ? panel.getBackground() : null);
             if (animImage instanceof ImageView) track(state, ((ImageView) animImage).getDrawable());
+            if (animImage != null) {
+                track(state, animImage.getBackground());
+                // Native close may rebind its animation View independently of
+                // setIconBgAnim/setFolderIconBlur. Claim the new RenderNode in
+                // this same pre-draw, before its first visible composition.
+                if (OWNER.maySuppressNative() && !state.claimedBlur.containsKey(animImage)) {
+                    claimNativeBlur(state);
+                }
+            }
             state.materials.endFrame(state.serial);
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top, frame.right, frame.bottom, frame.radius), amount);
