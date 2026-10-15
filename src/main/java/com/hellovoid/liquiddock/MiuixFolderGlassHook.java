@@ -1,7 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.content.Context;
-import android.content.ContextWrapper;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -49,6 +47,7 @@ final class MiuixFolderGlassHook {
     private static long openedFolderSerial;
     private static boolean folderStatusDispatcherInstalled;
     private static final FolderDockOpenDispatch DOCK_OPEN = new FolderDockOpenDispatch();
+    private static WeakReference<Object> pendingNativeLauncher = new WeakReference<>(null);
     private static final FolderCloseCompletionGate NATIVE_CLOSE = new FolderCloseCompletionGate();
     private static boolean nativeFolderMaterialsCovered;
     private static boolean installed;
@@ -176,32 +175,43 @@ final class MiuixFolderGlassHook {
         }
     }
 
-    /** Native Launcher 4.50 dispatch is normally delayed until after openFolderAnim(). */
-    static void dispatchDockOpenBeforeFirstDraw(View folderCling) {
-        if (!folderStatusDispatcherInstalled || !GlassRuntimeState.isEnabled()
-                || folderCling == null || DOCK_OPEN.hasPendingNativeOpen()) return;
-        Context context = folderCling.getContext();
-        for (int depth = 0; depth < 8 && context instanceof ContextWrapper
-                && !context.getClass().getName().equals("com.miui.home.launcher.Launcher"); depth++) {
-            Context next = ((ContextWrapper) context).getBaseContext();
-            if (next == context) break;
-            context = next;
+    /** Launcher.openFolder is an authoritative owner; ContextWrapper is not. */
+    static void recordNativeLauncher(Object launcher) {
+        if (launcher != null && "com.miui.home.launcher.Launcher".equals(
+                launcher.getClass().getName())) {
+            pendingNativeLauncher = new WeakReference<>(launcher);
         }
-        if (context == null || !context.getClass().getName().equals("com.miui.home.launcher.Launcher")) return;
+    }
+
+    /** Deliver the real OEM FolderState event before its original late call.
+     * Never steal the late dispatch until DockStateManager has subscribed.
+     */
+    static void dispatchDockOpenBeforeFirstDraw(View folderCling) {
+        Object launcher = pendingNativeLauncher.get();
+        pendingNativeLauncher.clear();
+        if (!folderStatusDispatcherInstalled || !GlassRuntimeState.isEnabled()
+                || folderCling == null || launcher == null
+                || DOCK_OPEN.hasPendingNativeOpen()) return;
         try {
-            Object controller = HookUtil.requireInvoke(context, "getDockController");
+            Object controller = HookUtil.requireInvoke(launcher, "getDockController");
             if (controller == null) return;
+            // Decompiled DockControllerImpl constructs and subscribes listeners
+            // inside DockStateManager's constructor, then assigns this field.
+            // Without it the first early event is silently lost; the ordinary
+            // Launcher.dispatchFolderStatus(true) must remain authoritative.
+            Object manager = HookUtil.getField(controller, "dockStateManager");
+            if (manager == null) {
+                MainHook.log(TAG + " early Dock state deferred: manager not initialized");
+                return;
+            }
             Object dispatcher = HookUtil.requireInvoke(controller, "getFolderStatusDispatcher");
             if (dispatcher == null) return;
-            // Invoke the SAME vendor dispatcher and listeners, not a manually
-            // constructed Dock state or alpha override. The later OEM call is
-            // consumed by the installed hook to avoid nested FolderState counts.
             HookUtil.requireInvoke(dispatcher, "dispatchFolderOpen");
             DOCK_OPEN.onEarlyDispatched();
-            MainHook.log(TAG + " Dock native FolderState dispatched before first folder draw");
+            MainHook.log(TAG + " OEM Dock FolderState delivered early via Launcher instance");
         } catch (Throwable error) {
-            // The original Launcher.dispatchFolderStatus() remains authoritative.
-            MainHook.log(TAG + " early Dock FolderState unavailable; preserving OEM event: " + error);
+            // Keep the original Launcher.dispatchFolderStatus(true) intact.
+            MainHook.log(TAG + " early Dock event unavailable, preserving OEM late event: " + error);
         }
     }
 
@@ -353,21 +363,18 @@ final class MiuixFolderGlassHook {
         LauncherGlassStaticNode sink = openedFolderSink.get();
         ViewGroup owner = openedFolderOwner.get();
 
-        // FolderStatusServiceImpl is a useful early semantic signal, but it is not guaranteed to
-        // dispatch every close path on Launcher 4.50. Folder.onClose completion is the final
-        // animation boundary we already observe, so reconcile the global hard-cover state here as
-        // an idempotent close authority as well. Otherwise a missed dispatchFolderClose leaves
-        // vendorFolderCovered=true and permanently hides every Workspace glass node.
-        setNativeFolderMaterialsCovered(false);
+        // Expose the original folder's glass sink and cached Workspace
+        // before removing native covers or the expanded glass output.
+        // This handoff is synchronous in UI ownership, without a new fade.
+        if (sink != null) sink.restoreFolderVisibilityImmediately();
         LauncherGlassSceneController.setFolderCoveredForAll(false);
         if (owner != null && !folderStatusDispatcherInstalled) {
-            // Keep the root-local fallback for builds where the semantic dispatcher was unavailable.
             LauncherGlassSceneController.setWorkspaceCovered(owner, false);
         }
+        setNativeFolderMaterialsCovered(false);
 
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
-        if (sink != null) sink.restoreFolderVisibilityImmediately();
     }
 
     private static LauncherGlassStaticNode resolveOwnerSink(ViewGroup owner) {

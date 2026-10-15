@@ -76,6 +76,9 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(launcher, "openFolder",
                     new Class<?>[]{info, View.class}), chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
+                // Capture the Launcher object before its asynchronous folder
+                // runnable; FolderCling's Context can be a themed wrapper.
+                MiuixFolderGlassHook.recordNativeLauncher(chain.getThisObject());
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }

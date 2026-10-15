@@ -23,7 +23,10 @@ final class OpenFolderGlassCoordinator {
 
     static boolean followsNativeWorkspaceFade() {
         State state = current;
-        return state != null && live(state) && state.cling.get() != null;
+        // Launcher dispatches FolderIcon.onOpen / FolderStatus before the
+        // FolderCling.open callback installs cling. Prepared source ownership
+        // is already sufficient to follow native Workspace alpha.
+        return state != null && live(state);
     }
 
     static void onTouch(ViewGroup icon, MotionEvent event) {
