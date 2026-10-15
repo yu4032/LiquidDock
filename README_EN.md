@@ -13,16 +13,16 @@
 LiquidDock is an LSPosed module for HyperOS 3 tablets. It lets you customize the home screen, Dock, and Recents, and brings Liquid Glass styling to the launcher, system UI, and selected third-party apps.
 
 <details>
-<summary><strong>Screenshots · 8 previews</strong></summary>
+<summary><strong>Screenshots</strong></summary>
 
-<p>Select an image to view the original.</p>
+<p align="center">Select an image to view the original.</p>
 
 <p align="center">
 <strong>Home-screen overview</strong><br />
 <a href="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6"><img width="640" alt="Home-screen overview" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" /></a>
 </p>
 
-<table>
+<table align="center">
 <tr>
 <td width="50%" align="center" valign="top">
 <p><strong>Shortcut menu</strong></p>
