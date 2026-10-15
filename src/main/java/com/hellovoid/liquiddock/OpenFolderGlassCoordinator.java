@@ -317,8 +317,15 @@ final class OpenFolderGlassCoordinator {
                     || Math.abs(basis[3] - basis[1]) > 0.001f
                     || Math.abs(basis[4] - basis[0]) > 0.001f
                     || Math.abs(basis[5] - basis[1] - 1f) > 0.001f) { releaseAll(); return; }
-            state.layer.setTranslationX(-basis[0]);
-            state.layer.setTranslationY(-basis[1]);
+            // The sibling host normally stays fixed. Avoid setting identical
+            // RenderNode transforms on every root pre-draw (which can schedule
+            // redundant compositions during the closing spring).
+            if (Math.abs(state.layer.getTranslationX() + basis[0]) > 0.01f) {
+                state.layer.setTranslationX(-basis[0]);
+            }
+            if (Math.abs(state.layer.getTranslationY() + basis[1]) > 0.01f) {
+                state.layer.setTranslationY(-basis[1]);
+            }
             LiquidDockConfig.Glass latest = LiveGlassConfigState.currentGlass();
             if (latest != null && latest != state.glass) {
                 state.glass = latest;
