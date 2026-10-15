@@ -5,6 +5,7 @@ import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 
@@ -71,8 +72,8 @@ final class OpenFolderGlassCoordinator {
                         if (state.layer != null) state.layer.reveal();
                         state.materials.invalidateAll();
                         claimNativeBlur(state);
-                        View cling = state.cling.get();
-                        if (cling != null) cling.postInvalidateOnAnimation();
+                        View root = state.root.get();
+                        if (root != null) root.postInvalidateOnAnimation();
                     }
                     @Override public void onFailure(Throwable error) {
                         if (live(state)) {
@@ -93,16 +94,24 @@ final class OpenFolderGlassCoordinator {
         if (live(state)) releaseAll();
     }
 
-    /** The native folder can start before the independent wallpaper source attaches. */
+    /** Keep glass below FolderCling content, but outside its visibility lifecycle.
+     * On native close the OEM hides FolderCling before its background spring ends.
+     * A TextureView child of FolderCling would vanish during that spring.
+     */
     private static void attachOutputLayer(State state) {
         if (!live(state) || state.layer != null || state.session == null) return;
         View cling = state.cling.get();
-        if (!(cling instanceof ViewGroup)) return;
+        if (cling == null) return;
+        ViewParent parent = cling.getParent();
+        if (!(parent instanceof ViewGroup)) return;
+        ViewGroup host = (ViewGroup) parent;
+        int position = host.indexOfChild(cling);
+        if (position < 0) return;
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(cling.getContext(), state.session);
+        state.layerHost = new WeakReference<>(host);
         state.layer = layer;
-        ((ViewGroup) cling).addView(layer, 0,
-                new ViewGroup.LayoutParams(state.width, state.height));
-        cling.postInvalidateOnAnimation();
+        host.addView(layer, position, new ViewGroup.LayoutParams(state.width, state.height));
+        host.postInvalidateOnAnimation();
     }
 
     static void onOpening(View folderCling) {
@@ -132,12 +141,12 @@ final class OpenFolderGlassCoordinator {
         state.closedFrame = bounds(image(sourceIcon), state);
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
-        state.observer = folderCling.getViewTreeObserver();
+        state.observer = state.root.get().getViewTreeObserver();
         // Wallpaper-only source stays safe throughout native opening.
         // Do not reject its first GPU frame just because FolderCling drew first.
         state.preDraw = () -> { sync(state); return true; };
         state.observer.addOnPreDrawListener(state.preDraw);
-        folderCling.postInvalidateOnAnimation();
+        state.root.get().postInvalidateOnAnimation();
     }
 
     static void onAnimationHost(View folderCling) {
@@ -278,21 +287,27 @@ final class OpenFolderGlassCoordinator {
         if (!live(state)) return;
         try {
             View root = state.root.get(), cling = state.cling.get(), folder = state.folder.get();
-            if (root == null || cling == null || folder == null || !cling.isAttachedToWindow()
+            ViewGroup host = state.layerHost.get();
+            if (root == null || cling == null || folder == null || !root.isAttachedToWindow()
                     || root.getWidth() != state.width || root.getHeight() != state.height
-                    || (cling.getVisibility() != View.VISIBLE && !state.motion.isClosing())
+                    || (!state.motion.isClosing() && !cling.isAttachedToWindow())
+                    || (!state.motion.isClosing() && cling.getVisibility() != View.VISIBLE)
                     || (root.getDisplay() != null && root.getDisplay().getRotation() != state.rotation)
                     || !enabled(state.icon.get())) { releaseAll(); return; }
-            // Native close may hide the FolderCling while its independent anim
-            // proxy still runs. Keep ownership until Folder.onClose completion.
-            if (cling.getVisibility() != View.VISIBLE) return;
-            // Keep the full-screen buffer at the root origin inside the native folder container.
+            // Native close can hide or detach FolderCling while its separate
+            // background proxy keeps animating. The sibling output stays live.
+            if (state.session == null) return;
+            attachOutputLayer(state);
+            host = state.layerHost.get();
+            if (state.layer == null || host == null || !host.isAttachedToWindow()) return;
+            // Align the stable sibling output to the Launcher root, not to
+            // FolderCling (whose visibility and transform change during close).
             float[] basis = state.basis;
             basis[0] = basis[1] = basis[3] = basis[4] = 0f;
             basis[2] = basis[5] = 1f;
             Matrix matrix = state.toGlobal;
             matrix.reset();
-            cling.transformMatrixToGlobal(matrix);
+            host.transformMatrixToGlobal(matrix);
             matrix.mapPoints(basis);
             state.rootToGlobal.reset();
             root.transformMatrixToGlobal(state.rootToGlobal);
@@ -302,11 +317,6 @@ final class OpenFolderGlassCoordinator {
                     || Math.abs(basis[3] - basis[1]) > 0.001f
                     || Math.abs(basis[4] - basis[0]) > 0.001f
                     || Math.abs(basis[5] - basis[1] - 1f) > 0.001f) { releaseAll(); return; }
-            // The capture window and TextureView can attach after native open.
-            // Missing output at this point must not release the folder session.
-            if (state.session == null) return;
-            attachOutputLayer(state);
-            if (state.layer == null) return;
             state.layer.setTranslationX(-basis[0]);
             state.layer.setTranslationY(-basis[1]);
             LiquidDockConfig.Glass latest = LiveGlassConfigState.currentGlass();
@@ -432,6 +442,7 @@ final class OpenFolderGlassCoordinator {
         final WeakReference<ViewGroup> icon;
         WeakReference<View> cling = new WeakReference<>(null), folder = new WeakReference<>(null);
         WeakReference<View> animationCling = new WeakReference<>(null);
+        WeakReference<ViewGroup> layerHost = new WeakReference<>(null);
         final long serial;
         Object expectedFolderInfo;
         final int width, height, rotation;

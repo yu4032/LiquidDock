@@ -36,7 +36,13 @@ final class LauncherGlassSceneController {
                 else setHardCovered(true);
             } else {
                 if (nativeFolderFade) setCovered(false);
-                else setHardCovered(false);
+                else {
+                    // A folder already has the vendor reverse spring. Wait for
+                    // a fresh Workspace frame, but never start a second reveal.
+                    setHardCovered(false);
+                    fadeAfterFreshFrame = false;
+                    fadeRevealReady = false;
+                }
                 nativeFolderFade = false;
             }
         }

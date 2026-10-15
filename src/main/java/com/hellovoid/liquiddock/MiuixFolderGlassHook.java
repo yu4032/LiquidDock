@@ -367,7 +367,7 @@ final class MiuixFolderGlassHook {
 
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
-        if (sink != null) sink.setSuppressedByFolderOpen(false);
+        if (sink != null) sink.restoreFolderVisibilityImmediately();
     }
 
     private static LauncherGlassStaticNode resolveOwnerSink(ViewGroup owner) {
