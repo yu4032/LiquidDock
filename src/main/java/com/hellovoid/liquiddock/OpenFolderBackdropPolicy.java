@@ -3,9 +3,6 @@ package com.hellovoid.liquiddock;
 /** Folder content progress owns the backdrop fade; the outgoing icon plate's fade does not. */
 final class OpenFolderBackdropPolicy {
     private OpenFolderBackdropPolicy() {}
-    // Prepared blur uses Bitmap rows; the output quad uses FBO UVs.
-    static float backdropSampleY(float outputY) { return 1f - outputY; }
-
     static float nativeProgress(float x, float y, float targetX, float targetY) {
         if (Float.isFinite(x) && Float.isFinite(targetX) && Math.abs(targetX) > .001f) return x / targetX;
         if (Float.isFinite(y) && Float.isFinite(targetY) && Math.abs(targetY) > .001f) return y / targetY;
