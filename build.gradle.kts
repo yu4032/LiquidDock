@@ -14,9 +14,27 @@ android {
         targetSdk = 37
         versionCode = 34
         versionName = "2.7.2"
-        // Embedded in CI APK: identify the *actual installed binary*, not a PR label.
-        val sourceSha = System.getenv("LIQUIDDOCK_SOURCE_SHA") ?: "LOCAL-UNSTAMPED"
+        // Pull-request Actions often run the workflow from the base branch,
+        // so do not rely on a modified workflow to inject a custom env var.
+        // The Actions event JSON is always provided to the build runner.
+        val eventHeadSha = try {
+            val eventPath = System.getenv("GITHUB_EVENT_PATH")
+            val eventFile = eventPath?.let { file(it) }
+            val event = eventFile?.takeIf { it.isFile }?.let {
+                groovy.json.JsonSlurper().parse(it) as? Map<*, *>
+            }
+            val pullRequest = event?.get("pull_request") as? Map<*, *>
+            val head = pullRequest?.get("head") as? Map<*, *>
+            head?.get("sha") as? String
+        } catch (_: Exception) {
+            null
+        }
+        val sourceSha = System.getenv("LIQUIDDOCK_SOURCE_SHA")
+            ?: eventHeadSha
+            ?: System.getenv("GITHUB_SHA")
+            ?: "LOCAL-UNSTAMPED"
         val runId = System.getenv("GITHUB_RUN_ID") ?: "LOCAL"
+        println("LiquidDock diagnostic APK identity: head=$sourceSha ciRun=$runId")
         buildConfigField("String", "DIAG_SOURCE_SHA", "\"$sourceSha\"")
         buildConfigField("String", "DIAG_CI_RUN", "\"$runId\"")
     }
