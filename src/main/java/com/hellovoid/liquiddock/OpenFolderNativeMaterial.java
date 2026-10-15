@@ -33,6 +33,11 @@ final class OpenFolderNativeMaterial {
 
     void endFrame(long serial) {
         if (!state.owns(serial)) return;
+        // OEM close swaps its animated plate and hides the original folder
+        // background at different times. Not appearing in one pre-draw is not
+        // proof that an old Drawable can no longer render on the next frame.
+        // Keep the entire set covered until the native spring completes.
+        if (state.isClosing()) return;
         Iterator<Entry> iterator = materials.values().iterator();
         while (iterator.hasNext()) {
             Entry entry = iterator.next();

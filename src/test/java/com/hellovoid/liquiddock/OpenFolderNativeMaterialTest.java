@@ -47,6 +47,32 @@ public class OpenFolderNativeMaterialTest {
         assertFalse(suppress(policy, old));
         assertTrue(suppress(policy, replacement));
     }
+    @Test public void closingRetainsIntermittentlyMissingNativeMaterials() throws Exception {
+        OpenFolderGlassState state = new OpenFolderGlassState();
+        Object policy = policy(state), expanded = new Object(), closingPlate = new Object();
+        long serial = state.prepare();
+        state.onBackdropReady(serial);
+        state.beginOpen(serial);
+        state.onPresented(serial);
+        assertTrue(beginFrame(policy, serial));
+        track(policy, serial, expanded);
+        endFrame(policy, serial);
+        assertTrue(state.beginClose(serial));
+        assertTrue(beginFrame(policy, serial));
+        track(policy, serial, closingPlate);
+        endFrame(policy, serial);
+        assertTrue("Native expanded plate can be shown again by the OEM spring",
+                suppress(policy, expanded));
+        assertTrue(suppress(policy, closingPlate));
+        assertTrue(beginFrame(policy, serial));
+        endFrame(policy, serial);
+        assertTrue(suppress(policy, expanded));
+        assertTrue(suppress(policy, closingPlate));
+        state.release();
+        assertFalse(suppress(policy, expanded));
+        assertFalse(suppress(policy, closingPlate));
+    }
+
     @Test public void nativeBackgroundRemainsUntilTheGlassIsActuallyPresented() throws Exception {
         OpenFolderGlassState state = new OpenFolderGlassState();
         Object policy = policy(state), background = new Object(), content = new Object();
@@ -100,6 +126,9 @@ public class OpenFolderNativeMaterialTest {
     }
     private static boolean beginFrame(Object policy, long serial) throws Exception {
         return (Boolean) policy.getClass().getDeclaredMethod("beginFrame", long.class).invoke(policy, serial);
+    }
+    private static void endFrame(Object policy, long serial) throws Exception {
+        policy.getClass().getDeclaredMethod("endFrame", long.class).invoke(policy, serial);
     }
     private static void track(Object policy, long serial, Object material) throws Exception {
         policy.getClass().getDeclaredMethod("track", long.class, Object.class).invoke(policy, serial, material);
