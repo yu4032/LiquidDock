@@ -149,9 +149,10 @@ final class MiuixFolderGlassHook {
                 "com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl";
         try {
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderOpen", chain -> {
-                // The snapshot source now captures the real desktop including
-                // native folder icons and Dock. Do not hard-cover Workspace
-                // materials on folder open: they are part of that snapshot.
+                // DockStateManager still owns the OEM FolderState fade.
+                // Cover Workspace materials before dispatch, not after the fade.
+                setNativeFolderMaterialsCovered(true);
+                LauncherGlassSceneController.setFolderCoveredForAll(true);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
@@ -264,8 +265,10 @@ final class MiuixFolderGlassHook {
 
     private static void setOwnerSuppressed(ViewGroup owner, boolean suppressed) {
         if (owner == null) return;
-        // No Workspace/Dock visibility transaction is needed for a frozen
-        // compositor snapshot. Retain only the opened icon's own interaction state.
+        if (!folderStatusDispatcherInstalled) {
+            setNativeFolderMaterialsCovered(suppressed);
+            LauncherGlassSceneController.setWorkspaceCovered(owner, suppressed);
+        }
         if (!suppressed) {
             LauncherGlassStaticNode sink = resolveOwnerSink(owner);
             if (sink != null) sink.setSuppressedByFolderOpen(false);

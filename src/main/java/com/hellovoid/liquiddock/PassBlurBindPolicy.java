@@ -12,9 +12,12 @@ final class PassBlurBindPolicy {
 
     private PassBlurBindPolicy() {}
 
-    /** One-shot folder capture includes both Launcher workspace and Dock surfaces. */
-    static String captureRootExclusion(PassBlurDomain domain, String rootSurfaceName) {
-        return domain == PassBlurDomain.OPEN_FOLDER ? null : rootSurfaceName;
+    /** Source-level wallpaper capture is independent of Dock's native fade. */
+    static String[] folderWallpaperExclusions(String launcherRootName) {
+        if (launcherRootName == null || launcherRootName.isBlank()) {
+            throw new IllegalArgumentException("Folder wallpaper requires Launcher surface identity");
+        }
+        return new String[]{launcherRootName, "DockAssistantView"};
     }
 
     static float nativeScale(PassBlurDomain domain, float requestedScale) {

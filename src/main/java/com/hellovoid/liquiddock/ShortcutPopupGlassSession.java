@@ -72,8 +72,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean sourceFrozen;
-    private volatile boolean folderCaptureWindowClosed;
-    private volatile long folderCaptureDeadlineNanos = Long.MAX_VALUE;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -175,16 +173,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         // must not re-capture from behind its own now-visible overlay.
     }
 
-    /** Called at the first actual native folder frame, not on ACTION_DOWN.
-     * Only a pre-open compositor frame may become the frozen desktop texture.
-     */
-    void endFolderCaptureWindow() {
-        if (!folderBackdrop || shuttingDown || sourceFrozen || folderCaptureWindowClosed) return;
-        folderCaptureDeadlineNanos = System.nanoTime();
-        folderCaptureWindowClosed = true;
-        sourceBackend.setUpdatesEnabled(false, "folder-first-draw-snapshot-deadline");
-    }
-
     private PrismalParams materialParams(Miuix307PrismalMaterial.Params optical, float density) {
         PrismalParams base = Miuix307PrismalAdapter.toPortable(optical);
         if (!folderBackdrop) return base;
@@ -282,12 +270,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
-        // A queued native frame after freezing may contain the now-visible folder. Never
-        // replace the safe pre-open capture, even when a late callback is already in flight.
-        long latchedAtNanos = backend.lastFrameLatchedAtNanos();
-        if (folderBackdrop && (sourceFrozen
-                || !OpenFolderBackdropPolicy.acceptsCapturedFrame(
-                        latchedAtNanos, folderCaptureDeadlineNanos))) return;
+        // Launcher and Dock are excluded at source: freeze the first valid wallpaper frame.
+        if (folderBackdrop && sourceFrozen) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -303,10 +287,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalWidth,
                     frame.logicalHeight,
                     prismalParams);
-            // The native pre-draw may occur while the GPU is still preparing the
-            // already-latched safe frame. Accept that frame, not a newly latched one.
-            if (folderBackdrop && !OpenFolderBackdropPolicy.acceptsCapturedFrame(
-                    latchedAtNanos, folderCaptureDeadlineNanos)) return;
             backdropPrepared = true;
             if (!sourceFrozen) {
                 sourceFrozen = true;

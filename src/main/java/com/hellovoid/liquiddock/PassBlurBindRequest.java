@@ -53,10 +53,10 @@ final class PassBlurBindRequest {
                 NO_EXTRA_EXCLUSIONS);
     }
 
-    static PassBlurBindRequest openFolder(View authoritativeRoot) {
-        // Include the Launcher workspace + Dock in the one-shot backdrop.
+    static PassBlurBindRequest openFolder(View authoritativeRoot, String launcherSurfaceName) {
         return new PassBlurBindRequest(
-                authoritativeRoot, PassBlurDomain.OPEN_FOLDER, 1.0f, NO_EXTRA_EXCLUSIONS);
+                authoritativeRoot, PassBlurDomain.OPEN_FOLDER, 1.0f,
+                PassBlurBindPolicy.folderWallpaperExclusions(launcherSurfaceName));
     }
 
     static PassBlurBindRequest dragOverlay(View authoritativeRoot) {
