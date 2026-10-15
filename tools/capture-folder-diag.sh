@@ -18,7 +18,11 @@ mkdir -p "$out"
   adb shell getprop ro.build.version.incremental || true
 } > "$out/device.txt" 2>&1
 echo "Device details saved: $out/device.txt"
-echo "Reopen Launcher after installing APK so LSPosed loads updated code."
-echo "Open/close the folder several times, then press Ctrl+C to finish capture."
+echo "IMPORTANT: restart the com.miui.home LSPosed scope AFTER capture begins."
+echo "That is required to capture [FolderTrace] BOOT with APK SHA and CI run ID."
+echo "After restart, open/close the folder several times, then press Ctrl+C."
 adb logcat -c
-adb logcat -v threadtime -b main -b system -b crash   -s LiquidDock-Diag:I LSPosedFramework:I AndroidRuntime:E libc:F '*:S'   | tee "$out/folder.log"
+adb logcat -v threadtime -b main -b system -b crash \
+  -s LiquidDock-Diag:I LSPosedFramework:I Dock_DesktopStateManager:I \
+     Dock_StateManager:I DockWindowManager:I AndroidRuntime:E libc:F '*:S' \
+  | tee "$out/folder.log"
