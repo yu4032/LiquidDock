@@ -34,9 +34,13 @@ final class OpenFolderGlassHook {
                 safe(() -> OpenFolderGlassCoordinator.onAnimationSpec(Boolean.TRUE.equals(args[0]),
                         (View) args[1], (View) args[2],
                         (int[]) args[3], (int[]) args[4], ((Number) args[5]).intValue()));
-                return chain.proceed(args);
+                Object result = chain.proceed(args);
+                if (!Boolean.TRUE.equals(args[0])) {
+                    safe(OpenFolderGlassCoordinator::onClosingAnimationMaterialUpdated);
+                }
+                return result;
             });
-            // Capture the composed workspace/Dock at touch-down without
+            // Capture source-excluded wallpaper at touch-down without
             // delaying native folder opening for an EGL/PassBlur callback.
             // Accessibility / keyboard entry can bypass FolderIcon ACTION_DOWN.
             HookUtil.hook(HookUtil.findMethodExact(launcher, "openFolder",
@@ -54,8 +58,11 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(cling, "open", new Class<?>[0]), chain -> {
                 try {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    // The native open() initializes its folder reference. Install our
-                    // pre-draw observer after that initialization, before its first draw.
+                    // OEM Launcher dispatches Dock FolderState only after beginning
+                    // its animation. Move that same event to this first-draw-safe
+                    // boundary, then consume its duplicate later in Launcher.
+                    MiuixFolderGlassHook.dispatchDockOpenBeforeFirstDraw((View) chain.getThisObject());
+                    // Native open() has initialized its folder reference.
                     safe(() -> OpenFolderGlassCoordinator.onOpening((View) chain.getThisObject()));
                     return result;
                 } catch (Throwable error) {

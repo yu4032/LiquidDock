@@ -12,7 +12,7 @@ import java.lang.ref.WeakReference;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
-/** One-shot composited desktop capture with native folder open/close geometry. */
+/** Wallpaper-only native folder glass with matched open/close geometry. */
 final class OpenFolderGlassCoordinator {
     private static final String TAG = "[DC][OpenFolderGlass]";
     private static final OpenFolderGlassState OWNER = new OpenFolderGlassState();
@@ -194,6 +194,18 @@ final class OpenFolderGlassCoordinator {
         }
         OWNER.beginClose(state.serial);
         state.motion.beginClose();
+        onClosingAnimationMaterialUpdated();
+    }
+
+    /** The OEM close spring may replace its temporary anim-image drawable. */
+    static void onClosingAnimationMaterialUpdated() {
+        State state = current;
+        if (state == null || !state.motion.isClosing() || !OWNER.maySuppressNative()) return;
+        View anim = animationImage(state);
+        if (anim instanceof ImageView) {
+            track(state, ((ImageView) anim).getDrawable());
+        }
+        claimNativeBlur(state);
     }
 
     static long closeSerial(View folder) {
@@ -255,9 +267,12 @@ final class OpenFolderGlassCoordinator {
             View root = state.root.get(), cling = state.cling.get(), folder = state.folder.get();
             if (root == null || cling == null || folder == null || !cling.isAttachedToWindow()
                     || root.getWidth() != state.width || root.getHeight() != state.height
-                    || cling.getVisibility() != View.VISIBLE
+                    || (cling.getVisibility() != View.VISIBLE && !state.motion.isClosing())
                     || (root.getDisplay() != null && root.getDisplay().getRotation() != state.rotation)
                     || !enabled(state.icon.get())) { releaseAll(); return; }
+            // Native close may hide the FolderCling while its independent anim
+            // proxy still runs. Keep ownership until Folder.onClose completion.
+            if (cling.getVisibility() != View.VISIBLE) return;
             // Keep the full-screen buffer at the root origin inside the native folder container.
             float[] basis = state.basis;
             basis[0] = basis[1] = basis[3] = basis[4] = 0f;
@@ -333,6 +348,14 @@ final class OpenFolderGlassCoordinator {
                 LauncherWidgetNativeViewBlurGate.rememberFolderInitializer(material, entry.getValue());
                 state.claimedBlur.put(material, Boolean.TRUE);
             }
+        }
+        // FolderAnimController may create or rebind the temporary closing icon
+        // without another BlurUtilities.setFolderIconBlur call. Suppress its
+        // RenderNode output too, while preserving the native spring geometry.
+        View anim = animationImage(state);
+        if (anim != null && !state.claimedBlur.containsKey(anim)
+                && LauncherWidgetNativeViewBlurGate.claimFolder(anim)) {
+            state.claimedBlur.put(anim, Boolean.TRUE);
         }
     }
 
