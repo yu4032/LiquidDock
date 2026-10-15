@@ -175,12 +175,14 @@ final class MiuixFolderGlassHook {
      * wallpaper-only folder source remains active for its one-shot snapshot.
      */
     static void onFolderOpeningBeforeNativeAnimation() {
+        LauncherNativeFolderWorkspaceFadeGate.onOpening(null);
         pendingInputResumeSerial = 0L;
         Miuix307ZeroCopyRenderer.setFolderFrozen(true);
         LauncherGlassSceneController.setFolderCoveredForAll(true);
     }
 
     static void onFolderOpeningFailed() {
+        LauncherNativeFolderWorkspaceFadeGate.onOpeningFailed();
         releaseFrozenInputs();
     }
 
@@ -387,6 +389,7 @@ final class MiuixFolderGlassHook {
     private static void releaseFrozenInputs() {
         LauncherGlassSceneController.setFolderCoveredForAll(false);
         Miuix307ZeroCopyRenderer.setFolderFrozen(false);
+        LauncherNativeFolderWorkspaceFadeGate.onClosed();
     }
 
     private static LauncherGlassStaticNode resolveOwnerSink(ViewGroup owner) {

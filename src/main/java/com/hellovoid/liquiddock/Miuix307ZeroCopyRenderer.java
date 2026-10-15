@@ -76,7 +76,8 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
-        if (folderFrozen) gpuBackdrop.setProducerUpdatesEnabled(false, "folder-reinstall-frozen");
+        // Do not toggle native producer updates on folder re-parenting.
+        // Its original vendor snapshot policy still owns the SF producer.
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
                 + " requestedBlur=" + blurRadiusPx
                 + " source=" + materialHost.getClass().getSimpleName());
@@ -138,18 +139,22 @@ final class Miuix307ZeroCopyRenderer {
         folderFrozen = frozen;
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null) gpuBackdrop.setFolderRenderFrozen(frozen);
-        applyProducerUpdatesPolicy(frozen ? "folder-frame-frozen" : "folder-frame-released");
+        // Do not pause/restart SurfaceFlinger's Dock producer here. The
+        // setUpdateTextureFlag transition is independent of the GL draw gate
+        // and can reset the visible material before the next blur frame.
+        // The Dock's native snapshot/active policy remains unchanged.
         // Do not queue a scene redraw on thaw: that would composite the
         // pre-folder prepared blur before SurfaceFlinger supplies its first
         // post-folder frame, producing a visible sharp/blur/sharp pulse.
         // The producer callback is already the first valid redraw boundary.
-        MainHook.log(TAG + " Dock source/render freeze=" + frozen);
+        MainHook.log(TAG + " Dock GL render freeze=" + frozen
+                + " (SurfaceFlinger producer retains vendor policy)");
     }
 
     private static void applyProducerUpdatesPolicy(String reason) {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
-        boolean effective = (producerUpdatesPolicyEnabled || homeProducerOverride) && !folderFrozen;
+        boolean effective = producerUpdatesPolicyEnabled || homeProducerOverride;
         gpuBackdrop.setProducerUpdatesEnabled(effective, reason
                 + (homeProducerOverride ? "/home-refresh-override" : ""));
     }

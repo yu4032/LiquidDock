@@ -4,18 +4,20 @@ import android.view.View;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+import io.github.libxposed.api.XposedInterface;
+
 /**
- * Suppress the OEM workspace/search-bar concealment while expanded folder
- * glass owns a frozen Launcher backdrop. The folder panel's own Folme spring
- * is left unchanged.
+ * Folder-scoped ownership of the original Launcher Workspace presentation.
  *
- * Launcher 4.50 calls fadeInOrOutScreenContentWhenFolderAnimate(true), which
- * drives changeScreenContentOnOpen -> setScreenContentAlpha, then
- * onScreenContentHide (sets Workspace and search bar INVISIBLE).
+ * In Launcher 4.50 the FolderCling Folme spring is distinct from the
+ * mScreenContentHideAnimator, whose terminal callback makes Workspace
+ * INVISIBLE. Intercept only that Launcher-specific side effect.
  */
 final class LauncherNativeFolderWorkspaceFadeGate {
     private static final String TAG = "[DC][FolderWorkspace]";
     private static boolean installed;
+    private static boolean folderSession;
+    private static int skippedFade, skippedAlpha, skippedHide;
 
     private LauncherNativeFolderWorkspaceFadeGate() {}
 
@@ -24,62 +26,100 @@ final class LauncherNativeFolderWorkspaceFadeGate {
         try {
             Class<?> launcher = Class.forName(
                     "com.miui.home.launcher.Launcher", false, loader);
-            Method fade = launcher.getDeclaredMethod(
-                    "fadeInOrOutScreenContentWhenFolderAnimate", boolean.class);
-            Method hide = launcher.getDeclaredMethod("onScreenContentHide");
-            Method opening = launcher.getDeclaredMethod("changeScreenContentOnOpen", float.class);
-            Method closing = launcher.getDeclaredMethod("changeScreenContentOnClose", float.class);
-            HookUtil.hook(fade, chain -> {
-                if (!Miuix307ZeroCopyRenderer.isFolderFrozen()) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                // Skip only Workspace/toolbar hide/reveal animations. The
-                // native FolderCling/Folme geometry still proceeds normally.
-                cancelExistingFade(chain.getThisObject());
-                ensureVisible(chain.getThisObject());
-                return null;
-            });
-            HookUtil.hook(hide, chain -> {
-                if (!Miuix307ZeroCopyRenderer.isFolderFrozen()) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                ensureVisible(chain.getThisObject());
-                return null;
-            });
-            HookUtil.hook(opening, chain -> {
-                if (!Miuix307ZeroCopyRenderer.isFolderFrozen()) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                return null;
-            });
-            HookUtil.hook(closing, chain -> {
-                if (!Miuix307ZeroCopyRenderer.isFolderFrozen()) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                return null;
-            });
-            installed = true;
-            MainHook.log(TAG + " native Workspace folder fade suppressed");
+            // Resolve each OEM method independently: one absent method must
+            // not disable the others as it did in the old all-or-nothing hook.
+            int installedCount = 0;
+            installedCount += hook(launcher, "fadeInOrOutScreenContentWhenFolderAnimate",
+                    new Class<?>[]{boolean.class}, chain -> {
+                        if (!folderSession) return chain.proceed(
+                                chain.getArgs().toArray(new Object[0]));
+                        skippedFade++;
+                        restoreWorkspace(chain.getThisObject());
+                        return null;
+                    });
+            installedCount += hook(launcher, "setScreenContentAlpha",
+                    new Class<?>[]{float.class}, chain -> {
+                        if (!folderSession) return chain.proceed(
+                                chain.getArgs().toArray(new Object[0]));
+                        skippedAlpha++;
+                        restoreWorkspace(chain.getThisObject());
+                        return null;
+                    });
+            installedCount += hook(launcher, "onScreenContentHide",
+                    new Class<?>[0], chain -> {
+                        if (!folderSession) return chain.proceed(
+                                chain.getArgs().toArray(new Object[0]));
+                        skippedHide++;
+                        restoreWorkspace(chain.getThisObject());
+                        return null;
+                    });
+            installedCount += hook(launcher, "changeScreenContentOnOpen",
+                    new Class<?>[]{float.class}, chain -> {
+                        if (!folderSession) return chain.proceed(
+                                chain.getArgs().toArray(new Object[0]));
+                        skippedAlpha++;
+                        return null;
+                    });
+            installedCount += hook(launcher, "changeScreenContentOnClose",
+                    new Class<?>[]{float.class}, chain -> {
+                        if (!folderSession) return chain.proceed(
+                                chain.getArgs().toArray(new Object[0]));
+                        skippedAlpha++;
+                        return null;
+                    });
+            installed = installedCount > 0;
+            MainHook.log(TAG + " native Workspace folder fade hooks=" + installedCount + "/5");
         } catch (Throwable error) {
-            MainHook.log(TAG + " native Workspace folder fade unavailable: " + error);
+            MainHook.log(TAG + " gate installation failure: " + error);
         }
     }
 
-    private static void ensureVisible(Object launcher) {
+    private static int hook(Class<?> launcher, String name, Class<?>[] signature,
+            XposedInterface.Hooker callback) {
+        try {
+            Method method = launcher.getDeclaredMethod(name, signature);
+            HookUtil.hook(method, callback);
+            MainHook.log(TAG + " installed " + name);
+            return 1;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " unable to hook " + name + ": " + error);
+            return 0;
+        }
+    }
+
+    static void onOpening(Object launcher) {
+        if (!folderSession) {
+            skippedFade = skippedAlpha = skippedHide = 0;
+            folderSession = true;
+            MainHook.log(TAG + " folder presentation ownership started");
+        }
+        if (launcher != null) restoreWorkspace(launcher);
+    }
+
+    static void onOpeningFailed() { folderSession = false; }
+
+    static void onClosed() {
+        if (folderSession) MainHook.log(TAG + " folder presentation complete skippedFade="
+                + skippedFade + " skippedAlpha=" + skippedAlpha
+                + " skippedHide=" + skippedHide);
+        folderSession = false;
+    }
+
+    private static void restoreWorkspace(Object launcher) {
         View workspace = viewField(launcher, "mWorkspace");
         View search = viewField(launcher, "mSearchBar");
-        View content = viewField(launcher, "mScreenContent");
         if (workspace != null) {
-            workspace.setVisibility(View.VISIBLE);
-            workspace.setAlpha(1f);
+            if (workspace.getVisibility() != View.VISIBLE) workspace.setVisibility(View.VISIBLE);
+            if (workspace.getAlpha() != 1f) workspace.setAlpha(1f);
         }
         if (search != null) {
-            search.setVisibility(View.VISIBLE);
-            search.setAlpha(1f);
+            if (search.getVisibility() != View.VISIBLE) search.setVisibility(View.VISIBLE);
+            if (search.getAlpha() != 1f) search.setAlpha(1f);
         }
+        View content = viewField(launcher, "mScreenContent");
         if (content != null) {
-            content.setScaleX(1f);
-            content.setScaleY(1f);
+            if (content.getScaleX() != 1f) content.setScaleX(1f);
+            if (content.getScaleY() != 1f) content.setScaleY(1f);
         }
     }
 
@@ -91,25 +131,8 @@ final class LauncherNativeFolderWorkspaceFadeGate {
             Object value = field.get(launcher);
             return value instanceof View ? (View) value : null;
         } catch (Throwable error) {
-            MainHook.log(TAG + " unable to resolve " + name + ": " + error);
+            MainHook.log(TAG + " unable to read " + name + ": " + error);
             return null;
-        }
-    }
-
-    private static void cancelExistingFade(Object launcher) {
-        if (launcher == null) return;
-        for (String name : new String[]{"mScreenContentHideAnimator", "mScreenContentShowAnimator"}) {
-            try {
-                Field field = launcher.getClass().getDeclaredField(name);
-                field.setAccessible(true);
-                Object animator = field.get(launcher);
-                if (animator != null) {
-                    Method cancel = animator.getClass().getMethod("cancel");
-                    cancel.invoke(animator);
-                }
-            } catch (Throwable error) {
-                MainHook.log(TAG + " unable to cancel " + name + ": " + error);
-            }
         }
     }
 }

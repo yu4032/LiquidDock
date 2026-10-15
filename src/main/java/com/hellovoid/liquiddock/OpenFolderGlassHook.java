@@ -81,8 +81,9 @@ final class OpenFolderGlassHook {
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
-                // Freeze current Dock/Workspace outputs BEFORE native folder
-                // opening (the later FolderStatus dispatcher is too late).
+                // Own native Workspace opacity before Launcher queues the
+                // delayed folder-open runnable, then freeze the GPU outputs.
+                LauncherNativeFolderWorkspaceFadeGate.onOpening(chain.getThisObject());
                 MiuixFolderGlassHook.onFolderOpeningBeforeNativeAnimation();
                 try {
                     return chain.proceed(args);
