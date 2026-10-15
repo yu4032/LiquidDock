@@ -174,6 +174,8 @@ final class Miuix307MaterialPipeline {
                         boolean snapshotMode = args.length > 0 && args[0] instanceof Boolean
                                 && (Boolean) args[0];
                         vendorStaticSnapshotMode = snapshotMode;
+                        MainHook.diag("[FolderTrace] OEM staticDockSnapshot=" + snapshotMode
+                                + " frozen=" + Miuix307ZeroCopyRenderer.isFolderFrozen());
                         if (GlassRuntimeState.isEnabled() && !MainHook.isWorkstationMode()) {
                             Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(!snapshotMode,
                                     "vendor-static-dock-snapshot");
@@ -199,6 +201,8 @@ final class Miuix307MaterialPipeline {
                         boolean liveBlurVisible = args.length > 0 && args[0] instanceof Boolean
                                 && (Boolean) args[0];
                         vendorStaticSnapshotMode = !liveBlurVisible;
+                        MainHook.diag("[FolderTrace] OEM liveDockBlurVisible=" + liveBlurVisible
+                                + " frozen=" + Miuix307ZeroCopyRenderer.isFolderFrozen());
                         if (GlassRuntimeState.isEnabled() && !MainHook.isWorkstationMode()) {
                             Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(liveBlurVisible,
                                     "vendor-live-blur-visible");

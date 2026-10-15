@@ -231,6 +231,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     // Drop any producer token queued before the folder was opened. After
     // thaw the first scene render must consume a genuine post-folder source.
     private volatile boolean awaitingPostFolderProducer;
+    private int diagnosticThawSwaps;
+    private int diagnosticFrozenCallbacks;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
@@ -389,17 +391,41 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
+    String diagnosticState() {
+        SurfaceTexture output = getSurfaceTexture();
+        Miuix307PassBlurBridge.Binding current = binding;
+        return "{attached=" + isAttachedToWindow()
+                + " v=" + getVisibility() + " a=" + getAlpha()
+                + " output=" + outputWidth + "x" + outputHeight
+                + " outputTimestamp=" + (output == null ? -1 : output.getTimestamp())
+                + " framePresented=" + hasPresentedFrame
+                + " active=" + gpuBackdropActive
+                + " frozen=" + folderRenderFrozen
+                + " awaitingFresh=" + awaitingPostFolderProducer
+                + " queuedFresh=" + frameAvailable.get()
+                + " producerPolicy=" + producerUpdatesEnabled
+                + " nativeProducer=" + (current == null ? "null" : current.updatesEnabled)
+                + "}";
+    }
+
     void setFolderRenderFrozen(boolean frozen) {
         if (folderRenderFrozen == frozen) return;
+        MainHook.diag("[FolderTrace] DockTexture freezeTransition requested=" + frozen
+                + " before=" + diagnosticState());
         if (frozen) {
             folderRenderFrozen = true;
             frameAvailable.set(false);
             awaitingPostFolderProducer = true;
+            diagnosticFrozenCallbacks = 0;
         } else {
+            diagnosticThawSwaps = 5;
             // No eager requestDockSceneRefresh: keep the last EGL buffer until
             // a new post-folder PassBlur frame is available.
             folderRenderFrozen = false;
         }
+        MainHook.diag("[FolderTrace] DockTexture freezeTransition finished=" + frozen
+                + " after=" + diagnosticState() + " frozenProducerCallbacks="
+                + diagnosticFrozenCallbacks);
     }
 
     void requestDockSceneRefresh() {
@@ -420,6 +446,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     void setProducerUpdatesEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
         producerUpdatesEnabled = enabled;
+        MainHook.diag("[FolderTrace] DockNativeProducer requested=" + enabled
+                + " reason=" + reason + " " + diagnosticState());
         renderHandler.postAtFrontOfQueue(() -> {
             Miuix307PassBlurBridge.Binding current = binding;
             if (shuttingDown || current == null || !current.bound) return;
@@ -527,6 +555,9 @@ final class Miuix307PassBlurTextureView extends TextureView
     public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
         if (shuttingDown || surface == null) return;
         outputSurfaceTexture = surface;
+        MainHook.diag("[FolderTrace] DockTexture outputSurfaceAvailable="
+                + Integer.toHexString(System.identityHashCode(surface))
+                + " size=" + width + "x" + height + " frozen=" + folderRenderFrozen);
         outputWidth = Math.max(1, width);
         outputHeight = Math.max(1, height);
         hasPresentedFrame = false;
@@ -558,6 +589,9 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+        MainHook.diag("[FolderTrace] DockTexture outputSurfaceDestroyed="
+                + Integer.toHexString(System.identityHashCode(surface))
+                + " frozen=" + folderRenderFrozen);
         if (surface == outputSurfaceTexture) outputSurfaceTexture = null;
         Surface stale = outputWindowSurface;
         outputWindowSurface = null;
@@ -803,6 +837,10 @@ final class Miuix307PassBlurTextureView extends TextureView
             // transaction became visible. They are part of the pre-folder
             // generation, never the first valid post-folder refresh.
             if (folderRenderFrozen) {
+                if (diagnosticFrozenCallbacks++ < 3) {
+                    MainHook.diag("[FolderTrace] DockNativeProducer frame while frozen n="
+                            + diagnosticFrozenCallbacks + " inputST=" + Integer.toHexString(System.identityHashCode(input)));
+                }
                 frameAvailable.set(false);
                 return;
             }
@@ -922,6 +960,10 @@ final class Miuix307PassBlurTextureView extends TextureView
             makeCurrent();
             boolean consumedFreshProducerFrame = frameAvailable.getAndSet(false);
             if (consumedFreshProducerFrame) {
+                if (awaitingPostFolderProducer) {
+                    MainHook.diag("[FolderTrace] DockTexture first post-folder OES latched "
+                            + diagnosticState());
+                }
                 awaitingPostFolderProducer = false;
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
@@ -993,6 +1035,13 @@ final class Miuix307PassBlurTextureView extends TextureView
             }
             hasPresentedFrame = true;
             renderedFrameCount++;
+            if (diagnosticThawSwaps > 0) {
+                int number = 6 - diagnosticThawSwaps--;
+                MainHook.diag("[FolderTrace] DockTexture firstThawSwap=" + number
+                        + " fresh=" + consumedFreshProducerFrame
+                        + " rebuild=" + rebuildBackdrop
+                        + " " + diagnosticState());
+            }
             maybeLogPowerStats();
 
             Miuix307PassBlurBridge.Binding currentBinding = binding;

@@ -23,6 +23,9 @@ final class OpenFolderGlassHook {
     static boolean isInstalled() { return installed; }
 
     static void install(ClassLoader loader, LiquidDockConfig config) {
+        MainHook.diag("[FolderTrace] OpenFolderGlassHook install invoked enabled="
+                + (config != null && config.enabled && config.glass.enabled)
+                + " alreadyInstalled=" + installed);
         if (installed || config == null || !config.enabled || !config.glass.enabled) return;
         try {
             Class<?> cling = Class.forName("com.miui.home.launcher.FolderCling", false, loader);
@@ -52,6 +55,7 @@ final class OpenFolderGlassHook {
                         new Class<?>[]{icon, Runnable.class}), chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Runnable original = args[1] instanceof Runnable ? (Runnable) args[1] : null;
+                    FolderDiagnosticTrace.event("native-close-spring-hook");
                     long nativeSerial = MiuixFolderGlassHook.activeNativeCloseSerial();
                     long glassSerial = OpenFolderGlassCoordinator.activeClosingSerial();
                     args[1] = (Runnable) () -> {
@@ -62,6 +66,7 @@ final class OpenFolderGlassHook {
                             // Dock/Workspace producers, never the reverse.
                             safe(() -> OpenFolderGlassCoordinator.onNativeBackgroundCloseFinished(glassSerial));
                             MiuixFolderGlassHook.onNativeBackgroundCloseFinished(nativeSerial);
+                            FolderDiagnosticTrace.finished();
                         }
                     };
                     return chain.proceed(args);
@@ -78,6 +83,7 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(launcher, "openFolder",
                     new Class<?>[]{info, View.class}), chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
+                FolderDiagnosticTrace.begin(chain.getThisObject());
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
@@ -98,7 +104,9 @@ final class OpenFolderGlassHook {
             });
             HookUtil.hook(HookUtil.findMethodExact(cling, "open", new Class<?>[0]), chain -> {
                 try {
+                    FolderDiagnosticTrace.event("FolderCling.open-before");
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    FolderDiagnosticTrace.event("FolderCling.open-after");
                     // The folder source already owns one frozen GPU backdrop.
                     // Neither Dock nor Workspace is hidden for this presentation.
                     safe(() -> OpenFolderGlassCoordinator.onOpening((View) chain.getThisObject()));
@@ -110,6 +118,7 @@ final class OpenFolderGlassHook {
             });
             HookUtil.hook(HookUtil.findMethodExact(cling, "onFolderOpenAnimationFinish", new Class<?>[0]), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                FolderDiagnosticTrace.event("FolderCling.open-animation-finished");
                 safe(() -> OpenFolderGlassCoordinator.onOpenFinished((View) chain.getThisObject()));
                 return result;
             });
@@ -117,6 +126,7 @@ final class OpenFolderGlassHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 boolean nativeSpring = nativeCloseBackgroundCallbackInstalled
                         && args.length > 0 && Boolean.TRUE.equals(args[0]);
+                FolderDiagnosticTrace.closeStarted();
                 MiuixFolderGlassHook.onNativeCloseStarted(nativeSpring);
                 safe(() -> OpenFolderGlassCoordinator.onClosing(
                         (View) chain.getThisObject(), nativeSpring));
@@ -146,8 +156,12 @@ final class OpenFolderGlassHook {
                 return result;
             });
             installed = true;
+            MainHook.diag("[FolderTrace] OpenFolderGlassHook installed nativeCloseCallback="
+                    + nativeCloseBackgroundCallbackInstalled);
             MainHook.log("[DC][OpenFolderGlass] native open/close hooks installed");
         } catch (Throwable error) {
+            MainHook.diag("[FolderTrace] OpenFolderGlassHook installation FAILED "
+                    + error.getClass().getName() + ": " + error.getMessage());
             MainHook.log("[DC][OpenFolderGlass] native adapter unavailable: " + error);
         }
     }

@@ -68,6 +68,7 @@ final class Miuix307ZeroCopyRenderer {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
+        MainHook.diag("[FolderTrace] Dock GL host installed " + diagnosticState());
         gpuBackdrop.setFolderRenderFrozen(folderFrozen);
         hostRef = new WeakReference<>(host);
         materialHostRef = new WeakReference<>(materialHost);
@@ -134,6 +135,27 @@ final class Miuix307ZeroCopyRenderer {
 
     static boolean isFolderFrozen() { return folderFrozen; }
 
+    static String diagnosticState() {
+        Miuix307PassBlurTextureView backdrop = gpuBackdropRef.get();
+        View material = materialHostRef.get();
+        View host = hostRef.get();
+        return "{policy=" + producerUpdatesPolicyEnabled
+                + " homeOverride=" + homeProducerOverride
+                + " frozen=" + folderFrozen
+                + " material=" + describe(material)
+                + " glassHost=" + describe(host)
+                + " gpu=" + (backdrop == null ? "null" : backdrop.diagnosticState())
+                + "}";
+    }
+
+    private static String describe(View view) {
+        if (view == null) return "null";
+        return view.getClass().getSimpleName() + "@"
+                + Integer.toHexString(System.identityHashCode(view))
+                + ":" + view.getVisibility() + "/" + view.getAlpha()
+                + ":attached=" + view.isAttachedToWindow();
+    }
+
     static void setFolderFrozen(boolean frozen) {
         if (folderFrozen == frozen) return;
         folderFrozen = frozen;
@@ -147,6 +169,7 @@ final class Miuix307ZeroCopyRenderer {
         // pre-folder prepared blur before SurfaceFlinger supplies its first
         // post-folder frame, producing a visible sharp/blur/sharp pulse.
         // The producer callback is already the first valid redraw boundary.
+        MainHook.diag("[FolderTrace] DockGL frozen=" + frozen + " " + diagnosticState());
         MainHook.log(TAG + " Dock GL render freeze=" + frozen
                 + " (SurfaceFlinger producer retains vendor policy)");
     }
