@@ -278,6 +278,15 @@ public final class ConfigSchema {
                 "liquid_small_folder_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SMALL_FOLDER_CORNER_RADIUS = dp(
                 "liquid_small_folder_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+        // Dedicated optics for the frozen desktop image inside an opened folder.
+        public static final ConfigKey<Integer> OPEN_FOLDER_BLUR = integer(
+                "open_folder_glass_blur", 6, 6, 6, 0, 60, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_IOR = integer(
+                "open_folder_glass_ior", 155, 155, 155, 100, 200, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_THICKNESS = integer(
+                "open_folder_glass_thickness", 18, 18, 18, 1, 60, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_TINT_ALPHA = integer(
+                "open_folder_glass_tint_alpha", 35, 35, 35, 0, 160, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> LARGE_FOLDER_NATIVE_OUTLINE = bool(
                 "large_folder_native_outline", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LARGE_FOLDER_PREVIEW_ICON_PERCENT = integer(
@@ -575,6 +584,8 @@ public final class ConfigSchema {
                 Glass.SMALL_FOLDER_CORNER_RADIUS, Glass.LARGE_FOLDER_GLASS,
                 Glass.LARGE_FOLDER_NATIVE_OUTLINE,
                 Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
+                Glass.OPEN_FOLDER_BLUR, Glass.OPEN_FOLDER_IOR,
+                Glass.OPEN_FOLDER_THICKNESS, Glass.OPEN_FOLDER_TINT_ALPHA,
                 Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
                 Glass.BLUR_MODE,
                 Glass.BLUR, Glass.CHROMATIC,

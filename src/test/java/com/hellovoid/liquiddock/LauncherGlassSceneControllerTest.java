@@ -8,6 +8,35 @@ import org.junit.Test;
 
 /** Pure behavior coverage for Workspace presentation/freshness ownership. */
 public class LauncherGlassSceneControllerTest {
+    @Test public void animatedFolderUsesTheSameCachedNativeAlphaPathAsRecents() throws Exception {
+        LauncherGlassSceneController.StateMachine state = new LauncherGlassSceneController.StateMachine();
+        state.onRootReady(); state.onFreshFrameReady(state.generation()); state.consumeFadeReveal();
+        java.lang.reflect.Method cover = state.getClass().getDeclaredMethod("setFolderCovered", boolean.class, boolean.class);
+        cover.invoke(state, true, true);
+        assertTrue(state.isLayerVisible());
+        LauncherGlassLayerAlpha alpha = new LauncherGlassLayerAlpha();
+        alpha.setSceneAlpha(1f); alpha.setWorkspaceAlpha(.25f, false);
+        assertEquals(.25f, alpha.alpha(), 0f);
+        alpha.setWorkspaceAlpha(0f, false);
+        assertEquals(0f, alpha.alpha(), 0f);
+        cover.invoke(state, false, false);
+        assertTrue(state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertFalse(state.consumeFadeReveal());
+    }
+
+    @Test public void unsupportedFolderRetainsTheExistingHardCoverageFallback() throws Exception {
+        LauncherGlassSceneController.StateMachine state = new LauncherGlassSceneController.StateMachine();
+        state.onRootReady(); state.onFreshFrameReady(state.generation()); state.consumeFadeReveal();
+        java.lang.reflect.Method cover = state.getClass().getDeclaredMethod("setFolderCovered", boolean.class, boolean.class);
+        cover.invoke(state, true, false);
+        assertFalse(state.isLayerVisible());
+        cover.invoke(state, false, false);
+        assertFalse(state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue(state.isLayerVisible());
+        assertTrue(state.consumeFadeReveal());
+    }
     @Test
     public void hardCoveredSceneRequiresFreshFrameBeforeReveal() {
         LauncherGlassSceneController.StateMachine state =

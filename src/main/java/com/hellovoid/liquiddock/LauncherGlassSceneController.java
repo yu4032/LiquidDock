@@ -27,6 +27,19 @@ final class LauncherGlassSceneController {
         private boolean fadeRevealReady;
         private boolean cachedLayerVisible;
         private boolean rotationPresentationPending;
+        private boolean nativeFolderFade;
+
+        void setFolderCovered(boolean covered, boolean followNativeAlpha) {
+            if (covered) {
+                nativeFolderFade = followNativeAlpha;
+                if (nativeFolderFade) setCovered(true);
+                else setHardCovered(true);
+            } else {
+                if (nativeFolderFade) setCovered(false);
+                else setHardCovered(false);
+                nativeFolderFade = false;
+            }
+        }
 
         void onRootReady() {
             if (state == State.DETACHED) {
@@ -195,7 +208,7 @@ final class LauncherGlassSceneController {
         created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
         if (created.folderCovered) {
-            created.state.setHardCovered(true);
+            created.state.setFolderCovered(true, OpenFolderGlassCoordinator.followsNativeWorkspaceFade());
         } else if (created.recentsCovered) {
             created.state.setCovered(true);
         }
@@ -583,7 +596,9 @@ final class LauncherGlassSceneController {
         if (folderCovered == covered) return;
         folderCovered = covered;
         if (covered) {
-            state.setHardCovered(true);
+            // Same cached-output/native Workspace opacity path as Recents. Folder still
+            // blocks captures, but does not hide the glass before its native icon peers fade.
+            state.setFolderCovered(true, OpenFolderGlassCoordinator.followsNativeWorkspaceFade());
             applyLayerVisibility();
             session.suspendWorkspaceProducer();
             return;
@@ -591,14 +606,14 @@ final class LauncherGlassSceneController {
         if (recentsCovered) {
             // Complete the hard-cover release semantics first, then keep Recents as capture-only
             // coverage. This preserves the pending fresh reveal without exposing it under Recents.
-            state.setHardCovered(false);
+            state.setFolderCovered(false, false);
             state.setCovered(true);
             applyLayerVisibility();
             return;
         }
 
         boolean wasCovered = state.state() == State.COVERED;
-        state.setHardCovered(false);
+        state.setFolderCovered(false, false);
         applyLayerVisibility();
         if (wasCovered) requestFreshBackdrop(state.generation());
     }
@@ -607,14 +622,14 @@ final class LauncherGlassSceneController {
         if (recentsCovered == covered) return;
         recentsCovered = covered;
         if (covered) {
-            if (folderCovered) state.setHardCovered(true);
+            if (folderCovered) state.setFolderCovered(true, state.nativeFolderFade);
             else state.setCovered(true);
             applyLayerVisibility();
             if (!keepSourceLiveDuringRecents()) session.suspendWorkspaceProducer();
             return;
         }
         if (folderCovered) {
-            state.setHardCovered(true);
+            state.setFolderCovered(true, state.nativeFolderFade);
             applyLayerVisibility();
             return;
         }

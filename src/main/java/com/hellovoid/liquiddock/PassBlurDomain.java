@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 enum PassBlurDomain {
     LAUNCHER_WORKSPACE,
     SHORTCUT_POPUP,
+    OPEN_FOLDER,
     DRAG_OVERLAY,
     DOCK,
     SECURITY_CENTER,

@@ -141,7 +141,8 @@ final class Miuix307PassBlurBridge {
             int surfaceSequenceId = readSurfaceSequenceId(viewRoot);
             int rootLayerId = surfaceLayerId(rootSurface);
             String[] exclusions = PassBlurBindPolicy.exclusions(
-                    rootName, request.extraExclusions());
+                    PassBlurBindPolicy.captureRootExclusion(domain, rootName),
+                    request.extraExclusions());
             float scale = request.nativeScale();
 
             if (domain == PassBlurDomain.SECURITY_CENTER) {
@@ -439,7 +440,7 @@ final class Miuix307PassBlurBridge {
         return -1;
     }
 
-    private static String surfaceName(SurfaceControl surface) {
+    static String surfaceName(SurfaceControl surface) {
         if (surface == null) return "";
         try {
             Method getName = SurfaceControl.class.getDeclaredMethod("getName");
