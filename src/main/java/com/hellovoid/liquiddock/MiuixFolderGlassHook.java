@@ -156,14 +156,17 @@ final class MiuixFolderGlassHook {
                 setNativeFolderMaterialsCovered(true);
                 LauncherGlassSceneController.setFolderCoveredForAll(true);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                MainHook.log(TAG + " native Dock folder-open event delivered");
+                // FolderState's alpha=0 can be overridden by concurrent native
+                // desktop transactions. Enter the same APP_STATE that Launcher
+                // uses when leaving for an application, without manual alpha.
+                FolderDockAppLifecycle.onFolderOpened(chain.getThisObject());
                 return result;
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
                 // Restore the OEM Dock on its original close event; the native
                 // folder material remains owned until both close springs finish.
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                MainHook.log(TAG + " native Dock folder-close event delivered");
+                FolderDockAppLifecycle.onFolderClosed();
                 return result;
             });
             MainHook.log(TAG + " semantic FolderStatus dispatcher hooks installed");

@@ -61,6 +61,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
+    private volatile float workspaceBlurPx;
+    private volatile boolean folderClosing;
     // RootPassBlurBackend retains its normalized FBO after freezing popup updates.
     // Reuse that valid texture to re-blur the existing snapshot without recapturing
     // the now-visible menu or changing the PassBlur/EGL owner.
@@ -117,6 +119,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
+        workspaceBlurPx = Miuix307PrismalAdapter.toPortable(optical).blurRadiusPx;
         prismalParams = materialParams(optical, density);
         appliedBlur = prismalParams.blurRadiusPx;
         highlightProfile = glassConfig != null
@@ -147,11 +150,15 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || config == null) return;
         View root = sourceRootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
-        PrismalParams next = materialParams(
-                Miuix307PrismalMaterial.fromConfig(config, density), density);
-        boolean blurChanged = Float.compare(appliedBlur, next.blurRadiusPx) != 0;
-        appliedBlur = next.blurRadiusPx;
-        prismalParams = next;
+        Miuix307PrismalMaterial.Params optical =
+                Miuix307PrismalMaterial.fromConfig(config, density);
+        workspaceBlurPx = Miuix307PrismalAdapter.toPortable(optical).blurRadiusPx;
+        PrismalParams next = materialParams(optical, density);
+        if (folderClosing) next = OpenFolderGlassOptics.restoreWorkspaceBlur(next, workspaceBlurPx);
+        final PrismalParams updated = next;
+        boolean blurChanged = Float.compare(appliedBlur, updated.blurRadiusPx) != 0;
+        appliedBlur = updated.blurRadiusPx;
+        prismalParams = updated;
         highlightProfile = config.largeSurfaceHighlightProfile;
         sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) return;
@@ -159,10 +166,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     && frozenPhysicalWidth > 0 && frozenPhysicalHeight > 0) {
                 try {
                     sourceBackend.makePbufferCurrent();
-                    if (folderBackdrop) prismalRenderer.reblurPreparedBackdrop(next);
+                    if (folderBackdrop) prismalRenderer.reblurPreparedBackdrop(updated);
                     else prismalRenderer.prepareBackdrop(
                             frozenNormalizedTexture, frozenPhysicalWidth, frozenPhysicalHeight,
-                            logicalWidth, logicalHeight, next);
+                            logicalWidth, logicalHeight, updated);
                 } catch (Throwable error) {
                     MainHook.log(TAG + " live blur refresh failed: " + error);
                     return;
@@ -172,6 +179,34 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         });
         // Capture-scale/FPS changes affect the next popup capture. An already-frozen popup
         // must not re-capture from behind its own now-visible overlay.
+    }
+
+    /** Switch to Workspace blur at the native close boundary. One re-blur of
+     * the frozen wallpaper, no recapture and no per-frame Gaussian passes.
+     * Folder refraction/IOR/tint retain their own settings until geometry closes.
+     */
+    void beginFolderClose() {
+        if (!folderBackdrop || shuttingDown || folderClosing) return;
+        folderClosing = true;
+        final PrismalParams next =
+                OpenFolderGlassOptics.restoreWorkspaceBlur(prismalParams, workspaceBlurPx);
+        // Serialize the new kernel with all EGL draws. UI-frame geometry updates
+        // can continue; the GL thread owns both blur preparation and presentation.
+        sourceBackend.postToRenderThread(() -> {
+            if (shuttingDown) return;
+            if (backdropPrepared && prismalRenderer != null) {
+                try {
+                    sourceBackend.makePbufferCurrent();
+                    prismalRenderer.reblurPreparedBackdrop(next);
+                } catch (Throwable error) {
+                    MainHook.log(TAG + " folder Workspace-blur handoff failed: " + error);
+                    return;
+                }
+            }
+            prismalParams = next;
+            appliedBlur = next.blurRadiusPx;
+            renderCurrent();
+        });
     }
 
     private PrismalParams materialParams(Miuix307PrismalMaterial.Params optical, float density) {
