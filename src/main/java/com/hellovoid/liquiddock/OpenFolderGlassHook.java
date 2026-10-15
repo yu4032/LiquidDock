@@ -14,6 +14,7 @@ import java.util.Set;
 final class OpenFolderGlassHook {
     private static final Set<Method> DRAW_HOOKS = new HashSet<>();
     private static boolean installed;
+    private static boolean nativeCloseBackgroundCallbackInstalled;
     private OpenFolderGlassHook() {}
 
     static boolean isInstalled() { return installed; }
@@ -40,6 +41,32 @@ final class OpenFolderGlassHook {
                 }
                 return result;
             });
+            // The OEM background spring finishes independently of Folder.onClose.
+            // Observe its actual completion rather than releasing glass with
+            // the content fade or the early Dock dispatchFolderClose event.
+            try {
+                HookUtil.hook(HookUtil.findMethodExact(anim, "closeFolderAnim",
+                        new Class<?>[]{icon, Runnable.class}), chain -> {
+                    Object[] args = chain.getArgs().toArray(new Object[0]);
+                    Runnable original = args[1] instanceof Runnable ? (Runnable) args[1] : null;
+                    long nativeSerial = MiuixFolderGlassHook.activeNativeCloseSerial();
+                    long glassSerial = OpenFolderGlassCoordinator.activeClosingSerial();
+                    args[1] = (Runnable) () -> {
+                        try {
+                            if (original != null) original.run();
+                        } finally {
+                            MiuixFolderGlassHook.onNativeBackgroundCloseFinished(nativeSerial);
+                            safe(() -> OpenFolderGlassCoordinator.onNativeBackgroundCloseFinished(glassSerial));
+                        }
+                    };
+                    return chain.proceed(args);
+                });
+                nativeCloseBackgroundCallbackInstalled = true;
+            } catch (Throwable error) {
+                // No background-completion hook: keep the original content
+                // completion as the only release boundary to avoid leaks.
+                MainHook.log("[DC][OpenFolderGlass] native close spring boundary unavailable: " + error);
+            }
             // Capture source-excluded wallpaper at touch-down without
             // delaying native folder opening for an EGL/PassBlur callback.
             // Accessibility / keyboard entry can bypass FolderIcon ACTION_DOWN.
@@ -76,8 +103,13 @@ final class OpenFolderGlassHook {
                 return result;
             });
             HookUtil.hook(HookUtil.findMethodExact(cling, "close", new Class<?>[]{boolean.class}), chain -> {
-                safe(() -> OpenFolderGlassCoordinator.onClosing((View) chain.getThisObject()));
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                boolean nativeSpring = nativeCloseBackgroundCallbackInstalled
+                        && args.length > 0 && Boolean.TRUE.equals(args[0]);
+                MiuixFolderGlassHook.onNativeCloseStarted(nativeSpring);
+                safe(() -> OpenFolderGlassCoordinator.onClosing(
+                        (View) chain.getThisObject(), nativeSpring));
+                return chain.proceed(args);
             });
             HookUtil.hook(HookUtil.findMethodExact(folder, "onClose", new Class<?>[]{boolean.class, Runnable.class}), chain -> {
                 long serial = OpenFolderGlassCoordinator.closeSerial((View) chain.getThisObject());

@@ -49,6 +49,7 @@ final class MiuixFolderGlassHook {
     private static long openedFolderSerial;
     private static boolean folderStatusDispatcherInstalled;
     private static final FolderDockOpenDispatch DOCK_OPEN = new FolderDockOpenDispatch();
+    private static final FolderCloseCompletionGate NATIVE_CLOSE = new FolderCloseCompletionGate();
     private static boolean nativeFolderMaterialsCovered;
     private static boolean installed;
 
@@ -204,6 +205,19 @@ final class MiuixFolderGlassHook {
         }
     }
 
+    /** The temporary closing plate is still animating after Folder.onClose completes. */
+    static void onNativeCloseStarted(boolean animated) {
+        NATIVE_CLOSE.begin(openedFolderSerial, animated);
+    }
+
+    static long activeNativeCloseSerial() { return openedFolderSerial; }
+
+    static void onNativeBackgroundCloseFinished(long serial) {
+        if (serial == openedFolderSerial && NATIVE_CLOSE.backdropFinished(serial)) {
+            restoreOpenedFolderOwner();
+        }
+    }
+
     private static void installFolderOpenCloseHooks(ClassLoader classLoader) throws Exception {
         Class<?> folderIcon = Class.forName(FOLDER_ICON, false, classLoader);
         Method dispatchTouchEvent = folderIcon.getDeclaredMethod("dispatchTouchEvent", MotionEvent.class);
@@ -268,7 +282,10 @@ final class MiuixFolderGlassHook {
                     ? (Runnable) args[1] : null;
             long closingSerial = openedFolderSerial;
             args[1] = (Runnable) () -> {
-                if (closingSerial == openedFolderSerial) restoreOpenedFolderOwner();
+                if (closingSerial == openedFolderSerial
+                        && (!NATIVE_CLOSE.isActive() || NATIVE_CLOSE.contentFinished(closingSerial))) {
+                    restoreOpenedFolderOwner();
+                }
                 if (originalCompletion != null) originalCompletion.run();
             };
             return chain.proceed(args);
@@ -323,6 +340,7 @@ final class MiuixFolderGlassHook {
         }
         openedFolderOwner = new WeakReference<>(owner);
         openedFolderSerial++;
+        NATIVE_CLOSE.cancel();
         LauncherGlassStaticNode sink = resolveOwnerSink(owner);
         openedFolderSink = new WeakReference<>(sink);
         if (sink != null) {
@@ -722,6 +740,7 @@ final class MiuixFolderGlassHook {
             if (listener != null) icon.removeOnAttachStateChangeListener(listener);
         }
         FOLDER_RECOVERY_PENDING.clear();
+        NATIVE_CLOSE.cancel();
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
     }
