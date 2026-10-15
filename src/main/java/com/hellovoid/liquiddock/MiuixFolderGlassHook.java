@@ -58,9 +58,8 @@ final class MiuixFolderGlassHook {
             return false;
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
-        // Intercept the exact native HotSeats.setAlpha writer before any folder
-        // lifecycle listener can begin ownership. A preDraw alpha correction
-        // races its per-frame animator and can present one visible Dock frame.
+        // Own the native HotSeats subtree visibility before native folder
+        // callbacks, independent of per-child alpha animations.
         FolderDockVisibilityOwner.install(classLoader);
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
@@ -160,15 +159,14 @@ final class MiuixFolderGlassHook {
                 setNativeFolderMaterialsCovered(true);
                 LauncherGlassSceneController.setFolderCoveredForAll(true);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                // The only event owner is Launcher. Keep the actual native
-                // DockContainerView covered even if another window transaction
-                // changes its visibility after this FolderState callback.
+                // OEM FolderState continues owning its window transaction;
+                // HotSeats subtree stays hidden across window/view switches.
                 FolderDockVisibilityOwner.onFolderOpened(chain.getThisObject());
                 return result;
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
-                // Restore the OEM Dock on its original close event; the native
-                // folder material remains owned until both close springs finish.
+                // CloseFolder precedes the native background spring. A visual
+                // owner release is deferred until that spring completes.
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 FolderDockVisibilityOwner.onFolderClosed();
                 return result;
@@ -185,14 +183,18 @@ final class MiuixFolderGlassHook {
     /** The temporary closing plate is still animating after Folder.onClose completes. */
     static void onNativeCloseStarted(boolean animated) {
         NATIVE_CLOSE.begin(openedFolderSerial, animated);
+        FolderDockVisibilityOwner.onNativeCloseStarted(animated);
     }
 
     static long activeNativeCloseSerial() { return openedFolderSerial; }
 
     static void onNativeBackgroundCloseFinished(long serial) {
-        if (serial == openedFolderSerial && NATIVE_CLOSE.backdropFinished(serial)) {
-            restoreOpenedFolderOwner();
-        }
+        if (serial != openedFolderSerial) return;
+        boolean complete = NATIVE_CLOSE.backdropFinished(serial);
+        // Closing the native background spring is the safe Dock reveal
+        // boundary. CloseFolder is dispatched much earlier.
+        FolderDockVisibilityOwner.onNativeBackgroundCloseFinished();
+        if (complete) restoreOpenedFolderOwner();
     }
 
     private static void installFolderOpenCloseHooks(ClassLoader classLoader) throws Exception {
