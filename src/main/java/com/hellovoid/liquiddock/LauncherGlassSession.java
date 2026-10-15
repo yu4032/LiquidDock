@@ -124,6 +124,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile RecentsCapsuleGlassSession recentsConsumer;
     private final LauncherGlassScrollProjectionState workspaceScrollProjection =
             new LauncherGlassScrollProjectionState();
+    private final LauncherGlassCompositingBounds staticCompositeBounds =
+            new LauncherGlassCompositingBounds();
+    // Main thread. Never hold a restricted TextureView crop through scroll/zoom motion.
+    private int staticClipStableObservations;
     // UI-thread scratch. Root-to-global is common to every Workspace node in one pre-draw, so
     // invert it once instead of repeating the same matrix walk/inversion for every icon/widget.
     private final Matrix uiRootToGlobal = new Matrix();
@@ -396,6 +400,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void registerStaticNode(LauncherGlassStaticNode node) {
         if (node == null || shuttingDown) return;
+        invalidateStaticCompositorClip();
         synchronized (staticNodes) {
             if (!staticNodes.containsKey(node)) {
                 staticNodes.put(node, new StaticNodeState(node));
@@ -409,6 +414,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void unregisterStaticNode(LauncherGlassStaticNode node) {
         if (node == null) return;
+        invalidateStaticCompositorClip();
         synchronized (staticNodes) {
             staticNodes.remove(node);
             staticNodeStateSnapshot =
@@ -525,12 +531,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
         if (shuttingDown || beforeScrollX == afterScrollX) return;
+        invalidateStaticCompositorClip();
         workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
         requestStaticRedraw();
     }
 
     void resetWorkspaceScrollProjection() {
         workspaceScrollProjection.reset();
+        invalidateStaticCompositorClip();
+    }
+
+    private void invalidateStaticCompositorClip() {
+        staticClipStableObservations = 0;
+        LauncherGlassStaticLayer.clearCompositorClipForRoot(rootRef.get());
     }
 
     void suspendWorkspaceProducer() {
@@ -764,10 +777,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
         StaticNodeState[] staticSnapshot = staticNodeStateSnapshot;
         int staticGeometryReads = 0;
+        boolean staticRootTransformValid = true;
         if (tracing) Trace.beginSection("LD.Workspace.StaticNodes");
         try {
             Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
-            boolean staticRootTransformValid =
+            staticRootTransformValid =
                     staticSnapshot.length == 0 || prepareStaticRootCaptureTransform(root);
             for (StaticNodeState state : staticSnapshot) {
                 LauncherGlassStaticNode node = state.nodeRef.get();
@@ -798,6 +812,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
+        int nextRotation = readLauncherConfigRotation(root);
+        updateStableCompositorClip(
+                root, staticSnapshot, staticRootTransformValid,
+                geometryMotionChanged || staticChanged || rotationSettlePending
+                        || nextRotation != configRotation
+                        || LauncherGlassSceneController.isRecentsCoveredByVendor());
+
         if (geometryMotionChanged
                 && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
                 && !transitionFrameSync.isUnlockTransitionActive()) {
@@ -811,7 +832,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         applyTransitionFrameSync(
                 transitionFrameSync.onPreDraw(geometryMotionChanged), root);
 
-        int nextRotation = readLauncherConfigRotation(root);
         if (nextRotation != configRotation) {
             configRotation = nextRotation;
             beginRotationSettle(nextRotation);
@@ -844,6 +864,51 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             return;
         }
         if (staticChanged || dragChanged) scheduleOutputRender(staticChanged, dragChanged);
+    }
+
+    /**
+     * The EGL producer remains fullscreen. This only narrows HWUI composition of the
+     * transparent TextureView when two consecutive pre-draws confirm stable root geometry.
+     * Native scroll, layout or rotation immediately restore the full TextureView clip.
+     */
+    private void updateStableCompositorClip(View root, StaticNodeState[] states,
+            boolean transformValid, boolean moving) {
+        if (root == null || states.length == 0 || !transformValid || moving
+                || rootWidth <= 0 || rootHeight <= 0
+                || staticClipStableObservations < 1) {
+            if (moving || !transformValid) staticClipStableObservations = 0;
+            else staticClipStableObservations = Math.min(2, staticClipStableObservations + 1);
+            LauncherGlassStaticLayer.clearCompositorClipForRoot(root);
+            return;
+        }
+        staticCompositeBounds.reset();
+        for (StaticNodeState state : states) {
+            StaticGeometryFrame frame = state.frame;
+            if (state.nodeRef.get() == null || frame == null || frame.geometry == null) {
+                staticClipStableObservations = 0;
+                LauncherGlassStaticLayer.clearCompositorClipForRoot(root);
+                return;
+            }
+            LauncherGlassGeometry.Snapshot geometry = frame.geometry;
+            float centerX = workspaceScrollProjection.projectCenterX(
+                    geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
+            if (!staticCompositeBounds.include(
+                    centerX, geometry.centerY, geometry.width, geometry.height)) {
+                staticClipStableObservations = 0;
+                LauncherGlassStaticLayer.clearCompositorClipForRoot(root);
+                return;
+            }
+        }
+        staticClipStableObservations = 2;
+        boolean reduced = staticCompositeBounds.finish(rootWidth, rootHeight);
+        LauncherGlassStaticLayer.updateCompositorClipForRoot(
+                root, reduced ? staticCompositeBounds : null);
+        if (Trace.isEnabled()) {
+            long fullArea = (long) rootWidth * rootHeight;
+            long clipArea = reduced ? staticCompositeBounds.area() : fullArea;
+            Trace.setCounter("LD.Workspace.HwuiClipPixels", clipArea);
+            Trace.setCounter("LD.Workspace.FullSurfacePixels", fullArea);
+        }
     }
 
     private boolean prepareStaticRootCaptureTransform(View root) {
@@ -1208,8 +1273,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // renders directly into the native-resolution window. The Prismal node scissor
         // limits expensive shading to occupied glass bounds.
         sourceBackend.makeCurrent(output.eglSurface);
-        prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
+        boolean tracing = workspaceSource && Trace.isEnabled();
+        if (tracing) Trace.beginSection("LD.Workspace.SurfaceClear");
+        try {
+            prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
         StaticNodeState[] snapshot = staticNodeStateSnapshot;
+        int drawnWidgets = 0;
+        if (tracing) Trace.beginSection("LD.Workspace.StaticDraw");
+        try {
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
@@ -1223,8 +1297,22 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
+            if (node.nodeKind() == LauncherGlassNodeKind.WIDGET) drawnWidgets++;
         }
-        sourceBackend.swapBuffers(output.eglSurface);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
+        if (tracing) {
+            Trace.setCounter("LD.Workspace.DrawnWidgets", drawnWidgets);
+            Trace.setCounter("LD.Workspace.StaticSurfacePixels",
+                    (long) output.width * output.height);
+            Trace.beginSection("LD.Workspace.StaticSwap");
+        }
+        try {
+            sourceBackend.swapBuffers(output.eglSurface);
+        } finally {
+            if (tracing) Trace.endSection();
+        }
     }
 
     private PrismalGeometry resolveStaticPrismalGeometry(
