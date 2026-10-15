@@ -76,9 +76,6 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(launcher, "openFolder",
                     new Class<?>[]{info, View.class}), chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                // Capture the Launcher object before its asynchronous folder
-                // runnable; FolderCling's Context can be a themed wrapper.
-                MiuixFolderGlassHook.recordNativeLauncher(chain.getThisObject());
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
@@ -91,11 +88,9 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(cling, "open", new Class<?>[0]), chain -> {
                 try {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    // OEM Launcher dispatches Dock FolderState only after beginning
-                    // its animation. Move that same event to this first-draw-safe
-                    // boundary, then consume its duplicate later in Launcher.
-                    MiuixFolderGlassHook.dispatchDockOpenBeforeFirstDraw((View) chain.getThisObject());
                     // Native open() has initialized its folder reference.
+                    // Leave OEM DockStateManager FolderState dispatch at the
+                    // Launcher-defined boundary after openFolderAnim().
                     safe(() -> OpenFolderGlassCoordinator.onOpening((View) chain.getThisObject()));
                     return result;
                 } catch (Throwable error) {
