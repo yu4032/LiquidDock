@@ -106,9 +106,10 @@ final class OpenFolderGlassCoordinator {
         if (live(state)) releaseAll();
     }
 
-    /** Keep glass below FolderCling content, but outside its visibility lifecycle.
-     * On native close the OEM hides FolderCling before its background spring ends.
-     * A TextureView child of FolderCling would vanish during that spring.
+    /** Native blur sits below the Prismal lens, and both sit below FolderCling.
+     * The two surfaces are Launcher-root siblings so the folder closing spring
+     * cannot hide the glass output by hiding FolderCling itself.
+     * IMPORTANT: sibling Z does NOT change independent Dock window Z.
      */
     private static void attachOutputLayer(State state) {
         if (!live(state) || state.layer != null || state.session == null) return;
@@ -119,10 +120,22 @@ final class OpenFolderGlassCoordinator {
         ViewGroup host = (ViewGroup) parent;
         int position = host.indexOfChild(cling);
         if (position < 0) return;
+        NativeFolderBackdropView nativeBackdrop = new NativeFolderBackdropView(
+                cling.getContext(), state.session.folderNativeBlurRadiusPx());
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(cling.getContext(), state.session);
         state.layerHost = new WeakReference<>(host);
+        state.nativeBackdrop = nativeBackdrop;
         state.layer = layer;
-        host.addView(layer, position, new ViewGroup.LayoutParams(state.width, state.height));
+        // Background pass-window blur (not a wallpaper image) < Prismal lens
+        // < OEM FolderCling content, all within this Launcher ViewRoot.
+        host.addView(nativeBackdrop, position,
+                new ViewGroup.LayoutParams(state.width, state.height));
+        host.addView(layer, position + 1,
+                new ViewGroup.LayoutParams(state.width, state.height));
+        MainHook.diag("[FolderTrace] Folder visual layers: nativeBlurIndex="
+                + host.indexOfChild(nativeBackdrop) + " prismalIndex="
+                + host.indexOfChild(layer) + " clingIndex="
+                + host.indexOfChild(cling) + " launcherWindow=" + cling.getWindowToken());
         host.postInvalidateOnAnimation();
     }
 
@@ -303,6 +316,7 @@ final class OpenFolderGlassCoordinator {
         View root = state.root.get();
         if (root != null) root.removeOnAttachStateChangeListener(state.attachListener);
         if (state.layer != null) state.layer.dispose();
+        if (state.nativeBackdrop != null) state.nativeBackdrop.dispose();
         if (state.session != null) state.session.shutdown();
         if (state.source != null) state.source.dispose();
         for (View material : state.claimedBlur.keySet()) LauncherWidgetNativeViewBlurGate.releaseFolder(material);
@@ -363,6 +377,10 @@ final class OpenFolderGlassCoordinator {
             if (latest != null && latest != state.glass) {
                 state.glass = latest;
                 state.session.applyLiveGlassConfig(latest);
+                if (state.nativeBackdrop != null) {
+                    state.nativeBackdrop.updateBlurRadius(
+                            state.session.folderNativeBlurRadiusPx());
+                }
             }
 
             View animImage = animationImage(state);
@@ -383,6 +401,9 @@ final class OpenFolderGlassCoordinator {
                 }
             }
             float amount = state.motion.sample(observed);
+            // Fade system blur with the native folder opening/closing spring.
+            // Do not re-composite an opaque wallpaper over the Workspace.
+            if (state.nativeBackdrop != null) state.nativeBackdrop.updateProgress(amount);
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
@@ -506,6 +527,7 @@ final class OpenFolderGlassCoordinator {
         ShortcutPopupSourceOverlay source;
         ShortcutPopupGlassSession session;
         ShortcutPopupGlassLayer layer;
+        NativeFolderBackdropView nativeBackdrop;
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDraw;
         final OpenFolderMotionState motion = new OpenFolderMotionState();

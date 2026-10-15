@@ -26,13 +26,6 @@ public class OpenFolderBackdropPolicyTest {
         assertTrue(Float.isNaN(OpenFolderBackdropPolicy.nativeVisualProgress(
                 0f, 0f, 0f, 0f, 1f, 1f)));
     }
-    @Test public void preparedDesktopRowsKeepTheirVisualTopAndBottom() throws Exception {
-        java.lang.reflect.Method sample = Class.forName("com.hellovoid.liquiddock.OpenFolderBackdropPolicy")
-                .getDeclaredMethod("backdropSampleY", float.class);
-        assertEquals(1f, (Float) sample.invoke(null, 0f), 0f);
-        assertEquals(.75f, (Float) sample.invoke(null, .25f), 0f);
-        assertEquals(0f, (Float) sample.invoke(null, 1f), 0f);
-    }
     @Test public void backgroundTracksNativeProgressAndClampsInvalidSamples() throws Exception {
         assertEquals(0f, opacity(0f), 0f);
         assertEquals(0.5f, opacity(0.5f), 0f);

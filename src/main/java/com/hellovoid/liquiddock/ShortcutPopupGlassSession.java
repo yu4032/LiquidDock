@@ -55,7 +55,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final boolean folderBackdrop;
-    private volatile float backdropOpacity;
     private final LauncherGlassOutputRenderState folderRenderWork = new LauncherGlassOutputRenderState();
     private final FolderGlassFramePacing folderFramePacing = new FolderGlassFramePacing();
     private final FloatBuffer quadBuffer;
@@ -230,6 +229,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 density);
     }
 
+    int folderNativeBlurRadiusPx() {
+        // The native blur layer and folder optics share the same effective
+        // user-configured blur setting; no duplicate configuration path.
+        return folderBackdrop ? Math.max(0, Math.round(prismalParams.blurRadiusPx)) : 0;
+    }
+
     boolean hasFrozenBackdrop() {
         return !shuttingDown && backdropPrepared && sourceFrozen;
     }
@@ -244,15 +249,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     void updateFolderFrame(LauncherGlassGeometry.Snapshot next, float nativeOpenProgress) {
         if (shuttingDown || !folderBackdrop || next == null) return;
-        float opacity = OpenFolderBackdropPolicy.backdropOpacity(nativeOpenProgress);
         LauncherGlassGeometry.Snapshot old = geometry;
-        if (old != null && old.sameAs(next) && Float.compare(opacity, backdropOpacity) == 0) return;
+        if (old != null && old.sameAs(next)) return;
         geometry = next;
-        backdropOpacity = opacity;
-        // Main-thread native geometry remains current at full refresh rate.
-        // Only submit expensive full-screen Prismal work on an actual output
-        // budget slot; the render thread always reads the newest geometry.
-        if (folderFramePacing.allow(System.nanoTime(), opacity)
+        // The native compositor owns the full-screen background blur.
+        // Only the lens geometry is submitted to the Prismal GPU compositor.
+        if (folderFramePacing.allow(System.nanoTime(), nativeOpenProgress)
                 && folderRenderWork.request(true, false)
                 && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
     }
@@ -448,16 +450,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        if (folderBackdrop && backdropOpacity > 0.0005f) {
-            GLES20.glEnable(GLES20.GL_BLEND);
-            GLES20.glBlendColor(0f, 0f, 0f, backdropOpacity);
-            GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalRenderer.preparedBlurTexture());
-            float firstRow = OpenFolderBackdropPolicy.backdropSampleY(0f);
-            float lastRow = OpenFolderBackdropPolicy.backdropSampleY(1f);
-            GLES20.glUniform4f(compositeCropRectLocation, 0f, firstRow, 1f, lastRow - firstRow);
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        }
+        // Never compose the prepared wallpaper as a fullscreen opaque quad.
+        // It covered the *visible* Launcher Workspace and made previous
+        // visibility/fade fixes ineffective. Prismal's geometry SDF/scissor
+        // already limits refraction to the actual folder glass outline.
         if (folderBackdrop) {
             GLES20.glEnable(GLES20.GL_BLEND);
             GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
