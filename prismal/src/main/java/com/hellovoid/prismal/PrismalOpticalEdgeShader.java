@@ -13,6 +13,8 @@ public final class PrismalOpticalEdgeShader {
             "float shadowExt = mix(0.15, 0.60, u_shadowSoftness > 1.0\n"
             + "        ? clamp(u_shadowSoftness / 20.0, 0.0, 1.0)\n"
             + "        : clamp(u_shadowSoftness, 0.0, 1.0));";
+    private static final String SHADOW_FALLOFF =
+            "float shadowFalloff = avgDim * shadowExt;";
     private static final String OUTWARD =
             "vec2 outward = (length(gradLens) > 1e-4) ? normalize(gradLens) : vec2(0.0, 1.0);";
     private static final String REFLECTION_MIX = "color = mix(color, reflSample, reflW);";
@@ -83,6 +85,7 @@ public final class PrismalOpticalEdgeShader {
         requireSingle(source, OUTWARD);
         requireSingle(source, VIBRANCY_NEUTRAL);
         requireSingle(source, SHADOW_EXTENT);
+        requireSingle(source, SHADOW_FALLOFF);
         requireSingle(source, REFLECTION_MIX);
         requireSingle(source, PLAIN_HIGHLIGHT_ADD);
         requireSingle(source, UPSTREAM_NORMAL_DEBUG);
@@ -125,6 +128,12 @@ public final class PrismalOpticalEdgeShader {
                         // 0..20 (GUI 0..2000) is continuous; default 1000 (10.0) remains 0.375.
                         float shadowExt = mix(0.15, 0.60, clamp(u_shadowSoftness / 20.0, 0.0, 1.0));
                         """)
+                // Average width/height lets the long axis push the entire short axis
+                // into inner shadow (e.g. wide Dock and rectangular Widgets).
+                // A square keeps exactly the upstream reach; rectangular glass
+                // limits the falloff to the short-axis scale.
+                .replace(SHADOW_FALLOFF,
+                        "float shadowFalloff = min(u_glassSize.x, u_glassSize.y) * shadowExt;")
                 .replace(OUTWARD, OUTWARD + "\n"
                         + "    vec3 os4EdgeNormal3 = normalize(vec3(os4SdfGradient, 1.0));")
                 .replace(REFLECTION_MIX, REFLECTION_MIX + "\n"
