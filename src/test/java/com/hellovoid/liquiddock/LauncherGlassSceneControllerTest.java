@@ -35,7 +35,24 @@ public class LauncherGlassSceneControllerTest {
         assertFalse(state.isLayerVisible());
         state.onFreshFrameReady(state.generation());
         assertTrue(state.isLayerVisible());
-        assertTrue(state.consumeFadeReveal());
+        assertFalse("Folder close must not add a second fade after OEM spring",
+                state.consumeFadeReveal());
+    }
+    @Test public void folderCloseUsesFreshFrameButNotAnAlphaReveal() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+        state.setFolderCovered(true, false);
+        long stale = state.generation();
+        state.setFolderCovered(false, false);
+        assertFalse(state.isLayerVisible());
+        state.onFreshFrameReady(stale);
+        assertFalse("Stale pixels must remain covered", state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue(state.isLayerVisible());
+        assertFalse("Native folder closing already provides the transition", state.consumeFadeReveal());
     }
     @Test
     public void hardCoveredSceneRequiresFreshFrameBeforeReveal() {
