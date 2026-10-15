@@ -87,6 +87,9 @@ final class OpenFolderGlassHook {
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
+                // Launcher is now INCLUDED in the PassBlur input. Once its
+                // native folder animation begins, never admit a late frame.
+                OpenFolderGlassCoordinator.freezePreparedDesktopBeforeNativeOpen();
                 // Own native Workspace opacity before Launcher queues the
                 // delayed folder-open runnable, then freeze the GPU outputs.
                 LauncherNativeFolderWorkspaceFadeGate.onOpening(chain.getThisObject());
@@ -119,6 +122,7 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(cling, "onFolderOpenAnimationFinish", new Class<?>[0]), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 FolderDiagnosticTrace.event("FolderCling.open-animation-finished");
+                MiuixFolderGlassHook.onNativeExpandedFolderOpenFinished();
                 safe(() -> OpenFolderGlassCoordinator.onOpenFinished((View) chain.getThisObject()));
                 return result;
             });

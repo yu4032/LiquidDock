@@ -44,6 +44,11 @@ final class MiuixFolderGlassHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static WeakReference<ViewGroup> openedFolderOwner = new WeakReference<>(null);
     private static WeakReference<LauncherGlassStaticNode> openedFolderSink = new WeakReference<>(null);
+    // Original FolderIcon contains its own title and native material. Only
+    // conceal it AFTER the OEM expansion animation has finished, so it cannot
+    // appear beside the expanded FolderCling when Workspace remains visible.
+    private static WeakReference<ViewGroup> concealedSourceIcon = new WeakReference<>(null);
+    private static int concealedSourceVisibility = View.VISIBLE;
     private static long openedFolderSerial;
     private static boolean folderStatusDispatcherInstalled;
     private static final FolderCloseCompletionGate NATIVE_CLOSE = new FolderCloseCompletionGate();
@@ -65,6 +70,7 @@ final class MiuixFolderGlassHook {
         // only folder side effect is to push/pop the Dock FolderState, which
         // sends an alpha=0 transaction; preserve all other native listeners.
         installDockFolderNoHide(classLoader);
+        OemFolderBlurStrengthHook.install(classLoader);
         LauncherNativeFolderWorkspaceFadeGate.install(classLoader);
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
@@ -231,7 +237,33 @@ final class MiuixFolderGlassHook {
 
     /** The temporary closing plate is still animating after Folder.onClose completes. */
     static void onNativeCloseStarted(boolean animated) {
+        restoreConcealedSourceIcon();
         NATIVE_CLOSE.begin(openedFolderSerial, animated);
+    }
+
+    static void onNativeExpandedFolderOpenFinished() {
+        ViewGroup owner = openedFolderOwner.get();
+        if (owner == null || !owner.isAttachedToWindow()) return;
+        ViewGroup old = concealedSourceIcon.get();
+        if (old == owner) return;
+        restoreConcealedSourceIcon();
+        concealedSourceVisibility = owner.getVisibility();
+        concealedSourceIcon = new WeakReference<>(owner);
+        if (concealedSourceVisibility == View.VISIBLE) {
+            owner.setVisibility(View.INVISIBLE);
+        }
+        MainHook.diag("[FolderTrace] source FolderIcon and title concealed after "
+                + "native open: " + owner.getClass().getSimpleName()
+                + " before=" + concealedSourceVisibility);
+    }
+
+    private static void restoreConcealedSourceIcon() {
+        ViewGroup icon = concealedSourceIcon.get();
+        concealedSourceIcon = new WeakReference<>(null);
+        if (icon != null && icon.getVisibility() == View.INVISIBLE) {
+            icon.setVisibility(concealedSourceVisibility);
+            MainHook.diag("[FolderTrace] source FolderIcon/title restored for native close");
+        }
     }
 
     static long activeNativeCloseSerial() { return openedFolderSerial; }
@@ -360,6 +392,7 @@ final class MiuixFolderGlassHook {
             return;
         }
         ViewGroup previousOwner = openedFolderOwner.get();
+        if (previousOwner != null && previousOwner != owner) restoreConcealedSourceIcon();
         LauncherGlassStaticNode previousSink = openedFolderSink.get();
         if (previousOwner != null && previousOwner != owner && previousSink != null) {
             previousSink.setSuppressedByFolderOpen(false);
@@ -376,6 +409,7 @@ final class MiuixFolderGlassHook {
     }
 
     private static void restoreOpenedFolderOwner() {
+        restoreConcealedSourceIcon();
         LauncherGlassStaticNode sink = openedFolderSink.get();
         ViewGroup owner = openedFolderOwner.get();
 
@@ -782,6 +816,7 @@ final class MiuixFolderGlassHook {
     }
 
     static void onRuntimeGlassDisabled() {
+        restoreConcealedSourceIcon();
         OpenFolderGlassCoordinator.releaseAll();
         setNativeFolderMaterialsCovered(false);
         for (View material : new ArrayList<>(CLAIMED.keySet())) {

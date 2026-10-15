@@ -13,7 +13,7 @@ import java.lang.ref.WeakReference;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
-/** Wallpaper-only native folder glass with matched open/close geometry. */
+/** Pre-open desktop snapshot for native folder lens, with matched open/close geometry. */
 final class OpenFolderGlassCoordinator {
     private static final String TAG = "[DC][OpenFolderGlass]";
     private static final OpenFolderGlassState OWNER = new OpenFolderGlassState();
@@ -57,6 +57,24 @@ final class OpenFolderGlassCoordinator {
         if (state != null && state.icon.get() == icon) state.expectedFolderInfo = folderInfo;
     }
 
+    /** Strict prediction-time boundary for a source which now INCLUDES the
+     * Launcher desktop. After this point the OEM may render FolderCling, so a
+     * late PassBlur callback must never be accepted as a valid background.
+     * Programmatic opens with no early ACTION_DOWN deliberately use stock.
+     */
+    static void freezePreparedDesktopBeforeNativeOpen() {
+        State state = current;
+        if (state == null) return;
+        if (state.session == null || !state.session.hasFrozenBackdrop()) {
+            MainHook.diag("[FolderTrace] desktop snapshot NOT READY before native folder; "
+                    + "using OEM instead glassSerial=" + state.serial);
+            releaseAll();
+            return;
+        }
+        MainHook.diag("[FolderTrace] desktop snapshot frozen BEFORE native folder "
+                + "glassSerial=" + state.serial);
+    }
+
     static void prepare(ViewGroup sourceIcon) {
         if (!OpenFolderGlassHook.isInstalled() || !enabled(sourceIcon)
                 || !LauncherGlassHierarchy.isWorkspace(sourceIcon)) return;
@@ -67,7 +85,7 @@ final class OpenFolderGlassCoordinator {
         RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
         if (endpoint == null || !endpoint.isValid()) return;
         String launcherSurfaceName = Miuix307PassBlurBridge.surfaceName(endpoint.rootSurface);
-        // Fail closed if the exact Launcher layer cannot be excluded.
+        // Fail closed when the native Launcher surface identity is unavailable.
         if (launcherSurfaceName.isBlank()) return;
         State state = new State(root, sourceIcon, OWNER.prepare(), glass);
         current = state;
@@ -106,10 +124,8 @@ final class OpenFolderGlassCoordinator {
         if (live(state)) releaseAll();
     }
 
-    /** Native blur sits below the Prismal lens, and both sit below FolderCling.
-     * The two surfaces are Launcher-root siblings so the folder closing spring
-     * cannot hide the glass output by hiding FolderCling itself.
-     * IMPORTANT: sibling Z does NOT change independent Dock window Z.
+    /** Attach only the refractive lens below the OEM FolderCling.
+     * Native Launcher remains the sole owner of the surrounding background blur.
      */
     private static void attachOutputLayer(State state) {
         if (!live(state) || state.layer != null || state.session == null) return;
@@ -120,22 +136,13 @@ final class OpenFolderGlassCoordinator {
         ViewGroup host = (ViewGroup) parent;
         int position = host.indexOfChild(cling);
         if (position < 0) return;
-        NativeFolderBackdropView nativeBackdrop = new NativeFolderBackdropView(
-                cling.getContext(), state.session.folderNativeBlurRadiusPx());
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(cling.getContext(), state.session);
         state.layerHost = new WeakReference<>(host);
-        state.nativeBackdrop = nativeBackdrop;
         state.layer = layer;
-        // Background pass-window blur (not a wallpaper image) < Prismal lens
-        // < OEM FolderCling content, all within this Launcher ViewRoot.
-        host.addView(nativeBackdrop, position,
+        host.addView(layer, position,
                 new ViewGroup.LayoutParams(state.width, state.height));
-        host.addView(layer, position + 1,
-                new ViewGroup.LayoutParams(state.width, state.height));
-        MainHook.diag("[FolderTrace] Folder visual layers: nativeBlurIndex="
-                + host.indexOfChild(nativeBackdrop) + " prismalIndex="
-                + host.indexOfChild(layer) + " clingIndex="
-                + host.indexOfChild(cling) + " launcherWindow=" + cling.getWindowToken());
+        MainHook.diag("[FolderTrace] lens below OEM FolderCling index="
+                + host.indexOfChild(layer) + " folderIndex=" + host.indexOfChild(cling));
         host.postInvalidateOnAnimation();
     }
 
@@ -167,8 +174,8 @@ final class OpenFolderGlassCoordinator {
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
         state.observer = state.root.get().getViewTreeObserver();
-        // Wallpaper-only source stays safe throughout native opening.
-        // Do not reject its first GPU frame just because FolderCling drew first.
+        // Desktop-inclusive source was frozen at the Launcher.openFolder boundary.
+        // Late captures cannot include the native FolderCling.
         state.preDraw = () -> { sync(state); return true; };
         state.observer.addOnPreDrawListener(state.preDraw);
         state.root.get().postInvalidateOnAnimation();
@@ -316,7 +323,6 @@ final class OpenFolderGlassCoordinator {
         View root = state.root.get();
         if (root != null) root.removeOnAttachStateChangeListener(state.attachListener);
         if (state.layer != null) state.layer.dispose();
-        if (state.nativeBackdrop != null) state.nativeBackdrop.dispose();
         if (state.session != null) state.session.shutdown();
         if (state.source != null) state.source.dispose();
         for (View material : state.claimedBlur.keySet()) LauncherWidgetNativeViewBlurGate.releaseFolder(material);
@@ -377,10 +383,6 @@ final class OpenFolderGlassCoordinator {
             if (latest != null && latest != state.glass) {
                 state.glass = latest;
                 state.session.applyLiveGlassConfig(latest);
-                if (state.nativeBackdrop != null) {
-                    state.nativeBackdrop.updateBlurRadius(
-                            state.session.folderNativeBlurRadiusPx());
-                }
             }
 
             View animImage = animationImage(state);
@@ -401,9 +403,6 @@ final class OpenFolderGlassCoordinator {
                 }
             }
             float amount = state.motion.sample(observed);
-            // Fade system blur with the native folder opening/closing spring.
-            // Do not re-composite an opaque wallpaper over the Workspace.
-            if (state.nativeBackdrop != null) state.nativeBackdrop.updateProgress(amount);
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
@@ -527,7 +526,6 @@ final class OpenFolderGlassCoordinator {
         ShortcutPopupSourceOverlay source;
         ShortcutPopupGlassSession session;
         ShortcutPopupGlassLayer layer;
-        NativeFolderBackdropView nativeBackdrop;
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDraw;
         final OpenFolderMotionState motion = new OpenFolderMotionState();

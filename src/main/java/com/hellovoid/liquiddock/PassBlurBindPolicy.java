@@ -12,12 +12,15 @@ final class PassBlurBindPolicy {
 
     private PassBlurBindPolicy() {}
 
-    /** Source-level wallpaper capture is independent of Dock's native fade. */
-    static String[] folderWallpaperExclusions(String launcherRootName) {
+    /** Real desktop capture before FolderCling can render. Source window itself
+     * is already excluded by exclusions(rootSurfaceName,...).
+     * Do NOT exclude Launcher, or the lens will contain wallpaper alone.
+     */
+    static String[] folderDesktopExclusions(String launcherRootName) {
         if (launcherRootName == null || launcherRootName.isBlank()) {
-            throw new IllegalArgumentException("Folder wallpaper requires Launcher surface identity");
+            throw new IllegalArgumentException("Folder desktop requires Launcher surface identity");
         }
-        return new String[]{launcherRootName, "DockAssistantView"};
+        return new String[]{"DockAssistantView"};
     }
 
     static float nativeScale(PassBlurDomain domain, float requestedScale) {
