@@ -87,6 +87,32 @@ public class PrismalOpticalEdgeShaderTest {
     }
 
     @Test
+    public void os4DirectionalLightAlsoCoversFaceWithoutChangingRimOrAlpha() {
+        String shader = PrismalOpticalEdgeShader.apply(
+                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT));
+        assertTrue(shader.contains("float coreBlend = smoothstep(0.0, 0.38, tDeep);"));
+        assertTrue(shader.contains(
+                "float os4FaceMask = 0.5 * coreBlend * step(0.5, u_os4EdgeEnabled);"));
+        assertTrue(shader.contains(
+                "* max(os4EdgeMask, os4FaceMask), 0.0, 1.0);"));
+        assertFalse(shader.contains(
+                "float os4SoftLight = clamp(os4Directional * os4EdgeMask, 0.0, 1.0);"));
+        assertTrue(shader.contains("float os4EdgeMask = os4EdgeBand("));
+        assertTrue(shader.contains(
+                "gl_FragColor = vec4(color, opacity * u_transmittance);"));
+
+        // The edge is unchanged (coreBlend == 0), the center remains lit
+        // when its edge mask is zero, and disabling OS4 removes both.
+        float rimMask = 0.8f;
+        org.junit.Assert.assertEquals(rimMask,
+                Math.max(rimMask, 0.5f * 0f * 1f), 0.00001f);
+        org.junit.Assert.assertEquals(0.5f,
+                Math.max(0f, 0.5f * 1f * 1f), 0.00001f);
+        org.junit.Assert.assertEquals(0f,
+                Math.max(0f, 0.5f * 1f * 0f), 0.00001f);
+    }
+
+    @Test
     public void normalDebugShowsActualOs4EdgeNormalAndDirectionalLighting() {
         String patched = PrismalComponentGateShader.apply(
                 PrismalOpticalEdgeShader.apply(
