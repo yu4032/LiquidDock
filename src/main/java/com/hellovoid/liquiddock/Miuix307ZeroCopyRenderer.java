@@ -131,6 +131,8 @@ final class Miuix307ZeroCopyRenderer {
         applyProducerUpdatesPolicy(reason);
     }
 
+    static boolean isFolderFrozen() { return folderFrozen; }
+
     static void setFolderFrozen(boolean frozen) {
         if (folderFrozen == frozen) return;
         folderFrozen = frozen;
