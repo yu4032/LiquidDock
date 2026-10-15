@@ -228,6 +228,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     // Stop both source-frame and scene-driven GL work while a folder uses
     // its own one-shot background. The last TextureView buffer stays visible.
     private volatile boolean folderRenderFrozen;
+    private volatile boolean folderFreezeRequested;
+    private volatile long folderFreezeEpoch;
     // Drop any producer token queued before the folder was opened. After
     // thaw the first scene render must consume a genuine post-folder source.
     private volatile boolean awaitingPostFolderProducer;
@@ -409,23 +411,57 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     void setFolderRenderFrozen(boolean frozen) {
-        if (folderRenderFrozen == frozen) return;
+        if (folderFreezeRequested == frozen) return;
+        folderFreezeRequested = frozen;
+        final long epoch = ++folderFreezeEpoch;
         MainHook.diag("[FolderTrace] DockTexture freezeTransition requested=" + frozen
                 + " before=" + diagnosticState());
         if (frozen) {
+            // Stop expensive normalization/Prismal draws immediately, without
+            // blocking the producer's BufferQueue. An unconsumed OES frame can
+            // exhaust the queue so there are NO callbacks after folder close.
             folderRenderFrozen = true;
-            frameAvailable.set(false);
+            boolean pending = frameAvailable.getAndSet(false);
             awaitingPostFolderProducer = true;
             diagnosticFrozenCallbacks = 0;
+            if (pending) {
+                renderHandler.post(() -> discardFrozenProducerFrame(inputSurfaceTexture));
+            }
         } else {
-            diagnosticThawSwaps = 5;
-            // No eager requestDockSceneRefresh: keep the last EGL buffer until
-            // a new post-folder PassBlur frame is available.
-            folderRenderFrozen = false;
+            // Commit thaw on the EGL thread after all queued frozen-era
+            // callbacks have had an opportunity to drain. A rapid reopen
+            // invalidates this pending thaw using the ownership epoch.
+            renderHandler.post(() -> {
+                if (shuttingDown || folderFreezeEpoch != epoch || folderFreezeRequested) return;
+                diagnosticThawSwaps = 5;
+                folderRenderFrozen = false;
+                // Explicitly wake a static SurfaceFlinger producer ONCE. The
+                // previous output buffer stays visible until a safe new frame.
+                Miuix307PassBlurBridge.requestFreshDockFrameAfterFolder(binding);
+                MainHook.diag("[FolderTrace] DockTexture thaw committed "
+                        + diagnosticState() + " frozenProducerCallbacks="
+                        + diagnosticFrozenCallbacks);
+            });
         }
-        MainHook.diag("[FolderTrace] DockTexture freezeTransition finished=" + frozen
-                + " after=" + diagnosticState() + " frozenProducerCallbacks="
-                + diagnosticFrozenCallbacks);
+        MainHook.diag("[FolderTrace] DockTexture freezeTransition scheduled=" + frozen
+                + " epoch=" + epoch + " after=" + diagnosticState());
+    }
+
+    /** GL-thread-only: discard raw input, not the last published glass frame.
+     * Keeping the consumer queue drained prevents a false permanent freeze.
+     */
+    private void discardFrozenProducerFrame(SurfaceTexture texture) {
+        if (shuttingDown || !folderRenderFrozen || texture == null
+                || texture != inputSurfaceTexture
+                || eglWindowSurface == EGL14.EGL_NO_SURFACE) return;
+        try {
+            makeCurrent();
+            texture.updateTexImage();
+        } catch (Throwable error) {
+            if (diagnosticFrozenCallbacks < 4) {
+                MainHook.diag("[FolderTrace] Dock frozen input drain failed " + error);
+            }
+        }
     }
 
     void requestDockSceneRefresh() {
@@ -833,14 +869,16 @@ final class Miuix307PassBlurTextureView extends TextureView
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
             producerFrameCount++;
-            // SurfaceFlinger may have queued frames before its pause
-            // transaction became visible. They are part of the pre-folder
-            // generation, never the first valid post-folder refresh.
+            // Never leave a queued BufferQueue input outstanding while the
+            // final glass output is frozen: SurfaceFlinger may then stop
+            // producing frames even though updatesEnabled is still true.
             if (folderRenderFrozen) {
                 if (diagnosticFrozenCallbacks++ < 3) {
-                    MainHook.diag("[FolderTrace] DockNativeProducer frame while frozen n="
-                            + diagnosticFrozenCallbacks + " inputST=" + Integer.toHexString(System.identityHashCode(input)));
+                    MainHook.diag("[FolderTrace] DockNativeProducer discarded while frozen n="
+                            + diagnosticFrozenCallbacks + " inputST="
+                            + Integer.toHexString(System.identityHashCode(input)));
                 }
+                discardFrozenProducerFrame(texture);
                 frameAvailable.set(false);
                 return;
             }
@@ -949,8 +987,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private void drawLatestFrame(boolean fromFrameCallback) {
         if (shuttingDown || folderRenderFrozen || eglWindowSurface == EGL14.EGL_NO_SURFACE
                 || normalizeProgram == 0 || compositeProgram == 0 || prismalRenderer == null
-                || oesTexture == 0
-                || (awaitingPostFolderProducer && !frameAvailable.get())) {
+                || oesTexture == 0) {
             return;
         }
         SurfaceTexture input = inputSurfaceTexture;

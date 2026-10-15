@@ -232,6 +232,25 @@ final class Miuix307PassBlurBridge {
         setUpdatesEnabled(binding, true, force);
     }
 
+    /**
+     * A folder can finish with a static compositor scene. On thaw explicitly
+     * re-assert the already-enabled native Dock producer once: otherwise no
+     * new OnFrameAvailable may follow the discarded folder-era buffers.
+     *
+     * This is NOT a false/true toggle and does not touch the Dock output
+     * TextureView. The compositor's force-refresh lease still honors the
+     * user's normal Dock frame-sync setting.
+     */
+    static void requestFreshDockFrameAfterFolder(Binding binding) {
+        if (binding == null || binding.domain != PassBlurDomain.DOCK
+                || !binding.bound || !binding.updatesEnabled
+                || !binding.rootSurface.isValid()) return;
+        setUpdatesEnabled(binding, true, true);
+        renewForceRefresh(binding);
+        MainHook.diag("[FolderTrace] Dock post-folder producer refresh requested"
+                + " root=" + binding.rootName + " updates=" + binding.updatesEnabled);
+    }
+
     /** Workspace idle suspension and vendor-snapshot Dock suspension. */
     static void pauseUpdates(Binding binding) {
         if (binding == null) return;
