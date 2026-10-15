@@ -80,7 +80,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return layer;
     }
 
-    private static synchronized LauncherGlassStaticLayer find(View root) {
+    // Read-only package accessor for bounded folder diagnostics.
+    static synchronized LauncherGlassStaticLayer find(View root) {
         LauncherGlassStaticLayer layer = root != null ? BY_ROOT.get(root) : null;
         return layer != null && !layer.disposed ? layer : null;
     }

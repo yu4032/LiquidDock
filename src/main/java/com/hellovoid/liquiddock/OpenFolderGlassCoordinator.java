@@ -23,6 +23,13 @@ final class OpenFolderGlassCoordinator {
 
     static boolean hasActiveSession() { return current != null; }
 
+    /** OWNERSHIP TOKEN for the prepared output, distinct from vendor
+     * FolderIcon.openedFolderSerial (touch preparations may be cancelled). */
+    static long activeSessionSerial() {
+        State state = current;
+        return state != null ? state.serial : 0L;
+    }
+
     static boolean followsNativeWorkspaceFade() {
         State state = current;
         // Launcher dispatches FolderIcon.onOpen / FolderStatus before the
@@ -286,6 +293,9 @@ final class OpenFolderGlassCoordinator {
         current = null;
         OWNER.release();
         if (state == null) return;
+        MainHook.diag("[FolderTrace] GlassCoordinator.releaseAll glassSerial="
+                + state.serial + " nativeFolderSerial="
+                + MiuixFolderGlassHook.diagnosticNativeSerial());
         state.materials.invalidateAll();
         if (state.observer != null && state.preDraw != null && state.observer.isAlive()) {
             state.observer.removeOnPreDrawListener(state.preDraw);
