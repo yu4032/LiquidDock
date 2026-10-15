@@ -236,6 +236,8 @@ final class MiuixFolderGlassHook {
 
     static long activeNativeCloseSerial() { return openedFolderSerial; }
 
+    static long diagnosticNativeSerial() { return openedFolderSerial; }
+
     static void onNativeBackgroundCloseFinished(long serial) {
         if (serial != openedFolderSerial) return;
         boolean complete = NATIVE_CLOSE.backdropFinished(serial);
@@ -385,8 +387,15 @@ final class MiuixFolderGlassHook {
         // is disposed. Keep all producers paused through that final output.
         FolderDiagnosticTrace.event("native-restore-owner");
         if (OpenFolderGlassCoordinator.hasActiveSession()) {
-            pendingInputResumeSerial = openedFolderSerial;
+            // This token MUST come from the prepared glass output, not
+            // openedFolderSerial. Background prepare() also occurs on icon
+            // ACTION_DOWN/cancel, so its serial and OEM opens diverge.
+            pendingInputResumeSerial = OpenFolderGlassCoordinator.activeSessionSerial();
+            MainHook.diag("[FolderTrace] resume deferred nativeSerial="
+                    + openedFolderSerial + " glassSerial=" + pendingInputResumeSerial);
         } else {
+            MainHook.diag("[FolderTrace] no expanded output; resume directly nativeSerial="
+                    + openedFolderSerial);
             releaseFrozenInputs();
         }
         if (owner != null && !folderStatusDispatcherInstalled) {
@@ -399,13 +408,21 @@ final class MiuixFolderGlassHook {
     }
 
     static void onExpandedFolderOutputReleased(long serial) {
-        if (serial == 0L || pendingInputResumeSerial != serial) return;
+        MainHook.diag("[FolderTrace] expanded output released glassSerial=" + serial
+                + " expectedGlassSerial=" + pendingInputResumeSerial
+                + " nativeSerial=" + openedFolderSerial);
+        if (serial == 0L || pendingInputResumeSerial != serial) {
+            MainHook.diag("[FolderTrace] release ignored: glass token mismatch");
+            return;
+        }
         pendingInputResumeSerial = 0L;
         releaseFrozenInputs();
     }
 
     private static void releaseFrozenInputs() {
         FolderDiagnosticTrace.event("release-frozen-inputs");
+        MainHook.diag("[FolderTrace] thaw workspace/Dock nativeSerial="
+                + openedFolderSerial + " glassSerial=" + pendingInputResumeSerial);
         LauncherGlassSceneController.setFolderCoveredForAll(false);
         Miuix307ZeroCopyRenderer.setFolderFrozen(false);
         LauncherNativeFolderWorkspaceFadeGate.onClosed();
