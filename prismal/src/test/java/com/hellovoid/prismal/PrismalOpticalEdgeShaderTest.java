@@ -37,6 +37,30 @@ public class PrismalOpticalEdgeShaderTest {
     }
 
     @Test
+    public void rectangularGlassDoesNotExtendInnerShadowAcrossItsShortAxis() {
+        String upstream = PrismalShaderSources.FRAGMENT;
+        String patched = PrismalOpticalEdgeShader.apply(upstream);
+        assertTrue(upstream.contains("float shadowFalloff = avgDim * shadowExt;"));
+        assertTrue(patched.contains(
+                "float shadowFalloff = min(u_glassSize.x, u_glassSize.y) * shadowExt;"));
+        assertFalse(patched.contains("float shadowFalloff = avgDim * shadowExt;"));
+        assertTrue(patched.contains("float innerShadow = 1.0 - smoothstep("));
+        assertTrue(patched.contains("innerShadow * u_shadowColor.a"));
+
+        // At the default softness (1000 => shadowExt 0.375), a square's
+        // geometry is unchanged, but a wide Dock's center is no longer
+        // inside a shadow radius borrowed from the long horizontal axis.
+        float shadowExt = 0.375f;
+        float square = 720f * shadowExt;
+        org.junit.Assert.assertEquals(square,
+                Math.min(720f, 720f) * shadowExt, 0.0001f);
+        float oldWide = (1500f + 160f) * 0.5f * shadowExt;
+        float newWide = Math.min(1500f, 160f) * shadowExt;
+        assertTrue(oldWide > 160f * 0.5f);
+        assertTrue(newWide < 160f * 0.5f);
+    }
+
+    @Test
     public void vibrancyWorksBelowNeutral100Percent() {
         String patched = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
         assertTrue(patched.contains("if (abs(sat - 1.0) <= 0.001) return rgb;"));
