@@ -31,6 +31,19 @@ final class LauncherGlassHierarchy {
     static boolean isWorkspace(View view) { return classify(view) == Domain.WORKSPACE; }
     static boolean isDock(View view) { return classify(view) == Domain.DOCK; }
 
+    static View findWorkspaceRoot(View view) {
+        View cursor = view;
+        while (cursor != null) {
+            if ("Workspace".equals(cursor.getClass().getSimpleName())
+                    || "com.miui.home.launcher.Workspace".equals(cursor.getClass().getName())) {
+                return cursor;
+            }
+            ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return null;
+    }
+
     static View findDockRoot(View view) {
         View cursor = view;
         while (cursor != null) {

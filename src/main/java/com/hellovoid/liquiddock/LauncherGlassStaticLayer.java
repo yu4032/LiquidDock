@@ -109,6 +109,24 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return workspace.getScrollX();
     }
 
+    /** UI pre-draw applies native opacity to the already cached output in the same traversal. */
+    static void syncWorkspacePresentation(View root, View material, boolean launchProxyActive) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null) return;
+        View workspace = layer.workspaceRef.get();
+        if (workspace == null || !workspace.isAttachedToWindow()
+                || workspace.getRootView() != root) {
+            workspace = LauncherGlassHierarchy.findWorkspaceRoot(material);
+            layer.workspaceRef = new WeakReference<>(workspace);
+        }
+        // Before any Workspace node is registered there is no content to follow. Keep the
+        // default factor so scene freshness and proxy ownership continue to decide presentation.
+        float alpha = workspace != null
+                ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
+        layer.layerAlpha.setWorkspaceAlpha(alpha, launchProxyActive);
+        layer.applyLayerAlpha();
+    }
+
     static void onNativeUnlockStarted(View root, long expectedDurationMs) {
         if (root == null || expectedDurationMs <= 0) return;
         long endAt = SystemClock.uptimeMillis() + expectedDurationMs;

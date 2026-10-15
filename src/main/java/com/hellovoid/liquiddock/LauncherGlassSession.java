@@ -763,6 +763,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
 
         StaticNodeState[] staticSnapshot = staticNodeStateSnapshot;
+        View workspaceMaterial = null;
+        boolean launchProxyActive = false;
         int staticGeometryReads = 0;
         if (tracing) Trace.beginSection("LD.Workspace.StaticNodes");
         try {
@@ -772,6 +774,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             for (StaticNodeState state : staticSnapshot) {
                 LauncherGlassStaticNode node = state.nodeRef.get();
                 if (node == null) continue;
+                if (workspaceMaterial == null) workspaceMaterial = node.materialHost();
+                launchProxyActive |= node.isLaunchProxyActive();
                 if (tracing && staticRootTransformValid) staticGeometryReads++;
                 LauncherGlassGeometry.Snapshot observed = staticRootTransformValid
                         ? node.captureGeometry(root, uiGlobalToRoot, rootWidth, rootHeight)
@@ -797,6 +801,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 Trace.setCounter("LD.Workspace.StaticGeometryReads", staticGeometryReads);
             }
         }
+
+        // The root-wide TextureView is a sibling of Workspace, so it does not inherit the
+        // native Recents fade. Apply it here, without waiting for GL redraw/swap of cached pixels.
+        LauncherGlassStaticLayer.syncWorkspacePresentation(root, workspaceMaterial, launchProxyActive);
 
         if (geometryMotionChanged
                 && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
