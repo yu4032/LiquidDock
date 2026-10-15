@@ -156,16 +156,17 @@ final class MiuixFolderGlassHook {
                 setNativeFolderMaterialsCovered(true);
                 LauncherGlassSceneController.setFolderCoveredForAll(true);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                // Keep FolderState untouched. Use only the OEM visual
-                // off-screen transaction, never LaunchApp/APP_STATE.
-                FolderDockFlyOut.onFolderOpened();
+                // The only event owner is Launcher. Keep the actual native
+                // DockContainerView covered even if another window transaction
+                // changes its visibility after this FolderState callback.
+                FolderDockVisibilityOwner.onFolderOpened(chain.getThisObject());
                 return result;
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
                 // Restore the OEM Dock on its original close event; the native
                 // folder material remains owned until both close springs finish.
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                FolderDockFlyOut.onFolderClosed();
+                FolderDockVisibilityOwner.onFolderClosed();
                 return result;
             });
             MainHook.log(TAG + " semantic FolderStatus dispatcher hooks installed");
