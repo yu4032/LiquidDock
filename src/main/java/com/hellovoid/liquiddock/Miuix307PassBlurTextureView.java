@@ -242,29 +242,6 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile int passBlurCaptureScalePercent =
             PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
 
-    // Stage A samples a real overscan ring around the visible Dock. The sample-valid
-    // rectangle is used only by the normalization mirror guard; Dock validity remains separate
-    // so half-pulled animations are still clipped to pixels that are actually on-screen.
-    private volatile float backdropX;
-    private volatile float backdropY;
-    private volatile float backdropW = 1f;
-    private volatile float backdropH = 1f;
-    private volatile float validSampleLeft;
-    private volatile float validSampleBottom;
-    private volatile float validSampleRight = 1f;
-    private volatile float validSampleTop = 1f;
-    private volatile float validDockLeft;
-    private volatile float validDockBottom;
-    private volatile float validDockRight = 1f;
-    private volatile float validDockTop = 1f;
-    // Visible Dock coordinates inside the larger overscan texture: x, y, width, height.
-    private volatile float dockUvLeft;
-    private volatile float dockUvBottom;
-    private volatile float dockUvWidth = 1f;
-    private volatile float dockUvHeight = 1f;
-    private volatile Miuix307BackdropMapping.Coverage producerCoverage =
-            Miuix307BackdropMapping.Coverage.FULL;
-
     private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLConfig eglConfig;
     private EGLContext eglContext = EGL14.EGL_NO_CONTEXT;
@@ -1494,23 +1471,23 @@ final class Miuix307PassBlurTextureView extends TextureView
                 && currentSnapshot.bufferWidth == boundBufferWidth
                 && currentSnapshot.bufferHeight == boundBufferHeight
                 && currentSnapshot.prismalParams == frameParams
-                && Float.compare(backdropX, sample.backdropX) == 0
-                && Float.compare(backdropY, sample.backdropY) == 0
-                && Float.compare(backdropW, sample.backdropW) == 0
-                && Float.compare(backdropH, sample.backdropH) == 0
-                && Float.compare(validSampleLeft, sample.validLeft) == 0
-                && Float.compare(validSampleBottom, sample.validBottom) == 0
-                && Float.compare(validSampleRight, sample.validRight) == 0
-                && Float.compare(validSampleTop, sample.validTop) == 0
-                && Float.compare(validDockLeft, dock.validLeft) == 0
-                && Float.compare(validDockBottom, dock.validBottom) == 0
-                && Float.compare(validDockRight, dock.validRight) == 0
-                && Float.compare(validDockTop, dock.validTop) == 0
-                && Float.compare(dockUvLeft, nextDockUvLeft) == 0
-                && Float.compare(dockUvBottom, nextDockUvBottom) == 0
-                && Float.compare(dockUvWidth, nextDockUvWidth) == 0
-                && Float.compare(dockUvHeight, nextDockUvHeight) == 0
-                && producerCoverage == dock.coverage;
+                && Float.compare(currentSnapshot.backdropX, sample.backdropX) == 0
+                && Float.compare(currentSnapshot.backdropY, sample.backdropY) == 0
+                && Float.compare(currentSnapshot.backdropW, sample.backdropW) == 0
+                && Float.compare(currentSnapshot.backdropH, sample.backdropH) == 0
+                && Float.compare(currentSnapshot.validSampleLeft, sample.validLeft) == 0
+                && Float.compare(currentSnapshot.validSampleBottom, sample.validBottom) == 0
+                && Float.compare(currentSnapshot.validSampleRight, sample.validRight) == 0
+                && Float.compare(currentSnapshot.validSampleTop, sample.validTop) == 0
+                && Float.compare(currentSnapshot.validDockLeft, dock.validLeft) == 0
+                && Float.compare(currentSnapshot.validDockBottom, dock.validBottom) == 0
+                && Float.compare(currentSnapshot.validDockRight, dock.validRight) == 0
+                && Float.compare(currentSnapshot.validDockTop, dock.validTop) == 0
+                && Float.compare(currentSnapshot.dockUvLeft, nextDockUvLeft) == 0
+                && Float.compare(currentSnapshot.dockUvBottom, nextDockUvBottom) == 0
+                && Float.compare(currentSnapshot.dockUvWidth, nextDockUvWidth) == 0
+                && Float.compare(currentSnapshot.dockUvHeight, nextDockUvHeight) == 0
+                && currentSnapshot.coverage == dock.coverage;
         if (unchanged) {
             // Dock icon membership/geometry is independent from the PassBlur crop. A hotseat
             // reflow can move icon glass while the backdrop mapping stays byte-for-byte stable.
@@ -1523,25 +1500,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             return;
         }
 
-        backdropX = sample.backdropX;
-        backdropY = sample.backdropY;
-        backdropW = sample.backdropW;
-        backdropH = sample.backdropH;
-        validSampleLeft = sample.validLeft;
-        validSampleBottom = sample.validBottom;
-        validSampleRight = sample.validRight;
-        validSampleTop = sample.validTop;
-        validDockLeft = dock.validLeft;
-        validDockBottom = dock.validBottom;
-        validDockRight = dock.validRight;
-        validDockTop = dock.validTop;
-        dockUvLeft = nextDockUvLeft;
-        dockUvBottom = nextDockUvBottom;
-        dockUvWidth = nextDockUvWidth;
-        dockUvHeight = nextDockUvHeight;
-        producerCoverage = dock.coverage;
-        // Volatile publication is deliberately last: the GL thread never observes a mixture of
-        // output size, overscan FBO, UV crop, rotation, or Prismal parameter generations.
+        // One volatile publication: the GL thread sees a complete mapping generation.
         backdropSnapshot = new BackdropSnapshot(
                 visibleWidth, visibleHeight,
                 sampleWidth, sampleHeight,
@@ -1874,23 +1833,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         boundBufferWidth = 0;
         boundBufferHeight = 0;
         boundConfigRotation = -1;
-        backdropX = 0f;
-        backdropY = 0f;
-        backdropW = 1f;
-        backdropH = 1f;
-        validSampleLeft = 0f;
-        validSampleBottom = 0f;
-        validSampleRight = 1f;
-        validSampleTop = 1f;
-        validDockLeft = 0f;
-        validDockBottom = 0f;
-        validDockRight = 1f;
-        validDockTop = 1f;
-        dockUvLeft = 0f;
-        dockUvBottom = 0f;
-        dockUvWidth = 1f;
-        dockUvHeight = 1f;
-        producerCoverage = Miuix307BackdropMapping.Coverage.FULL;
+        // Invalidating the snapshot on producer rebind forces an updated mapping even
+        // when its new dimensions and crop equal the previous producer generation.
+        backdropSnapshot = null;
     }
 
     private void fail(String stage, Throwable error) {

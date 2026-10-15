@@ -298,10 +298,6 @@ public final class ConfigSchema {
                 "liquid_chromatic", 26, 26, 2, 0, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_ALPHA = integer(
                 "liquid_tint_alpha", 35, 35, 38, 0, 160, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> CAPTURE_FPS = integer(
-                "liquid_capture_power_limit_fps", 20, 20, 20, 5, 60, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> CAPTURE_STOP_DELAY = integer(
-                "liquid_capture_stop_delay", 150, 150, 150, 0, 10000, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> THICKNESS = dp(
                 "liquid_thickness", 18, 18, 18, 1, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> IOR = integer(
@@ -312,8 +308,6 @@ public final class ConfigSchema {
                 "liquid_dome", 130, 130, 100, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LENS_REFRACTION = dp(
                 "liquid_lens_refraction", 1, 1, 12, 0, 8, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> CAPTURE_SCALE = integer(
-                "liquid_capture_scale", 50, 50, 50, 10, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PASSBLUR_CAPTURE_SCALE = integer(
                 PassBlurQualityKeys.CAPTURE_SCALE,
                 PassBlurQualityKeys.CAPTURE_SCALE_DEFAULT,
@@ -328,24 +322,6 @@ public final class ConfigSchema {
                 PassBlurQualityKeys.RENDER_FPS_DEFAULT,
                 PassBlurQualityKeys.RENDER_FPS_MIN, PassBlurQualityKeys.RENDER_FPS_MAX,
                 ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Boolean> DYNAMIC_APP_CAPTURE = bool(
-                "liquid_dynamic_app_capture", true, true, true, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Boolean> FULLSCREEN_CAPTURE = bool(
-                "liquid_capture_fullscreen", true, true, true, ConfigKey.ExportMode.NEVER);
-        public static final ConfigKey<Integer> DYNAMIC_APP_PROBE_FPS = integer(
-                "liquid_dynamic_app_probe_fps", 3, 3, 3, 1, 10, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> DYNAMIC_MOTION_THRESHOLD = integer(
-                "liquid_dynamic_motion_threshold", 12, 12, 12, 1, 240, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> DYNAMIC_BIT_THRESHOLD = integer(
-                "liquid_dynamic_bit_threshold", 18, 18, 18, 1, 64, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> DYNAMIC_HOLD_MS = integer(
-                "liquid_dynamic_hold_ms", 900, 900, 900, 0, 5000, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> BLACK_THRESHOLD = integer(
-                "liquid_black_threshold", 10, 10, 10, 0, 64, ConfigKey.ExportMode.ALWAYS);
-        // Historical JSON export/import included this key in the _tenths round-trip list even
-        // though the current UI presents whole milliseconds. Preserve that storage contract.
-        public static final ConfigKey<Integer> HOME_SETTLE_DELAY_MS = dp(
-                "liquid_home_settle_delay", 1200, 1200, 1200, 200, 3000, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> HIGHLIGHT_WIDTH = integer(
                 "liquid_highlight_width", 100, 100, 100, 50, 300, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_RED = integer(
@@ -578,14 +554,10 @@ public final class ConfigSchema {
                 Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
                 Glass.BLUR_MODE,
                 Glass.BLUR, Glass.CHROMATIC,
-                Glass.TINT_ALPHA, Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY,
-                Glass.THICKNESS,
+                Glass.TINT_ALPHA, Glass.THICKNESS,
                 Glass.IOR, Glass.NORMAL_STRENGTH, Glass.DOME, Glass.LENS_REFRACTION,
-                Glass.CAPTURE_SCALE, Glass.PASSBLUR_CAPTURE_SCALE,
-                Glass.PASSBLUR_RENDER_FPS, Glass.DYNAMIC_APP_CAPTURE, Glass.FULLSCREEN_CAPTURE,
-                Glass.DYNAMIC_APP_PROBE_FPS, Glass.DYNAMIC_MOTION_THRESHOLD,
-                Glass.DYNAMIC_BIT_THRESHOLD, Glass.DYNAMIC_HOLD_MS, Glass.BLACK_THRESHOLD,
-                Glass.HOME_SETTLE_DELAY_MS, Glass.HIGHLIGHT_WIDTH, Glass.TINT_RED,
+                Glass.PASSBLUR_CAPTURE_SCALE, Glass.PASSBLUR_RENDER_FPS,
+                Glass.HIGHLIGHT_WIDTH, Glass.TINT_RED,
                 Glass.TINT_GREEN, Glass.TINT_BLUE, Glass.DEPTH_EFFECT, Glass.BRIGHTNESS,
                 Glass.CAUSTICS, Glass.RECENTS_PREARM_DISTANCE,
                 Glass.PRISMAL_REFRACTION_INSET, Glass.PRISMAL_DISPLACEMENT_SCALE,

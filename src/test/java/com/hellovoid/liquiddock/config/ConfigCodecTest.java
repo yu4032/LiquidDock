@@ -74,13 +74,11 @@ public class ConfigCodecTest {
         json.put("grid_landscape_margin_horizontal", 41);
         json.put("workstation_all_apps_horizontal_offset", 2.6d);
         json.put("grid_enabled", true);
-        json.put("liquid_capture_power_limit_fps", 100);
         json.put("dock_shadow_alpha", -3);
         json.put("dock_divider_width_dp", 999);
 
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("grid_enabled", true);
-        expected.put("liquid_capture_power_limit_fps", 60);
         expected.put("dock_shadow_alpha", 0);
         expected.put("dock_divider_width_dp", 160);
         assertEquals(expected, ConfigCodec.importValues(json));
@@ -124,12 +122,12 @@ public class ConfigCodecTest {
     @Test
     public void importClampsIntegersToExistingRanges() {
         Map<String, Object> json = new HashMap<>();
-        json.put("liquid_capture_power_limit_fps", 100);
         json.put("dock_shadow_alpha", -3);
+        json.put("liquid_highlight_width", 999);
 
         Map<String, Object> imported = ConfigCodec.importValues(json);
 
-        assertEquals(60, imported.get("liquid_capture_power_limit_fps"));
+        assertEquals(300, imported.get("liquid_highlight_width"));
         assertEquals(0, imported.get("dock_shadow_alpha"));
     }
 
@@ -162,20 +160,35 @@ public class ConfigCodecTest {
     }
 
     @Test
-    public void homeSettleDelayPreservesHistoricalTenthsRoundTrip() {
+    public void retiredCaptureSettingsAreExcludedFromSchemaAndCodec() {
+        String[] retired = {
+                "liquid_capture_power_limit_fps",
+                "liquid_capture_stop_delay",
+                "liquid_capture_scale",
+                "liquid_dynamic_app_capture",
+                "liquid_capture_fullscreen",
+                "liquid_dynamic_app_probe_fps",
+                "liquid_dynamic_motion_threshold",
+                "liquid_dynamic_bit_threshold",
+                "liquid_dynamic_hold_ms",
+                "liquid_black_threshold",
+                "liquid_home_settle_delay"
+        };
+        Set<String> registered = new HashSet<>();
+        for (ConfigKey<?> key : ConfigSchema.all()) registered.add(key.name());
+
         Map<String, Object> prefs = new HashMap<>();
-        prefs.put("liquid_home_settle_delay", 1201);
-        prefs.put("liquid_home_settle_delay_tenths", 12005);
-
+        for (String key : retired) {
+            assertFalse("Retired key still registered: " + key, registered.contains(key));
+            prefs.put(key, 10);
+        }
         Map<String, Object> exported = ConfigCodec.exportValues(prefs);
-        assertEquals(1200.5d,
-                ((Number) exported.get("liquid_home_settle_delay")).doubleValue(), 0.0001d);
-
-        Map<String, Object> imported = ConfigCodec.importValues(exported);
-        assertEquals(1201, imported.get("liquid_home_settle_delay"));
-        assertEquals(12005, imported.get("liquid_home_settle_delay_tenths"));
+        Map<String, Object> imported = ConfigCodec.importValues(prefs);
+        for (String key : retired) {
+            assertFalse("Retired key still exported: " + key, exported.containsKey(key));
+            assertFalse("Retired key still imported: " + key, imported.containsKey(key));
+        }
     }
-
 
     @Test
     public void absentPreferencesExportCompleteHistoricalDefaultsFromSchema() {
