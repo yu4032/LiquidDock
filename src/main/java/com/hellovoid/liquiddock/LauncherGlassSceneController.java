@@ -215,7 +215,8 @@ final class LauncherGlassSceneController {
         created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
         if (created.folderCovered) {
-            created.state.setFolderCovered(true, OpenFolderGlassCoordinator.followsNativeWorkspaceFade());
+            created.session.setFolderFrameFrozen(true);
+            created.state.setFolderCovered(true, true);
         } else if (created.recentsCovered) {
             created.state.setCovered(true);
         }
@@ -603,16 +604,17 @@ final class LauncherGlassSceneController {
         if (folderCovered == covered) return;
         folderCovered = covered;
         if (covered) {
-            // Same cached-output/native Workspace opacity path as Recents. Folder still
-            // blocks captures, but does not hide the glass before its native icon peers fade.
-            state.setFolderCovered(true, OpenFolderGlassCoordinator.followsNativeWorkspaceFade());
+            // A folder is an input-frame boundary, not a presentation hide.
+            // Keep the last displayed Workspace TextureView buffer intact
+            // while stopping PassBlur captures and all Prismal redraws.
+            session.setFolderFrameFrozen(true);
+            state.setFolderCovered(true, true);
             applyLayerVisibility();
-            session.suspendWorkspaceProducer();
             return;
         }
+        session.setFolderFrameFrozen(false);
         if (recentsCovered) {
-            // Complete the hard-cover release semantics first, then keep Recents as capture-only
-            // coverage. This preserves the pending fresh reveal without exposing it under Recents.
+            // Recents owns the next frame; do not restart Workspace under it.
             state.setFolderCovered(false, false);
             state.setCovered(true);
             applyLayerVisibility();
@@ -680,9 +682,8 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            // Recents, HOME, unlock and wallpaper-settle are capture/freshness barriers only.
-            // Rotation is different: resized output cannot safely present pixels from the previous
-            // orientation. Folder remains a real LiquidDock presentation cover.
+            // Folder and Recents suspend source/computation but preserve the
+            // last output; rotation still cannot display stale geometry.
             boolean hardPresentationCover =
                     (folderCovered && !state.followsNativeFolderFade())
                     || state.isRotationPresentationPending();

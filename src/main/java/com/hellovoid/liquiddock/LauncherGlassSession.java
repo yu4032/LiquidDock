@@ -140,6 +140,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             new LauncherGlassOutputRenderState();
     private final boolean workspaceSource;
 
+    // Preserve last composed Workspace output while an expanded folder owns
+    // its own frozen backdrop. No new GPU sample or scene redraw is permitted.
+    private volatile boolean folderFrameFrozen;
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
     private volatile PrismalParams prismalParams;
@@ -533,6 +536,15 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         workspaceScrollProjection.reset();
     }
 
+    void setFolderFrameFrozen(boolean frozen) {
+        if (folderFrameFrozen == frozen || shuttingDown) return;
+        folderFrameFrozen = frozen;
+        if (frozen) sourceBackend.setUpdatesEnabled(false, "launcher-folder-frame-frozen");
+        // Producer freshness is requested by the scene controller only after
+        // the native folder has fully closed.
+        MainHook.log(TAG + " Workspace source/render freeze=" + frozen);
+    }
+
     void suspendWorkspaceProducer() {
         if (shuttingDown) return;
         if (WorkstationProducerPolicy.shouldPauseSharedProducer(
@@ -642,7 +654,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void scheduleOutputRender(boolean staticDirty, boolean dragDirty) {
-        if (shuttingDown) return;
+        if (shuttingDown || folderFrameFrozen) return;
         if (outputRenderState.request(staticDirty, dragDirty)
                 && !postRender(this::drainOutputRenderWork)) {
             outputRenderState.onPostRejected();
@@ -654,7 +666,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         boolean trace = MainHook.debugLogging && workspaceSource && work != 0;
         if (trace) Trace.beginSection("LD.Workspace.GeometryFrame");
         try {
-            if (backdropPrepared && work != 0) {
+            if (!folderFrameFrozen && backdropPrepared && work != 0) {
                 renderOutputs(
                         (work & LauncherGlassOutputRenderState.STATIC) != 0,
                         (work & LauncherGlassOutputRenderState.DRAG) != 0);
@@ -721,7 +733,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void syncSceneOnUiThreadInternal(boolean tracing) {
-        if (shuttingDown) return;
+        if (shuttingDown || folderFrameFrozen) return;
         View root = rootRef.get();
         if (root == null) return;
         int nextWidth = root.getWidth();
@@ -1054,7 +1066,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
-        if (shuttingDown || backend != sourceBackend || frame == null) return;
+        if (shuttingDown || folderFrameFrozen || backend != sourceBackend || frame == null) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
         // The Recents child uses this OES frame on the same GL thread, with its own geometry.
@@ -1202,6 +1214,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void renderOutputs(boolean renderStatic, boolean renderDrag) {
+        if (folderFrameFrozen) return;
         PrismalParams params = prismalParams;
         if (!backdropPrepared || params == null || rootWidth <= 0 || rootHeight <= 0) return;
         if (renderStatic) renderStaticScene(params);
