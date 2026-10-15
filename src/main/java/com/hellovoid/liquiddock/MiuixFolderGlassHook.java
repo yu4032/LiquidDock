@@ -58,6 +58,10 @@ final class MiuixFolderGlassHook {
             return false;
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
+        // Intercept the exact native HotSeats.setAlpha writer before any folder
+        // lifecycle listener can begin ownership. A preDraw alpha correction
+        // races its per-frame animator and can present one visible Dock frame.
+        FolderDockVisibilityOwner.install(classLoader);
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
             Class<?> itemIcon = Class.forName(ITEM_ICON, false, classLoader);

@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.view.View;
-import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
@@ -19,26 +18,45 @@ final class FolderDockVisibilityOwner {
     private static WeakReference<View> rootRef = new WeakReference<>(null);
     private static float originalAlpha = 1f;
     private static boolean open;
-    private static ViewTreeObserver observer;
+    private static boolean alphaHookInstalled;
+    private static int interceptedAlphaWrites;
 
-    private static final ViewTreeObserver.OnPreDrawListener PRE_DRAW = () -> {
-        View root = rootRef.get();
-        if (open && root != null && root.getAlpha() != 0f) {
-            root.setAlpha(0f);
-            MainHook.log(TAG + " competing HotSeats alpha write corrected");
+    /** HotSeats overrides View.setAlpha: each native animation frame rewrites
+     * its private mAlpha and its children. Fence the exact writer, not preDraw.
+     * No repeated View invalidation or source-level animation cancellation.
+     */
+    static void install(ClassLoader loader) {
+        if (alphaHookInstalled || loader == null) return;
+        try {
+            Class<?> hotSeats = Class.forName(
+                    "com.miui.home.launcher.hotseats.HotSeats", false, loader);
+            Method setter = hotSeats.getDeclaredMethod("setAlpha", float.class);
+            setter.setAccessible(true);
+            HookUtil.hook(setter, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (open && chain.getThisObject() == rootRef.get()
+                        && args.length == 1 && args[0] instanceof Number
+                        && ((Number) args[0]).floatValue() != 0f) {
+                    interceptedAlphaWrites++;
+                    return chain.proceed(new Object[]{0f});
+                }
+                return chain.proceed(args);
+            });
+            alphaHookInstalled = true;
+            MainHook.log(TAG + " HotSeats.setAlpha writer fence installed");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " HotSeats.setAlpha writer fence unavailable: " + error);
         }
-        return true;
-    };
+    }
     private static final View.OnAttachStateChangeListener ATTACH =
             new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View view) {
                     if (!open || rootRef.get() != view) return;
-                    observe(view);
-                    if (view.getAlpha() != 0f) view.setAlpha(0f);
+                    // Reparenting can rebuild child presentation properties.
+                    // Reassert the zero only once per actual attachment.
+                    view.setAlpha(0f);
                 }
-                @Override public void onViewDetachedFromWindow(View view) {
-                    if (rootRef.get() == view) unobserve();
-                }
+                @Override public void onViewDetachedFromWindow(View view) {}
             };
 
     private FolderDockVisibilityOwner() {}
@@ -107,8 +125,8 @@ final class FolderDockVisibilityOwner {
             originalAlpha = root.getAlpha();
             rootRef = new WeakReference<>(root);
             open = true;
+            interceptedAlphaWrites = 0;
             root.addOnAttachStateChangeListener(ATTACH);
-            observe(root);
             root.setAlpha(0f);
             MainHook.log(TAG + " HotSeats covered during folder"
                     + " attached=" + root.isAttachedToWindow()
@@ -129,27 +147,13 @@ final class FolderDockVisibilityOwner {
     private static void releaseRoot() {
         View root = rootRef.get();
         open = false;
-        unobserve();
         rootRef.clear();
         if (root == null) return;
         root.removeOnAttachStateChangeListener(ATTACH);
         root.setAlpha(originalAlpha);
-        MainHook.log(TAG + " HotSeats restored alpha=" + originalAlpha);
+        MainHook.log(TAG + " HotSeats restored alpha=" + originalAlpha
+                + " preventedNativeAlphaWrites=" + interceptedAlphaWrites);
         originalAlpha = 1f;
-    }
-
-    private static void observe(View root) {
-        ViewTreeObserver next = root.getViewTreeObserver();
-        if (next == observer) return;
-        unobserve();
-        if (next.isAlive()) {
-            next.addOnPreDrawListener(PRE_DRAW);
-            observer = next;
-        }
-    }
-
-    private static void unobserve() {
-        if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(PRE_DRAW);
-        observer = null;
+        interceptedAlphaWrites = 0;
     }
 }
