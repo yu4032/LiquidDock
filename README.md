@@ -13,10 +13,51 @@
 LiquidDock 是一个面向 HyperOS 3 平板体验的 LSPosed 模块，用来调整桌面布局、Dock、多任务界面，并把液态玻璃效果应用到桌面、系统界面和部分第三方应用。
 
 <details>
-<summary>查看桌面整体效果</summary>
+<summary><strong>效果展示 · 8 张截图</strong></summary>
+
+<p>点击图片查看原图。</p>
 
 <p align="center">
-  <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
+<strong>桌面总览</strong><br />
+<a href="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6"><img width="640" alt="桌面总览" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" /></a>
+</p>
+
+<table>
+<tr>
+<td width="50%" align="center" valign="top">
+<p><strong>快捷菜单</strong></p>
+<a href="https://github.com/user-attachments/assets/4a8104b4-d4de-4319-b6d8-99b3d9603b20"><img width="300" alt="快捷菜单" src="https://github.com/user-attachments/assets/4a8104b4-d4de-4319-b6d8-99b3d9603b20" /></a>
+</td>
+<td width="50%" align="center" valign="top">
+<p><strong>桌面对话框</strong></p>
+<a href="https://github.com/user-attachments/assets/7b4a152b-bb7a-4b36-a8de-841ec0ea2618"><img width="300" alt="桌面对话框" src="https://github.com/user-attachments/assets/7b4a152b-bb7a-4b36-a8de-841ec0ea2618" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center" valign="top">
+<p><strong>安全中心侧边栏</strong></p>
+<a href="https://github.com/user-attachments/assets/ec773cda-b8cf-4ac8-9a78-afce2437519c"><img height="280" alt="安全中心侧边栏" src="https://github.com/user-attachments/assets/ec773cda-b8cf-4ac8-9a78-afce2437519c" /></a>
+</td>
+<td width="50%" align="center" valign="top">
+<p><strong>系统搜索</strong></p>
+<a href="https://github.com/user-attachments/assets/41c5e987-bc6d-45d3-ac2f-c14b44d61057"><img width="300" alt="系统搜索" src="https://github.com/user-attachments/assets/41c5e987-bc6d-45d3-ac2f-c14b44d61057" /></a>
+</td>
+</tr>
+</table>
+
+<p align="center">
+<strong>玻璃细节</strong><br />
+<a href="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4"><img width="440" alt="玻璃细节" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" /></a>
+</p>
+
+<p align="center">
+<strong>应用顶部菜单</strong><br />
+<a href="https://github.com/user-attachments/assets/9f39ca0c-3fd3-4cc4-ba6c-d8af01354788"><img width="640" alt="应用顶部菜单" src="https://github.com/user-attachments/assets/9f39ca0c-3fd3-4cc4-ba6c-d8af01354788" /></a>
+</p>
+
+<p align="center">
+<strong>多任务操作按钮</strong><br />
+<a href="https://github.com/user-attachments/assets/badcd56c-b013-4a12-a018-bc505ee943f2"><img width="640" alt="多任务操作按钮" src="https://github.com/user-attachments/assets/badcd56c-b013-4a12-a018-bc505ee943f2" /></a>
 </p>
 
 </details>
@@ -32,74 +73,17 @@ LiquidDock 是一个面向 HyperOS 3 平板体验的 LSPosed 模块，用来调�
 - 小组件；
 - 小文件夹和大文件夹；
 - 拖动中的图标、小组件和文件夹；
-- 长按桌面图标弹出的快捷菜单；<details>
-<summary>查看快捷菜单效果</summary>
-
-<img width="1093" height="821" alt="b456e2f02bd653c401793cc6eaa13db7" src="https://github.com/user-attachments/assets/4a8104b4-d4de-4319-b6d8-99b3d9603b20" />
-
-</details>
-
-
-
-- 多任务界面的“清除全部”和设备互联操作按钮；<details>
-<summary>查看多任务按钮效果</summary>
-
-<img width="3007" height="179" alt="e88ecbf5a603e1ba4dbc21c03ee8721e" src="https://github.com/user-attachments/assets/badcd56c-b013-4a12-a018-bc505ee943f2" />
-
-</details>
-
-
-
-- 桌面卸载、移除和二次确认弹窗；<details>
-<summary>查看桌面对话框效果</summary>
-
-<img width="1262" height="820" alt="f6ae9c234d7ed1a6a8f7048cedf3bb98" src="https://github.com/user-attachments/assets/7b4a152b-bb7a-4b36-a8de-841ec0ea2618" />
-
-</details>
-
-
-
-- 应用顶部的分屏、小窗等控制菜单；<details>
-<summary>查看应用顶部菜单效果</summary>
-
-<img width="1143" height="246" alt="ab2a13f233848870a43b3266d7cd58f7" src="https://github.com/user-attachments/assets/9f39ca0c-3fd3-4cc4-ba6c-d8af01354788" />
-
-</details>
-
-
-
-- 新版安全中心侧边栏；<details>
-<summary>查看安全中心侧边栏效果</summary>
-
-<img width="1309" height="1609" alt="3666dc79aeec607b3f658198af18ec8c" src="https://github.com/user-attachments/assets/ec773cda-b8cf-4ac8-9a78-afce2437519c" />
-
-</details>
-
-
-
-- MIUI 系统搜索主界面；<details>
-<summary>查看系统搜索效果</summary>
-
-<img width="1401" height="1079" alt="1ddacaa27f191c4d8d36ffe42a711cfb" src="https://github.com/user-attachments/assets/41c5e987-bc6d-45d3-ac2f-c14b44d61057" />
-
-</details>
-
-
-
+- 长按桌面图标弹出的快捷菜单；
+- 多任务界面的“清除全部”和设备互联操作按钮；
+- 桌面卸载、移除和二次确认弹窗；
+- 应用顶部的分屏、小窗等控制菜单；
+- 新版安全中心侧边栏；
+- MIUI 系统搜索主界面；
 - Gboard 悬浮键盘及相关工具栏。
 
 可以单独调整模糊、折射、色散、颜色、亮度、阴影、高光、圆角和不同类型的高光层。
 
 多数外观调整可在已有 Hook 正在运行时**即时应用**；若目标 Hook 尚未安装，或修改网格等结构性设置，仍需要重启对应作用域。
-
-<details>
-<summary>查看玻璃细节效果</summary>
-
-<p align="center">
-  <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
-</p>
-
-</details>
 
 ### 桌面布局
 
