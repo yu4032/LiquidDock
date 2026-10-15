@@ -4,13 +4,6 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class OpenFolderBackdropPolicyTest {
-    @Test public void acceptsSafeLatchedFrameEvenWhenBlurFinishesAfterNativeFirstDraw() {
-        assertTrue(OpenFolderBackdropPolicy.acceptsCapturedFrame(10L, 20L));
-        assertTrue(OpenFolderBackdropPolicy.acceptsCapturedFrame(30L, Long.MAX_VALUE));
-        assertFalse(OpenFolderBackdropPolicy.acceptsCapturedFrame(21L, 20L));
-        assertFalse(OpenFolderBackdropPolicy.acceptsCapturedFrame(0L, Long.MAX_VALUE));
-    }
-
     @Test public void progressUsesNativeTranslationAndFallsBackToYForVerticalOnlyExpansion() throws Exception {
         java.lang.reflect.Method progress = OpenFolderBackdropPolicy.class.getDeclaredMethod("nativeProgress",
                 float.class, float.class, float.class, float.class);
@@ -50,12 +43,11 @@ public class OpenFolderBackdropPolicyTest {
         assertEquals(1f, opacity(2f), 0f);
     }
 
-    @Test public void folderSnapshotIncludesLauncherAndDockAndNeverHidesTheirViews() {
-        assertArrayEquals(new String[]{"NavigationBar", "StatusBar", "GestureStub"},
-                PassBlurBindPolicy.exclusions(PassBlurBindPolicy.captureRootExclusion(
-                        PassBlurDomain.OPEN_FOLDER, "FolderSource#1"), new String[0]));
-        assertEquals("FolderSource#1", PassBlurBindPolicy.captureRootExclusion(
-                PassBlurDomain.SHORTCUT_POPUP, "FolderSource#1"));
+    @Test public void folderWallpaperExcludesDockEvenBeforeItsNativeFade() {
+        assertArrayEquals(new String[]{"FolderSource#1", "NavigationBar", "StatusBar",
+                "GestureStub", "Launcher#1", "DockAssistantView"},
+                PassBlurBindPolicy.exclusions("FolderSource#1",
+                        PassBlurBindPolicy.folderWallpaperExclusions("Launcher#1")));
     }
     @Test public void folderCaptureHasItsOwnRootWithoutWorkspaceUnlockGate() {
         PassBlurDomain folder;
@@ -64,9 +56,10 @@ public class OpenFolderBackdropPolicyTest {
         assertEquals(1f, PassBlurBindPolicy.nativeScale(folder, 0.25f), 0f);
         assertFalse(PassBlurBindPolicy.requiresUnlockGate(folder));
         assertEquals(24, PassBlurBindPolicy.retryBudgetAttempt(folder, 24, true, true));
-        assertArrayEquals(new String[]{"NavigationBar", "StatusBar", "GestureStub"},
-                PassBlurBindPolicy.exclusions(PassBlurBindPolicy.captureRootExclusion(
-                        folder, "FolderSource#1"), new String[0]));
+        assertArrayEquals(new String[]{"FolderSource#1", "NavigationBar", "StatusBar",
+                "GestureStub", "Launcher#1", "DockAssistantView"},
+                PassBlurBindPolicy.exclusions("FolderSource#1",
+                        PassBlurBindPolicy.folderWallpaperExclusions("Launcher#1")));
         assertEquals(1f, PassBlurBindPolicy.nativeScale(PassBlurDomain.SHORTCUT_POPUP, 0.25f), 0f);
     }
 

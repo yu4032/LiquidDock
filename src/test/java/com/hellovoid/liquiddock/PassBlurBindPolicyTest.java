@@ -8,16 +8,23 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PassBlurBindPolicyTest {
-    @Test public void folderCaptureIncludesLauncherAndDockButKeepsSystemChromeExcluded() {
-        // Capture the actual desktop in the frame before FolderCling draws.
-        assertArrayEquals(new String[]{"NavigationBar", "StatusBar", "GestureStub"},
-                PassBlurBindPolicy.exclusions(
-                        PassBlurBindPolicy.captureRootExclusion(PassBlurDomain.OPEN_FOLDER, "Launcher#42"),
-                        new String[0]));
-        assertEquals("Launcher#42", PassBlurBindPolicy.captureRootExclusion(
-                PassBlurDomain.LAUNCHER_WORKSPACE, "Launcher#42"));
-        assertEquals("Launcher#42", PassBlurBindPolicy.captureRootExclusion(
-                PassBlurDomain.SHORTCUT_POPUP, "Launcher#42"));
+    @Test public void folderCaptureExcludesLauncherAndDockAtSource() {
+        String[] excluded = PassBlurBindPolicy.folderWallpaperExclusions("Launcher#42");
+        assertArrayEquals(new String[]{"Launcher#42", "DockAssistantView"}, excluded);
+        assertArrayEquals(new String[]{"FolderSource#1", "NavigationBar", "StatusBar",
+                "GestureStub", "Launcher#42", "DockAssistantView"},
+                PassBlurBindPolicy.exclusions("FolderSource#1", excluded));
+    }
+
+    @Test public void missingLauncherIdentityDoesNotFallBackToFullDesktop() {
+        for (String name : new String[]{null, "", " "}) {
+            try {
+                PassBlurBindPolicy.folderWallpaperExclusions(name);
+                org.junit.Assert.fail("Missing Launcher surface must be rejected");
+            } catch (IllegalArgumentException expected) {
+                // Never capture a full desktop when Launcher identity is unknown.
+            }
+        }
     }
     @Test
     public void unavailableUnlockEndpointDoesNotExhaustWorkspaceBindBudget() {

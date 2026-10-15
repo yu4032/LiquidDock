@@ -140,9 +140,7 @@ final class Miuix307PassBlurBridge {
             int viewRootIdentity = System.identityHashCode(viewRoot);
             int surfaceSequenceId = readSurfaceSequenceId(viewRoot);
             int rootLayerId = surfaceLayerId(rootSurface);
-            String[] exclusions = PassBlurBindPolicy.exclusions(
-                    PassBlurBindPolicy.captureRootExclusion(domain, rootName),
-                    request.extraExclusions());
+            String[] exclusions = PassBlurBindPolicy.exclusions(rootName, request.extraExclusions());
             float scale = request.nativeScale();
 
             if (domain == PassBlurDomain.SECURITY_CENTER) {

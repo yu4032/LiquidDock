@@ -67,7 +67,6 @@ final class RootPassBlurBackend {
     private volatile boolean transitionFrameSyncEnabled;
     private volatile long sourceGeneration = -1L;
     private volatile long renderedGeneration = -1L;
-    private volatile long lastFrameLatchedNanos;
     private volatile boolean requestedSingleFramePulse;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
@@ -284,9 +283,6 @@ final class RootPassBlurBackend {
     boolean hasFreshFrame(long generation) {
         return state.hasFreshFrame(generation);
     }
-
-    /** Monotonic latch time of the frame currently delivered to Consumer.onFreshFrame. */
-    long lastFrameLatchedAtNanos() { return lastFrameLatchedNanos; }
 
     boolean isRebindPending() {
         return state.isRebindPending();
@@ -614,7 +610,6 @@ final class RootPassBlurBackend {
         try {
             makePbufferCurrentUnchecked();
             latchSourceFrame(input);
-            lastFrameLatchedNanos = System.nanoTime();
             if (generation < 0L || generation != sourceGeneration
                     || generation != state.requestedGeneration()) return;
             boolean trace = MainHook.debugLogging

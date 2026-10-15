@@ -53,6 +53,9 @@ final class OpenFolderGlassCoordinator {
         if (glass == null || !root.isAttachedToWindow() || root.getWidth() <= 0 || root.getHeight() <= 0) return;
         RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
         if (endpoint == null || !endpoint.isValid()) return;
+        String launcherSurfaceName = Miuix307PassBlurBridge.surfaceName(endpoint.rootSurface);
+        // Fail closed if the exact Launcher layer cannot be excluded.
+        if (launcherSurfaceName.isBlank()) return;
         State state = new State(root, sourceIcon, OWNER.prepare(), glass);
         current = state;
         root.addOnAttachStateChangeListener(state.attachListener);
@@ -77,7 +80,7 @@ final class OpenFolderGlassCoordinator {
                             failOpen(state);
                         }
                     }
-                }, PassBlurBindRequest.openFolder(source));
+                }, PassBlurBindRequest.openFolder(source, launcherSurfaceName));
                 attachOutputLayer(state);
                 state.session.requestInitialCapture();
             }
@@ -130,19 +133,9 @@ final class OpenFolderGlassCoordinator {
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
         state.observer = folderCling.getViewTreeObserver();
-        state.preDraw = () -> {
-            // After the first native folder pre-draw the captured compositor
-            // frame might include the folder itself. Never accept late frames.
-            if (!state.firstOpenDrawCompleted) {
-                state.firstOpenDrawCompleted = true;
-                if (state.session != null) {
-                    if (state.session.hasFrozenBackdrop()) OWNER.onBackdropReady(state.serial);
-                    state.session.endFolderCaptureWindow();
-                }
-            }
-            sync(state);
-            return true;
-        };
+        // Wallpaper-only source stays safe throughout native opening.
+        // Do not reject its first GPU frame just because FolderCling drew first.
+        state.preDraw = () -> { sync(state); return true; };
         state.observer.addOnPreDrawListener(state.preDraw);
         folderCling.postInvalidateOnAnimation();
     }
@@ -281,12 +274,13 @@ final class OpenFolderGlassCoordinator {
                     || Math.abs(basis[3] - basis[1]) > 0.001f
                     || Math.abs(basis[4] - basis[0]) > 0.001f
                     || Math.abs(basis[5] - basis[1] - 1f) > 0.001f) { releaseAll(); return; }
+            // The capture window and TextureView can attach after native open.
+            // Missing output at this point must not release the folder session.
+            if (state.session == null) return;
+            attachOutputLayer(state);
+            if (state.layer == null) return;
             state.layer.setTranslationX(-basis[0]);
             state.layer.setTranslationY(-basis[1]);
-            // The wallpaper-only EGL/PassBlur session may attach after native
-            // FolderCling.open has already begun. Until then, keep the native
-            // material visible and do not fail/tear down the open animation.
-            if (state.session == null) return;
             LiquidDockConfig.Glass latest = LiveGlassConfigState.currentGlass();
             if (latest != null && latest != state.glass) {
                 state.glass = latest;
@@ -420,7 +414,6 @@ final class OpenFolderGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener preDraw;
         final OpenFolderMotionState motion = new OpenFolderMotionState();
         boolean animationSpecReady;
-        boolean firstOpenDrawCompleted;
         float nativeTargetX, nativeTargetY, nativeSourceWidth, nativeSourceHeight;
         float nativeTargetWidth, nativeTargetHeight, nativeExpandedScaleX = Float.NaN;
         final View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
