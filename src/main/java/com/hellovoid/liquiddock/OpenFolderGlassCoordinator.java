@@ -180,9 +180,10 @@ final class OpenFolderGlassCoordinator {
         state.animationSpecReady = true;
     }
 
-    static void onClosing(View folderCling) {
+    static void onClosing(View folderCling, boolean animated) {
         State state = current;
         if (!matches(state, folderCling)) return;
+        state.close.begin(state.serial, animated);
         // Freeze the expanded destination: native Folder.onClose hides the
         // content background before its reverse Folme transition. Reading its
         // bounds afterward would collapse the final panel to the icon size.
@@ -215,7 +216,19 @@ final class OpenFolderGlassCoordinator {
 
     static void onClosed(long serial) {
         State state = current;
-        if (state != null && serial == state.serial && OWNER.owns(serial)) releaseAll();
+        if (state != null && serial == state.serial && OWNER.owns(serial)
+                && state.close.contentFinished(serial)) releaseAll();
+    }
+
+    static long activeClosingSerial() {
+        State state = current;
+        return state != null && state.motion.isClosing() ? state.serial : 0L;
+    }
+
+    static void onNativeBackgroundCloseFinished(long serial) {
+        State state = current;
+        if (state != null && serial != 0L && state.serial == serial && OWNER.owns(serial)
+                && state.close.backdropFinished(serial)) releaseAll();
     }
 
     static void releaseIfStyle(boolean small) {
@@ -436,6 +449,7 @@ final class OpenFolderGlassCoordinator {
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDraw;
         final OpenFolderMotionState motion = new OpenFolderMotionState();
+        final FolderCloseCompletionGate close = new FolderCloseCompletionGate();
         boolean animationSpecReady;
         float nativeTargetX, nativeTargetY, nativeSourceWidth, nativeSourceHeight;
         float nativeTargetWidth, nativeTargetHeight, nativeExpandedScaleX = Float.NaN;
