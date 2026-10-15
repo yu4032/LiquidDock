@@ -181,7 +181,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     /** Switch to Workspace blur at the native close boundary. One re-blur of
-     * the frozen wallpaper, no recapture and no per-frame Gaussian passes.
+     * the frozen desktop, no recapture and no per-frame Gaussian passes.
      * Folder refraction/IOR/tint retain their own settings until geometry closes.
      */
     void beginFolderClose() {
@@ -193,7 +193,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         // can continue; the GL thread owns both blur preparation and presentation.
         sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) return;
-            // This is a one-shot wallpaper texture; if Folder and Workspace
+            // This is a one-shot desktop texture; if Folder and Workspace
             // requested the same blur radius, do not run another two-pass
             // Gaussian at the native closing boundary.
             if (backdropPrepared && prismalRenderer != null
@@ -227,12 +227,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.name(),
                         ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.runtimeFallback()),
                 density);
-    }
-
-    int folderNativeBlurRadiusPx() {
-        // The native blur layer and folder optics share the same effective
-        // user-configured blur setting; no duplicate configuration path.
-        return folderBackdrop ? Math.max(0, Math.round(prismalParams.blurRadiusPx)) : 0;
     }
 
     boolean hasFrozenBackdrop() {
@@ -316,7 +310,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
-        // Launcher and Dock are excluded at source: freeze the first valid wallpaper frame.
+        // The separate PassBlur authority includes Launcher; freeze only its PRE-OPEN desktop frame.
         if (folderBackdrop && sourceFrozen) return;
         try {
             ensureGl();
