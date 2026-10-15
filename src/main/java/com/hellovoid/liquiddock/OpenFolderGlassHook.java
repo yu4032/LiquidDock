@@ -7,12 +7,15 @@ import android.view.ViewGroup;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /** Native folder lifecycle adapter; rendering and ownership stay in the coordinator. */
 final class OpenFolderGlassHook {
     private static final Set<Method> DRAW_HOOKS = new HashSet<>();
+    private static final Map<Class<?>, Boolean> DRAW_OBSERVATION = new HashMap<>();
     private static boolean installed;
     private static boolean nativeCloseBackgroundCallbackInstalled;
     private OpenFolderGlassHook() {}
@@ -141,18 +144,27 @@ final class OpenFolderGlassHook {
     }
 
     static synchronized boolean observeDrawable(Drawable drawable) {
+        Class<?> type = drawable.getClass();
+        Boolean cached = DRAW_OBSERVATION.get(type);
+        if (cached != null) return cached;
         try {
-            Method draw = drawable.getClass().getMethod("draw", Canvas.class);
-            if (Modifier.isAbstract(draw.getModifiers())) return false;
-            if (DRAW_HOOKS.contains(draw)) return true;
-            HookUtil.hook(draw, chain -> {
-                if (chain.getThisObject() instanceof Drawable
-                        && OpenFolderGlassCoordinator.shouldSuppress((Drawable) chain.getThisObject())) return null;
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-            });
-            DRAW_HOOKS.add(draw);
+            Method draw = type.getMethod("draw", Canvas.class);
+            if (Modifier.isAbstract(draw.getModifiers())) {
+                DRAW_OBSERVATION.put(type, false);
+                return false;
+            }
+            if (!DRAW_HOOKS.contains(draw)) {
+                HookUtil.hook(draw, chain -> {
+                    if (chain.getThisObject() instanceof Drawable
+                            && OpenFolderGlassCoordinator.shouldSuppress((Drawable) chain.getThisObject())) return null;
+                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                });
+                DRAW_HOOKS.add(draw);
+            }
+            DRAW_OBSERVATION.put(type, true);
             return true;
         } catch (Throwable error) {
+            DRAW_OBSERVATION.put(type, false);
             MainHook.log("[DC][OpenFolderGlass] material draw unavailable: " + error);
             return false;
         }
