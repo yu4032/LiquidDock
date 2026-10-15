@@ -8,21 +8,21 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PassBlurBindPolicyTest {
-    @Test public void folderCaptureExcludesLauncherAndDockAtSource() {
-        String[] excluded = PassBlurBindPolicy.folderWallpaperExclusions("Launcher#42");
-        assertArrayEquals(new String[]{"Launcher#42", "DockAssistantView"}, excluded);
+    @Test public void folderCaptureIncludesLauncherButExcludesItsAuthorityAndDock() {
+        String[] excluded = PassBlurBindPolicy.folderDesktopExclusions("Launcher#42");
+        assertArrayEquals(new String[]{"DockAssistantView"}, excluded);
         assertArrayEquals(new String[]{"FolderSource#1", "NavigationBar", "StatusBar",
-                "GestureStub", "Launcher#42", "DockAssistantView"},
+                "GestureStub", "DockAssistantView"},
                 PassBlurBindPolicy.exclusions("FolderSource#1", excluded));
     }
 
-    @Test public void missingLauncherIdentityDoesNotFallBackToFullDesktop() {
+    @Test public void missingLauncherIdentityRejectsUnverifiedCapture() {
         for (String name : new String[]{null, "", " "}) {
             try {
-                PassBlurBindPolicy.folderWallpaperExclusions(name);
+                PassBlurBindPolicy.folderDesktopExclusions(name);
                 org.junit.Assert.fail("Missing Launcher surface must be rejected");
             } catch (IllegalArgumentException expected) {
-                // Never capture a full desktop when Launcher identity is unknown.
+                // Reject an unverified Launcher root even for desktop-inclusive capture.
             }
         }
     }
