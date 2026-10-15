@@ -113,8 +113,7 @@ public class MainHook {
      * Dock frames should use this. Never call it from a 165Hz hot loop.
      */
     static void diag(String message) {
-        if (!BuildConfig.DEBUG) return;
-        android.util.Log.i("LiquidDock-Diag", message);
+        Api101Bridge.logFolderDiagnostic(message);
     }
 
     static void log(String message) {

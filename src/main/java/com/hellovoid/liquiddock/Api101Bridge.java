@@ -54,6 +54,19 @@ public final class Api101Bridge {
         writeError(message, error);
     }
 
+    /** Debug-APK-only field tracing for PR #392.
+     * Kept in the audited logging owner; never used in release builds and
+     * never enabled by the user's ordinary runtime debug preference.
+     * Device acceptance requires this channel even when that preference is off.
+     */
+    static void logFolderDiagnostic(String message) {
+        if (!BuildConfig.DEBUG || message == null) return;
+        if (!message.startsWith("[FolderTrace]") && !message.startsWith("[DC][FolderWorkspace]")) {
+            return;
+        }
+        Log.i("LiquidDock-Diag", message);
+    }
+
     private static void writeInfo(String message) {
         try {
             module().log(Log.INFO, "LiquidDock", message);
