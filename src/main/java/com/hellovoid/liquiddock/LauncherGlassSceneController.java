@@ -242,6 +242,13 @@ final class LauncherGlassSceneController {
         return vendorRecentsCovered;
     }
 
+    /** Folder is capture-only. Native Workspace opacity is not authoritative
+     * for the cached glass TextureView during this frozen session. */
+    static synchronized boolean isFolderBackdropFrozenForRoot(View root) {
+        LauncherGlassSceneController controller = root != null ? BY_ROOT.get(root) : null;
+        return vendorFolderCovered && controller != null && controller.folderCovered;
+    }
+
     long widgetTransitionSceneGeneration() {
         return state.generation();
     }

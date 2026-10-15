@@ -81,7 +81,15 @@ final class OpenFolderGlassHook {
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
-                return chain.proceed(args);
+                // Freeze current Dock/Workspace outputs BEFORE native folder
+                // opening (the later FolderStatus dispatcher is too late).
+                MiuixFolderGlassHook.onFolderOpeningBeforeNativeAnimation();
+                try {
+                    return chain.proceed(args);
+                } catch (Throwable error) {
+                    MiuixFolderGlassHook.onFolderOpeningFailed();
+                    throw error;
+                }
             });
             HookUtil.hook(HookUtil.findMethodExact(cling, "addFolderAnimIcon", new Class<?>[]{info, boolean.class}), chain -> {
                 safe(() -> OpenFolderGlassCoordinator.onAnimationHost((View) chain.getThisObject()));

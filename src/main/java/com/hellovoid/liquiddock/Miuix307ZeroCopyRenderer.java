@@ -137,7 +137,10 @@ final class Miuix307ZeroCopyRenderer {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null) gpuBackdrop.setFolderRenderFrozen(frozen);
         applyProducerUpdatesPolicy(frozen ? "folder-frame-frozen" : "folder-frame-released");
-        if (!frozen) requestDockSceneRefresh();
+        // Do not queue a scene redraw on thaw: that would composite the
+        // pre-folder prepared blur before SurfaceFlinger supplies its first
+        // post-folder frame, producing a visible sharp/blur/sharp pulse.
+        // The producer callback is already the first valid redraw boundary.
         MainHook.log(TAG + " Dock source/render freeze=" + frozen);
     }
 
