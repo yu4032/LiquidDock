@@ -57,6 +57,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final boolean folderBackdrop;
     private volatile float backdropOpacity;
     private final LauncherGlassOutputRenderState folderRenderWork = new LauncherGlassOutputRenderState();
+    private final FolderGlassFramePacing folderFramePacing = new FolderGlassFramePacing();
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
@@ -209,7 +210,11 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (old != null && old.sameAs(next) && Float.compare(opacity, backdropOpacity) == 0) return;
         geometry = next;
         backdropOpacity = opacity;
-        if (folderRenderWork.request(true, false)
+        // Main-thread native geometry remains current at full refresh rate.
+        // Only submit expensive full-screen Prismal work on an actual output
+        // budget slot; the render thread always reads the newest geometry.
+        if (folderFramePacing.allow(System.nanoTime(), opacity)
+                && folderRenderWork.request(true, false)
                 && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
     }
 
