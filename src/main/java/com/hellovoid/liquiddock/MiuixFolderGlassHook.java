@@ -46,8 +46,6 @@ final class MiuixFolderGlassHook {
     private static WeakReference<LauncherGlassStaticNode> openedFolderSink = new WeakReference<>(null);
     private static long openedFolderSerial;
     private static boolean folderStatusDispatcherInstalled;
-    private static final FolderDockOpenDispatch DOCK_OPEN = new FolderDockOpenDispatch();
-    private static WeakReference<Object> pendingNativeLauncher = new WeakReference<>(null);
     private static final FolderCloseCompletionGate NATIVE_CLOSE = new FolderCloseCompletionGate();
     private static boolean nativeFolderMaterialsCovered;
     private static boolean installed;
@@ -152,19 +150,21 @@ final class MiuixFolderGlassHook {
                 "com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl";
         try {
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderOpen", chain -> {
-                // We moved this exact OEM event to the FolderCling.open boundary.
-                // FolderState is counted: deliver precisely one OpenFolder event.
-                if (DOCK_OPEN.consumeLateNativeOpen()) return null;
+                // FolderState is CountState<OpenFolder>: OEM open and close events
+                // must remain paired and in native Launcher order. Never consume
+                // Launcher.dispatchFolderStatus(true) or forward it early.
                 setNativeFolderMaterialsCovered(true);
                 LauncherGlassSceneController.setFolderCoveredForAll(true);
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                MainHook.log(TAG + " native Dock folder-open event delivered");
+                return result;
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
-                DOCK_OPEN.onClose();
-                // The native Dock must start its exit now. The Workspace folder
-                // icon material, however, is part of the still-running close spring;
-                // it is restored only in Folder.onClose's completion callback.
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                // Restore the OEM Dock on its original close event; the native
+                // folder material remains owned until both close springs finish.
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                MainHook.log(TAG + " native Dock folder-close event delivered");
+                return result;
             });
             MainHook.log(TAG + " semantic FolderStatus dispatcher hooks installed");
             return true;
@@ -172,46 +172,6 @@ final class MiuixFolderGlassHook {
             MainHook.log(TAG + " semantic FolderStatus dispatcher unavailable; using FolderIcon fallback: "
                     + error);
             return false;
-        }
-    }
-
-    /** Launcher.openFolder is an authoritative owner; ContextWrapper is not. */
-    static void recordNativeLauncher(Object launcher) {
-        if (launcher != null && "com.miui.home.launcher.Launcher".equals(
-                launcher.getClass().getName())) {
-            pendingNativeLauncher = new WeakReference<>(launcher);
-        }
-    }
-
-    /** Deliver the real OEM FolderState event before its original late call.
-     * Never steal the late dispatch until DockStateManager has subscribed.
-     */
-    static void dispatchDockOpenBeforeFirstDraw(View folderCling) {
-        Object launcher = pendingNativeLauncher.get();
-        pendingNativeLauncher.clear();
-        if (!folderStatusDispatcherInstalled || !GlassRuntimeState.isEnabled()
-                || folderCling == null || launcher == null
-                || DOCK_OPEN.hasPendingNativeOpen()) return;
-        try {
-            Object controller = HookUtil.requireInvoke(launcher, "getDockController");
-            if (controller == null) return;
-            // Decompiled DockControllerImpl constructs and subscribes listeners
-            // inside DockStateManager's constructor, then assigns this field.
-            // Without it the first early event is silently lost; the ordinary
-            // Launcher.dispatchFolderStatus(true) must remain authoritative.
-            Object manager = HookUtil.getField(controller, "dockStateManager");
-            if (manager == null) {
-                MainHook.log(TAG + " early Dock state deferred: manager not initialized");
-                return;
-            }
-            Object dispatcher = HookUtil.requireInvoke(controller, "getFolderStatusDispatcher");
-            if (dispatcher == null) return;
-            HookUtil.requireInvoke(dispatcher, "dispatchFolderOpen");
-            DOCK_OPEN.onEarlyDispatched();
-            MainHook.log(TAG + " OEM Dock FolderState delivered early via Launcher instance");
-        } catch (Throwable error) {
-            // Keep the original Launcher.dispatchFolderStatus(true) intact.
-            MainHook.log(TAG + " early Dock event unavailable, preserving OEM late event: " + error);
         }
     }
 
