@@ -799,6 +799,13 @@ final class Miuix307PassBlurTextureView extends TextureView
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
             producerFrameCount++;
+            // SurfaceFlinger may have queued frames before its pause
+            // transaction became visible. They are part of the pre-folder
+            // generation, never the first valid post-folder refresh.
+            if (folderRenderFrozen) {
+                frameAvailable.set(false);
+                return;
+            }
             frameAvailable.set(true);
             Miuix307PassBlurBridge.renewForceRefresh(binding);
             scheduleRender(true);
