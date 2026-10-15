@@ -63,6 +63,7 @@ final class MiuixFolderGlassHook {
         // only folder side effect is to push/pop the Dock FolderState, which
         // sends an alpha=0 transaction; preserve all other native listeners.
         installDockFolderNoHide(classLoader);
+        LauncherNativeFolderWorkspaceFadeGate.install(classLoader);
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
             Class<?> itemIcon = Class.forName(ITEM_ICON, false, classLoader);
