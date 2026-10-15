@@ -13,10 +13,51 @@
 LiquidDock is an LSPosed module for HyperOS 3 tablets. It lets you customize the home screen, Dock, and Recents, and brings Liquid Glass styling to the launcher, system UI, and selected third-party apps.
 
 <details>
-<summary>View the home-screen overview</summary>
+<summary><strong>Screenshots · 8 previews</strong></summary>
+
+<p>Select an image to view the original.</p>
 
 <p align="center">
-  <img width="3008" height="1880" alt="LiquidDock on HyperOS Launcher" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" />
+<strong>Home-screen overview</strong><br />
+<a href="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6"><img width="640" alt="Home-screen overview" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" /></a>
+</p>
+
+<table>
+<tr>
+<td width="50%" align="center" valign="top">
+<p><strong>Shortcut menu</strong></p>
+<a href="https://github.com/user-attachments/assets/4a8104b4-d4de-4319-b6d8-99b3d9603b20"><img width="300" alt="Shortcut menu" src="https://github.com/user-attachments/assets/4a8104b4-d4de-4319-b6d8-99b3d9603b20" /></a>
+</td>
+<td width="50%" align="center" valign="top">
+<p><strong>Launcher dialog</strong></p>
+<a href="https://github.com/user-attachments/assets/7b4a152b-bb7a-4b36-a8de-841ec0ea2618"><img width="300" alt="Launcher dialog" src="https://github.com/user-attachments/assets/7b4a152b-bb7a-4b36-a8de-841ec0ea2618" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center" valign="top">
+<p><strong>Security Center sidebar</strong></p>
+<a href="https://github.com/user-attachments/assets/ec773cda-b8cf-4ac8-9a78-afce2437519c"><img height="280" alt="Security Center sidebar" src="https://github.com/user-attachments/assets/ec773cda-b8cf-4ac8-9a78-afce2437519c" /></a>
+</td>
+<td width="50%" align="center" valign="top">
+<p><strong>System Search</strong></p>
+<a href="https://github.com/user-attachments/assets/41c5e987-bc6d-45d3-ac2f-c14b44d61057"><img width="300" alt="System Search" src="https://github.com/user-attachments/assets/41c5e987-bc6d-45d3-ac2f-c14b44d61057" /></a>
+</td>
+</tr>
+</table>
+
+<p align="center">
+<strong>Glass details</strong><br />
+<a href="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4"><img width="440" alt="Glass details" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" /></a>
+</p>
+
+<p align="center">
+<strong>App control menu</strong><br />
+<a href="https://github.com/user-attachments/assets/9f39ca0c-3fd3-4cc4-ba6c-d8af01354788"><img width="640" alt="App control menu" src="https://github.com/user-attachments/assets/9f39ca0c-3fd3-4cc4-ba6c-d8af01354788" /></a>
+</p>
+
+<p align="center">
+<strong>Recents action buttons</strong><br />
+<a href="https://github.com/user-attachments/assets/badcd56c-b013-4a12-a018-bc505ee943f2"><img width="640" alt="Recents action buttons" src="https://github.com/user-attachments/assets/badcd56c-b013-4a12-a018-bc505ee943f2" /></a>
 </p>
 
 </details>
@@ -43,15 +84,6 @@ With the LiquidDock and Liquid Glass master switches enabled, LiquidDock can add
 Blur, refraction, chromatic dispersion, tint, brightness, shadows, highlights, corner radii, and different highlight layers can be adjusted separately.
 
 Most appearance changes take effect **immediately** when the relevant hook is already running. Installing a hook for the first time, or changing structural settings such as the grid, may still require restarting the corresponding scope.
-
-<details>
-<summary>View the glass details</summary>
-
-<p align="center">
-  <img width="704" height="440" alt="LiquidDock glass example" src="https://github.com/user-attachments/assets/caf50253-187d-4dbe-acfb-08ebc70769c4" />
-</p>
-
-</details>
 
 ### Home screen layout
 
