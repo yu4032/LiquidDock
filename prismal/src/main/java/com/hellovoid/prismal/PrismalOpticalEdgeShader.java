@@ -162,7 +162,12 @@ public final class PrismalOpticalEdgeShader {
                         + "            + os4OppositeFacing\n"
                         + "            * max(u_os4DirectionalOppositeIntensity, 0.0)\n"
                         + "            * os4OppositeFalloff;\n"
-                        + "    float os4SoftLight = clamp(os4Directional * os4EdgeMask, 0.0, 1.0);\n"
+                        // OS4 light must cover the gently curved glass face as well as its rim.
+                // Edge illumination is unchanged; central illumination ramps up using
+                // Prismal's existing deep-surface blend and respects the OS4 enable gate.
+                + "    float os4FaceMask = 0.5 * coreBlend * step(0.5, u_os4EdgeEnabled);\n"
+                + "    float os4SoftLight = clamp(os4Directional\n"
+                + "            * max(os4EdgeMask, os4FaceMask), 0.0, 1.0);\n"
                         + "    float os4Luma = dot(color, vec3(0.2126, 0.7152, 0.0722));\n"
                         + "    float os4DarkResponse = 1.0 - smoothstep(0.35, 0.92, os4Luma);\n"
                         + "    color += vec3(os4SoftLight\n"
