@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.content.SharedPreferences;
 import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
@@ -12,6 +13,7 @@ import com.hellovoid.prismal.PrismalHighlightProfile;
 import com.hellovoid.prismal.PrismalInteractionState;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
@@ -21,6 +23,7 @@ import java.nio.FloatBuffer;
 /** One-shot workspace backdrop capture plus stable full-screen rendering for ShortcutMenu glass. */
 final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
+        default void onBackdropReady() {}
         void onPresented();
         void onFailure(Throwable error);
     }
@@ -51,6 +54,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final Handler mainHandler;
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
+    private final boolean folderBackdrop;
+    private volatile float backdropOpacity;
+    private final LauncherGlassOutputRenderState folderRenderWork = new LauncherGlassOutputRenderState();
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
@@ -66,6 +72,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean sourceFrozen;
+    private volatile boolean folderCaptureWindowClosed;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -80,7 +87,26 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     ShortcutPopupGlassSession(
             View sourceRoot, LiquidDockConfig.Glass glassConfig, Listener listener) {
+        this(sourceRoot, glassConfig, listener, PassBlurDomain.SHORTCUT_POPUP);
+    }
+
+    ShortcutPopupGlassSession(
+            View sourceRoot, LiquidDockConfig.Glass glassConfig, Listener listener,
+            PassBlurDomain domain) {
+        this(sourceRoot, glassConfig, listener, domain, null);
+    }
+
+    ShortcutPopupGlassSession(View sourceRoot, LiquidDockConfig.Glass glassConfig, Listener listener,
+                             PassBlurBindRequest folderCapture) {
+        this(sourceRoot, glassConfig, listener, PassBlurDomain.OPEN_FOLDER, folderCapture);
+    }
+
+    private ShortcutPopupGlassSession(
+            View sourceRoot, LiquidDockConfig.Glass glassConfig, Listener listener,
+            PassBlurDomain domain, PassBlurBindRequest folderCapture) {
         if (sourceRoot == null) throw new IllegalArgumentException("sourceRoot == null");
+        folderBackdrop = domain == PassBlurDomain.OPEN_FOLDER;
+        if (folderBackdrop && folderCapture == null) throw new IllegalArgumentException("Missing wallpaper capture request");
         sourceRootRef = new WeakReference<>(sourceRoot);
         this.listener = listener;
         mainHandler = new Handler(sourceRoot.getContext().getMainLooper());
@@ -91,8 +117,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
-        prismalParams = Miuix307PrismalAdapter.toPortable(optical);
-        appliedBlur = glassConfig != null ? glassConfig.blur : Float.NaN;
+        prismalParams = materialParams(optical, density);
+        appliedBlur = prismalParams.blurRadiusPx;
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
@@ -104,7 +130,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
         sourceBackend = new RootPassBlurBackend(
                 sourceRoot,
-                PassBlurBindRequest.shortcutPopup(sourceRoot),
+                folderBackdrop ? folderCapture
+                        : PassBlurBindRequest.shortcutPopup(sourceRoot),
                 scalePercent,
                 renderFps,
                 this,
@@ -120,10 +147,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || config == null) return;
         View root = sourceRootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
-        PrismalParams next = Miuix307PrismalAdapter.toPortable(
-                Miuix307PrismalMaterial.fromConfig(config, density));
-        boolean blurChanged = Float.compare(appliedBlur, config.blur) != 0;
-        appliedBlur = config.blur;
+        PrismalParams next = materialParams(
+                Miuix307PrismalMaterial.fromConfig(config, density), density);
+        boolean blurChanged = Float.compare(appliedBlur, next.blurRadiusPx) != 0;
+        appliedBlur = next.blurRadiusPx;
         prismalParams = next;
         highlightProfile = config.largeSurfaceHighlightProfile;
         sourceBackend.postToRenderThread(() -> {
@@ -132,7 +159,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     && frozenPhysicalWidth > 0 && frozenPhysicalHeight > 0) {
                 try {
                     sourceBackend.makePbufferCurrent();
-                    prismalRenderer.prepareBackdrop(
+                    if (folderBackdrop) prismalRenderer.reblurPreparedBackdrop(next);
+                    else prismalRenderer.prepareBackdrop(
                             frozenNormalizedTexture, frozenPhysicalWidth, frozenPhysicalHeight,
                             logicalWidth, logicalHeight, next);
                 } catch (Throwable error) {
@@ -146,6 +174,32 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         // must not re-capture from behind its own now-visible overlay.
     }
 
+    /** Called at the first actual native folder frame, not on ACTION_DOWN.
+     * Only a pre-open compositor frame may become the frozen desktop texture.
+     */
+    void endFolderCaptureWindow() {
+        if (!folderBackdrop || shuttingDown || sourceFrozen) return;
+        folderCaptureWindowClosed = true;
+        sourceBackend.setUpdatesEnabled(false, "folder-first-draw-snapshot-deadline");
+    }
+
+    private PrismalParams materialParams(Miuix307PrismalMaterial.Params optical, float density) {
+        PrismalParams base = Miuix307PrismalAdapter.toPortable(optical);
+        if (!folderBackdrop) return base;
+        SharedPreferences preferences = Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP);
+        if (preferences == null) return base;
+        return OpenFolderGlassOptics.apply(base,
+                preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_BLUR.name(),
+                        ConfigSchema.Glass.OPEN_FOLDER_BLUR.runtimeFallback()),
+                preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_IOR.name(),
+                        ConfigSchema.Glass.OPEN_FOLDER_IOR.runtimeFallback()),
+                preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_THICKNESS.name(),
+                        ConfigSchema.Glass.OPEN_FOLDER_THICKNESS.runtimeFallback()),
+                preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.name(),
+                        ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.runtimeFallback()),
+                density);
+    }
+
     boolean hasFrozenBackdrop() {
         return !shuttingDown && backdropPrepared && sourceFrozen;
     }
@@ -156,6 +210,23 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (old != null && old.sameAs(next)) return;
         geometry = next;
         sourceBackend.postToRenderThread(this::renderCurrent);
+    }
+
+    void updateFolderFrame(LauncherGlassGeometry.Snapshot next, float nativeOpenProgress) {
+        if (shuttingDown || !folderBackdrop || next == null) return;
+        float opacity = OpenFolderBackdropPolicy.backdropOpacity(nativeOpenProgress);
+        LauncherGlassGeometry.Snapshot old = geometry;
+        if (old != null && old.sameAs(next) && Float.compare(opacity, backdropOpacity) == 0) return;
+        geometry = next;
+        backdropOpacity = opacity;
+        if (folderRenderWork.request(true, false)
+                && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
+    }
+
+    private void drainFolderFrame() {
+        if (folderRenderWork.consumeQueuedRender() != 0 && !shuttingDown) renderCurrent();
+        if (folderRenderWork.finishQueuedRender()
+                && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -209,6 +280,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
+        // A queued native frame after freezing may contain the now-visible folder. Never
+        // replace the safe pre-open capture, even when a late callback is already in flight.
+        if (folderBackdrop && (sourceFrozen || folderCaptureWindowClosed)) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -224,11 +298,15 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalWidth,
                     frame.logicalHeight,
                     prismalParams);
+            if (folderBackdrop && folderCaptureWindowClosed) return;
             backdropPrepared = true;
             if (!sourceFrozen) {
                 sourceFrozen = true;
                 sourceBackend.setUpdatesEnabled(false, "shortcut-popup-frozen");
                 MainHook.log(TAG + " workspace backdrop frozen generation=" + frame.generation);
+                mainHandler.post(() -> {
+                    if (!shuttingDown && listener != null) listener.onBackdropReady();
+                });
             }
             renderCurrent();
         } catch (Throwable error) {
@@ -247,6 +325,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || !backdropPrepared || currentGeometry == null
                 || currentOutput == null || currentOutput.eglSurface == EGL14.EGL_NO_SURFACE
                 || logicalWidth <= 0 || logicalHeight <= 0) return;
+        if (folderBackdrop && (currentOutput.width != logicalWidth || currentOutput.height != logicalHeight)) {
+            notifyFailure(new IllegalStateException("Folder backdrop/output viewport mismatch"));
+            return;
+        }
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
@@ -334,9 +416,21 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        if (folderBackdrop) {
+            GLES20.glEnable(GLES20.GL_BLEND);
+            GLES20.glBlendColor(0f, 0f, 0f, backdropOpacity);
+            GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalRenderer.preparedBlurTexture());
+            float firstRow = OpenFolderBackdropPolicy.backdropSampleY(0f);
+            float lastRow = OpenFolderBackdropPolicy.backdropSampleY(1f);
+            GLES20.glUniform4f(compositeCropRectLocation, 0f, firstRow, 1f, lastRow - firstRow);
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+            GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+        }
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-                GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
+        GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        if (folderBackdrop) GLES20.glDisable(GLES20.GL_BLEND);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         sourceBackend.swapBuffers(current.eglSurface);
     }

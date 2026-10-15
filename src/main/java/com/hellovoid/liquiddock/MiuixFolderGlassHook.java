@@ -44,6 +44,7 @@ final class MiuixFolderGlassHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static WeakReference<ViewGroup> openedFolderOwner = new WeakReference<>(null);
     private static WeakReference<LauncherGlassStaticNode> openedFolderSink = new WeakReference<>(null);
+    private static long openedFolderSerial;
     private static boolean folderStatusDispatcherInstalled;
     private static boolean nativeFolderMaterialsCovered;
     private static boolean installed;
@@ -72,6 +73,7 @@ final class MiuixFolderGlassHook {
             });
 
             installFolderOpenCloseHooks(classLoader);
+            OpenFolderGlassHook.install(classLoader, runtimeConfig);
             observeFolderVariantConstructors(classLoader, glassConfig);
 
             Class<?> utilities = Class.forName(
@@ -147,8 +149,9 @@ final class MiuixFolderGlassHook {
                 "com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl";
         try {
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderOpen", chain -> {
-                setNativeFolderMaterialsCovered(true);
-                LauncherGlassSceneController.setFolderCoveredForAll(true);
+                // The snapshot source now captures the real desktop including
+                // native folder icons and Dock. Do not hard-cover Workspace
+                // materials on folder open: they are part of that snapshot.
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
@@ -172,6 +175,11 @@ final class MiuixFolderGlassHook {
         dispatchTouchEvent.setAccessible(true);
         HookUtil.hook(dispatchTouchEvent, chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
+            Object touchOwner = chain.getThisObject();
+            if (touchOwner instanceof ViewGroup && args.length > 0 && args[0] instanceof MotionEvent) {
+                try { OpenFolderGlassCoordinator.onTouch((ViewGroup) touchOwner, (MotionEvent) args[0]); }
+                catch (Throwable error) { OpenFolderGlassCoordinator.releaseAll(); }
+            }
             Object result = chain.proceed(args);
             Object owner = chain.getThisObject();
             if (owner instanceof ViewGroup && args.length > 0 && args[0] instanceof MotionEvent) {
@@ -223,8 +231,9 @@ final class MiuixFolderGlassHook {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             Runnable originalCompletion = args.length > 1 && args[1] instanceof Runnable
                     ? (Runnable) args[1] : null;
+            long closingSerial = openedFolderSerial;
             args[1] = (Runnable) () -> {
-                restoreOpenedFolderOwner();
+                if (closingSerial == openedFolderSerial) restoreOpenedFolderOwner();
                 if (originalCompletion != null) originalCompletion.run();
             };
             return chain.proceed(args);
@@ -255,10 +264,8 @@ final class MiuixFolderGlassHook {
 
     private static void setOwnerSuppressed(ViewGroup owner, boolean suppressed) {
         if (owner == null) return;
-        if (!folderStatusDispatcherInstalled) {
-            setNativeFolderMaterialsCovered(suppressed);
-            LauncherGlassSceneController.setWorkspaceCovered(owner, suppressed);
-        }
+        // No Workspace/Dock visibility transaction is needed for a frozen
+        // compositor snapshot. Retain only the opened icon's own interaction state.
         if (!suppressed) {
             LauncherGlassStaticNode sink = resolveOwnerSink(owner);
             if (sink != null) sink.setSuppressedByFolderOpen(false);
@@ -274,6 +281,7 @@ final class MiuixFolderGlassHook {
             previousSink.setSuppressedByFolderOpen(false);
         }
         openedFolderOwner = new WeakReference<>(owner);
+        openedFolderSerial++;
         LauncherGlassStaticNode sink = resolveOwnerSink(owner);
         openedFolderSink = new WeakReference<>(sink);
         if (sink != null) {
@@ -626,6 +634,7 @@ final class MiuixFolderGlassHook {
     }
 
     private static void releaseFolderStyleOwnership(boolean smallFolder) {
+        OpenFolderGlassCoordinator.releaseIfStyle(smallFolder);
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
             if (material == null || isSmallFolderMaterial(material) != smallFolder) continue;
             releaseMaterialOwnership(material);
@@ -656,6 +665,7 @@ final class MiuixFolderGlassHook {
     }
 
     static void onRuntimeGlassDisabled() {
+        OpenFolderGlassCoordinator.releaseAll();
         setNativeFolderMaterialsCovered(false);
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
             releaseMaterialOwnership(material);

@@ -227,6 +227,10 @@ public final class PresetManager {
         source.put("liquid_large_folder_glass", Boolean.TRUE);
         source.put("large_folder_native_outline", Boolean.TRUE);
         source.put("large_folder_preview_icon_percent", 100);
+        source.put("open_folder_glass_blur", 6);
+        source.put("open_folder_glass_ior", 155);
+        source.put("open_folder_glass_thickness", 18);
+        source.put("open_folder_glass_tint_alpha", 35);
         source.put("liquid_large_folder_size_offset", 0);
         source.put("liquid_large_folder_corner_radius", 16);
         source.put("liquid_blur_mode", "advanced_material");

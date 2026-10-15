@@ -1,0 +1,103 @@
+package com.hellovoid.liquiddock;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class OpenFolderGlassStateTest {
+    @Test public void capturedCloseCompletionCannotReleaseTheNextOpeningOfTheSameFolder() throws Exception {
+        OpenFolderGlassState state = new OpenFolderGlassState();
+        long old = state.prepare();
+        state.onBackdropReady(old); state.beginOpen(old); state.onPresented(old); state.beginClose(old);
+        Runnable close = (Runnable) state.getClass().getDeclaredMethod("guardCompletion", long.class, Runnable.class)
+                .invoke(state, old, (Runnable) state::release);
+        long current = state.prepare();
+        state.onBackdropReady(current); state.beginOpen(current); state.onPresented(current);
+        close.run();
+        assertTrue(state.owns(current));
+        assertTrue(state.maySuppressNative());
+    }
+    @Test public void nativeMaterialStaysUntilSafeBackdropAndFirstGlassFrame() throws Exception {
+        Object state = state();
+        long serial = (Long) call(state, "prepare");
+        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue((Boolean) call(state, "onBackdropReady", serial));
+        assertTrue((Boolean) call(state, "beginOpen", serial));
+        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue((Boolean) call(state, "onPresented", serial));
+        assertTrue((Boolean) call(state, "maySuppressNative"));
+        assertTrue((Boolean) call(state, "beginClose", serial));
+        assertTrue((Boolean) call(state, "maySuppressNative"));
+        assertTrue((Boolean) call(state, "finishClose", serial));
+        assertFalse((Boolean) call(state, "maySuppressNative"));
+    }
+
+    @Test public void wallpaperOnlyCaptureMayFinishAfterNativeOpeningStarted() throws Exception {
+        Object state = state();
+        long serial = (Long) call(state, "prepare");
+        assertTrue((Boolean) call(state, "beginOpen", serial));
+        assertFalse((Boolean) call(state, "onPresented", serial));
+        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue((Boolean) call(state, "onBackdropReady", serial));
+        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue((Boolean) call(state, "onPresented", serial));
+        assertTrue((Boolean) call(state, "maySuppressNative"));
+    }
+
+    @Test public void tooLateWallpaperFrameMustNotAppearDuringClose() throws Exception {
+        Object state = state();
+        long serial = (Long) call(state, "prepare");
+        assertTrue((Boolean) call(state, "beginOpen", serial));
+        assertTrue((Boolean) call(state, "beginClose", serial));
+        assertTrue((Boolean) call(state, "onBackdropReady", serial));
+        assertFalse((Boolean) call(state, "onPresented", serial));
+        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue((Boolean) call(state, "finishClose", serial));
+    }
+
+    @Test public void callbacksFromPreviousFolderCannotHideOrReleaseTheCurrentOne() throws Exception {
+        Object state = state();
+        long old = (Long) call(state, "prepare");
+        long current = (Long) call(state, "prepare");
+        assertNotEquals(old, current);
+        assertFalse((Boolean) call(state, "onBackdropReady", old));
+        assertFalse((Boolean) call(state, "onPresented", old));
+        assertFalse((Boolean) call(state, "finishClose", old));
+        assertTrue((Boolean) call(state, "owns", current));
+        assertTrue((Boolean) call(state, "onBackdropReady", current));
+        assertTrue((Boolean) call(state, "beginOpen", current));
+        assertTrue((Boolean) call(state, "onPresented", current));
+        assertFalse((Boolean) call(state, "beginClose", old));
+        assertTrue((Boolean) call(state, "maySuppressNative"));
+    }
+
+    @Test public void cancellationImmediateCloseAndReplacementReleaseTheirPresentation() throws Exception {
+        Object state = state();
+        long serial = (Long) call(state, "prepare");
+        assertTrue((Boolean) call(state, "finishClose", serial));
+        assertFalse((Boolean) call(state, "finishClose", serial));
+        serial = (Long) call(state, "prepare");
+        call(state, "onBackdropReady", serial);
+        call(state, "beginOpen", serial);
+        call(state, "onPresented", serial);
+        call(state, "beginClose", serial);
+        long replacement = (Long) call(state, "prepare");
+        assertFalse((Boolean) call(state, "maySuppressNative"));
+        call(state, "release");
+        assertFalse((Boolean) call(state, "owns", replacement));
+        assertFalse((Boolean) call(state, "onPresented", replacement));
+    }
+
+    private static Object state() throws Exception {
+        try {
+            return Class.forName("com.hellovoid.liquiddock.OpenFolderGlassState")
+                    .getDeclaredConstructor().newInstance();
+        } catch (ClassNotFoundException missing) {
+            throw new AssertionError("Missing open-folder lifecycle ownership", missing);
+        }
+    }
+
+    private static Object call(Object state, String name, long... serial) throws Exception {
+        return serial.length == 0 ? state.getClass().getDeclaredMethod(name).invoke(state)
+                : state.getClass().getDeclaredMethod(name, long.class).invoke(state, serial[0]);
+    }
+}

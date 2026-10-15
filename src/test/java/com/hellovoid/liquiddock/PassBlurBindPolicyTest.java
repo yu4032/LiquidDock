@@ -8,6 +8,17 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PassBlurBindPolicyTest {
+    @Test public void folderCaptureIncludesLauncherAndDockButKeepsSystemChromeExcluded() {
+        // Capture the actual desktop in the frame before FolderCling draws.
+        assertArrayEquals(new String[]{"NavigationBar", "StatusBar", "GestureStub"},
+                PassBlurBindPolicy.exclusions(
+                        PassBlurBindPolicy.captureRootExclusion(PassBlurDomain.OPEN_FOLDER, "Launcher#42"),
+                        new String[0]));
+        assertEquals("Launcher#42", PassBlurBindPolicy.captureRootExclusion(
+                PassBlurDomain.LAUNCHER_WORKSPACE, "Launcher#42"));
+        assertEquals("Launcher#42", PassBlurBindPolicy.captureRootExclusion(
+                PassBlurDomain.SHORTCUT_POPUP, "Launcher#42"));
+    }
     @Test
     public void unavailableUnlockEndpointDoesNotExhaustWorkspaceBindBudget() {
         assertEquals(0, PassBlurBindPolicy.retryBudgetAttempt(

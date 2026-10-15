@@ -12,6 +12,11 @@ final class PassBlurBindPolicy {
 
     private PassBlurBindPolicy() {}
 
+    /** One-shot folder capture includes both Launcher workspace and Dock surfaces. */
+    static String captureRootExclusion(PassBlurDomain domain, String rootSurfaceName) {
+        return domain == PassBlurDomain.OPEN_FOLDER ? null : rootSurfaceName;
+    }
+
     static float nativeScale(PassBlurDomain domain, float requestedScale) {
         return PassBlurQualityPolicy.bridgeScale(
                 domain == PassBlurDomain.LAUNCHER_WORKSPACE,

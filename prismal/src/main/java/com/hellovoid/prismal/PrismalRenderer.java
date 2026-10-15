@@ -228,6 +228,14 @@ public final class PrismalRenderer implements AutoCloseable {
         glassDrawCount = 0;
     }
 
+    /** Recompute blur from our source copy, never from a producer-owned texture ID. */
+    public void reblurPreparedBackdrop(PrismalParams params) {
+        if (!backdropPrepared) throw new IllegalStateException("No prepared backdrop to reblur");
+        renderBlur(params != null ? params : PrismalParams.builder().build());
+        glassFrameBegun = false;
+        glassDrawCount = 0;
+    }
+
     /** Clear the transparent scene output once before appending glass nodes. */
     public void beginGlassFrame() {
         beginGlassFrameRegion(0f, 0f, width, height);
@@ -411,6 +419,8 @@ public final class PrismalRenderer implements AutoCloseable {
         return reducedOutputFramebuffer != 0 && frameTarget.framebuffer == reducedOutputFramebuffer
                 ? reducedOutputTexture : outputTexture;
     }
+    /** Prepared screen-anchored blur, owned by this renderer and its current GL context. */
+    public int preparedBlurTexture() { return backdropPrepared ? blurTextureV : 0; }
     public int framebufferWidth() { return width; }
     public int framebufferHeight() { return height; }
 
