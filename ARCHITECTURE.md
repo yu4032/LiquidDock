@@ -1,6 +1,6 @@
 # LiquidDock Architecture
 
-本文档记录 LiquidDock 生产架构（原逐项核验于 2026-10-03）。**2026-10-10 已确认 `main` 源码构建版本 `2.6.4`**，本次未逐项重新证明下文所有 Hook 时序。涉及最新实现以源码和测试为准；当前架构技术债见 [TODO.md](TODO.md) 与 [2026-10-10 可维护性审计](docs/maintainability-audit-20261010.md)。历史 `docs/superpowers/*` 仅是阶段性记录，不是当前 runtime contract。
+本文档记录 LiquidDock 生产架构（原逐项核验于 2026-10-03）。当前源码版本为 **2.7.2（versionCode 34）**，上一正式版本为 **2.7.1**。具体 Hook 时序以源码和测试为准；当前架构技术债见 [TODO.md](TODO.md) 与 [2026-10-10 可维护性审计](docs/maintainability-audit-20261010.md)。历史 `docs/superpowers/*` 是阶段性记录。
 
 当前新增边界：
 

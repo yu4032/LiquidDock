@@ -83,6 +83,8 @@ Part-level whitening currently supports **RemoteViews TextView / ImageView**. In
 
 Small and large folders have separate glass switches, sizes, and corner-radius settings.
 
+On Launcher 4.50, four-preview and nine-preview large folders support a real **2×2 home-screen footprint**. Enable real large folders and titles per folder in the launcher's native folder settings. Under **Appearance → Folders**, adjust preview icon size (**60%–110%, 100% by default**) and toggle the native outline. Preview icon sizing works independently of the glass switch.
+
 ### Shortcut menus and dialogs
 
 The shortcut menu shown when long-pressing a home-screen icon can use a glass background, with an optional white-text-and-icon mode for dark themes.
