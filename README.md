@@ -13,16 +13,16 @@
 LiquidDock 是一个面向 HyperOS 3 平板体验的 LSPosed 模块，用来调整桌面布局、Dock、多任务界面，并把液态玻璃效果应用到桌面、系统界面和部分第三方应用。
 
 <details>
-<summary><strong>效果展示 · 8 张截图</strong></summary>
+<summary><strong>效果展示</strong></summary>
 
-<p>点击图片查看原图。</p>
+<p align="center">点击图片查看原图。</p>
 
 <p align="center">
 <strong>桌面总览</strong><br />
 <a href="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6"><img width="640" alt="桌面总览" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" /></a>
 </p>
 
-<table>
+<table align="center">
 <tr>
 <td width="50%" align="center" valign="top">
 <p><strong>快捷菜单</strong></p>
