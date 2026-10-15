@@ -34,6 +34,7 @@ final class LauncherNativeFolderWorkspaceFadeGate {
                         if (!folderSession) return chain.proceed(
                                 chain.getArgs().toArray(new Object[0]));
                         skippedFade++;
+                        if (skippedFade <= 3) FolderDiagnosticTrace.event("OEM-fade-suppressed");
                         restoreWorkspace(chain.getThisObject());
                         return null;
                     });
@@ -42,6 +43,7 @@ final class LauncherNativeFolderWorkspaceFadeGate {
                         if (!folderSession) return chain.proceed(
                                 chain.getArgs().toArray(new Object[0]));
                         skippedAlpha++;
+                        if (skippedAlpha <= 3) FolderDiagnosticTrace.event("OEM-alpha-suppressed");
                         restoreWorkspace(chain.getThisObject());
                         return null;
                     });
@@ -50,6 +52,7 @@ final class LauncherNativeFolderWorkspaceFadeGate {
                         if (!folderSession) return chain.proceed(
                                 chain.getArgs().toArray(new Object[0]));
                         skippedHide++;
+                        if (skippedHide <= 3) FolderDiagnosticTrace.event("OEM-hide-suppressed");
                         restoreWorkspace(chain.getThisObject());
                         return null;
                     });
@@ -68,6 +71,7 @@ final class LauncherNativeFolderWorkspaceFadeGate {
                         return null;
                     });
             installed = installedCount > 0;
+            MainHook.diag(TAG + " native Workspace folder fade hooks=" + installedCount + "/5");
             MainHook.log(TAG + " native Workspace folder fade hooks=" + installedCount + "/5");
         } catch (Throwable error) {
             MainHook.log(TAG + " gate installation failure: " + error);
@@ -79,9 +83,11 @@ final class LauncherNativeFolderWorkspaceFadeGate {
         try {
             Method method = launcher.getDeclaredMethod(name, signature);
             HookUtil.hook(method, callback);
+            MainHook.diag(TAG + " installed " + name);
             MainHook.log(TAG + " installed " + name);
             return 1;
         } catch (Throwable error) {
+            MainHook.diag(TAG + " unable to hook " + name + ": " + error);
             MainHook.log(TAG + " unable to hook " + name + ": " + error);
             return 0;
         }
@@ -91,6 +97,7 @@ final class LauncherNativeFolderWorkspaceFadeGate {
         if (!folderSession) {
             skippedFade = skippedAlpha = skippedHide = 0;
             folderSession = true;
+            MainHook.diag(TAG + " folder presentation ownership started");
             MainHook.log(TAG + " folder presentation ownership started");
         }
         if (launcher != null) restoreWorkspace(launcher);
@@ -99,7 +106,7 @@ final class LauncherNativeFolderWorkspaceFadeGate {
     static void onOpeningFailed() { folderSession = false; }
 
     static void onClosed() {
-        if (folderSession) MainHook.log(TAG + " folder presentation complete skippedFade="
+        if (folderSession) MainHook.diag(TAG + " folder presentation complete skippedFade="
                 + skippedFade + " skippedAlpha=" + skippedAlpha
                 + " skippedHide=" + skippedHide);
         folderSession = false;
@@ -131,7 +138,7 @@ final class LauncherNativeFolderWorkspaceFadeGate {
             Object value = field.get(launcher);
             return value instanceof View ? (View) value : null;
         } catch (Throwable error) {
-            MainHook.log(TAG + " unable to read " + name + ": " + error);
+            MainHook.diag(TAG + " unable to read " + name + ": " + error);
             return null;
         }
     }

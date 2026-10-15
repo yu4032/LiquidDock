@@ -14,6 +14,11 @@ android {
         targetSdk = 37
         versionCode = 34
         versionName = "2.7.2"
+        // Embedded in CI APK: identify the *actual installed binary*, not a PR label.
+        val sourceSha = System.getenv("LIQUIDDOCK_SOURCE_SHA") ?: "LOCAL-UNSTAMPED"
+        val runId = System.getenv("GITHUB_RUN_ID") ?: "LOCAL"
+        buildConfigField("String", "DIAG_SOURCE_SHA", "\"$sourceSha\"")
+        buildConfigField("String", "DIAG_CI_RUN", "\"$runId\"")
     }
 
     signingConfigs {
@@ -45,7 +50,7 @@ android {
         }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 
     packaging {
         resources {
