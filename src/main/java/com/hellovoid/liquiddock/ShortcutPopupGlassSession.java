@@ -194,7 +194,11 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         // can continue; the GL thread owns both blur preparation and presentation.
         sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) return;
-            if (backdropPrepared && prismalRenderer != null) {
+            // This is a one-shot wallpaper texture; if Folder and Workspace
+            // requested the same blur radius, do not run another two-pass
+            // Gaussian at the native closing boundary.
+            if (backdropPrepared && prismalRenderer != null
+                    && Float.compare(appliedBlur, next.blurRadiusPx) != 0) {
                 try {
                     sourceBackend.makePbufferCurrent();
                     prismalRenderer.reblurPreparedBackdrop(next);
@@ -444,7 +448,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        if (folderBackdrop) {
+        if (folderBackdrop && backdropOpacity > 0.0005f) {
             GLES20.glEnable(GLES20.GL_BLEND);
             GLES20.glBlendColor(0f, 0f, 0f, backdropOpacity);
             GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);
@@ -453,6 +457,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             float lastRow = OpenFolderBackdropPolicy.backdropSampleY(1f);
             GLES20.glUniform4f(compositeCropRectLocation, 0f, firstRow, 1f, lastRow - firstRow);
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        }
+        if (folderBackdrop) {
+            GLES20.glEnable(GLES20.GL_BLEND);
             GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
         }
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);

@@ -169,6 +169,20 @@ final class MiuixFolderGlassHook {
         }
     }
 
+    /** Stop both cached-glass producers at the authoritative Launcher entry,
+     * before FolderCling can make its first pixels visible. The independent
+     * wallpaper-only folder source remains active for its one-shot snapshot.
+     */
+    static void onFolderOpeningBeforeNativeAnimation() {
+        pendingInputResumeSerial = 0L;
+        Miuix307ZeroCopyRenderer.setFolderFrozen(true);
+        LauncherGlassSceneController.setFolderCoveredForAll(true);
+    }
+
+    static void onFolderOpeningFailed() {
+        releaseFrozenInputs();
+    }
+
     private static boolean installFolderStatusDispatcherHooks(ClassLoader classLoader) {
         String dispatcher =
                 "com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl";
@@ -177,9 +191,7 @@ final class MiuixFolderGlassHook {
                 // Folder scene uses a one-shot source-excluded wallpaper frame.
                 // Suspend Dock/Workspace sources and preserve their last output:
                 // no hide, no capture of the FolderCling overlay, no redraw.
-                pendingInputResumeSerial = 0L;
-                Miuix307ZeroCopyRenderer.setFolderFrozen(true);
-                LauncherGlassSceneController.setFolderCoveredForAll(true);
+                onFolderOpeningBeforeNativeAnimation();
                 setNativeFolderMaterialsCovered(true);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });

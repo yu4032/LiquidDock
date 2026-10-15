@@ -228,6 +228,9 @@ final class Miuix307PassBlurTextureView extends TextureView
     // Stop both source-frame and scene-driven GL work while a folder uses
     // its own one-shot background. The last TextureView buffer stays visible.
     private volatile boolean folderRenderFrozen;
+    // Drop any producer token queued before the folder was opened. After
+    // thaw the first scene render must consume a genuine post-folder source.
+    private volatile boolean awaitingPostFolderProducer;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
@@ -387,8 +390,16 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     void setFolderRenderFrozen(boolean frozen) {
-        folderRenderFrozen = frozen;
-        if (!frozen && !shuttingDown) requestDockSceneRefresh();
+        if (folderRenderFrozen == frozen) return;
+        if (frozen) {
+            folderRenderFrozen = true;
+            frameAvailable.set(false);
+            awaitingPostFolderProducer = true;
+        } else {
+            // No eager requestDockSceneRefresh: keep the last EGL buffer until
+            // a new post-folder PassBlur frame is available.
+            folderRenderFrozen = false;
+        }
     }
 
     void requestDockSceneRefresh() {
@@ -893,7 +904,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     private void drawLatestFrame(boolean fromFrameCallback) {
         if (shuttingDown || folderRenderFrozen || eglWindowSurface == EGL14.EGL_NO_SURFACE
                 || normalizeProgram == 0 || compositeProgram == 0 || prismalRenderer == null
-                || oesTexture == 0) {
+                || oesTexture == 0
+                || (awaitingPostFolderProducer && !frameAvailable.get())) {
             return;
         }
         SurfaceTexture input = inputSurfaceTexture;
@@ -903,6 +915,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             makeCurrent();
             boolean consumedFreshProducerFrame = frameAvailable.getAndSet(false);
             if (consumedFreshProducerFrame) {
+                awaitingPostFolderProducer = false;
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 producerRecovery.onFreshFrameConsumed();
@@ -964,6 +977,9 @@ final class Miuix307PassBlurTextureView extends TextureView
                     || mapping.configRotation != boundConfigRotation) {
                 return;
             }
+            // Freezing can begin while an older GL job is already executing.
+            // Never present the frame after the folder boundary has begun.
+            if (folderRenderFrozen) return;
             if (!EGL14.eglSwapBuffers(eglDisplay, eglWindowSurface)) {
                 throw new IllegalStateException("eglSwapBuffers error=0x"
                         + Integer.toHexString(EGL14.eglGetError()));

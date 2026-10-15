@@ -121,7 +121,13 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         }
         // Before any Workspace node is registered there is no content to follow. Keep the
         // default factor so scene freshness and proxy ownership continue to decide presentation.
-        float alpha = workspace != null
+        // The native FolderCling opening animation can fade the Workspace
+        // View hierarchy to zero. That is NOT a request to hide the already
+        // frozen glass output (which is an independent Launcher-root sibling).
+        // Keep other modes' opacity handling, including app and Recents.
+        boolean frozenFolder = LauncherGlassSceneController
+                .isFolderBackdropFrozenForRoot(root);
+        float alpha = frozenFolder ? 1f : workspace != null
                 ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
         layer.layerAlpha.setWorkspaceAlpha(alpha, launchProxyActive);
         layer.applyLayerAlpha();
