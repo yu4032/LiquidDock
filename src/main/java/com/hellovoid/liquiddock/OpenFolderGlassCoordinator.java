@@ -262,6 +262,16 @@ final class OpenFolderGlassCoordinator {
         return state != null && state.materials.shouldSuppress(drawable);
     }
 
+    /** Synchronous native setter fence for a just-rebound close-animation
+     * image, which can arrive after pre-draw but before Surface composition.
+     * Do not affect widget hosts, folder content or unrelated View blurs.
+     */
+    static boolean ownsNativeBlurMode(View material) {
+        State state = current;
+        return state != null && material != null && OWNER.maySuppressNative()
+                && material == animationImage(state);
+    }
+
     static void rememberNativeBlur(View material, Object[] args) {
         State state = current;
         if (state == null || material != animationImage(state) || args == null) return;

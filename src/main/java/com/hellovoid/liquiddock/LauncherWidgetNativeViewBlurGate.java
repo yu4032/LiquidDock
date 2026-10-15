@@ -89,6 +89,14 @@ final class LauncherWidgetNativeViewBlurGate {
                         if (folder.claimed) return chain.proceed(new Object[]{0});
                     }
                 }
+                // The OEM can replace FolderAnimController's closing plate
+                // between pre-draw and composition. If this exact native
+                // animation image belongs to the presented glass, claim it at
+                // the setter boundary so its first frame cannot flash blur.
+                if (OpenFolderGlassCoordinator.ownsNativeBlurMode(view)) {
+                    claimFolder(view);
+                    return chain.proceed(new Object[]{0});
+                }
                 // Unowned Views and Launcher lifecycle clears always pass through unchanged.
                 return chain.proceed(args);
             });
