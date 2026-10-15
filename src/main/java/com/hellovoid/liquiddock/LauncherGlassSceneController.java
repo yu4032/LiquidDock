@@ -151,6 +151,7 @@ final class LauncherGlassSceneController {
             return cachedLayerVisible && !rotationPresentationPending && state != State.DETACHED;
         }
         boolean isRotationPresentationPending() { return rotationPresentationPending; }
+        boolean followsNativeFolderFade() { return nativeFolderFade; }
         boolean consumeFadeReveal() {
             boolean result = fadeRevealReady;
             fadeRevealReady = false;
@@ -683,7 +684,8 @@ final class LauncherGlassSceneController {
             // Rotation is different: resized output cannot safely present pixels from the previous
             // orientation. Folder remains a real LiquidDock presentation cover.
             boolean hardPresentationCover =
-                    folderCovered || state.isRotationPresentationPending();
+                    (folderCovered && !state.followsNativeFolderFade())
+                    || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
             current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
         }

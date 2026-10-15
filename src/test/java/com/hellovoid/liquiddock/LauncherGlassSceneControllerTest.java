@@ -25,6 +25,31 @@ public class LauncherGlassSceneControllerTest {
         assertFalse(state.consumeFadeReveal());
     }
 
+    @Test public void earlyFolderCoverRetainsCachedWorkspaceGlassThroughClose() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+
+        // This path is selected at FolderIcon.onOpen, before FolderCling's
+        // opening observer is installed. Native Workspace alpha hides pixels.
+        state.setFolderCovered(true, true);
+        assertTrue(state.followsNativeFolderFade());
+        assertTrue("Cached layer cannot be hard-hidden during native folder open",
+                state.isLayerVisible());
+        long oldGeneration = state.generation();
+        state.setFolderCovered(false, false);
+        assertTrue("The last cached output must bridge the close handoff",
+                state.isLayerVisible());
+        assertTrue(state.generation() > oldGeneration);
+        assertFalse("Native folder close does not start another alpha animation",
+                state.consumeFadeReveal());
+        state.onFreshFrameReady(state.generation());
+        assertTrue(state.isLayerVisible());
+        assertFalse(state.consumeFadeReveal());
+    }
+
     @Test public void unsupportedFolderRetainsTheExistingHardCoverageFallback() throws Exception {
         LauncherGlassSceneController.StateMachine state = new LauncherGlassSceneController.StateMachine();
         state.onRootReady(); state.onFreshFrameReady(state.generation()); state.consumeFadeReveal();
