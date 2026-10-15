@@ -21,6 +21,9 @@ final class Miuix307ZeroCopyRenderer {
             new DockHomeBackdropFreshnessState();
     private static boolean dockAnimationFrameScheduled;
     private static boolean producerUpdatesPolicyEnabled = true;
+    // Folder owns a frozen input frame. Keep Dock's last presented TextureView
+    // buffer visible, but suppress all new PassBlur and Prismal work.
+    private static volatile boolean folderFrozen;
     private static boolean homeProducerOverride;
     private static long homeFreshnessSerial;
 
@@ -65,6 +68,7 @@ final class Miuix307ZeroCopyRenderer {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
+        gpuBackdrop.setFolderRenderFrozen(folderFrozen);
         hostRef = new WeakReference<>(host);
         materialHostRef = new WeakReference<>(materialHost);
         dockAnimationFrameScheduled = false;
@@ -72,6 +76,7 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
+        if (folderFrozen) gpuBackdrop.setProducerUpdatesEnabled(false, "folder-reinstall-frozen");
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
                 + " requestedBlur=" + blurRadiusPx
                 + " source=" + materialHost.getClass().getSimpleName());
@@ -126,10 +131,20 @@ final class Miuix307ZeroCopyRenderer {
         applyProducerUpdatesPolicy(reason);
     }
 
+    static void setFolderFrozen(boolean frozen) {
+        if (folderFrozen == frozen) return;
+        folderFrozen = frozen;
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        if (gpuBackdrop != null) gpuBackdrop.setFolderRenderFrozen(frozen);
+        applyProducerUpdatesPolicy(frozen ? "folder-frame-frozen" : "folder-frame-released");
+        if (!frozen) requestDockSceneRefresh();
+        MainHook.log(TAG + " Dock source/render freeze=" + frozen);
+    }
+
     private static void applyProducerUpdatesPolicy(String reason) {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
-        boolean effective = producerUpdatesPolicyEnabled || homeProducerOverride;
+        boolean effective = (producerUpdatesPolicyEnabled || homeProducerOverride) && !folderFrozen;
         gpuBackdrop.setProducerUpdatesEnabled(effective, reason
                 + (homeProducerOverride ? "/home-refresh-override" : ""));
     }
@@ -213,13 +228,13 @@ final class Miuix307ZeroCopyRenderer {
 
     static void requestDockAnimationFrames() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
+        if (folderFrozen || gpuBackdrop == null || dockAnimationFrameScheduled) return;
         dockAnimationFrameScheduled = true;
         gpuBackdrop.requestDockSceneRefresh();
         gpuBackdrop.postOnAnimation(() -> {
             if (gpuBackdropRef.get() != gpuBackdrop) return;
             dockAnimationFrameScheduled = false;
-            if (DockGlassItemRegistry.hasActiveAnimation()) {
+            if (!folderFrozen && DockGlassItemRegistry.hasActiveAnimation()) {
                 requestDockAnimationFrames();
             }
         });
@@ -235,6 +250,8 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
+        // Do not clear folderFrozen here: rebuilds during the same folder
+        // session must not revive producer updates.
         if (gpuBackdrop != null) gpuBackdrop.shutdown();
     }
 }

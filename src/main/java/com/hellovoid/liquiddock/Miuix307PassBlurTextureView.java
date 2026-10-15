@@ -225,6 +225,9 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile boolean gpuBackdropActive;
     private volatile boolean hasPresentedFrame;
     private volatile boolean producerUpdatesEnabled = true;
+    // Stop both source-frame and scene-driven GL work while a folder uses
+    // its own one-shot background. The last TextureView buffer stays visible.
+    private volatile boolean folderRenderFrozen;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
@@ -383,10 +386,15 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
+    void setFolderRenderFrozen(boolean frozen) {
+        folderRenderFrozen = frozen;
+        if (!frozen && !shuttingDown) requestDockSceneRefresh();
+    }
+
     void requestDockSceneRefresh() {
-        if (shuttingDown) return;
+        if (shuttingDown || folderRenderFrozen) return;
         postOnAnimation(() -> {
-            if (shuttingDown) return;
+            if (shuttingDown || folderRenderFrozen) return;
             dockCompositor.invalidateUiScene();
             updateBackdropMapping();
             if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
@@ -825,7 +833,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private void scheduleRender(boolean producerFrame) {
-        if (shuttingDown) return;
+        if (shuttingDown || folderRenderFrozen) return;
         synchronized (renderQueueLock) {
             renderDirty = true;
             if (producerFrame) producerRenderDirty = true;
@@ -883,7 +891,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private void drawLatestFrame(boolean fromFrameCallback) {
-        if (shuttingDown || eglWindowSurface == EGL14.EGL_NO_SURFACE
+        if (shuttingDown || folderRenderFrozen || eglWindowSurface == EGL14.EGL_NO_SURFACE
                 || normalizeProgram == 0 || compositeProgram == 0 || prismalRenderer == null
                 || oesTexture == 0) {
             return;

@@ -21,6 +21,8 @@ final class OpenFolderGlassCoordinator {
 
     private OpenFolderGlassCoordinator() {}
 
+    static boolean hasActiveSession() { return current != null; }
+
     static boolean followsNativeWorkspaceFade() {
         State state = current;
         // Launcher dispatches FolderIcon.onOpen / FolderStatus before the
@@ -299,6 +301,9 @@ final class OpenFolderGlassCoordinator {
         state.geometry.reset();
         View cling = state.cling.get();
         if (cling != null) cling.postInvalidateOnAnimation();
+        // Folder glass is now detached, so the cached Dock and Workspace
+        // producers may resume without ever sampling the folder itself.
+        MiuixFolderGlassHook.onExpandedFolderOutputReleased(state.serial);
     }
 
     private static void sync(State state) {

@@ -58,8 +58,10 @@ final class OpenFolderGlassHook {
                         try {
                             if (original != null) original.run();
                         } finally {
-                            MiuixFolderGlassHook.onNativeBackgroundCloseFinished(nativeSerial);
+                            // Drop expanded glass output before resuming the
+                            // Dock/Workspace producers, never the reverse.
                             safe(() -> OpenFolderGlassCoordinator.onNativeBackgroundCloseFinished(glassSerial));
+                            MiuixFolderGlassHook.onNativeBackgroundCloseFinished(nativeSerial);
                         }
                     };
                     return chain.proceed(args);
@@ -76,7 +78,6 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(launcher, "openFolder",
                     new Class<?>[]{info, View.class}), chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                FolderDockVisibilityOwner.rememberLauncher(chain.getThisObject());
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
@@ -89,10 +90,8 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(cling, "open", new Class<?>[0]), chain -> {
                 try {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    // FolderCling.open is earlier than the late native
-                    // FolderStatusServiceImpl event: cover the real Dock
-                    // hierarchy now, then let the OEM state event run normally.
-                    FolderDockVisibilityOwner.onFolderOpened();
+                    // The folder source already owns one frozen GPU backdrop.
+                    // Neither Dock nor Workspace is hidden for this presentation.
                     safe(() -> OpenFolderGlassCoordinator.onOpening((View) chain.getThisObject()));
                     return result;
                 } catch (Throwable error) {
@@ -113,9 +112,6 @@ final class OpenFolderGlassHook {
                 safe(() -> OpenFolderGlassCoordinator.onClosing(
                         (View) chain.getThisObject(), nativeSpring));
                 Object result = chain.proceed(args);
-                // Release at the native close boundary, including versions
-                // that omit the semantic FolderStatusServiceImpl callback.
-                FolderDockVisibilityOwner.onFolderClosed();
                 return result;
             });
             HookUtil.hook(HookUtil.findMethodExact(folder, "onClose", new Class<?>[]{boolean.class, Runnable.class}), chain -> {
