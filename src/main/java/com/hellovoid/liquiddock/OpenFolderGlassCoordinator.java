@@ -61,11 +61,10 @@ final class OpenFolderGlassCoordinator {
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
         // Native blur/gesture progress can precede this semantic callback.
-        // Do not interpret a missing progress sample as p=1 (a final-folder
-        // outline): that caused a one-frame exposure of the darker Recents
-        // wallpaper while the frozen full-screen wallpaper was still bright.
-        // Direct/no-gesture Recents retains the bounded final-panel clip as
-        // a safety fallback; progressive paths use the actual vendor ratio.
+        // A missing progress sample must NOT be interpreted as p=1 for
+        // presentation alpha. Direct/no-gesture Recents retains the existing
+        // bounded final-panel clip for safety; only the original OEM gesture
+        // signal is allowed to animate the output alpha and silhouette.
         if (Float.isFinite(state.recentsGestureProgress)) {
             updateRecentsOutline(state);
             updateRecentsPresentationAlpha(state);
@@ -91,6 +90,14 @@ final class OpenFolderGlassCoordinator {
             return;
         }
         state.recentsGestureProgress = nativeRatio;
+        if (Api101Bridge.isDebugLoggingEnabled()) {
+            int bucket = Math.max(0, Math.min(4, Math.round(
+                    OpenFolderBackdropPolicy.backdropOpacity(nativeRatio) * 4f)));
+            if (bucket != state.recentsProgressLogBucket) {
+                state.recentsProgressLogBucket = bucket;
+                trace("recents-native-ratio-" + bucket, state);
+            }
+        }
         if (nativeRatio > 0f || OWNER.isRecentsCovered(state.serial)
                 || OWNER.isRecentsReturnPending(state.serial)) {
             updateRecentsOutline(state);
@@ -1017,6 +1024,7 @@ final class OpenFolderGlassCoordinator {
         float nativeTargetX, nativeTargetY, nativeSourceWidth, nativeSourceHeight;
         float nativeTargetWidth, nativeTargetHeight, nativeExpandedScaleX = Float.NaN;
         float recentsGestureProgress = Float.NaN;
+        int recentsProgressLogBucket = -1;
         final View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 if (live(State.this)) trace("root-attached", State.this);
