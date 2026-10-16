@@ -69,6 +69,34 @@ final class OpenFolderGlassGeometry {
                 radius * p);
     }
 
+    /** Native FolderCling CLOSE owns progress: expanded=1, icon=0.
+     * The temporary OPEN_FOLDER TextureView also contains a full-screen
+     * wallpaper backdrop. Morph its visible background from the whole root
+     * into the *desktop source folder* round-rect on the SAME reverse-spring
+     * progress already used to position the Prismal glass lens.
+     *
+     * This is distinct from Recents: Recents ends at the expanded panel,
+     * while native CLOSE ends at the Workspace icon. Neither needs a
+     * second timer or hardcoded 1x1/2x2 folder geometry.
+     */
+    static Frame closingBackdropMask(Frame desktopIcon, int rootWidth, int rootHeight,
+                                     float nativeOpenProgress) {
+        if (desktopIcon == null || !valid(desktopIcon, rootWidth, rootHeight)
+                || rootWidth <= 0 || rootHeight <= 0) return null;
+        float p = Float.isFinite(nativeOpenProgress)
+                ? Math.max(0f, Math.min(1f, nativeOpenProgress)) : 1f;
+        float t = 1f - p; // 0: full screen, 1: desktop icon
+        float radius = Math.max(0f, Math.min(desktopIcon.radius,
+                Math.min(desktopIcon.right - desktopIcon.left,
+                        desktopIcon.bottom - desktopIcon.top) * .5f));
+        return new Frame(
+                desktopIcon.left * t,
+                desktopIcon.top * t,
+                rootWidth + (desktopIcon.right - rootWidth) * t,
+                rootHeight + (desktopIcon.bottom - rootHeight) * t,
+                radius * t);
+    }
+
     Frame current() { return current; }
     void reset() { current = null; width = height = 0; }
 
