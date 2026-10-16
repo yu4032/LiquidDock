@@ -504,12 +504,6 @@ final class OpenFolderGlassCoordinator {
                 releaseAll();
                 return;
             }
-            if (OWNER.completeRecentsReturn(state.serial)) {
-                // EGL backdrop survives Recents; force a presentation from
-                // cached textures in case native TextureView lost its buffer.
-                if (state.session != null) state.session.requestCachedGlassRedraw();
-                if (state.layer != null && OWNER.maySuppressNative()) state.layer.reveal();
-            }
             // Native close can hide or detach FolderCling while its separate
             // background proxy keeps animating. The sibling output stays live.
             if (state.session == null) return;
@@ -532,7 +526,17 @@ final class OpenFolderGlassCoordinator {
             if (Math.abs(basis[2] - basis[0] - 1f) > 0.001f
                     || Math.abs(basis[3] - basis[1]) > 0.001f
                     || Math.abs(basis[4] - basis[0]) > 0.001f
-                    || Math.abs(basis[5] - basis[1] - 1f) > 0.001f) { releaseAll(); return; }
+                    || Math.abs(basis[5] - basis[1] - 1f) > 0.001f) {
+                if (OWNER.deferTransientRecentsTransform(state.serial)) return;
+                releaseAll();
+                return;
+            }
+            // Wait until the native HOME transform is back to root-space
+            // identity before consuming the return protection token.
+            if (OWNER.completeRecentsReturn(state.serial)) {
+                if (state.session != null) state.session.requestCachedGlassRedraw();
+                if (state.layer != null) state.layer.reveal();
+            }
             // The sibling host normally stays fixed. Avoid setting identical
             // RenderNode transforms on every root pre-draw (which can schedule
             // redundant compositions during the closing spring).
