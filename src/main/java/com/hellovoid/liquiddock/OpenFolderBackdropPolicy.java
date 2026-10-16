@@ -65,6 +65,17 @@ final class OpenFolderBackdropPolicy {
         return Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
     }
 
+    /** Keep the same immutable wallpaper sample while its composition
+     * ownership is transferred to OEM Recents. The original OEM gesture ratio
+     * drives both the HWUI rounded outline and the alpha of the cached image.
+     * Missing progress is NOT an animation endpoint: callers must preserve
+     * the existing presentation until a real native sample arrives.
+     */
+    static float recentsBackdropAlpha(float nativeRatio) {
+        return Float.isFinite(nativeRatio)
+                ? 1f - backdropOpacity(nativeRatio) : Float.NaN;
+    }
+
     /** 0 = expanded folder material, 1 = final resident Workspace material.
      * The glass itself remains opaque at the icon endpoint; a separate
      * ready-frame handoff owns removal of the temporary surface.
