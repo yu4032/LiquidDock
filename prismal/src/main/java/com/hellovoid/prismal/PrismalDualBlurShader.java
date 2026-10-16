@@ -32,7 +32,8 @@ final class PrismalDualBlurShader {
         if (count < 4) {
             throw new IllegalStateException("Unexpected Prismal blurred sample count " + count);
         }
-        String changed = fragment.replace(ORIGINAL_SAMPLE, SAMPLE);
+        String changed = fragment.replace(ORIGINAL_SAMPLE + " ", SAMPLE)
+                .replace(ORIGINAL_SAMPLE, SAMPLE);
         changed = changed.replace(SAMPLER, SAMPLER + "\n"
                 + "uniform sampler2D u_workspaceBlurredTexture;\n"
                 + "uniform float u_workspaceBlurMix;");
