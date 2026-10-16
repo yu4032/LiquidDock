@@ -54,7 +54,10 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.icon.get() != icon) prepare(icon);
         state = current;
-        if (state != null && state.icon.get() == icon) state.expectedFolderInfo = folderInfo;
+        if (state != null && state.icon.get() == icon) {
+            state.expectedFolderInfo = folderInfo;
+            state.nativeOpenRequested = true;
+        }
     }
 
     static void prepare(ViewGroup sourceIcon) {
@@ -492,8 +495,11 @@ final class OpenFolderGlassCoordinator {
 
     private static void cancelUnused(View icon) {
         State state = current;
+        // ACTION_UP/CANCEL can precede the OEM's delayed FolderCling.open.
+        // Once Launcher.openFolder has accepted this owner, it is no longer
+        // an unused touch session and must survive that native handoff.
         if (state != null && state.icon.get() == icon
-                && state.cling.get() == null) releaseAll();
+                && !state.nativeOpenRequested && state.cling.get() == null) releaseAll();
     }
 
     private static boolean live(State state) { return current == state && OWNER.owns(state.serial); }
@@ -555,6 +561,7 @@ final class OpenFolderGlassCoordinator {
         final String launcherSurfaceName;
         final String[] dockRootsAtPrepare;
         Object expectedFolderInfo;
+        boolean nativeOpenRequested;
         final int width, height, rotation;
         LiquidDockConfig.Glass glass;
         final Matrix toGlobal = new Matrix(), rootToGlobal = new Matrix(), toRoot = new Matrix();
