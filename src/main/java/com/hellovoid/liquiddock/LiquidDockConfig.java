@@ -222,7 +222,7 @@ final class LiquidDockConfig {
 
     static final class Glass {
         final boolean enabled, securityCenterEnabled, systemUiHandleMenuEnabled,
-                folderEnabled, widgetEnabled, widgetDarkContent, iconEnabled,
+                folderEnabled, openFolderEnabled, widgetEnabled, widgetDarkContent, iconEnabled,
                 functionalDockIconEnabled, recentsCapsuleEnabled;
         final GlassComponentStyle iconStyle;
         final GlassComponentStyle widgetStyle;
@@ -269,6 +269,8 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.SMALL_FOLDER_GLASS.runtimeFallback());
             boolean resolvedLargeEnabled = c.b(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(),
                     ConfigSchema.Glass.LARGE_FOLDER_GLASS.runtimeFallback());
+            openFolderEnabled = c.b(ConfigSchema.Glass.OPEN_FOLDER_GLASS.name(),
+                    ConfigSchema.Glass.OPEN_FOLDER_GLASS.runtimeFallback());
             float smallRadius = c.f(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name(),
                     ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.runtimeFallback());
             float largeRadius = c.f(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name(),
