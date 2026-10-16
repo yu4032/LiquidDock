@@ -54,5 +54,8 @@ public class OpenFolderGlassEnableConfigTest {
             }
         }
         assertTrue(registered);
+        assertTrue("reset-to-default must not silently disable expanded folder glass",
+                (Boolean) com.hellovoid.liquiddock.config.PresetManager.defaultValues()
+                        .get(ConfigSchema.Glass.OPEN_FOLDER_GLASS.name()));
     }
 }
