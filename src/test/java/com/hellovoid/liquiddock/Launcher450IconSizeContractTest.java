@@ -31,25 +31,24 @@ public class Launcher450IconSizeContractTest {
     }
 
     @Test
-    public void expandedGridKeepsNativeMeasureInBothDirections() throws Exception {
-        // Folder grid's own pitch and caption space must not follow
-        // smaller or larger global icon percentages.
-        String source = Files.readString(Path.of(
-                "src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java"));
-        assertTrue("FolderGridView has its explicit measure domain",
-                source.contains("MeasureDomain.FOLDER_CONTENT"));
-        String nativeReturn = "if (domain == MeasureDomain.FOLDER_CONTENT) return result;";
-        assertTrue("The native icon size is returned unmodified",
-                source.contains(nativeReturn));
-        assertTrue("Native folder bypass must precede global enabled/percent handling",
-                source.indexOf(nativeReturn) < source.indexOf(
-                        "if (!enabled || domain == null || !(result instanceof Integer))"));
-        assertFalse("No remaining one-way clamp",
-                source.contains("fitNativeFolderCell"));
-        assertEquals(96, Launcher450IconSizePolicy.scaledPx(96, false, 80));
-        assertEquals(96, Launcher450IconSizePolicy.scaledPx(96, false, 120));
-        assertEquals(77, Launcher450IconSizePolicy.scaledPx(96, true, 80));
-        assertEquals(115, Launcher450IconSizePolicy.scaledPx(96, true, 120));
+    public void expandedGridKeepsNativeMeasureInBothDirections() {
+        for (int percent : new int[]{80, 90, 100, 110, 120}) {
+            assertEquals("expanded FolderGridView always returns the OEM value",
+                    96, Launcher450IconSizePolicy.measuredIconSize(
+                            96, true, percent, true));
+            assertEquals(96, Launcher450IconSizePolicy.measuredIconSize(
+                    96, false, percent, true));
+            assertEquals("other domains retain their requested icon size",
+                    Launcher450IconSizePolicy.scaledPx(96, true, percent),
+                    Launcher450IconSizePolicy.measuredIconSize(
+                            96, true, percent, false));
+        }
+        assertEquals(0, Launcher450IconSizePolicy.measuredIconSize(
+                0, true, 120, true));
+        assertEquals(115, Launcher450IconSizePolicy.measuredIconSize(
+                96, true, 120, false));
+        assertEquals(77, Launcher450IconSizePolicy.measuredIconSize(
+                96, true, 80, false));
     }
 
     @Test
@@ -97,8 +96,10 @@ public class Launcher450IconSizeContractTest {
                 source.contains("com.miui.home.launcher.FolderGridView"));
         assertTrue("folder inner ShortcutIcon must have an explicit measure domain",
                 source.contains("MeasureDomain.FOLDER_CONTENT"));
-        assertTrue("expanded folder always bypasses the global icon-size override",
-                source.contains("if (domain == MeasureDomain.FOLDER_CONTENT) return result;"));
+        assertTrue("expanded folder uses its native-size measurement domain",
+                source.contains("domain == MeasureDomain.FOLDER_CONTENT"));
+        assertTrue("hook delegates to the typed measurement policy",
+                source.contains("Launcher450IconSizePolicy.measuredIconSize"));
     }
 
     @Test
