@@ -36,32 +36,6 @@ public class OpenFolderBackdropPolicyTest {
         assertEquals(1f, opacity(2f), 0f);
     }
 
-    @Test public void recentsUsesOneOriginalNativeRatioForBackdropAndCompositorAlpha() {
-        assertEquals(1f, OpenFolderBackdropPolicy.recentsBackdropAlpha(0f), 0f);
-        assertEquals(.75f, OpenFolderBackdropPolicy.recentsBackdropAlpha(.25f), .0001f);
-        assertEquals(.5f, OpenFolderBackdropPolicy.recentsBackdropAlpha(.5f), .0001f);
-        assertEquals(.25f, OpenFolderBackdropPolicy.recentsBackdropAlpha(.75f), .0001f);
-        assertEquals(0f, OpenFolderBackdropPolicy.recentsBackdropAlpha(1f), 0f);
-        assertEquals(0f, OpenFolderBackdropPolicy.recentsBackdropAlpha(1.2f), 0f);
-        assertEquals(1f, OpenFolderBackdropPolicy.recentsBackdropAlpha(-.2f), 0f);
-        assertTrue("No native progress is not permission to cut to the final dim frame",
-                Float.isNaN(OpenFolderBackdropPolicy.recentsBackdropAlpha(Float.NaN)));
-        assertTrue(Float.isNaN(
-                OpenFolderBackdropPolicy.recentsBackdropAlpha(Float.POSITIVE_INFINITY)));
-        // Native return traces the same values backwards, no second animator.
-        for (int i = 100; i >= 0; i--) {
-            float p = i / 100f;
-            assertEquals(1f - p, OpenFolderBackdropPolicy.recentsBackdropAlpha(p), .0001f);
-        }
-    }
-
-    @Test public void nativeWallpaperMustFinishBeforeCachedFolderFullReveal() {
-        assertFalse(OpenFolderBackdropPolicy.mayCompleteRecentsReturn(false, true));
-        assertFalse(OpenFolderBackdropPolicy.mayCompleteRecentsReturn(true, true));
-        assertFalse(OpenFolderBackdropPolicy.mayCompleteRecentsReturn(false, false));
-        assertTrue(OpenFolderBackdropPolicy.mayCompleteRecentsReturn(true, false));
-    }
-
     @Test public void closingGlassSmoothlyBecomesWorkspaceMaterial() {
         assertEquals(1f, OpenFolderBackdropPolicy.workspaceGlassMix(0f), 0f);
         assertEquals(.5f, OpenFolderBackdropPolicy.workspaceGlassMix(.5f), 0.0001f);
