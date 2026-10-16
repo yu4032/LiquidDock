@@ -424,6 +424,20 @@ final class LauncherGlassHomePresentationHook {
         applyUnlockDecision(decision, "SystemUI LOCKSCREEN->GONE FINISHED");
     }
 
+    /** Screen-off is not an unlock capture freeze; it only records a
+     * presentation boundary for long idle periods without Launcher PREPARE.
+     */
+    static void onSystemScreenOff() {
+        UNLOCK_RECOVERY.onScreenOff();
+    }
+
+    /** ACTION_USER_PRESENT is the platform fallback if the SystemUI-specific
+     * GONE callback is absent or its capture barrier already timed out.
+     */
+    static void onSystemUserPresent() {
+        applyUnlockDecision(UNLOCK_RECOVERY.onUserPresent(), "ACTION_USER_PRESENT");
+    }
+
     /** Freshness stays gated until GONE, even when motion permits live capture and rebind. */
     static boolean isUnlockCaptureBlocked() {
         if (!UNLOCK_RECOVERY.isBlocked()) return false;
@@ -465,6 +479,11 @@ final class LauncherGlassHomePresentationHook {
         }
         if (decision.releaseBarrier) {
             finishUnlockBarrierNow(reason + "/fresh-reconcile", decision.serial);
+        } else if (decision.requestFreshReconcile) {
+            // A prior fail-open may have already cleared the pending flag.
+            // The actual keyguard-exit event still owes Workspace a fresh
+            // capture; otherwise glass remains missing until a user gesture.
+            LauncherGlassSceneController.reconcilePostUnlockForAll(reason);
         }
     }
 
