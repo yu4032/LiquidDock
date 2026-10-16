@@ -66,6 +66,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile PrismalHighlightProfile highlightProfile;
     private volatile float workspaceBlurPx;
     private volatile boolean folderClosing;
+    // The OEM Recents compositor owns the screen-wide wallpaper, its scaling
+    // and dimming. OPEN_FOLDER may retain a frozen image as a Prismal texture
+    // input, but must not draw that second wallpaper behind the lens in Recents.
+    private volatile boolean folderRecentsLensOnly;
     // RootPassBlurBackend retains its normalized FBO after freezing popup updates.
     // Reuse that valid texture to re-blur the existing snapshot without recapturing
     // the now-visible menu or changing the PassBlur/EGL owner.
@@ -246,6 +250,31 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     void requestCachedGlassRedraw() {
         if (!shuttingDown && backdropPrepared) {
             sourceBackend.postToRenderThread(this::renderCurrent);
+        }
+    }
+
+    /** Switch ONLY the OPEN_FOLDER final compositor pass. Prepared frozen
+     * Gaussian textures remain resident and are still sampled by Prismal,
+     * but the full-root wallpaper quad is omitted while native Recents owns
+     * wallpaper scaling/dimming. Completion fires after the replacement EGL
+     * swap, so callers may safely remove the temporary root-space clip.
+     */
+    void setFolderRecentsLensOnly(boolean lensOnly, Runnable afterSwap) {
+        if (!folderBackdrop || shuttingDown) return;
+        if (folderRecentsLensOnly == lensOnly && afterSwap == null) return;
+        folderRecentsLensOnly = lensOnly;
+        if (!sourceBackend.postToRenderThread(() -> {
+            if (shuttingDown) return;
+            renderCurrent();
+            if (afterSwap != null && output != null
+                    && output.eglSurface != EGL14.EGL_NO_SURFACE
+                    && backdropPrepared) {
+                mainHandler.post(() -> {
+                    if (!shuttingDown) afterSwap.run();
+                });
+            }
+        }) && afterSwap != null) {
+            MainHook.log(TAG + " Recents output handoff render unavailable");
         }
     }
 
@@ -515,7 +544,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        if (folderBackdrop) {
+        if (folderBackdrop && !folderRecentsLensOnly) {
             // The frozen source contains wallpaper only: both Launcher and
             // Dock surfaces were excluded before PassBlur producer binding.
             GLES20.glEnable(GLES20.GL_BLEND);
@@ -538,6 +567,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
+        if (folderBackdrop && folderRecentsLensOnly) {
+            // Draw only the transparent Prismal lens on a cleared RGBA EGL
+            // output. Outside the lens the native wallpaper remains untouched.
+            GLES20.glEnable(GLES20.GL_BLEND);
+            GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+        }
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         if (folderBackdrop) GLES20.glDisable(GLES20.GL_BLEND);
         unbindQuad(compositePositionLocation, compositeUvLocation);
