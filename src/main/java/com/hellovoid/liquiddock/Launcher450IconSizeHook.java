@@ -97,12 +97,12 @@ final class Launcher450IconSizeHook {
             HookUtil.hook(getIconSize, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 MeasureDomain domain = ACTIVE_DOMAIN.get();
-                // FolderGridView owns its own row pitch, viewport and caption.
-                // Bypass the global icon-size setting in BOTH directions.
-                // Workspace/Dock and folder-cover scaling are unaffected.
-                if (domain == MeasureDomain.FOLDER_CONTENT) return result;
-                if (!enabled || domain == null || !(result instanceof Integer)) return result;
-                return Launcher450IconSizePolicy.scaledPx((Integer) result, true, percent);
+                if (domain == null || !(result instanceof Integer)) return result;
+                // FolderGridView owns a fixed row pitch and caption height.
+                // All other domains still honor the global icon-size setting.
+                return Launcher450IconSizePolicy.measuredIconSize(
+                        (Integer) result, enabled, percent,
+                        domain == MeasureDomain.FOLDER_CONTENT);
             });
 
             installed = true;
