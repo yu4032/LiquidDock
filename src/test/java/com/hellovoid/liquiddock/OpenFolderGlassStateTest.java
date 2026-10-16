@@ -4,6 +4,25 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class OpenFolderGlassStateTest {
+    @Test public void firstGlassFrameArrivingDuringRecentsRemainsReplayable() {
+        OpenFolderGlassState state = new OpenFolderGlassState();
+        long serial = state.prepare();
+        assertTrue(state.beginOpen(serial));
+        state.onRecentsShown(serial);
+        assertTrue(state.onBackdropReady(serial));
+        assertTrue("first frame can commit while Recents owns presentation",
+                state.onPresented(serial));
+        assertTrue("cached lens remains valid while temporarily covered",
+                state.maySuppressNative());
+        state.onRecentsHidden(serial);
+        assertTrue(state.shouldReplayAfterRecents(serial, true));
+        assertTrue(state.completeRecentsReturn(serial));
+        assertTrue("native close still owns final release",
+                state.beginClose(serial));
+        assertTrue(state.finishClose(serial));
+        assertFalse(state.shouldReplayAfterRecents(serial, true));
+    }
+
     @Test public void recentsCannotDestroyOpenFolderOrReviveStaleOwnership() {
         OpenFolderGlassState state = new OpenFolderGlassState();
         long serial = state.prepare();
