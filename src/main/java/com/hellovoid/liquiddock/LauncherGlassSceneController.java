@@ -335,6 +335,35 @@ final class LauncherGlassSceneController {
         }
     }
 
+    /** A true keyguard-exit event arrived after a bounded fail-open, or the
+     * Launcher PREPARE hook was skipped during extended sleep. Capture must
+     * be refreshed even when unlockTransitionPending is already false.
+     * Never recycle/reveal an old workspace output as proof of fresh glass.
+     */
+    static void reconcilePostUnlockForAll(String reason) {
+        ArrayList<LauncherGlassSceneController> snapshot;
+        synchronized (LauncherGlassSceneController.class) {
+            snapshot = new ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassSceneController controller : snapshot) {
+            if (controller == null) continue;
+            controller.reconcilePostUnlock(reason);
+        }
+    }
+
+    private void reconcilePostUnlock(String reason) {
+        if (state.state() == State.DETACHED) return;
+        state.onGenerationInvalidated();
+        applyLayerVisibility();
+        MainHook.log(TAG + " late unlock HOME freshness requested reason=" + reason
+                + " generation=" + state.generation());
+        if (!isPresentationPending() && state.state() != State.COVERED) {
+            requestFreshBackdrop(state.generation());
+        }
+        // A pending HOME/Recents/Folder owner already requests its next fresh
+        // generation when that semantic presentation boundary is released.
+    }
+
     static void onWallpaperChangedForAll() {
         ArrayList<LauncherGlassSceneController> snapshot;
         synchronized (LauncherGlassSceneController.class) {
