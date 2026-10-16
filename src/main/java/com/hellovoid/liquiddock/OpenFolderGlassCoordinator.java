@@ -320,6 +320,10 @@ final class OpenFolderGlassCoordinator {
         int position = workspaceIndex >= 0 && workspaceIndex < folderIndex
                 ? workspaceIndex : folderIndex;
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(cling.getContext(), state.session);
+        // Inverse host compensation uses the layer's top-left as its origin.
+        // Do this once, not on every 165Hz pre-draw.
+        layer.setPivotX(0f);
+        layer.setPivotY(0f);
         state.layerHost = new WeakReference<>(host);
         state.layer = layer;
         host.addView(layer, position,
@@ -628,10 +632,20 @@ final class OpenFolderGlassCoordinator {
         try {
             View root = state.root.get(), cling = state.cling.get(), folder = state.folder.get();
             ViewGroup host = state.layerHost.get();
-            if (root == null || cling == null || folder == null || !root.isAttachedToWindow()
+            if (root == null || !root.isAttachedToWindow()
                     || root.getWidth() != state.width || root.getHeight() != state.height
                     || (root.getDisplay() != null && root.getDisplay().getRotation() != state.rotation)
                     || !enabled(state.icon.get())) { releaseAll(); return; }
+            if (cling == null || folder == null) {
+                // Recents is permitted to hide/recycle FolderCling. The native
+                // CLOSE callback, not a transient weak reference, releases
+                // the frozen session.
+                if (state.recentsGestureObserved
+                        || OWNER.isRecentsCovered(state.serial)
+                        || OWNER.isRecentsReturnPending(state.serial)) return;
+                releaseAll();
+                return;
+            }
             if (state.session == null) return;
             attachOutputLayer(state);
             host = state.layerHost.get();
@@ -670,8 +684,6 @@ final class OpenFolderGlassCoordinator {
             // WindowManager task leash, if present, remains OEM-owned; it is
             // not observable in transformMatrixToGlobal().
             ShortcutPopupGlassLayer layer = state.layer;
-            layer.setPivotX(0f);
-            layer.setPivotY(0f);
             float inverseX = hostFrame.inverseScaleX();
             float inverseY = hostFrame.inverseScaleY();
             float translateX = hostFrame.inverseTranslationX(layer.getLeft());
@@ -692,6 +704,20 @@ final class OpenFolderGlassCoordinator {
                 // expanded material without scaling its entire backdrop.
                 OpenFolderGlassGeometry.Frame projected = hostFrame.project(
                         state.expandedFrame, state.hostBaseline);
+                if (Api101Bridge.isDebugLoggingEnabled() && state.hostBaseline != null) {
+                    int bucket = Math.round(hostFrame.scaleX * 100f);
+                    if (bucket != state.lastRecentsHostScaleBucket) {
+                        state.lastRecentsHostScaleBucket = bucket;
+                        Api101Bridge.folderLifecycle("recents-host-matrix serial="
+                                + state.serial + " hostScale=" + hostFrame.scaleX
+                                + "/" + hostFrame.scaleY
+                                + " hostOffset=" + hostFrame.x + "/" + hostFrame.y
+                                + " layerInverse=" + inverseX + "/" + inverseY
+                                + " phase=" + (OWNER.isRecentsCovered(state.serial)
+                                        ? "covered" : "interactive-return")
+                                + " renderer=LENS_ONLY");
+                    }
+                }
                 if (projected != null) {
                     LauncherGlassGeometry.Snapshot scene = LauncherGlassGeometry.resolveStatic(
                             state.width, state.height,
@@ -708,6 +734,7 @@ final class OpenFolderGlassCoordinator {
                     if (!OWNER.completeRecentsReturn(state.serial)) return;
                     state.recentsGestureObserved = false;
                     state.recentsGestureReturnSignaled = false;
+                    state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
                     layer.reveal();
                 } else if (state.recentsGestureObserved) {
                     // Cancelled gesture: wait for both the native blur reset
@@ -716,6 +743,7 @@ final class OpenFolderGlassCoordinator {
                     if (!state.recentsGestureReturnSignaled || !hostRestored) return;
                     state.recentsGestureObserved = false;
                     state.recentsGestureReturnSignaled = false;
+                    state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
                 }
             }
             if (!state.motion.isClosing()
@@ -981,6 +1009,7 @@ final class OpenFolderGlassCoordinator {
         boolean recentsGestureObserved;
         boolean recentsGestureReturnSignaled;
         OpenFolderHostTransform hostBaseline;
+        int lastRecentsHostScaleBucket = Integer.MIN_VALUE;
         final OpenFolderNativeCloseProgress nativeCloseProgress = new OpenFolderNativeCloseProgress();
         OpenFolderGlassGeometry.Frame closeImageStart, closePlateStart;
         int closeProgressLogBucket = -1;
