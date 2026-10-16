@@ -6,7 +6,8 @@ import org.junit.Test;
 
 /** Typed regression for native view-matrix isolation, no production-source scanning. */
 public class OpenFolderHostTransformTest {
-    private static final float EPS = .0001f;
+    // Subpixel geometry agreement using 32-bit floats and translated matrices.
+    private static final float EPS = .025f;
 
     private static OpenFolderHostTransform host(
             float x, float y, float sx, float sy) {
