@@ -376,7 +376,7 @@ final class OpenFolderGlassCoordinator {
         // on asynchronous source-window attachment or the first EGL swap.
         // Otherwise the stock folder plate paints before our output exists.
         trackNativeMaterial(state);
-        state.closedFrame = bounds(image(sourceIcon), state);
+        state.closedFrame = bounds(image(sourceIcon), state, true);
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
         state.observer = state.root.get().getViewTreeObserver();
@@ -849,6 +849,10 @@ final class OpenFolderGlassCoordinator {
     }
 
     private static OpenFolderGlassGeometry.Frame bounds(View view, State state) {
+        return bounds(view, state, false);
+    }
+
+    private static OpenFolderGlassGeometry.Frame bounds(View view, State state, boolean desktopIcon) {
         View root = state.root.get();
         if (view == null || root == null) return null;
         int width = view.getWidth(), height = view.getHeight();
@@ -870,9 +874,24 @@ final class OpenFolderGlassCoordinator {
         float bottom = Math.max(Math.max(points[1], points[3]), Math.max(points[5], points[7]));
         Drawable drawable = view instanceof ImageView ? ((ImageView) view).getDrawable() : view.getBackground();
         Object corner = invoke(drawable, "getCornerRadius");
-        float radius = corner instanceof Number ? ((Number) corner).floatValue()
-                : state.glass.largeFolderStyle.cornerRadiusDp * view.getResources().getDisplayMetrics().density;
-        if (!(radius > 0f)) radius = Math.min(width, height) * 0.16f;
+        float nativeRadius = corner instanceof Number ? ((Number) corner).floatValue()
+                : Float.NaN;
+        float density = view.getResources().getDisplayMetrics().density;
+        float radius;
+        if (desktopIcon) {
+            // The desktop endpoint uses the miniature icon's own glass style.
+            // Using largeFolderStyle here leaves 1x1 with an expanded-radius
+            // endpoint, then the resident small-folder glass visibly snaps.
+            radius = OpenFolderGlassGeometry.sourceIconRadiusPx(
+                    isSmall(state.icon.get()),
+                    state.glass.smallFolderStyle.cornerRadiusDp,
+                    state.glass.largeFolderStyle.cornerRadiusDp,
+                    density, nativeRadius, width, height);
+        } else {
+            radius = Float.isFinite(nativeRadius) && nativeRadius > 0f
+                    ? nativeRadius : state.glass.largeFolderStyle.cornerRadiusDp * density;
+            if (!(radius > 0f)) radius = Math.min(width, height) * .16f;
+        }
         float scale = Math.min((right - left) / width, (bottom - top) / height);
         return new OpenFolderGlassGeometry.Frame(left, top, right, bottom, radius * scale);
     }
