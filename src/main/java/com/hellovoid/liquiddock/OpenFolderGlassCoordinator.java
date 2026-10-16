@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Matrix;
 import android.graphics.drawable.Drawable;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,11 +26,11 @@ final class OpenFolderGlassCoordinator {
      * Never call from an animation frame or the EGL render hot path.
      */
     private static void trace(String boundary, State state) {
-        if (!MainHook.debugLogging) return;
+        if (!Api101Bridge.isDebugLoggingEnabled()) return;
         View root = state != null ? state.root.get() : null;
         View cling = state != null ? state.cling.get() : null;
         ShortcutPopupGlassLayer layer = state != null ? state.layer : null;
-        Log.i(LIFECYCLE_LOG_TAG, boundary
+        Api101Bridge.folderLifecycle(boundary
                 + " serial=" + (state != null ? state.serial : -1L)
                 + " owns=" + (state != null && OWNER.owns(state.serial))
                 + " recents=" + (state != null && OWNER.isRecentsCovered(state.serial))
