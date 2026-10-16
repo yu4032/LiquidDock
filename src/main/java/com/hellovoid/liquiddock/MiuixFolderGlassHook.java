@@ -72,6 +72,7 @@ final class MiuixFolderGlassHook {
             });
 
             installFolderOpenCloseHooks(classLoader);
+            ExpandedFolderGridProbe.install(classLoader);
             observeFolderVariantConstructors(classLoader, glassConfig);
 
             Class<?> utilities = Class.forName(
