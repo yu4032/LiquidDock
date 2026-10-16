@@ -33,6 +33,15 @@ final class OpenFolderGlassState {
         return owns(value) && (recentsCovered || (recentsReturnPending && nativeStillOpened));
     }
 
+    /** Returning the native folder may still be INVISIBLE for one or more
+     * OEM traversals; availability of the cached lens is not tied to that
+     * transient View visibility.
+     */
+    boolean shouldReplayAfterRecents(long value, boolean nativeStillOpened) {
+        return owns(value) && presented && !recentsCovered
+                && recentsReturnPending && nativeStillOpened;
+    }
+
     boolean completeRecentsReturn(long value) {
         if (!owns(value) || !recentsReturnPending || recentsCovered) return false;
         recentsReturnPending = false;
