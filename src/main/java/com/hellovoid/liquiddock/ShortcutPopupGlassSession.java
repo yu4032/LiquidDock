@@ -55,8 +55,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final boolean folderBackdrop;
-    // Native Workspace is hidden for modal input safety. Present its real
-    // PRE-OPEN frozen desktop blur under the Prismal lens; not wallpaper-only.
+    // OEM native modal state hides Workspace/Dock. Present a wallpaper-only
+    // frozen blur behind the Prismal lens; do not snapshot Launcher content.
     private volatile float backdropOpacity;
     private final LauncherGlassOutputRenderState folderRenderWork = new LauncherGlassOutputRenderState();
     private final FolderGlassFramePacing folderFramePacing = new FolderGlassFramePacing();
@@ -77,7 +77,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean sourceFrozen;
-    private final FolderDesktopCaptureGate desktopCapture = new FolderDesktopCaptureGate();
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -237,14 +236,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         return !shuttingDown && backdropPrepared && sourceFrozen;
     }
 
-    /** Atomically stop accepting frames before the native folder opens. */
-    boolean sealFolderCapture() {
-        if (!folderBackdrop || shuttingDown) return false;
-        boolean ready = desktopCapture.seal();
-        sourceBackend.setUpdatesEnabled(false, "folder-pre-native-open-fence");
-        return ready && hasFrozenBackdrop();
-    }
-
     void updateGeometry(LauncherGlassGeometry.Snapshot next) {
         if (shuttingDown || next == null) return;
         LauncherGlassGeometry.Snapshot old = geometry;
@@ -324,8 +315,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
-        // The separate PassBlur authority includes Launcher; freeze only its PRE-OPEN desktop frame.
-        if (folderBackdrop && !desktopCapture.mayPrepare()) return;
+        // The Launcher and Dock surfaces are excluded for OPEN_FOLDER, so a
+        // late wallpaper frame cannot recursively contain FolderCling.
+        if (folderBackdrop && sourceFrozen) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -341,21 +333,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalWidth,
                     frame.logicalHeight,
                     prismalParams);
-            boolean first;
-            if (folderBackdrop) {
-                // GPU work may complete after the UI thread opened Launcher.
-                // Publication is serialized with that native-open fence.
-                first = desktopCapture.commit(() -> {
-                    backdropPrepared = true;
-                    sourceFrozen = true;
-                });
-                if (!first) return;
-            } else {
-                backdropPrepared = true;
-                first = !sourceFrozen;
+            backdropPrepared = true;
+            if (!sourceFrozen) {
                 sourceFrozen = true;
-            }
-            if (first) {
                 sourceBackend.setUpdatesEnabled(false, "shortcut-popup-frozen");
                 MainHook.log(TAG + " workspace backdrop frozen generation=" + frame.generation);
                 mainHandler.post(() -> {
@@ -471,10 +451,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         if (folderBackdrop) {
-            // The frozen source now CONTAINS the real Launcher workspace
-            // (icons/widgets/wallpaper). Present its prepared blur below
-            // folder optics; native Workspace is hidden to preserve OEM input
-            // modality, not because this picture is wallpaper-only.
+            // The frozen source contains wallpaper only: both Launcher and
+            // Dock surfaces were excluded before PassBlur producer binding.
             GLES20.glEnable(GLES20.GL_BLEND);
             GLES20.glBlendColor(0f, 0f, 0f, backdropOpacity);
             GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);

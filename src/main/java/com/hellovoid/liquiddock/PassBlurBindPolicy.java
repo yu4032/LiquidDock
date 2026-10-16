@@ -12,15 +12,16 @@ final class PassBlurBindPolicy {
 
     private PassBlurBindPolicy() {}
 
-    /** Real desktop capture before FolderCling can render. Source window itself
-     * is already excluded by exclusions(rootSurfaceName,...).
-     * Do NOT exclude Launcher, or the lens will contain wallpaper alone.
+    /** Wallpaper-only backdrop. The native Launcher owns the modal folder
+     * transition and hides Workspace/Dock; their surface pixels must not be
+     * captured into a static second copy of the folder or its source icon.
+     * The capture authority window is excluded by exclusions(...).
      */
-    static String[] folderDesktopExclusions(String launcherRootName) {
+    static String[] folderWallpaperExclusions(String launcherRootName) {
         if (launcherRootName == null || launcherRootName.isBlank()) {
             throw new IllegalArgumentException("Folder desktop requires Launcher surface identity");
         }
-        return new String[]{"DockAssistantView"};
+        return new String[]{launcherRootName, "DockAssistantView"};
     }
 
     static float nativeScale(PassBlurDomain domain, float requestedScale) {

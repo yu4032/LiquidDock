@@ -154,9 +154,9 @@ final class MiuixFolderGlassHook {
         }
     }
 
-    /** Stop both cached-glass producers at the authoritative Launcher entry,
-     * before FolderCling can make its first pixels visible. The independent
-     * pre-open desktop snapshot remains frozen and never samples FolderCling.
+    /** Freeze existing Dock/Workspace glass output at the native folder entry.
+     * The independent folder source excludes Launcher and Dock surfaces;
+     * native FolderCling visibility remains entirely OEM-owned.
      */
     static void onFolderOpeningBeforeNativeAnimation() {
         OemFolderBlurStrengthHook.setFolderOpening(true);
@@ -184,8 +184,8 @@ final class MiuixFolderGlassHook {
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
                 FolderDiagnosticTrace.event("OEM-dispatchFolderClose");
-                // Freeze remains in effect through the native close spring;
-                // restoreOpenedFolderOwner releases it at its real completion.
+                // Freeze persists through native close; the correct committed
+                // Workspace frame is acquired only after folder release.
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             MainHook.diag("[FolderTrace] semantic FolderStatus dispatcher hooked");
@@ -262,8 +262,8 @@ final class MiuixFolderGlassHook {
         // the original material View.
 
         HookUtil.hook(HookUtil.findMethodExact(folderIcon, "onOpen", new Class<?>[0]), chain -> {
-            // This callback may precede Launcher.openFolder on OEM variants.
-            OpenFolderGlassCoordinator.freezePreparedDesktopBeforeNativeOpen();
+            // OEM FolderIcon.onOpen may precede Launcher.openFolder. Wallpaper
+            // capture excludes Launcher, so neither path needs a deadline fence.
             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
             if (chain.getThisObject() instanceof ViewGroup) {
                 setOwnerSuppressed((ViewGroup) chain.getThisObject(), true);
