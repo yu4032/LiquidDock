@@ -38,20 +38,10 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsHidden(state.serial);
-        View cling = state.cling.get();
-        Object opened = invoke(cling, "isOpened");
-        // Only an explicit native close may invalidate a retained session.
-        // An unavailable reflection result during Recents isn't close proof.
-        if (Boolean.FALSE.equals(opened)) {
-            releaseAll();
-            return;
-        }
-        // Do not wait for a future pre-draw where FolderCling is VISIBLE:
-        // the native view can remain temporarily hidden after Recents ends.
-        // Its cached glass is already owned by Launcher and should be ready
-        // for the first OEM returning HOME frame, without new PassBlur.
-        if (OWNER.shouldReplayAfterRecents(state.serial,
-                !Boolean.FALSE.equals(opened))) {
+        // onRecentViewHide precedes the OEM HOME presentation. isOpened()
+        // and visibility are transient here; the hooked native close callback
+        // (not a snapshot of an intermediate view flag) owns teardown.
+        if (OWNER.shouldReplayAfterRecents(state.serial, true)) {
             if (state.session != null) state.session.requestCachedGlassRedraw();
             if (state.layer != null) state.layer.reveal();
         }
@@ -507,18 +497,10 @@ final class OpenFolderGlassCoordinator {
                     || !enabled(state.icon.get())) { releaseAll(); return; }
             if (!state.motion.isClosing()
                     && (!cling.isAttachedToWindow() || cling.getVisibility() != View.VISIBLE)) {
-                Object opened = invoke(cling, "isOpened");
-                // Only an explicit OEM false may tear down an otherwise
-                // valid frozen session. Reflection can be temporarily
-                // unavailable while Recents swaps its native view owners.
-                if (OWNER.keepHiddenFolder(state.serial, !Boolean.FALSE.equals(opened))) return;
-                releaseAll();
-                return;
-            }
-            // An OEM close that occurred while Recents was visible may have
-            // bypassed the animated callbacks. Do not revive an orphan lens.
-            if (!state.motion.isClosing() && OWNER.keepHiddenFolder(state.serial, false)
-                    && Boolean.FALSE.equals(invoke(cling, "isOpened"))) {
+                // Recents may keep the native FolderCling temporarily
+                // invisible even after its onRecentViewHide callback.
+                // Preserve until a real OEM close or terminal detach.
+                if (OWNER.keepHiddenFolder(state.serial, true)) return;
                 releaseAll();
                 return;
             }
@@ -760,8 +742,21 @@ final class OpenFolderGlassCoordinator {
         float nativeTargetX, nativeTargetY, nativeSourceWidth, nativeSourceHeight;
         float nativeTargetWidth, nativeTargetHeight, nativeExpandedScaleX = Float.NaN;
         final View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(View v) {}
-            @Override public void onViewDetachedFromWindow(View v) { if (live(State.this)) releaseAll(); }
+            @Override public void onViewAttachedToWindow(View v) {
+                // OEM Recents may recycle the Launcher root and output Surface.
+                // The TextureView will recreate its EGL OUTPUT only; the
+                // retired capture producer must remain retired.
+                if (live(State.this) && !OWNER.isRecentsCovered(serial)) {
+                    if (session != null) session.requestCachedGlassRedraw();
+                    v.postInvalidateOnAnimation();
+                }
+            }
+            @Override public void onViewDetachedFromWindow(View v) {
+                // This is not proof of folder CLOSE during Recents. A real
+                // Launcher root destruction outside that transition may abort.
+                if (live(State.this) && !OWNER.isRecentsCovered(serial)
+                        && !OWNER.isRecentsReturnPending(serial)) releaseAll();
+            }
         };
         State(View root, ViewGroup icon, long serial, LiquidDockConfig.Glass glass,
               String launcherSurfaceName, String[] dockRootsAtPrepare) {
