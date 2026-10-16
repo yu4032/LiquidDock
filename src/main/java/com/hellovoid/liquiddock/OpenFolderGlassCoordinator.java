@@ -101,7 +101,7 @@ final class OpenFolderGlassCoordinator {
         state.source = ShortcutPopupSourceOverlay.attachToLauncherBounds(root, new ShortcutPopupSourceOverlay.Listener() {
             @Override public void onAttached(ShortcutPopupSourceOverlay source) {
                 if (!live(state)) return;
-                state.session = new ShortcutPopupGlassSession(source, glass, new ShortcutPopupGlassSession.Listener() {
+                state.session = new ShortcutPopupGlassSession(source, state.glass, new ShortcutPopupGlassSession.Listener() {
                     @Override public void onBackdropReady() {
                         if (live(state)) OWNER.onBackdropReady(state.serial);
                     }
