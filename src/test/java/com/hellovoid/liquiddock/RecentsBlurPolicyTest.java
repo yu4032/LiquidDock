@@ -22,6 +22,19 @@ public class RecentsBlurPolicyTest {
     }
 
     @Test
+    public void directSurfaceDimAndRecentBlurParamsShareOptOutSemantics() {
+        // RecentBlurParams and TaskViewUtils/DimLayer are independent native
+        // authorities. On OFF both preserve the exact native value; on ON
+        // even a transition-cancellation/return surface-dim update is zero.
+        for (float dim : new float[]{0f, 0.05f, 0.35f, 0.8f, 1f}) {
+            assertEquals(dim, RecentsBlurPolicy.resolveDimming(dim, false), EPSILON);
+            assertEquals(0f, RecentsBlurPolicy.resolveDimming(dim, true), EPSILON);
+        }
+        // Disabling dim must not collapse the separate wallpaper blur curve.
+        assertEquals(.3f, RecentsBlurPolicy.scaleGestureRatio(.5f, 60), EPSILON);
+    }
+
+    @Test
     public void wallpaperDimmingCanBeRemovedWithoutChangingVendorValueWhenDisabled() {
         assertEquals(0f, RecentsBlurPolicy.resolveDimming(0.5f, true), EPSILON);
         assertEquals(0f, RecentsBlurPolicy.resolveDimming(1.0f, true), EPSILON);
