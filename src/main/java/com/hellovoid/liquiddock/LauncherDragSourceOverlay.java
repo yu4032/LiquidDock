@@ -75,11 +75,15 @@ final class LauncherDragSourceOverlay extends FrameLayout {
             @Override public void onViewDetachedFromWindow(View v) {}
         });
 
+        // Capture must not overlap IME in window Z-order. Combined with
+        // NOT_FOCUSABLE, ALT_FOCUSABLE_IM keeps this non-touchable panel
+        // *behind* the keyboard without changing drag input or focus.
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
