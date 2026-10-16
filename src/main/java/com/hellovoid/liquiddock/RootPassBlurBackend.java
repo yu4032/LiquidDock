@@ -160,10 +160,15 @@ final class RootPassBlurBackend {
      * so the WindowManager capture panel may then be safely removed.
      */
     boolean retireFrozenFolderProducer(long generation, Runnable onRetired) {
-        if (shuttingDown || bindRequest.domain() != PassBlurDomain.OPEN_FOLDER
-                || !state.hasFreshFrame(generation)) return false;
+        if (shuttingDown || bindRequest.domain() != PassBlurDomain.OPEN_FOLDER) return false;
+        // No freshness check on the main/UI caller: onPresented() is posted
+        // before drainFreshFrame() records freshness. FIFO render-thread
+        // ownership guarantees that callback registration has completed.
         return postToRenderThread(() -> {
-            if (!state.retireCapturedSource(generation)) return;
+            if (!state.retireCapturedSource(generation)) {
+                MainHook.log(TAG + " frozen folder capture retirement skipped: no fresh frame");
+                return;
+            }
             bindEpoch.incrementAndGet(); // Fence pending bind/retry callbacks.
             Miuix307PassBlurBridge.Binding old = binding;
             binding = null;
