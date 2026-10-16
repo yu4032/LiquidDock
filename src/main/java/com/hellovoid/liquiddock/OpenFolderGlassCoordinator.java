@@ -494,7 +494,10 @@ final class OpenFolderGlassCoordinator {
             if (!state.motion.isClosing()
                     && (!cling.isAttachedToWindow() || cling.getVisibility() != View.VISIBLE)) {
                 Object opened = invoke(cling, "isOpened");
-                if (OWNER.keepHiddenFolder(state.serial, Boolean.TRUE.equals(opened))) return;
+                // Only an explicit OEM false may tear down an otherwise
+                // valid frozen session. Reflection can be temporarily
+                // unavailable while Recents swaps its native view owners.
+                if (OWNER.keepHiddenFolder(state.serial, !Boolean.FALSE.equals(opened))) return;
                 releaseAll();
                 return;
             }
