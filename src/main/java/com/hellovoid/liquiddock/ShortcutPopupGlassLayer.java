@@ -17,14 +17,14 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
     private final ShortcutPopupGlassSession session;
     private Surface outputSurface;
     private boolean disposed;
-    private final Rect recentsOutlineBounds = new Rect();
-    private float recentsOutlineRadius;
-    private boolean recentsOutlineActive;
+    private final Rect backdropOutlineBounds = new Rect();
+    private float backdropOutlineRadius;
+    private boolean backdropOutlineActive;
     private ViewOutlineProvider originalOutlineProvider;
-    private final ViewOutlineProvider recentsOutline = new ViewOutlineProvider() {
+    private final ViewOutlineProvider backdropOutline = new ViewOutlineProvider() {
         @Override public void getOutline(View view, Outline outline) {
-            if (recentsOutlineActive) {
-                outline.setRoundRect(recentsOutlineBounds, recentsOutlineRadius);
+            if (backdropOutlineActive) {
+                outline.setRoundRect(backdropOutlineBounds, backdropOutlineRadius);
             } else {
                 outline.setRect(0, 0, view.getWidth(), view.getHeight());
             }
@@ -42,11 +42,11 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
         setSurfaceTextureListener(this);
     }
 
-    /** Crop the frozen full-screen wallpaper using the native folder's
-     * animated rounded silhouette. Only HWUI clips this TextureView: there
+    /** Crop the frozen full-screen wallpaper during Recents and native
+     * FolderCling.close using the corresponding OEM-driven silhouette. Only HWUI clips this TextureView: there
      * is no second GL mask, producer read or synthetic time animation.
      */
-    void setFolderRecentsOutline(OpenFolderGlassGeometry.Frame frame, int rootWidth, int rootHeight) {
+    void setFolderBackdropOutline(OpenFolderGlassGeometry.Frame frame, int rootWidth, int rootHeight) {
         if (disposed || frame == null || rootWidth <= 0 || rootHeight <= 0) return;
         int left = Math.max(0, (int) Math.floor(frame.left));
         int top = Math.max(0, (int) Math.floor(frame.top));
@@ -55,24 +55,24 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
         if (right <= left || bottom <= top) return;
         float radius = Math.max(0f, Math.min(frame.radius,
                 Math.min(right - left, bottom - top) * .5f));
-        if (recentsOutlineActive && recentsOutlineBounds.left == left
-                && recentsOutlineBounds.top == top && recentsOutlineBounds.right == right
-                && recentsOutlineBounds.bottom == bottom
-                && Math.abs(recentsOutlineRadius - radius) < .01f) return;
-        recentsOutlineBounds.set(left, top, right, bottom);
-        recentsOutlineRadius = radius;
-        if (!recentsOutlineActive) {
+        if (backdropOutlineActive && backdropOutlineBounds.left == left
+                && backdropOutlineBounds.top == top && backdropOutlineBounds.right == right
+                && backdropOutlineBounds.bottom == bottom
+                && Math.abs(backdropOutlineRadius - radius) < .01f) return;
+        backdropOutlineBounds.set(left, top, right, bottom);
+        backdropOutlineRadius = radius;
+        if (!backdropOutlineActive) {
             originalOutlineProvider = getOutlineProvider();
-            recentsOutlineActive = true;
-            setOutlineProvider(recentsOutline);
+            backdropOutlineActive = true;
+            setOutlineProvider(backdropOutline);
             setClipToOutline(true);
         }
         invalidateOutline();
     }
 
-    void clearFolderRecentsOutline() {
-        if (!recentsOutlineActive) return;
-        recentsOutlineActive = false;
+    void clearFolderBackdropOutline() {
+        if (!backdropOutlineActive) return;
+        backdropOutlineActive = false;
         setClipToOutline(false);
         setOutlineProvider(originalOutlineProvider);
         originalOutlineProvider = null;
@@ -112,7 +112,7 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
         if (disposed) return;
         disposed = true;
         animate().cancel();
-        clearFolderRecentsOutline();
+        clearFolderBackdropOutline();
         Surface current = outputSurface;
         outputSurface = null;
         if (current != null) session.detachOutput(current);
