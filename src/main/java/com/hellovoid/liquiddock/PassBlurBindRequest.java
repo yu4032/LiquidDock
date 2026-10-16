@@ -56,7 +56,7 @@ final class PassBlurBindRequest {
     static PassBlurBindRequest openFolder(View authoritativeRoot, String launcherSurfaceName) {
         return new PassBlurBindRequest(
                 authoritativeRoot, PassBlurDomain.OPEN_FOLDER, 1.0f,
-                PassBlurBindPolicy.folderDesktopExclusions(launcherSurfaceName));
+                PassBlurBindPolicy.folderWallpaperExclusions(launcherSurfaceName));
     }
 
     static PassBlurBindRequest dragOverlay(View authoritativeRoot) {

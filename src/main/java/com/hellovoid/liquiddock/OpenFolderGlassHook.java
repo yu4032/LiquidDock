@@ -77,7 +77,7 @@ final class OpenFolderGlassHook {
                 // completion as the only release boundary to avoid leaks.
                 MainHook.log("[DC][OpenFolderGlass] native close spring boundary unavailable: " + error);
             }
-            // Prewarm desktop-inclusive capture at touch-down without
+            // Prewarm the wallpaper-only PassBlur source at touch-down without
             // delaying native folder opening for an EGL/PassBlur callback.
             // Accessibility / keyboard entry can bypass FolderIcon ACTION_DOWN.
             HookUtil.hook(HookUtil.findMethodExact(launcher, "openFolder",
@@ -87,9 +87,8 @@ final class OpenFolderGlassHook {
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
-                // Seal the compositor snapshot before any OEM opening side effects.
-                // An async PassBlur frame from after this boundary is unsafe.
-                OpenFolderGlassCoordinator.freezePreparedDesktopBeforeNativeOpen();
+                // Excluding the Launcher surface makes post-open source frames
+                // safe: keep async wallpaper capture alive through native opening.
                 MiuixFolderGlassHook.onFolderOpeningBeforeNativeAnimation();
                 try {
                     return chain.proceed(args);
@@ -104,15 +103,11 @@ final class OpenFolderGlassHook {
             });
             HookUtil.hook(HookUtil.findMethodExact(cling, "open", new Class<?>[0]), chain -> {
                 try {
-                    // Last safe boundary before OEM FolderCling becomes visible.
-                    // No frame may be accepted after this point, even if the
-                    // SurfaceFlinger producer calls back late.
-                    OpenFolderGlassCoordinator.freezePreparedDesktopBeforeNativeOpen();
                     FolderDiagnosticTrace.event("FolderCling.open-before");
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     FolderDiagnosticTrace.event("FolderCling.open-after");
-                    // The folder source already owns one frozen GPU backdrop.
-                    // Neither Dock nor Workspace is hidden for this presentation.
+                    // The wallpaper-only source can complete after this call.
+                    // Launcher retains native Workspace/Dock modal behavior.
                     safe(() -> OpenFolderGlassCoordinator.onOpening((View) chain.getThisObject()));
                     return result;
                 } catch (Throwable error) {

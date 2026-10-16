@@ -216,7 +216,7 @@ final class LauncherGlassSceneController {
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
         if (created.folderCovered) {
             created.session.setFolderFrameFrozen(true);
-            created.state.setFolderCovered(true, true);
+            created.state.setFolderCovered(true, false);
         } else if (created.recentsCovered) {
             created.state.setCovered(true);
         }
@@ -611,11 +611,13 @@ final class LauncherGlassSceneController {
         if (folderCovered == covered) return;
         folderCovered = covered;
         if (covered) {
-            // A folder is an input-frame boundary, not a presentation hide.
-            // Keep the last displayed Workspace TextureView buffer intact
-            // while stopping PassBlur captures and all Prismal redraws.
+            // The native Launcher hides Workspace for modal FolderCling, but
+            // our independent TextureView would otherwise retain the original
+            // folder lens in its frozen buffer at the desktop coordinates.
+            // Hard-cover presentation while preserving its GPU cache, then
+            // require a fresh post-close frame before showing it again.
             session.setFolderFrameFrozen(true);
-            state.setFolderCovered(true, true);
+            state.setFolderCovered(true, false);
             applyLayerVisibility();
             return;
         }
@@ -689,8 +691,8 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            // Folder and Recents suspend source/computation but preserve the
-            // last output; rotation still cannot display stale geometry.
+            // Recents preserves its cached scene; native folder opening hides
+            // the cached Workspace glass until a fresh post-close frame.
             boolean hardPresentationCover =
                     (folderCovered && !state.followsNativeFolderFade())
                     || state.isRotationPresentationPending();

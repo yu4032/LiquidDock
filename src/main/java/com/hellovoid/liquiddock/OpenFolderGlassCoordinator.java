@@ -57,24 +57,6 @@ final class OpenFolderGlassCoordinator {
         if (state != null && state.icon.get() == icon) state.expectedFolderInfo = folderInfo;
     }
 
-    /** Strict prediction-time boundary for a source which now INCLUDES the
-     * Launcher desktop. After this point the OEM may render FolderCling, so a
-     * late PassBlur callback must never be accepted as a valid background.
-     * Programmatic opens with no early ACTION_DOWN deliberately use stock.
-     */
-    static void freezePreparedDesktopBeforeNativeOpen() {
-        State state = current;
-        if (state == null) return;
-        if (state.session == null || !state.session.sealFolderCapture()) {
-            MainHook.diag("[FolderTrace] desktop snapshot NOT READY before native folder; "
-                    + "using OEM instead glassSerial=" + state.serial);
-            releaseAll();
-            return;
-        }
-        MainHook.diag("[FolderTrace] desktop snapshot sealed BEFORE native folder "
-                + "glassSerial=" + state.serial);
-    }
-
     static void prepare(ViewGroup sourceIcon) {
         if (!OpenFolderGlassHook.isInstalled() || !enabled(sourceIcon)
                 || !LauncherGlassHierarchy.isWorkspace(sourceIcon)) return;
@@ -174,8 +156,8 @@ final class OpenFolderGlassCoordinator {
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
         state.observer = state.root.get().getViewTreeObserver();
-        // Desktop-inclusive source was sealed at the earliest native opening boundary.
-        // Late captures cannot include the native FolderCling.
+        // PassBlur excludes the whole Launcher root and Dock; the first
+        // wallpaper-only frame remains safe even after FolderCling opens.
         state.preDraw = () -> { sync(state); return true; };
         state.observer.addOnPreDrawListener(state.preDraw);
         state.root.get().postInvalidateOnAnimation();
