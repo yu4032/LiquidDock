@@ -59,11 +59,12 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
+        state.recentsReturnRestoreQueued = false;
         // Clip the independent OPEN_FOLDER wallpaper to the actual material
         // BEFORE Launcher scales its root. The root's own native spring owns
         // folder geometry. Never let the cached second wallpaper occupy the
         // whole scaled screen during Recents.
-        updateRecentsOutline(state);
+        enterRecentsLensOnly(state);
         trace("recents-show", state);
     }
 
@@ -85,11 +86,21 @@ final class OpenFolderGlassCoordinator {
         }
         if (nativeBlurRatio > 0f || OWNER.isRecentsCovered(state.serial)
                 || OWNER.isRecentsReturnPending(state.serial)) {
-            updateRecentsOutline(state);
-        } else if (state.layer != null) {
-            // A gesture aborted before Recents claimed ownership. Resume the
-            // original full-screen folder capture without a second animator.
-            state.layer.clearFolderBackdropOutline();
+            enterRecentsLensOnly(state);
+        } else if (state.layer != null && state.session != null
+                && !state.recentsReturnRestoreQueued) {
+            // An aborted gesture has no semantic onRecentViewHide. Commit the
+            // restored full background EGL buffer BEFORE clearing the clip;
+            // otherwise the previously displayed full-screen copy is briefly
+            // scaled by Launcher during the cancellation spring.
+            state.recentsReturnRestoreQueued = true;
+            state.session.setFolderRecentsLensOnly(false, () -> {
+                if (!live(state)) return;
+                state.recentsReturnRestoreQueued = false;
+                if (OWNER.isRecentsCovered(state.serial)
+                        || OWNER.isRecentsReturnPending(state.serial)) return;
+                if (state.layer != null) state.layer.clearFolderBackdropOutline();
+            });
         }
     }
 
@@ -116,6 +127,16 @@ final class OpenFolderGlassCoordinator {
         }
         View root = state.root.get();
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    /** The Recents-owned wallpaper supplies the full-screen picture. Retain
+     * the frozen source as Prismal's texture input only; never render a second
+     * full-screen wallpaper over the native dimming animation.
+     */
+    private static void enterRecentsLensOnly(State state) {
+        if (!live(state)) return;
+        updateRecentsOutline(state);
+        if (state.session != null) state.session.setFolderRecentsLensOnly(true, null);
     }
 
     /** Ensure a final traversal after vendor wallpaper HOME spring completion;
@@ -716,13 +737,25 @@ final class OpenFolderGlassCoordinator {
             // identity before consuming the return protection token.
             boolean wallpaperSettled = !LauncherGlassSceneController
                     .isRecentsWallpaperSettlePendingForRoot(root);
-            if (wallpaperSettled && OWNER.completeRecentsReturn(state.serial)) {
-                // Native wallpaper has completed its HOME spring AND the root
-                // transform has reached identity; only now may the frozen
-                // popup background regain its full-screen presentation.
-                state.layer.clearFolderBackdropOutline();
-                if (state.session != null) state.session.requestCachedGlassRedraw();
-                if (state.layer != null) state.layer.reveal();
+            if (wallpaperSettled && OWNER.isRecentsReturnPending(state.serial)
+                    && !state.recentsReturnRestoreQueued) {
+                // HOME is stable. Restore the normal expanded-folder composite
+                // ON THE EGL THREAD, and remove the temporary mask only after
+                // that complete frame was swapped. Geometry identity alone
+                // cannot prove the old buffer has changed presentation mode.
+                state.recentsReturnRestoreQueued = true;
+                state.session.setFolderRecentsLensOnly(false, () -> {
+                    if (!live(state)) return;
+                    state.recentsReturnRestoreQueued = false;
+                    View returningRoot = state.root.get();
+                    if (LauncherGlassSceneController
+                            .isRecentsWallpaperSettlePendingForRoot(returningRoot)
+                            || !OWNER.completeRecentsReturn(state.serial)) return;
+                    if (state.layer != null) {
+                        state.layer.clearFolderBackdropOutline();
+                        state.layer.reveal();
+                    }
+                });
             }
             // The sibling host normally stays fixed. Avoid setting identical
             // RenderNode transforms on every root pre-draw (which can schedule
@@ -988,6 +1021,7 @@ final class OpenFolderGlassCoordinator {
         final float[] points = new float[8], basis = new float[6];
         OpenFolderGlassGeometry.Frame closedFrame, expandedFrame;
         final OpenFolderGlassGeometry geometry = new OpenFolderGlassGeometry();
+        boolean recentsReturnRestoreQueued;
         final OpenFolderNativeCloseProgress nativeCloseProgress = new OpenFolderNativeCloseProgress();
         OpenFolderGlassGeometry.Frame closeImageStart, closePlateStart;
         int closeProgressLogBucket = -1;
