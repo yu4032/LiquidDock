@@ -31,25 +31,20 @@ public class Launcher450IconSizeContractTest {
     }
 
     @Test
-    public void expandedGridClampDoesNotAlterOtherDomains() {
-        // Native-size expanded-folder children are the sole exception.
-        // The full requested range remains authoritative on Workspace/Dock.
-        assertEquals(144, Launcher450IconSizePolicy.scaledPx(120, true, 120));
-        assertEquals(120, Launcher450IconSizePolicy.fitNativeFolderCell(120, true, 120));
-        assertEquals(108, Launcher450IconSizePolicy.fitNativeFolderCell(120, true, 90));
-        assertEquals(120, Launcher450IconSizePolicy.fitNativeFolderCell(120, false, 90));
-    }
-
-    @Test
-    public void expandedFolderRetainsVendorCellHeightForOversizedIcons() {
-        // A 120% drawable inside a native-size FolderGridView cell displaces
-        // the caption. This domain must not inflate its child measurement.
-        assertEquals(96, Launcher450IconSizePolicy.fitNativeFolderCell(96, true, 120));
-        assertEquals(96, Launcher450IconSizePolicy.fitNativeFolderCell(96, true, 100));
-        assertEquals(77, Launcher450IconSizePolicy.fitNativeFolderCell(96, true, 80));
-        assertEquals(96, Launcher450IconSizePolicy.fitNativeFolderCell(96, false, 120));
-        assertEquals(0, Launcher450IconSizePolicy.fitNativeFolderCell(0, true, 120));
-        // The general Workspace/Dock authority is deliberately not capped.
+    public void expandedGridKeepsNativeMeasureInBothDirections() throws Exception {
+        // Folder grid's own pitch and caption space must not follow
+        // smaller or larger global icon percentages.
+        String source = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java"));
+        assertTrue("FolderGridView has its explicit measure domain",
+                source.contains("MeasureDomain.FOLDER_CONTENT"));
+        assertTrue("The native icon size is returned unmodified",
+                source.contains("if (domain == MeasureDomain.FOLDER_CONTENT) return result;"));
+        assertFalse("No remaining one-way clamp",
+                source.contains("fitNativeFolderCell"));
+        assertEquals(96, Launcher450IconSizePolicy.scaledPx(96, false, 80));
+        assertEquals(96, Launcher450IconSizePolicy.scaledPx(96, false, 120));
+        assertEquals(77, Launcher450IconSizePolicy.scaledPx(96, true, 80));
         assertEquals(115, Launcher450IconSizePolicy.scaledPx(96, true, 120));
     }
 
@@ -98,8 +93,8 @@ public class Launcher450IconSizeContractTest {
                 source.contains("com.miui.home.launcher.FolderGridView"));
         assertTrue("folder inner ShortcutIcon must have an explicit measure domain",
                 source.contains("MeasureDomain.FOLDER_CONTENT"));
-        assertTrue("folder content oversized drawables must respect OEM fixed-pitch cell",
-                source.contains("fitNativeFolderCell"));
+        assertTrue("expanded folder always bypasses the global icon-size override",
+                source.contains("if (domain == MeasureDomain.FOLDER_CONTENT) return result;"));
     }
 
     @Test

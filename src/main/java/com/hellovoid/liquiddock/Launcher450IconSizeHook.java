@@ -97,17 +97,11 @@ final class Launcher450IconSizeHook {
             HookUtil.hook(getIconSize, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 MeasureDomain domain = ACTIVE_DOMAIN.get();
+                // FolderGridView owns its own row pitch, viewport and caption.
+                // Bypass the global icon-size setting in BOTH directions.
+                // Workspace/Dock and folder-cover scaling are unaffected.
+                if (domain == MeasureDomain.FOLDER_CONTENT) return result;
                 if (!enabled || domain == null || !(result instanceof Integer)) return result;
-
-                // FolderGridView's OEM row pitch, viewport and label height
-                // are computed independently of ShortcutIcon.onMeasure().
-                // Enlarging the body here without enlarging the row clips the
-                // last row's caption. Restrict oversize only within that
-                // fixed-pitch grid; keep Workspace/Dock/preview scaling intact.
-                if (domain == MeasureDomain.FOLDER_CONTENT) {
-                    return Launcher450IconSizePolicy.fitNativeFolderCell(
-                            (Integer) result, true, percent);
-                }
                 return Launcher450IconSizePolicy.scaledPx((Integer) result, true, percent);
             });
 
