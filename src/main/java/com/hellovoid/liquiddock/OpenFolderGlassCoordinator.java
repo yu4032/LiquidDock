@@ -74,8 +74,7 @@ final class OpenFolderGlassCoordinator {
      */
     static void onNativeRecentsGestureProgress(float nativeRatio) {
         State state = current;
-        if (state == null || state.motion.isClosing() || !Float.isFinite(nativeRatio)
-                || nativeRatio < 0f || nativeRatio > 1f) return;
+        if (state == null || state.motion.isClosing() || !Float.isFinite(nativeRatio)) return;
         if (Looper.myLooper() != Looper.getMainLooper()) {
             View root = state.root.get();
             if (root != null) root.post(() -> {
