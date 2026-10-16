@@ -132,11 +132,18 @@ final class RecentsBackgroundBlurHook {
             throw new NoSuchMethodException("RecentBlurParams float constructor");
         }
 
-        installDimmingFactoryScope(loader, "getRecentStateParams");
-        installDimmingFactoryScope(loader, "getHomeHoldParams");
-        installDimmingFactoryScope(loader, "getRecentDragParams", float.class);
-        installDimmingFactoryScope(
-                loader, "getAppMoveStateParams", float.class, boolean.class, boolean.class);
+        // Each semantic factory is optional in a vendor R8 build. Missing
+        // one signature must not prevent all the remaining factories from
+        // retaining their own dimming suppression on this Launcher version.
+        int scopedFactories = 0;
+        if (tryInstallDimmingFactoryScope(loader, "getRecentStateParams")) scopedFactories++;
+        if (tryInstallDimmingFactoryScope(loader, "getHomeHoldParams")) scopedFactories++;
+        if (tryInstallDimmingFactoryScope(
+                loader, "getRecentDragParams", float.class)) scopedFactories++;
+        if (tryInstallDimmingFactoryScope(loader, "getAppMoveStateParams",
+                float.class, boolean.class, boolean.class)) scopedFactories++;
+        MainHook.log(TAG + " RecentBlurParams scoped factories installed="
+                + scopedFactories + "/4, constructors=" + hookedConstructors);
     }
 
     /** Direct Recents task-transition SurfaceControl dim, distinct from
@@ -164,6 +171,18 @@ final class RecentsBackgroundBlurHook {
             return chain.proceed(args);
         }, float.class, SURFACE_CONTROL_COMPAT, boolean.class);
         MainHook.log(TAG + " Recents task-transition DimLayer.dim installed");
+    }
+
+    private static boolean tryInstallDimmingFactoryScope(
+            ClassLoader loader, String methodName, Object... parameterTypes) {
+        try {
+            installDimmingFactoryScope(loader, methodName, parameterTypes);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " RecentBlurParams factory unavailable "
+                    + methodName + ": " + error);
+            return false;
+        }
     }
 
     private static void installDimmingFactoryScope(
