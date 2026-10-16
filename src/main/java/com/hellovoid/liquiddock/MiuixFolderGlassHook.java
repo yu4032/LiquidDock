@@ -380,16 +380,25 @@ final class MiuixFolderGlassHook {
         openedFolderSink = new WeakReference<>(null);
     }
 
+    /** Thaw the resident Workspace/Folder glass producer while keeping the
+     * completed opening-folder surface on screen. The caller must wait for the
+     * resident source's first swapped frame before disposing that surface.
+     */
+    static boolean beginExpandedFolderHandoff(long serial) {
+        if (serial == 0L || pendingInputResumeSerial != serial) return false;
+        pendingInputResumeSerial = 0L;
+        releaseFrozenInputs();
+        MainHook.diag("[FolderTrace] expanded output retained during Workspace recovery serial=" + serial);
+        return true;
+    }
+
     static void onExpandedFolderOutputReleased(long serial) {
         MainHook.diag("[FolderTrace] expanded output released glassSerial=" + serial
                 + " expectedGlassSerial=" + pendingInputResumeSerial
                 + " nativeSerial=" + openedFolderSerial);
-        if (serial == 0L || pendingInputResumeSerial != serial) {
-            MainHook.diag("[FolderTrace] release ignored: glass token mismatch");
-            return;
+        if (!beginExpandedFolderHandoff(serial)) {
+            MainHook.diag("[FolderTrace] release ignored: glass token mismatch/already thawed");
         }
-        pendingInputResumeSerial = 0L;
-        releaseFrozenInputs();
     }
 
     private static void releaseFrozenInputs() {
