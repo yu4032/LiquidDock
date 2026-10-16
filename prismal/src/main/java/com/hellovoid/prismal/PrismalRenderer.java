@@ -454,6 +454,11 @@ public final class PrismalRenderer implements AutoCloseable {
     }
     /** Prepared screen-anchored blur, owned by this renderer and its current GL context. */
     public int preparedBlurTexture() { return backdropPrepared ? blurTextureV : 0; }
+
+    /** Only populated for explicitly opted-in OPEN_FOLDER instances. */
+    public int preparedWorkspaceBlurTexture() {
+        return dualBlurEnabled && backdropPrepared ? workspaceBlurTexture : 0;
+    }
     public int framebufferWidth() { return width; }
     public int framebufferHeight() { return height; }
 
