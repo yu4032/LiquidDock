@@ -155,10 +155,11 @@ final class RecentsBackgroundBlurHook {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             if (args.length > 1 && args[1] instanceof Number) {
                 float nativeRatio = ((Number) args[1]).floatValue();
-                // The OPEN_FOLDER full-screen wallpaper must shrink into the
-                // opened native Folder round-rect on this exact gesture curve.
-                // Sample BEFORE applying the GUI Recents blur multiplier:
-                // otherwise disabling blur also freezes the folder animation.
+                // This native value is a blur-strength/motion signal, NOT a
+                // reliable Launcher root-scale progress fraction. Use it only
+                // to isolate the already-expanded folder material before the
+                // vendor scales the root (or undo isolation after cancellation).
+                // Sample before the GUI modifies blur strength.
                 OpenFolderGlassCoordinator.onNativeRecentsGestureProgress(nativeRatio);
                 args[1] = RecentsBlurPolicy.scaleGestureRatio(nativeRatio, liveBlurPercent);
             }
