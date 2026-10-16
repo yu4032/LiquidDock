@@ -19,6 +19,13 @@ final class OemFolderBlurStrengthHook {
     // OEM fastBlur is normalized 0..1, not a radius in pixels.
     private static final float OPEN_STRENGTH = 0.22f;
     private static final ThreadLocal<Boolean> FOLDER_OPEN = new ThreadLocal<>();
+    // OEM Launcher 4.50 calls fastBlurWhenOpenOrCloseFolder(..., true)
+    // on BOTH open and close. The Boolean parameter does not distinguish them.
+    private static volatile boolean actualFolderOpening;
+
+    static void setFolderOpening(boolean opening) {
+        actualFolderOpening = opening;
+    }
     private static boolean installed;
 
     private OemFolderBlurStrengthHook() {}
@@ -57,7 +64,8 @@ final class OemFolderBlurStrengthHook {
             final int which = openingArg;
             HookUtil.hook(wrapper, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (args.length <= which || !Boolean.TRUE.equals(args[which])) {
+                if (!actualFolderOpening
+                        || args.length <= which || !Boolean.TRUE.equals(args[which])) {
                     return chain.proceed(args);
                 }
                 FOLDER_OPEN.set(Boolean.TRUE);

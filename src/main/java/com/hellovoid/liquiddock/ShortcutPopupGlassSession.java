@@ -55,6 +55,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final boolean folderBackdrop;
+    // Native Workspace is hidden for modal input safety. Present its real
+    // PRE-OPEN frozen desktop blur under the Prismal lens; not wallpaper-only.
+    private volatile float backdropOpacity;
     private final LauncherGlassOutputRenderState folderRenderWork = new LauncherGlassOutputRenderState();
     private final FolderGlassFramePacing folderFramePacing = new FolderGlassFramePacing();
     private final FloatBuffer quadBuffer;
@@ -243,12 +246,14 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     void updateFolderFrame(LauncherGlassGeometry.Snapshot next, float nativeOpenProgress) {
         if (shuttingDown || !folderBackdrop || next == null) return;
+        float opacity = OpenFolderBackdropPolicy.backdropOpacity(nativeOpenProgress);
         LauncherGlassGeometry.Snapshot old = geometry;
-        if (old != null && old.sameAs(next)) return;
+        if (old != null && old.sameAs(next) && Float.compare(opacity, backdropOpacity) == 0) return;
         geometry = next;
-        // The native compositor owns the full-screen background blur.
-        // Only the lens geometry is submitted to the Prismal GPU compositor.
-        if (folderFramePacing.allow(System.nanoTime(), nativeOpenProgress)
+        backdropOpacity = opacity;
+        // The blur snapshot is static. During OEM folder spring, only its
+        // presentation opacity and the glass bounds advance.
+        if (folderFramePacing.allow(System.nanoTime(), opacity)
                 && folderRenderWork.request(true, false)
                 && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
     }
@@ -444,12 +449,20 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        // Never compose the prepared wallpaper as a fullscreen opaque quad.
-        // It covered the *visible* Launcher Workspace and made previous
-        // visibility/fade fixes ineffective. Prismal's geometry SDF/scissor
-        // already limits refraction to the actual folder glass outline.
         if (folderBackdrop) {
+            // The frozen source now CONTAINS the real Launcher workspace
+            // (icons/widgets/wallpaper). Present its prepared blur below
+            // folder optics; native Workspace is hidden to preserve OEM input
+            // modality, not because this picture is wallpaper-only.
             GLES20.glEnable(GLES20.GL_BLEND);
+            GLES20.glBlendColor(0f, 0f, 0f, backdropOpacity);
+            GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalRenderer.preparedBlurTexture());
+            float firstRow = OpenFolderBackdropPolicy.backdropSampleY(0f);
+            float lastRow = OpenFolderBackdropPolicy.backdropSampleY(1f);
+            GLES20.glUniform4f(compositeCropRectLocation,
+                    0f, firstRow, 1f, lastRow - firstRow);
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
             GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
         }
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);

@@ -36,6 +36,12 @@ public class OpenFolderBackdropPolicyTest {
         assertEquals(1f, opacity(2f), 0f);
     }
 
+    @Test public void preparedDesktopBlurMapsFboRowsOntoLogicalFullscreenQuad() {
+        assertEquals(1f, OpenFolderBackdropPolicy.backdropSampleY(0f), 0f);
+        assertEquals(.75f, OpenFolderBackdropPolicy.backdropSampleY(.25f), 0f);
+        assertEquals(0f, OpenFolderBackdropPolicy.backdropSampleY(1f), 0f);
+    }
+
     @Test public void folderDesktopIncludesLauncherAndExcludesDock() {
         assertArrayEquals(new String[]{"FolderSource#1", "NavigationBar", "StatusBar",
                 "GestureStub", "DockAssistantView"},

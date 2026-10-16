@@ -89,10 +89,10 @@ final class OpenFolderGlassHook {
                 }
                 // Launcher is now INCLUDED in the PassBlur input. Once its
                 // native folder animation begins, never admit a late frame.
-                OpenFolderGlassCoordinator.freezePreparedDesktopBeforeNativeOpen();
-                // Own native Workspace opacity before Launcher queues the
-                // delayed folder-open runnable, then freeze the GPU outputs.
-                LauncherNativeFolderWorkspaceFadeGate.onOpening(chain.getThisObject());
+                // Do not pre-emptively abort the glass on Launcher.openFolder:
+                // the OEM schedules its FolderCling.open in a later UI task,
+                // giving the already-running pre-open producer time to complete.
+                // Keep the original native Workspace fade/mode ownership.
                 MiuixFolderGlassHook.onFolderOpeningBeforeNativeAnimation();
                 try {
                     return chain.proceed(args);
@@ -107,6 +107,10 @@ final class OpenFolderGlassHook {
             });
             HookUtil.hook(HookUtil.findMethodExact(cling, "open", new Class<?>[0]), chain -> {
                 try {
+                    // Last safe boundary before OEM FolderCling becomes visible.
+                    // No frame may be accepted after this point, even if the
+                    // SurfaceFlinger producer calls back late.
+                    OpenFolderGlassCoordinator.freezePreparedDesktopBeforeNativeOpen();
                     FolderDiagnosticTrace.event("FolderCling.open-before");
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     FolderDiagnosticTrace.event("FolderCling.open-after");
@@ -122,7 +126,6 @@ final class OpenFolderGlassHook {
             HookUtil.hook(HookUtil.findMethodExact(cling, "onFolderOpenAnimationFinish", new Class<?>[0]), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 FolderDiagnosticTrace.event("FolderCling.open-animation-finished");
-                MiuixFolderGlassHook.onNativeExpandedFolderOpenFinished();
                 safe(() -> OpenFolderGlassCoordinator.onOpenFinished((View) chain.getThisObject()));
                 return result;
             });
