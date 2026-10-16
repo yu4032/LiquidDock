@@ -38,6 +38,7 @@ final class LauncherGlassRecentsHook {
                 long staleReturn = WALLPAPER_SETTLE.pendingSerial();
                 WALLPAPER_SETTLE.onRecentsShown();
                 if (staleReturn > 0L) discardWallpaperAuthorities(staleReturn);
+                OpenFolderGlassCoordinator.onRecentsShown();
                 LauncherGlassSceneController.setRecentsCoveredForAll(true);
                 LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -106,6 +107,7 @@ final class LauncherGlassRecentsHook {
 
                 LauncherRecentsCapsuleGlassHook.onRecentsHidden();
                 LauncherGlassSceneController.setRecentsCoveredForAll(false);
+                OpenFolderGlassCoordinator.onRecentsHidden();
                 MainHook.log(TAG + " Recents HOME return "
                         + (wallpaperAuthorityArmed
                         ? "armed wallpaper authority"

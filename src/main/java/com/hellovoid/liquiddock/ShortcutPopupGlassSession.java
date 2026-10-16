@@ -240,6 +240,15 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         return !shuttingDown && backdropPrepared && sourceFrozen;
     }
 
+    /** Re-present the preserved GPU snapshot after a temporary Recents cover.
+     * Does not rebind or recreate the retired OPEN_FOLDER PassBlur producer.
+     */
+    void requestCachedGlassRedraw() {
+        if (!shuttingDown && backdropPrepared) {
+            sourceBackend.postToRenderThread(this::renderCurrent);
+        }
+    }
+
     void updateGeometry(LauncherGlassGeometry.Snapshot next) {
         if (shuttingDown || next == null) return;
         LauncherGlassGeometry.Snapshot old = geometry;

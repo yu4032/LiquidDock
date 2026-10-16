@@ -397,6 +397,22 @@ final class MiuixFolderGlassHook {
         beginExpandedFolderHandoff(serial);
     }
 
+    /** An early glass-session abort (e.g. detached Launcher root) has no
+     * native close completion token. Never strand shared Workspace/Dock
+     * producers or keep the icon's native fallback material suppressed.
+     */
+    static void onExpandedFolderOutputAborted(long serial) {
+        if (serial == 0L) return;
+        pendingInputResumeSerial = 0L;
+        NATIVE_CLOSE.cancel();
+        OemFolderBlurStrengthHook.setFolderOpening(false);
+        LauncherGlassStaticNode sink = openedFolderSink.get();
+        if (sink != null) sink.restoreFolderVisibilityImmediately();
+        openedFolderOwner = new WeakReference<>(null);
+        openedFolderSink = new WeakReference<>(null);
+        releaseFrozenInputs();
+    }
+
     private static void releaseFrozenInputs() {
         LauncherGlassSceneController.setFolderCoveredForAll(false);
         Miuix307ZeroCopyRenderer.setFolderFrozen(false);

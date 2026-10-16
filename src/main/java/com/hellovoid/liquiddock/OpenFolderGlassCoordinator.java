@@ -23,6 +23,28 @@ final class OpenFolderGlassCoordinator {
 
     static boolean hasActiveSession() { return current != null; }
 
+    /** Recents only suspends the transient glass presentation. A temporary
+     * INVISIBLE/GONE FolderCling does not constitute an OEM folder close.
+     * Never discard the one-shot GPU snapshot for Recents visibility alone.
+     */
+    static void onRecentsShown() {
+        State state = current;
+        if (state == null || state.motion.isClosing()) return;
+        OWNER.onRecentsShown(state.serial);
+        if (state.layer != null) {
+            state.layer.animate().cancel();
+            state.layer.setAlpha(0f);
+        }
+    }
+
+    static void onRecentsHidden() {
+        State state = current;
+        if (state == null || state.motion.isClosing()) return;
+        OWNER.onRecentsHidden(state.serial);
+        View root = state.root.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
     /** OWNERSHIP TOKEN for the prepared output, distinct from vendor
      * FolderIcon.openedFolderSerial (touch preparations may be cancelled). */
     static long activeSessionSerial() {
@@ -107,7 +129,9 @@ final class OpenFolderGlassCoordinator {
                     }
                     @Override public void onPresented() {
                         if (!live(state) || !OWNER.onPresented(state.serial)) return;
-                        if (state.layer != null) state.layer.reveal();
+                        if (state.layer != null && !OWNER.isRecentsCovered(state.serial)) {
+                            state.layer.reveal();
+                        }
                         // The wallpaper frame and first lens output are already
                         // GPU-resident. Free the fullscreen independent panel
                         // NOW, not at folder CLOSE (which may be minutes later).
@@ -452,20 +476,41 @@ final class OpenFolderGlassCoordinator {
         if (cling != null) cling.postInvalidateOnAnimation();
         // The healthy path already thawed Workspace before crossfading the
         // resident buffer. Retain the old direct-release path for fallback.
-        if (!state.inputsResumed) MiuixFolderGlassHook.onExpandedFolderOutputReleased(state.serial);
+        if (!state.inputsResumed) MiuixFolderGlassHook.onExpandedFolderOutputAborted(state.serial);
     }
 
     private static void sync(State state) {
         if (!live(state) || state.finalCloseQueued) return;
+        // The native Recents transition can temporarily hide FolderCling.
+        // Keep the frozen output and source-less EGL session untouched.
+        if (OWNER.isRecentsCovered(state.serial)) return;
         try {
             View root = state.root.get(), cling = state.cling.get(), folder = state.folder.get();
             ViewGroup host = state.layerHost.get();
             if (root == null || cling == null || folder == null || !root.isAttachedToWindow()
                     || root.getWidth() != state.width || root.getHeight() != state.height
-                    || (!state.motion.isClosing() && !cling.isAttachedToWindow())
-                    || (!state.motion.isClosing() && cling.getVisibility() != View.VISIBLE)
                     || (root.getDisplay() != null && root.getDisplay().getRotation() != state.rotation)
                     || !enabled(state.icon.get())) { releaseAll(); return; }
+            if (!state.motion.isClosing()
+                    && (!cling.isAttachedToWindow() || cling.getVisibility() != View.VISIBLE)) {
+                Object opened = invoke(cling, "isOpened");
+                if (OWNER.keepHiddenFolder(state.serial, Boolean.TRUE.equals(opened))) return;
+                releaseAll();
+                return;
+            }
+            // An OEM close that occurred while Recents was visible may have
+            // bypassed the animated callbacks. Do not revive an orphan lens.
+            if (!state.motion.isClosing() && OWNER.keepHiddenFolder(state.serial, false)
+                    && Boolean.FALSE.equals(invoke(cling, "isOpened"))) {
+                releaseAll();
+                return;
+            }
+            if (OWNER.completeRecentsReturn(state.serial)) {
+                // EGL backdrop survives Recents; force a presentation from
+                // cached textures in case native TextureView lost its buffer.
+                if (state.session != null) state.session.requestCachedGlassRedraw();
+                if (state.layer != null && OWNER.maySuppressNative()) state.layer.reveal();
+            }
             // Native close can hide or detach FolderCling while its separate
             // background proxy keeps animating. The sibling output stays live.
             if (state.session == null) return;
