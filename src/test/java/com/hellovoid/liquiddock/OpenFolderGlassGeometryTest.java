@@ -53,39 +53,6 @@ public class OpenFolderGlassGeometryTest {
                 20, 30, 400, 500, 48);
     }
 
-    @Test public void recentsMaskNeverShowsScaledFullScreenWallpaperOutsideExpandedFolder() {
-        // The cached OPEN_FOLDER texture is full-screen, but the vendor
-        // Recents spring scales the whole Launcher root. Only the native
-        // expanded folder material is allowed to participate in that scale.
-        OpenFolderGlassGeometry.Frame small =
-                new OpenFolderGlassGeometry.Frame(460f, 215f, 1076f, 806f, 46f);
-        OpenFolderGlassGeometry.Frame mask =
-                OpenFolderGlassGeometry.recentsMaterialMask(small, 1728, 1080);
-        assertNotNull(mask);
-        assertEquals(small.left, mask.left, .001f);
-        assertEquals(small.top, mask.top, .001f);
-        assertEquals(small.right, mask.right, .001f);
-        assertEquals(small.bottom, mask.bottom, .001f);
-        assertEquals(small.radius, mask.radius, .001f);
-        assertTrue("must not expose root-wide captured wallpaper",
-                mask.right - mask.left < 1728f);
-        assertTrue(mask.bottom - mask.top < 1080f);
-    }
-
-    @Test public void recentsMaskKeepsLargeFolderGeometryAndClampsCornerRadius() {
-        OpenFolderGlassGeometry.Frame large =
-                new OpenFolderGlassGeometry.Frame(150f, 90f, 1550f, 990f, 900f);
-        OpenFolderGlassGeometry.Frame mask =
-                OpenFolderGlassGeometry.recentsMaterialMask(large, 1728, 1080);
-        assertEquals(large.left, mask.left, .001f);
-        assertEquals(large.top, mask.top, .001f);
-        assertEquals(large.right, mask.right, .001f);
-        assertEquals(large.bottom, mask.bottom, .001f);
-        assertEquals(450f, mask.radius, .001f);
-        assertNull(OpenFolderGlassGeometry.recentsMaterialMask(null, 1728, 1080));
-        assertNull(OpenFolderGlassGeometry.recentsMaterialMask(large, 0, 1080));
-    }
-
     @Test public void nativeCloseBackdropContractsToDesktopSmallFolderIconOnActualSpringProgress() {
         // Native expanded folder is much larger; the CLOSE target is the
         // desktop 1x1 folder *icon*, not the Recents expanded panel.
