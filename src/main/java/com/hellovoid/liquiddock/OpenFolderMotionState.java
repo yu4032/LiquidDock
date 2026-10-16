@@ -9,6 +9,10 @@ final class OpenFolderMotionState {
 
     void beginClose() {
         if (closing) return;
+        // Capture can start late (after OEM hides Dock). If opening had no
+        // usable animated sample, an already-open folder still begins its
+        // reverse spring from the expanded endpoint, not an opacity of zero.
+        if (!sampled && contentFinished) progress = 1f;
         closing = true;
     }
 

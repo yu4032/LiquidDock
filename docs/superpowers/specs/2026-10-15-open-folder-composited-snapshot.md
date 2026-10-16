@@ -24,3 +24,10 @@ The four folder-only optics controls remain under Appearance → Folders (blur 0
 - Verify ordinary/rapid 1×1 and 2×2 opens, close, app launch from folder, and Dock/Workspace post-close recovery on actual Launcher 4.50 hardware.
 
 Focused tests: `LauncherGlassSceneControllerTest`, `PassBlurBindPolicyTest`, `OpenFolderGlassStateTest`, `OpenFolderMotionStateTest`, `OpenFolderGlassGeometryTest`. CI compilation is not a substitute for device acceptance.
+
+
+### October 16: native close sampling and material ownership
+- Keep the frozen wallpaper source throughout the reverse spring; do not change Gaussian kernel to Workspace blur during close. The old 2-pass reblur could overtake geometry/swap on the EGL thread and make the endpoint flash.
+- On closing frames, use the actual transformed `FolderAnimIcon` child image's root-space bounds as the Prismal lens rectangle and wallpaper sample position. Use the measured bounds to derive the backdrop fade; retain the native-spec interpolation only when no safe live plate is available.
+- Submit every changed closing geometry to the coalescing output queue; no 11ms render-pacing gate during a 165Hz native reverse spring.
+- Native advanced-material ownership extends to the actual animated FolderIcon container in addition to its image View; track that plate's background drawable and suppress its RenderNode blur only while the expanded Prismal presentation is active. Preserve native content and OEM restoration on exit.
