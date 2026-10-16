@@ -288,7 +288,7 @@ internal fun RecentsPage(padding: PaddingValues, prefs: SharedPreferences, maste
             prefs,
             ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING,
             "取消壁纸压暗",
-            "进入多任务时保留系统背景模糊与过渡动画，仅移除壁纸黑色压暗；已加载的桌面 Hook 即时生效",
+            "取消多任务壁纸与转场的额外压暗，保留原生模糊、缩放和动画；下次切换起生效，无需重启桌面",
             masterEnabled,
         )
     }
