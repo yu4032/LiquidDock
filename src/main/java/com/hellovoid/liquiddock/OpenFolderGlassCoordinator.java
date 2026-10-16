@@ -60,10 +60,18 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
-        // Gesture progress can precede this semantic callback. Preserve its
-        // latest OEM value; absent a gesture signal, keep the previously safe
-        // final-folder mask instead of displaying a scaled full-screen sheet.
-        updateRecentsOutline(state);
+        // Native blur/gesture progress can precede this semantic callback.
+        // Do not interpret a missing progress sample as p=1 (a final-folder
+        // outline): that caused a one-frame exposure of the darker Recents
+        // wallpaper while the frozen full-screen wallpaper was still bright.
+        // Direct/no-gesture Recents retains the bounded final-panel clip as
+        // a safety fallback; progressive paths use the actual vendor ratio.
+        if (Float.isFinite(state.recentsGestureProgress)) {
+            updateRecentsOutline(state);
+            updateRecentsPresentationAlpha(state);
+        } else {
+            updateRecentsOutline(state);
+        }
         trace("recents-show", state);
     }
 
@@ -86,10 +94,12 @@ final class OpenFolderGlassCoordinator {
         if (nativeRatio > 0f || OWNER.isRecentsCovered(state.serial)
                 || OWNER.isRecentsReturnPending(state.serial)) {
             updateRecentsOutline(state);
+            updateRecentsPresentationAlpha(state);
         } else if (state.layer != null) {
             // Aborted gesture: no Recents scene has taken ownership. Restore
             // the full OPEN_FOLDER backdrop without a delayed alpha fade.
             state.layer.clearFolderBackdropOutline();
+            state.layer.setAlpha(1f);
             // Preserve the observed zero for a subsequent semantic
             // onRecentViewShow on the same gesture; it must begin full-size.
         }
@@ -109,7 +119,10 @@ final class OpenFolderGlassCoordinator {
         // (not a snapshot of an intermediate view flag) owns teardown.
         if (OWNER.shouldReplayAfterRecents(state.serial, true)) {
             if (state.session != null) state.session.requestCachedGlassRedraw();
-            if (state.layer != null) state.layer.reveal();
+            // The vendor HOME wallpaper spring is not necessarily finished
+            // when onRecentViewHide returns. Do NOT call layer.reveal() here:
+            // it resets alpha to 1 and replaces the dimmed Recents wallpaper
+            // with the bright cached wallpaper in a single frame.
         }
         View root = state.root.get();
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
@@ -134,6 +147,17 @@ final class OpenFolderGlassCoordinator {
         } else {
             // Missing geometry may never reveal a screen-sized frozen sheet.
             state.layer.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    private static void updateRecentsPresentationAlpha(State state) {
+        if (!live(state) || state.layer == null) return;
+        float alpha = OpenFolderBackdropPolicy.recentsBackdropAlpha(
+                state.recentsGestureProgress);
+        if (Float.isFinite(alpha) && Math.abs(state.layer.getAlpha() - alpha) > .001f) {
+            // HWUI/RenderNode composition only; no new GL capture, no
+            // fullscreen brightness shader, and no independent time curve.
+            state.layer.setAlpha(alpha);
         }
     }
 
@@ -701,7 +725,10 @@ final class OpenFolderGlassCoordinator {
             }
             // Wait until the native HOME transform is back to root-space
             // identity before consuming the return protection token.
-            if (OWNER.completeRecentsReturn(state.serial)) {
+            View nativeRoot = state.root.get();
+            boolean wallpaperStillSettling = LauncherGlassSceneController
+                    .isRecentsWallpaperSettlePendingForRoot(nativeRoot);
+            if (!wallpaperStillSettling && OWNER.completeRecentsReturn(state.serial)) {
                 state.layer.clearFolderBackdropOutline();
                 state.recentsGestureProgress = Float.NaN;
                 if (state.session != null) state.session.requestCachedGlassRedraw();
