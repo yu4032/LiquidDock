@@ -29,6 +29,10 @@ final class OpenFolderGlassState {
         return owns(value) && recentsCovered;
     }
 
+    boolean isRecentsReturnPending(long value) {
+        return owns(value) && recentsReturnPending;
+    }
+
     boolean keepHiddenFolder(long value, boolean nativeStillOpened) {
         return owns(value) && (recentsCovered || (recentsReturnPending && nativeStillOpened));
     }
@@ -94,7 +98,13 @@ final class OpenFolderGlassState {
         return true;
     }
 
-    boolean maySuppressNative() { return phase != Phase.CLOSED && presented; }
+    /** Native source/background draw suppression begins with OEM OPENING,
+     * before an async wallpaper capture can finish and reveal Prismal.
+     * PREPARING (touch-down without opening) still retains native fallback.
+     */
+    boolean maySuppressNative() {
+        return phase == Phase.OPENING || phase == Phase.OPEN || phase == Phase.CLOSING;
+    }
     boolean isClosing() { return phase == Phase.CLOSING; }
 
     Runnable guardCompletion(long value, Runnable completion) {

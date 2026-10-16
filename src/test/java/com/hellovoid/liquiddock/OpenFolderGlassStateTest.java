@@ -34,10 +34,12 @@ public class OpenFolderGlassStateTest {
                 state.maySuppressNative());
         assertFalse(state.shouldReplayAfterRecents(serial, true));
         assertTrue(state.isRecentsCovered(serial));
+        assertFalse(state.isRecentsReturnPending(serial));
         assertTrue(state.keepHiddenFolder(serial, false));
         assertFalse(state.completeRecentsReturn(serial));
         state.onRecentsHidden(serial);
         assertFalse(state.isRecentsCovered(serial));
+        assertTrue(state.isRecentsReturnPending(serial));
         assertTrue("cached glass may restore before FolderCling becomes VISIBLE",
                 state.shouldReplayAfterRecents(serial, true));
         assertFalse("native actual close forbids replay",
@@ -47,6 +49,7 @@ public class OpenFolderGlassStateTest {
         assertFalse("truly closed native folder is not retained",
                 state.keepHiddenFolder(serial, false));
         assertTrue(state.completeRecentsReturn(serial));
+        assertFalse(state.isRecentsReturnPending(serial));
         assertFalse(state.shouldReplayAfterRecents(serial, true));
         assertFalse(state.completeRecentsReturn(serial));
         assertFalse(state.keepHiddenFolder(serial, true));
@@ -78,7 +81,8 @@ public class OpenFolderGlassStateTest {
         assertFalse((Boolean) call(state, "maySuppressNative"));
         assertTrue((Boolean) call(state, "onBackdropReady", serial));
         assertTrue((Boolean) call(state, "beginOpen", serial));
-        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue("native material cannot flash before the first glass frame",
+                (Boolean) call(state, "maySuppressNative"));
         assertTrue((Boolean) call(state, "onPresented", serial));
         assertTrue((Boolean) call(state, "maySuppressNative"));
         assertTrue((Boolean) call(state, "beginClose", serial));
@@ -92,9 +96,10 @@ public class OpenFolderGlassStateTest {
         long serial = (Long) call(state, "prepare");
         assertTrue((Boolean) call(state, "beginOpen", serial));
         assertFalse((Boolean) call(state, "onPresented", serial));
-        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue("opening suppresses native before async capture",
+                (Boolean) call(state, "maySuppressNative"));
         assertTrue((Boolean) call(state, "onBackdropReady", serial));
-        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue((Boolean) call(state, "maySuppressNative"));
         assertTrue((Boolean) call(state, "onPresented", serial));
         assertTrue((Boolean) call(state, "maySuppressNative"));
     }
@@ -106,7 +111,8 @@ public class OpenFolderGlassStateTest {
         assertTrue((Boolean) call(state, "beginClose", serial));
         assertTrue((Boolean) call(state, "onBackdropReady", serial));
         assertFalse((Boolean) call(state, "onPresented", serial));
-        assertFalse((Boolean) call(state, "maySuppressNative"));
+        assertTrue("an in-flight native close retains the material suppression",
+                (Boolean) call(state, "maySuppressNative"));
         assertTrue((Boolean) call(state, "finishClose", serial));
     }
 
