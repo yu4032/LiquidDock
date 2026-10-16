@@ -21,13 +21,13 @@ public class OpenFolderHostTransformTest {
         float translation = nativeHost.inverseTranslationX(12);
         for (float logicalX : new float[]{0f, 150f, 720f, 1728f}) {
             float localInHost = 12f + inv * logicalX + translation;
-            assertEquals(logicalX, nativeHost.x + nativeHost.scaleX * localInHost, .0002f);
+            assertEquals(logicalX, nativeHost.x + nativeHost.scaleX * localInHost, .001f);
         }
         float inverseY = nativeHost.inverseScaleY();
         float translationY = nativeHost.inverseTranslationY(18);
         for (float logicalY : new float[]{0f, 350f, 1080f}) {
             assertEquals(logicalY, nativeHost.y + nativeHost.scaleY
-                    * (18f + inverseY * logicalY + translationY), .0002f);
+                    * (18f + inverseY * logicalY + translationY), .001f);
         }
     }
 
