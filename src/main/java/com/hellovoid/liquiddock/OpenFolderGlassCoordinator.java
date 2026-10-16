@@ -90,7 +90,8 @@ final class OpenFolderGlassCoordinator {
             // Aborted gesture: no Recents scene has taken ownership. Restore
             // the full OPEN_FOLDER backdrop without a delayed alpha fade.
             state.layer.clearFolderRecentsOutline();
-            state.recentsGestureProgress = Float.NaN;
+            // Preserve the observed zero for a subsequent semantic
+            // onRecentViewShow on the same gesture; it must begin full-size.
         }
     }
 
