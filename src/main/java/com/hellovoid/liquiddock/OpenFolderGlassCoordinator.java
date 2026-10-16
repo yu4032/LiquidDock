@@ -135,6 +135,18 @@ final class OpenFolderGlassCoordinator {
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
 
+    /** Native Recents wallpaper completion, not the time of hide dispatch,
+     * releases the HOME backdrop authority. Ensure a traversal even when
+     * nothing in the frozen GL session is otherwise moving.
+     */
+    static void onRecentsWallpaperSettled() {
+        State state = current;
+        if (state == null || !live(state)
+                || !OWNER.isRecentsReturnPending(state.serial)) return;
+        View root = state.root.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
     /** Morph the OPEN_FOLDER *backdrop*, not its inner icons or the
      * already-expanded lens geometry. Both boundary and roundness come from
      * the actual opened native Folder background; one original OEM Recents
