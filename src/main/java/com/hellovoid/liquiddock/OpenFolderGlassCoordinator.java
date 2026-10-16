@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Matrix;
-import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 import android.view.View;
@@ -59,29 +58,10 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
-        // The OPEN_FOLDER output contains a full-screen frozen wallpaper layer.
-        // MIUI scales Launcher when entering Recents, but the actual wallpaper
-        // is owned by the system compositor. Clip our sibling TextureView to
-        // the folder's material bounds BEFORE the native scale animation:
-        // only the folder lens should participate in that transform.
-        if (state.layer != null) {
-            OpenFolderGlassGeometry.Frame panel = state.expandedFrame;
-            if (panel == null) {
-                View folder = state.folder.get();
-                panel = bounds(view(field(folder, "mBackgroundView")), state);
-            }
-            if (panel != null) {
-                state.layer.setClipBounds(new Rect(
-                        Math.max(0, (int) Math.floor(panel.left)),
-                        Math.max(0, (int) Math.floor(panel.top)),
-                        Math.min(state.width, (int) Math.ceil(panel.right)),
-                        Math.min(state.height, (int) Math.ceil(panel.bottom))));
-            } else {
-                // Unknown native material geometry must not expose a scaled,
-                // screen-sized copy of the wallpaper in Recents.
-                state.layer.setVisibility(View.INVISIBLE);
-            }
-        }
+        // Clip the full-screen frozen wallpaper to the LAST ACTUAL native
+        // Folme silhouette, including its interpolated corner radius. A
+        // rectangular clip caused sharp corners to scale into Recents.
+        updateRecentsOutline(state);
         trace("recents-show", state);
     }
 
@@ -103,6 +83,27 @@ final class OpenFolderGlassCoordinator {
         }
         View root = state.root.get();
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    /** Use the same material path as the folder's open/close renderer. Never
+     * infer a synthetic Recents progress or animate a new rectangle: Launcher
+     * owns scene scaling; its transform scales our rounded outline with it.
+     */
+    private static void updateRecentsOutline(State state) {
+        if (!live(state) || state.layer == null) return;
+        OpenFolderGlassGeometry.Frame frame = state.geometry.current();
+        if (frame == null) frame = state.expandedFrame;
+        if (frame == null) {
+            View folder = state.folder.get();
+            frame = bounds(view(field(folder, "mBackgroundView")), state);
+        }
+        if (frame != null) {
+            state.layer.setFolderRecentsOutline(frame, state.width, state.height);
+        } else {
+            // Without a native silhouette, a screen-sized wallpaper overlay
+            // must not leak into the Recents zoom.
+            state.layer.setVisibility(View.INVISIBLE);
+        }
     }
 
     /** Recover a folder owner orphaned by the keyguard boundary only when
@@ -397,7 +398,7 @@ final class OpenFolderGlassCoordinator {
         OWNER.beginClose(state.serial);
         if (!OWNER.isRecentsCovered(state.serial)
                 && !OWNER.isRecentsReturnPending(state.serial) && state.layer != null) {
-            state.layer.setClipBounds(null);
+            state.layer.clearFolderRecentsOutline();
         }
         state.motion.beginClose();
         // Reuse the same prepared wallpaper and optical material for the
@@ -572,7 +573,10 @@ final class OpenFolderGlassCoordinator {
         if (!live(state) || state.finalCloseQueued) return;
         // The native Recents transition can temporarily hide FolderCling.
         // Keep the frozen output and source-less EGL session untouched.
-        if (OWNER.isRecentsCovered(state.serial)) return;
+        if (OWNER.isRecentsCovered(state.serial)) {
+            updateRecentsOutline(state);
+            return;
+        }
         try {
             View root = state.root.get(), cling = state.cling.get(), folder = state.folder.get();
             ViewGroup host = state.layerHost.get();
@@ -623,7 +627,7 @@ final class OpenFolderGlassCoordinator {
             // Wait until the native HOME transform is back to root-space
             // identity before consuming the return protection token.
             if (OWNER.completeRecentsReturn(state.serial)) {
-                state.layer.setClipBounds(null);
+                state.layer.clearFolderRecentsOutline();
                 if (state.session != null) state.session.requestCachedGlassRedraw();
                 if (state.layer != null) state.layer.reveal();
             }
