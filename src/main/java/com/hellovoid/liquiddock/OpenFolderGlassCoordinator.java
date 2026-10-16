@@ -108,6 +108,17 @@ final class OpenFolderGlassCoordinator {
                     @Override public void onPresented() {
                         if (!live(state) || !OWNER.onPresented(state.serial)) return;
                         if (state.layer != null) state.layer.reveal();
+                        // The wallpaper frame and first lens output are already
+                        // GPU-resident. Free the fullscreen independent panel
+                        // NOW, not at folder CLOSE (which may be minutes later).
+                        // Render-thread retirement fences native unbind before
+                        // WindowManager.removeViewImmediate on the main thread.
+                        if (state.session != null) state.session.retireFolderCapture(() -> {
+                            if (!live(state)) return;
+                            ShortcutPopupSourceOverlay oldSource = state.source;
+                            state.source = null;
+                            if (oldSource != null) oldSource.dispose();
+                        });
                         state.materials.invalidateAll();
                         claimNativeBlur(state);
                         View root = state.root.get();

@@ -73,6 +73,36 @@ public class RootPassBlurBackendStateTest {
     }
 
     @Test
+    public void frozenFolderProducerCanRetireOnlyAfterAFreshCurrentFrame() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        assertFalse(state.retireCapturedSource(7L));
+        assertTrue(state.requestFresh(7L));
+        state.onBindSucceeded();
+        assertFalse(state.retireCapturedSource(7L));
+        assertFalse(state.retireCapturedSource(6L));
+        assertTrue(state.onFreshFrame(7L));
+        assertTrue(state.retireCapturedSource(7L));
+        assertTrue(state.isCapturedSourceRetired());
+        assertTrue("the already-rendered frame remains valid",
+                state.hasFreshFrame(7L));
+        assertFalse("no second implicit capture", state.requestFresh(8L));
+        assertFalse("no producer rollover after retirement",
+                state.requestRebind().accepted);
+        assertFalse("do not revalidate already-frozen input",
+                state.onFreshFrame(7L));
+        assertFalse("no automatic recreate",
+                state.onProducerRecreated().accepted);
+        assertFalse("no quality reallocation after freezing",
+                state.onQualityChanged().accepted);
+        state.onGeometryInvalidated();
+        assertTrue("frozen GPU snapshot must survive later output geometry",
+                state.hasFreshFrame(7L));
+        state.onShutdown();
+        assertTrue(state.isShutdown());
+        assertFalse(state.hasFreshFrame(7L));
+    }
+
+    @Test
     public void terminalFailureAndShutdownFailClosed() {
         RootPassBlurBackendState state = new RootPassBlurBackendState();
         assertTrue(state.requestFresh(30L));

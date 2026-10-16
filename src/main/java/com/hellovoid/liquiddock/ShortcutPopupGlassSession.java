@@ -81,6 +81,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
+    private boolean captureRetirementRequested;
+    private final float sourceDensity;
 
     private PrismalRenderer prismalRenderer;
     private int compositeProgram;
@@ -121,6 +123,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
         quadBuffer.put(QUAD).position(0);
         float density = sourceRoot.getResources().getDisplayMetrics().density;
+        sourceDensity = density;
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
@@ -153,11 +156,24 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (!shuttingDown) sourceBackend.requestFresh(GENERATION);
     }
 
+    /** After the first EGL presentation, retire only the OPEN_FOLDER capture
+     * producer; maintain normalized GPU input and Prismal background textures
+     * until the final icon-sized lens swaps and Workspace takes ownership.
+     */
+    boolean retireFolderCapture(Runnable onRetired) {
+        if (!folderBackdrop || shuttingDown || !backdropPrepared || !sourceFrozen
+                || !presentationSignaled || captureRetirementRequested) return false;
+        boolean queued = sourceBackend.retireFrozenFolderProducer(GENERATION, onRetired);
+        if (queued) captureRetirementRequested = true;
+        return queued;
+    }
+
     /** Refresh a live popup's optics without touching its frozen producer or EGL surface. */
     void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
         if (shuttingDown || config == null) return;
         View root = sourceRootRef.get();
-        float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
+        float density = root != null
+                ? root.getResources().getDisplayMetrics().density : sourceDensity;
         Miuix307PrismalMaterial.Params optical =
                 Miuix307PrismalMaterial.fromConfig(config, density);
         PrismalParams next = materialParams(optical, density);
