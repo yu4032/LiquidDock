@@ -76,6 +76,14 @@ final class OpenFolderBackdropPolicy {
                 ? 1f - backdropOpacity(nativeRatio) : Float.NaN;
     }
 
+    /** A stable geometric basis alone is not proof of tonal parity between
+     * the independent cached wallpaper and the vendor HOME wallpaper.
+     */
+    static boolean mayCompleteRecentsReturn(boolean nativeBasisStable,
+                                            boolean wallpaperSettlePending) {
+        return nativeBasisStable && !wallpaperSettlePending;
+    }
+
     /** 0 = expanded folder material, 1 = final resident Workspace material.
      * The glass itself remains opaque at the icon endpoint; a separate
      * ready-frame handoff owns removal of the temporary surface.
