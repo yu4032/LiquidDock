@@ -313,7 +313,6 @@ final class LauncherGlassRecentsHook {
         if (!WALLPAPER_SETTLE.cancelReturn(serial)) return false;
         discardWallpaperAuthorities(serial);
         LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
-        OpenFolderGlassCoordinator.onRecentsWallpaperSettled();
         MainHook.log(TAG + " Recents wallpaper settle cancelled reason=" + reason
                 + " serial=" + serial);
         return true;
@@ -327,7 +326,6 @@ final class LauncherGlassRecentsHook {
         }
         discardWallpaperAuthorities(serial);
         LauncherGlassSceneController.setRecentsWallpaperSettlePendingForAll(false);
-        OpenFolderGlassCoordinator.onRecentsWallpaperSettled();
         MainHook.log(TAG + " Recents wallpaper settled authority=" + authority
                 + " serial=" + serial);
     }
