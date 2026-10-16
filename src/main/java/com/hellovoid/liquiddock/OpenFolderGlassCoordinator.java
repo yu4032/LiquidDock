@@ -43,8 +43,7 @@ final class OpenFolderGlassCoordinator {
                 + " layerAlpha=" + (layer != null ? layer.getAlpha() : -1f)
                 + " backdrop=" + (state != null && state.session != null
                         && state.session.hasFrozenBackdrop())
-                + " sourceWindow=" + (state != null && state.source != null)
-                + " recentsGesture=" + (state != null ? state.recentsGestureProgress : Float.NaN));
+                + " sourceWindow=" + (state != null && state.source != null));
     }
 
     private OpenFolderGlassCoordinator() {}
@@ -60,38 +59,37 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
-        // Gesture progress can precede this semantic callback. Preserve its
-        // latest OEM value; absent a gesture signal, keep the previously safe
-        // final-folder mask instead of displaying a scaled full-screen sheet.
+        // Clip the independent OPEN_FOLDER wallpaper to the actual material
+        // BEFORE Launcher scales its root. The root's own native spring owns
+        // folder geometry. Never let the cached second wallpaper occupy the
+        // whole scaled screen during Recents.
         updateRecentsOutline(state);
         trace("recents-show", state);
     }
 
-    /** Original unmodified Launcher Recents gesture fraction. Called before
-     * RecentsBackgroundBlurHook scales that parameter for user blur strength.
-     * A gesture can begin BEFORE RecentsServiceDispatcher.onRecentViewShow,
-     * so update the rounded mask at the first actual gesture frame.
+    /** Native BlurUtils can fire before RecentsServiceDispatcher.onRecentViewShow.
+     * Use its non-zero value only as an EARLY TRANSITION SIGNAL, NOT as
+     * geometric progress. Blur intensity may jump or use a different spring
+     * from the root transform; interpreting it as a frame fraction previously
+     * exposed a scaled full-screen copy of the wallpaper.
      */
-    static void onNativeRecentsGestureProgress(float nativeRatio) {
+    static void onNativeRecentsGestureProgress(float nativeBlurRatio) {
         State state = current;
-        if (state == null || state.motion.isClosing() || !Float.isFinite(nativeRatio)) return;
+        if (state == null || state.motion.isClosing() || !Float.isFinite(nativeBlurRatio)) return;
         if (Looper.myLooper() != Looper.getMainLooper()) {
             View root = state.root.get();
             if (root != null) root.post(() -> {
-                if (live(state)) onNativeRecentsGestureProgress(nativeRatio);
+                if (live(state)) onNativeRecentsGestureProgress(nativeBlurRatio);
             });
             return;
         }
-        state.recentsGestureProgress = nativeRatio;
-        if (nativeRatio > 0f || OWNER.isRecentsCovered(state.serial)
+        if (nativeBlurRatio > 0f || OWNER.isRecentsCovered(state.serial)
                 || OWNER.isRecentsReturnPending(state.serial)) {
             updateRecentsOutline(state);
         } else if (state.layer != null) {
-            // Aborted gesture: no Recents scene has taken ownership. Restore
-            // the full OPEN_FOLDER backdrop without a delayed alpha fade.
+            // A gesture aborted before Recents claimed ownership. Resume the
+            // original full-screen folder capture without a second animator.
             state.layer.clearFolderBackdropOutline();
-            // Preserve the observed zero for a subsequent semantic
-            // onRecentViewShow on the same gesture; it must begin full-size.
         }
     }
 
@@ -99,7 +97,11 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsHidden(state.serial);
-        if (state.layer != null) state.layer.setVisibility(View.VISIBLE);
+        // A missing native folder outline was hidden on entry; do not unhide
+        // a full-screen cached wallpaper simply because Recents is exiting.
+        if (state.layer != null && state.expandedFrame != null) {
+            state.layer.setVisibility(View.VISIBLE);
+        }
         // Keep the Recents clip until sync observes a stable HOME coordinate
         // basis; removing it here can reveal a screen-sized scaled wallpaper
         // during the OEM reverse spring.
@@ -109,16 +111,27 @@ final class OpenFolderGlassCoordinator {
         // (not a snapshot of an intermediate view flag) owns teardown.
         if (OWNER.shouldReplayAfterRecents(state.serial, true)) {
             if (state.session != null) state.session.requestCachedGlassRedraw();
-            if (state.layer != null) state.layer.reveal();
+            // Do not force an early full-layer alpha change while Launcher is
+            // still animating its Recents wallpaper toward HOME.
         }
         View root = state.root.get();
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
 
-    /** Morph the OPEN_FOLDER *backdrop*, not its inner icons or the
-     * already-expanded lens geometry. Both boundary and roundness come from
-     * the actual opened native Folder background; one original OEM Recents
-     * gesture fraction drives the full-root -> expanded-panel interpolation.
+    /** Ensure a final traversal after vendor wallpaper HOME spring completion;
+     * the bounded temporary mask otherwise might outlive the last OEM frame.
+     */
+    static void onRecentsWallpaperSettled() {
+        State state = current;
+        if (state == null || !live(state)
+                || !OWNER.isRecentsReturnPending(state.serial)) return;
+        View root = state.root.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    /** Isolate the folder's actual rounded material during native Recents
+     * root scaling. The wallpaper outside this outline belongs exclusively
+     * to the vendor compositor, not to the frozen folder TextureView.
      */
     private static void updateRecentsOutline(State state) {
         if (!live(state) || state.layer == null) return;
@@ -127,8 +140,8 @@ final class OpenFolderGlassCoordinator {
             View folder = state.folder.get();
             panel = bounds(view(field(folder, "mBackgroundView")), state);
         }
-        OpenFolderGlassGeometry.Frame mask = OpenFolderGlassGeometry.recentsBackdropMask(
-                panel, state.width, state.height, state.recentsGestureProgress);
+        OpenFolderGlassGeometry.Frame mask = OpenFolderGlassGeometry.recentsMaterialMask(
+                panel, state.width, state.height);
         if (mask != null) {
             state.layer.setFolderBackdropOutline(mask, state.width, state.height);
         } else {
@@ -701,9 +714,13 @@ final class OpenFolderGlassCoordinator {
             }
             // Wait until the native HOME transform is back to root-space
             // identity before consuming the return protection token.
-            if (OWNER.completeRecentsReturn(state.serial)) {
+            boolean wallpaperSettled = !LauncherGlassSceneController
+                    .isRecentsWallpaperSettlePendingForRoot(root);
+            if (wallpaperSettled && OWNER.completeRecentsReturn(state.serial)) {
+                // Native wallpaper has completed its HOME spring AND the root
+                // transform has reached identity; only now may the frozen
+                // popup background regain its full-screen presentation.
                 state.layer.clearFolderBackdropOutline();
-                state.recentsGestureProgress = Float.NaN;
                 if (state.session != null) state.session.requestCachedGlassRedraw();
                 if (state.layer != null) state.layer.reveal();
             }
@@ -989,7 +1006,6 @@ final class OpenFolderGlassCoordinator {
         boolean animationSpecReady;
         float nativeTargetX, nativeTargetY, nativeSourceWidth, nativeSourceHeight;
         float nativeTargetWidth, nativeTargetHeight, nativeExpandedScaleX = Float.NaN;
-        float recentsGestureProgress = Float.NaN;
         final View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 if (live(State.this)) trace("root-attached", State.this);
