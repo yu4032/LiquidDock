@@ -31,6 +31,19 @@ public class Launcher450IconSizeContractTest {
     }
 
     @Test
+    public void expandedFolderRetainsVendorCellHeightForOversizedIcons() {
+        // A 120% drawable inside a native-size FolderGridView cell displaces
+        // the caption. This domain must not inflate its child measurement.
+        assertEquals(96, Launcher450IconSizePolicy.fitNativeFolderCell(96, true, 120));
+        assertEquals(96, Launcher450IconSizePolicy.fitNativeFolderCell(96, true, 100));
+        assertEquals(77, Launcher450IconSizePolicy.fitNativeFolderCell(96, true, 80));
+        assertEquals(96, Launcher450IconSizePolicy.fitNativeFolderCell(96, false, 120));
+        assertEquals(0, Launcher450IconSizePolicy.fitNativeFolderCell(0, true, 120));
+        // The general Workspace/Dock authority is deliberately not capped.
+        assertEquals(115, Launcher450IconSizePolicy.scaledPx(96, true, 120));
+    }
+
+    @Test
     public void runtimeUsesLauncher450MeasureAuthoritiesOnly() throws Exception {
         Path hookPath = Path.of("src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java");
         assertTrue("Launcher 4.50 hook must exist", Files.exists(hookPath));
@@ -75,6 +88,8 @@ public class Launcher450IconSizeContractTest {
                 source.contains("com.miui.home.launcher.FolderGridView"));
         assertTrue("folder inner ShortcutIcon must have an explicit measure domain",
                 source.contains("MeasureDomain.FOLDER_CONTENT"));
+        assertTrue("folder content oversized drawables must respect OEM fixed-pitch cell",
+                source.contains("fitNativeFolderCell"));
     }
 
     @Test
