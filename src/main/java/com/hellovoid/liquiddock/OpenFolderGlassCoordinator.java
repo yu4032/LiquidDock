@@ -89,7 +89,7 @@ final class OpenFolderGlassCoordinator {
         } else if (state.layer != null) {
             // Aborted gesture: no Recents scene has taken ownership. Restore
             // the full OPEN_FOLDER backdrop without a delayed alpha fade.
-            state.layer.clearFolderRecentsOutline();
+            state.layer.clearFolderBackdropOutline();
             // Preserve the observed zero for a subsequent semantic
             // onRecentViewShow on the same gesture; it must begin full-size.
         }
@@ -130,7 +130,7 @@ final class OpenFolderGlassCoordinator {
         OpenFolderGlassGeometry.Frame mask = OpenFolderGlassGeometry.recentsBackdropMask(
                 panel, state.width, state.height, state.recentsGestureProgress);
         if (mask != null) {
-            state.layer.setFolderRecentsOutline(mask, state.width, state.height);
+            state.layer.setFolderBackdropOutline(mask, state.width, state.height);
         } else {
             // Missing geometry may never reveal a screen-sized frozen sheet.
             state.layer.setVisibility(View.INVISIBLE);
@@ -150,7 +150,7 @@ final class OpenFolderGlassCoordinator {
         OpenFolderGlassGeometry.Frame mask = OpenFolderGlassGeometry.closingBackdropMask(
                 state.closedFrame, state.width, state.height, nativeOpenProgress);
         if (mask != null) {
-            state.layer.setFolderRecentsOutline(mask, state.width, state.height);
+            state.layer.setFolderBackdropOutline(mask, state.width, state.height);
         }
         // If the desktop endpoint is temporarily unavailable, leave the
         // current valid mask instead of clipping to a guessed coordinate.
@@ -684,7 +684,7 @@ final class OpenFolderGlassCoordinator {
             // Wait until the native HOME transform is back to root-space
             // identity before consuming the return protection token.
             if (OWNER.completeRecentsReturn(state.serial)) {
-                state.layer.clearFolderRecentsOutline();
+                state.layer.clearFolderBackdropOutline();
                 state.recentsGestureProgress = Float.NaN;
                 if (state.session != null) state.session.requestCachedGlassRedraw();
                 if (state.layer != null) state.layer.reveal();
