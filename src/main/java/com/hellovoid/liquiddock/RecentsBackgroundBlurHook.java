@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.view.Window;
 
 import java.lang.reflect.Constructor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Owns Launcher Recents background blur and dimming overrides while preserving vendor transition
@@ -15,6 +16,11 @@ final class RecentsBackgroundBlurHook {
             "com.miui.home.recents.anim.RecentBlurParams";
     private static final String RECENT_BLUR_PARAMS_COMPANION =
             "com.miui.home.recents.anim.RecentBlurParams$Companion";
+    private static final String RECENTS_DIM_LAYER =
+            "com.miui.home.recents.DimLayer";
+    private static final String SURFACE_CONTROL_COMPAT =
+            "com.android.systemui.shared.recents.system.SurfaceControlCompat";
+    private static final AtomicInteger dimLayerSuppressLogCount = new AtomicInteger();
 
     private static final ThreadLocal<Boolean> RECENTS_TARGET_SCOPE = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> RECENTS_DIMMING_SCOPE = new ThreadLocal<>();
@@ -52,7 +58,17 @@ final class RecentsBackgroundBlurHook {
             try {
                 installRecentsDimmingOverride(classLoader);
             } catch (Throwable error) {
-                MainHook.log(TAG + " optional dimming hooks unavailable: " + error);
+                MainHook.log(TAG + " RecentBlurParams dimming hooks unavailable: " + error);
+            }
+            // HyperOS 4.50 additionally uses TaskViewUtils -> DimLayer.dim()
+            // for a SurfaceControl dim in the task spring. It bypasses the
+            // RecentBlurParams factory constructors entirely. This is a
+            // separate optional vendor entry point; failure on one firmware
+            // must not disable the existing blur and dimming interception.
+            try {
+                installRecentsDimLayerOverride(classLoader);
+            } catch (Throwable error) {
+                MainHook.log(TAG + " Recents DimLayer hook unavailable: " + error);
             }
             installed = true;
             MainHook.log(TAG + " hooks installed strength=" + liveBlurPercent + "%"
@@ -121,6 +137,33 @@ final class RecentsBackgroundBlurHook {
         installDimmingFactoryScope(loader, "getRecentDragParams", float.class);
         installDimmingFactoryScope(
                 loader, "getAppMoveStateParams", float.class, boolean.class, boolean.class);
+    }
+
+    /** Direct Recents task-transition SurfaceControl dim, distinct from
+     * RecentBlurParams.dimming/ezDimming and from folder-opening blur.
+     *
+     * Always invoke the native dim method with a zero alpha when disabled:
+     * skipping it altogether can leave a previously created dim Surface
+     * visible across a cancellation or return-to-folder spring. Do not hook
+     * global Window dimming or getUseRecentBlurAnim(), as the latter also
+     * removes native blur animation elements and changes their timing.
+     */
+    private static void installRecentsDimLayerOverride(ClassLoader loader) {
+        HookUtil.hookMethod(loader, RECENTS_DIM_LAYER, "dim", chain -> {
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            if (liveDisableDimming && args.length == 3
+                    && args[0] instanceof Number) {
+                float nativeAmount = ((Number) args[0]).floatValue();
+                args[0] = RecentsBlurPolicy.resolveDimming(nativeAmount, true);
+                if (MainHook.debugLogging && nativeAmount > 0f
+                        && dimLayerSuppressLogCount.getAndIncrement() < 8) {
+                    MainHook.log(TAG + " Recents DimLayer suppressed native="
+                            + nativeAmount);
+                }
+            }
+            return chain.proceed(args);
+        }, float.class, SURFACE_CONTROL_COMPAT, boolean.class);
+        MainHook.log(TAG + " Recents task-transition DimLayer.dim installed");
     }
 
     private static void installDimmingFactoryScope(
