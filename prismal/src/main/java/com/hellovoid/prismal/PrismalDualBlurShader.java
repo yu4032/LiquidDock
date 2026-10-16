@@ -24,7 +24,11 @@ final class PrismalDualBlurShader {
                 || !fragment.contains("void main() {")) {
             throw new IllegalStateException("Unsupported Prismal shader structure for dual blur");
         }
-        int count = fragment.split(ORIGINAL_SAMPLE, -1).length - 1;
+        int count = 0, index = 0;
+        while ((index = fragment.indexOf(ORIGINAL_SAMPLE, index)) >= 0) {
+            count++;
+            index += ORIGINAL_SAMPLE.length();
+        }
         if (count < 4) {
             throw new IllegalStateException("Unexpected Prismal blurred sample count " + count);
         }

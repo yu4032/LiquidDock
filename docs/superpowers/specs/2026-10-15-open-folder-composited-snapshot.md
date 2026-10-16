@@ -34,3 +34,5 @@ Focused tests: `LauncherGlassSceneControllerTest`, `PassBlurBindPolicyTest`, `Op
 
 ### Close Gaussian continuity
 The frozen wallpaper source is normalized once; Prismal's folder session opts into two precomputed GPU Gaussian blur textures: OPEN_FOLDER radius and the current Workspace radius, both generated only at capture/live-config update. Native reverse-spring progress blends the two in the same optical fragment shader, so the final close frame already matches Workspace Gaussian blur. No per-frame blur kernels, no second PassBlur capture, and no modification to other Prismal clients.
+
+The full-screen wallpaper blur and the refractive lens both blend folder/workspace Gaussian textures with the same close progress. A folder-only composite shader samples both prepared textures in one pass; the existing non-folder compositing shader is unchanged.

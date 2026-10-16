@@ -87,6 +87,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeUvLocation = -1;
     private int compositeTextureLocation = -1;
     private int compositeCropRectLocation = -1;
+    private int compositeWorkspaceTextureLocation = -1;
+    private int compositeBlurMixLocation = -1;
     private OutputState output;
 
     ShortcutPopupGlassSession(
@@ -392,7 +394,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
             compositeProgram = 0;
         compositePositionLocation = compositeUvLocation = -1;
-        compositeTextureLocation = compositeCropRectLocation = -1;
+            compositeTextureLocation = compositeCropRectLocation = -1;
+            compositeWorkspaceTextureLocation = compositeBlurMixLocation = -1;
             sourceBackend.shutdown();
         });
         if (!queued) sourceBackend.shutdown();
@@ -407,7 +410,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (compositeProgram == 0) {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
-                    Miuix307PrismalCompositeShaders.FRAGMENT);
+                    folderBackdrop
+                            ? Miuix307PrismalCompositeShaders.FOLDER_DUAL_BLUR_FRAGMENT
+                            : Miuix307PrismalCompositeShaders.FRAGMENT);
             compositePositionLocation =
                     GLES20.glGetAttribLocation(compositeProgram, "aPosition");
             compositeUvLocation =
@@ -419,6 +424,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
             GLES20.glUseProgram(compositeProgram);
             GLES20.glUniform1i(compositeTextureLocation, 0);
+            if (folderBackdrop) {
+                compositeWorkspaceTextureLocation = requireUniform(
+                        compositeProgram, "uWorkspaceTexture");
+                compositeBlurMixLocation = requireUniform(compositeProgram, "uBlurMix");
+                GLES20.glUniform1i(compositeWorkspaceTextureLocation, 1);
+            }
         }
     }
 
@@ -448,13 +459,20 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             GLES20.glBlendColor(0f, 0f, 0f, backdropOpacity);
             GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalRenderer.preparedBlurTexture());
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,
+                    prismalRenderer.preparedWorkspaceBlurTexture());
+            GLES20.glUniform1f(compositeBlurMixLocation,
+                    folderClosing ? 1f - backdropOpacity : 0f);
             float firstRow = OpenFolderBackdropPolicy.backdropSampleY(0f);
             float lastRow = OpenFolderBackdropPolicy.backdropSampleY(1f);
             GLES20.glUniform4f(compositeCropRectLocation,
                     0f, firstRow, 1f, lastRow - firstRow);
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
             GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+            GLES20.glUniform1f(compositeBlurMixLocation, 0f); // Scene is already dual-blended.
         }
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
