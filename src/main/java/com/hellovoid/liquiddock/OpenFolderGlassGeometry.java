@@ -97,6 +97,19 @@ final class OpenFolderGlassGeometry {
                 radius * t);
     }
 
+    /** The native desktop folder icon uses a different style from the
+     * expanded folder background. In particular, 1x1 must never inherit
+     * LARGE_FOLDER_CORNER_RADIUS as its end-of-close geometry.
+     */
+    static float sourceIconRadiusPx(boolean smallFolder, float smallOverrideDp,
+                                    float largeOverrideDp, float density,
+                                    float nativeRadiusPx, float width, float height) {
+        float fallback = Math.max(0f, Math.min(width, height) * .22f);
+        return LauncherGlassCornerRadiusPolicy.resolve(
+                smallFolder ? smallOverrideDp : largeOverrideDp,
+                density, nativeRadiusPx, fallback);
+    }
+
     Frame current() { return current; }
     void reset() { current = null; width = height = 0; }
 
