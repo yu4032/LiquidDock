@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 import android.view.View;
@@ -58,6 +59,29 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
+        // The OPEN_FOLDER output contains a full-screen frozen wallpaper layer.
+        // MIUI scales Launcher when entering Recents, but the actual wallpaper
+        // is owned by the system compositor. Clip our sibling TextureView to
+        // the folder's material bounds BEFORE the native scale animation:
+        // only the folder lens should participate in that transform.
+        if (state.layer != null) {
+            OpenFolderGlassGeometry.Frame panel = state.expandedFrame;
+            if (panel == null) {
+                View folder = state.folder.get();
+                panel = bounds(view(field(folder, "mBackgroundView")), state);
+            }
+            if (panel != null) {
+                state.layer.setClipBounds(new Rect(
+                        Math.max(0, (int) Math.floor(panel.left)),
+                        Math.max(0, (int) Math.floor(panel.top)),
+                        Math.min(state.width, (int) Math.ceil(panel.right)),
+                        Math.min(state.height, (int) Math.ceil(panel.bottom))));
+            } else {
+                // Unknown native material geometry must not expose a scaled,
+                // screen-sized copy of the wallpaper in Recents.
+                state.layer.setVisibility(View.INVISIBLE);
+            }
+        }
         trace("recents-show", state);
     }
 
@@ -65,6 +89,10 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsHidden(state.serial);
+        if (state.layer != null) state.layer.setVisibility(View.VISIBLE);
+        // Keep the Recents clip until sync observes a stable HOME coordinate
+        // basis; removing it here can reveal a screen-sized scaled wallpaper
+        // during the OEM reverse spring.
         trace("recents-hide", state);
         // onRecentViewHide precedes the OEM HOME presentation. isOpened()
         // and visibility are transient here; the hooked native close callback
@@ -75,6 +103,24 @@ final class OpenFolderGlassCoordinator {
         }
         View root = state.root.get();
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    /** Recover a folder owner orphaned by the keyguard boundary only when
+     * the native FolderCling explicitly reports CLOSED. Never infer closure
+     * from temporary visibility/detach during Recents or unlocking.
+     */
+    static void onUnlockPresentationReleased() {
+        State state = current;
+        if (state == null || !live(state)) return;
+        View root = state.root.get();
+        View cling = state.cling.get();
+        if (root == null || !root.isAttachedToWindow() || cling == null) return;
+        Object result = invoke(cling, "isOpened");
+        Boolean opened = result instanceof Boolean ? (Boolean) result : null;
+        if (OWNER.shouldAbortAfterUnlock(state.serial, opened)) {
+            trace("unlock-native-folder-closed", state);
+            releaseAll();
+        }
     }
 
     /** OWNERSHIP TOKEN for the prepared output, distinct from vendor
@@ -349,6 +395,10 @@ final class OpenFolderGlassCoordinator {
             state.expandedFrame = panel != null ? bounds(panel, state) : null;
         }
         OWNER.beginClose(state.serial);
+        if (!OWNER.isRecentsCovered(state.serial)
+                && !OWNER.isRecentsReturnPending(state.serial) && state.layer != null) {
+            state.layer.setClipBounds(null);
+        }
         state.motion.beginClose();
         // Reuse the same prepared wallpaper and optical material for the
         // entire reverse spring. Changing the blur kernel here stalls frames
@@ -573,6 +623,7 @@ final class OpenFolderGlassCoordinator {
             // Wait until the native HOME transform is back to root-space
             // identity before consuming the return protection token.
             if (OWNER.completeRecentsReturn(state.serial)) {
+                state.layer.setClipBounds(null);
                 if (state.session != null) state.session.requestCachedGlassRedraw();
                 if (state.layer != null) state.layer.reveal();
             }
