@@ -269,7 +269,28 @@ final class OpenFolderGlassCoordinator {
         // entire reverse spring. Changing the blur kernel here stalls frames
         // and causes a final-frame discontinuity at the native handoff.
         if (state.session != null) state.session.beginFolderClose();
+        state.closeAlignment.reset();
+        state.alignmentImage = null;
         onClosingAnimationMaterialUpdated();
+    }
+
+    /** Called after the OEM assigns Folme's reverse-spring start geometry.
+     * Calibrate between the opened panel and the native image at this EXACT
+     * handoff, before its first closing frame is presented.
+     */
+    static void onClosingNativePlatePrepared() {
+        State state = current;
+        if (state == null || !state.motion.isClosing()) return;
+        View anim = animationImage(state);
+        OpenFolderGlassGeometry.Frame raw = bounds(anim, state);
+        OpenFolderGlassGeometry.Frame openingPanel = state.expandedFrame;
+        if (anim != null && raw != null && openingPanel != null) {
+            state.closeAlignment.calibrate(openingPanel, raw);
+            state.alignmentImage = anim;
+            MainHook.diag("[FolderTrace] close geometry anchored to native image delta="
+                    + state.closeAlignment.deltaX() + "," + state.closeAlignment.deltaY()
+                    + " serial=" + state.serial);
+        }
     }
 
     /** The OEM close spring may replace its temporary anim-image drawable. */
@@ -451,6 +472,18 @@ final class OpenFolderGlassCoordinator {
             // and the root-space wallpaper sampling coordinates.
             OpenFolderGlassGeometry.Frame livePlate = state.motion.isClosing()
                     && animImage != null ? bounds(animImage, state) : null;
+            if (livePlate != null) {
+                if (state.alignmentImage != animImage || !state.closeAlignment.isCalibrated()) {
+                    // If an OEM variant swaps the animation image, align it to
+                    // the last drawn glass frame rather than jumping between
+                    // the child ImageView and Folder background coordinate origins.
+                    OpenFolderGlassGeometry.Frame previous = state.geometry.current();
+                    OpenFolderGlassGeometry.Frame anchor = previous != null ? previous : target;
+                    state.closeAlignment.calibrate(anchor, livePlate);
+                    state.alignmentImage = animImage;
+                }
+                livePlate = state.closeAlignment.apply(livePlate);
+            }
             float liveProgress = livePlate != null
                     ? OpenFolderBackdropPolicy.nativeFrameProgress(
                             state.closedFrame, target, livePlate)
@@ -608,6 +641,8 @@ final class OpenFolderGlassCoordinator {
         final float[] points = new float[8], basis = new float[6];
         OpenFolderGlassGeometry.Frame closedFrame, expandedFrame;
         final OpenFolderGlassGeometry geometry = new OpenFolderGlassGeometry();
+        final OpenFolderCloseAlignment closeAlignment = new OpenFolderCloseAlignment();
+        View alignmentImage;
         final OpenFolderNativeMaterial materials = new OpenFolderNativeMaterial(OWNER);
         final IdentityHashMap<View, Object[]> blurRequests = new IdentityHashMap<>();
         final IdentityHashMap<View, Boolean> claimedBlur = new IdentityHashMap<>();
