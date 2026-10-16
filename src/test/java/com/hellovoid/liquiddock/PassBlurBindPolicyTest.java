@@ -16,6 +16,26 @@ public class PassBlurBindPolicyTest {
                 PassBlurBindPolicy.exclusions("FolderSource#1", excluded));
     }
 
+    @Test public void folderCaptureExcludesActualDockSurfaceAcrossRebind() {
+        String[] exclusions = PassBlurBindPolicy.folderWallpaperExclusions(
+                "Launcher#42", "com.miui.home DockOverlay#12", "DockAssistantView",
+                "com.miui.home DockOverlay#13", "", null);
+        assertArrayEquals(new String[]{
+                "Launcher#42", "DockAssistantView",
+                "com.miui.home DockOverlay#12", "com.miui.home DockOverlay#13"
+        }, exclusions);
+        assertArrayEquals(new String[]{
+                "FolderSource#1", "NavigationBar", "StatusBar", "GestureStub",
+                "Launcher#42", "DockAssistantView",
+                "com.miui.home DockOverlay#12", "com.miui.home DockOverlay#13"
+        }, PassBlurBindPolicy.exclusions("FolderSource#1", exclusions));
+    }
+
+    @Test public void noDockRootStillExcludesLegacyVendorDock() {
+        assertArrayEquals(new String[]{"Launcher#42", "DockAssistantView"},
+                PassBlurBindPolicy.folderWallpaperExclusions("Launcher#42", new String[0]));
+    }
+
     @Test public void missingLauncherIdentityRejectsUnverifiedCapture() {
         for (String name : new String[]{null, "", " "}) {
             try {

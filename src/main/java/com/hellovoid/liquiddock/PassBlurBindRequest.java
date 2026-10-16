@@ -53,10 +53,11 @@ final class PassBlurBindRequest {
                 NO_EXTRA_EXCLUSIONS);
     }
 
-    static PassBlurBindRequest openFolder(View authoritativeRoot, String launcherSurfaceName) {
+    static PassBlurBindRequest openFolder(View authoritativeRoot,
+                                          String launcherSurfaceName, String[] liveDockRoots) {
         return new PassBlurBindRequest(
                 authoritativeRoot, PassBlurDomain.OPEN_FOLDER, 1.0f,
-                PassBlurBindPolicy.folderWallpaperExclusions(launcherSurfaceName));
+                PassBlurBindPolicy.folderWallpaperExclusions(launcherSurfaceName, liveDockRoots));
     }
 
     static PassBlurBindRequest dragOverlay(View authoritativeRoot) {

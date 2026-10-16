@@ -69,9 +69,35 @@ final class OpenFolderGlassCoordinator {
         String launcherSurfaceName = Miuix307PassBlurBridge.surfaceName(endpoint.rootSurface);
         // Fail closed when the native Launcher surface identity is unavailable.
         if (launcherSurfaceName.isBlank()) return;
-        State state = new State(root, sourceIcon, OWNER.prepare(), glass);
+        // Prepare identity/geometry only. Starting an actual producer on
+        // ACTION_DOWN captured an intermittently visible Dock *before* the OEM
+        // FolderState alpha=0 transaction reached SurfaceFlinger.
+        State state = new State(root, sourceIcon, OWNER.prepare(), glass,
+                launcherSurfaceName, Miuix307ZeroCopyRenderer.folderCaptureDockSurfaceNames());
         current = state;
         root.addOnAttachStateChangeListener(state.attachListener);
+    }
+
+    /** The OEM FolderState has hidden Dock before we bind the independent
+     * wallpaper PassBlur source. Its root names are still excluded as a
+     * second line of defense against a window reparenting/buffer race.
+     */
+    private static void startWallpaperCapture(State state) {
+        if (!live(state) || state.source != null || state.session != null
+                || state.motion.isClosing()) return;
+        View root = state.root.get();
+        if (root == null || !root.isAttachedToWindow()) { failOpen(state); return; }
+        java.util.LinkedHashSet<String> dockRoots = new java.util.LinkedHashSet<>();
+        for (String name : state.dockRootsAtPrepare) {
+            if (name != null && !name.isBlank()) dockRoots.add(name);
+        }
+        for (String name : Miuix307ZeroCopyRenderer.folderCaptureDockSurfaceNames()) {
+            if (name != null && !name.isBlank()) dockRoots.add(name);
+        }
+        String[] excludedDockRoots = dockRoots.toArray(new String[0]);
+        MainHook.diag("[FolderTrace] wallpaper capture AFTER native folder enter"
+                + " launcherRoot=" + state.launcherSurfaceName
+                + " dockRoots=" + dockRoots);
         state.source = ShortcutPopupSourceOverlay.attachToLauncherBounds(root, new ShortcutPopupSourceOverlay.Listener() {
             @Override public void onAttached(ShortcutPopupSourceOverlay source) {
                 if (!live(state)) return;
@@ -93,13 +119,26 @@ final class OpenFolderGlassCoordinator {
                             failOpen(state);
                         }
                     }
-                }, PassBlurBindRequest.openFolder(source, launcherSurfaceName));
+                }, PassBlurBindRequest.openFolder(
+                        source, state.launcherSurfaceName, excludedDockRoots));
                 attachOutputLayer(state);
                 state.session.requestInitialCapture();
             }
             @Override public void onAttachFailed(Throwable error) { if (live(state)) failOpen(state); }
         }, "LiquidDockFolderBackdropSource");
         if (state.source == null && live(state)) releaseAll();
+    }
+
+    private static void scheduleWallpaperCaptureAfterNativeHide(State state) {
+        View root = state.root.get();
+        if (root == null) { failOpen(state); return; }
+        // The WindowManager Dock FolderState alpha transaction is asynchronous
+        // to native View callbacks. Give SurfaceFlinger two display frames to
+        // apply it before we even create the one-shot capture producer.
+        root.postOnAnimation(() -> root.postOnAnimation(() -> {
+            if (live(state) && !state.motion.isClosing()
+                    && state.cling.get() != null) startWallpaperCapture(state);
+        }));
     }
 
     private static void failOpen(State state) {
@@ -160,6 +199,7 @@ final class OpenFolderGlassCoordinator {
         // wallpaper-only frame remains safe even after FolderCling opens.
         state.preDraw = () -> { sync(state); return true; };
         state.observer.addOnPreDrawListener(state.preDraw);
+        scheduleWallpaperCaptureAfterNativeHide(state);
         state.root.get().postInvalidateOnAnimation();
     }
 
@@ -512,6 +552,8 @@ final class OpenFolderGlassCoordinator {
         WeakReference<View> animationCling = new WeakReference<>(null);
         WeakReference<ViewGroup> layerHost = new WeakReference<>(null);
         final long serial;
+        final String launcherSurfaceName;
+        final String[] dockRootsAtPrepare;
         Object expectedFolderInfo;
         final int width, height, rotation;
         LiquidDockConfig.Glass glass;
@@ -536,10 +578,14 @@ final class OpenFolderGlassCoordinator {
             @Override public void onViewAttachedToWindow(View v) {}
             @Override public void onViewDetachedFromWindow(View v) { if (live(State.this)) releaseAll(); }
         };
-        State(View root, ViewGroup icon, long serial, LiquidDockConfig.Glass glass) {
+        State(View root, ViewGroup icon, long serial, LiquidDockConfig.Glass glass,
+              String launcherSurfaceName, String[] dockRootsAtPrepare) {
             this.root = new WeakReference<>(root);
             this.icon = new WeakReference<>(icon);
             this.serial = serial;
+            this.launcherSurfaceName = launcherSurfaceName;
+            this.dockRootsAtPrepare = dockRootsAtPrepare != null
+                    ? dockRootsAtPrepare.clone() : new String[0];
             this.glass = glass;
             width = root.getWidth(); height = root.getHeight();
             rotation = root.getDisplay() != null ? root.getDisplay().getRotation() : -1;
