@@ -36,6 +36,25 @@ public class OpenFolderBackdropPolicyTest {
         assertEquals(1f, opacity(2f), 0f);
     }
 
+    @Test public void closeLensOpacitySmoothlyReachesZeroAtNativeIconEndpoint() {
+        assertEquals(0f, OpenFolderBackdropPolicy.closingLensOpacity(0f), 0f);
+        assertEquals(0f, OpenFolderBackdropPolicy.closingLensOpacity(-1f), 0f);
+        assertEquals(0f, OpenFolderBackdropPolicy.closingLensOpacity(Float.NaN), 0f);
+        assertEquals(.5f, OpenFolderBackdropPolicy.closingLensOpacity(.12f), .00001f);
+        assertEquals(1f, OpenFolderBackdropPolicy.closingLensOpacity(.24f), 0f);
+        assertEquals(1f, OpenFolderBackdropPolicy.closingLensOpacity(1f), 0f);
+        float previous = -1f;
+        for (int sample = 0; sample <= 240; sample++) {
+            float opacity = OpenFolderBackdropPolicy.closingLensOpacity(sample / 1000f);
+            assertTrue("native reverse spring must have no alpha jump", opacity >= previous);
+            assertTrue("lens alpha remains bounded", opacity <= 1f);
+            previous = opacity;
+        }
+        // Background fades with the original linear progress and must remain
+        // independent of the final lens edge fade.
+        assertEquals(.12f, OpenFolderBackdropPolicy.backdropOpacity(.12f), 0f);
+    }
+
     @Test public void preparedDesktopBlurMapsFboRowsOntoLogicalFullscreenQuad() {
         assertEquals(1f, OpenFolderBackdropPolicy.backdropSampleY(0f), 0f);
         assertEquals(.75f, OpenFolderBackdropPolicy.backdropSampleY(.25f), 0f);

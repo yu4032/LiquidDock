@@ -371,9 +371,16 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
+            // Each EGL presentation must use a single native-progress snapshot
+            // for lens alpha, Gaussian mix and background alpha. Independent
+            // volatile reads could otherwise mix different spring frames.
+            float progress = backdropOpacity;
+            boolean closing = folderClosing;
             if (folderBackdrop) {
-                prismalRenderer.setWorkspaceBlurMix(folderClosing ? 1f - backdropOpacity : 0f);
+                prismalRenderer.setWorkspaceBlurMix(closing ? 1f - progress : 0f);
             }
+            float lensOpacity = folderBackdrop && closing
+                    ? OpenFolderBackdropPolicy.closingLensOpacity(progress) : 1f;
             prismalRenderer.beginGlassFrame();
             prismalRenderer.drawGlass(
                     new PrismalGeometry(
@@ -386,8 +393,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                             currentGeometry.cornerRadius),
                     prismalParams,
                     highlightProfile,
-                    PrismalInteractionState.IDLE);
-            presentFull(prismalRenderer.outputTexture(), currentOutput);
+                    lensOpacity);
+            presentFull(prismalRenderer.outputTexture(), currentOutput, progress, closing);
             if (!presentationSignaled) {
                 presentationSignaled = true;
                 mainHandler.post(() -> {
@@ -451,7 +458,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentFull(int sceneTexture, OutputState current) {
+    private void presentFull(int sceneTexture, OutputState current,
+                             float progress, boolean closing) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         // Clear the whole EGL buffer first. The TextureView buffer can be taller than the
@@ -474,14 +482,14 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             // The frozen source contains wallpaper only: both Launcher and
             // Dock surfaces were excluded before PassBlur producer binding.
             GLES20.glEnable(GLES20.GL_BLEND);
-            GLES20.glBlendColor(0f, 0f, 0f, backdropOpacity);
+            GLES20.glBlendColor(0f, 0f, 0f, progress);
             GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalRenderer.preparedBlurTexture());
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,
                     prismalRenderer.preparedWorkspaceBlurTexture());
             GLES20.glUniform1f(compositeBlurMixLocation,
-                    folderClosing ? 1f - backdropOpacity : 0f);
+                    closing ? 1f - progress : 0f);
             float firstRow = OpenFolderBackdropPolicy.backdropSampleY(0f);
             float lastRow = OpenFolderBackdropPolicy.backdropSampleY(1f);
             GLES20.glUniform4f(compositeCropRectLocation,
