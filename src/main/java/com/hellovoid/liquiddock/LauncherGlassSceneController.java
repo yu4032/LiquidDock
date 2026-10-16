@@ -244,16 +244,6 @@ final class LauncherGlassSceneController {
         return vendorRecentsCovered;
     }
 
-    /** Native HOME wallpaper spring/draw-end remains the single authority
-     * for clearing the temporary folder cached-wallpaper presentation. The
-     * root transform returning to identity alone cannot prove tonal parity.
-     */
-    static synchronized boolean isRecentsWallpaperSettlePendingForRoot(View root) {
-        LauncherGlassSceneController controller = root != null ? BY_ROOT.get(root) : null;
-        return vendorRecentsWallpaperSettlePending
-                || (controller != null && controller.recentsWallpaperSettlePending);
-    }
-
     /** Folder is capture-only. Native Workspace opacity is not authoritative
      * for the cached glass TextureView during this frozen session. */
     static synchronized boolean isFolderBackdropFrozenForRoot(View root) {
