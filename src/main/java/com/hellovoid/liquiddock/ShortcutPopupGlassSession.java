@@ -242,6 +242,24 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
     }
 
+    /** Terminal native-close frame: force the real desktop-icon rectangle,
+     * zero folder background opacity and 100% Workspace blur. The callback
+     * runs only after the final EGL swap in this renderer's FIFO queue.
+     */
+    void finishFolderClose(LauncherGlassGeometry.Snapshot endpoint, Runnable onSwap) {
+        if (!folderBackdrop || endpoint == null || shuttingDown) {
+            if (onSwap != null) mainHandler.post(onSwap);
+            return;
+        }
+        folderClosing = true;
+        geometry = endpoint;
+        backdropOpacity = 0f;
+        if (!sourceBackend.postToRenderThread(() -> {
+            if (!shuttingDown) renderCurrent();
+            if (onSwap != null) mainHandler.post(onSwap);
+        }) && onSwap != null) mainHandler.post(onSwap);
+    }
+
     private void drainFolderFrame() {
         if (folderRenderWork.consumeQueuedRender() != 0 && !shuttingDown) renderCurrent();
         if (folderRenderWork.finishQueuedRender()

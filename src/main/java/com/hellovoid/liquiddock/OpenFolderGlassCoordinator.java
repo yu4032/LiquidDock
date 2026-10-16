@@ -225,6 +225,10 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || opening == state.motion.isClosing()
                 || image(icon) != animationImage(state) || source == null || destination == null) return;
+        // Closing may pass reversed source/destination arrays. The accepted
+        // OPEN spec already defines the expanded direction of native Folme;
+        // overwriting it during CLOSE makes a valid translation look negative.
+        if (!opening && state.animationSpecReady) return;
         View image = image(icon);
         Object size = invoke(image, "getOriginalSize");
         int[] original = size instanceof int[] ? (int[]) size : null;
@@ -269,28 +273,26 @@ final class OpenFolderGlassCoordinator {
         // entire reverse spring. Changing the blur kernel here stalls frames
         // and causes a final-frame discontinuity at the native handoff.
         if (state.session != null) state.session.beginFolderClose();
-        state.closeAlignment.reset();
-        state.alignmentImage = null;
+        state.nativeCloseProgress.reset();
         onClosingAnimationMaterialUpdated();
     }
 
-    /** Called after the OEM assigns Folme's reverse-spring start geometry.
-     * Calibrate between the opened panel and the native image at this EXACT
-     * handoff, before its first closing frame is presented.
+    /** Read the actual Folme channels initialized by setIconBgAnim(false).
+     * Native animation progress is useful; the ImageView's root-space bounds
+     * are NOT the same geometry as Folder.mBackgroundView. Never translate
+     * or scale the lens using a child image's unrelated layout origin.
      */
     static void onClosingNativePlatePrepared() {
         State state = current;
         if (state == null || !state.motion.isClosing()) return;
         View anim = animationImage(state);
-        OpenFolderGlassGeometry.Frame raw = bounds(anim, state);
-        OpenFolderGlassGeometry.Frame openingPanel = state.expandedFrame;
-        if (anim != null && raw != null && openingPanel != null) {
-            state.closeAlignment.calibrate(openingPanel, raw);
-            state.alignmentImage = anim;
-            MainHook.diag("[FolderTrace] close geometry anchored to native image delta="
-                    + state.closeAlignment.deltaX() + "," + state.closeAlignment.deltaY()
-                    + " serial=" + state.serial);
-        }
+        if (anim == null) return;
+        state.nativeCloseProgress.capture(anim.getTranslationX(), anim.getTranslationY(),
+                anim.getScaleX(), state.nativeTargetX, state.nativeTargetY,
+                state.nativeExpandedScaleX);
+        MainHook.diag("[FolderTrace] native close progress channels="
+                + state.nativeCloseProgress.channelDescription()
+                + " serial=" + state.serial);
     }
 
     /** The OEM close spring may replace its temporary anim-image drawable. */
@@ -313,7 +315,7 @@ final class OpenFolderGlassCoordinator {
     static void onClosed(long serial) {
         State state = current;
         if (state != null && serial == state.serial && OWNER.owns(serial)
-                && state.close.contentFinished(serial)) releaseAll();
+                && state.close.contentFinished(serial)) finishNativeClose(state);
     }
 
     static long activeClosingSerial() {
@@ -324,7 +326,40 @@ final class OpenFolderGlassCoordinator {
     static void onNativeBackgroundCloseFinished(long serial) {
         State state = current;
         if (state != null && serial != 0L && state.serial == serial && OWNER.owns(serial)
-                && state.close.backdropFinished(serial)) releaseAll();
+                && state.close.backdropFinished(serial)) finishNativeClose(state);
+    }
+
+    /** Native content and background completion are separate. Once both have
+     * actually ended, commit the exact icon endpoint and Workspace blur onto
+     * the EGL queue BEFORE removing the independent TextureView. A stale
+     * intermediate GPU buffer must never be our final closing image.
+     */
+    private static void finishNativeClose(State state) {
+        if (!live(state) || state.finalCloseQueued) return;
+        state.finalCloseQueued = true;
+        OpenFolderGlassGeometry.Frame icon = state.geometry.acceptAnimation(
+                state.closedFrame, state.width, state.height);
+        if (icon == null || state.layer == null || state.session == null
+                || !state.session.hasFrozenBackdrop()) {
+            releaseAll();
+            return;
+        }
+        LauncherGlassGeometry.Snapshot endpoint = LauncherGlassGeometry.resolveStatic(
+                state.width, state.height, icon.left, icon.top,
+                icon.right, icon.bottom, icon.radius);
+        if (endpoint == null) { releaseAll(); return; }
+        MainHook.diag("[FolderTrace] final close EGL endpoint glassSerial=" + state.serial);
+        state.session.finishFolderClose(endpoint, () -> {
+            if (!live(state)) return;
+            View layer = state.layer;
+            if (layer == null || !layer.isAttachedToWindow()) {
+                releaseAll();
+            } else {
+                // The GL swap is queued first. Keep the TextureView through
+                // the next UI composition, then release the native ownership.
+                layer.postOnAnimation(() -> { if (live(state)) releaseAll(); });
+            }
+        });
     }
 
     static void releaseIfStyle(boolean small) {
@@ -452,58 +487,29 @@ final class OpenFolderGlassCoordinator {
                             animImage.getWidth(), state.nativeSourceHeight, state.nativeTargetHeight, animImage.getHeight());
                 }
             }
-            // For OEM variants without the setIconBgAnim signature, read
-            // the live transformed animation plate rather than hold its origin.
-            if (!Float.isFinite(observed) && animImage != null
-                    && target != null && state.closedFrame != null) {
-                OpenFolderGlassGeometry.Frame plate = bounds(animImage, state);
-                if (plate != null) {
-                    observed = OpenFolderBackdropPolicy.openProgress(
-                            state.closedFrame.right - state.closedFrame.left,
-                            target.right - target.left, plate.right - plate.left,
-                            state.closedFrame.bottom - state.closedFrame.top,
-                            target.bottom - target.top, plate.bottom - plate.top);
+            // The OEM may animate translation and scale on independent Folme
+            // curves. Use whichever actually moved, but NEVER use the native
+            // ImageView's own root-space rectangle as the glass silhouette:
+            // its bounds/pivot can differ from both material endpoints.
+            if (state.motion.isClosing()) observed = Float.NaN;
+            if (state.motion.isClosing() && animImage != null) {
+                if (!state.nativeCloseProgress.hasChannels()) {
+                    state.nativeCloseProgress.capture(animImage.getTranslationX(),
+                            animImage.getTranslationY(), animImage.getScaleX(),
+                            state.nativeTargetX, state.nativeTargetY,
+                            state.nativeExpandedScaleX);
                 }
+                float reverse = state.nativeCloseProgress.sample(
+                        animImage.getTranslationX(), animImage.getTranslationY(),
+                        animImage.getScaleX(), state.nativeTargetX,
+                        state.nativeTargetY, state.nativeExpandedScaleX);
+                if (Float.isFinite(reverse)) observed = reverse;
             }
-            // Native Folme changes translation AND scale. At 165 Hz a ratio
-            // inferred from only one animation property diverges from the
-            // actual plate during its final reverse-spring frames.
-            // Use the transformed bounds directly for both the lens geometry
-            // and the root-space wallpaper sampling coordinates.
-            OpenFolderGlassGeometry.Frame livePlate = state.motion.isClosing()
-                    && animImage != null ? bounds(animImage, state) : null;
-            if (livePlate != null) {
-                if (state.alignmentImage != animImage || !state.closeAlignment.isCalibrated()) {
-                    // If an OEM variant swaps the animation image, align it to
-                    // the last drawn glass frame rather than jumping between
-                    // the child ImageView and Folder background coordinate origins.
-                    OpenFolderGlassGeometry.Frame previous = state.geometry.current();
-                    OpenFolderGlassGeometry.Frame anchor = previous != null ? previous : target;
-                    state.closeAlignment.calibrate(anchor, livePlate);
-                    state.alignmentImage = animImage;
-                }
-                livePlate = state.closeAlignment.apply(livePlate);
-            }
-            float liveProgress = livePlate != null
-                    ? OpenFolderBackdropPolicy.nativeFrameProgress(
-                            state.closedFrame, target, livePlate)
-                    : Float.NaN;
-            float amount = state.motion.sample(Float.isFinite(liveProgress)
-                    ? liveProgress : observed);
-            OpenFolderGlassGeometry.Frame frame;
-            if (state.motion.isClosing() && livePlate != null
-                    && Float.isFinite(liveProgress)) {
-                frame = state.geometry.acceptAnimation(
-                        new OpenFolderGlassGeometry.Frame(
-                                livePlate.left, livePlate.top,
-                                livePlate.right, livePlate.bottom,
-                                state.closedFrame.radius
-                                        + (target.radius - state.closedFrame.radius) * amount),
-                        state.width, state.height);
-            } else {
-                frame = state.geometry.acceptProgress(
-                        state.closedFrame, target, amount, state.width, state.height);
-            }
+            float amount = state.motion.sample(observed);
+            // One root-coordinate path for OPEN and CLOSE: no child-View
+            // layout-origin handoff, one-time offset or second animation.
+            OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
+                    state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
             state.materials.beginFrame(state.serial);
             track(state, folder.getBackground());
@@ -641,8 +647,8 @@ final class OpenFolderGlassCoordinator {
         final float[] points = new float[8], basis = new float[6];
         OpenFolderGlassGeometry.Frame closedFrame, expandedFrame;
         final OpenFolderGlassGeometry geometry = new OpenFolderGlassGeometry();
-        final OpenFolderCloseAlignment closeAlignment = new OpenFolderCloseAlignment();
-        View alignmentImage;
+        final OpenFolderNativeCloseProgress nativeCloseProgress = new OpenFolderNativeCloseProgress();
+        boolean finalCloseQueued;
         final OpenFolderNativeMaterial materials = new OpenFolderNativeMaterial(OWNER);
         final IdentityHashMap<View, Object[]> blurRequests = new IdentityHashMap<>();
         final IdentityHashMap<View, Boolean> claimedBlur = new IdentityHashMap<>();
