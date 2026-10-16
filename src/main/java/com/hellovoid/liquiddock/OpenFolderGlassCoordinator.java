@@ -756,10 +756,12 @@ final class OpenFolderGlassCoordinator {
                 }
             }
             @Override public void onViewDetachedFromWindow(View v) {
-                // This is not proof of folder CLOSE during Recents. A real
-                // Launcher root destruction outside that transition may abort.
-                if (live(State.this) && !OWNER.isRecentsCovered(serial)
-                        && !OWNER.isRecentsReturnPending(serial)) releaseAll();
+                // ViewRoot removal may PRECEDE onRecentViewShow and the OEM
+                // does not guarantee the callback order. A detach has no
+                // authority to revoke an OPEN_FOLDER GPU snapshot. Surface-
+                // Texture lifecycle already releases only the output EGL
+                // surface; on reattach it recreates the output from cache.
+                // Real folder CLOSE / Launcher onDestroy own full release.
             }
         };
         State(View root, ViewGroup icon, long serial, LiquidDockConfig.Glass glass,

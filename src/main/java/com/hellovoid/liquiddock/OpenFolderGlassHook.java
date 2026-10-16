@@ -146,6 +146,23 @@ final class OpenFolderGlassHook {
                 }
                 return result;
             });
+            // A temporary ViewRoot detach during Recents is not a destroyed
+            // Launcher. Bind final cleanup to the actual Launcher lifecycle
+            // instead of releasing the frozen EGL cache in onViewDetached.
+            try {
+                Method onDestroy = launcher.getDeclaredMethod("onDestroy");
+                onDestroy.setAccessible(true);
+                HookUtil.hook(onDestroy, chain -> {
+                    try {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    } finally {
+                        OpenFolderGlassCoordinator.releaseAll();
+                    }
+                });
+            } catch (NoSuchMethodException ignored) {
+                MainHook.log("[DC][OpenFolderGlass] Launcher onDestroy not overridden;"
+                        + " stale folder session releases on next prepare");
+            }
             installed = true;
             MainHook.log("[DC][OpenFolderGlass] native open/close hooks installed");
         } catch (Throwable error) {
