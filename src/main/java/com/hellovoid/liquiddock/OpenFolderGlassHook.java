@@ -159,9 +159,12 @@ final class OpenFolderGlassHook {
                         OpenFolderGlassCoordinator.releaseAll();
                     }
                 });
-            } catch (NoSuchMethodException ignored) {
-                MainHook.log("[DC][OpenFolderGlass] Launcher onDestroy not overridden;"
-                        + " stale folder session releases on next prepare");
+            } catch (Throwable unavailable) {
+                // Optional final cleanup must never poison the already
+                // installed OEM open/close Hooks if this Launcher version has
+                // no declared onDestroy or rejects the extra method Hook.
+                MainHook.log("[DC][OpenFolderGlass] Launcher final lifecycle hook unavailable: "
+                        + unavailable);
             }
             installed = true;
             MainHook.log("[DC][OpenFolderGlass] native open/close hooks installed");
