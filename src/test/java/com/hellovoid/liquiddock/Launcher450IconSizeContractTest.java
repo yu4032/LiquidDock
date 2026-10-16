@@ -31,6 +31,16 @@ public class Launcher450IconSizeContractTest {
     }
 
     @Test
+    public void expandedGridClampDoesNotAlterOtherDomains() {
+        // Native-size expanded-folder children are the sole exception.
+        // The full requested range remains authoritative on Workspace/Dock.
+        assertEquals(144, Launcher450IconSizePolicy.scaledPx(120, true, 120));
+        assertEquals(120, Launcher450IconSizePolicy.fitNativeFolderCell(120, true, 120));
+        assertEquals(108, Launcher450IconSizePolicy.fitNativeFolderCell(120, true, 90));
+        assertEquals(120, Launcher450IconSizePolicy.fitNativeFolderCell(120, false, 90));
+    }
+
+    @Test
     public void expandedFolderRetainsVendorCellHeightForOversizedIcons() {
         // A 120% drawable inside a native-size FolderGridView cell displaces
         // the caption. This domain must not inflate its child measurement.
