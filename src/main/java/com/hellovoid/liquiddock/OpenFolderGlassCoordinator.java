@@ -137,6 +137,25 @@ final class OpenFolderGlassCoordinator {
         }
     }
 
+    /** A native CLOSE is not a Recents transition. The frozen wallpaper
+     * background must contract into the *desktop* folder's glass outline,
+     * not stay full-screen while the Prismal lens alone shrinks.
+     *
+     * The OPEN_FOLDER output TextureView remains full-sized and resident
+     * throughout close: only its compositor outline changes. No additional
+     * PassBlur, GPU recapture, alpha animation or rounded-bitmap allocation.
+     */
+    private static void updateClosingBackdropOutline(State state, float nativeOpenProgress) {
+        if (!live(state) || state.layer == null) return;
+        OpenFolderGlassGeometry.Frame mask = OpenFolderGlassGeometry.closingBackdropMask(
+                state.closedFrame, state.width, state.height, nativeOpenProgress);
+        if (mask != null) {
+            state.layer.setFolderRecentsOutline(mask, state.width, state.height);
+        }
+        // If the desktop endpoint is temporarily unavailable, leave the
+        // current valid mask instead of clipping to a guessed coordinate.
+    }
+
     /** Recover a folder owner orphaned by the keyguard boundary only when
      * the native FolderCling explicitly reports CLOSED. Never infer closure
      * from temporary visibility/detach during Recents or unlocking.
@@ -427,11 +446,15 @@ final class OpenFolderGlassCoordinator {
             state.expandedFrame = panel != null ? bounds(panel, state) : null;
         }
         OWNER.beginClose(state.serial);
-        if (!OWNER.isRecentsCovered(state.serial)
-                && !OWNER.isRecentsReturnPending(state.serial) && state.layer != null) {
-            state.layer.clearFolderRecentsOutline();
-        }
         state.motion.beginClose();
+        if (!OWNER.isRecentsCovered(state.serial)
+                && !OWNER.isRecentsReturnPending(state.serial)) {
+            // Start at the complete wallpaper (radius 0). The pre-draw
+            // reverse spring then constrains it toward the desktop icon.
+            // Clearing the mask here was the root of the 1x1 regression:
+            // the GL lens shrank, but the backdrop did not.
+            updateClosingBackdropOutline(state, 1f);
+        }
         // Reuse the same prepared wallpaper and optical material for the
         // entire reverse spring. Changing the blur kernel here stalls frames
         // and causes a final-frame discontinuity at the native handoff.
@@ -508,6 +531,9 @@ final class OpenFolderGlassCoordinator {
                 state.width, state.height, icon.left, icon.top,
                 icon.right, icon.bottom, icon.radius);
         if (endpoint == null) { releaseAll(); return; }
+        // Match the final, exact desktop-folder rectangle before the
+        // terminal EGL swap and resident Workspace material handoff.
+        updateClosingBackdropOutline(state, 0f);
         state.session.finishFolderClose(endpoint, () -> {
             if (!live(state)) return;
             ShortcutPopupGlassLayer output = state.layer;
@@ -719,6 +745,13 @@ final class OpenFolderGlassCoordinator {
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
+            if (state.motion.isClosing() && !OWNER.isRecentsCovered(state.serial)
+                    && !OWNER.isRecentsReturnPending(state.serial)) {
+                // The compositor crop and shader lens share this EXACT
+                // native-Folme progress snapshot. A separate Recents blur
+                // ratio cannot represent an ordinary folder close.
+                updateClosingBackdropOutline(state, amount);
+            }
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top, frame.right, frame.bottom, frame.radius), amount);
         } catch (Throwable error) {
