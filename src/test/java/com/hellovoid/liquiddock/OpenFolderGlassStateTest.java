@@ -40,6 +40,8 @@ public class OpenFolderGlassStateTest {
         state.onRecentsHidden(serial);
         assertFalse(state.isRecentsCovered(serial));
         assertTrue(state.isRecentsReturnPending(serial));
+        assertTrue("temporary non-identity HOME transform cannot destroy glass",
+                state.deferTransientRecentsTransform(serial));
         assertTrue("cached glass may restore before FolderCling becomes VISIBLE",
                 state.shouldReplayAfterRecents(serial, true));
         assertFalse("native actual close forbids replay",
@@ -49,6 +51,7 @@ public class OpenFolderGlassStateTest {
         assertFalse("truly closed native folder is not retained",
                 state.keepHiddenFolder(serial, false));
         assertTrue(state.completeRecentsReturn(serial));
+        assertFalse(state.deferTransientRecentsTransform(serial));
         assertFalse(state.isRecentsReturnPending(serial));
         assertFalse(state.shouldReplayAfterRecents(serial, true));
         assertFalse(state.completeRecentsReturn(serial));
@@ -60,6 +63,7 @@ public class OpenFolderGlassStateTest {
         assertFalse(state.shouldReplayAfterRecents(serial, true));
         assertFalse(state.keepHiddenFolder(serial, true));
         assertFalse(state.isRecentsCovered(replacement));
+        assertFalse(state.deferTransientRecentsTransform(replacement));
         assertTrue(state.owns(replacement));
     }
 
