@@ -49,24 +49,6 @@ final class OpenFolderGlassGeometry {
                 closed.radius + (panel.radius - closed.radius) * p), rootWidth, rootHeight);
     }
 
-    /** Recents scales the Launcher root including its full-screen glass output.
-     * Showing even part of the captured *whole-screen* wallpaper outside the
-     * expanded folder double-composites a second, scaled wallpaper over the
-     * vendor's independently animated/dimmed wallpaper.
-     *
-     * Limit the cached output to the real expanded-folder material rectangle
-     * BEFORE native root scaling; Launcher alone animates that rectangle.
-     * BlurUtils' float argument is a blur intensity, not a reliable geometric
-     * transform timeline, and must never expand this mask to full-screen.
-     */
-    static Frame recentsMaterialMask(Frame expanded, int rootWidth, int rootHeight) {
-        if (expanded == null || rootWidth <= 0 || rootHeight <= 0
-                || !valid(expanded, rootWidth, rootHeight)) return null;
-        float radius = Math.max(0f, Math.min(expanded.radius,
-                Math.min(expanded.right - expanded.left, expanded.bottom - expanded.top) * .5f));
-        return new Frame(expanded.left, expanded.top, expanded.right, expanded.bottom, radius);
-    }
-
     /** Native FolderCling CLOSE owns progress: expanded=1, icon=0.
      * The temporary OPEN_FOLDER TextureView also contains a full-screen
      * wallpaper backdrop. Morph its visible background from the whole root
