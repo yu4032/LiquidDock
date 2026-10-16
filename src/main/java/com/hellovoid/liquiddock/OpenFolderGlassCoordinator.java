@@ -276,6 +276,10 @@ final class OpenFolderGlassCoordinator {
         }
         state.cling = new WeakReference<>(folderCling);
         state.folder = new WeakReference<>(folder);
+        // Native material ownership is an OEM-opening concern, NOT dependent
+        // on asynchronous source-window attachment or the first EGL swap.
+        // Otherwise the stock folder plate paints before our output exists.
+        trackNativeMaterial(state);
         state.closedFrame = bounds(image(sourceIcon), state);
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
@@ -535,6 +539,10 @@ final class OpenFolderGlassCoordinator {
                 // here. The already-hooked native CLOSE owns release.
                 return;
             }
+            // Draw suppression remains active even before the async input
+            // window and EGL session are ready. Register each new OEM
+            // background/plate before the native View traversal draws it.
+            trackNativeMaterial(state);
             // Native close can hide or detach FolderCling while its separate
             // background proxy keeps animating. The sibling output stays live.
             if (state.session == null) return;
@@ -625,25 +633,31 @@ final class OpenFolderGlassCoordinator {
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
-            state.materials.beginFrame(state.serial);
-            track(state, folder.getBackground());
-            track(state, panel != null ? panel.getBackground() : null);
-            if (animImage instanceof ImageView) track(state, ((ImageView) animImage).getDrawable());
-            if (animImage != null) track(state, animImage.getBackground());
-            // The OEM close plate is a FolderIcon container. Its background
-            // (and native RenderNode blur) may be distinct from the child
-            // icon image's drawable. Cover both actual identities rather than
-            // globally muting BlurUtilities or all FolderIcon instances.
-            View plate = nativeAnimationPlate(state);
-            if (plate != null) track(state, plate.getBackground());
-            if (OWNER.maySuppressNative()) claimNativeBlur(state);
-            state.materials.endFrame(state.serial);
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top, frame.right, frame.bottom, frame.radius), amount);
         } catch (Throwable error) {
             MainHook.log(TAG + " geometry fallback: " + error);
             releaseAll();
         }
+    }
+
+    /** OEM material draw ownership, independent of PassBlur source attachment
+     * or GL output availability. No geometry writes, alpha hacks or captures.
+     */
+    private static void trackNativeMaterial(State state) {
+        View folder = state.folder.get();
+        if (folder == null || !OWNER.maySuppressNative()) return;
+        View panel = view(field(folder, "mBackgroundView"));
+        View animImage = animationImage(state);
+        View plate = nativeAnimationPlate(state);
+        state.materials.beginFrame(state.serial);
+        track(state, folder.getBackground());
+        track(state, panel != null ? panel.getBackground() : null);
+        if (animImage instanceof ImageView) track(state, ((ImageView) animImage).getDrawable());
+        if (animImage != null) track(state, animImage.getBackground());
+        if (plate != null) track(state, plate.getBackground());
+        claimNativeBlur(state);
+        state.materials.endFrame(state.serial);
     }
 
     private static void track(State state, Drawable drawable) {
