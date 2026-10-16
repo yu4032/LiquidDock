@@ -97,9 +97,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeWorkspaceTextureLocation = -1;
     private int compositeBlurMixLocation = -1;
     private OutputState output;
-    // Render-thread owned: the callback that releases Recents protection
-    // must observe a real completed EGL swap, not merely a queued render.
-    private long presentedOutputFrameCount;
+    // Render-thread owned. Keep the HOME handoff pending if the TextureView
+    // Surface is briefly unavailable: its next successful EGL swap owns the
+    // actual release of the protective rounded clip.
+    private Runnable pendingFolderRecentsSwapCompletion;
 
     ShortcutPopupGlassSession(
             View sourceRoot, LiquidDockConfig.Glass glassConfig, Listener listener) {
@@ -268,13 +269,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         folderRecentsLensOnly = lensOnly;
         if (!sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) return;
-            long before = presentedOutputFrameCount;
+            if (afterSwap != null) pendingFolderRecentsSwapCompletion = afterSwap;
             renderCurrent();
-            if (afterSwap != null && presentedOutputFrameCount > before) {
-                mainHandler.post(() -> {
-                    if (!shuttingDown) afterSwap.run();
-                });
-            }
         }) && afterSwap != null) {
             MainHook.log(TAG + " Recents output handoff render unavailable");
         }
@@ -464,6 +460,13 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     1f);
             presentFull(prismalRenderer.outputTexture(), currentOutput, progress,
                     workspaceMix, folderBackdrop && folderRecentsLensOnly);
+            Runnable completed = pendingFolderRecentsSwapCompletion;
+            pendingFolderRecentsSwapCompletion = null;
+            if (completed != null) {
+                mainHandler.post(() -> {
+                    if (!shuttingDown) completed.run();
+                });
+            }
             if (!presentationSignaled) {
                 presentationSignaled = true;
                 mainHandler.post(() -> {
@@ -479,6 +482,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown) return;
         shuttingDown = true;
         boolean queued = sourceBackend.postToRenderThread(() -> {
+            pendingFolderRecentsSwapCompletion = null;
             releaseOutput(output);
             output = null;
             if (prismalRenderer != null) {
@@ -580,7 +584,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (folderBackdrop) GLES20.glDisable(GLES20.GL_BLEND);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         sourceBackend.swapBuffers(current.eglSurface);
-        presentedOutputFrameCount++;
     }
 
     private void releaseOutput(OutputState current) {
