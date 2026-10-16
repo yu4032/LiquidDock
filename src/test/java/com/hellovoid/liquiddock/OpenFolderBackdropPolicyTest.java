@@ -55,6 +55,13 @@ public class OpenFolderBackdropPolicyTest {
         }
     }
 
+    @Test public void nativeWallpaperMustFinishBeforeCachedFolderFullReveal() {
+        assertFalse(OpenFolderBackdropPolicy.mayCompleteRecentsReturn(false, true));
+        assertFalse(OpenFolderBackdropPolicy.mayCompleteRecentsReturn(true, true));
+        assertFalse(OpenFolderBackdropPolicy.mayCompleteRecentsReturn(false, false));
+        assertTrue(OpenFolderBackdropPolicy.mayCompleteRecentsReturn(true, false));
+    }
+
     @Test public void closingGlassSmoothlyBecomesWorkspaceMaterial() {
         assertEquals(1f, OpenFolderBackdropPolicy.workspaceGlassMix(0f), 0f);
         assertEquals(.5f, OpenFolderBackdropPolicy.workspaceGlassMix(.5f), 0.0001f);
