@@ -64,6 +64,5 @@ jobs:
             src/main/java/com/hellovoid/liquiddock
             src/test/java/com/hellovoid/liquiddock
             prismal/src/main/java/com/hellovoid/prismal
-            tools/capture-folder-diag.sh
           if-no-files-found: error
           retention-days: 3

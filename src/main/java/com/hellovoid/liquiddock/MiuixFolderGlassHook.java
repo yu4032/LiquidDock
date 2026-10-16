@@ -51,8 +51,6 @@ final class MiuixFolderGlassHook {
     private MiuixFolderGlassHook() {}
 
     static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
-        MainHook.diag("[FolderTrace] MiuixFolderGlassHook install called"
-                + " alreadyInstalled=" + installed + " configPresent=" + (runtimeConfig != null));
         if (installed) return true;
         if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
             return false;
@@ -116,8 +114,6 @@ final class MiuixFolderGlassHook {
                 return chain.proceed(args);
             });
             installed = true;
-            MainHook.diag("[FolderTrace] MiuixFolderGlassHook installed"
-                    + " semanticDispatcher=" + folderStatusDispatcherInstalled);
             MainHook.log(TAG + " shared FolderIcon glass hook installed");
             return true;
         } catch (Throwable error) {
@@ -160,7 +156,6 @@ final class MiuixFolderGlassHook {
      */
     static void onFolderOpeningBeforeNativeAnimation() {
         OemFolderBlurStrengthHook.setFolderOpening(true);
-        FolderDiagnosticTrace.event("freeze-before-native-folder");
         pendingInputResumeSerial = 0L;
         Miuix307ZeroCopyRenderer.setFolderFrozen(true);
         LauncherGlassSceneController.setFolderCoveredForAll(true);
@@ -176,23 +171,19 @@ final class MiuixFolderGlassHook {
                 "com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl";
         try {
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderOpen", chain -> {
-                FolderDiagnosticTrace.event("OEM-dispatchFolderOpen");
                 // Keep Launcher responsible for native visibility and modal
                 // input; the desktop snapshot was sealed before this dispatch.
                 onFolderOpeningBeforeNativeAnimation();
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
-                FolderDiagnosticTrace.event("OEM-dispatchFolderClose");
                 // Freeze persists through native close; the correct committed
                 // Workspace frame is acquired only after folder release.
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
-            MainHook.diag("[FolderTrace] semantic FolderStatus dispatcher hooked");
             MainHook.log(TAG + " semantic FolderStatus dispatcher hooks installed");
             return true;
         } catch (Throwable error) {
-            MainHook.diag("[FolderTrace] semantic FolderStatus dispatcher hook FAILED " + error);
             MainHook.log(TAG + " semantic FolderStatus dispatcher unavailable; using FolderIcon fallback: "
                     + error);
             return false;
@@ -217,8 +208,6 @@ final class MiuixFolderGlassHook {
         // transparent gap at the closing folder.
         if (animated && OpenFolderGlassCoordinator.hasActiveSession()) {
             LauncherGlassSceneController.beginNativeFolderCloseForAll();
-            MainHook.diag("[FolderTrace] Workspace glass resumes with native icon fade"
-                    + " serial=" + openedFolderSerial);
         }
     }
 
@@ -377,17 +366,12 @@ final class MiuixFolderGlassHook {
         if (sink != null) sink.restoreFolderVisibilityImmediately();
         // The native close may finish before the sibling glass TextureView
         // is disposed. Keep all producers paused through that final output.
-        FolderDiagnosticTrace.event("native-restore-owner");
         if (OpenFolderGlassCoordinator.hasActiveSession()) {
             // This token MUST come from the prepared glass output, not
             // openedFolderSerial. Background prepare() also occurs on icon
             // ACTION_DOWN/cancel, so its serial and OEM opens diverge.
             pendingInputResumeSerial = OpenFolderGlassCoordinator.activeSessionSerial();
-            MainHook.diag("[FolderTrace] resume deferred nativeSerial="
-                    + openedFolderSerial + " glassSerial=" + pendingInputResumeSerial);
         } else {
-            MainHook.diag("[FolderTrace] no expanded output; resume directly nativeSerial="
-                    + openedFolderSerial);
             releaseFrozenInputs();
         }
         if (owner != null && !folderStatusDispatcherInstalled) {
@@ -406,23 +390,14 @@ final class MiuixFolderGlassHook {
         if (serial == 0L || pendingInputResumeSerial != serial) return false;
         pendingInputResumeSerial = 0L;
         releaseFrozenInputs();
-        MainHook.diag("[FolderTrace] expanded output retained during Workspace recovery serial=" + serial);
         return true;
     }
 
     static void onExpandedFolderOutputReleased(long serial) {
-        MainHook.diag("[FolderTrace] expanded output released glassSerial=" + serial
-                + " expectedGlassSerial=" + pendingInputResumeSerial
-                + " nativeSerial=" + openedFolderSerial);
-        if (!beginExpandedFolderHandoff(serial)) {
-            MainHook.diag("[FolderTrace] release ignored: glass token mismatch/already thawed");
-        }
+        beginExpandedFolderHandoff(serial);
     }
 
     private static void releaseFrozenInputs() {
-        FolderDiagnosticTrace.event("release-frozen-inputs");
-        MainHook.diag("[FolderTrace] thaw workspace/Dock nativeSerial="
-                + openedFolderSerial + " glassSerial=" + pendingInputResumeSerial);
         LauncherGlassSceneController.setFolderCoveredForAll(false);
         Miuix307ZeroCopyRenderer.setFolderFrozen(false);
     }

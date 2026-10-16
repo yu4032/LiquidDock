@@ -9,7 +9,6 @@ package com.hellovoid.liquiddock;
  */
 public class MainHook {
     public void install(ClassLoader classLoader) {
-        FolderDiagnosticTrace.processBoot("install-entry", "loader=" + classLoader);
         // Sequence guard makes future hook-order drift fail fast in tests and debug builds.
         LauncherInstallSequence order = new LauncherInstallSequence();
 
@@ -24,8 +23,6 @@ public class MainHook {
                 config.enabled && config.grid.enabled);
         debugLogging = config.debugLog;
         Api101Bridge.setDebugLogging(debugLogging);
-        FolderDiagnosticTrace.processBoot("config", "master=" + config.enabled
-                + " glass=" + config.glass.enabled + " debug=" + debugLogging);
         log("[DC] LiquidDock " + (debugLogging ? "debug logging ON" : "loaded"));
         if (!config.enabled) {
             log("[DC] LiquidDock master switch disabled");
@@ -107,14 +104,6 @@ public class MainHook {
     // ── process logging ─────────────────────────────────────────────
 
     static boolean debugLogging;
-
-    /** Temporary field-diagnostic channel: independent from GUI debug setting.
-     * Only startup, folder lifecycle, sampled frame states and first post-folder
-     * Dock frames should use this. Never call it from a 165Hz hot loop.
-     */
-    static void diag(String message) {
-        Api101Bridge.logFolderDiagnostic(message);
-    }
 
     static void log(String message) {
         if (!debugLogging) return;
