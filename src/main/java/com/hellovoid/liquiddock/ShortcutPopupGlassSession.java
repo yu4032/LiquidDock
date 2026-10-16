@@ -547,7 +547,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        if (folderBackdrop && !lensOnly) {
+        if (OpenFolderRecentsCompositionPolicy.drawFrozenWallpaper(folderBackdrop, lensOnly)) {
             // The frozen source contains wallpaper only: both Launcher and
             // Dock surfaces were excluded before PassBlur producer binding.
             GLES20.glEnable(GLES20.GL_BLEND);
