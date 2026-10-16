@@ -503,6 +503,11 @@ final class LauncherGlassHomePresentationHook {
                 + " serial=" + serial);
         LauncherGlassSessionRegistry.setUnlockTransitionFrameSyncForAll(
                 false, "unlock-barrier-released");
+        // The OEM may close an expanded folder during keyguard without
+        // dispatching FolderCling.close. Reconcile only a confirmed native
+        // isOpened()==false owner, so stale folder coverage cannot indefinitely
+        // block the resident Workspace source on the first unlocked frame.
+        OpenFolderGlassCoordinator.onUnlockPresentationReleased();
         // SceneController requests a fresh generation before exposing Workspace glass again.
         LauncherGlassSceneController.setUnlockTransitionPendingForAll(false);
     }
