@@ -356,7 +356,6 @@ final class MiuixFolderGlassHook {
             previousSink.setSuppressedByFolderOpen(false);
         }
         // A new native folder owner supersedes any previous preview handoff.
-        FolderPreviewCloseContinuity.cancel();
         openedFolderOwner = new WeakReference<>(owner);
         openedFolderSerial++;
         NATIVE_CLOSE.cancel();
@@ -371,17 +370,6 @@ final class MiuixFolderGlassHook {
     private static void restoreOpenedFolderOwner() {
         LauncherGlassStaticNode sink = openedFolderSink.get();
         ViewGroup owner = openedFolderOwner.get();
-
-        // The OEM uses a separate PreviewContainer alpha for the desktop
-        // folder miniature. Between closing the animation proxy and rebinding
-        // its source, that preview can briefly drop to zero even while
-        // Workspace and the standalone glass layer are already visible.
-        // Hold ONLY this source preview from native spring completion through
-        // the resident glass handoff; its parent continues following OEM
-        // Workspace alpha with the rest of the icons.
-        if (owner != null && OpenFolderGlassCoordinator.activeClosingSerial() != 0L) {
-            FolderPreviewCloseContinuity.begin(owner, openedFolderSerial);
-        }
 
         // Only now may the Dock and Workspace consume new source frames;
         // their existing TextureView outputs were preserved while the folder
@@ -423,7 +411,6 @@ final class MiuixFolderGlassHook {
     }
 
     static void onExpandedFolderOutputReleased(long serial) {
-        FolderPreviewCloseContinuity.releaseAfterTwoDraws();
         MainHook.diag("[FolderTrace] expanded output released glassSerial=" + serial
                 + " expectedGlassSerial=" + pendingInputResumeSerial
                 + " nativeSerial=" + openedFolderSerial);

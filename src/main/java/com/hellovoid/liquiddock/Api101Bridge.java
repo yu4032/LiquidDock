@@ -54,13 +54,13 @@ public final class Api101Bridge {
         writeError(message, error);
     }
 
-    /** Debug-APK-only field tracing for PR #392.
-     * Kept in the audited logging owner; never used in release builds and
-     * never enabled by the user's ordinary runtime debug preference.
-     * Device acceptance requires this channel even when that preference is off.
+    /** Bounded folder diagnostics: debug builds always, release builds only
+     * when the user explicitly enables the existing debug-log preference.
+     * The previous DEBUG-only gate made PR392 traces silently unavailable
+     * to real-device release installations even with logging enabled.
      */
     static void logFolderDiagnostic(String message) {
-        if (!BuildConfig.DEBUG || message == null) return;
+        if ((!BuildConfig.DEBUG && !debugLogging) || message == null) return;
         if (!message.startsWith("[FolderTrace]") && !message.startsWith("[DC][FolderWorkspace]")) {
             return;
         }
