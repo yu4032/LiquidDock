@@ -33,14 +33,6 @@ final class OpenFolderGlassState {
         return owns(value) && recentsReturnPending;
     }
 
-    /** The OEM HOME transition may leave our host scaled/transformed for
-     * several draw frames. A pending Recents return owns the GPU snapshot;
-     * it must wait for the native root transform, never release the output.
-     */
-    boolean deferTransientRecentsTransform(long value) {
-        return owns(value) && (recentsCovered || recentsReturnPending);
-    }
-
     boolean keepHiddenFolder(long value, boolean nativeStillOpened) {
         return owns(value) && (recentsCovered || (recentsReturnPending && nativeStillOpened));
     }

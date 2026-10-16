@@ -529,11 +529,10 @@ final class OpenFolderGlassCoordinator {
                     || !enabled(state.icon.get())) { releaseAll(); return; }
             if (!state.motion.isClosing()
                     && (!cling.isAttachedToWindow() || cling.getVisibility() != View.VISIBLE)) {
-                // Recents may keep the native FolderCling temporarily
-                // invisible even after its onRecentViewHide callback.
-                // Preserve until a real OEM close or terminal detach.
-                if (OWNER.keepHiddenFolder(state.serial, true)) return;
-                releaseAll();
+                // View visibility is a presentation fact, not a folder-close
+                // event. Recents may hide the Cling before its dispatcher
+                // announces the transition; never dispose a GPU snapshot
+                // here. The already-hooked native CLOSE owns release.
                 return;
             }
             // Native close can hide or detach FolderCling while its separate
@@ -559,8 +558,9 @@ final class OpenFolderGlassCoordinator {
                     || Math.abs(basis[3] - basis[1]) > 0.001f
                     || Math.abs(basis[4] - basis[0]) > 0.001f
                     || Math.abs(basis[5] - basis[1] - 1f) > 0.001f) {
-                if (OWNER.deferTransientRecentsTransform(state.serial)) return;
-                releaseAll();
+                // Any transient host scaling/rotation invalidates only this
+                // frame's geometry, never the cached glass's lifetime.
+                // The vendor native root owns HOME/Recents transforms.
                 return;
             }
             // Wait until the native HOME transform is back to root-space
