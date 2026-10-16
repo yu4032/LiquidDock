@@ -12,6 +12,8 @@ final class SystemUiKeyguardGoneRuntime {
     private static final Object LOCK = new Object();
     private static boolean registered;
     private static BroadcastReceiver receiver;
+    private static boolean screenLifecycleRegistered;
+    private static BroadcastReceiver screenLifecycleReceiver;
 
     private SystemUiKeyguardGoneRuntime() {}
 
@@ -27,10 +29,11 @@ final class SystemUiKeyguardGoneRuntime {
     static void ensureRegistered(Context context) {
         if (context == null) return;
         synchronized (LOCK) {
-            if (registered) return;
+            if (registered && screenLifecycleRegistered) return;
             Context app = context.getApplicationContext();
             if (app == null) app = context;
             final Context receiverContext = app;
+            if (!registered) {
             BroadcastReceiver created = new BroadcastReceiver() {
                 @Override public void onReceive(Context ignored, Intent intent) {
                     if (intent == null
@@ -53,6 +56,35 @@ final class SystemUiKeyguardGoneRuntime {
             } catch (Throwable error) {
                 MainHook.log("[DC][GlassScene] SystemUI keyguard-finished receiver unavailable: "
                         + error);
+            }
+            }
+            if (!screenLifecycleRegistered) {
+                BroadcastReceiver lifecycle = new BroadcastReceiver() {
+                    @Override public void onReceive(Context ignored, Intent intent) {
+                        if (intent == null) return;
+                        String action = intent.getAction();
+                        if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                            LauncherGlassHomePresentationHook.onSystemScreenOff();
+                        } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                            LauncherGlassHomePresentationHook.onSystemUserPresent();
+                        }
+                    }
+                };
+                try {
+                    IntentFilter actions = new IntentFilter();
+                    actions.addAction(Intent.ACTION_SCREEN_OFF);
+                    actions.addAction(Intent.ACTION_USER_PRESENT);
+                    // Both actions are protected system broadcasts. No third-
+                    // party sender may force a Workspace capture/visibility.
+                    receiverContext.registerReceiver(lifecycle, actions,
+                            Context.RECEIVER_NOT_EXPORTED);
+                    screenLifecycleReceiver = lifecycle;
+                    screenLifecycleRegistered = true;
+                    MainHook.log("[DC][GlassScene] screen-off / user-present freshness receiver registered");
+                } catch (Throwable error) {
+                    MainHook.log("[DC][GlassScene] screen lifecycle receiver unavailable: "
+                            + error);
+                }
             }
         }
     }
