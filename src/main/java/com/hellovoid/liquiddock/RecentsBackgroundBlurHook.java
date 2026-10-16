@@ -40,42 +40,63 @@ final class RecentsBackgroundBlurHook {
         if (installed) return true;
         if (config == null || !config.enabled) return false;
         onLiveConfigChanged(config.recents);
+        // OEM 4.50 variants may inline/rename any ONE blur or gesture
+        // function. Never let an unrelated optional method failure prevent
+        // the independent wallpaper-dimming Hooks from installing.
+        boolean anyInstalled = false;
         try {
             installTargetInterceptor(classLoader);
-            installSynchronousTargetScope(classLoader, "fastBlurWhenEnterRecents",
-                    "com.miui.home.launcher.Launcher",
-                    "com.miui.home.launcher.LauncherState", boolean.class);
-            installSynchronousTargetScope(classLoader, "fastBlurWhenGestureResetTaskView",
-                    "com.miui.home.launcher.Launcher", boolean.class);
-            installSynchronousTargetScope(classLoader, "fastBlurWhenEnterMultiWindowMode",
-                    "com.miui.home.launcher.Launcher", boolean.class);
-            installGestureRatioHook(classLoader,
-                    "fastBlurWhenDontUseNoBlurTypeWhenRecents");
-            installGestureRatioHook(classLoader,
-                    "fastBlurWhenUseCompleteRecentsBlur");
-            // Install once even when initially disabled so GUI toggles can change behavior.
-            // Failure of the optional dimming path must not disable strength interception.
-            try {
-                installRecentsDimmingOverride(classLoader);
-            } catch (Throwable error) {
-                MainHook.log(TAG + " RecentBlurParams dimming hooks unavailable: " + error);
-            }
-            // HyperOS 4.50 additionally uses TaskViewUtils -> DimLayer.dim()
-            // for a SurfaceControl dim in the task spring. It bypasses the
-            // RecentBlurParams factory constructors entirely. This is a
-            // separate optional vendor entry point; failure on one firmware
-            // must not disable the existing blur and dimming interception.
-            try {
-                installRecentsDimLayerOverride(classLoader);
-            } catch (Throwable error) {
-                MainHook.log(TAG + " Recents DimLayer hook unavailable: " + error);
-            }
-            installed = true;
-            MainHook.log(TAG + " hooks installed strength=" + liveBlurPercent + "%"
-                    + " wallpaperDimming=" + (liveDisableDimming ? "off" : "vendor"));
+            anyInstalled = true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " fastBlur strength interceptor unavailable: " + error);
+        }
+        anyInstalled |= tryInstallTargetScope(classLoader, "fastBlurWhenEnterRecents",
+                "com.miui.home.launcher.Launcher",
+                "com.miui.home.launcher.LauncherState", boolean.class);
+        anyInstalled |= tryInstallTargetScope(classLoader, "fastBlurWhenGestureResetTaskView",
+                "com.miui.home.launcher.Launcher", boolean.class);
+        anyInstalled |= tryInstallTargetScope(classLoader, "fastBlurWhenEnterMultiWindowMode",
+                "com.miui.home.launcher.Launcher", boolean.class);
+        anyInstalled |= tryInstallGestureRatioHook(
+                classLoader, "fastBlurWhenDontUseNoBlurTypeWhenRecents");
+        anyInstalled |= tryInstallGestureRatioHook(
+                classLoader, "fastBlurWhenUseCompleteRecentsBlur");
+        try {
+            installRecentsDimmingOverride(classLoader);
+            anyInstalled = true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " RecentBlurParams dimming hooks unavailable: " + error);
+        }
+        try {
+            installRecentsDimLayerOverride(classLoader);
+            anyInstalled = true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " Recents DimLayer hook unavailable: " + error);
+        }
+        installed = anyInstalled;
+        MainHook.log(TAG + " installed=" + installed
+                + " strength=" + liveBlurPercent + "%"
+                + " wallpaperDimming=" + (liveDisableDimming ? "off" : "vendor"));
+        return installed;
+    }
+
+    private static boolean tryInstallTargetScope(
+            ClassLoader loader, String name, Object... parameterTypes) {
+        try {
+            installSynchronousTargetScope(loader, name, parameterTypes);
             return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " hooks unavailable: " + error);
+            MainHook.log(TAG + " blur target scope unavailable " + name + ": " + error);
+            return false;
+        }
+    }
+
+    private static boolean tryInstallGestureRatioHook(ClassLoader loader, String name) {
+        try {
+            installGestureRatioHook(loader, name);
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " blur gesture hook unavailable " + name + ": " + error);
             return false;
         }
     }
