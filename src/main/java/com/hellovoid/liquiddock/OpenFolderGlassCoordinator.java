@@ -376,7 +376,13 @@ final class OpenFolderGlassCoordinator {
         // on asynchronous source-window attachment or the first EGL swap.
         // Otherwise the stock folder plate paints before our output exists.
         trackNativeMaterial(state);
-        state.closedFrame = bounds(image(sourceIcon), state, true);
+        // Source-folder geometry must be the exact material that the resident
+        // SMALL_FOLDER/LARGE_FOLDER static glass node owns after close.
+        // FolderIcon1x1 prefers mImageView, not necessarily the
+        // getIconImageView() used by the OEM temporary animation plate.
+        View desktopMaterial = MiuixFolderGlassHook.resolveFolderMaterial((ViewGroup) sourceIcon);
+        if (desktopMaterial == null) desktopMaterial = image(sourceIcon);
+        state.closedFrame = bounds(desktopMaterial, state, true);
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
         state.observer = state.root.get().getViewTreeObserver();
@@ -922,6 +928,14 @@ final class OpenFolderGlassCoordinator {
         float density = view.getResources().getDisplayMetrics().density;
         float radius;
         if (desktopIcon) {
+            // Reuse exactly the native radius authority the persistent
+            // small-folder glass node uses, including mCornerRadius and its
+            // background GradientDrawable. A preview drawable may have a
+            // different radius and must not silently win.
+            float materialRadius = MiuixFolderGlassHook.readMaterialRadius(view);
+            if (Float.isFinite(materialRadius) && materialRadius > 0f) {
+                nativeRadius = materialRadius;
+            }
             // The desktop endpoint uses the miniature icon's own glass style.
             // Using largeFolderStyle here leaves 1x1 with an expanded-radius
             // endpoint, then the resident small-folder glass visibly snaps.
