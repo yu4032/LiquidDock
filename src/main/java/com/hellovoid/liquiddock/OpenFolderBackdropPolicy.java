@@ -25,6 +25,10 @@ final class OpenFolderBackdropPolicy {
         return Float.NaN;
     }
 
+    // Prepared desktop-blur texture is stored as an FBO; the logical
+    // fullscreen output quad uses the opposite vertical UV convention.
+    static float backdropSampleY(float outputY) { return 1f - outputY; }
+
     static float backdropOpacity(float progress) {
         return Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
     }

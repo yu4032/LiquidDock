@@ -44,11 +44,6 @@ final class MiuixFolderGlassHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static WeakReference<ViewGroup> openedFolderOwner = new WeakReference<>(null);
     private static WeakReference<LauncherGlassStaticNode> openedFolderSink = new WeakReference<>(null);
-    // Original FolderIcon contains its own title and native material. Only
-    // conceal it AFTER the OEM expansion animation has finished, so it cannot
-    // appear beside the expanded FolderCling when Workspace remains visible.
-    private static WeakReference<ViewGroup> concealedSourceIcon = new WeakReference<>(null);
-    private static int concealedSourceVisibility = View.VISIBLE;
     private static long openedFolderSerial;
     private static boolean folderStatusDispatcherInstalled;
     private static final FolderCloseCompletionGate NATIVE_CLOSE = new FolderCloseCompletionGate();
@@ -69,9 +64,10 @@ final class MiuixFolderGlassHook {
         // Do not hide Dock for folders. The OEM DockStateManager listener's
         // only folder side effect is to push/pop the Dock FolderState, which
         // sends an alpha=0 transaction; preserve all other native listeners.
-        installDockFolderNoHide(classLoader);
+        // Preserve the OEM Dock FolderState: it owns native z-order, alpha,
+        // and input modality while FolderCling is opened. Bypassing it left
+        // clickable Dock icons above the folder.
         OemFolderBlurStrengthHook.install(classLoader);
-        LauncherNativeFolderWorkspaceFadeGate.install(classLoader);
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
             Class<?> itemIcon = Class.forName(ITEM_ICON, false, classLoader);
@@ -161,47 +157,20 @@ final class MiuixFolderGlassHook {
         }
     }
 
-    private static void installDockFolderNoHide(ClassLoader classLoader) {
-        String nativeListener =
-                "com.miui.home.launcher.dock.v3.state.DockStateManager$folderStatusListener$1";
-        try {
-            Class<?> listener = Class.forName(nativeListener, false, classLoader);
-            Method opened = listener.getDeclaredMethod("onFolderOpen");
-            Method closed = listener.getDeclaredMethod("onFolderClose");
-            // These OEM callbacks do nothing except send OpenFolder /
-            // CloseFolder to the Dock-only DesktopStateManager. Ignore the
-            // paired events together, without affecting the Launcher folder,
-            // any other registered listener, or folder-edit events.
-            HookUtil.hook(opened, chain -> {
-                MainHook.diag("[FolderTrace] OEM Dock listener OpenFolder BYPASSED");
-                return null;
-            });
-            HookUtil.hook(closed, chain -> {
-                MainHook.diag("[FolderTrace] OEM Dock listener CloseFolder BYPASSED");
-                return null;
-            });
-            MainHook.diag("[FolderTrace] native Dock FolderState callbacks hooked for bypass");
-            MainHook.log(TAG + " native Dock FolderState hide/restore bypassed");
-        } catch (Throwable error) {
-            MainHook.diag("[FolderTrace] Dock listener bypass installation FAILED " + error);
-            MainHook.log(TAG + " native Dock folder listener unavailable: " + error);
-        }
-    }
-
     /** Stop both cached-glass producers at the authoritative Launcher entry,
      * before FolderCling can make its first pixels visible. The independent
-     * wallpaper-only folder source remains active for its one-shot snapshot.
+     * pre-open desktop snapshot remains frozen and never samples FolderCling.
      */
     static void onFolderOpeningBeforeNativeAnimation() {
+        OemFolderBlurStrengthHook.setFolderOpening(true);
         FolderDiagnosticTrace.event("freeze-before-native-folder");
-        LauncherNativeFolderWorkspaceFadeGate.onOpening(null);
         pendingInputResumeSerial = 0L;
         Miuix307ZeroCopyRenderer.setFolderFrozen(true);
         LauncherGlassSceneController.setFolderCoveredForAll(true);
     }
 
     static void onFolderOpeningFailed() {
-        LauncherNativeFolderWorkspaceFadeGate.onOpeningFailed();
+        OemFolderBlurStrengthHook.setFolderOpening(false);
         releaseFrozenInputs();
     }
 
@@ -237,33 +206,8 @@ final class MiuixFolderGlassHook {
 
     /** The temporary closing plate is still animating after Folder.onClose completes. */
     static void onNativeCloseStarted(boolean animated) {
-        restoreConcealedSourceIcon();
+        OemFolderBlurStrengthHook.setFolderOpening(false);
         NATIVE_CLOSE.begin(openedFolderSerial, animated);
-    }
-
-    static void onNativeExpandedFolderOpenFinished() {
-        ViewGroup owner = openedFolderOwner.get();
-        if (owner == null || !owner.isAttachedToWindow()) return;
-        ViewGroup old = concealedSourceIcon.get();
-        if (old == owner) return;
-        restoreConcealedSourceIcon();
-        concealedSourceVisibility = owner.getVisibility();
-        concealedSourceIcon = new WeakReference<>(owner);
-        if (concealedSourceVisibility == View.VISIBLE) {
-            owner.setVisibility(View.INVISIBLE);
-        }
-        MainHook.diag("[FolderTrace] source FolderIcon and title concealed after "
-                + "native open: " + owner.getClass().getSimpleName()
-                + " before=" + concealedSourceVisibility);
-    }
-
-    private static void restoreConcealedSourceIcon() {
-        ViewGroup icon = concealedSourceIcon.get();
-        concealedSourceIcon = new WeakReference<>(null);
-        if (icon != null && icon.getVisibility() == View.INVISIBLE) {
-            icon.setVisibility(concealedSourceVisibility);
-            MainHook.diag("[FolderTrace] source FolderIcon/title restored for native close");
-        }
     }
 
     static long activeNativeCloseSerial() { return openedFolderSerial; }
@@ -392,7 +336,6 @@ final class MiuixFolderGlassHook {
             return;
         }
         ViewGroup previousOwner = openedFolderOwner.get();
-        if (previousOwner != null && previousOwner != owner) restoreConcealedSourceIcon();
         LauncherGlassStaticNode previousSink = openedFolderSink.get();
         if (previousOwner != null && previousOwner != owner && previousSink != null) {
             previousSink.setSuppressedByFolderOpen(false);
@@ -409,7 +352,6 @@ final class MiuixFolderGlassHook {
     }
 
     private static void restoreOpenedFolderOwner() {
-        restoreConcealedSourceIcon();
         LauncherGlassStaticNode sink = openedFolderSink.get();
         ViewGroup owner = openedFolderOwner.get();
 
@@ -459,7 +401,6 @@ final class MiuixFolderGlassHook {
                 + openedFolderSerial + " glassSerial=" + pendingInputResumeSerial);
         LauncherGlassSceneController.setFolderCoveredForAll(false);
         Miuix307ZeroCopyRenderer.setFolderFrozen(false);
-        LauncherNativeFolderWorkspaceFadeGate.onClosed();
     }
 
     private static LauncherGlassStaticNode resolveOwnerSink(ViewGroup owner) {
@@ -816,7 +757,7 @@ final class MiuixFolderGlassHook {
     }
 
     static void onRuntimeGlassDisabled() {
-        restoreConcealedSourceIcon();
+        OemFolderBlurStrengthHook.setFolderOpening(false);
         OpenFolderGlassCoordinator.releaseAll();
         setNativeFolderMaterialsCovered(false);
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
