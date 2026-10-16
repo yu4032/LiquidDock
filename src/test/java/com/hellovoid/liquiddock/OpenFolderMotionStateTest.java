@@ -33,6 +33,14 @@ public class OpenFolderMotionStateTest {
         assertEquals(.5f, sample(state, .9f), .0001f);
         assertEquals(0f, sample(state, 0f), .0001f);
     }
+    @Test public void lateWallpaperCaptureStillContractsFromExpandedSize() throws Exception {
+        Object state = state();
+        call(state, "onContentFinished");
+        call(state, "beginClose");
+        assertEquals(1f, sample(state, Float.NaN), 0f);
+        assertEquals(.7f, sample(state, .7f), 0f);
+        assertEquals(0f, sample(state, 0f), 0f);
+    }
     @Test public void disabledNativeAnimationsCanReachThePanelWithoutASpringSample() throws Exception {
         Object state = state();
         call(state, "onContentFinished");

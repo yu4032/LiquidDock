@@ -63,7 +63,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
-    private volatile float workspaceBlurPx;
     private volatile boolean folderClosing;
     // RootPassBlurBackend retains its normalized FBO after freezing popup updates.
     // Reuse that valid texture to re-blur the existing snapshot without recapturing
@@ -121,7 +120,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
-        workspaceBlurPx = Miuix307PrismalAdapter.toPortable(optical).blurRadiusPx;
         prismalParams = materialParams(optical, density);
         appliedBlur = prismalParams.blurRadiusPx;
         highlightProfile = glassConfig != null
@@ -154,9 +152,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
         Miuix307PrismalMaterial.Params optical =
                 Miuix307PrismalMaterial.fromConfig(config, density);
-        workspaceBlurPx = Miuix307PrismalAdapter.toPortable(optical).blurRadiusPx;
         PrismalParams next = materialParams(optical, density);
-        if (folderClosing) next = OpenFolderGlassOptics.restoreWorkspaceBlur(next, workspaceBlurPx);
         final PrismalParams updated = next;
         boolean blurChanged = Float.compare(appliedBlur, updated.blurRadiusPx) != 0;
         appliedBlur = updated.blurRadiusPx;
@@ -183,36 +179,13 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         // must not re-capture from behind its own now-visible overlay.
     }
 
-    /** Switch to Workspace blur at the native close boundary. One re-blur of
-     * the frozen desktop, no recapture and no per-frame Gaussian passes.
-     * Folder refraction/IOR/tint retain their own settings until geometry closes.
+    /** The reverse spring continues to sample the same prepared wallpaper.
+     * Do not switch Gaussian kernels mid-animation: its geometry comes from
+     * the native plate each pre-draw, not from a second blur snapshot.
      */
     void beginFolderClose() {
-        if (!folderBackdrop || shuttingDown || folderClosing) return;
+        if (!folderBackdrop || shuttingDown) return;
         folderClosing = true;
-        final PrismalParams next =
-                OpenFolderGlassOptics.restoreWorkspaceBlur(prismalParams, workspaceBlurPx);
-        // Serialize the new kernel with all EGL draws. UI-frame geometry updates
-        // can continue; the GL thread owns both blur preparation and presentation.
-        sourceBackend.postToRenderThread(() -> {
-            if (shuttingDown) return;
-            // This is a one-shot desktop texture; if Folder and Workspace
-            // requested the same blur radius, do not run another two-pass
-            // Gaussian at the native closing boundary.
-            if (backdropPrepared && prismalRenderer != null
-                    && Float.compare(appliedBlur, next.blurRadiusPx) != 0) {
-                try {
-                    sourceBackend.makePbufferCurrent();
-                    prismalRenderer.reblurPreparedBackdrop(next);
-                } catch (Throwable error) {
-                    MainHook.log(TAG + " folder Workspace-blur handoff failed: " + error);
-                    return;
-                }
-            }
-            prismalParams = next;
-            appliedBlur = next.blurRadiusPx;
-            renderCurrent();
-        });
     }
 
     private PrismalParams materialParams(Miuix307PrismalMaterial.Params optical, float density) {
@@ -251,9 +224,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (old != null && old.sameAs(next) && Float.compare(opacity, backdropOpacity) == 0) return;
         geometry = next;
         backdropOpacity = opacity;
-        // The blur snapshot is static. During OEM folder spring, only its
-        // presentation opacity and the glass bounds advance.
-        if (folderFramePacing.allow(System.nanoTime(), opacity)
+        // Close must follow EVERY native animation frame (165Hz: ~6.06ms).
+        // The previous 11ms limiter dropped alternate positions and left a
+        // stale lens texture when the OEM closing plate reached its endpoint.
+        // The render queue still coalesces redundant work into the latest
+        // geometry without a second source capture or Gaussian pass.
+        if ((folderClosing || folderFramePacing.allow(System.nanoTime(), opacity))
                 && folderRenderWork.request(true, false)
                 && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
     }

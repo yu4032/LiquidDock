@@ -254,9 +254,9 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (!matches(state, folderCling)) return;
         state.close.begin(state.serial, animated);
-        // Freeze the expanded destination: native Folder.onClose hides the
-        // content background before its reverse Folme transition. Reading its
-        // bounds afterward would collapse the final panel to the icon size.
+        // The expanded endpoint is sampled only while native Folder is open.
+        // Closing geometry itself must follow the animation plate's *current*
+        // transformed bounds, not a rescaled stale endpoint image.
         if (state.expandedFrame == null) {
             View folder = state.folder.get();
             View panel = view(field(folder, "mBackgroundView"));
@@ -265,9 +265,9 @@ final class OpenFolderGlassCoordinator {
         }
         OWNER.beginClose(state.serial);
         state.motion.beginClose();
-        // Native reverse spring supplies geometry, but from its first frame
-        // the prepared wallpaper must use Workspace rather than folder blur.
-        // Re-blur the frozen input once; never recapture a desktop-in-folder frame.
+        // Reuse the same prepared wallpaper and optical material for the
+        // entire reverse spring. Changing the blur kernel here stalls frames
+        // and causes a final-frame discontinuity at the native handoff.
         if (state.session != null) state.session.beginFolderClose();
         onClosingAnimationMaterialUpdated();
     }
@@ -277,10 +277,10 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || !state.motion.isClosing() || !OWNER.maySuppressNative()) return;
         View anim = animationImage(state);
-        if (anim instanceof ImageView) {
-            track(state, ((ImageView) anim).getDrawable());
-        }
+        if (anim instanceof ImageView) track(state, ((ImageView) anim).getDrawable());
         if (anim != null) track(state, anim.getBackground());
+        View plate = nativeAnimationPlate(state);
+        if (plate != null) track(state, plate.getBackground());
         claimNativeBlur(state);
     }
 
@@ -327,12 +327,12 @@ final class OpenFolderGlassCoordinator {
     static boolean ownsNativeBlurMode(View material) {
         State state = current;
         return state != null && material != null && OWNER.maySuppressNative()
-                && material == animationImage(state);
+                && isOwnedNativeBackground(state, material);
     }
 
     static void rememberNativeBlur(View material, Object[] args) {
         State state = current;
-        if (state == null || material != animationImage(state) || args == null) return;
+        if (state == null || args == null || !isOwnedNativeBackground(state, material)) return;
         state.blurRequests.put(material, args.clone());
         if (OWNER.maySuppressNative()) claimNativeBlur(state);
     }
@@ -444,23 +444,46 @@ final class OpenFolderGlassCoordinator {
                             target.bottom - target.top, plate.bottom - plate.top);
                 }
             }
-            float amount = state.motion.sample(observed);
-            OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
-                    state.closedFrame, target, amount, state.width, state.height);
+            // Native Folme changes translation AND scale. At 165 Hz a ratio
+            // inferred from only one animation property diverges from the
+            // actual plate during its final reverse-spring frames.
+            // Use the transformed bounds directly for both the lens geometry
+            // and the root-space wallpaper sampling coordinates.
+            OpenFolderGlassGeometry.Frame livePlate = state.motion.isClosing()
+                    && animImage != null ? bounds(animImage, state) : null;
+            float liveProgress = livePlate != null
+                    ? OpenFolderBackdropPolicy.nativeFrameProgress(
+                            state.closedFrame, target, livePlate)
+                    : Float.NaN;
+            float amount = state.motion.sample(Float.isFinite(liveProgress)
+                    ? liveProgress : observed);
+            OpenFolderGlassGeometry.Frame frame;
+            if (state.motion.isClosing() && livePlate != null
+                    && Float.isFinite(liveProgress)) {
+                frame = state.geometry.acceptAnimation(
+                        new OpenFolderGlassGeometry.Frame(
+                                livePlate.left, livePlate.top,
+                                livePlate.right, livePlate.bottom,
+                                state.closedFrame.radius
+                                        + (target.radius - state.closedFrame.radius) * amount),
+                        state.width, state.height);
+            } else {
+                frame = state.geometry.acceptProgress(
+                        state.closedFrame, target, amount, state.width, state.height);
+            }
             if (frame == null) return;
             state.materials.beginFrame(state.serial);
             track(state, folder.getBackground());
             track(state, panel != null ? panel.getBackground() : null);
             if (animImage instanceof ImageView) track(state, ((ImageView) animImage).getDrawable());
-            if (animImage != null) {
-                track(state, animImage.getBackground());
-                // Native close may rebind its animation View independently of
-                // setIconBgAnim/setFolderIconBlur. Claim the new RenderNode in
-                // this same pre-draw, before its first visible composition.
-                if (OWNER.maySuppressNative() && !state.claimedBlur.containsKey(animImage)) {
-                    claimNativeBlur(state);
-                }
-            }
+            if (animImage != null) track(state, animImage.getBackground());
+            // The OEM close plate is a FolderIcon container. Its background
+            // (and native RenderNode blur) may be distinct from the child
+            // icon image's drawable. Cover both actual identities rather than
+            // globally muting BlurUtilities or all FolderIcon instances.
+            View plate = nativeAnimationPlate(state);
+            if (plate != null) track(state, plate.getBackground());
+            if (OWNER.maySuppressNative()) claimNativeBlur(state);
             state.materials.endFrame(state.serial);
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top, frame.right, frame.bottom, frame.radius), amount);
@@ -478,19 +501,37 @@ final class OpenFolderGlassCoordinator {
     private static void claimNativeBlur(State state) {
         for (Map.Entry<View, Object[]> entry : state.blurRequests.entrySet()) {
             View material = entry.getKey();
-            if (LauncherWidgetNativeViewBlurGate.claimFolder(material)) {
+            if (!isOwnedNativeBackground(state, material)) continue;
+            claimNativeBackground(state, material);
+            if (state.claimedBlur.containsKey(material)) {
                 LauncherWidgetNativeViewBlurGate.rememberFolderInitializer(material, entry.getValue());
-                state.claimedBlur.put(material, Boolean.TRUE);
             }
         }
-        // FolderAnimController may create or rebind the temporary closing icon
-        // without another BlurUtilities.setFolderIconBlur call. Suppress its
-        // RenderNode output too, while preserving the native spring geometry.
-        View anim = animationImage(state);
-        if (anim != null && !state.claimedBlur.containsKey(anim)
-                && LauncherWidgetNativeViewBlurGate.claimFolder(anim)) {
-            state.claimedBlur.put(anim, Boolean.TRUE);
+        // The temporary plate and its ImageView have independent native
+        // advanced-material RenderNodes on some Launcher 4.50 paths.
+        claimNativeBackground(state, nativeAnimationPlate(state));
+        claimNativeBackground(state, animationImage(state));
+    }
+
+    private static void claimNativeBackground(State state, View material) {
+        if (material == null || state.claimedBlur.containsKey(material)) return;
+        if (LauncherWidgetNativeViewBlurGate.claimFolder(material)) {
+            state.claimedBlur.put(material, Boolean.TRUE);
         }
+    }
+
+    private static boolean isOwnedNativeBackground(State state, View material) {
+        if (material == null) return false;
+        View nativePanel = view(field(state.folder.get(), "mBackgroundView"));
+        return material == animationImage(state)
+                || material == nativeAnimationPlate(state)
+                || (material == nativePanel && state.blurRequests.containsKey(material));
+    }
+
+    private static View nativeAnimationPlate(State state) {
+        View cling = state.cling.get();
+        if (cling == null) cling = state.animationCling.get();
+        return view(invoke(cling, "getFolderAnimIcon"));
     }
 
     private static void cancelUnused(View icon) {
@@ -510,8 +551,7 @@ final class OpenFolderGlassCoordinator {
     }
     private static boolean isSmall(View icon) { return icon != null && icon.getClass().getName().contains("FolderIcon1x1"); }
     private static View animationImage(State state) {
-        View cling = state.cling.get();
-        return image(view(invoke(cling != null ? cling : state.animationCling.get(), "getFolderAnimIcon")));
+        return image(nativeAnimationPlate(state));
     }
     private static View image(View icon) { return view(invoke(icon, "getIconImageView")); }
     private static View view(Object value) { return value instanceof View ? (View) value : null; }
