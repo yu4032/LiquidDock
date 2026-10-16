@@ -13,11 +13,14 @@ final class UnlockCaptureRecoveryState {
     static final class Decision {
         final boolean suspendProducers;
         final boolean releaseBarrier;
+        final boolean requestFreshReconcile;
         final long serial;
 
-        Decision(boolean suspendProducers, boolean releaseBarrier, long serial) {
+        Decision(boolean suspendProducers, boolean releaseBarrier,
+                 boolean requestFreshReconcile, long serial) {
             this.suspendProducers = suspendProducers;
             this.releaseBarrier = releaseBarrier;
+            this.requestFreshReconcile = requestFreshReconcile;
             this.serial = serial;
         }
     }
@@ -26,29 +29,53 @@ final class UnlockCaptureRecoveryState {
     private long activeSerial;
     private boolean blocked;
     private boolean liveMotion;
+    // A bounded timeout releases producer ownership, not proof that the user
+    // has actually exited keyguard. Remember the unfulfilled presentation
+    // boundary until SystemUI GONE or ACTION_USER_PRESENT arrives.
+    private boolean awaitingActualUnlock;
+    private boolean screenOffSincePresent;
 
     synchronized Decision onPrepare() {
-        if (blocked) return new Decision(false, false, activeSerial);
+        if (blocked) return new Decision(false, false, false, activeSerial);
         activeSerial = ++nextSerial;
         blocked = true;
         liveMotion = false;
-        return new Decision(true, false, activeSerial);
+        awaitingActualUnlock = true;
+        return new Decision(true, false, false, activeSerial);
     }
 
     synchronized Decision onSystemUiGoneFinished() {
-        if (!blocked) return new Decision(false, false, activeSerial);
+        return onVerifiedUserPresent();
+    }
+
+    synchronized void onScreenOff() {
+        screenOffSincePresent = true;
+    }
+
+    synchronized Decision onUserPresent() {
+        return onVerifiedUserPresent();
+    }
+
+    private Decision onVerifiedUserPresent() {
+        boolean release = blocked;
+        // A timeout may have already removed the gate while keyguard
+        // remained on-screen. The first real unlock must still request a
+        // fresh Workspace generation; subsequent duplicate signals must not.
+        boolean reconcile = !release && (awaitingActualUnlock || screenOffSincePresent);
         blocked = false;
         liveMotion = false;
-        return new Decision(false, true, activeSerial);
+        awaitingActualUnlock = false;
+        screenOffSincePresent = false;
+        return new Decision(false, release, reconcile, activeSerial);
     }
 
     synchronized Decision onBarrierTimeout(long serial) {
         if (!blocked || serial != activeSerial) {
-            return new Decision(false, false, activeSerial);
+            return new Decision(false, false, false, activeSerial);
         }
         blocked = false;
         liveMotion = false;
-        return new Decision(false, true, activeSerial);
+        return new Decision(false, true, false, activeSerial);
     }
 
     synchronized boolean isBlocked() {
