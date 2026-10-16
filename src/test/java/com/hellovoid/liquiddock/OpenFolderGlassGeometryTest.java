@@ -153,6 +153,21 @@ public class OpenFolderGlassGeometryTest {
         assertNull(OpenFolderGlassGeometry.closingBackdropMask(largeIcon, 0, 1080, .4f));
     }
 
+    @Test public void desktopSmallFolderUsesItsOwnCornerSettingNotExpandedLargeFolderSetting() {
+        float small = OpenFolderGlassGeometry.sourceIconRadiusPx(
+                true, 9f, 54f, 2f, Float.NaN, 80f, 80f);
+        float large = OpenFolderGlassGeometry.sourceIconRadiusPx(
+                false, 9f, 54f, 2f, Float.NaN, 80f, 80f);
+        assertEquals(18f, small, .001f);
+        assertEquals(108f, large, .001f);
+        float nativeAuto = OpenFolderGlassGeometry.sourceIconRadiusPx(
+                true, 0f, 54f, 2f, 12f, 80f, 80f);
+        assertEquals(12f, nativeAuto, .001f);
+        float fallbackAuto = OpenFolderGlassGeometry.sourceIconRadiusPx(
+                true, 0f, 54f, 2f, Float.NaN, 80f, 80f);
+        assertEquals(17.6f, fallbackAuto, .001f);
+    }
+
     private static Class<?> type() {
         try { return Class.forName("com.hellovoid.liquiddock.OpenFolderGlassGeometry"); }
         catch (ClassNotFoundException missing) { throw new AssertionError("Missing native folder geometry policy", missing); }
