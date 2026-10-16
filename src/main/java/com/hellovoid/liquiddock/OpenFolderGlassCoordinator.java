@@ -158,15 +158,35 @@ final class OpenFolderGlassCoordinator {
         ViewParent parent = cling.getParent();
         if (!(parent instanceof ViewGroup)) return;
         ViewGroup host = (ViewGroup) parent;
-        int position = host.indexOfChild(cling);
-        if (position < 0) return;
+        int folderIndex = host.indexOfChild(cling);
+        if (folderIndex < 0) return;
+        View workspace = LauncherGlassHierarchy.findWorkspaceRoot(state.icon.get());
+        // TextureView must remain in the SAME parent / stable EGL Surface.
+        // Put the transparent refractive overlay behind the native Workspace
+        // itself, not merely below FolderCling. With the old z-order, the
+        // terminal lens was drawn OVER the reappearing source-folder mini
+        // icons during the 80ms takeover fade, washing them out for one frame.
+        // Workspace icons must always paint on top of the retained glass,
+        // while the OEM modal FolderCling continues painting above both.
+        View workspaceSibling = workspace;
+        while (workspaceSibling != null && workspaceSibling.getParent() != host
+                && workspaceSibling.getParent() instanceof View) {
+            workspaceSibling = (View) workspaceSibling.getParent();
+        }
+        int workspaceIndex = workspaceSibling != null && workspaceSibling.getParent() == host
+                ? host.indexOfChild(workspaceSibling) : -1;
+        int position = workspaceIndex >= 0 && workspaceIndex < folderIndex
+                ? workspaceIndex : folderIndex;
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(cling.getContext(), state.session);
         state.layerHost = new WeakReference<>(host);
         state.layer = layer;
         host.addView(layer, position,
                 new ViewGroup.LayoutParams(state.width, state.height));
-        MainHook.diag("[FolderTrace] lens below OEM FolderCling index="
-                + host.indexOfChild(layer) + " folderIndex=" + host.indexOfChild(cling));
+        MainHook.diag("[FolderTrace] lens z-order=" +
+                (position == workspaceIndex && workspaceIndex >= 0 ? "behind-Workspace" : "fallback-below-Cling")
+                + " lensIndex=" + host.indexOfChild(layer)
+                + " workspaceIndex=" + (workspaceSibling != null ? host.indexOfChild(workspaceSibling) : -1)
+                + " folderIndex=" + host.indexOfChild(cling));
         host.postInvalidateOnAnimation();
     }
 
