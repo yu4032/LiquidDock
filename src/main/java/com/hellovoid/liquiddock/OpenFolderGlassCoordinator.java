@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Matrix;
+import android.os.Looper;
 import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 import android.view.View;
@@ -58,11 +59,39 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
-        // Clip the full-screen frozen wallpaper to the LAST ACTUAL native
-        // Folme silhouette, including its interpolated corner radius. A
-        // rectangular clip caused sharp corners to scale into Recents.
+        // Gesture progress can precede this semantic callback. Preserve its
+        // latest OEM value; absent a gesture signal, keep the previously safe
+        // final-folder mask instead of displaying a scaled full-screen sheet.
         updateRecentsOutline(state);
         trace("recents-show", state);
+    }
+
+    /** Original unmodified Launcher Recents gesture fraction. Called before
+     * RecentsBackgroundBlurHook scales that parameter for user blur strength.
+     * A gesture can begin BEFORE RecentsServiceDispatcher.onRecentViewShow,
+     * so update the rounded mask at the first actual gesture frame.
+     */
+    static void onNativeRecentsGestureProgress(float nativeRatio) {
+        State state = current;
+        if (state == null || state.motion.isClosing() || !Float.isFinite(nativeRatio)
+                || nativeRatio < 0f || nativeRatio > 1f) return;
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            View root = state.root.get();
+            if (root != null) root.post(() -> {
+                if (live(state)) onNativeRecentsGestureProgress(nativeRatio);
+            });
+            return;
+        }
+        state.recentsGestureProgress = nativeRatio;
+        if (nativeRatio > 0f || OWNER.isRecentsCovered(state.serial)
+                || OWNER.isRecentsReturnPending(state.serial)) {
+            updateRecentsOutline(state);
+        } else if (state.layer != null) {
+            // Aborted gesture: no Recents scene has taken ownership. Restore
+            // the full OPEN_FOLDER backdrop without a delayed alpha fade.
+            state.layer.clearFolderRecentsOutline();
+            state.recentsGestureProgress = Float.NaN;
+        }
     }
 
     static void onRecentsHidden() {
@@ -85,23 +114,24 @@ final class OpenFolderGlassCoordinator {
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
 
-    /** Use the same material path as the folder's open/close renderer. Never
-     * infer a synthetic Recents progress or animate a new rectangle: Launcher
-     * owns scene scaling; its transform scales our rounded outline with it.
+    /** Morph the OPEN_FOLDER *backdrop*, not its inner icons or the
+     * already-expanded lens geometry. Both boundary and roundness come from
+     * the actual opened native Folder background; one original OEM Recents
+     * gesture fraction drives the full-root -> expanded-panel interpolation.
      */
     private static void updateRecentsOutline(State state) {
         if (!live(state) || state.layer == null) return;
-        OpenFolderGlassGeometry.Frame frame = state.geometry.current();
-        if (frame == null) frame = state.expandedFrame;
-        if (frame == null) {
+        OpenFolderGlassGeometry.Frame panel = state.expandedFrame;
+        if (panel == null) {
             View folder = state.folder.get();
-            frame = bounds(view(field(folder, "mBackgroundView")), state);
+            panel = bounds(view(field(folder, "mBackgroundView")), state);
         }
-        if (frame != null) {
-            state.layer.setFolderRecentsOutline(frame, state.width, state.height);
+        OpenFolderGlassGeometry.Frame mask = OpenFolderGlassGeometry.recentsBackdropMask(
+                panel, state.width, state.height, state.recentsGestureProgress);
+        if (mask != null) {
+            state.layer.setFolderRecentsOutline(mask, state.width, state.height);
         } else {
-            // Without a native silhouette, a screen-sized wallpaper overlay
-            // must not leak into the Recents zoom.
+            // Missing geometry may never reveal a screen-sized frozen sheet.
             state.layer.setVisibility(View.INVISIBLE);
         }
     }
@@ -628,6 +658,7 @@ final class OpenFolderGlassCoordinator {
             // identity before consuming the return protection token.
             if (OWNER.completeRecentsReturn(state.serial)) {
                 state.layer.clearFolderRecentsOutline();
+                state.recentsGestureProgress = Float.NaN;
                 if (state.session != null) state.session.requestCachedGlassRedraw();
                 if (state.layer != null) state.layer.reveal();
             }
@@ -845,6 +876,7 @@ final class OpenFolderGlassCoordinator {
         boolean animationSpecReady;
         float nativeTargetX, nativeTargetY, nativeSourceWidth, nativeSourceHeight;
         float nativeTargetWidth, nativeTargetHeight, nativeExpandedScaleX = Float.NaN;
+        float recentsGestureProgress = Float.NaN;
         final View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 if (live(State.this)) trace("root-attached", State.this);
