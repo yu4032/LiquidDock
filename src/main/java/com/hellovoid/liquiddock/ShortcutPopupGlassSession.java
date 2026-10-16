@@ -62,6 +62,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final FolderGlassFramePacing folderFramePacing = new FolderGlassFramePacing();
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
+    private volatile PrismalParams[] closingMaterials;
     private volatile PrismalHighlightProfile highlightProfile;
     private volatile float workspaceBlurPx;
     private volatile boolean folderClosing;
@@ -124,7 +125,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
         prismalParams = materialParams(optical, density);
-        workspaceBlurPx = Miuix307PrismalAdapter.toPortable(optical).blurRadiusPx;
+        PrismalParams workspace = Miuix307PrismalAdapter.toPortable(optical);
+        closingMaterials = folderBackdrop
+                ? OpenFolderGlassOptics.closeToWorkspace(prismalParams, workspace) : null;
+        workspaceBlurPx = workspace.blurRadiusPx;
         appliedBlur = prismalParams.blurRadiusPx;
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
@@ -164,6 +168,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         workspaceBlurPx = newWorkspaceBlur;
         appliedBlur = updated.blurRadiusPx;
         prismalParams = updated;
+        closingMaterials = folderBackdrop
+                ? OpenFolderGlassOptics.closeToWorkspace(updated, Miuix307PrismalAdapter.toPortable(optical))
+                : null;
         highlightProfile = config.largeSurfaceHighlightProfile;
         sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) return;
@@ -376,11 +383,16 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             // volatile reads could otherwise mix different spring frames.
             float progress = backdropOpacity;
             boolean closing = folderClosing;
-            if (folderBackdrop) {
-                prismalRenderer.setWorkspaceBlurMix(closing ? 1f - progress : 0f);
+            float workspaceMix = folderBackdrop && closing
+                    ? OpenFolderBackdropPolicy.workspaceGlassMix(progress) : 0f;
+            if (folderBackdrop) prismalRenderer.setWorkspaceBlurMix(workspaceMix);
+            PrismalParams drawParams = prismalParams;
+            PrismalParams[] materialSteps = closingMaterials;
+            if (folderBackdrop && closing && materialSteps != null) {
+                int index = Math.min(materialSteps.length - 1,
+                        Math.max(0, Math.round(workspaceMix * (materialSteps.length - 1))));
+                drawParams = materialSteps[index];
             }
-            float lensOpacity = folderBackdrop && closing
-                    ? OpenFolderBackdropPolicy.closingLensOpacity(progress) : 1f;
             prismalRenderer.beginGlassFrame();
             prismalRenderer.drawGlass(
                     new PrismalGeometry(
@@ -391,10 +403,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                             currentGeometry.width,
                             currentGeometry.height,
                             currentGeometry.cornerRadius),
-                    prismalParams,
+                    drawParams,
                     highlightProfile,
-                    lensOpacity);
-            presentFull(prismalRenderer.outputTexture(), currentOutput, progress, closing);
+                    1f);
+            presentFull(prismalRenderer.outputTexture(), currentOutput, progress, workspaceMix);
             if (!presentationSignaled) {
                 presentationSignaled = true;
                 mainHandler.post(() -> {
@@ -459,7 +471,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void presentFull(int sceneTexture, OutputState current,
-                             float progress, boolean closing) {
+                             float progress, float workspaceMix) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         // Clear the whole EGL buffer first. The TextureView buffer can be taller than the
@@ -489,7 +501,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,
                     prismalRenderer.preparedWorkspaceBlurTexture());
             GLES20.glUniform1f(compositeBlurMixLocation,
-                    closing ? 1f - progress : 0f);
+                    workspaceMix);
             float firstRow = OpenFolderBackdropPolicy.backdropSampleY(0f);
             float lastRow = OpenFolderBackdropPolicy.backdropSampleY(1f);
             GLES20.glUniform4f(compositeCropRectLocation,

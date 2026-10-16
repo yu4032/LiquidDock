@@ -351,14 +351,40 @@ final class OpenFolderGlassCoordinator {
         MainHook.diag("[FolderTrace] final close EGL endpoint glassSerial=" + state.serial);
         state.session.finishFolderClose(endpoint, () -> {
             if (!live(state)) return;
-            View layer = state.layer;
-            if (layer == null || !layer.isAttachedToWindow()) {
+            ShortcutPopupGlassLayer output = state.layer;
+            View root = state.root.get();
+            if (root == null || output == null || !output.isAttachedToWindow()
+                    || !LauncherGlassSceneController.awaitFolderHandoff(root, () -> {
+                        if (live(state) && state.layer != null) {
+                            MainHook.diag("[FolderTrace] workspace frame ready, crossfading icon glass"
+                                    + " serial=" + state.serial);
+                            state.layer.fadeIntoWorkspace(() -> {
+                                if (live(state)) releaseAll();
+                            });
+                        }
+                    })) {
                 releaseAll();
-            } else {
-                // The GL swap is queued first. Keep the TextureView through
-                // the next UI composition, then release the native ownership.
-                layer.postOnAnimation(() -> { if (live(state)) releaseAll(); });
+                return;
             }
+            // Opposite of the old sequence: start Workspace capture while the
+            // final OPEN_FOLDER icon glass is still presented. Its own one-shot
+            // wallpaper source never samples Launcher/Dock.
+            if (!MiuixFolderGlassHook.beginExpandedFolderHandoff(state.serial)) {
+                LauncherGlassSceneController.cancelFolderHandoff(root);
+                releaseAll();
+                return;
+            }
+            state.inputsResumed = true;
+            MainHook.diag("[FolderTrace] holding final glass until Workspace visible"
+                    + " serial=" + state.serial);
+            // Failure-only lifecycle fence: don't strand a TextureView if
+            // Launcher is paused or the resident output cannot become ready.
+            root.postDelayed(() -> {
+                if (live(state)) {
+                    MainHook.diag("[FolderTrace] handoff timeout fallback serial=" + state.serial);
+                    releaseAll();
+                }
+            }, 1500L);
         });
     }
 
@@ -401,11 +427,12 @@ final class OpenFolderGlassCoordinator {
         MainHook.diag("[FolderTrace] GlassCoordinator.releaseAll glassSerial="
                 + state.serial + " nativeFolderSerial="
                 + MiuixFolderGlassHook.diagnosticNativeSerial());
+        View root = state.root.get();
+        if (root != null) LauncherGlassSceneController.cancelFolderHandoff(root);
         state.materials.invalidateAll();
         if (state.observer != null && state.preDraw != null && state.observer.isAlive()) {
             state.observer.removeOnPreDrawListener(state.preDraw);
         }
-        View root = state.root.get();
         if (root != null) root.removeOnAttachStateChangeListener(state.attachListener);
         if (state.layer != null) state.layer.dispose();
         if (state.session != null) state.session.shutdown();
@@ -416,13 +443,13 @@ final class OpenFolderGlassCoordinator {
         state.geometry.reset();
         View cling = state.cling.get();
         if (cling != null) cling.postInvalidateOnAnimation();
-        // Folder glass is now detached, so the cached Dock and Workspace
-        // producers may resume without ever sampling the folder itself.
-        MiuixFolderGlassHook.onExpandedFolderOutputReleased(state.serial);
+        // The healthy path already thawed Workspace before crossfading the
+        // resident buffer. Retain the old direct-release path for fallback.
+        if (!state.inputsResumed) MiuixFolderGlassHook.onExpandedFolderOutputReleased(state.serial);
     }
 
     private static void sync(State state) {
-        if (!live(state)) return;
+        if (!live(state) || state.finalCloseQueued) return;
         try {
             View root = state.root.get(), cling = state.cling.get(), folder = state.folder.get();
             ViewGroup host = state.layerHost.get();
@@ -649,6 +676,7 @@ final class OpenFolderGlassCoordinator {
         final OpenFolderGlassGeometry geometry = new OpenFolderGlassGeometry();
         final OpenFolderNativeCloseProgress nativeCloseProgress = new OpenFolderNativeCloseProgress();
         boolean finalCloseQueued;
+        boolean inputsResumed;
         final OpenFolderNativeMaterial materials = new OpenFolderNativeMaterial(OWNER);
         final IdentityHashMap<View, Object[]> blurRequests = new IdentityHashMap<>();
         final IdentityHashMap<View, Boolean> claimedBlur = new IdentityHashMap<>();

@@ -65,20 +65,12 @@ final class OpenFolderBackdropPolicy {
         return Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
     }
 
-    /**
-     * Ease out the *lens only* during the last part of OEM's reverse spring.
-     * The background layer already fades with the native progress, and the
-     * cached Workspace layer remains hard-covered until final EGL release.
-     *
-     * Never animate the entire TextureView after native close: doing so would
-     * reveal an unprepared Workspace buffer underneath. At the exact icon
-     * endpoint this reaches zero, so destroying the folder surface adds no
-     * sudden visible lens discontinuity.
+    /** 0 = expanded folder material, 1 = final resident Workspace material.
+     * The glass itself remains opaque at the icon endpoint; a separate
+     * ready-frame handoff owns removal of the temporary surface.
      */
-    static float closingLensOpacity(float nativeOpenProgress) {
-        final float fadeEnd = 0.24f; // normalized native geometry, not seconds or dp
-        float t = backdropOpacity(nativeOpenProgress) / fadeEnd;
-        t = Math.min(1f, t);
+    static float workspaceGlassMix(float nativeOpenProgress) {
+        float t = 1f - backdropOpacity(nativeOpenProgress);
         return t * t * (3f - 2f * t);
     }
 
