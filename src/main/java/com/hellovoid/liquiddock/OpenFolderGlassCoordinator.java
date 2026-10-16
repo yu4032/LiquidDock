@@ -460,6 +460,9 @@ final class OpenFolderGlassCoordinator {
         // and causes a final-frame discontinuity at the native handoff.
         if (state.session != null) state.session.beginFolderClose();
         state.nativeCloseProgress.reset();
+        state.closeImageStart = null;
+        state.closePlateStart = null;
+        state.closeProgressLogBucket = -1;
         onClosingAnimationMaterialUpdated();
     }
 
@@ -472,10 +475,15 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || !state.motion.isClosing()) return;
         View anim = animationImage(state);
-        if (anim == null) return;
-        state.nativeCloseProgress.capture(anim.getTranslationX(), anim.getTranslationY(),
-                anim.getScaleX(), state.nativeTargetX, state.nativeTargetY,
-                state.nativeExpandedScaleX);
+        if (anim != null) {
+            state.nativeCloseProgress.capture(anim.getTranslationX(), anim.getTranslationY(),
+                    anim.getScaleX(), state.nativeTargetX, state.nativeTargetY,
+                    state.nativeExpandedScaleX);
+            state.closeImageStart = bounds(anim, state);
+        }
+        // 1x1 rounded-folder Folme may animate the parent plate, while its
+        // child ImageView's scale/translation properties stay unchanged.
+        state.closePlateStart = bounds(nativeAnimationPlate(state), state);
     }
 
     /** The OEM close spring may replace its temporary anim-image drawable. */
@@ -739,7 +747,42 @@ final class OpenFolderGlassCoordinator {
                         state.nativeTargetY, state.nativeExpandedScaleX);
                 if (Float.isFinite(reverse)) observed = reverse;
             }
+            if (state.motion.isClosing() && state.closedFrame != null) {
+                // Read the animated native plate only as a progress sensor.
+                // Never use its rectangle to place the glass: its local
+                // pivot differs from the Prismal root-space endpoints.
+                View plate = nativeAnimationPlate(state);
+                if (plate != null && state.closePlateStart == null) {
+                    state.closePlateStart = bounds(plate, state);
+                }
+                if (animImage != null && state.closeImageStart == null) {
+                    state.closeImageStart = bounds(animImage, state);
+                }
+                float imageProgress = OpenFolderNativeCloseProgress.sampleVisualFrame(
+                        state.closedFrame, state.closeImageStart, bounds(animImage, state));
+                float plateProgress = OpenFolderNativeCloseProgress.sampleVisualFrame(
+                        state.closedFrame, state.closePlateStart, bounds(plate, state));
+                if (Float.isFinite(imageProgress)) {
+                    observed = Float.isFinite(observed)
+                            ? Math.min(observed, imageProgress) : imageProgress;
+                }
+                if (Float.isFinite(plateProgress)) {
+                    observed = Float.isFinite(observed)
+                            ? Math.min(observed, plateProgress) : plateProgress;
+                }
+            }
             float amount = state.motion.sample(observed);
+            if (state.motion.isClosing() && Api101Bridge.isDebugLoggingEnabled()) {
+                int bucket = Math.max(0, Math.min(4, Math.round(amount * 4f)));
+                if (bucket != state.closeProgressLogBucket) {
+                    state.closeProgressLogBucket = bucket;
+                    Api101Bridge.folderLifecycle("close-progress serial=" + state.serial
+                            + " fraction=" + amount + " native=" + observed
+                            + " channels=" + state.nativeCloseProgress.channelDescription()
+                            + " radius=" + (state.closedFrame != null
+                                    ? state.closedFrame.radius : Float.NaN));
+                }
+            }
             // One root-coordinate path for OPEN and CLOSE: no child-View
             // layout-origin handoff, one-time offset or second animation.
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
@@ -914,6 +957,8 @@ final class OpenFolderGlassCoordinator {
         OpenFolderGlassGeometry.Frame closedFrame, expandedFrame;
         final OpenFolderGlassGeometry geometry = new OpenFolderGlassGeometry();
         final OpenFolderNativeCloseProgress nativeCloseProgress = new OpenFolderNativeCloseProgress();
+        OpenFolderGlassGeometry.Frame closeImageStart, closePlateStart;
+        int closeProgressLogBucket = -1;
         boolean finalCloseQueued;
         boolean inputsResumed;
         final OpenFolderNativeMaterial materials = new OpenFolderNativeMaterial(OWNER);
