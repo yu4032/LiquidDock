@@ -7,12 +7,45 @@ final class OpenFolderGlassState {
     private long serial;
     private boolean backdropReady;
     private boolean presented;
+    private boolean recentsCovered;
+    private boolean recentsReturnPending;
+
+    /** Recents can hide FolderCling without closing it. The native
+     * close callbacks, not transient View.visibility, own its lifecycle.
+     */
+    void onRecentsShown(long value) {
+        if (!owns(value)) return;
+        recentsCovered = true;
+        recentsReturnPending = false;
+    }
+
+    void onRecentsHidden(long value) {
+        if (!owns(value) || !recentsCovered) return;
+        recentsCovered = false;
+        recentsReturnPending = true;
+    }
+
+    boolean isRecentsCovered(long value) {
+        return owns(value) && recentsCovered;
+    }
+
+    boolean keepHiddenFolder(long value, boolean nativeStillOpened) {
+        return owns(value) && (recentsCovered || (recentsReturnPending && nativeStillOpened));
+    }
+
+    boolean completeRecentsReturn(long value) {
+        if (!owns(value) || !recentsReturnPending || recentsCovered) return false;
+        recentsReturnPending = false;
+        return true;
+    }
 
     long prepare() {
         serial++;
         phase = Phase.PREPARING;
         backdropReady = false;
         presented = false;
+        recentsCovered = false;
+        recentsReturnPending = false;
         return serial;
     }
 
@@ -63,5 +96,7 @@ final class OpenFolderGlassState {
         phase = Phase.CLOSED;
         backdropReady = false;
         presented = false;
+        recentsCovered = false;
+        recentsReturnPending = false;
     }
 }

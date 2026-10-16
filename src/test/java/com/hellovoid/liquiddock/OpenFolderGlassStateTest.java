@@ -4,6 +4,34 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class OpenFolderGlassStateTest {
+    @Test public void recentsCannotDestroyOpenFolderOrReviveStaleOwnership() {
+        OpenFolderGlassState state = new OpenFolderGlassState();
+        long serial = state.prepare();
+        state.beginOpen(serial);
+        state.onBackdropReady(serial);
+        state.onPresented(serial);
+        state.onRecentsShown(serial);
+        assertTrue(state.isRecentsCovered(serial));
+        assertTrue(state.keepHiddenFolder(serial, false));
+        assertFalse(state.completeRecentsReturn(serial));
+        state.onRecentsHidden(serial);
+        assertFalse(state.isRecentsCovered(serial));
+        assertTrue("temporarily hidden native folder remains valid",
+                state.keepHiddenFolder(serial, true));
+        assertFalse("truly closed native folder is not retained",
+                state.keepHiddenFolder(serial, false));
+        assertTrue(state.completeRecentsReturn(serial));
+        assertFalse(state.completeRecentsReturn(serial));
+        assertFalse(state.keepHiddenFolder(serial, true));
+
+        state.onRecentsShown(serial);
+        long replacement = state.prepare();
+        state.onRecentsHidden(serial);
+        assertFalse(state.keepHiddenFolder(serial, true));
+        assertFalse(state.isRecentsCovered(replacement));
+        assertTrue(state.owns(replacement));
+    }
+
     @Test public void capturedCloseCompletionCannotReleaseTheNextOpeningOfTheSameFolder() throws Exception {
         OpenFolderGlassState state = new OpenFolderGlassState();
         long old = state.prepare();
