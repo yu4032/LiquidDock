@@ -43,7 +43,8 @@ final class OpenFolderGlassCoordinator {
                 + " layerAlpha=" + (layer != null ? layer.getAlpha() : -1f)
                 + " backdrop=" + (state != null && state.session != null
                         && state.session.hasFrozenBackdrop())
-                + " sourceWindow=" + (state != null && state.source != null));
+                + " sourceWindow=" + (state != null && state.source != null)
+                + " recentsGesture=" + (state != null ? state.recentsGestureProgress : Float.NaN));
     }
 
     private OpenFolderGlassCoordinator() {}
