@@ -34,6 +34,32 @@ public class LauncherGlassSceneControllerTest {
         assertFalse("OEM close already has its own transition", state.consumeFadeReveal());
     }
 
+    @Test public void closingFolderCanRestoreSiblingsBeforeNativeSpringEnds() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+        state.setFolderCovered(true, false);
+        long frozenGeneration = state.generation();
+
+        // Native FolderCling.close starts the ordinary Workspace icon fade.
+        // Reopen the shared static glass scene NOW, not when the temporary
+        // folder lens has completed its separate GPU handoff.
+        state.setFolderCovered(false, false);
+        assertFalse("stale pre-open folder silhouette must stay hidden",
+                state.isLayerVisible());
+        state.onFreshFrameReady(frozenGeneration);
+        assertFalse("stale generation must not reveal other folders", state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue("other folder glass may follow the native Workspace alpha",
+                state.isLayerVisible());
+        assertFalse("OEM owns the alpha curve: do not add a second fade",
+                state.consumeFadeReveal());
+        // Content+spring completion is still pending, but siblings are ready.
+        assertEquals(LauncherGlassSceneController.State.HOME_VISIBLE, state.state());
+    }
+
     @Test public void unsupportedFolderRetainsTheExistingHardCoverageFallback() throws Exception {
         LauncherGlassSceneController.StateMachine state = new LauncherGlassSceneController.StateMachine();
         state.onRootReady(); state.onFreshFrameReady(state.generation()); state.consumeFadeReveal();

@@ -279,6 +279,18 @@ final class LauncherGlassSceneController {
         }
     }
 
+    /** Reopen only the Workspace glass consumer at the native close START.
+     * Ordinary desktop icons and non-active folders share the same Workspace
+     * view alpha. Dock remains in its original OEM modal FolderState.
+     *
+     * Do not wait for the terminal OPEN_FOLDER TextureView handoff: doing so
+     * makes every unrelated folder glass pop in after its icon has returned.
+     */
+    static void beginNativeFolderCloseForAll() {
+        if (!vendorFolderCovered) return;
+        setFolderCoveredForAll(false);
+    }
+
     static void setFolderCoveredForAll(boolean covered) {
         ArrayList<LauncherGlassSceneController> snapshot;
         synchronized (LauncherGlassSceneController.class) {
@@ -405,7 +417,15 @@ final class LauncherGlassSceneController {
         LauncherGlassSceneController controller = findRoot(root);
         if (controller == null || controller.layer == null || onReady == null) return false;
         controller.pendingFolderHandoff = onReady;
-        controller.pendingFolderHandoffFresh = false;
+        // On an animated close the Workspace producer was resumed at the
+        // START of the OEM reverse spring. Its generation may already have
+        // presented before the temporary lens reaches its final icon shape.
+        // That is a valid fresh output, not a reason to demand another source
+        // capture and introduce an avoidable ownership gap.
+        controller.pendingFolderHandoffFresh =
+                !controller.folderCovered
+                && controller.state.state() == State.HOME_VISIBLE;
+        if (controller.pendingFolderHandoffFresh) controller.checkFolderHandoffPresentation();
         return true;
     }
 

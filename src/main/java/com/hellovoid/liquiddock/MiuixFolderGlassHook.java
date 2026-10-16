@@ -203,6 +203,23 @@ final class MiuixFolderGlassHook {
     static void onNativeCloseStarted(boolean animated) {
         OemFolderBlurStrengthHook.setFolderOpening(false);
         NATIVE_CLOSE.begin(openedFolderSerial, animated);
+        // The Launcher Workspace icons start their *native* visibility
+        // transition at FolderCling.close, not at the end of its spring.
+        // Recover the shared root-wide glass producer at that same boundary:
+        // all OTHER folder/widget glass then follows the very same ancestor
+        // Workspace alpha as the ordinary icons. Do not thaw Dock here: its
+        // independent native FolderState remains authoritative until close.
+        //
+        // The opening folder's own static node stays suppressed by
+        // openedFolderSink until the native content/background completion.
+        // Its temporary icon-shaped lens stays presented through the later
+        // fresh-frame handoff, so recovering the siblings cannot create a
+        // transparent gap at the closing folder.
+        if (animated && OpenFolderGlassCoordinator.hasActiveSession()) {
+            LauncherGlassSceneController.beginNativeFolderCloseForAll();
+            MainHook.diag("[FolderTrace] Workspace glass resumes with native icon fade"
+                    + " serial=" + openedFolderSerial);
+        }
     }
 
     static long activeNativeCloseSerial() { return openedFolderSerial; }
