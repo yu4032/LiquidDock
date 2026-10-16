@@ -8,7 +8,11 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
-/** Transparent application-panel root used only as the shortcut-popup PassBlur capture authority. */
+/** Transparent, non-interactive PassBlur authority.
+ * Keep its panel BELOW the IME: FLAG_NOT_FOCUSABLE alone would otherwise
+ * place this full-screen, FLAG_NOT_TOUCHABLE window above the keyboard,
+ * causing Android 12+ cross-UID touch-occlusion rejection.
+ */
 final class ShortcutPopupSourceOverlay extends FrameLayout {
     interface Listener {
         void onAttached(ShortcutPopupSourceOverlay overlay);
@@ -58,6 +62,7 @@ final class ShortcutPopupSourceOverlay extends FrameLayout {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
