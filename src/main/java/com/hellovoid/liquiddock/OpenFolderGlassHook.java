@@ -77,7 +77,7 @@ final class OpenFolderGlassHook {
                 // completion as the only release boundary to avoid leaks.
                 MainHook.log("[DC][OpenFolderGlass] native close spring boundary unavailable: " + error);
             }
-            // Capture source-excluded wallpaper at touch-down without
+            // Prewarm desktop-inclusive capture at touch-down without
             // delaying native folder opening for an EGL/PassBlur callback.
             // Accessibility / keyboard entry can bypass FolderIcon ACTION_DOWN.
             HookUtil.hook(HookUtil.findMethodExact(launcher, "openFolder",
@@ -87,12 +87,9 @@ final class OpenFolderGlassHook {
                 if (args.length > 1 && args[1] instanceof ViewGroup) {
                     safe(() -> OpenFolderGlassCoordinator.ensurePrepared((ViewGroup) args[1], args[0]));
                 }
-                // Launcher is now INCLUDED in the PassBlur input. Once its
-                // native folder animation begins, never admit a late frame.
-                // Do not pre-emptively abort the glass on Launcher.openFolder:
-                // the OEM schedules its FolderCling.open in a later UI task,
-                // giving the already-running pre-open producer time to complete.
-                // Keep the original native Workspace fade/mode ownership.
+                // Seal the compositor snapshot before any OEM opening side effects.
+                // An async PassBlur frame from after this boundary is unsafe.
+                OpenFolderGlassCoordinator.freezePreparedDesktopBeforeNativeOpen();
                 MiuixFolderGlassHook.onFolderOpeningBeforeNativeAnimation();
                 try {
                     return chain.proceed(args);

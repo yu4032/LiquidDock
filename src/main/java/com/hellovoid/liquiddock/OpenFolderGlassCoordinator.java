@@ -65,13 +65,13 @@ final class OpenFolderGlassCoordinator {
     static void freezePreparedDesktopBeforeNativeOpen() {
         State state = current;
         if (state == null) return;
-        if (state.session == null || !state.session.hasFrozenBackdrop()) {
+        if (state.session == null || !state.session.sealFolderCapture()) {
             MainHook.diag("[FolderTrace] desktop snapshot NOT READY before native folder; "
                     + "using OEM instead glassSerial=" + state.serial);
             releaseAll();
             return;
         }
-        MainHook.diag("[FolderTrace] desktop snapshot frozen BEFORE native folder "
+        MainHook.diag("[FolderTrace] desktop snapshot sealed BEFORE native folder "
                 + "glassSerial=" + state.serial);
     }
 
@@ -174,7 +174,7 @@ final class OpenFolderGlassCoordinator {
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
         state.observer = state.root.get().getViewTreeObserver();
-        // Desktop-inclusive source was frozen at the Launcher.openFolder boundary.
+        // Desktop-inclusive source was sealed at the earliest native opening boundary.
         // Late captures cannot include the native FolderCling.
         state.preDraw = () -> { sync(state); return true; };
         state.observer.addOnPreDrawListener(state.preDraw);
@@ -219,6 +219,10 @@ final class OpenFolderGlassCoordinator {
             state.nativeTargetY += state.nativeTargetHeight / 2f - original[1] / 2f;
         }
         state.animationSpecReady = true;
+        MainHook.diag("[FolderTrace] native animation spec accepted glassSerial="
+                + state.serial + " opening=" + opening + " source="
+                + state.nativeSourceWidth + "x" + state.nativeSourceHeight
+                + " target=" + state.nativeTargetWidth + "x" + state.nativeTargetHeight);
     }
 
     static void onClosing(View folderCling, boolean animated) {
@@ -400,6 +404,19 @@ final class OpenFolderGlassCoordinator {
                         || state.nativeTargetHeight != state.nativeSourceHeight)) {
                     observed = OpenFolderBackdropPolicy.openProgress(state.nativeSourceWidth, state.nativeTargetWidth,
                             animImage.getWidth(), state.nativeSourceHeight, state.nativeTargetHeight, animImage.getHeight());
+                }
+            }
+            // For OEM variants without the setIconBgAnim signature, read
+            // the live transformed animation plate rather than hold its origin.
+            if (!Float.isFinite(observed) && animImage != null
+                    && target != null && state.closedFrame != null) {
+                OpenFolderGlassGeometry.Frame plate = bounds(animImage, state);
+                if (plate != null) {
+                    observed = OpenFolderBackdropPolicy.openProgress(
+                            state.closedFrame.right - state.closedFrame.left,
+                            target.right - target.left, plate.right - plate.left,
+                            state.closedFrame.bottom - state.closedFrame.top,
+                            target.bottom - target.top, plate.bottom - plate.top);
                 }
             }
             float amount = state.motion.sample(observed);

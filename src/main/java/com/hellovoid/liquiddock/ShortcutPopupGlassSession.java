@@ -77,6 +77,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean sourceFrozen;
+    private final FolderDesktopCaptureGate desktopCapture = new FolderDesktopCaptureGate();
     private volatile int logicalWidth;
     private volatile int logicalHeight;
     private boolean presentationSignaled;
@@ -236,6 +237,14 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         return !shuttingDown && backdropPrepared && sourceFrozen;
     }
 
+    /** Atomically stop accepting frames before the native folder opens. */
+    boolean sealFolderCapture() {
+        if (!folderBackdrop || shuttingDown) return false;
+        boolean ready = desktopCapture.seal();
+        sourceBackend.setUpdatesEnabled(false, "folder-pre-native-open-fence");
+        return ready && hasFrozenBackdrop();
+    }
+
     void updateGeometry(LauncherGlassGeometry.Snapshot next) {
         if (shuttingDown || next == null) return;
         LauncherGlassGeometry.Snapshot old = geometry;
@@ -316,7 +325,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
         // The separate PassBlur authority includes Launcher; freeze only its PRE-OPEN desktop frame.
-        if (folderBackdrop && sourceFrozen) return;
+        if (folderBackdrop && !desktopCapture.mayPrepare()) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
@@ -332,9 +341,21 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     frame.logicalWidth,
                     frame.logicalHeight,
                     prismalParams);
-            backdropPrepared = true;
-            if (!sourceFrozen) {
+            boolean first;
+            if (folderBackdrop) {
+                // GPU work may complete after the UI thread opened Launcher.
+                // Publication is serialized with that native-open fence.
+                first = desktopCapture.commit(() -> {
+                    backdropPrepared = true;
+                    sourceFrozen = true;
+                });
+                if (!first) return;
+            } else {
+                backdropPrepared = true;
+                first = !sourceFrozen;
                 sourceFrozen = true;
+            }
+            if (first) {
                 sourceBackend.setUpdatesEnabled(false, "shortcut-popup-frozen");
                 MainHook.log(TAG + " workspace backdrop frozen generation=" + frame.generation);
                 mainHandler.post(() -> {
