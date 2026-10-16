@@ -154,8 +154,13 @@ final class RecentsBackgroundBlurHook {
         HookUtil.hookMethod(loader, BLUR_UTILS, methodName, chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             if (args.length > 1 && args[1] instanceof Number) {
-                args[1] = RecentsBlurPolicy.scaleGestureRatio(
-                        ((Number) args[1]).floatValue(), liveBlurPercent);
+                float nativeRatio = ((Number) args[1]).floatValue();
+                // The OPEN_FOLDER full-screen wallpaper must shrink into the
+                // opened native Folder round-rect on this exact gesture curve.
+                // Sample BEFORE applying the GUI Recents blur multiplier:
+                // otherwise disabling blur also freezes the folder animation.
+                OpenFolderGlassCoordinator.onNativeRecentsGestureProgress(nativeRatio);
+                args[1] = RecentsBlurPolicy.scaleGestureRatio(nativeRatio, liveBlurPercent);
             }
             return chain.proceed(args);
         }, "com.miui.home.launcher.Launcher", float.class, boolean.class);
