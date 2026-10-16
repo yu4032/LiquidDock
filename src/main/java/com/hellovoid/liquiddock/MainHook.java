@@ -78,7 +78,6 @@ public class MainHook {
             }
         }
         order.advance(LauncherInstallSequence.Stage.GLASS_DECISION);
-        diag("[FolderTrace] zeroCopyPipelineInstalled=" + zeroCopyOwned);
         if (zeroCopyOwned) {
             order.finishAtGlassOwner();
             return;

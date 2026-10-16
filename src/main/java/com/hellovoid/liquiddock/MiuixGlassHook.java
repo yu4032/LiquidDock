@@ -215,10 +215,6 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
                     + " radius=" + readNativeOpticsRadius(dockBg));
         }
 
-        MainHook.diag("[FolderTrace] Dock glass host rebind background="
-                + dockBg.getClass().getName() + "@"
-                + Integer.toHexString(System.identityHashCode(dockBg))
-                + " frozen=" + Miuix307ZeroCopyRenderer.isFolderFrozen());
         removeVendorMaterialBodyPreserver();
         Miuix307ZeroCopyRenderer.clear();
         DockLiquidGlassHostView previousHost = currentHost();
