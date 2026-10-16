@@ -590,7 +590,7 @@ final class MiuixFolderGlassHook {
         }
     }
 
-    private static View resolveFolderMaterial(ViewGroup folder) {
+    static View resolveFolderMaterial(ViewGroup folder) {
         if (folder == null) return null;
         boolean small = folder.getClass().getName().contains("FolderIcon1x1");
         String[] fields = small
@@ -683,7 +683,7 @@ final class MiuixFolderGlassHook {
         return reference != null ? reference.get() : null;
     }
 
-    private static float readMaterialRadius(View material) {
+    static float readMaterialRadius(View material) {
         if (material == null) return Float.NaN;
         try {
             Field field = findField(material.getClass(), "mCornerRadius");
