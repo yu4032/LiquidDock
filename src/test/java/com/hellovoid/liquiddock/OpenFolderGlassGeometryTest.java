@@ -53,56 +53,37 @@ public class OpenFolderGlassGeometryTest {
                 20, 30, 400, 500, 48);
     }
 
-    @Test public void recentsBackdropContinuouslyContractsFullscreenIntoSmallFolderRoundRect() {
-        // Representative expanded 1x1 native folder panel, NOT a desktop icon.
-        OpenFolderGlassGeometry.Frame folder =
+    @Test public void recentsMaskNeverShowsScaledFullScreenWallpaperOutsideExpandedFolder() {
+        // The cached OPEN_FOLDER texture is full-screen, but the vendor
+        // Recents spring scales the whole Launcher root. Only the native
+        // expanded folder material is allowed to participate in that scale.
+        OpenFolderGlassGeometry.Frame small =
                 new OpenFolderGlassGeometry.Frame(460f, 215f, 1076f, 806f, 46f);
-        OpenFolderGlassGeometry.Frame full =
-                OpenFolderGlassGeometry.recentsBackdropMask(folder, 1728, 1080, 0f);
-        assertEquals(0f, full.left, .001f);
-        assertEquals(0f, full.top, .001f);
-        assertEquals(1728f, full.right, .001f);
-        assertEquals(1080f, full.bottom, .001f);
-        assertEquals(0f, full.radius, .001f);
-
-        OpenFolderGlassGeometry.Frame half =
-                OpenFolderGlassGeometry.recentsBackdropMask(folder, 1728, 1080, .5f);
-        assertEquals(230f, half.left, .001f);
-        assertEquals(107.5f, half.top, .001f);
-        assertEquals(1402f, half.right, .001f);
-        assertEquals(943f, half.bottom, .001f);
-        assertEquals(23f, half.radius, .001f);
-
-        OpenFolderGlassGeometry.Frame end =
-                OpenFolderGlassGeometry.recentsBackdropMask(folder, 1728, 1080, 1f);
-        assertEquals(folder.left, end.left, .001f);
-        assertEquals(folder.top, end.top, .001f);
-        assertEquals(folder.right, end.right, .001f);
-        assertEquals(folder.bottom, end.bottom, .001f);
-        assertEquals(folder.radius, end.radius, .001f);
+        OpenFolderGlassGeometry.Frame mask =
+                OpenFolderGlassGeometry.recentsMaterialMask(small, 1728, 1080);
+        assertNotNull(mask);
+        assertEquals(small.left, mask.left, .001f);
+        assertEquals(small.top, mask.top, .001f);
+        assertEquals(small.right, mask.right, .001f);
+        assertEquals(small.bottom, mask.bottom, .001f);
+        assertEquals(small.radius, mask.radius, .001f);
+        assertTrue("must not expose root-wide captured wallpaper",
+                mask.right - mask.left < 1728f);
+        assertTrue(mask.bottom - mask.top < 1080f);
     }
 
-    @Test public void recentsBackdropUsesActualExpandedPanelForLargeFolderAndClampsProgress() {
+    @Test public void recentsMaskKeepsLargeFolderGeometryAndClampsCornerRadius() {
         OpenFolderGlassGeometry.Frame large =
-                new OpenFolderGlassGeometry.Frame(150f, 90f, 1550f, 990f, 90f);
-        OpenFolderGlassGeometry.Frame end =
-                OpenFolderGlassGeometry.recentsBackdropMask(large, 1728, 1080, 2f);
-        assertEquals(large.left, end.left, .001f);
-        assertEquals(large.right, end.right, .001f);
-        assertEquals(large.radius, end.radius, .001f);
-        OpenFolderGlassGeometry.Frame start =
-                OpenFolderGlassGeometry.recentsBackdropMask(large, 1728, 1080, -1f);
-        assertEquals(0f, start.radius, .001f);
-        assertEquals(1728f, start.right, .001f);
-        assertEquals(1080f, start.bottom, .001f);
-        assertNull(OpenFolderGlassGeometry.recentsBackdropMask(null, 1728, 1080, .4f));
-        assertNull(OpenFolderGlassGeometry.recentsBackdropMask(large, 0, 1080, .4f));
-        // Missing native progress fails to the existing safe folder mask,
-        // never a scaled duplicate of the full-screen wallpaper.
-        OpenFolderGlassGeometry.Frame missing =
-                OpenFolderGlassGeometry.recentsBackdropMask(large, 1728, 1080, Float.NaN);
-        assertEquals(large.left, missing.left, .001f);
-        assertEquals(large.radius, missing.radius, .001f);
+                new OpenFolderGlassGeometry.Frame(150f, 90f, 1550f, 990f, 900f);
+        OpenFolderGlassGeometry.Frame mask =
+                OpenFolderGlassGeometry.recentsMaterialMask(large, 1728, 1080);
+        assertEquals(large.left, mask.left, .001f);
+        assertEquals(large.top, mask.top, .001f);
+        assertEquals(large.right, mask.right, .001f);
+        assertEquals(large.bottom, mask.bottom, .001f);
+        assertEquals(450f, mask.radius, .001f);
+        assertNull(OpenFolderGlassGeometry.recentsMaterialMask(null, 1728, 1080));
+        assertNull(OpenFolderGlassGeometry.recentsMaterialMask(large, 0, 1080));
     }
 
     @Test public void nativeCloseBackdropContractsToDesktopSmallFolderIconOnActualSpringProgress() {
