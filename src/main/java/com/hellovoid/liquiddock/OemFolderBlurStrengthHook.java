@@ -56,8 +56,6 @@ final class OemFolderBlurStrengthHook {
                     float requested = ((Number) args[0]).floatValue();
                     float adjusted = Math.max(0f, Math.min(requested, OPEN_STRENGTH));
                     args[0] = adjusted;
-                    MainHook.diag(TAG + " native folder open blur=" + requested
-                            + " adjusted=" + adjusted);
                 }
                 return chain.proceed(args);
             });
@@ -76,12 +74,9 @@ final class OemFolderBlurStrengthHook {
                 }
             });
             installed = true;
-            MainHook.diag(TAG + " installed exact OEM folder opening blur scale="
-                    + OPEN_STRENGTH);
         } catch (Throwable error) {
             // OEM signature differs on some Launcher builds. Do not guess or
             // change other blur callsites as a fallback.
-            MainHook.diag(TAG + " unavailable; stock folder blur retained: " + error);
         }
     }
 }

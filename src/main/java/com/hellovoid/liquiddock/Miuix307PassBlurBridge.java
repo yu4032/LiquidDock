@@ -247,8 +247,6 @@ final class Miuix307PassBlurBridge {
                 || !binding.rootSurface.isValid()) return;
         setUpdatesEnabled(binding, true, true);
         renewForceRefresh(binding);
-        MainHook.diag("[FolderTrace] Dock post-folder producer refresh requested"
-                + " root=" + binding.rootName + " updates=" + binding.updatesEnabled);
     }
 
     /** Workspace idle suspension and vendor-snapshot Dock suspension. */
