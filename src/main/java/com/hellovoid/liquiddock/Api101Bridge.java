@@ -54,19 +54,6 @@ public final class Api101Bridge {
         writeError(message, error);
     }
 
-    /** Bounded folder diagnostics: debug builds always, release builds only
-     * when the user explicitly enables the existing debug-log preference.
-     * The previous DEBUG-only gate made PR392 traces silently unavailable
-     * to real-device release installations even with logging enabled.
-     */
-    static void logFolderDiagnostic(String message) {
-        if ((!BuildConfig.DEBUG && !debugLogging) || message == null) return;
-        if (!message.startsWith("[FolderTrace]") && !message.startsWith("[DC][FolderWorkspace]")) {
-            return;
-        }
-        Log.i("LiquidDock-Diag", message);
-    }
-
     private static void writeInfo(String message) {
         try {
             module().log(Log.INFO, "LiquidDock", message);

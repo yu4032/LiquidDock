@@ -98,9 +98,6 @@ final class OpenFolderGlassCoordinator {
             if (name != null && !name.isBlank()) dockRoots.add(name);
         }
         String[] excludedDockRoots = dockRoots.toArray(new String[0]);
-        MainHook.diag("[FolderTrace] wallpaper capture AFTER native folder enter"
-                + " launcherRoot=" + state.launcherSurfaceName
-                + " dockRoots=" + dockRoots);
         state.source = ShortcutPopupSourceOverlay.attachToLauncherBounds(root, new ShortcutPopupSourceOverlay.Listener() {
             @Override public void onAttached(ShortcutPopupSourceOverlay source) {
                 if (!live(state)) return;
@@ -182,11 +179,6 @@ final class OpenFolderGlassCoordinator {
         state.layer = layer;
         host.addView(layer, position,
                 new ViewGroup.LayoutParams(state.width, state.height));
-        MainHook.diag("[FolderTrace] lens z-order=" +
-                (position == workspaceIndex && workspaceIndex >= 0 ? "behind-Workspace" : "fallback-below-Cling")
-                + " lensIndex=" + host.indexOfChild(layer)
-                + " workspaceIndex=" + (workspaceSibling != null ? host.indexOfChild(workspaceSibling) : -1)
-                + " folderIndex=" + host.indexOfChild(cling));
         host.postInvalidateOnAnimation();
     }
 
@@ -268,10 +260,6 @@ final class OpenFolderGlassCoordinator {
             state.nativeTargetY += state.nativeTargetHeight / 2f - original[1] / 2f;
         }
         state.animationSpecReady = true;
-        MainHook.diag("[FolderTrace] native animation spec accepted glassSerial="
-                + state.serial + " opening=" + opening + " source="
-                + state.nativeSourceWidth + "x" + state.nativeSourceHeight
-                + " target=" + state.nativeTargetWidth + "x" + state.nativeTargetHeight);
     }
 
     static void onClosing(View folderCling, boolean animated) {
@@ -310,9 +298,6 @@ final class OpenFolderGlassCoordinator {
         state.nativeCloseProgress.capture(anim.getTranslationX(), anim.getTranslationY(),
                 anim.getScaleX(), state.nativeTargetX, state.nativeTargetY,
                 state.nativeExpandedScaleX);
-        MainHook.diag("[FolderTrace] native close progress channels="
-                + state.nativeCloseProgress.channelDescription()
-                + " serial=" + state.serial);
     }
 
     /** The OEM close spring may replace its temporary anim-image drawable. */
@@ -368,7 +353,6 @@ final class OpenFolderGlassCoordinator {
                 state.width, state.height, icon.left, icon.top,
                 icon.right, icon.bottom, icon.radius);
         if (endpoint == null) { releaseAll(); return; }
-        MainHook.diag("[FolderTrace] final close EGL endpoint glassSerial=" + state.serial);
         state.session.finishFolderClose(endpoint, () -> {
             if (!live(state)) return;
             ShortcutPopupGlassLayer output = state.layer;
@@ -376,8 +360,6 @@ final class OpenFolderGlassCoordinator {
             if (root == null || output == null || !output.isAttachedToWindow()
                     || !LauncherGlassSceneController.awaitFolderHandoff(root, () -> {
                         if (live(state) && state.layer != null) {
-                            MainHook.diag("[FolderTrace] workspace frame ready, crossfading icon glass"
-                                    + " serial=" + state.serial);
                             state.layer.fadeIntoWorkspace(() -> {
                                 if (live(state)) releaseAll();
                             });
@@ -395,13 +377,10 @@ final class OpenFolderGlassCoordinator {
                 return;
             }
             state.inputsResumed = true;
-            MainHook.diag("[FolderTrace] holding final glass until Workspace visible"
-                    + " serial=" + state.serial);
             // Failure-only lifecycle fence: don't strand a TextureView if
             // Launcher is paused or the resident output cannot become ready.
             root.postDelayed(() -> {
                 if (live(state)) {
-                    MainHook.diag("[FolderTrace] handoff timeout fallback serial=" + state.serial);
                     releaseAll();
                 }
             }, 1500L);
@@ -444,9 +423,6 @@ final class OpenFolderGlassCoordinator {
         current = null;
         OWNER.release();
         if (state == null) return;
-        MainHook.diag("[FolderTrace] GlassCoordinator.releaseAll glassSerial="
-                + state.serial + " nativeFolderSerial="
-                + MiuixFolderGlassHook.diagnosticNativeSerial());
         View root = state.root.get();
         if (root != null) LauncherGlassSceneController.cancelFolderHandoff(root);
         state.materials.invalidateAll();
