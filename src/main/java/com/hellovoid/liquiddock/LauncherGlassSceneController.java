@@ -244,6 +244,15 @@ final class LauncherGlassSceneController {
         return vendorRecentsCovered;
     }
 
+    /** Root transform identity is insufficient for a frozen wallpaper
+     * handoff: the Recents wallpaper spring may still be dimmed or blurred.
+     */
+    static synchronized boolean isRecentsWallpaperSettlePendingForRoot(View root) {
+        LauncherGlassSceneController controller = root != null ? BY_ROOT.get(root) : null;
+        return vendorRecentsWallpaperSettlePending
+                || (controller != null && controller.recentsWallpaperSettlePending);
+    }
+
     /** Folder is capture-only. Native Workspace opacity is not authoritative
      * for the cached glass TextureView during this frozen session. */
     static synchronized boolean isFolderBackdropFrozenForRoot(View root) {
