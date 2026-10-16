@@ -42,11 +42,11 @@ public class OpenFolderBackdropPolicyTest {
         assertEquals(0f, OpenFolderBackdropPolicy.backdropSampleY(1f), 0f);
     }
 
-    @Test public void folderDesktopIncludesLauncherAndExcludesDock() {
+    @Test public void folderWallpaperExcludesLauncherAndDock() {
         assertArrayEquals(new String[]{"FolderSource#1", "NavigationBar", "StatusBar",
-                "GestureStub", "DockAssistantView"},
+                "GestureStub", "Launcher#1", "DockAssistantView"},
                 PassBlurBindPolicy.exclusions("FolderSource#1",
-                        PassBlurBindPolicy.folderDesktopExclusions("Launcher#1")));
+                        PassBlurBindPolicy.folderWallpaperExclusions("Launcher#1")));
     }
     @Test public void folderCaptureHasItsOwnRootWithoutWorkspaceUnlockGate() {
         PassBlurDomain folder;
@@ -56,9 +56,9 @@ public class OpenFolderBackdropPolicyTest {
         assertFalse(PassBlurBindPolicy.requiresUnlockGate(folder));
         assertEquals(24, PassBlurBindPolicy.retryBudgetAttempt(folder, 24, true, true));
         assertArrayEquals(new String[]{"FolderSource#1", "NavigationBar", "StatusBar",
-                "GestureStub", "DockAssistantView"},
+                "GestureStub", "Launcher#1", "DockAssistantView"},
                 PassBlurBindPolicy.exclusions("FolderSource#1",
-                        PassBlurBindPolicy.folderDesktopExclusions("Launcher#1")));
+                        PassBlurBindPolicy.folderWallpaperExclusions("Launcher#1")));
         assertEquals(1f, PassBlurBindPolicy.nativeScale(PassBlurDomain.SHORTCUT_POPUP, 0.25f), 0f);
     }
 
