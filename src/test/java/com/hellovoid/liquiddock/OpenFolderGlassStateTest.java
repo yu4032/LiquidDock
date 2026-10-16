@@ -11,22 +11,31 @@ public class OpenFolderGlassStateTest {
         state.onBackdropReady(serial);
         state.onPresented(serial);
         state.onRecentsShown(serial);
+        assertTrue("entering Recents must not invalidate an already-presented lens",
+                state.maySuppressNative());
+        assertFalse(state.shouldReplayAfterRecents(serial, true));
         assertTrue(state.isRecentsCovered(serial));
         assertTrue(state.keepHiddenFolder(serial, false));
         assertFalse(state.completeRecentsReturn(serial));
         state.onRecentsHidden(serial);
         assertFalse(state.isRecentsCovered(serial));
+        assertTrue("cached glass may restore before FolderCling becomes VISIBLE",
+                state.shouldReplayAfterRecents(serial, true));
+        assertFalse("native actual close forbids replay",
+                state.shouldReplayAfterRecents(serial, false));
         assertTrue("temporarily hidden native folder remains valid",
                 state.keepHiddenFolder(serial, true));
         assertFalse("truly closed native folder is not retained",
                 state.keepHiddenFolder(serial, false));
         assertTrue(state.completeRecentsReturn(serial));
+        assertFalse(state.shouldReplayAfterRecents(serial, true));
         assertFalse(state.completeRecentsReturn(serial));
         assertFalse(state.keepHiddenFolder(serial, true));
 
         state.onRecentsShown(serial);
         long replacement = state.prepare();
         state.onRecentsHidden(serial);
+        assertFalse(state.shouldReplayAfterRecents(serial, true));
         assertFalse(state.keepHiddenFolder(serial, true));
         assertFalse(state.isRecentsCovered(replacement));
         assertTrue(state.owns(replacement));

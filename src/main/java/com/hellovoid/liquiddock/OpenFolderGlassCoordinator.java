@@ -23,24 +23,38 @@ final class OpenFolderGlassCoordinator {
 
     static boolean hasActiveSession() { return current != null; }
 
-    /** Recents only suspends the transient glass presentation. A temporary
-     * INVISIBLE/GONE FolderCling does not constitute an OEM folder close.
-     * Never discard the one-shot GPU snapshot for Recents visibility alone.
+    /** Recents is a compositor/Launcher presentation boundary, not a folder
+     * close. Keep the already-presented cached lens in its native View stack:
+     * forcing TextureView alpha to zero here can strand it invisible because
+     * FolderCling visibility may not return in the same draw traversal.
      */
     static void onRecentsShown() {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
-        if (state.layer != null) {
-            state.layer.animate().cancel();
-            state.layer.setAlpha(0f);
-        }
     }
 
     static void onRecentsHidden() {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsHidden(state.serial);
+        View cling = state.cling.get();
+        Object opened = invoke(cling, "isOpened");
+        // Only an explicit native close may invalidate a retained session.
+        // An unavailable reflection result during Recents isn't close proof.
+        if (Boolean.FALSE.equals(opened)) {
+            releaseAll();
+            return;
+        }
+        // Do not wait for a future pre-draw where FolderCling is VISIBLE:
+        // the native view can remain temporarily hidden after Recents ends.
+        // Its cached glass is already owned by Launcher and should be ready
+        // for the first OEM returning HOME frame, without new PassBlur.
+        if (OWNER.shouldReplayAfterRecents(state.serial,
+                !Boolean.FALSE.equals(opened))) {
+            if (state.session != null) state.session.requestCachedGlassRedraw();
+            if (state.layer != null) state.layer.reveal();
+        }
         View root = state.root.get();
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
