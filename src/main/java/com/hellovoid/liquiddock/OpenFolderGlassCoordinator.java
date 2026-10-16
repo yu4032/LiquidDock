@@ -747,7 +747,9 @@ final class OpenFolderGlassCoordinator {
             View nativeRoot = state.root.get();
             boolean wallpaperStillSettling = LauncherGlassSceneController
                     .isRecentsWallpaperSettlePendingForRoot(nativeRoot);
-            if (!wallpaperStillSettling && OWNER.completeRecentsReturn(state.serial)) {
+            if (OpenFolderBackdropPolicy.mayCompleteRecentsReturn(
+                    true, wallpaperStillSettling)
+                    && OWNER.completeRecentsReturn(state.serial)) {
                 state.layer.clearFolderBackdropOutline();
                 state.recentsGestureProgress = Float.NaN;
                 if (state.session != null) state.session.requestCachedGlassRedraw();
