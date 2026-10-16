@@ -99,8 +99,15 @@ final class Launcher450IconSizeHook {
                 MeasureDomain domain = ACTIVE_DOMAIN.get();
                 if (!enabled || domain == null || !(result instanceof Integer)) return result;
 
-                // Scale only the icon body. Dock slot width remains vendor-owned so the
-                // ShortcutIcon stays centered in the same Flexbox item.
+                // FolderGridView's OEM row pitch, viewport and label height
+                // are computed independently of ShortcutIcon.onMeasure().
+                // Enlarging the body here without enlarging the row clips the
+                // last row's caption. Restrict oversize only within that
+                // fixed-pitch grid; keep Workspace/Dock/preview scaling intact.
+                if (domain == MeasureDomain.FOLDER_CONTENT) {
+                    return Launcher450IconSizePolicy.fitNativeFolderCell(
+                            (Integer) result, true, percent);
+                }
                 return Launcher450IconSizePolicy.scaledPx((Integer) result, true, percent);
             });
 
