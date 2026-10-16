@@ -93,6 +93,7 @@ final class OpenFolderGlassHook {
                 try {
                     return chain.proceed(args);
                 } catch (Throwable error) {
+                    OpenFolderGlassCoordinator.releaseAll();
                     MiuixFolderGlassHook.onFolderOpeningFailed();
                     throw error;
                 }
