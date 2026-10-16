@@ -63,6 +63,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
+    private volatile float workspaceBlurPx;
     private volatile boolean folderClosing;
     // RootPassBlurBackend retains its normalized FBO after freezing popup updates.
     // Reuse that valid texture to re-blur the existing snapshot without recapturing
@@ -121,6 +122,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
         prismalParams = materialParams(optical, density);
+        workspaceBlurPx = Miuix307PrismalAdapter.toPortable(optical).blurRadiusPx;
         appliedBlur = prismalParams.blurRadiusPx;
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
@@ -154,7 +156,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 Miuix307PrismalMaterial.fromConfig(config, density);
         PrismalParams next = materialParams(optical, density);
         final PrismalParams updated = next;
-        boolean blurChanged = Float.compare(appliedBlur, updated.blurRadiusPx) != 0;
+        float newWorkspaceBlur = Miuix307PrismalAdapter.toPortable(optical).blurRadiusPx;
+        boolean blurChanged = Float.compare(appliedBlur, updated.blurRadiusPx) != 0
+                || (folderBackdrop && Float.compare(workspaceBlurPx, newWorkspaceBlur) != 0);
+        workspaceBlurPx = newWorkspaceBlur;
         appliedBlur = updated.blurRadiusPx;
         prismalParams = updated;
         highlightProfile = config.largeSurfaceHighlightProfile;
@@ -164,8 +169,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     && frozenPhysicalWidth > 0 && frozenPhysicalHeight > 0) {
                 try {
                     sourceBackend.makePbufferCurrent();
-                    if (folderBackdrop) prismalRenderer.reblurPreparedBackdrop(updated);
-                    else prismalRenderer.prepareBackdrop(
+                    if (folderBackdrop) {
+                        prismalRenderer.setWorkspaceBlurRadius(workspaceBlurPx);
+                        prismalRenderer.reblurPreparedBackdrop(updated);
+                    } else prismalRenderer.prepareBackdrop(
                             frozenNormalizedTexture, frozenPhysicalWidth, frozenPhysicalHeight,
                             logicalWidth, logicalHeight, updated);
                 } catch (Throwable error) {
@@ -179,9 +186,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         // must not re-capture from behind its own now-visible overlay.
     }
 
-    /** The reverse spring continues to sample the same prepared wallpaper.
-     * Do not switch Gaussian kernels mid-animation: its geometry comes from
-     * the native plate each pre-draw, not from a second blur snapshot.
+    /** Reverse spring mixes two already-prepared wallpaper Gaussian radii,
+     * never reallocates the background and never re-blurs during animation.
      */
     void beginFolderClose() {
         if (!folderBackdrop || shuttingDown) return;
@@ -296,6 +302,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (folderBackdrop && sourceFrozen) return;
         try {
             ensureGl();
+            if (folderBackdrop) {
+                prismalRenderer.setWorkspaceBlurRadius(workspaceBlurPx);
+            }
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
             sourceBackend.makePbufferCurrent();
@@ -342,6 +351,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
+            if (folderBackdrop) {
+                prismalRenderer.setWorkspaceBlurMix(folderClosing ? 1f - backdropOpacity : 0f);
+            }
             prismalRenderer.beginGlassFrame();
             prismalRenderer.drawGlass(
                     new PrismalGeometry(
@@ -388,7 +400,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     private void ensureGl() {
         sourceBackend.makePbufferCurrent();
-        if (prismalRenderer == null) prismalRenderer = new PrismalRenderer();
+        if (prismalRenderer == null) {
+            prismalRenderer = new PrismalRenderer();
+            if (folderBackdrop) prismalRenderer.enableDualBlur(workspaceBlurPx);
+        }
         if (compositeProgram == 0) {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
