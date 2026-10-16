@@ -356,6 +356,16 @@ final class Miuix307PassBlurTextureView extends TextureView
         mainHandler = new Handler(context.getMainLooper());
     }
 
+    /** Actual, currently bound Dock source SurfaceControl name. The floating
+     * Dock can be reparented or rebound under a different window name, so the
+     * folder wallpaper capture must not rely on "DockAssistantView" alone.
+     */
+    String boundDockRootSurfaceName() {
+        Miuix307PassBlurBridge.Binding current = binding;
+        return current != null && current.bound && current.rootSurface.isValid()
+                ? current.rootName : "";
+    }
+
     boolean isGpuBackdropActive() {
         return gpuBackdropActive;
     }

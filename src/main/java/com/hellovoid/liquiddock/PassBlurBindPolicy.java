@@ -17,11 +17,19 @@ final class PassBlurBindPolicy {
      * captured into a static second copy of the folder or its source icon.
      * The capture authority window is excluded by exclusions(...).
      */
-    static String[] folderWallpaperExclusions(String launcherRootName) {
+    static String[] folderWallpaperExclusions(String launcherRootName, String... liveDockRoots) {
         if (launcherRootName == null || launcherRootName.isBlank()) {
-            throw new IllegalArgumentException("Folder desktop requires Launcher surface identity");
+            throw new IllegalArgumentException("Folder wallpaper needs Launcher surface identity");
         }
-        return new String[]{launcherRootName, "DockAssistantView"};
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        names.add(launcherRootName);
+        names.add("DockAssistantView"); // Legacy vendor Dock layer title.
+        if (liveDockRoots != null) {
+            for (String name : liveDockRoots) {
+                if (name != null && !name.isBlank()) names.add(name);
+            }
+        }
+        return names.toArray(new String[0]);
     }
 
     static float nativeScale(PassBlurDomain domain, float requestedScale) {

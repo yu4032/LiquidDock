@@ -135,6 +135,28 @@ final class Miuix307ZeroCopyRenderer {
 
     static boolean isFolderFrozen() { return folderFrozen; }
 
+    /** Resolve the Dock's REAL source root, including a binding that may be
+     * replaced while the OEM moves the floating Dock. Used by OPEN_FOLDER
+     * only; this never changes the Dock producer or its freeze/thaw policy.
+     */
+    static String[] folderCaptureDockSurfaceNames() {
+        java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
+        Miuix307PassBlurTextureView output = gpuBackdropRef.get();
+        if (output != null) {
+            String bound = output.boundDockRootSurfaceName();
+            if (bound != null && !bound.isBlank()) names.add(bound);
+        }
+        View material = materialHostRef.get();
+        if (material != null && material.isAttachedToWindow()) {
+            RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(material);
+            if (endpoint != null && endpoint.isValid()) {
+                String current = Miuix307PassBlurBridge.surfaceName(endpoint.rootSurface);
+                if (current != null && !current.isBlank()) names.add(current);
+            }
+        }
+        return names.toArray(new String[0]);
+    }
+
     static String diagnosticState() {
         Miuix307PassBlurTextureView backdrop = gpuBackdropRef.get();
         View material = materialHostRef.get();
