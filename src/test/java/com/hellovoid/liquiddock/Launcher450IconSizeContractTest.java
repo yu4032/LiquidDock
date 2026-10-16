@@ -38,8 +38,12 @@ public class Launcher450IconSizeContractTest {
                 "src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java"));
         assertTrue("FolderGridView has its explicit measure domain",
                 source.contains("MeasureDomain.FOLDER_CONTENT"));
+        String nativeReturn = "if (domain == MeasureDomain.FOLDER_CONTENT) return result;";
         assertTrue("The native icon size is returned unmodified",
-                source.contains("if (domain == MeasureDomain.FOLDER_CONTENT) return result;"));
+                source.contains(nativeReturn));
+        assertTrue("Native folder bypass must precede global enabled/percent handling",
+                source.indexOf(nativeReturn) < source.indexOf(
+                        "if (!enabled || domain == null || !(result instanceof Integer))"));
         assertFalse("No remaining one-way clamp",
                 source.contains("fitNativeFolderCell"));
         assertEquals(96, Launcher450IconSizePolicy.scaledPx(96, false, 80));
