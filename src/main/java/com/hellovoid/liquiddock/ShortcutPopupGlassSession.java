@@ -97,6 +97,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeWorkspaceTextureLocation = -1;
     private int compositeBlurMixLocation = -1;
     private OutputState output;
+    // Render-thread owned: the callback that releases Recents protection
+    // must observe a real completed EGL swap, not merely a queued render.
+    private long presentedOutputFrameCount;
 
     ShortcutPopupGlassSession(
             View sourceRoot, LiquidDockConfig.Glass glassConfig, Listener listener) {
@@ -265,10 +268,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         folderRecentsLensOnly = lensOnly;
         if (!sourceBackend.postToRenderThread(() -> {
             if (shuttingDown) return;
+            long before = presentedOutputFrameCount;
             renderCurrent();
-            if (afterSwap != null && output != null
-                    && output.eglSurface != EGL14.EGL_NO_SURFACE
-                    && backdropPrepared) {
+            if (afterSwap != null && presentedOutputFrameCount > before) {
                 mainHandler.post(() -> {
                     if (!shuttingDown) afterSwap.run();
                 });
@@ -460,7 +462,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     drawParams,
                     highlightProfile,
                     1f);
-            presentFull(prismalRenderer.outputTexture(), currentOutput, progress, workspaceMix);
+            presentFull(prismalRenderer.outputTexture(), currentOutput, progress,
+                    workspaceMix, folderBackdrop && folderRecentsLensOnly);
             if (!presentationSignaled) {
                 presentationSignaled = true;
                 mainHandler.post(() -> {
@@ -525,7 +528,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void presentFull(int sceneTexture, OutputState current,
-                             float progress, float workspaceMix) {
+                             float progress, float workspaceMix, boolean lensOnly) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         // Clear the whole EGL buffer first. The TextureView buffer can be taller than the
@@ -544,7 +547,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        if (folderBackdrop && !folderRecentsLensOnly) {
+        if (folderBackdrop && !lensOnly) {
             // The frozen source contains wallpaper only: both Launcher and
             // Dock surfaces were excluded before PassBlur producer binding.
             GLES20.glEnable(GLES20.GL_BLEND);
@@ -567,7 +570,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
-        if (folderBackdrop && folderRecentsLensOnly) {
+        if (lensOnly) {
             // Draw only the transparent Prismal lens on a cleared RGBA EGL
             // output. Outside the lens the native wallpaper remains untouched.
             GLES20.glEnable(GLES20.GL_BLEND);
@@ -577,6 +580,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (folderBackdrop) GLES20.glDisable(GLES20.GL_BLEND);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         sourceBackend.swapBuffers(current.eglSurface);
+        presentedOutputFrameCount++;
     }
 
     private void releaseOutput(OutputState current) {
