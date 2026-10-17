@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.view.Window;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 
 /**
  * Scale only the Launcher OEM global folder-opening blur, leaving its
@@ -20,15 +19,26 @@ final class OemFolderBlurStrengthHook {
     // OEM fastBlur is normalized 0..1, not a radius in pixels.
     private static final float OPEN_STRENGTH = 0.22f;
     private static final ThreadLocal<Boolean> FOLDER_OPEN = new ThreadLocal<>();
-    private static final ThreadLocal<Boolean> RECENTS_RESTORE = new ThreadLocal<>();
     // OEM Launcher 4.50 calls fastBlurWhenOpenOrCloseFolder(..., true)
     // on BOTH open and close. The Boolean parameter does not distinguish them.
     private static volatile boolean actualFolderOpening;
-    private static Method nativeFolderBlur;
-    private static int nativeOpeningArg;
+    private static volatile boolean recentsReturningToOpenFolder;
 
     static void setFolderOpening(boolean opening) {
         actualFolderOpening = opening;
+        if (!opening) recentsReturningToOpenFolder = false;
+    }
+
+    /** The semantic Recents return starts before OEM HomeState emits its
+     * fastBlur(1.0) target. Only a real, still-open expanded folder may
+     * retain its opening blur while the native return is in progress.
+     */
+    static void onRecentsReturnStarted(boolean expandedFolderOpen) {
+        recentsReturningToOpenFolder = expandedFolderOpen && actualFolderOpening;
+    }
+
+    static void onRecentsReturnFinished() {
+        recentsReturningToOpenFolder = false;
     }
     private static boolean installed;
 
@@ -55,14 +65,17 @@ final class OemFolderBlurStrengthHook {
             // Inner interception is installed before the outer scope owner.
             HookUtil.hook(inner, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (Boolean.TRUE.equals(FOLDER_OPEN.get()) && args.length == 3
+                boolean opening = Boolean.TRUE.equals(FOLDER_OPEN.get());
+                boolean recentsReturn = actualFolderOpening && recentsReturningToOpenFolder;
+                if ((opening || recentsReturn) && args.length == 3
                         && args[0] instanceof Number) {
                     float requested = ((Number) args[0]).floatValue();
-                    float adjusted = Math.max(0f, Math.min(requested, OPEN_STRENGTH));
+                    float adjusted = FolderNativeBlurTargetPolicy.capWhenFolderOwns(
+                            requested, opening, recentsReturn, OPEN_STRENGTH);
                     args[0] = adjusted;
-                    if (Boolean.TRUE.equals(RECENTS_RESTORE.get())) {
-                        MainHook.log(TAG + " Recents return native fastBlur requested="
-                                + requested + " applied=" + adjusted);
+                    if (recentsReturn && requested > adjusted) {
+                        MainHook.log(TAG + " Recents-return fastBlur target corrected "
+                                + requested + " -> " + adjusted);
                     }
                 }
                 return chain.proceed(args);
@@ -81,55 +94,12 @@ final class OemFolderBlurStrengthHook {
                     FOLDER_OPEN.remove();
                 }
             });
-            nativeFolderBlur = wrapper;
-            nativeOpeningArg = which;
             installed = true;
-            MainHook.log(TAG + " native folder blur entry installed");
+            MainHook.log(TAG + " native folder fastBlur owner installed");
         } catch (Throwable error) {
-            // OEM signature differs on some Launcher builds. Never substitute
-            // a global Window/Surface blur setter as an unsafe fallback.
-            MainHook.log(TAG + " native folder blur entry unavailable: " + error);
-        }
-    }
-
-    /** Restore the *same native folder-blur owner* after the OEM Recents
-     * wallpaper/host return has settled. Recents can overwrite this value
-     * without another FolderCling.open(), so the opening-only cap is not
-     * replayed automatically. The original Launcher wrapper and fastBlur
-     * animator stay authoritative; our existing opening cap still applies.
-     */
-    static void restoreAfterRecentsReturn() {
-        Method method = nativeFolderBlur;
-        if (!installed || method == null || !actualFolderOpening
-                || !GlassRuntimeState.isEnabled()) return;
-        if (!Modifier.isStatic(method.getModifiers())) {
-            MainHook.log(TAG + " Recents folder blur restore skipped: non-static native owner");
-            return;
-        }
-        try {
-            ClassLoader loader = method.getDeclaringClass().getClassLoader();
-            Class<?> application = Class.forName(
-                    "com.miui.home.launcher.Application", false, loader);
-            HookUtil.InvocationResult<Object> result =
-                    HookUtil.tryInvokeStatic(application, "getLauncher");
-            Object launcher = result.succeeded() ? result.value() : null;
-            int index = nativeOpeningArg;
-            if (launcher == null || !method.getParameterTypes()[1 - index].isInstance(launcher)) {
-                MainHook.log(TAG + " Recents folder blur restore skipped: Launcher unavailable");
-                return;
-            }
-            Object[] args = index == 1 ? new Object[]{launcher, true}
-                    : new Object[]{true, launcher};
-            RECENTS_RESTORE.set(Boolean.TRUE);
-            try {
-                method.invoke(null, args);
-            } finally {
-                RECENTS_RESTORE.remove();
-            }
-            MainHook.log(TAG + " restored native folder blur after Recents settle"
-                    + " cap=" + OPEN_STRENGTH);
-        } catch (Throwable error) {
-            MainHook.log(TAG + " Recents folder blur restore failed: " + error);
+            // OEM signature differs on some Launcher builds. Never patch
+            // global Window blur or SurfaceControl as a fallback.
+            MainHook.log(TAG + " native folder fastBlur owner unavailable: " + error);
         }
     }
 }
