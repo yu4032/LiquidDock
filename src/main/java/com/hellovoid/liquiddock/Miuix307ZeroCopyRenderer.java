@@ -21,11 +21,6 @@ final class Miuix307ZeroCopyRenderer {
             new DockHomeBackdropFreshnessState();
     private static boolean dockAnimationFrameScheduled;
     private static boolean producerUpdatesPolicyEnabled = true;
-    // The native folder and the native Recents compositor have independent
-    // lifecycles. Only freeze the Dock while FolderCling owns HOME; native
-    // Recents may expose the Dock without dispatching a folder CLOSE.
-    private static volatile boolean folderFrozen;
-    private static volatile boolean recentsCovered;
     private static boolean homeProducerOverride;
     private static long homeFreshnessSerial;
 
@@ -70,7 +65,6 @@ final class Miuix307ZeroCopyRenderer {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
-        gpuBackdrop.setFolderRenderFrozen(effectiveFolderRenderFrozen());
         hostRef = new WeakReference<>(host);
         materialHostRef = new WeakReference<>(materialHost);
         dockAnimationFrameScheduled = false;
@@ -134,32 +128,6 @@ final class Miuix307ZeroCopyRenderer {
         applyProducerUpdatesPolicy(reason);
     }
 
-    static boolean isFolderFrozen() { return folderFrozen; }
-
-    /** Recents is presentation coverage, never a synthetic folder close.
-     * Leaving Recents restores the still-open folder's render gate; a native
-     * CLOSE remains solely responsible for clearing folderFrozen.
-     */
-    static void setRecentsCovered(boolean covered) {
-        if (recentsCovered == covered) return;
-        recentsCovered = covered;
-        applyFolderRenderGate("recents-covered=" + covered);
-    }
-
-    private static boolean effectiveFolderRenderFrozen() {
-        return DockFolderRecentsFreezePolicy.shouldFreeze(folderFrozen, recentsCovered);
-    }
-
-    private static void applyFolderRenderGate(String reason) {
-        boolean frozen = effectiveFolderRenderFrozen();
-        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop != null) gpuBackdrop.setFolderRenderFrozen(frozen);
-        MainHook.log(TAG + " Dock GL render freeze=" + frozen
-                + " folderOwner=" + folderFrozen
-                + " recentsCovered=" + recentsCovered
-                + " reason=" + reason);
-    }
-
     /** Resolve the Dock's REAL source root, including a binding that may be
      * replaced while the OEM moves the floating Dock. Used by OPEN_FOLDER
      * only; this never changes the Dock producer or its freeze/thaw policy.
@@ -180,16 +148,6 @@ final class Miuix307ZeroCopyRenderer {
             }
         }
         return names.toArray(new String[0]);
-    }
-
-    static void setFolderFrozen(boolean frozen) {
-        if (folderFrozen == frozen) return;
-        folderFrozen = frozen;
-        // Only the effective draw gate changes. The native FolderCling stays
-        // open during Recents and the producer still follows vendor policy.
-        // On thaw, the TextureView requests a fresh SF producer frame instead
-        // of presenting stale, prepared wallpaper.
-        applyFolderRenderGate("folder-owner=" + frozen);
     }
 
     private static void applyProducerUpdatesPolicy(String reason) {
@@ -279,14 +237,13 @@ final class Miuix307ZeroCopyRenderer {
 
     static void requestDockAnimationFrames() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (effectiveFolderRenderFrozen() || gpuBackdrop == null
-                || dockAnimationFrameScheduled) return;
+        if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
         dockAnimationFrameScheduled = true;
         gpuBackdrop.requestDockSceneRefresh();
         gpuBackdrop.postOnAnimation(() -> {
             if (gpuBackdropRef.get() != gpuBackdrop) return;
             dockAnimationFrameScheduled = false;
-            if (!effectiveFolderRenderFrozen() && DockGlassItemRegistry.hasActiveAnimation()) {
+            if (DockGlassItemRegistry.hasActiveAnimation()) {
                 requestDockAnimationFrames();
             }
         });
@@ -302,8 +259,6 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
-        // Preserve both vendor presentation owners across a Dock renderer
-        // replacement. install() reapplies the effective draw gate.
         if (gpuBackdrop != null) gpuBackdrop.shutdown();
     }
 }
