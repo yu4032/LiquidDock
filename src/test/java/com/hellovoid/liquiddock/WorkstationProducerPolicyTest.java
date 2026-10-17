@@ -19,10 +19,11 @@ public class WorkstationProducerPolicyTest {
 
     @Test
     public void recentsKeepsSharedSourceLiveWhileCovered() {
-        assertTrue(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true, false));
-        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(false, true, false));
-        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, false, false));
-        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true, true));
+        assertTrue(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true));
+        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(false, true));
+        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, false));
+        // No folder-state argument: a modal HOME folder must not remove
+        // Recents' right to use an already shared OES producer.
     }
 
     @Test
