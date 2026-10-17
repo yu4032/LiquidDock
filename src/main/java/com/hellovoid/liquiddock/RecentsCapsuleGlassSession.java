@@ -142,6 +142,7 @@ final class RecentsCapsuleGlassSession {
 
     void onRecentsHidden() {
         recentsVisible = false;
+        workspaceSourceOwner.onRecentsConsumerHidden(this);
     }
 
     void updateGeometry(GeometrySet next) {
