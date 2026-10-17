@@ -58,13 +58,12 @@ final class OemFolderBlurStrengthHook {
         // onRecentViewHide. The still-open native folder and vendor Recents
         // coverage are already authoritative at this exact blur write.
         // Checking them here avoids depending on an earlier guessed overload.
-        boolean coveredHomeWrite = false;
-        if (!recentsScope && Float.isFinite(requested) && requested >= .999f
-                && LauncherGlassSceneController.isRecentsCoveredByVendor()) {
-            coveredHomeWrite = FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
-                    true, OpenFolderGlassCoordinator.isNativeExpandedFolderOpen(),
-                    false, requested);
-        }
+        boolean recentsCovered = Float.isFinite(requested) && requested >= .999f
+                && LauncherGlassSceneController.isRecentsCoveredByVendor();
+        boolean expandedFolder = recentsCovered
+                && OpenFolderGlassCoordinator.isNativeExpandedFolderOpen();
+        boolean coveredHomeWrite = FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                recentsCovered, expandedFolder, requested);
         boolean returning = coveredHomeWrite
                 || (actualFolderOpening && recentsReturningToOpenFolder);
         float resolved = FolderNativeBlurTargetPolicy.arbitrate(
