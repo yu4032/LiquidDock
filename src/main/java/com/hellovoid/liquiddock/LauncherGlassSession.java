@@ -457,7 +457,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestFreshBackdrop(long generation) {
-        if (shuttingDown || generation < sceneGeneration) return;
+        // The posted HOME recovery task must never wake a folder-paused root.
+        // Recents owns its own explicit resumeRecentsSharedSource() request.
+        if (shuttingDown || folderFrameFrozen || generation < sceneGeneration) return;
         if (rotationSettlePending && generation == sceneGeneration) {
             MainHook.log(TAG + " fresh backdrop deferred for rotation settle generation="
                     + generation + " rotation=" + rotationSettleTargetRotation);
@@ -470,7 +472,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     boolean requestWallpaperBackdrop(
             long requestedSceneGeneration, long wallpaperGeneration, boolean authoritative) {
-        if (shuttingDown || requestedSceneGeneration != sceneGeneration
+        if (shuttingDown || folderFrameFrozen || requestedSceneGeneration != sceneGeneration
                 || wallpaperGeneration < 0L || rotationSettlePending) return false;
         synchronized (this) {
             wallpaperRequestedGeneration = wallpaperGeneration;
@@ -975,7 +977,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void recoverFreshBackdropOnUi(long generation, int attempt) {
-        if (shuttingDown || generation != sceneGeneration) return;
+        // A frame request queued before native FolderCling opened must not
+        // silently clear the producer pause after its owner changed.
+        if (shuttingDown || folderFrameFrozen || generation != sceneGeneration) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) {
             retryFreshBackdropRecovery(generation, attempt);

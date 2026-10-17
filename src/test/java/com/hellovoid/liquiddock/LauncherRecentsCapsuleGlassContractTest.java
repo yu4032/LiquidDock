@@ -205,5 +205,9 @@ public class LauncherRecentsCapsuleGlassContractTest {
                 controller.contains("WorkstationProducerPolicy.keepSharedSourceLiveForRecents("));
         assertTrue("Coverage without an attached visible capsule is not a source lease",
                 controller.contains("session.hasVisibleRecentsConsumer(), GlassRuntimeState.isRecentsCapsuleEnabled()"));
+        assertTrue("HOME requests queued before folder-open cannot reenable its source",
+                workspace.contains("if (shuttingDown || folderFrameFrozen || generation != sceneGeneration) return;"));
+        assertTrue("Wallpaper pulses cannot wake HOME capture under FolderCling",
+                workspace.contains("if (shuttingDown || folderFrameFrozen || requestedSceneGeneration != sceneGeneration"));
     }
 }
