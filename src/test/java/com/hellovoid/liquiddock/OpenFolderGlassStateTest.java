@@ -96,6 +96,30 @@ public class OpenFolderGlassStateTest {
         assertFalse(state.isRecentsReturnPending(serial));
     }
 
+    @Test public void settledRecentsReturnIsSingleAuthorityAndNeverRunsAfterClose() {
+        OpenFolderGlassState state = new OpenFolderGlassState();
+        long serial = state.prepare();
+        assertTrue(state.beginOpen(serial));
+        state.onBackdropReady(serial);
+        assertTrue(state.onPresented(serial));
+        state.onRecentsShown(serial);
+        state.onRecentsHidden(serial);
+        assertTrue(state.isRecentsReturnPending(serial));
+        assertTrue(state.completeRecentsReturn(serial));
+        assertFalse("A second callback cannot reapply folder visual state",
+                state.completeRecentsReturn(serial));
+        assertFalse(state.isRecentsReturnPending(serial));
+
+        state.onRecentsShown(serial);
+        state.onRecentsHidden(serial);
+        assertTrue(state.beginClose(serial));
+        assertFalse("Closing preempts a stale wallpaper-return callback",
+                state.completeRecentsReturn(serial));
+        assertFalse(state.isRecentsReturnPending(serial));
+        assertTrue(state.finishClose(serial));
+        assertFalse(state.completeRecentsReturn(serial));
+    }
+
     @Test public void capturedCloseCompletionCannotReleaseTheNextOpeningOfTheSameFolder() throws Exception {
         OpenFolderGlassState state = new OpenFolderGlassState();
         long old = state.prepare();
