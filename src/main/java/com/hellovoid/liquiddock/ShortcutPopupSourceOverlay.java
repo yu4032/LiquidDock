@@ -28,6 +28,19 @@ final class ShortcutPopupSourceOverlay extends FrameLayout {
     }
 
     static ShortcutPopupSourceOverlay attach(View launcherRoot, Listener listener) {
+        return attach(launcherRoot, listener, "LiquidDockShortcutBackdropSource");
+    }
+
+    static ShortcutPopupSourceOverlay attach(View launcherRoot, Listener listener, String title) {
+        return attach(launcherRoot, listener, title, false);
+    }
+
+    static ShortcutPopupSourceOverlay attachToLauncherBounds(View launcherRoot, Listener listener, String title) {
+        return attach(launcherRoot, listener, title, true);
+    }
+
+    private static ShortcutPopupSourceOverlay attach(View launcherRoot, Listener listener, String title,
+                                                      boolean matchLauncherBounds) {
         if (launcherRoot == null || launcherRoot.getWindowToken() == null) return null;
         Context context = launcherRoot.getContext();
         WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -51,7 +64,19 @@ final class ShortcutPopupSourceOverlay extends FrameLayout {
                 PixelFormat.TRANSLUCENT);
         lp.token = launcherRoot.getWindowToken();
         lp.gravity = Gravity.TOP | Gravity.START;
-        lp.setTitle("LiquidDockShortcutBackdropSource");
+        if (matchLauncherBounds) {
+            // Independent windows can otherwise receive different status/navigation insets.
+            // Capture and output must share the Launcher root's exact logical pixel domain.
+            int[] location = new int[2];
+            launcherRoot.getLocationOnScreen(location);
+            lp.gravity = Gravity.TOP | Gravity.LEFT;
+            lp.width = launcherRoot.getWidth();
+            lp.height = launcherRoot.getHeight();
+            lp.x = location[0];
+            lp.y = location[1];
+            lp.setFitInsetsTypes(0);
+        }
+        lp.setTitle(title);
         try {
             wm.addView(overlay, lp);
             overlay.added = true;

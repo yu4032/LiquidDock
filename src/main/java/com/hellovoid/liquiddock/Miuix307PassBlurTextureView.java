@@ -225,6 +225,11 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile boolean gpuBackdropActive;
     private volatile boolean hasPresentedFrame;
     private volatile boolean producerUpdatesEnabled = true;
+    // Stop both source-frame and scene-driven GL work while a folder uses
+    // its own one-shot background. The last TextureView buffer stays visible.
+    private volatile boolean folderRenderFrozen;
+    private volatile boolean folderFreezeRequested;
+    private volatile long folderFreezeEpoch;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
@@ -346,6 +351,16 @@ final class Miuix307PassBlurTextureView extends TextureView
         mainHandler = new Handler(context.getMainLooper());
     }
 
+    /** Actual, currently bound Dock source SurfaceControl name. The floating
+     * Dock can be reparented or rebound under a different window name, so the
+     * folder wallpaper capture must not rely on "DockAssistantView" alone.
+     */
+    String boundDockRootSurfaceName() {
+        Miuix307PassBlurBridge.Binding current = binding;
+        return current != null && current.bound && current.rootSurface.isValid()
+                ? current.rootName : "";
+    }
+
     boolean isGpuBackdropActive() {
         return gpuBackdropActive;
     }
@@ -383,10 +398,52 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
     }
 
+    void setFolderRenderFrozen(boolean frozen) {
+        if (folderFreezeRequested == frozen) return;
+        folderFreezeRequested = frozen;
+        final long epoch = ++folderFreezeEpoch;
+        if (frozen) {
+            // Stop expensive normalization/Prismal draws immediately, without
+            // blocking the producer's BufferQueue. An unconsumed OES frame can
+            // exhaust the queue so there are NO callbacks after folder close.
+            folderRenderFrozen = true;
+            boolean pending = frameAvailable.getAndSet(false);
+            if (pending) {
+                renderHandler.post(() -> discardFrozenProducerFrame(inputSurfaceTexture));
+            }
+        } else {
+            // Commit thaw on the EGL thread after all queued frozen-era
+            // callbacks have had an opportunity to drain. A rapid reopen
+            // invalidates this pending thaw using the ownership epoch.
+            renderHandler.post(() -> {
+                if (shuttingDown || folderFreezeEpoch != epoch || folderFreezeRequested) return;
+                folderRenderFrozen = false;
+                // Explicitly wake a static SurfaceFlinger producer ONCE. The
+                // previous output buffer stays visible until a safe new frame.
+                Miuix307PassBlurBridge.requestFreshDockFrameAfterFolder(binding);
+            });
+        }
+    }
+
+    /** GL-thread-only: discard raw input, not the last published glass frame.
+     * Keeping the consumer queue drained prevents a false permanent freeze.
+     */
+    private void discardFrozenProducerFrame(SurfaceTexture texture) {
+        if (shuttingDown || !folderRenderFrozen || texture == null
+                || texture != inputSurfaceTexture
+                || eglWindowSurface == EGL14.EGL_NO_SURFACE) return;
+        try {
+            makeCurrent();
+            texture.updateTexImage();
+        } catch (Throwable error) {
+            MainHook.log(TAG + " frozen input drain failed: " + error);
+        }
+    }
+
     void requestDockSceneRefresh() {
-        if (shuttingDown) return;
+        if (shuttingDown || folderRenderFrozen) return;
         postOnAnimation(() -> {
-            if (shuttingDown) return;
+            if (shuttingDown || folderRenderFrozen) return;
             dockCompositor.invalidateUiScene();
             updateBackdropMapping();
             if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
@@ -780,6 +837,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
             producerFrameCount++;
+            // Never leave a queued BufferQueue input outstanding while the
+            // final glass output is frozen: SurfaceFlinger may then stop
+            // producing frames even though updatesEnabled is still true.
+            if (folderRenderFrozen) {
+                discardFrozenProducerFrame(texture);
+                frameAvailable.set(false);
+                return;
+            }
             frameAvailable.set(true);
             Miuix307PassBlurBridge.renewForceRefresh(binding);
             scheduleRender(true);
@@ -825,7 +890,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private void scheduleRender(boolean producerFrame) {
-        if (shuttingDown) return;
+        if (shuttingDown || folderRenderFrozen) return;
         synchronized (renderQueueLock) {
             renderDirty = true;
             if (producerFrame) producerRenderDirty = true;
@@ -883,7 +948,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private void drawLatestFrame(boolean fromFrameCallback) {
-        if (shuttingDown || eglWindowSurface == EGL14.EGL_NO_SURFACE
+        if (shuttingDown || folderRenderFrozen || eglWindowSurface == EGL14.EGL_NO_SURFACE
                 || normalizeProgram == 0 || compositeProgram == 0 || prismalRenderer == null
                 || oesTexture == 0) {
             return;
@@ -956,6 +1021,9 @@ final class Miuix307PassBlurTextureView extends TextureView
                     || mapping.configRotation != boundConfigRotation) {
                 return;
             }
+            // Freezing can begin while an older GL job is already executing.
+            // Never present the frame after the folder boundary has begun.
+            if (folderRenderFrozen) return;
             if (!EGL14.eglSwapBuffers(eglDisplay, eglWindowSurface)) {
                 throw new IllegalStateException("eglSwapBuffers error=0x"
                         + Integer.toHexString(EGL14.eglGetError()));

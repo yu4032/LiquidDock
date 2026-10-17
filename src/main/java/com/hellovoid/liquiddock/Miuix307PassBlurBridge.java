@@ -140,8 +140,7 @@ final class Miuix307PassBlurBridge {
             int viewRootIdentity = System.identityHashCode(viewRoot);
             int surfaceSequenceId = readSurfaceSequenceId(viewRoot);
             int rootLayerId = surfaceLayerId(rootSurface);
-            String[] exclusions = PassBlurBindPolicy.exclusions(
-                    rootName, request.extraExclusions());
+            String[] exclusions = PassBlurBindPolicy.exclusions(rootName, request.extraExclusions());
             float scale = request.nativeScale();
 
             if (domain == PassBlurDomain.SECURITY_CENTER) {
@@ -231,6 +230,23 @@ final class Miuix307PassBlurBridge {
                 || binding.domain == PassBlurDomain.MIUI_SEARCHBOX
                 || binding.domain == PassBlurDomain.RECENTS_CAPSULE;
         setUpdatesEnabled(binding, true, force);
+    }
+
+    /**
+     * A folder can finish with a static compositor scene. On thaw explicitly
+     * re-assert the already-enabled native Dock producer once: otherwise no
+     * new OnFrameAvailable may follow the discarded folder-era buffers.
+     *
+     * This is NOT a false/true toggle and does not touch the Dock output
+     * TextureView. The compositor's force-refresh lease still honors the
+     * user's normal Dock frame-sync setting.
+     */
+    static void requestFreshDockFrameAfterFolder(Binding binding) {
+        if (binding == null || binding.domain != PassBlurDomain.DOCK
+                || !binding.bound || !binding.updatesEnabled
+                || !binding.rootSurface.isValid()) return;
+        setUpdatesEnabled(binding, true, true);
+        renewForceRefresh(binding);
     }
 
     /** Workspace idle suspension and vendor-snapshot Dock suspension. */
@@ -439,7 +455,7 @@ final class Miuix307PassBlurBridge {
         return -1;
     }
 
-    private static String surfaceName(SurfaceControl surface) {
+    static String surfaceName(SurfaceControl surface) {
         if (surface == null) return "";
         try {
             Method getName = SurfaceControl.class.getDeclaredMethod("getName");

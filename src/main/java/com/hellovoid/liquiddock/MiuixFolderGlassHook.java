@@ -32,8 +32,6 @@ final class MiuixFolderGlassHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, OwnedValueState<Drawable>> BACKGROUND_OWNERSHIP =
             Collections.synchronizedMap(new WeakHashMap<>());
-    private static final Map<View, Integer> ORIGINAL_COVERED_VISIBILITY =
-            Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<View, Map<Drawable, Integer>> ORIGINAL_LARGE_FOLDER_PAINT_ALPHA =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<ViewGroup, WeakReference<View>> CLAIMED_FOLDER_COVERS =
@@ -44,8 +42,10 @@ final class MiuixFolderGlassHook {
             Collections.synchronizedMap(new WeakHashMap<>());
     private static WeakReference<ViewGroup> openedFolderOwner = new WeakReference<>(null);
     private static WeakReference<LauncherGlassStaticNode> openedFolderSink = new WeakReference<>(null);
+    private static long openedFolderSerial;
     private static boolean folderStatusDispatcherInstalled;
-    private static boolean nativeFolderMaterialsCovered;
+    private static final FolderCloseCompletionGate NATIVE_CLOSE = new FolderCloseCompletionGate();
+    private static long pendingInputResumeSerial;
     private static boolean installed;
 
     private MiuixFolderGlassHook() {}
@@ -56,6 +56,13 @@ final class MiuixFolderGlassHook {
             return false;
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
+        // Do not hide Dock for folders. The OEM DockStateManager listener's
+        // only folder side effect is to push/pop the Dock FolderState, which
+        // sends an alpha=0 transaction; preserve all other native listeners.
+        // Preserve the OEM Dock FolderState: it owns native z-order, alpha,
+        // and input modality while FolderCling is opened. Bypassing it left
+        // clickable Dock icons above the folder.
+        OemFolderBlurStrengthHook.install(classLoader);
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
             Class<?> itemIcon = Class.forName(ITEM_ICON, false, classLoader);
@@ -72,6 +79,7 @@ final class MiuixFolderGlassHook {
             });
 
             installFolderOpenCloseHooks(classLoader);
+            OpenFolderGlassHook.install(classLoader, runtimeConfig);
             observeFolderVariantConstructors(classLoader, glassConfig);
 
             Class<?> utilities = Class.forName(
@@ -142,20 +150,36 @@ final class MiuixFolderGlassHook {
         }
     }
 
+    /** Freeze existing Dock/Workspace glass output at the native folder entry.
+     * The independent folder source excludes Launcher and Dock surfaces;
+     * native FolderCling visibility remains entirely OEM-owned.
+     */
+    static void onFolderOpeningBeforeNativeAnimation() {
+        OemFolderBlurStrengthHook.setFolderOpening(true);
+        pendingInputResumeSerial = 0L;
+        Miuix307ZeroCopyRenderer.setFolderFrozen(true);
+        LauncherGlassSceneController.setFolderCoveredForAll(true);
+    }
+
+    static void onFolderOpeningFailed() {
+        OemFolderBlurStrengthHook.setFolderOpening(false);
+        releaseFrozenInputs();
+    }
+
     private static boolean installFolderStatusDispatcherHooks(ClassLoader classLoader) {
         String dispatcher =
                 "com.miui.home.launcher.dock.v3.dependencies.FolderStatusServiceImpl";
         try {
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderOpen", chain -> {
-                setNativeFolderMaterialsCovered(true);
-                LauncherGlassSceneController.setFolderCoveredForAll(true);
+                // Keep Launcher responsible for native visibility and modal
+                // input; the desktop snapshot was sealed before this dispatch.
+                onFolderOpeningBeforeNativeAnimation();
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             HookUtil.hookMethod(classLoader, dispatcher, "dispatchFolderClose", chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                setNativeFolderMaterialsCovered(false);
-                LauncherGlassSceneController.setFolderCoveredForAll(false);
-                return result;
+                // Freeze persists through native close; the correct committed
+                // Workspace frame is acquired only after folder release.
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             MainHook.log(TAG + " semantic FolderStatus dispatcher hooks installed");
             return true;
@@ -166,12 +190,48 @@ final class MiuixFolderGlassHook {
         }
     }
 
+    /** The temporary closing plate is still animating after Folder.onClose completes. */
+    static void onNativeCloseStarted(boolean animated) {
+        OemFolderBlurStrengthHook.setFolderOpening(false);
+        NATIVE_CLOSE.begin(openedFolderSerial, animated);
+        // The Launcher Workspace icons start their *native* visibility
+        // transition at FolderCling.close, not at the end of its spring.
+        // Recover the shared root-wide glass producer at that same boundary:
+        // all OTHER folder/widget glass then follows the very same ancestor
+        // Workspace alpha as the ordinary icons. Do not thaw Dock here: its
+        // independent native FolderState remains authoritative until close.
+        //
+        // The opening folder's own static node stays suppressed by
+        // openedFolderSink until the native content/background completion.
+        // Its temporary icon-shaped lens stays presented through the later
+        // fresh-frame handoff, so recovering the siblings cannot create a
+        // transparent gap at the closing folder.
+        if (animated && OpenFolderGlassCoordinator.hasActiveSession()) {
+            LauncherGlassSceneController.beginNativeFolderCloseForAll();
+        }
+    }
+
+    static long activeNativeCloseSerial() { return openedFolderSerial; }
+
+    static long diagnosticNativeSerial() { return openedFolderSerial; }
+
+    static void onNativeBackgroundCloseFinished(long serial) {
+        if (serial != openedFolderSerial) return;
+        boolean complete = NATIVE_CLOSE.backdropFinished(serial);
+        if (complete) restoreOpenedFolderOwner();
+    }
+
     private static void installFolderOpenCloseHooks(ClassLoader classLoader) throws Exception {
         Class<?> folderIcon = Class.forName(FOLDER_ICON, false, classLoader);
         Method dispatchTouchEvent = folderIcon.getDeclaredMethod("dispatchTouchEvent", MotionEvent.class);
         dispatchTouchEvent.setAccessible(true);
         HookUtil.hook(dispatchTouchEvent, chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
+            Object touchOwner = chain.getThisObject();
+            if (touchOwner instanceof ViewGroup && args.length > 0 && args[0] instanceof MotionEvent) {
+                try { OpenFolderGlassCoordinator.onTouch((ViewGroup) touchOwner, (MotionEvent) args[0]); }
+                catch (Throwable error) { OpenFolderGlassCoordinator.releaseAll(); }
+            }
             Object result = chain.proceed(args);
             Object owner = chain.getThisObject();
             if (owner instanceof ViewGroup && args.length > 0 && args[0] instanceof MotionEvent) {
@@ -208,6 +268,8 @@ final class MiuixFolderGlassHook {
         // the original material View.
 
         HookUtil.hook(HookUtil.findMethodExact(folderIcon, "onOpen", new Class<?>[0]), chain -> {
+            // OEM FolderIcon.onOpen may precede Launcher.openFolder. Wallpaper
+            // capture excludes Launcher, so neither path needs a deadline fence.
             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
             if (chain.getThisObject() instanceof ViewGroup) {
                 setOwnerSuppressed((ViewGroup) chain.getThisObject(), true);
@@ -223,8 +285,12 @@ final class MiuixFolderGlassHook {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             Runnable originalCompletion = args.length > 1 && args[1] instanceof Runnable
                     ? (Runnable) args[1] : null;
+            long closingSerial = openedFolderSerial;
             args[1] = (Runnable) () -> {
-                restoreOpenedFolderOwner();
+                if (closingSerial == openedFolderSerial
+                        && (!NATIVE_CLOSE.isActive() || NATIVE_CLOSE.contentFinished(closingSerial))) {
+                    restoreOpenedFolderOwner();
+                }
                 if (originalCompletion != null) originalCompletion.run();
             };
             return chain.proceed(args);
@@ -255,9 +321,14 @@ final class MiuixFolderGlassHook {
 
     private static void setOwnerSuppressed(ViewGroup owner, boolean suppressed) {
         if (owner == null) return;
-        if (!folderStatusDispatcherInstalled) {
-            setNativeFolderMaterialsCovered(suppressed);
-            LauncherGlassSceneController.setWorkspaceCovered(owner, suppressed);
+        // FolderIcon.onOpen runs earlier than the vendor FolderStatus dispatcher,
+        // so cover the Workspace even when the semantic dispatcher is installed.
+        if (suppressed) {
+            // Suppress our cached desktop icon, not the OEM folder material:
+            // its native animation must survive unavailable snapshot fallback.
+            LauncherGlassSceneController.setFolderCoveredForAll(true);
+        } else if (!folderStatusDispatcherInstalled) {
+            LauncherGlassSceneController.setWorkspaceCovered(owner, false);
         }
         if (!suppressed) {
             LauncherGlassStaticNode sink = resolveOwnerSink(owner);
@@ -273,7 +344,10 @@ final class MiuixFolderGlassHook {
         if (previousOwner != null && previousOwner != owner && previousSink != null) {
             previousSink.setSuppressedByFolderOpen(false);
         }
+        // A new native folder owner supersedes any previous preview handoff.
         openedFolderOwner = new WeakReference<>(owner);
+        openedFolderSerial++;
+        NATIVE_CLOSE.cancel();
         LauncherGlassStaticNode sink = resolveOwnerSink(owner);
         openedFolderSink = new WeakReference<>(sink);
         if (sink != null) {
@@ -286,21 +360,46 @@ final class MiuixFolderGlassHook {
         LauncherGlassStaticNode sink = openedFolderSink.get();
         ViewGroup owner = openedFolderOwner.get();
 
-        // FolderStatusServiceImpl is a useful early semantic signal, but it is not guaranteed to
-        // dispatch every close path on Launcher 4.50. Folder.onClose completion is the final
-        // animation boundary we already observe, so reconcile the global hard-cover state here as
-        // an idempotent close authority as well. Otherwise a missed dispatchFolderClose leaves
-        // vendorFolderCovered=true and permanently hides every Workspace glass node.
-        setNativeFolderMaterialsCovered(false);
-        LauncherGlassSceneController.setFolderCoveredForAll(false);
+        // Only now may the Dock and Workspace consume new source frames;
+        // their existing TextureView outputs were preserved while the folder
+        // owned a separate frozen backdrop.
+        if (sink != null) sink.restoreFolderVisibilityImmediately();
+        // The native close may finish before the sibling glass TextureView
+        // is disposed. Keep all producers paused through that final output.
+        if (OpenFolderGlassCoordinator.hasActiveSession()) {
+            // This token MUST come from the prepared glass output, not
+            // openedFolderSerial. Background prepare() also occurs on icon
+            // ACTION_DOWN/cancel, so its serial and OEM opens diverge.
+            pendingInputResumeSerial = OpenFolderGlassCoordinator.activeSessionSerial();
+        } else {
+            releaseFrozenInputs();
+        }
         if (owner != null && !folderStatusDispatcherInstalled) {
-            // Keep the root-local fallback for builds where the semantic dispatcher was unavailable.
             LauncherGlassSceneController.setWorkspaceCovered(owner, false);
         }
 
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
-        if (sink != null) sink.setSuppressedByFolderOpen(false);
+    }
+
+    /** Thaw the resident Workspace/Folder glass producer while keeping the
+     * completed opening-folder surface on screen. The caller must wait for the
+     * resident source's first swapped frame before disposing that surface.
+     */
+    static boolean beginExpandedFolderHandoff(long serial) {
+        if (serial == 0L || pendingInputResumeSerial != serial) return false;
+        pendingInputResumeSerial = 0L;
+        releaseFrozenInputs();
+        return true;
+    }
+
+    static void onExpandedFolderOutputReleased(long serial) {
+        beginExpandedFolderHandoff(serial);
+    }
+
+    private static void releaseFrozenInputs() {
+        LauncherGlassSceneController.setFolderCoveredForAll(false);
+        Miuix307ZeroCopyRenderer.setFolderFrozen(false);
     }
 
     private static LauncherGlassStaticNode resolveOwnerSink(ViewGroup owner) {
@@ -461,11 +560,9 @@ final class MiuixFolderGlassHook {
                 icon, new WeakReference<>(cover));
         View previous = previousReference != null ? previousReference.get() : null;
         if (previous != null && previous != cover) {
-            restoreCoveredVisibility(previous);
             restoreMaterial(previous);
         }
         makeMaterialTransparent(cover);
-        coverNativeViewIfNeeded(cover);
     }
 
     private static void releaseFolderCover(ViewGroup icon) {
@@ -473,7 +570,6 @@ final class MiuixFolderGlassHook {
         WeakReference<View> reference = CLAIMED_FOLDER_COVERS.remove(icon);
         View cover = reference != null ? reference.get() : null;
         if (cover != null) {
-            restoreCoveredVisibility(cover);
             restoreMaterial(cover);
         }
     }
@@ -541,7 +637,6 @@ final class MiuixFolderGlassHook {
             }
             makeMaterialTransparent(material);
             suppressLargeFolderDrawablePaint(material);
-            coverNativeViewIfNeeded(material);
             MiuixLauncherDragOverlayHook.observeStaticNode(existing);
             return existing;
         }
@@ -562,7 +657,6 @@ final class MiuixFolderGlassHook {
             MiuixLauncherDragOverlayHook.observeStaticNode(sink);
             makeMaterialTransparent(material);
             suppressLargeFolderDrawablePaint(material);
-            coverNativeViewIfNeeded(material);
             MainHook.log(TAG + " FolderIcon material joined shared static launcher compositor");
         }
         return sink;
@@ -626,6 +720,7 @@ final class MiuixFolderGlassHook {
     }
 
     private static void releaseFolderStyleOwnership(boolean smallFolder) {
+        OpenFolderGlassCoordinator.releaseIfStyle(smallFolder);
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
             if (material == null || isSmallFolderMaterial(material) != smallFolder) continue;
             releaseMaterialOwnership(material);
@@ -651,12 +746,12 @@ final class MiuixFolderGlassHook {
         if (sink != null) sink.dispose();
         CLAIMED.remove(material);
         LauncherWidgetNativeViewBlurGate.releaseFolder(material);
-        restoreCoveredVisibility(material);
         restoreMaterial(material);
     }
 
     static void onRuntimeGlassDisabled() {
-        setNativeFolderMaterialsCovered(false);
+        OemFolderBlurStrengthHook.setFolderOpening(false);
+        OpenFolderGlassCoordinator.releaseAll();
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
             releaseMaterialOwnership(material);
         }
@@ -671,43 +766,9 @@ final class MiuixFolderGlassHook {
             if (listener != null) icon.removeOnAttachStateChangeListener(listener);
         }
         FOLDER_RECOVERY_PENDING.clear();
+        NATIVE_CLOSE.cancel();
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
-    }
-
-    private static void setNativeFolderMaterialsCovered(boolean covered) {
-        nativeFolderMaterialsCovered = covered;
-        if (!covered) {
-            for (Map.Entry<View, Integer> entry
-                    : new ArrayList<>(ORIGINAL_COVERED_VISIBILITY.entrySet())) {
-                View view = entry.getKey();
-                Integer original = entry.getValue();
-                if (view != null && original != null) view.setVisibility(original);
-            }
-            ORIGINAL_COVERED_VISIBILITY.clear();
-            return;
-        }
-        for (View material : new ArrayList<>(CLAIMED.keySet())) {
-            coverNativeViewIfNeeded(material);
-        }
-        for (WeakReference<View> reference
-                : new ArrayList<>(CLAIMED_FOLDER_COVERS.values())) {
-            coverNativeViewIfNeeded(reference != null ? reference.get() : null);
-        }
-    }
-
-    private static void coverNativeViewIfNeeded(View view) {
-        if (!nativeFolderMaterialsCovered || view == null) return;
-        if (!ORIGINAL_COVERED_VISIBILITY.containsKey(view)) {
-            ORIGINAL_COVERED_VISIBILITY.put(view, view.getVisibility());
-        }
-        view.setVisibility(View.INVISIBLE);
-    }
-
-    private static void restoreCoveredVisibility(View view) {
-        if (view == null) return;
-        Integer original = ORIGINAL_COVERED_VISIBILITY.remove(view);
-        if (original != null) view.setVisibility(original);
     }
 
     private static void restoreMaterial(View material) {

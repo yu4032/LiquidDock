@@ -217,6 +217,19 @@ final class LauncherGlassStaticNode {
         animateVisibilityTo(!suppressionState.isSuppressed());
     }
 
+    /** Folder close already animates its icon and Workspace natively.
+     * Do not add a second static-glass alpha animator on top of that spring.
+     */
+    void restoreFolderVisibilityImmediately() {
+        if (disposed || !suppressionState.setFolderOpen(false)) return;
+        if (visibilityAnimator != null) {
+            visibilityAnimator.cancel();
+            visibilityAnimator = null;
+        }
+        visibilityAlpha = suppressionState.isSuppressed() ? 0f : 1f;
+        requestLifecycleRefresh();
+    }
+
     void setSuppressedByDrag(boolean suppressed) {
         if (disposed || !suppressionState.setDrag(suppressed)) return;
         if (suppressed) resetPressInteraction(false);

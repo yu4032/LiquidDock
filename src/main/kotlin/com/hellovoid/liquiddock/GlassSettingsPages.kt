@@ -400,6 +400,12 @@ internal fun GlassFoldersPage(
         IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
         IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
         IntSetting(prefs, largeFolderPreviewIconScaleSpec, masterEnabled)
+        // Open-folder material owns an independent frozen screenshot and optics;
+        // it is not controlled by the icon background's large-folder toggle.
+        IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled)
+        IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled)
+        IntSetting(prefs, openFolderThicknessSpec, masterEnabled && liquidEnabled)
+        IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled)
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,

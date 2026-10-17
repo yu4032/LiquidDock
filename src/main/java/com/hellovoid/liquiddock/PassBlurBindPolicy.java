@@ -12,6 +12,26 @@ final class PassBlurBindPolicy {
 
     private PassBlurBindPolicy() {}
 
+    /** Wallpaper-only backdrop. The native Launcher owns the modal folder
+     * transition and hides Workspace/Dock; their surface pixels must not be
+     * captured into a static second copy of the folder or its source icon.
+     * The capture authority window is excluded by exclusions(...).
+     */
+    static String[] folderWallpaperExclusions(String launcherRootName, String... liveDockRoots) {
+        if (launcherRootName == null || launcherRootName.isBlank()) {
+            throw new IllegalArgumentException("Folder wallpaper needs Launcher surface identity");
+        }
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        names.add(launcherRootName);
+        names.add("DockAssistantView"); // Legacy vendor Dock layer title.
+        if (liveDockRoots != null) {
+            for (String name : liveDockRoots) {
+                if (name != null && !name.isBlank()) names.add(name);
+            }
+        }
+        return names.toArray(new String[0]);
+    }
+
     static float nativeScale(PassBlurDomain domain, float requestedScale) {
         return PassBlurQualityPolicy.bridgeScale(
                 domain == PassBlurDomain.LAUNCHER_WORKSPACE,
