@@ -4,74 +4,52 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 
 public class FolderNativeBlurTargetPolicyTest {
-    private static final float EPS = 0.0001f;
-    private static final float FOLDER_BLUR = 0.22f;
+    private static final float EPS = .0001f;
 
-    @Test public void onlyHomeReturnToAnExistingExpandedFolderArmsEarlyBlurOwnership() {
+    @Test public void earlyReturnRequiresNativeFolderAndCoveredOverview() {
         assertEquals(true, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(true, true));
         assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(true, false));
         assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(false, true));
         assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(false, false));
     }
 
-    @Test public void recentsReturnMustNotOvertakeExistingExpandedFolderBlur() {
-        // On the affected Launcher, Recents HOME return writes fastBlur(1.0)
-        // while the still-open folder's current sBlurRatioValue is 0.22.
-        assertEquals(FOLDER_BLUR,
-                FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                        1f, false, true, FOLDER_BLUR), EPS);
-        assertEquals(0.15f,
-                FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                        .15f, false, true, FOLDER_BLUR), EPS);
-    }
-
-    @Test public void nativeBlurPercentIsIndependentFromPrismalPixelRadius() {
+    @Test public void nativeStrengthReadsPercentIndependentlyFromPrismalBlur() {
+        assertEquals(0f, FolderNativeBlurTargetPolicy.ratioFromPercent(-3), EPS);
         assertEquals(0f, FolderNativeBlurTargetPolicy.ratioFromPercent(0), EPS);
         assertEquals(.22f, FolderNativeBlurTargetPolicy.ratioFromPercent(22), EPS);
-        assertEquals(.65f, FolderNativeBlurTargetPolicy.ratioFromPercent(65), EPS);
+        assertEquals(.75f, FolderNativeBlurTargetPolicy.ratioFromPercent(75), EPS);
         assertEquals(1f, FolderNativeBlurTargetPolicy.ratioFromPercent(100), EPS);
-        assertEquals(0f, FolderNativeBlurTargetPolicy.ratioFromPercent(-5), EPS);
-        assertEquals(1f, FolderNativeBlurTargetPolicy.ratioFromPercent(200), EPS);
-
-        assertEquals(.65f, FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                1f, false, true, FolderNativeBlurTargetPolicy.ratioFromPercent(65)), EPS);
-        assertEquals(0f, FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                1f, true, false, FolderNativeBlurTargetPolicy.ratioFromPercent(0)), EPS);
+        assertEquals(1f, FolderNativeBlurTargetPolicy.ratioFromPercent(101), EPS);
     }
 
-    @Test public void regularFolderOpeningUsesTheSameCap() {
-        assertEquals(FOLDER_BLUR,
-                FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                        1f, true, false, FOLDER_BLUR), EPS);
-        assertEquals(0f,
-                FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                        0f, true, false, FOLDER_BLUR), EPS);
-    }
-
-    @Test public void nativeFolderTargetWinsAgainstRecentsStrengthRegardlessOfScope() {
-        assertEquals(.22f, FolderNativeBlurTargetPolicy.arbitrate(
-                1f, true, 100, false, true, .22f), EPS);
-        assertEquals(.15f, FolderNativeBlurTargetPolicy.arbitrate(
-                1f, true, 15, false, true, .22f), EPS);
-        assertEquals(.65f, FolderNativeBlurTargetPolicy.arbitrate(
-                1f, true, 65, false, false, .22f), EPS);
-        assertEquals(.81f, FolderNativeBlurTargetPolicy.arbitrate(
-                .81f, false, 30, false, false, .22f), EPS);
+    @Test public void nativeOpenUsesConfiguredTargetIncludingAboveStockStrength() {
+        assertEquals(.75f, FolderNativeBlurTargetPolicy.arbitrate(
+                .22f, false, 100, true, false, .75f), EPS);
+        assertEquals(.08f, FolderNativeBlurTargetPolicy.arbitrate(
+                .22f, false, 100, true, false, .08f), EPS);
         assertEquals(0f, FolderNativeBlurTargetPolicy.arbitrate(
-                0f, true, 80, true, false, .22f), EPS);
-        assertEquals(.33f, FolderNativeBlurTargetPolicy.arbitrate(
-                1f, false, 100, true, false, .33f), EPS);
+                .22f, false, 100, true, false, 0f), EPS);
     }
 
-    @Test public void recentsWithoutFolderAndNativeCloseRemainVendorOwned() {
-        assertEquals(1f,
-                FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                        1f, false, false, FOLDER_BLUR), EPS);
-        assertEquals(.81f,
-                FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                        .81f, false, false, FOLDER_BLUR), EPS);
-        assertEquals(0f,
-                FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                        0f, false, false, FOLDER_BLUR), EPS);
+    @Test public void recentsReturnRestoresFolderConfiguredTargetNotTheHomeOne() {
+        assertEquals(.22f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, false, 100, false, true, .22f), EPS);
+        assertEquals(.70f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, true, 100, false, true, .70f), EPS);
+        assertEquals(.70f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, true, 10, false, true, .70f), EPS);
+    }
+
+    @Test public void nativeClearAndOrdinaryRecentsRemainVendorOwned() {
+        assertEquals(0f, FolderNativeBlurTargetPolicy.arbitrate(
+                0f, false, 100, false, true, .70f), EPS);
+        assertEquals(0f, FolderNativeBlurTargetPolicy.arbitrate(
+                0f, true, 100, true, false, .70f), EPS);
+        assertEquals(1f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, false, 100, false, false, .70f), EPS);
+        assertEquals(.35f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, true, 35, false, false, .70f), EPS);
+        assertEquals(.91f, FolderNativeBlurTargetPolicy.arbitrate(
+                .91f, false, 0, false, false, .70f), EPS);
     }
 }
