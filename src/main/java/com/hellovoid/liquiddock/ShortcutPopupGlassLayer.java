@@ -11,7 +11,7 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
 
-/** Stable full-screen popup glass output. Its Surface never follows MiuiX popup bounds animation. */
+/** Stable root-sized transparent popup/folder lens output; geometry is rendered by Prismal. */
 final class ShortcutPopupGlassLayer extends TextureView implements TextureView.SurfaceTextureListener {
 
     private final ShortcutPopupGlassSession session;
@@ -42,9 +42,9 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
         setSurfaceTextureListener(this);
     }
 
-    /** Crop the frozen full-screen wallpaper during Recents and native
-     * FolderCling.close using the corresponding OEM-driven silhouette. Only HWUI clips this TextureView: there
-     * is no second GL mask, producer read or synthetic time animation.
+    /** Clip the resident transparent lens output during native folder CLOSE.
+     * This View outline follows the same native progress as Prismal geometry;
+     * Recents never draws a second full-screen wallpaper through this layer.
      */
     void setFolderBackdropOutline(OpenFolderGlassGeometry.Frame frame, int rootWidth, int rootHeight) {
         if (disposed || frame == null || rootWidth <= 0 || rootHeight <= 0) return;
