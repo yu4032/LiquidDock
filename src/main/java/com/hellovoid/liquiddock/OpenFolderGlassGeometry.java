@@ -49,6 +49,44 @@ final class OpenFolderGlassGeometry {
                 closed.radius + (panel.radius - closed.radius) * p), rootWidth, rootHeight);
     }
 
+    /** Native FolderCling CLOSE owns progress: expanded=1, icon=0.
+     * This optional HWUI outline contracts with the Prismal lens from a
+     * root-sized initial region into the desktop folder icon. The texture
+     * underneath is always transparent outside the glass: no fullscreen
+     * wallpaper quad, second timer, or hardcoded 1x1/2x2 endpoint exists.
+     * Recents instead projects the existing native expanded material.
+     */
+    static Frame closingBackdropMask(Frame desktopIcon, int rootWidth, int rootHeight,
+                                     float nativeOpenProgress) {
+        if (desktopIcon == null || !valid(desktopIcon, rootWidth, rootHeight)
+                || rootWidth <= 0 || rootHeight <= 0) return null;
+        float p = Float.isFinite(nativeOpenProgress)
+                ? Math.max(0f, Math.min(1f, nativeOpenProgress)) : 1f;
+        float t = 1f - p; // 0: full screen, 1: desktop icon
+        float radius = Math.max(0f, Math.min(desktopIcon.radius,
+                Math.min(desktopIcon.right - desktopIcon.left,
+                        desktopIcon.bottom - desktopIcon.top) * .5f));
+        return new Frame(
+                desktopIcon.left * t,
+                desktopIcon.top * t,
+                rootWidth + (desktopIcon.right - rootWidth) * t,
+                rootHeight + (desktopIcon.bottom - rootHeight) * t,
+                radius * t);
+    }
+
+    /** The native desktop folder icon uses a different style from the
+     * expanded folder background. In particular, 1x1 must never inherit
+     * LARGE_FOLDER_CORNER_RADIUS as its end-of-close geometry.
+     */
+    static float sourceIconRadiusPx(boolean smallFolder, float smallOverrideDp,
+                                    float largeOverrideDp, float density,
+                                    float nativeRadiusPx, float width, float height) {
+        float fallback = Math.max(0f, Math.min(width, height) * .22f);
+        return LauncherGlassCornerRadiusPolicy.resolve(
+                smallFolder ? smallOverrideDp : largeOverrideDp,
+                density, nativeRadiusPx, fallback);
+    }
+
     Frame current() { return current; }
     void reset() { current = null; width = height = 0; }
 

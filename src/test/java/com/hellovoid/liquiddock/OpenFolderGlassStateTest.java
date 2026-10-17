@@ -149,6 +149,33 @@ public class OpenFolderGlassStateTest {
         assertFalse((Boolean) call(state, "onPresented", replacement));
     }
 
+    @Test public void unlockOnlyClearsExplicitlyClosedNativeFolder() {
+        OpenFolderGlassState state = new OpenFolderGlassState();
+        long serial = state.prepare();
+        assertFalse(state.shouldAbortAfterUnlock(serial, false));
+        assertTrue(state.beginOpen(serial));
+        assertFalse(state.shouldAbortAfterUnlock(serial, null));
+        assertFalse(state.shouldAbortAfterUnlock(serial, true));
+        assertTrue(state.shouldAbortAfterUnlock(serial, false));
+
+        state.onRecentsShown(serial);
+        assertFalse("Recents may transiently report native closed",
+                state.shouldAbortAfterUnlock(serial, false));
+        state.onRecentsHidden(serial);
+        assertFalse("HOME return may transiently report native closed",
+                state.shouldAbortAfterUnlock(serial, false));
+        assertTrue(state.completeRecentsReturn(serial));
+        assertTrue(state.shouldAbortAfterUnlock(serial, false));
+        assertTrue(state.beginClose(serial));
+        assertFalse("native close handoff already owns the release",
+                state.shouldAbortAfterUnlock(serial, false));
+
+        long replacement = state.prepare();
+        assertFalse("previous folder must not abort a new session",
+                state.shouldAbortAfterUnlock(serial, false));
+        assertFalse(state.shouldAbortAfterUnlock(replacement, false));
+    }
+
     private static Object state() throws Exception {
         try {
             return Class.forName("com.hellovoid.liquiddock.OpenFolderGlassState")

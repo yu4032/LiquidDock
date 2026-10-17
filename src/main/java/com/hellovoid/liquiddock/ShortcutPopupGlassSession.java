@@ -10,7 +10,6 @@ import android.view.View;
 
 import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalHighlightProfile;
-import com.hellovoid.prismal.PrismalInteractionState;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
 import com.hellovoid.liquiddock.config.ConfigSchema;
@@ -20,7 +19,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** One-shot workspace backdrop capture plus stable full-screen rendering for ShortcutMenu glass. */
+/** One frozen PassBlur source for shortcut popup or expanded-folder Prismal lens output. */
 final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         default void onBackdropReady() {}
@@ -55,8 +54,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final boolean folderBackdrop;
-    // OEM native modal state hides Workspace/Dock. Present a wallpaper-only
-    // frozen blur behind the Prismal lens; do not snapshot Launcher content.
+    // Keep the wallpaper-only GPU snapshot as an optical input; the visible
+    // OPEN_FOLDER output must never composite a second fullscreen background.
     private volatile float backdropOpacity;
     private final LauncherGlassOutputRenderState folderRenderWork = new LauncherGlassOutputRenderState();
     private final FolderGlassFramePacing folderFramePacing = new FolderGlassFramePacing();
@@ -90,8 +89,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private int compositeUvLocation = -1;
     private int compositeTextureLocation = -1;
     private int compositeCropRectLocation = -1;
-    private int compositeWorkspaceTextureLocation = -1;
-    private int compositeBlurMixLocation = -1;
     private OutputState output;
 
     ShortcutPopupGlassSession(
@@ -403,9 +400,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
-            // Each EGL presentation must use a single native-progress snapshot
-            // for lens alpha, Gaussian mix and background alpha. Independent
-            // volatile reads could otherwise mix different spring frames.
+            // Keep one native close-progress snapshot for the workspace Gaussian
+            // mix and material parameters; do not mix two spring frames.
             float progress = backdropOpacity;
             boolean closing = folderClosing;
             float workspaceMix = folderBackdrop && closing
@@ -431,7 +427,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     drawParams,
                     highlightProfile,
                     1f);
-            presentFull(prismalRenderer.outputTexture(), currentOutput, progress, workspaceMix);
+            presentFull(prismalRenderer.outputTexture(), currentOutput);
             if (!presentationSignaled) {
                 presentationSignaled = true;
                 mainHandler.post(() -> {
@@ -455,9 +451,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             }
             if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
             compositeProgram = 0;
-        compositePositionLocation = compositeUvLocation = -1;
+            compositePositionLocation = compositeUvLocation = -1;
             compositeTextureLocation = compositeCropRectLocation = -1;
-            compositeWorkspaceTextureLocation = compositeBlurMixLocation = -1;
             sourceBackend.shutdown();
         });
         if (!queued) sourceBackend.shutdown();
@@ -472,9 +467,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (compositeProgram == 0) {
             compositeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
-                    folderBackdrop
-                            ? Miuix307PrismalCompositeShaders.FOLDER_DUAL_BLUR_FRAGMENT
-                            : Miuix307PrismalCompositeShaders.FRAGMENT);
+                    Miuix307PrismalCompositeShaders.FRAGMENT);
             compositePositionLocation =
                     GLES20.glGetAttribLocation(compositeProgram, "aPosition");
             compositeUvLocation =
@@ -486,28 +479,25 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             compositeCropRectLocation = requireUniform(compositeProgram, "uCropRect");
             GLES20.glUseProgram(compositeProgram);
             GLES20.glUniform1i(compositeTextureLocation, 0);
-            if (folderBackdrop) {
-                compositeWorkspaceTextureLocation = requireUniform(
-                        compositeProgram, "uWorkspaceTexture");
-                compositeBlurMixLocation = requireUniform(compositeProgram, "uBlurMix");
-                GLES20.glUniform1i(compositeWorkspaceTextureLocation, 1);
-            }
         }
     }
 
-    private void presentFull(int sceneTexture, OutputState current,
-                             float progress, float workspaceMix) {
+    /** Only the Prismal scene is visible. The normalized frozen wallpaper and
+     * both prepared Gaussian textures remain GPU sampling inputs; they must
+     * never be painted as a second full-screen wallpaper by OPEN_FOLDER.
+     * Launcher/Recents owns the wallpaper blur, zoom, and dimming throughout
+     * the complete interactive gesture, so there is no mid-gesture mode swap.
+     */
+    private void presentFull(int sceneTexture, OutputState current) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-        // Clear the whole EGL buffer first. The TextureView buffer can be taller than the
-        // Launcher logical root; stretching the root-wide Prismal texture to that buffer was the
-        // source of the vertical drift found by the stage-3 bisection. Draw the logical scene
-        // 1:1 and anchor it to the output's top-left instead.
         GLES20.glViewport(0, 0, current.width, current.height);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        // Preserve the audited logical 1:1 viewport and top-left anchoring
+        // when the TextureView Surface is larger than the Launcher root.
         int viewportWidth = Math.max(1, logicalWidth);
         int viewportHeight = Math.max(1, logicalHeight);
         int viewportBottom = current.height - viewportHeight;
@@ -515,31 +505,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         GLES20.glUseProgram(compositeProgram);
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        if (folderBackdrop) {
-            // The frozen source contains wallpaper only: both Launcher and
-            // Dock surfaces were excluded before PassBlur producer binding.
-            GLES20.glEnable(GLES20.GL_BLEND);
-            GLES20.glBlendColor(0f, 0f, 0f, progress);
-            GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalRenderer.preparedBlurTexture());
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,
-                    prismalRenderer.preparedWorkspaceBlurTexture());
-            GLES20.glUniform1f(compositeBlurMixLocation,
-                    workspaceMix);
-            float firstRow = OpenFolderBackdropPolicy.backdropSampleY(0f);
-            float lastRow = OpenFolderBackdropPolicy.backdropSampleY(1f);
-            GLES20.glUniform4f(compositeCropRectLocation,
-                    0f, firstRow, 1f, lastRow - firstRow);
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-            GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
-            GLES20.glUniform1f(compositeBlurMixLocation, 0f); // Scene is already dual-blended.
-        }
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
         GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
+        // Preserve the RGBA values of the transparent Prismal FBO.
+        // Alpha blending against the cleared output with GL_ONE incorrectly
+        // treats straight-alpha glass pixels as premultiplied.
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-        if (folderBackdrop) GLES20.glDisable(GLES20.GL_BLEND);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         sourceBackend.swapBuffers(current.eglSurface);
     }

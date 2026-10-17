@@ -62,7 +62,10 @@ final class MiuixFolderGlassHook {
         // Preserve the OEM Dock FolderState: it owns native z-order, alpha,
         // and input modality while FolderCling is opened. Bypassing it left
         // clickable Dock icons above the folder.
-        OemFolderBlurStrengthHook.install(classLoader);
+        // Only the expanded-folder material overrides the OEM opening blur.
+        // When disabled, Launcher keeps its own native folder background and
+        // blur; the independent desktop small/large folder glass remains live.
+        if (glassConfig.openFolderEnabled) OemFolderBlurStrengthHook.install(classLoader);
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
             Class<?> itemIcon = Class.forName(ITEM_ICON, false, classLoader);
@@ -79,7 +82,9 @@ final class MiuixFolderGlassHook {
             });
 
             installFolderOpenCloseHooks(classLoader);
-            OpenFolderGlassHook.install(classLoader, runtimeConfig);
+            if (glassConfig.openFolderEnabled) {
+                OpenFolderGlassHook.install(classLoader, runtimeConfig);
+            }
             observeFolderVariantConstructors(classLoader, glassConfig);
 
             Class<?> utilities = Class.forName(
@@ -590,7 +595,7 @@ final class MiuixFolderGlassHook {
         }
     }
 
-    private static View resolveFolderMaterial(ViewGroup folder) {
+    static View resolveFolderMaterial(ViewGroup folder) {
         if (folder == null) return null;
         boolean small = folder.getClass().getName().contains("FolderIcon1x1");
         String[] fields = small
@@ -683,7 +688,7 @@ final class MiuixFolderGlassHook {
         return reference != null ? reference.get() : null;
     }
 
-    private static float readMaterialRadius(View material) {
+    static float readMaterialRadius(View material) {
         if (material == null) return Float.NaN;
         try {
             Field field = findField(material.getClass(), "mCornerRadius");

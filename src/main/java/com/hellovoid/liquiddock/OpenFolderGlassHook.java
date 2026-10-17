@@ -23,7 +23,8 @@ final class OpenFolderGlassHook {
     static boolean isInstalled() { return installed; }
 
     static void install(ClassLoader loader, LiquidDockConfig config) {
-        if (installed || config == null || !config.enabled || !config.glass.enabled) return;
+        if (installed || config == null || !config.enabled || !config.glass.enabled
+                || !config.glass.openFolderEnabled) return;
         try {
             Class<?> cling = Class.forName("com.miui.home.launcher.FolderCling", false, loader);
             Class<?> folder = Class.forName("com.miui.home.launcher.Folder", false, loader);
