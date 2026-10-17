@@ -7,6 +7,13 @@ public class FolderNativeBlurTargetPolicyTest {
     private static final float EPS = 0.0001f;
     private static final float FOLDER_BLUR = 0.22f;
 
+    @Test public void onlyHomeReturnToAnExistingExpandedFolderArmsEarlyBlurOwnership() {
+        assertEquals(true, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(true, true));
+        assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(true, false));
+        assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(false, true));
+        assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(false, false));
+    }
+
     @Test public void recentsReturnMustNotOvertakeExistingExpandedFolderBlur() {
         // On the affected Launcher, Recents HOME return writes fastBlur(1.0)
         // while the still-open folder's current sBlurRatioValue is 0.22.
