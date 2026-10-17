@@ -283,10 +283,6 @@ final class LauncherGlassSceneController {
             vendorRecentsCovered = covered;
             snapshot = new ArrayList<>(BY_ROOT.values());
         }
-        // The Dock is a different OEM surface, not a Workspace/FolderCling
-        // child. A native Recents transition can expose it while the modal
-        // folder remains logically open; do not strand its glass draw gate.
-        Miuix307ZeroCopyRenderer.setRecentsCovered(covered);
         for (LauncherGlassSceneController controller : snapshot) {
             if (controller != null) controller.setRecentsCovered(covered);
         }
