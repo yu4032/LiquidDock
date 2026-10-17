@@ -24,7 +24,7 @@ final class RecentsBackgroundBlurHook {
     private static final ThreadLocal<Boolean> RECENTS_TARGET_SCOPE = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> RECENTS_DIMMING_SCOPE = new ThreadLocal<>();
     private static boolean installed;
-    private static boolean recentParamsInstalled;
+    private static int recentParamsFactoryCount;
     private static boolean directDimInstalled;
     private static volatile int liveBlurPercent;
     private static volatile boolean liveDisableDimming;
@@ -67,8 +67,7 @@ final class RecentsBackgroundBlurHook {
         anyInstalled |= tryInstallGestureRatioHook(
                 classLoader, "fastBlurWhenUseCompleteRecentsBlur");
         try {
-            installRecentsDimmingOverride(classLoader);
-            recentParamsInstalled = true;
+            recentParamsFactoryCount = installRecentsDimmingOverride(classLoader);
             anyInstalled = true;
         } catch (Throwable error) {
             MainHook.log(TAG + " RecentBlurParams dimming hooks unavailable: " + error);
@@ -129,7 +128,7 @@ final class RecentsBackgroundBlurHook {
      * untouched, so the existing Recents blur-strength control and vendor animation curve remain
      * authoritative.</p>
      */
-    private static void installRecentsDimmingOverride(ClassLoader loader) throws Exception {
+    private static int installRecentsDimmingOverride(ClassLoader loader) throws Exception {
         Class<?> params = Class.forName(RECENT_BLUR_PARAMS, false, loader);
         int hookedConstructors = 0;
         for (Constructor<?> constructor : params.getDeclaredConstructors()) {
@@ -172,6 +171,7 @@ final class RecentsBackgroundBlurHook {
                 float.class, boolean.class, boolean.class)) scopedFactories++;
         MainHook.log(TAG + " RecentBlurParams scoped factories installed="
                 + scopedFactories + "/4, constructors=" + hookedConstructors);
+        return scopedFactories;
     }
 
     /** Direct Recents task-transition SurfaceControl dim, distinct from
@@ -221,9 +221,9 @@ final class RecentsBackgroundBlurHook {
 
     static void logDimmingCoverage() {
         MainHook.log(TAG + " wallpaper dimming optOut=" + liveDisableDimming
-                + " RecentBlurParams=" + recentParamsInstalled
+                + " RecentBlurParamsFactories=" + recentParamsFactoryCount + "/4"
                 + " DimLayer=" + directDimInstalled
-                + (liveDisableDimming && (!recentParamsInstalled || !directDimInstalled)
+                + (liveDisableDimming && (recentParamsFactoryCount == 0 || !directDimInstalled)
                     ? " PARTIAL: native dim may remain" : ""));
     }
 
