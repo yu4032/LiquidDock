@@ -455,11 +455,8 @@ final class OpenFolderGlassCoordinator {
         state.recentsGestureReturnSignaled = false;
         state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
         state.motion.beginClose();
-        // The native closing outline must progress on every close, including
-        // one started immediately after Recents cancellation. A stale
-        // Recents-return fence previously left a full expanded glass plate
-        // visible for several frames after the icons reached their endpoints.
-        updateClosingBackdropOutline(state, 1f);
+        // CI ABLATION ONLY: suppress the native CLOSE's initial backdrop
+        // outline update. Retain the terminal endpoint and all other logic.
         // Reuse the same prepared wallpaper and optical material for the
         // entire reverse spring. Changing the blur kernel here stalls frames
         // and causes a final-frame discontinuity at the native handoff.
@@ -846,12 +843,9 @@ final class OpenFolderGlassCoordinator {
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
-            if (state.motion.isClosing()) {
-                // Native CLOSE owns the silhouette even if an earlier Recents
-                // wallpaper settle is still pending. Follow Folme geometry,
-                // not the obsolete Recents-return classification.
-                updateClosingBackdropOutline(state, amount);
-            }
+            // CI ABLATION ONLY: the glass scene still follows Folme, but its
+            // backdrop crop no longer follows per-frame CLOSE geometry.
+            // The terminal exact-icon mask in finishNativeClose is unchanged.
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top, frame.right, frame.bottom, frame.radius), amount);
         } catch (Throwable error) {
