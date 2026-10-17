@@ -48,6 +48,21 @@ public class FolderNativeBlurTargetPolicyTest {
                         0f, true, false, FOLDER_BLUR), EPS);
     }
 
+    @Test public void nativeFolderTargetWinsAgainstRecentsStrengthRegardlessOfScope() {
+        assertEquals(.22f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, true, 100, false, true, .22f), EPS);
+        assertEquals(.15f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, true, 15, false, true, .22f), EPS);
+        assertEquals(.65f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, true, 65, false, false, .22f), EPS);
+        assertEquals(.81f, FolderNativeBlurTargetPolicy.arbitrate(
+                .81f, false, 30, false, false, .22f), EPS);
+        assertEquals(0f, FolderNativeBlurTargetPolicy.arbitrate(
+                0f, true, 80, true, false, .22f), EPS);
+        assertEquals(.33f, FolderNativeBlurTargetPolicy.arbitrate(
+                1f, false, 100, true, false, .33f), EPS);
+    }
+
     @Test public void recentsWithoutFolderAndNativeCloseRemainVendorOwned() {
         assertEquals(1f,
                 FolderNativeBlurTargetPolicy.capWhenFolderOwns(
