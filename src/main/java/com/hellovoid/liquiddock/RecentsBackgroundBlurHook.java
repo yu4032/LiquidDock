@@ -242,12 +242,8 @@ final class RecentsBackgroundBlurHook {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             if (args.length > 1 && args[1] instanceof Number) {
                 float nativeRatio = ((Number) args[1]).floatValue();
-                // This native value is a blur-strength/motion signal, NOT a
-                // reliable Launcher root-scale progress fraction. Use it only
-                // to isolate the already-expanded folder material before the
-                // vendor scales the root (or undo isolation after cancellation).
-                // Sample before the GUI modifies blur strength.
-                OpenFolderGlassCoordinator.onNativeRecentsGestureProgress(nativeRatio);
+                // CI ABLATION B: skip blur-ratio-derived expanded-folder
+                // gesture tracking. Keep the OEM Recents intensity adjustment.
                 args[1] = RecentsBlurPolicy.scaleGestureRatio(nativeRatio, liveBlurPercent);
             }
             return chain.proceed(args);
