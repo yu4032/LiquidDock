@@ -12,6 +12,14 @@ final class FolderNativeBlurTargetPolicy {
         return Math.max(0, Math.min(100, percent)) / 100f;
     }
 
+    static float arbitrate(
+            float requested, boolean recentsScope, int recentsPercent,
+            boolean opening, boolean returning, float folderCap) {
+        float afterRecents = recentsScope && requested > 0f
+                ? RecentsBlurPolicy.ratioFromPercent(recentsPercent) : requested;
+        return capWhenFolderOwns(afterRecents, opening, returning, folderCap);
+    }
+
     static float capWhenFolderOwns(
             float requested, boolean nativeOpening, boolean recentsReturningToFolder, float cap) {
         if (!nativeOpening && !recentsReturningToFolder) return requested;
