@@ -16,13 +16,20 @@ import java.lang.reflect.Method;
  */
 final class OemFolderBlurStrengthHook {
     private static final String TAG = "[FolderTrace] OEMBlur";
-    // OEM fastBlur is normalized 0..1, not a radius in pixels.
-    private static final float OPEN_STRENGTH = 0.22f;
+    // OEM fastBlur is normalized 0..1, not the Prismal source's pixel blur.
+    // Populated from the dedicated persisted native background-blur setting.
+    private static volatile float nativeFolderBlurRatio;
     private static final ThreadLocal<Boolean> FOLDER_OPEN = new ThreadLocal<>();
     // OEM Launcher 4.50 calls fastBlurWhenOpenOrCloseFolder(..., true)
     // on BOTH open and close. The Boolean parameter does not distinguish them.
     private static volatile boolean actualFolderOpening;
     private static volatile boolean recentsReturningToOpenFolder;
+
+    static void onLiveConfigChanged(LiquidDockConfig.Glass config) {
+        if (config == null) return;
+        nativeFolderBlurRatio = FolderNativeBlurTargetPolicy.ratioFromPercent(
+                config.openFolderNativeBlurPercent);
+    }
 
     static void setFolderOpening(boolean opening) {
         actualFolderOpening = opening;
@@ -71,7 +78,7 @@ final class OemFolderBlurStrengthHook {
                         && args[0] instanceof Number) {
                     float requested = ((Number) args[0]).floatValue();
                     float adjusted = FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                            requested, opening, recentsReturn, OPEN_STRENGTH);
+                            requested, opening, recentsReturn, nativeFolderBlurRatio);
                     args[0] = adjusted;
                     if (recentsReturn && requested > adjusted) {
                         MainHook.log(TAG + " Recents-return fastBlur target corrected "
