@@ -613,7 +613,6 @@ final class OpenFolderGlassCoordinator {
         if (state != null) trace("releaseAll", state);
         current = null;
         OWNER.release();
-        OemFolderBlurStrengthHook.onRecentsReturnFinished();
         if (state == null) return;
         View root = state.root.get();
         if (root != null) LauncherGlassSceneController.cancelFolderHandoff(root);
@@ -745,7 +744,6 @@ final class OpenFolderGlassCoordinator {
                     state.recentsGestureReturnSignaled = false;
                     state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
                     layer.reveal();
-                    OemFolderBlurStrengthHook.onRecentsReturnFinished();
                 } else if (state.recentsGestureObserved) {
                     // Cancelled gesture: wait for both the native blur reset
                     // signal and restoration of the host transform. There is
