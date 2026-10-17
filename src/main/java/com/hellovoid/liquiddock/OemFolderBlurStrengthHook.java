@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.view.Window;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 
 /**
  * Scale only the Launcher OEM global folder-opening blur, leaving its
@@ -22,6 +23,8 @@ final class OemFolderBlurStrengthHook {
     // OEM Launcher 4.50 calls fastBlurWhenOpenOrCloseFolder(..., true)
     // on BOTH open and close. The Boolean parameter does not distinguish them.
     private static volatile boolean actualFolderOpening;
+    private static Method nativeFolderBlur;
+    private static int nativeOpeningArg;
 
     static void setFolderOpening(boolean opening) {
         actualFolderOpening = opening;
@@ -73,10 +76,50 @@ final class OemFolderBlurStrengthHook {
                     FOLDER_OPEN.remove();
                 }
             });
+            nativeFolderBlur = wrapper;
+            nativeOpeningArg = which;
             installed = true;
+            MainHook.log(TAG + " native folder blur entry installed");
         } catch (Throwable error) {
-            // OEM signature differs on some Launcher builds. Do not guess or
-            // change other blur callsites as a fallback.
+            // OEM signature differs on some Launcher builds. Never substitute
+            // a global Window/Surface blur setter as an unsafe fallback.
+            MainHook.log(TAG + " native folder blur entry unavailable: " + error);
+        }
+    }
+
+    /** Restore the *same native folder-blur owner* after the OEM Recents
+     * wallpaper/host return has settled. Recents can overwrite this value
+     * without another FolderCling.open(), so the opening-only cap is not
+     * replayed automatically. The original Launcher wrapper and fastBlur
+     * animator stay authoritative; our existing opening cap still applies.
+     */
+    static void restoreAfterRecentsReturn() {
+        Method method = nativeFolderBlur;
+        if (!installed || method == null || !actualFolderOpening
+                || !GlassRuntimeState.isEnabled()) return;
+        if (!Modifier.isStatic(method.getModifiers())) {
+            MainHook.log(TAG + " Recents folder blur restore skipped: non-static native owner");
+            return;
+        }
+        try {
+            ClassLoader loader = method.getDeclaringClass().getClassLoader();
+            Class<?> application = Class.forName(
+                    "com.miui.home.launcher.Application", false, loader);
+            HookUtil.InvocationResult<Object> result =
+                    HookUtil.tryInvokeStatic(application, "getLauncher");
+            Object launcher = result.succeeded() ? result.value() : null;
+            int index = nativeOpeningArg;
+            if (launcher == null || !method.getParameterTypes()[1 - index].isInstance(launcher)) {
+                MainHook.log(TAG + " Recents folder blur restore skipped: Launcher unavailable");
+                return;
+            }
+            Object[] args = index == 1 ? new Object[]{launcher, true}
+                    : new Object[]{true, launcher};
+            method.invoke(null, args);
+            MainHook.log(TAG + " restored native folder blur after Recents settle"
+                    + " cap=" + OPEN_STRENGTH);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " Recents folder blur restore failed: " + error);
         }
     }
 }
