@@ -98,7 +98,12 @@ final class OpenFolderGlassState {
 
     boolean beginClose(long value) {
         if (!owns(value) || phase == Phase.PREPARING) return false;
+        // Native FolderCling CLOSE is a stronger lifecycle authority than an
+        // unfinished Recents-return wallpaper/host settle. Once a real close
+        // begins, Recents must not block reverse-spring lens geometry.
         phase = Phase.CLOSING;
+        recentsCovered = false;
+        recentsReturnPending = false;
         return true;
     }
 
