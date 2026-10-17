@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.view.Window;
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Scale only the Launcher OEM global folder-opening blur, leaving its
@@ -19,6 +20,9 @@ final class OemFolderBlurStrengthHook {
     // OEM fastBlur is normalized 0..1, not a radius in pixels.
     private static final float OPEN_STRENGTH = 0.22f;
     private static final ThreadLocal<Boolean> FOLDER_OPEN = new ThreadLocal<>();
+    // One bounded diagnostic window per vendor Recents→HOME event.
+    // Logging is disabled completely unless the existing GUI debug option is on.
+    private static final AtomicInteger RECENTS_BLUR_TRACE_REMAINING = new AtomicInteger();
     // OEM Launcher 4.50 calls fastBlurWhenOpenOrCloseFolder(..., true)
     // on BOTH open and close. The Boolean parameter does not distinguish them.
     private static volatile boolean actualFolderOpening;
@@ -40,6 +44,22 @@ final class OemFolderBlurStrengthHook {
     static void onRecentsReturnFinished() {
         recentsReturningToOpenFolder = false;
     }
+
+    static void traceRecentsShown() {
+        if (!MainHook.debugLogging) return;
+        RECENTS_BLUR_TRACE_REMAINING.set(0);
+        MainHook.log(TAG + " Recents shown nativeFolderOpening=" + actualFolderOpening);
+    }
+
+    static void traceRecentsHide(boolean coveredByVendor, boolean activeExpandedSession) {
+        if (!MainHook.debugLogging) return;
+        RECENTS_BLUR_TRACE_REMAINING.set(24);
+        MainHook.log(TAG + " Recents hide covered=" + coveredByVendor
+                + " nativeFolderOpening=" + actualFolderOpening
+                + " expandedGlassSession=" + activeExpandedSession
+                + " returnGuard=" + recentsReturningToOpenFolder);
+    }
+
     private static boolean installed;
 
     private OemFolderBlurStrengthHook() {}
@@ -67,12 +87,23 @@ final class OemFolderBlurStrengthHook {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 boolean opening = Boolean.TRUE.equals(FOLDER_OPEN.get());
                 boolean recentsReturn = actualFolderOpening && recentsReturningToOpenFolder;
-                if ((opening || recentsReturn) && args.length == 3
-                        && args[0] instanceof Number) {
+                if (args.length == 3 && args[0] instanceof Number) {
                     float requested = ((Number) args[0]).floatValue();
-                    float adjusted = FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                            requested, opening, recentsReturn, OPEN_STRENGTH);
-                    args[0] = adjusted;
+                    float adjusted = requested;
+                    if (opening || recentsReturn) {
+                        adjusted = FolderNativeBlurTargetPolicy.capWhenFolderOwns(
+                                requested, opening, recentsReturn, OPEN_STRENGTH);
+                        args[0] = adjusted;
+                    }
+                    if (MainHook.debugLogging && RECENTS_BLUR_TRACE_REMAINING
+                            .getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
+                        MainHook.log(TAG + " Recents-exit native fastBlur requested="
+                                + requested + " applied=" + adjusted
+                                + " animated=" + args[2]
+                                + " folderOpening=" + actualFolderOpening
+                                + " openingScope=" + opening
+                                + " returnScope=" + recentsReturn);
+                    }
                     if (recentsReturn && requested > adjusted) {
                         MainHook.log(TAG + " Recents-return fastBlur target corrected "
                                 + requested + " -> " + adjusted);
