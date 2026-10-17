@@ -95,6 +95,16 @@ final class ShortcutPopupGlassLayer extends TextureView implements TextureView.S
                 .start();
     }
 
+    /** CI ABLATION ONLY: legacy post-handoff 80 ms overlapping fade. */
+    void fadeIntoWorkspace(Runnable onComplete) {
+        if (disposed) return;
+        animate().cancel();
+        animate().alpha(0f).setDuration(80L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> { if (!disposed && onComplete != null) onComplete.run(); })
+                .start();
+    }
+
     void dispose() {
         if (disposed) return;
         disposed = true;
