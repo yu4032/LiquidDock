@@ -88,6 +88,23 @@ public class Miuix307MaterialHandoffContractTest {
     }
 
     @Test
+    public void folderHandoffCannotRestoreStaleDockPauseOrDoubleCompositeGlass() throws Exception {
+        String dock = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        String folder = Files.readString(MAIN.resolve("OpenFolderGlassCoordinator.java"));
+        String layer = Files.readString(MAIN.resolve("ShortcutPopupGlassLayer.java"));
+
+        assertTrue("render-thread capture must apply latest UI power policy",
+                dock.contains("boolean latestEnabled = producerUpdatesEnabled;"));
+        assertTrue(dock.contains("if (latestEnabled) Miuix307PassBlurBridge.resumeUpdates(current);"));
+        assertFalse("older front-of-queue closures must not override a later resume",
+                dock.contains("if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);"));
+        assertFalse("once the resident glass is presented, temporary glass cannot linger",
+                folder.contains("state.layer.fadeIntoWorkspace("));
+        assertFalse("obsolete 80-ms lens crossfade must be removed",
+                layer.contains("void fadeIntoWorkspace("));
+    }
+
+    @Test
     public void expandedFolderCannotOwnDockProducerOrEglRenderGate() throws Exception {
         // Static architecture/API contract: OPEN_FOLDER has a separate capture owner
         // and cannot inject a render-freeze method into Dock's 307 pipeline.
