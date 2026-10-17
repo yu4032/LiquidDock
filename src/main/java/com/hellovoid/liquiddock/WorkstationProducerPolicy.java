@@ -9,10 +9,12 @@ final class WorkstationProducerPolicy {
         return workspaceCovered && !workstationMode;
     }
 
-    /** Do not stop the native source if Recents glass shares its OES frame. */
+    /** A Recents capsule owns the shared input even when HOME's folder scene
+     * is frozen. Folder coverage gates Workspace output, not Recents capture.
+     */
     static boolean keepSharedSourceLiveForRecents(
-            boolean covered, boolean capsulesEnabled, boolean folderCovered) {
-        return covered && capsulesEnabled && !folderCovered;
+            boolean covered, boolean capsulesEnabled) {
+        return covered && capsulesEnabled;
     }
 
     /** Workspace HOME capture is continuous; coverage/presentation suspension is handled separately. */
