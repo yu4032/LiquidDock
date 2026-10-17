@@ -145,9 +145,21 @@ final class LauncherGlassRecentsHook {
      */
     private static void installEarlyOverviewExitBlurAuthority(ClassLoader loader) {
         try {
-            HookUtil.hookMethod(loader,
-                    "com.miui.home.launcher.LauncherStateManager",
-                    "exitOverviewStateIfNeed", chain -> {
+            // OEM logs "animated=true" on exitOverviewStateIfNeed.
+            // Prefer the typed boolean overload; a no-argument hook can
+            // install yet miss the actual native Recents background-tap path.
+            final Class<?> launcherStates = Class.forName(
+                    "com.miui.home.launcher.LauncherStateManager", false, loader);
+            java.lang.reflect.Method entry;
+            try {
+                entry = HookUtil.findMethodExact(launcherStates,
+                        "exitOverviewStateIfNeed", new Class<?>[]{boolean.class});
+            } catch (NoSuchMethodException withoutAnimatedArg) {
+                entry = HookUtil.findMethodExact(launcherStates,
+                        "exitOverviewStateIfNeed", new Class<?>[0]);
+            }
+            final java.lang.reflect.Method nativeEntry = entry;
+            HookUtil.hook(nativeEntry, chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         if (!FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(
                                 LauncherGlassSceneController.isRecentsCoveredByVendor(),
@@ -166,7 +178,8 @@ final class LauncherGlassRecentsHook {
                             }
                         }
                     });
-            MainHook.log(TAG + " early Overview exit blur authority installed");
+            MainHook.log(TAG + " early Overview exit blur authority installed signature="
+                    + nativeEntry.toGenericString());
         } catch (Throwable error) {
             // Separate optional native entrypoint. The existing Recents-hide
             // listener, wallpaper fences and normal folder opening survive.
