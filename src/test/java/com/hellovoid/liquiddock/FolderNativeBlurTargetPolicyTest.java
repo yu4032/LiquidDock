@@ -6,11 +6,19 @@ import org.junit.Test;
 public class FolderNativeBlurTargetPolicyTest {
     private static final float EPS = .0001f;
 
-    @Test public void earlyReturnRequiresNativeFolderAndCoveredOverview() {
-        assertEquals(true, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(true, true));
-        assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(true, false));
-        assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(false, true));
-        assertEquals(false, FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(false, false));
+    @Test public void homeBlurWriteUsesNativeFolderOwnerBeforeRecentsHide() {
+        assertEquals(true, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                true, true, false, 1f));
+        assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                true, false, false, 1f));
+        assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                false, true, false, 1f));
+        assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                true, true, true, 1f));
+        assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                true, true, false, 0f));
+        assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                true, true, false, .22f));
     }
 
     @Test public void nativeStrengthReadsPercentIndependentlyFromPrismalBlur() {
