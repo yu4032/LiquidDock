@@ -75,33 +75,6 @@ final class OpenFolderGlassCoordinator {
         trace("recents-show", state);
     }
 
-    /** BlurUtils is an early gesture *signal*, not geometry progress.
-     * Never use its ratio to switch wallpaper authority, glass opacity,
-     * output Surface, or rendered backdrop. Geometry follows the native host
-     * matrix in the root pre-draw instead.
-     */
-    static void onNativeRecentsGestureProgress(float nativeBlurRatio) {
-        State state = current;
-        if (state == null || state.motion.isClosing() || !Float.isFinite(nativeBlurRatio)) return;
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            View root = state.root.get();
-            if (root != null) root.post(() -> {
-                if (live(state)) onNativeRecentsGestureProgress(nativeBlurRatio);
-            });
-            return;
-        }
-        if (nativeBlurRatio > 0f) {
-            state.recentsGestureObserved = true;
-            state.recentsGestureReturnSignaled = false;
-        } else if (state.recentsGestureObserved
-                && !OWNER.isRecentsCovered(state.serial)
-                && !OWNER.isRecentsReturnPending(state.serial)) {
-            state.recentsGestureReturnSignaled = true;
-        }
-        View root = state.root.get();
-        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
-    }
-
     static void onRecentsHidden() {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
