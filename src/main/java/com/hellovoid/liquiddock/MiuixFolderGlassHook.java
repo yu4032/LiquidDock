@@ -155,14 +155,13 @@ final class MiuixFolderGlassHook {
         }
     }
 
-    /** Freeze existing Dock/Workspace glass output at the native folder entry.
-     * The independent folder source excludes Launcher and Dock surfaces;
-     * native FolderCling visibility remains entirely OEM-owned.
+    /** Preserve OEM Dock FolderState and freeze only the Workspace material.
+     * The expanded folder uses its own wallpaper-only PassBlur capture;
+     * the Dock remains an independent, continuous GPU source.
      */
     static void onFolderOpeningBeforeNativeAnimation() {
         OemFolderBlurStrengthHook.setFolderOpening(true);
         pendingInputResumeSerial = 0L;
-        Miuix307ZeroCopyRenderer.setFolderFrozen(true);
         LauncherGlassSceneController.setFolderCoveredForAll(true);
     }
 
@@ -420,7 +419,6 @@ final class MiuixFolderGlassHook {
 
     private static void releaseFrozenInputs() {
         LauncherGlassSceneController.setFolderCoveredForAll(false);
-        Miuix307ZeroCopyRenderer.setFolderFrozen(false);
     }
 
     private static LauncherGlassStaticNode resolveOwnerSink(ViewGroup owner) {
