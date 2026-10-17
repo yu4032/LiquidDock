@@ -55,9 +55,11 @@ final class OpenFolderGlassCoordinator {
      */
     static boolean isNativeExpandedFolderOpen() {
         State state = current;
+        // Recents is allowed to hide or recycle FolderCling temporarily.
+        // The native OPEN request and serial owner survive that transition;
+        // requiring a live Cling reference here drops the return blur gate.
         return state != null && live(state) && state.nativeOpenRequested
-                && state.cling.get() != null && !state.motion.isClosing()
-                && GlassRuntimeState.isEnabled();
+                && !state.motion.isClosing() && GlassRuntimeState.isEnabled();
     }
 
     /** Native Recents owns the wallpaper, screen-wide dimming and scale.
