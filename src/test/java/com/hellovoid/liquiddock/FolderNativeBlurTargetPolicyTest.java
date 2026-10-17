@@ -25,6 +25,20 @@ public class FolderNativeBlurTargetPolicyTest {
                         .15f, false, true, FOLDER_BLUR), EPS);
     }
 
+    @Test public void nativeBlurPercentIsIndependentFromPrismalPixelRadius() {
+        assertEquals(0f, FolderNativeBlurTargetPolicy.ratioFromPercent(0), EPS);
+        assertEquals(.22f, FolderNativeBlurTargetPolicy.ratioFromPercent(22), EPS);
+        assertEquals(.65f, FolderNativeBlurTargetPolicy.ratioFromPercent(65), EPS);
+        assertEquals(1f, FolderNativeBlurTargetPolicy.ratioFromPercent(100), EPS);
+        assertEquals(0f, FolderNativeBlurTargetPolicy.ratioFromPercent(-5), EPS);
+        assertEquals(1f, FolderNativeBlurTargetPolicy.ratioFromPercent(200), EPS);
+
+        assertEquals(.65f, FolderNativeBlurTargetPolicy.capWhenFolderOwns(
+                1f, false, true, FolderNativeBlurTargetPolicy.ratioFromPercent(65)), EPS);
+        assertEquals(0f, FolderNativeBlurTargetPolicy.capWhenFolderOwns(
+                1f, true, false, FolderNativeBlurTargetPolicy.ratioFromPercent(0)), EPS);
+    }
+
     @Test public void regularFolderOpeningUsesTheSameCap() {
         assertEquals(FOLDER_BLUR,
                 FolderNativeBlurTargetPolicy.capWhenFolderOwns(
