@@ -152,4 +152,19 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(folder.contains("HookUtil.tryInvoke(drawable, \"getPaint\")"));
         assertTrue(folder.contains("paintResult.succeeded()"));
     }
+
+    @Test public void fullGlassDisableReleasesFolderCaptureWithoutAnExpandedSession()
+            throws Exception {
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+
+        assertTrue("Installed OEM hooks must stop taking ownership after global disable",
+                folder.contains("if (!GlassRuntimeState.isEnabled()) return;"));
+        assertTrue("Full teardown must explicitly reset pending capture handoff",
+                folder.contains("pendingInputResumeSerial = 0L;"));
+        assertTrue("Folder cleanup uses the root-wide Workspace coverage release",
+                folder.contains("releaseFrozenInputs();"));
+        assertTrue("Release propagates to all existing Workspace roots",
+                scene.contains("setFolderCoveredForAll(boolean covered)"));
+    }
 }
