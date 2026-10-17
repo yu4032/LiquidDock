@@ -49,6 +49,17 @@ final class OpenFolderGlassCoordinator {
 
     static boolean hasActiveSession() { return current != null; }
 
+    /** Only an accepted, native OPEN is allowed to preserve the folder's
+     * original blur target when Recents returns to its still-live Cling.
+     * Touch-only preparations and native CLOSE are explicitly excluded.
+     */
+    static boolean isNativeExpandedFolderOpen() {
+        State state = current;
+        return state != null && live(state) && state.nativeOpenRequested
+                && state.cling.get() != null && !state.motion.isClosing()
+                && GlassRuntimeState.isEnabled();
+    }
+
     /** Native Recents owns the wallpaper, screen-wide dimming and scale.
      * OPEN_FOLDER always presents a transparent lens; semantic state changes
      * must not switch EGL backdrop modes mid-gesture.
@@ -603,6 +614,7 @@ final class OpenFolderGlassCoordinator {
         if (state != null) trace("releaseAll", state);
         current = null;
         OWNER.release();
+        OemFolderBlurStrengthHook.onRecentsReturnFinished();
         if (state == null) return;
         View root = state.root.get();
         if (root != null) LauncherGlassSceneController.cancelFolderHandoff(root);
@@ -734,21 +746,7 @@ final class OpenFolderGlassCoordinator {
                     state.recentsGestureReturnSignaled = false;
                     state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
                     layer.reveal();
-                    // Recents may leave its native global blur above the
-                    // opening-folder target. The resident popup is already
-                    // restored, but it only draws the glass lens; it cannot
-                    // repair the OEM wallpaper outside the lens. Reassert
-                    // Launcher's own folder blur after the semantic settle.
-                    // Defer out of root pre-draw to avoid mutating the OEM
-                    // blur animator while composing this frame.
-                    root.post(() -> {
-                        if (live(state) && !state.motion.isClosing()
-                                && !OWNER.isRecentsCovered(state.serial)
-                                && !OWNER.isRecentsReturnPending(state.serial)
-                                && enabled(state.icon.get())) {
-                            OemFolderBlurStrengthHook.restoreAfterRecentsReturn();
-                        }
-                    });
+                    OemFolderBlurStrengthHook.onRecentsReturnFinished();
                 } else if (state.recentsGestureObserved) {
                     // Cancelled gesture: wait for both the native blur reset
                     // signal and restoration of the host transform. There is
