@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** Native BlurUtils.fastBlur target arbitration; no independent blur animator. */
+/** Single OEM BlurUtils.fastBlur target authority; no independent blur animation. */
 final class FolderNativeBlurTargetPolicy {
     private FolderNativeBlurTargetPolicy() {}
 
@@ -14,15 +14,17 @@ final class FolderNativeBlurTargetPolicy {
 
     static float arbitrate(
             float requested, boolean recentsScope, int recentsPercent,
-            boolean opening, boolean returning, float folderCap) {
-        float afterRecents = recentsScope && requested > 0f
-                ? RecentsBlurPolicy.ratioFromPercent(recentsPercent) : requested;
-        return capWhenFolderOwns(afterRecents, opening, returning, folderCap);
-    }
+            boolean nativeFolderOpening, boolean returningToFolder, float nativeFolderRatio) {
+        // A zero target is an explicit native clear on Recents entry or
+        // FolderCling CLOSE; the folder never overrides it.
+        if (!Float.isFinite(requested) || requested <= 0f) return requested;
 
-    static float capWhenFolderOwns(
-            float requested, boolean nativeOpening, boolean recentsReturningToFolder, float cap) {
-        if (!nativeOpening && !recentsReturningToFolder) return requested;
-        return Math.max(0f, Math.min(requested, cap));
+        // The actual native folder's configured strength is an absolute
+        // target, not a ceiling. Capping at the stock 0.22 would make
+        // percent settings above 22 ineffective on folder OPEN.
+        if (nativeFolderOpening || returningToFolder) {
+            return Math.max(0f, Math.min(1f, nativeFolderRatio));
+        }
+        return recentsScope ? RecentsBlurPolicy.ratioFromPercent(recentsPercent) : requested;
     }
 }
