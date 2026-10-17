@@ -8,6 +8,10 @@ final class FolderNativeBlurTargetPolicy {
         return recentsCovered && expandedFolderOpen;
     }
 
+    static float ratioFromPercent(int percent) {
+        return Math.max(0, Math.min(100, percent)) / 100f;
+    }
+
     static float capWhenFolderOwns(
             float requested, boolean nativeOpening, boolean recentsReturningToFolder, float cap) {
         if (!nativeOpening && !recentsReturningToFolder) return requested;
