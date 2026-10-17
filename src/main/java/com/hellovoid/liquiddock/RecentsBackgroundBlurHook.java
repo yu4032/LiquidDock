@@ -242,8 +242,8 @@ final class RecentsBackgroundBlurHook {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             if (args.length > 1 && args[1] instanceof Number) {
                 float nativeRatio = ((Number) args[1]).floatValue();
-                // CI ABLATION B: skip blur-ratio-derived expanded-folder
-                // gesture tracking. Keep the OEM Recents intensity adjustment.
+                // This value controls Recents blur intensity, not folder
+                // geometry. Folder return follows semantic Recents callbacks.
                 args[1] = RecentsBlurPolicy.scaleGestureRatio(nativeRatio, liveBlurPercent);
             }
             return chain.proceed(args);
