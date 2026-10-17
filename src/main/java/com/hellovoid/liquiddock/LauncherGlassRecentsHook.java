@@ -108,6 +108,9 @@ final class LauncherGlassRecentsHook {
                 LauncherRecentsCapsuleGlassHook.onRecentsHidden();
                 LauncherGlassSceneController.setRecentsCoveredForAll(false);
                 OpenFolderGlassCoordinator.onRecentsHidden();
+                // Emit capability state at the transition being diagnosed,
+                // not only at Launcher process startup before logcat capture.
+                RecentsBackgroundBlurHook.logDimmingCoverage();
                 MainHook.log(TAG + " Recents HOME return "
                         + (wallpaperAuthorityArmed
                         ? "armed wallpaper authority"
