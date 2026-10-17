@@ -286,6 +286,10 @@ public final class ConfigSchema {
         // Dedicated optics for the frozen desktop image inside an opened folder.
         public static final ConfigKey<Integer> OPEN_FOLDER_BLUR = integer(
                 "open_folder_glass_blur", 6, 6, 6, 0, 60, ConfigKey.ExportMode.ALWAYS);
+        // Launcher BlurUtils.fastBlur receives a normalized strength (0..1).
+        // This is intentionally independent of the frozen Prismal image's px radius.
+        public static final ConfigKey<Integer> OPEN_FOLDER_NATIVE_BLUR_PERCENT = integer(
+                "open_folder_native_blur_percent", 22, 22, 22, 0, 100, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> OPEN_FOLDER_IOR = integer(
                 "open_folder_glass_ior", 155, 155, 155, 100, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> OPEN_FOLDER_THICKNESS = integer(
@@ -589,8 +593,8 @@ public final class ConfigSchema {
                 Glass.SMALL_FOLDER_CORNER_RADIUS, Glass.LARGE_FOLDER_GLASS,
                 Glass.LARGE_FOLDER_NATIVE_OUTLINE,
                 Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
-                Glass.OPEN_FOLDER_GLASS, Glass.OPEN_FOLDER_BLUR, Glass.OPEN_FOLDER_IOR,
-                Glass.OPEN_FOLDER_THICKNESS, Glass.OPEN_FOLDER_TINT_ALPHA,
+                Glass.OPEN_FOLDER_GLASS, Glass.OPEN_FOLDER_BLUR, Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT,
+                Glass.OPEN_FOLDER_IOR, Glass.OPEN_FOLDER_THICKNESS, Glass.OPEN_FOLDER_TINT_ALPHA,
                 Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
                 Glass.BLUR_MODE,
                 Glass.BLUR, Glass.CHROMATIC,
