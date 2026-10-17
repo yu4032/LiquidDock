@@ -185,4 +185,23 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(controller.contains("coveredWithoutSharedRecents"));
         assertTrue(controller.contains("keepSourceLiveDuringRecents()"));
     }
+
+    @Test public void folderCoverCannotInterposeOnRecentsSharedSourceOwnership() throws Exception {
+        String workspace = read("LauncherGlassSession.java");
+        String recents = read("RecentsCapsuleGlassSession.java");
+        String controller = read("LauncherGlassSceneController.java");
+
+        assertTrue("Recents' child callback remains independent of HOME frame validity",
+                workspace.contains("child.onSharedSourceFrame(backend, frame)"));
+        assertFalse("Folder should not reject the shared OES callback before Recents",
+                workspace.contains("if (shuttingDown || folderFrameFrozen || backend != sourceBackend"));
+        assertTrue("The folder can still stop rendering the HOME output",
+                workspace.contains("if (folderFrameFrozen) return;"));
+        assertTrue("A folder may only pause source when no visible Recents child exists",
+                workspace.contains("if (frozen && !hasVisibleRecentsConsumer())"));
+        assertTrue("Recents hidden explicitly yields shared-source ownership",
+                recents.contains("workspaceSourceOwner.onRecentsConsumerHidden(this)"));
+        assertTrue("Scene coverage uses the capsule policy rather than folder gate",
+                controller.contains("WorkstationProducerPolicy.keepSharedSourceLiveForRecents("));
+    }
 }
