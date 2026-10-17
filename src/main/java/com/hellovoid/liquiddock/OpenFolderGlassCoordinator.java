@@ -427,8 +427,8 @@ final class OpenFolderGlassCoordinator {
         state.recentsGestureObserved = false;
         state.recentsGestureReturnSignaled = false;
         state.motion.beginClose();
-        // CI ABLATION ONLY: suppress the native CLOSE's initial backdrop
-        // outline update. Retain the terminal endpoint and all other logic.
+        // The folder lens follows native CLOSE geometry directly. Its
+        // temporary backdrop outline need only be finalized at the handoff.
         // Reuse the same prepared wallpaper and optical material for the
         // entire reverse spring. Changing the blur kernel here stalls frames
         // and causes a final-frame discontinuity at the native handoff.
@@ -799,9 +799,8 @@ final class OpenFolderGlassCoordinator {
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
-            // CI ABLATION ONLY: the glass scene still follows Folme, but its
-            // backdrop crop no longer follows per-frame CLOSE geometry.
-            // The terminal exact-icon mask in finishNativeClose is unchanged.
+            // Follow native Folme with the glass scene, without duplicating
+            // each geometry sample into a separate backdrop-outline update.
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top, frame.right, frame.bottom, frame.radius), amount);
         } catch (Throwable error) {
