@@ -36,12 +36,20 @@ internal fun SecurityCenterSidebarPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
+    open: (Page) -> Unit,
 ) {
     val liquidGlassEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         item {
             PageHeader(
                 stringResource(R.string.page_security_center_sidebar),
@@ -49,11 +57,7 @@ internal fun SecurityCenterSidebarPage(
             )
         }
         item { SmallTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
-        item {
-            SettingsCard {
-                SideSlideHoldSetting(prefs, masterEnabled)
-            }
-        }
+        item { SettingsCard { SideSlideHoldSetting(prefs, masterEnabled) } }
         item { SmallTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
         item {
             SettingsCard {
@@ -63,6 +67,17 @@ internal fun SecurityCenterSidebarPage(
                     stringResource(R.string.liquid_security_center_glass_enable),
                     stringResource(R.string.liquid_security_center_glass_enable_summary),
                     masterEnabled && liquidGlassEnabled,
+                )
+            }
+        }
+        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_scenes)) }
+        sidebarSceneSettings.forEach { scene ->
+            item(key = "sc-scene-entry:${scene.page.name}") {
+                ModernFeatureCard(
+                    title = stringResource(scene.page.titleRes),
+                    summary = "独立玻璃开关、模糊度与颜色",
+                    onClick = { open(scene.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
                 )
             }
         }

@@ -71,9 +71,22 @@ final class SecurityCenterVendorMaterialBridge {
         if (!(turboLayout instanceof View) || dockLayout == null) {
             throw new IllegalArgumentException("missing Security Center material owner");
         }
+        claimCustom(turboLayout, dockLayout, abstractDockLayout, boxMaterialView,
+                allAppsLayout, true, true, true);
+    }
+
+    /** Only owned outputs suppress vendor backgrounds; disabled scenes stay native. */
+    void claimCustom(
+            Object turboLayout, View dockLayout, View abstractDockLayout,
+            View boxMaterialView, View allAppsLayout,
+            boolean claimDock, boolean claimToolbox, boolean claimAllApps) {
+        if (!(turboLayout instanceof View) || dockLayout == null) {
+            throw new IllegalArgumentException("missing Security Center material owner");
+        }
         if (!claimCustomInternal(
                 (View) turboLayout, dockLayout, abstractDockLayout,
-                boxMaterialView, allAppsLayout)) {
+                boxMaterialView, allAppsLayout,
+                claimDock, claimToolbox, claimAllApps)) {
             throw new IllegalStateException("Security Center Dock material unavailable");
         }
     }
@@ -104,20 +117,25 @@ final class SecurityCenterVendorMaterialBridge {
             View dockLayout,
             View abstractDockLayout,
             View boxMaterialView,
-            View allAppsLayout) {
+            View allAppsLayout,
+            boolean claimDock, boolean claimToolbox, boolean claimAllApps) {
         if (!protectVendorFallbackInternal(
                 turboLayout, dockLayout, abstractDockLayout,
                 boxMaterialView, allAppsLayout)) return false;
         try {
             SecurityCenterVendorMaterialState.claimOwner(
-                    turboLayout, dockLayout, abstractDockLayout,
-                    boxMaterialView, allAppsLayout);
+                    turboLayout, claimDock ? dockLayout : null,
+                    claimDock ? abstractDockLayout : null,
+                    claimToolbox ? boxMaterialView : null,
+                    claimAllApps ? allAppsLayout : null);
             claimedOwner = new WeakReference<>(turboLayout);
             SecurityCenterVendorMaterialState.runModuleMutation(() -> {
-                clearVendorTarget(dockLayout);
-                clearVendorTarget(abstractDockLayout);
-                clearVendorTarget(boxMaterialView);
-                clearVendorTarget(allAppsLayout);
+                if (claimDock) {
+                    clearVendorTarget(dockLayout);
+                    clearVendorTarget(abstractDockLayout);
+                }
+                if (claimToolbox) clearVendorTarget(boxMaterialView);
+                if (claimAllApps) clearVendorTarget(allAppsLayout);
             });
             return true;
         } catch (Throwable error) {
