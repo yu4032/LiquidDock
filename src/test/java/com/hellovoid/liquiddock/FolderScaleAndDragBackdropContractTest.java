@@ -22,6 +22,26 @@ public class FolderScaleAndDragBackdropContractTest {
         assertTrue(hook.contains("MeasureDomain.FOLDER"));
     }
 
+    @Test public void launcherCapturePanelsStayBelowImeAndNeverConsumeTouch() throws Exception {
+        // API/window-layer contract, not a rendering-order test: Android
+        // Z-orders NOT_FOCUSABLE alone above the IME. The pair with
+        // ALT_FOCUSABLE_IM places a non-touchable source below the keyboard.
+        String folder = Files.readString(MAIN.resolve("ShortcutPopupSourceOverlay.java"));
+        String drag = Files.readString(MAIN.resolve("LauncherDragSourceOverlay.java"));
+        for (String source : new String[]{folder, drag}) {
+            assertTrue("capture still uses native application-panel owner",
+                    source.contains("WindowManager.LayoutParams.TYPE_APPLICATION_PANEL"));
+            assertTrue("capture never takes Launcher or IME touch focus",
+                    source.contains("WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE"));
+            assertTrue("panel stays beneath the input method",
+                    source.contains("WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM"));
+            assertTrue("capture remains input-transparent",
+                    source.contains("WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE"));
+            assertFalse("do not fake transparency by hiding the producer",
+                    source.contains("lp.alpha = 0"));
+        }
+    }
+
     @Test public void dragGlassUsesIndependentUpperWorkspaceBackdropAuthority() throws Exception {
         String overlay = Files.readString(MAIN.resolve("LauncherGlassDragOverlay.java"));
         String source = Files.readString(MAIN.resolve("LauncherDragSourceOverlay.java"));
