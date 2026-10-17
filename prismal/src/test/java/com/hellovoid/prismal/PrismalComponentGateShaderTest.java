@@ -56,6 +56,39 @@ public class PrismalComponentGateShaderTest {
                 "if (u_componentPressGlow > 0.5 && pressGlow > 0.001) {"));
     }
 
+    @Test public void causticsUseSmoothFaceFieldWithoutChangingRimOrAlpha() {
+        String shader = transformed();
+        assertTrue("Upstream must remain the unmodified provenance baseline",
+                PrismalShaderSources.FRAGMENT.contains(
+                        "float caust = pow(max(causticDot, 0.0), 7.0) * u_causticIntensity * height;"));
+        assertEquals(1, occurrences(shader,
+                "vec2 causticGrad = mix(gradH, gradHSig, coreBlend);"));
+        assertEquals(1, occurrences(shader,
+                "float causticHeight = mix(height, hSig, coreBlend);"));
+        assertTrue(shader.contains(
+                "dot(normalize(vec3(causticGrad * u_normalStrength, 0.45)), Lp)"));
+        assertTrue(shader.contains(
+                "* u_causticIntensity * causticHeight;"));
+        assertFalse(shader.contains(
+                "* u_causticIntensity * height;"));
+        assertTrue(shader.contains(
+                "if (u_componentCaustics > 0.5 && u_causticIntensity > 0.001) {"));
+        assertTrue(shader.contains(
+                "gl_FragColor = vec4(color, opacity * u_transmittance);"));
+
+        // The face of a large dome must use the smooth slab response, not a
+        // low/zero hDome. The rim must remain byte-for-byte optically equivalent.
+        float rimBlend = 0f;
+        float deepFaceBlend = 1f;
+        float slabHeight = 1f;
+        float collapsedDomeHeight = 0.035f;
+        assertEquals(collapsedDomeHeight,
+                collapsedDomeHeight * (1f - rimBlend) + slabHeight * rimBlend, 0.0001f);
+        assertEquals(slabHeight,
+                collapsedDomeHeight * (1f - deepFaceBlend) + slabHeight * deepFaceBlend,
+                0.0001f);
+    }
+
     @Test public void enabledFamiliesRetainEveryOriginalColorContributionExactlyOnce() {
         String shader = transformed();
         String[] statements = {
