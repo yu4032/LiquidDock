@@ -202,8 +202,8 @@ final class MiuixFolderGlassHook {
         // transition at FolderCling.close, not at the end of its spring.
         // Recover the shared root-wide glass producer at that same boundary:
         // all OTHER folder/widget glass then follows the very same ancestor
-        // Workspace alpha as the ordinary icons. Do not thaw Dock here: its
-        // independent native FolderState remains authoritative until close.
+        // Workspace alpha as the ordinary icons. Dock keeps its own live
+        // PassBlur producer and native FolderState throughout this transition.
         //
         // The opening folder's own static node stays suppressed by
         // openedFolderSink until the native content/background completion.
@@ -364,9 +364,9 @@ final class MiuixFolderGlassHook {
         LauncherGlassStaticNode sink = openedFolderSink.get();
         ViewGroup owner = openedFolderOwner.get();
 
-        // Only now may the Dock and Workspace consume new source frames;
-        // their existing TextureView outputs were preserved while the folder
-        // owned a separate frozen backdrop.
+        // Restore the Workspace source only after native folder close.
+        // Dock's independent PassBlur producer was never frozen; the expanded
+        // folder kept its own wallpaper snapshot during the transition.
         if (sink != null) sink.restoreFolderVisibilityImmediately();
         // The native close may finish before the sibling glass TextureView
         // is disposed. Keep all producers paused through that final output.
@@ -418,6 +418,7 @@ final class MiuixFolderGlassHook {
     }
 
     private static void releaseFrozenInputs() {
+        // Folder owns only the Workspace capture gate, never Dock's draw loop.
         LauncherGlassSceneController.setFolderCoveredForAll(false);
     }
 
