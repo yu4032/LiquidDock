@@ -50,14 +50,11 @@ final class OpenFolderGlassGeometry {
     }
 
     /** Native FolderCling CLOSE owns progress: expanded=1, icon=0.
-     * The temporary OPEN_FOLDER TextureView also contains a full-screen
-     * wallpaper backdrop. Morph its visible background from the whole root
-     * into the *desktop source folder* round-rect on the SAME reverse-spring
-     * progress already used to position the Prismal glass lens.
-     *
-     * This is distinct from Recents: Recents ends at the expanded panel,
-     * while native CLOSE ends at the Workspace icon. Neither needs a
-     * second timer or hardcoded 1x1/2x2 folder geometry.
+     * This optional HWUI outline contracts with the Prismal lens from a
+     * root-sized initial region into the desktop folder icon. The texture
+     * underneath is always transparent outside the glass: no fullscreen
+     * wallpaper quad, second timer, or hardcoded 1x1/2x2 endpoint exists.
+     * Recents instead projects the existing native expanded material.
      */
     static Frame closingBackdropMask(Frame desktopIcon, int rootWidth, int rootHeight,
                                      float nativeOpenProgress) {
