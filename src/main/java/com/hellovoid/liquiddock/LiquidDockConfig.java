@@ -244,6 +244,7 @@ final class LiquidDockConfig {
         final int tintAlpha, tintR, tintG, tintB,
                 prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;
         final int passBlurCaptureScalePercent, passBlurRenderFps;
+        final int openFolderNativeBlurPercent;
 
         Glass(ConfigReader c) {
             enabled = c.b(ConfigSchema.Glass.ENABLED.name(),
@@ -271,6 +272,9 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.LARGE_FOLDER_GLASS.runtimeFallback());
             openFolderEnabled = c.b(ConfigSchema.Glass.OPEN_FOLDER_GLASS.name(),
                     ConfigSchema.Glass.OPEN_FOLDER_GLASS.runtimeFallback());
+            openFolderNativeBlurPercent = clamp(c.i(
+                    ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT.name(),
+                    ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT.runtimeFallback()), 0, 100);
             float smallRadius = c.f(ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name(),
                     ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.runtimeFallback());
             float largeRadius = c.f(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name(),

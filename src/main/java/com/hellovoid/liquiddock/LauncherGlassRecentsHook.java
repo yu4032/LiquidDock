@@ -57,13 +57,13 @@ final class LauncherGlassRecentsHook {
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
 
-                // Arm before vendor hide handling. Launcher can start the wallpaper HOME spring
-                // from inside onRecentViewHide(), so arming afterwards can miss the real start.
+                // Record HOME wallpaper-return ownership before vendor hide
+                // processing; this is independent of the earlier fastBlur target.
                 final long supersededSerial = WALLPAPER_SETTLE.pendingSerial();
                 final long serial = WALLPAPER_SETTLE.onReturnStarted();
-                // The OEM may emit HomeState's fastBlur(1.0) synchronously
-                // inside onRecentViewHide(). Arm before the native callback,
-                // so the original spring gets 0.22 as its target, not 1.0.
+                // This semantic hide callback retains the return lease for
+                // subsequent blur writes. The earlier HOME fastBlur(1.0) is
+                // handled at the single final target arbitration point.
                 OemFolderBlurStrengthHook.onRecentsReturnStarted(
                         OpenFolderGlassCoordinator.isNativeExpandedFolderOpen());
                 if (supersededSerial > 0L) {

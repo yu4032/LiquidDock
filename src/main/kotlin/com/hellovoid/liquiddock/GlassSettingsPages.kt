@@ -419,6 +419,7 @@ internal fun GlassFoldersPage(
             masterEnabled && liquidEnabled,
         ) { openFolderGlass = it }
         IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
+        IntSetting(prefs, openFolderNativeBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
         IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled && openFolderGlass)
         IntSetting(prefs, openFolderThicknessSpec, masterEnabled && liquidEnabled && openFolderGlass)
         IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)

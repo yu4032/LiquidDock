@@ -37,6 +37,7 @@ final class LiveGlassConfigState {
                     ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(),
                     ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(),
                     ConfigSchema.Glass.OPEN_FOLDER_BLUR.name(),
+                    ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT.name(),
                     ConfigSchema.Glass.OPEN_FOLDER_IOR.name(),
                     ConfigSchema.Glass.OPEN_FOLDER_THICKNESS.name(),
                     ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.name(),
@@ -205,6 +206,7 @@ final class LiveGlassConfigState {
             LiquidDockConfig next = LiquidDockConfig.from(new ConfigReader(all));
             if (glassChanged) {
                 currentGlass = next.glass;
+                OemFolderBlurStrengthHook.onLiveConfigChanged(next.glass);
                 lastGlass = glass;
                 generation++;
                 if (GlassRuntimeState.isEnabled()) {
