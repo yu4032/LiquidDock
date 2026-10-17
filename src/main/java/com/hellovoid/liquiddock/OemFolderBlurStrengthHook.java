@@ -22,7 +22,6 @@ final class OemFolderBlurStrengthHook {
     // OEM Launcher 4.50 calls fastBlurWhenOpenOrCloseFolder(..., true)
     // on BOTH open and close. The Boolean parameter does not distinguish them.
     private static volatile boolean actualFolderOpening;
-    private static volatile boolean recentsReturningToOpenFolder;
 
     static void onLiveConfigChanged(LiquidDockConfig.Glass config) {
         if (config == null) return;
@@ -32,20 +31,8 @@ final class OemFolderBlurStrengthHook {
 
     static void setFolderOpening(boolean opening) {
         actualFolderOpening = opening;
-        if (!opening) recentsReturningToOpenFolder = false;
     }
 
-    /** The semantic Recents return starts before OEM HomeState emits its
-     * fastBlur(1.0) target. Only a real, still-open expanded folder may
-     * retain its opening blur while the native return is in progress.
-     */
-    static void onRecentsReturnStarted(boolean expandedFolderOpen) {
-        recentsReturningToOpenFolder = expandedFolderOpen && actualFolderOpening;
-    }
-
-    static void onRecentsReturnFinished() {
-        recentsReturningToOpenFolder = false;
-    }
     private static boolean installed;
 
     /** The sole fastBlur hook owns the final OEM target. In particular,
@@ -64,8 +51,7 @@ final class OemFolderBlurStrengthHook {
                 && OpenFolderGlassCoordinator.isNativeExpandedFolderOpen();
         boolean coveredHomeWrite = FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
                 recentsCovered, expandedFolder, requested);
-        boolean returning = coveredHomeWrite
-                || (actualFolderOpening && recentsReturningToOpenFolder);
+        boolean returning = coveredHomeWrite;
         float resolved = FolderNativeBlurTargetPolicy.arbitrate(
                 requested, recentsScope, recentsPercent,
                 opening, returning, nativeFolderBlurRatio);
