@@ -170,6 +170,24 @@ final class LauncherWidgetNativeViewBlurGate {
         }
     }
 
+    /** Drop a completed native animation copy without resurrecting its blur
+     * for the few frames before FolderCling removes the closing plate.
+     * The next native open remains responsible for initializing a new plate.
+     */
+    static void releaseClosingFolderPlate(View material) {
+        if (material == null) return;
+        FolderState state;
+        synchronized (FOLDER_STATES) {
+            state = FOLDER_STATES.remove(material);
+        }
+        if (state == null) return;
+        synchronized (state) {
+            state.claimed = false;
+            state.latestVendorCall = null;
+        }
+        MainHook.log(TAG + " closing animation plate released without vendor rebind");
+    }
+
     static void releaseFolder(View material) {
         if (material == null) return;
         FolderState state;
