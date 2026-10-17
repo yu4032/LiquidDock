@@ -734,6 +734,21 @@ final class OpenFolderGlassCoordinator {
                     state.recentsGestureReturnSignaled = false;
                     state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
                     layer.reveal();
+                    // Recents may leave its native global blur above the
+                    // opening-folder target. The resident popup is already
+                    // restored, but it only draws the glass lens; it cannot
+                    // repair the OEM wallpaper outside the lens. Reassert
+                    // Launcher's own folder blur after the semantic settle.
+                    // Defer out of root pre-draw to avoid mutating the OEM
+                    // blur animator while composing this frame.
+                    root.post(() -> {
+                        if (live(state) && !state.motion.isClosing()
+                                && !OWNER.isRecentsCovered(state.serial)
+                                && !OWNER.isRecentsReturnPending(state.serial)
+                                && enabled(state.icon.get())) {
+                            OemFolderBlurStrengthHook.restoreAfterRecentsReturn();
+                        }
+                    });
                 } else if (state.recentsGestureObserved) {
                     // Cancelled gesture: wait for both the native blur reset
                     // signal and restoration of the host transform. There is
