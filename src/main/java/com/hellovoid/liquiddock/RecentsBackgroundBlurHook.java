@@ -104,10 +104,14 @@ final class RecentsBackgroundBlurHook {
     private static void installTargetInterceptor(ClassLoader loader) {
         HookUtil.hookMethod(loader, BLUR_UTILS, "fastBlur", chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
-            if (Boolean.TRUE.equals(RECENTS_TARGET_SCOPE.get())
-                    && args.length > 0 && args[0] instanceof Number
-                    && ((Number) args[0]).floatValue() > 0f) {
-                args[0] = RecentsBlurPolicy.ratioFromPercent(liveBlurPercent);
+            if (args.length > 0 && args[0] instanceof Number) {
+                // One final owner for the OEM fastBlur target. Recents strength
+                // is resolved first; the still-open folder's native target
+                // takes precedence when the transition returns to HOME.
+                args[0] = OemFolderBlurStrengthHook.arbitrateTarget(
+                        ((Number) args[0]).floatValue(),
+                        Boolean.TRUE.equals(RECENTS_TARGET_SCOPE.get()),
+                        liveBlurPercent);
             }
             return chain.proceed(args);
         }, float.class, Window.class, boolean.class);
