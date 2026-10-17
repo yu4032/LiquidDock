@@ -8,17 +8,19 @@ public class FolderNativeBlurTargetPolicyTest {
 
     @Test public void homeBlurWriteUsesNativeFolderOwnerBeforeRecentsHide() {
         assertEquals(true, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
-                true, true, false, 1f));
+                true, true, 1f));
         assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
-                true, false, false, 1f));
+                true, false, 1f));
         assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
-                false, true, false, 1f));
+                false, true, 1f));
+        // The vendor HOME write may originate from a Recents wrapper; that
+        // classification must not mask the observed 1.0 target.
+        assertEquals(true, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                true, true, 1f));
         assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
-                true, true, true, 1f));
+                true, true, 0f));
         assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
-                true, true, false, 0f));
-        assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
-                true, true, false, .22f));
+                true, true, .22f));
     }
 
     @Test public void nativeStrengthReadsPercentIndependentlyFromPrismalBlur() {
