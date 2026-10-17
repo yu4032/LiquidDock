@@ -97,11 +97,12 @@ final class Launcher450IconSizeHook {
             HookUtil.hook(getIconSize, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 MeasureDomain domain = ACTIVE_DOMAIN.get();
-                if (!enabled || domain == null || !(result instanceof Integer)) return result;
-
-                // Scale only the icon body. Dock slot width remains vendor-owned so the
-                // ShortcutIcon stays centered in the same Flexbox item.
-                return Launcher450IconSizePolicy.scaledPx((Integer) result, true, percent);
+                if (domain == null || !(result instanceof Integer)) return result;
+                // FolderGridView owns a fixed row pitch and caption height.
+                // All other domains still honor the global icon-size setting.
+                return Launcher450IconSizePolicy.measuredIconSize(
+                        (Integer) result, enabled, percent,
+                        domain == MeasureDomain.FOLDER_CONTENT);
             });
 
             installed = true;
