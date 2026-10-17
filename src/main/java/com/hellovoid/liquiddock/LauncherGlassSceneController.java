@@ -499,7 +499,6 @@ final class LauncherGlassSceneController {
         boolean coveredWithoutSharedRecents = state.state() == State.COVERED
                 && !keepSourceLiveDuringRecents();
         if (coveredWithoutSharedRecents
-                || (folderCovered && !keepSourceLiveDuringRecents())
                 || (unlockTransitionPending
                     && LauncherGlassHomePresentationHook.isUnlockProducerBlocked())
                 || (recentsWallpaperSettlePending && !keepSourceLiveDuringRecents())) {
