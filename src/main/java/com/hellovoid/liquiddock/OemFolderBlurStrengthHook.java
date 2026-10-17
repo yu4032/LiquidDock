@@ -10,8 +10,9 @@ import java.lang.reflect.Method;
  * Launcher.lambda$openLauncherFolder$41 ->
  * BlurUtils.fastBlurWhenOpenOrCloseFolder(this, true).
  *
- * The private fastBlur overload is version-dependent. If its exact
- * signature is absent, leave stock OEM behavior untouched and log it.
+ * The optional OEM wrapper only marks native folder-opening scope.
+ * Native blur targets are resolved once by RecentsBackgroundBlurHook;
+ * failure to hook this wrapper does not disable the Recents return guard.
  */
 final class OemFolderBlurStrengthHook {
     private static final String TAG = "[FolderTrace] OEMBlur";
@@ -35,9 +36,10 @@ final class OemFolderBlurStrengthHook {
         if (!opening) recentsReturningToOpenFolder = false;
     }
 
-    /** The semantic Recents return starts before OEM HomeState emits its
-     * fastBlur(1.0) target. Only a real, still-open expanded folder may
-     * retain its opening blur while the native return is in progress.
+    /** Retain folder blur ownership after semantic Recents hide.
+     * The earlier HOME fastBlur(1.0) is handled at its write site; this
+     * lease protects the subsequent native blur calls, including a cancelled
+     * or reversed Recents gesture.
      */
     static void onRecentsReturnStarted(boolean expandedFolderOpen) {
         recentsReturningToOpenFolder = expandedFolderOpen && actualFolderOpening;
