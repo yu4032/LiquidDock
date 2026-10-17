@@ -10,7 +10,6 @@ import android.view.View;
 
 import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalHighlightProfile;
-import com.hellovoid.prismal.PrismalInteractionState;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
 import com.hellovoid.liquiddock.config.ConfigSchema;
