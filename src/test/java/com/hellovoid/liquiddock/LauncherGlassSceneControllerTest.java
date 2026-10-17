@@ -8,6 +8,87 @@ import org.junit.Test;
 
 /** Pure behavior coverage for Workspace presentation/freshness ownership. */
 public class LauncherGlassSceneControllerTest {
+    @Test public void nativeFolderMustHideIndependentCachedWorkspaceGlass() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+        assertTrue(state.isLayerVisible());
+
+        // Production folder entry passes followNativeAlpha=false:
+        // the TextureView is not a child of the OEM-faded Workspace.
+        state.setFolderCovered(true, false);
+        assertFalse("Stale source-folder glass cannot stay at its desktop position",
+                state.isLayerVisible());
+        assertFalse(state.followsNativeFolderFade());
+        long prior = state.generation();
+        state.setFolderCovered(false, false);
+        assertFalse("Do not reveal stale folder glass after native close",
+                state.isLayerVisible());
+        assertTrue(state.generation() > prior);
+        state.onFreshFrameReady(prior);
+        assertFalse(state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue(state.isLayerVisible());
+        assertFalse("OEM close already has its own transition", state.consumeFadeReveal());
+    }
+
+    @Test public void closingFolderCanRestoreSiblingsBeforeNativeSpringEnds() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+        state.setFolderCovered(true, false);
+        long frozenGeneration = state.generation();
+
+        // Native FolderCling.close starts the ordinary Workspace icon fade.
+        // Reopen the shared static glass scene NOW, not when the temporary
+        // folder lens has completed its separate GPU handoff.
+        state.setFolderCovered(false, false);
+        assertFalse("stale pre-open folder silhouette must stay hidden",
+                state.isLayerVisible());
+        state.onFreshFrameReady(frozenGeneration);
+        assertFalse("stale generation must not reveal other folders", state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue("other folder glass may follow the native Workspace alpha",
+                state.isLayerVisible());
+        assertFalse("OEM owns the alpha curve: do not add a second fade",
+                state.consumeFadeReveal());
+        // Content+spring completion is still pending, but siblings are ready.
+        assertEquals(LauncherGlassSceneController.State.HOME_VISIBLE, state.state());
+    }
+
+    @Test public void unsupportedFolderRetainsTheExistingHardCoverageFallback() throws Exception {
+        LauncherGlassSceneController.StateMachine state = new LauncherGlassSceneController.StateMachine();
+        state.onRootReady(); state.onFreshFrameReady(state.generation()); state.consumeFadeReveal();
+        java.lang.reflect.Method cover = state.getClass().getDeclaredMethod("setFolderCovered", boolean.class, boolean.class);
+        cover.invoke(state, true, false);
+        assertFalse(state.isLayerVisible());
+        cover.invoke(state, false, false);
+        assertFalse(state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue(state.isLayerVisible());
+        assertFalse("Folder close must not add a second fade after OEM spring",
+                state.consumeFadeReveal());
+    }
+    @Test public void folderCloseUsesFreshFrameButNotAnAlphaReveal() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+        state.setFolderCovered(true, false);
+        long stale = state.generation();
+        state.setFolderCovered(false, false);
+        assertFalse(state.isLayerVisible());
+        state.onFreshFrameReady(stale);
+        assertFalse("Stale pixels must remain covered", state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue(state.isLayerVisible());
+        assertFalse("Native folder closing already provides the transition", state.consumeFadeReveal());
+    }
     @Test
     public void hardCoveredSceneRequiresFreshFrameBeforeReveal() {
         LauncherGlassSceneController.StateMachine state =

@@ -27,6 +27,25 @@ final class LauncherGlassSceneController {
         private boolean fadeRevealReady;
         private boolean cachedLayerVisible;
         private boolean rotationPresentationPending;
+        private boolean nativeFolderFade;
+
+        void setFolderCovered(boolean covered, boolean followNativeAlpha) {
+            if (covered) {
+                nativeFolderFade = followNativeAlpha;
+                if (nativeFolderFade) setCovered(true);
+                else setHardCovered(true);
+            } else {
+                if (nativeFolderFade) setCovered(false);
+                else {
+                    // A folder already has the vendor reverse spring. Wait for
+                    // a fresh Workspace frame, but never start a second reveal.
+                    setHardCovered(false);
+                    fadeAfterFreshFrame = false;
+                    fadeRevealReady = false;
+                }
+                nativeFolderFade = false;
+            }
+        }
 
         void onRootReady() {
             if (state == State.DETACHED) {
@@ -132,6 +151,7 @@ final class LauncherGlassSceneController {
             return cachedLayerVisible && !rotationPresentationPending && state != State.DETACHED;
         }
         boolean isRotationPresentationPending() { return rotationPresentationPending; }
+        boolean followsNativeFolderFade() { return nativeFolderFade; }
         boolean consumeFadeReveal() {
             boolean result = fadeRevealReady;
             fadeRevealReady = false;
@@ -154,6 +174,8 @@ final class LauncherGlassSceneController {
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
+    private Runnable pendingFolderHandoff;
+    private boolean pendingFolderHandoffFresh;
 
     // Wallpaper semantics stay here rather than in the generic PassBlur Session. Only one
     // wallpaper-labelled producer pulse may be in flight for a root at a time; a newer content
@@ -195,7 +217,8 @@ final class LauncherGlassSceneController {
         created.unlockTransitionPending = vendorUnlockTransitionPending;
         created.recentsWallpaperSettlePending = vendorRecentsWallpaperSettlePending;
         if (created.folderCovered) {
-            created.state.setHardCovered(true);
+            created.session.setFolderFrameFrozen(true);
+            created.state.setFolderCovered(true, false);
         } else if (created.recentsCovered) {
             created.state.setCovered(true);
         }
@@ -219,6 +242,13 @@ final class LauncherGlassSceneController {
 
     static synchronized boolean isRecentsCoveredByVendor() {
         return vendorRecentsCovered;
+    }
+
+    /** Folder is capture-only. Native Workspace opacity is not authoritative
+     * for the cached glass TextureView during this frozen session. */
+    static synchronized boolean isFolderBackdropFrozenForRoot(View root) {
+        LauncherGlassSceneController controller = root != null ? BY_ROOT.get(root) : null;
+        return vendorFolderCovered && controller != null && controller.folderCovered;
     }
 
     long widgetTransitionSceneGeneration() {
@@ -247,6 +277,18 @@ final class LauncherGlassSceneController {
         for (LauncherGlassSceneController controller : snapshot) {
             if (controller != null) controller.setRecentsCovered(covered);
         }
+    }
+
+    /** Reopen only the Workspace glass consumer at the native close START.
+     * Ordinary desktop icons and non-active folders share the same Workspace
+     * view alpha. Dock remains in its original OEM modal FolderState.
+     *
+     * Do not wait for the terminal OPEN_FOLDER TextureView handoff: doing so
+     * makes every unrelated folder glass pop in after its icon has returned.
+     */
+    static void beginNativeFolderCloseForAll() {
+        if (!vendorFolderCovered) return;
+        setFolderCoveredForAll(false);
     }
 
     static void setFolderCoveredForAll(boolean covered) {
@@ -368,6 +410,33 @@ final class LauncherGlassSceneController {
         return generation;
     }
 
+    /** Arm before thawing folder inputs so the first valid, composited
+     * Workspace frame can acknowledge ownership without a release gap.
+     */
+    static boolean awaitFolderHandoff(View root, Runnable onReady) {
+        LauncherGlassSceneController controller = findRoot(root);
+        if (controller == null || controller.layer == null || onReady == null) return false;
+        controller.pendingFolderHandoff = onReady;
+        // On an animated close the Workspace producer was resumed at the
+        // START of the OEM reverse spring. Its generation may already have
+        // presented before the temporary lens reaches its final icon shape.
+        // That is a valid fresh output, not a reason to demand another source
+        // capture and introduce an avoidable ownership gap.
+        controller.pendingFolderHandoffFresh =
+                !controller.folderCovered
+                && controller.state.state() == State.HOME_VISIBLE;
+        if (controller.pendingFolderHandoffFresh) controller.checkFolderHandoffPresentation();
+        return true;
+    }
+
+    static void cancelFolderHandoff(View root) {
+        LauncherGlassSceneController controller = findRoot(root);
+        if (controller != null) {
+            controller.pendingFolderHandoff = null;
+            controller.pendingFolderHandoffFresh = false;
+        }
+    }
+
     static void requestFreshForRoot(View root) {
         LauncherGlassSceneController controller = findRoot(root);
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
@@ -420,10 +489,39 @@ final class LauncherGlassSceneController {
         boolean rotationWasPending = state.isRotationPresentationPending();
         state.onFreshFrameReady(generation);
         applyLayerVisibility();
+        if (pendingFolderHandoff != null && !folderCovered
+                && state.state() == State.HOME_VISIBLE) {
+            pendingFolderHandoffFresh = true;
+            checkFolderHandoffPresentation();
+        }
         if (rotationWasPending && !state.isRotationPresentationPending()) {
             MainHook.log(TAG + " rotation presentation released generation=" + generation);
         }
         flushDeferredWallpaperPulse();
+    }
+
+    /** Rendering alone is not enough: the view-alpha / native Workspace
+     * visibility must also be restored before swapping surface ownership.
+     * Check once per display frame only during an armed handoff. The folder
+     * coordinator has a bounded failure path if a fresh frame never arrives.
+     */
+    private void checkFolderHandoffPresentation() {
+        Runnable completion = pendingFolderHandoff;
+        View root = rootRef.get();
+        if (completion == null || !pendingFolderHandoffFresh || root == null
+                || !root.isAttachedToWindow()) return;
+        root.postOnAnimation(() -> {
+            if (pendingFolderHandoff != completion || folderCovered
+                    || state.state() != State.HOME_VISIBLE) return;
+            if (layer == null || !layer.isAttachedToWindow()
+                    || layer.getAlpha() < 0.95f) {
+                checkFolderHandoffPresentation();
+                return;
+            }
+            pendingFolderHandoff = null;
+            pendingFolderHandoffFresh = false;
+            completion.run();
+        });
     }
 
     private synchronized void onWallpaperChanged() {
@@ -583,22 +681,29 @@ final class LauncherGlassSceneController {
         if (folderCovered == covered) return;
         folderCovered = covered;
         if (covered) {
-            state.setHardCovered(true);
+            pendingFolderHandoff = null;
+            pendingFolderHandoffFresh = false;
+            // The native Launcher hides Workspace for modal FolderCling, but
+            // our independent TextureView would otherwise retain the original
+            // folder lens in its frozen buffer at the desktop coordinates.
+            // Hard-cover presentation while preserving its GPU cache, then
+            // require a fresh post-close frame before showing it again.
+            session.setFolderFrameFrozen(true);
+            state.setFolderCovered(true, false);
             applyLayerVisibility();
-            session.suspendWorkspaceProducer();
             return;
         }
+        session.setFolderFrameFrozen(false);
         if (recentsCovered) {
-            // Complete the hard-cover release semantics first, then keep Recents as capture-only
-            // coverage. This preserves the pending fresh reveal without exposing it under Recents.
-            state.setHardCovered(false);
+            // Recents owns the next frame; do not restart Workspace under it.
+            state.setFolderCovered(false, false);
             state.setCovered(true);
             applyLayerVisibility();
             return;
         }
 
         boolean wasCovered = state.state() == State.COVERED;
-        state.setHardCovered(false);
+        state.setFolderCovered(false, false);
         applyLayerVisibility();
         if (wasCovered) requestFreshBackdrop(state.generation());
     }
@@ -607,14 +712,14 @@ final class LauncherGlassSceneController {
         if (recentsCovered == covered) return;
         recentsCovered = covered;
         if (covered) {
-            if (folderCovered) state.setHardCovered(true);
+            if (folderCovered) state.setFolderCovered(true, state.nativeFolderFade);
             else state.setCovered(true);
             applyLayerVisibility();
             if (!keepSourceLiveDuringRecents()) session.suspendWorkspaceProducer();
             return;
         }
         if (folderCovered) {
-            state.setHardCovered(true);
+            state.setFolderCovered(true, state.nativeFolderFade);
             applyLayerVisibility();
             return;
         }
@@ -658,11 +763,11 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            // Recents, HOME, unlock and wallpaper-settle are capture/freshness barriers only.
-            // Rotation is different: resized output cannot safely present pixels from the previous
-            // orientation. Folder remains a real LiquidDock presentation cover.
+            // Recents preserves its cached scene; native folder opening hides
+            // the cached Workspace glass until a fresh post-close frame.
             boolean hardPresentationCover =
-                    folderCovered || state.isRotationPresentationPending();
+                    (folderCovered && !state.followsNativeFolderFade())
+                    || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
             current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
         }

@@ -21,6 +21,9 @@ final class Miuix307ZeroCopyRenderer {
             new DockHomeBackdropFreshnessState();
     private static boolean dockAnimationFrameScheduled;
     private static boolean producerUpdatesPolicyEnabled = true;
+    // Folder owns a frozen input frame. Keep Dock's last presented TextureView
+    // buffer visible, but suppress all new PassBlur and Prismal work.
+    private static volatile boolean folderFrozen;
     private static boolean homeProducerOverride;
     private static long homeFreshnessSerial;
 
@@ -65,6 +68,7 @@ final class Miuix307ZeroCopyRenderer {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
+        gpuBackdrop.setFolderRenderFrozen(folderFrozen);
         hostRef = new WeakReference<>(host);
         materialHostRef = new WeakReference<>(materialHost);
         dockAnimationFrameScheduled = false;
@@ -72,6 +76,8 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
+        // Do not toggle native producer updates on folder re-parenting.
+        // Its original vendor snapshot policy still owns the SF producer.
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
                 + " requestedBlur=" + blurRadiusPx
                 + " source=" + materialHost.getClass().getSimpleName());
@@ -124,6 +130,47 @@ final class Miuix307ZeroCopyRenderer {
     static void setProducerUpdatesEnabled(boolean enabled, String reason) {
         producerUpdatesPolicyEnabled = enabled;
         applyProducerUpdatesPolicy(reason);
+    }
+
+    static boolean isFolderFrozen() { return folderFrozen; }
+
+    /** Resolve the Dock's REAL source root, including a binding that may be
+     * replaced while the OEM moves the floating Dock. Used by OPEN_FOLDER
+     * only; this never changes the Dock producer or its freeze/thaw policy.
+     */
+    static String[] folderCaptureDockSurfaceNames() {
+        java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
+        Miuix307PassBlurTextureView output = gpuBackdropRef.get();
+        if (output != null) {
+            String bound = output.boundDockRootSurfaceName();
+            if (bound != null && !bound.isBlank()) names.add(bound);
+        }
+        View material = materialHostRef.get();
+        if (material != null && material.isAttachedToWindow()) {
+            RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(material);
+            if (endpoint != null && endpoint.isValid()) {
+                String current = Miuix307PassBlurBridge.surfaceName(endpoint.rootSurface);
+                if (current != null && !current.isBlank()) names.add(current);
+            }
+        }
+        return names.toArray(new String[0]);
+    }
+
+    static void setFolderFrozen(boolean frozen) {
+        if (folderFrozen == frozen) return;
+        folderFrozen = frozen;
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        if (gpuBackdrop != null) gpuBackdrop.setFolderRenderFrozen(frozen);
+        // Do not pause/restart SurfaceFlinger's Dock producer here. The
+        // setUpdateTextureFlag transition is independent of the GL draw gate
+        // and can reset the visible material before the next blur frame.
+        // The Dock's native snapshot/active policy remains unchanged.
+        // Do not queue a scene redraw on thaw: that would composite the
+        // pre-folder prepared blur before SurfaceFlinger supplies its first
+        // post-folder frame, producing a visible sharp/blur/sharp pulse.
+        // The producer callback is already the first valid redraw boundary.
+        MainHook.log(TAG + " Dock GL render freeze=" + frozen
+                + " (SurfaceFlinger producer retains vendor policy)");
     }
 
     private static void applyProducerUpdatesPolicy(String reason) {
@@ -213,13 +260,13 @@ final class Miuix307ZeroCopyRenderer {
 
     static void requestDockAnimationFrames() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
+        if (folderFrozen || gpuBackdrop == null || dockAnimationFrameScheduled) return;
         dockAnimationFrameScheduled = true;
         gpuBackdrop.requestDockSceneRefresh();
         gpuBackdrop.postOnAnimation(() -> {
             if (gpuBackdropRef.get() != gpuBackdrop) return;
             dockAnimationFrameScheduled = false;
-            if (DockGlassItemRegistry.hasActiveAnimation()) {
+            if (!folderFrozen && DockGlassItemRegistry.hasActiveAnimation()) {
                 requestDockAnimationFrames();
             }
         });
@@ -235,6 +282,8 @@ final class Miuix307ZeroCopyRenderer {
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
         HOME_FRESHNESS.reset();
+        // Do not clear folderFrozen here: rebuilds during the same folder
+        // session must not revive producer updates.
         if (gpuBackdrop != null) gpuBackdrop.shutdown();
     }
 }
