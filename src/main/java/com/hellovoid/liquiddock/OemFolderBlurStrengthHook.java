@@ -58,7 +58,7 @@ final class OemFolderBlurStrengthHook {
         float resolved = FolderNativeBlurTargetPolicy.arbitrate(
                 requested, recentsScope, recentsPercent,
                 opening, returning, nativeFolderBlurRatio);
-        if (returning && resolved < requested && MainHook.debugLogging) {
+        if (returning && Float.compare(resolved, requested) != 0 && MainHook.debugLogging) {
             MainHook.log(TAG + " native fastBlur final target "
                     + requested + " -> " + resolved + " folderStrength="
                     + nativeFolderBlurRatio + " recentsScope=" + recentsScope);
