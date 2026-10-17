@@ -20,7 +20,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** One-shot workspace backdrop capture plus stable full-screen rendering for ShortcutMenu glass. */
+/** One frozen PassBlur source for shortcut popup or expanded-folder Prismal lens output. */
 final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         default void onBackdropReady() {}
@@ -55,8 +55,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final boolean folderBackdrop;
-    // OEM native modal state hides Workspace/Dock. Present a wallpaper-only
-    // frozen blur behind the Prismal lens; do not snapshot Launcher content.
+    // Keep the wallpaper-only GPU snapshot as an optical input; the visible
+    // OPEN_FOLDER output must never composite a second fullscreen background.
     private volatile float backdropOpacity;
     private final LauncherGlassOutputRenderState folderRenderWork = new LauncherGlassOutputRenderState();
     private final FolderGlassFramePacing folderFramePacing = new FolderGlassFramePacing();
@@ -401,9 +401,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
-            // Each EGL presentation must use a single native-progress snapshot
-            // for lens alpha, Gaussian mix and background alpha. Independent
-            // volatile reads could otherwise mix different spring frames.
+            // Keep one native close-progress snapshot for the workspace Gaussian
+            // mix and material parameters; do not mix two spring frames.
             float progress = backdropOpacity;
             boolean closing = folderClosing;
             float workspaceMix = folderBackdrop && closing
@@ -453,7 +452,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             }
             if (compositeProgram != 0) GLES20.glDeleteProgram(compositeProgram);
             compositeProgram = 0;
-        compositePositionLocation = compositeUvLocation = -1;
+            compositePositionLocation = compositeUvLocation = -1;
             compositeTextureLocation = compositeCropRectLocation = -1;
             sourceBackend.shutdown();
         });
