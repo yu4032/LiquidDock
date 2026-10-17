@@ -20,6 +20,7 @@ final class OemFolderBlurStrengthHook {
     // OEM fastBlur is normalized 0..1, not a radius in pixels.
     private static final float OPEN_STRENGTH = 0.22f;
     private static final ThreadLocal<Boolean> FOLDER_OPEN = new ThreadLocal<>();
+    private static final ThreadLocal<Boolean> RECENTS_RESTORE = new ThreadLocal<>();
     // OEM Launcher 4.50 calls fastBlurWhenOpenOrCloseFolder(..., true)
     // on BOTH open and close. The Boolean parameter does not distinguish them.
     private static volatile boolean actualFolderOpening;
@@ -59,6 +60,10 @@ final class OemFolderBlurStrengthHook {
                     float requested = ((Number) args[0]).floatValue();
                     float adjusted = Math.max(0f, Math.min(requested, OPEN_STRENGTH));
                     args[0] = adjusted;
+                    if (Boolean.TRUE.equals(RECENTS_RESTORE.get())) {
+                        MainHook.log(TAG + " Recents return native fastBlur requested="
+                                + requested + " applied=" + adjusted);
+                    }
                 }
                 return chain.proceed(args);
             });
@@ -115,7 +120,12 @@ final class OemFolderBlurStrengthHook {
             }
             Object[] args = index == 1 ? new Object[]{launcher, true}
                     : new Object[]{true, launcher};
-            method.invoke(null, args);
+            RECENTS_RESTORE.set(Boolean.TRUE);
+            try {
+                method.invoke(null, args);
+            } finally {
+                RECENTS_RESTORE.remove();
+            }
             MainHook.log(TAG + " restored native folder blur after Recents settle"
                     + " cap=" + OPEN_STRENGTH);
         } catch (Throwable error) {
