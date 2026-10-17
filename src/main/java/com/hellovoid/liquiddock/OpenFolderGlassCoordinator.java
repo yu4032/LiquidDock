@@ -13,11 +13,17 @@ import android.widget.ImageView;
 import java.lang.ref.WeakReference;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 /** Pre-open desktop snapshot for native folder lens, with matched open/close geometry. */
 final class OpenFolderGlassCoordinator {
     private static final String TAG = "[DC][OpenFolderGlass]";
     private static final OpenFolderGlassState OWNER = new OpenFolderGlassState();
+    // The OEM can draw its temporary closing plate for a few traversals AFTER
+    // the resident Workspace becomes visible. Keep only those transient
+    // backgrounds muted until their native owner is no longer on screen.
+    private static final Map<Drawable, WeakReference<View>> EXITING_NATIVE_BACKGROUNDS =
+            new WeakHashMap<>();
     private static State current;
 
     /** Low-frequency physical-device lifecycle evidence. Unlike the former
@@ -187,6 +193,9 @@ final class OpenFolderGlassCoordinator {
     }
 
     static void prepare(ViewGroup sourceIcon) {
+        synchronized (EXITING_NATIVE_BACKGROUNDS) {
+            EXITING_NATIVE_BACKGROUNDS.clear();
+        }
         if (!OpenFolderGlassHook.isInstalled() || !enabled(sourceIcon)
                 || !LauncherGlassHierarchy.isWorkspace(sourceIcon)) return;
         releaseAll();
@@ -575,7 +584,31 @@ final class OpenFolderGlassCoordinator {
 
     static boolean shouldSuppress(Drawable drawable) {
         State state = current;
-        return state != null && state.materials.shouldSuppress(drawable);
+        if (state != null && state.materials.shouldSuppress(drawable)) return true;
+        synchronized (EXITING_NATIVE_BACKGROUNDS) {
+            WeakReference<View> reference = EXITING_NATIVE_BACKGROUNDS.get(drawable);
+            if (reference == null) return false;
+            View owner = reference.get();
+            if (owner != null && owner.isAttachedToWindow() && owner.isShown()) return true;
+            EXITING_NATIVE_BACKGROUNDS.remove(drawable);
+            return false;
+        }
+    }
+
+    static void clearExitingNativeBackgrounds() {
+        synchronized (EXITING_NATIVE_BACKGROUNDS) {
+            EXITING_NATIVE_BACKGROUNDS.clear();
+        }
+    }
+
+    private static void retainExitingNativeBackground(View owner) {
+        if (owner == null) return;
+        Drawable background = owner.getBackground();
+        if (background == null || !OpenFolderGlassHook.observeDrawable(background)) return;
+        synchronized (EXITING_NATIVE_BACKGROUNDS) {
+            EXITING_NATIVE_BACKGROUNDS.put(background, new WeakReference<>(owner));
+        }
+        background.invalidateSelf();
     }
 
     /** Synchronous native setter fence for a just-rebound close-animation
@@ -598,6 +631,17 @@ final class OpenFolderGlassCoordinator {
     static void releaseAll() {
         State state = current;
         if (state != null) trace("releaseAll", state);
+        // On a successful animated close the temporary FolderAnimController
+        // plate can still be attached after its callback fires. Re-enabling
+        // that plate's drawable here recreates an obsolete shadow on HOME.
+        boolean completedNativeClose = state != null && state.finalCloseQueued
+                && state.inputsResumed && state.motion.isClosing();
+        View closingPlate = completedNativeClose ? nativeAnimationPlate(state) : null;
+        View closingImage = completedNativeClose ? animationImage(state) : null;
+        if (completedNativeClose) {
+            retainExitingNativeBackground(closingPlate);
+            retainExitingNativeBackground(closingImage);
+        }
         current = null;
         OWNER.release();
         if (state == null) return;
@@ -611,7 +655,15 @@ final class OpenFolderGlassCoordinator {
         if (state.layer != null) state.layer.dispose();
         if (state.session != null) state.session.shutdown();
         if (state.source != null) state.source.dispose();
-        for (View material : state.claimedBlur.keySet()) LauncherWidgetNativeViewBlurGate.releaseFolder(material);
+        for (View material : state.claimedBlur.keySet()) {
+            // The closing plate and its image are transient OEM animation
+            // copies, not persistent folder-icon materials to reinitialize.
+            if (completedNativeClose && (material == closingPlate || material == closingImage)) {
+                LauncherWidgetNativeViewBlurGate.releaseClosingFolderPlate(material);
+            } else {
+                LauncherWidgetNativeViewBlurGate.releaseFolder(material);
+            }
+        }
         state.claimedBlur.clear();
         state.blurRequests.clear();
         state.geometry.reset();
