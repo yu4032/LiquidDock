@@ -160,6 +160,9 @@ final class MiuixFolderGlassHook {
      * the Dock remains an independent, continuous GPU source.
      */
     static void onFolderOpeningBeforeNativeAnimation() {
+        // Hooks remain installed after a live master-glass disable. They must
+        // not reactivate folder capture while all glass ownership is released.
+        if (!GlassRuntimeState.isEnabled()) return;
         OemFolderBlurStrengthHook.setFolderOpening(true);
         pendingInputResumeSerial = 0L;
         LauncherGlassSceneController.setFolderCoveredForAll(true);
@@ -772,6 +775,11 @@ final class MiuixFolderGlassHook {
     static void onRuntimeGlassDisabled() {
         OemFolderBlurStrengthHook.setFolderOpening(false);
         OpenFolderGlassCoordinator.releaseAll();
+        // releaseAll() only calls the abort callback when there is a live
+        // OPEN_FOLDER session. A native FolderCling can be open without one;
+        // clear the global Workspace coverage in both cases on master disable.
+        pendingInputResumeSerial = 0L;
+        releaseFrozenInputs();
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
             releaseMaterialOwnership(material);
         }
