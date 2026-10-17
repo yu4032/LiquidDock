@@ -255,7 +255,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     synchronized void detachRecentsConsumer(RecentsCapsuleGlassSession child) {
-        if (recentsConsumer == child) recentsConsumer = null;
+        if (recentsConsumer != child) return;
+        recentsConsumer = null;
+        // No consumer remains for the OES source while FolderCling owns HOME.
+        if (folderFrameFrozen && !shuttingDown) {
+            sourceBackend.setUpdatesEnabled(false, "launcher-folder-recents-detached");
+        }
+    }
+
+    void onRecentsConsumerHidden(RecentsCapsuleGlassSession child) {
+        if (shuttingDown || recentsConsumer != child || !folderFrameFrozen) return;
+        // onRecentsShown() temporarily resumed the folder-paused source.
+        // Restore native capture idleness only after the capsule stops using it.
+        sourceBackend.setUpdatesEnabled(false, "launcher-folder-recents-hidden");
     }
 
     boolean hasVisibleRecentsConsumer() {
@@ -539,9 +551,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void setFolderFrameFrozen(boolean frozen) {
         if (folderFrameFrozen == frozen || shuttingDown) return;
         folderFrameFrozen = frozen;
-        if (frozen) sourceBackend.setUpdatesEnabled(false, "launcher-folder-frame-frozen");
-        // Producer freshness is requested by the scene controller only after
-        // the native folder has fully closed.
+        if (frozen && !hasVisibleRecentsConsumer()) {
+            sourceBackend.setUpdatesEnabled(false, "launcher-folder-frame-frozen");
+        }
+        // HOME output remains frozen even when an explicit Recents consumer
+        // temporarily resumes the same source. After the folder closes the
+        // SceneController requests a new HOME generation.
         MainHook.log(TAG + " Workspace source/render freeze=" + frozen);
     }
 
@@ -1066,7 +1081,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
-        if (shuttingDown || folderFrameFrozen || backend != sourceBackend || frame == null) return;
+        if (shuttingDown || backend != sourceBackend || frame == null) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
         // The Recents child uses this OES frame on the same GL thread, with its own geometry.
@@ -1074,6 +1089,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // or a HOME-only Prismal parameter is unavailable during the Recents transition.
         RecentsCapsuleGlassSession child = recentsConsumer;
         if (child != null) child.onSharedSourceFrame(backend, frame);
+        // Folder only freezes HOME's output, never Recents' independent output.
+        if (folderFrameFrozen) return;
         // HOME generation/rotation constraints are separate from the Recents GPU consumer.
         if (frame.generation != sceneGeneration || rotationSettlePending) return;
         if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
