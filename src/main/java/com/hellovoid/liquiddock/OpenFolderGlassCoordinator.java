@@ -193,9 +193,6 @@ final class OpenFolderGlassCoordinator {
     }
 
     static void prepare(ViewGroup sourceIcon) {
-        synchronized (EXITING_NATIVE_BACKGROUNDS) {
-            EXITING_NATIVE_BACKGROUNDS.clear();
-        }
         if (!OpenFolderGlassHook.isInstalled() || !enabled(sourceIcon)
                 || !LauncherGlassHierarchy.isWorkspace(sourceIcon)) return;
         releaseAll();
