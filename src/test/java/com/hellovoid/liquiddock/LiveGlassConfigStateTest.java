@@ -12,6 +12,7 @@ public class LiveGlassConfigStateTest {
     @Test
     public void glassOpticsAndTenthsAreLiveButUnrelatedGridKeysAreNot() {
         assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.BLUR.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT.name()));
         assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.BLUR.name() + "_tenths"));
         assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.IOR.name()));
         assertTrue(LiveGlassConfigState.isLiveKey(ConfigSchema.Glass.PRISMAL_DISPERSION_R.name()));
@@ -131,6 +132,19 @@ public class LiveGlassConfigStateTest {
                 ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name()));
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name()));
+    }
+
+    @Test
+    public void nativeFolderBackgroundBlurReadsDedicatedPercentInsteadOfGlassPixelBlur() {
+        Map<String, Object> values = new HashMap<>();
+        values.put(ConfigSchema.Glass.OPEN_FOLDER_BLUR.name(), 6);
+        LiquidDockConfig defaults = LiquidDockConfig.from(new ConfigReader(values));
+        assertEquals(22, defaults.glass.openFolderNativeBlurPercent);
+        values.put(ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT.name(), 70);
+        LiquidDockConfig changed = LiquidDockConfig.from(new ConfigReader(values));
+        assertEquals(70, changed.glass.openFolderNativeBlurPercent);
+        assertEquals(70f / 100f, FolderNativeBlurTargetPolicy.ratioFromPercent(
+                changed.glass.openFolderNativeBlurPercent), 0.0001f);
     }
 
     @Test

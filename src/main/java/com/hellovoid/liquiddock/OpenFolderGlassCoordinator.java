@@ -75,33 +75,6 @@ final class OpenFolderGlassCoordinator {
         trace("recents-show", state);
     }
 
-    /** BlurUtils is an early gesture *signal*, not geometry progress.
-     * Never use its ratio to switch wallpaper authority, glass opacity,
-     * output Surface, or rendered backdrop. Geometry follows the native host
-     * matrix in the root pre-draw instead.
-     */
-    static void onNativeRecentsGestureProgress(float nativeBlurRatio) {
-        State state = current;
-        if (state == null || state.motion.isClosing() || !Float.isFinite(nativeBlurRatio)) return;
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            View root = state.root.get();
-            if (root != null) root.post(() -> {
-                if (live(state)) onNativeRecentsGestureProgress(nativeBlurRatio);
-            });
-            return;
-        }
-        if (nativeBlurRatio > 0f) {
-            state.recentsGestureObserved = true;
-            state.recentsGestureReturnSignaled = false;
-        } else if (state.recentsGestureObserved
-                && !OWNER.isRecentsCovered(state.serial)
-                && !OWNER.isRecentsReturnPending(state.serial)) {
-            state.recentsGestureReturnSignaled = true;
-        }
-        View root = state.root.get();
-        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
-    }
-
     static void onRecentsHidden() {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
@@ -453,13 +426,9 @@ final class OpenFolderGlassCoordinator {
         // early-return branch while the folder's reverse spring runs.
         state.recentsGestureObserved = false;
         state.recentsGestureReturnSignaled = false;
-        state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
         state.motion.beginClose();
-        // The native closing outline must progress on every close, including
-        // one started immediately after Recents cancellation. A stale
-        // Recents-return fence previously left a full expanded glass plate
-        // visible for several frames after the icons reached their endpoints.
-        updateClosingBackdropOutline(state, 1f);
+        // The folder lens follows native CLOSE geometry directly. Its
+        // temporary backdrop outline need only be finalized at the handoff.
         // Reuse the same prepared wallpaper and optical material for the
         // entire reverse spring. Changing the blur kernel here stalls frames
         // and causes a final-frame discontinuity at the native handoff.
@@ -716,20 +685,6 @@ final class OpenFolderGlassCoordinator {
                 // expanded material without scaling its entire backdrop.
                 OpenFolderGlassGeometry.Frame projected = hostFrame.project(
                         state.expandedFrame, state.hostBaseline);
-                if (Api101Bridge.isDebugLoggingEnabled() && state.hostBaseline != null) {
-                    int bucket = Math.round(hostFrame.scaleX * 100f);
-                    if (bucket != state.lastRecentsHostScaleBucket) {
-                        state.lastRecentsHostScaleBucket = bucket;
-                        Api101Bridge.folderLifecycle("recents-host-matrix serial="
-                                + state.serial + " hostScale=" + hostFrame.scaleX
-                                + "/" + hostFrame.scaleY
-                                + " hostOffset=" + hostFrame.x + "/" + hostFrame.y
-                                + " layerInverse=" + inverseX + "/" + inverseY
-                                + " phase=" + (OWNER.isRecentsCovered(state.serial)
-                                        ? "covered" : "interactive-return")
-                                + " renderer=LENS_ONLY");
-                    }
-                }
                 if (projected != null) {
                     LauncherGlassGeometry.Snapshot scene = LauncherGlassGeometry.resolveStatic(
                             state.width, state.height,
@@ -746,7 +701,6 @@ final class OpenFolderGlassCoordinator {
                     if (!OWNER.completeRecentsReturn(state.serial)) return;
                     state.recentsGestureObserved = false;
                     state.recentsGestureReturnSignaled = false;
-                    state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
                     layer.reveal();
                     OemFolderBlurStrengthHook.onRecentsReturnFinished();
                 } else if (state.recentsGestureObserved) {
@@ -756,7 +710,6 @@ final class OpenFolderGlassCoordinator {
                     if (!state.recentsGestureReturnSignaled || !hostRestored) return;
                     state.recentsGestureObserved = false;
                     state.recentsGestureReturnSignaled = false;
-                    state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
                 }
             }
             if (!state.motion.isClosing()
@@ -846,12 +799,8 @@ final class OpenFolderGlassCoordinator {
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
-            if (state.motion.isClosing()) {
-                // Native CLOSE owns the silhouette even if an earlier Recents
-                // wallpaper settle is still pending. Follow Folme geometry,
-                // not the obsolete Recents-return classification.
-                updateClosingBackdropOutline(state, amount);
-            }
+            // Follow native Folme with the glass scene, without duplicating
+            // each geometry sample into a separate backdrop-outline update.
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top, frame.right, frame.bottom, frame.radius), amount);
         } catch (Throwable error) {
@@ -1021,7 +970,6 @@ final class OpenFolderGlassCoordinator {
         boolean recentsGestureObserved;
         boolean recentsGestureReturnSignaled;
         OpenFolderHostTransform hostBaseline;
-        int lastRecentsHostScaleBucket = Integer.MIN_VALUE;
         final OpenFolderNativeCloseProgress nativeCloseProgress = new OpenFolderNativeCloseProgress();
         OpenFolderGlassGeometry.Frame closeImageStart, closePlateStart;
         int closeProgressLogBucket = -1;

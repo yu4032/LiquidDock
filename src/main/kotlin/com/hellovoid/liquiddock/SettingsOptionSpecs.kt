@@ -245,6 +245,7 @@ internal val smallFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.SMALL_FOLD
 internal val largeFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_SIZE_OFFSET, "大文件夹尺寸偏移", "dp/边")
 internal val largeFolderCornerRadiusSpec = IntSpec(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS, "大文件夹圆角", "dp")
 internal val openFolderBlurSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BLUR, "展开文件夹 · 模糊", "px", summary = "只影响打开文件夹时冻结画面的模糊")
+internal val openFolderNativeBlurSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT, "展开文件夹 · 外部原生模糊", "%", summary = "调整文件夹外壁纸的系统模糊，独立于玻璃内模糊；下次打开文件夹或多任务返回时生效")
 internal val openFolderIorSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_IOR, "展开文件夹 · 折射率", "×100", summary = "100 = 1.00（不折射），155 = 1.55")
 internal val openFolderThicknessSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_THICKNESS, "展开文件夹 · 玻璃厚度", "dp")
 internal val openFolderTintSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA, "展开文件夹 · 染色透明度", "", summary = "0 = 完全透明，160 = 较强染色；颜色继承全局玻璃颜色")

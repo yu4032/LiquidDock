@@ -228,6 +228,7 @@ public final class PresetManager {
         source.put("large_folder_native_outline", Boolean.TRUE);
         source.put("large_folder_preview_icon_percent", 100);
         source.put(ConfigSchema.Glass.OPEN_FOLDER_GLASS.name(), Boolean.TRUE);
+        source.put(ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT.name(), 22);
         source.put("open_folder_glass_blur", 6);
         source.put("open_folder_glass_ior", 155);
         source.put("open_folder_glass_thickness", 18);

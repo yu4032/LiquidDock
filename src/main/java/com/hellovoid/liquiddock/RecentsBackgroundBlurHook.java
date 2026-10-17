@@ -104,10 +104,14 @@ final class RecentsBackgroundBlurHook {
     private static void installTargetInterceptor(ClassLoader loader) {
         HookUtil.hookMethod(loader, BLUR_UTILS, "fastBlur", chain -> {
             Object[] args = chain.getArgs().toArray(new Object[0]);
-            if (Boolean.TRUE.equals(RECENTS_TARGET_SCOPE.get())
-                    && args.length > 0 && args[0] instanceof Number
-                    && ((Number) args[0]).floatValue() > 0f) {
-                args[0] = RecentsBlurPolicy.ratioFromPercent(liveBlurPercent);
+            if (args.length > 0 && args[0] instanceof Number) {
+                // One final owner for the OEM fastBlur target. Recents strength
+                // is resolved first; the still-open folder's native target
+                // takes precedence when the transition returns to HOME.
+                args[0] = OemFolderBlurStrengthHook.arbitrateTarget(
+                        ((Number) args[0]).floatValue(),
+                        Boolean.TRUE.equals(RECENTS_TARGET_SCOPE.get()),
+                        liveBlurPercent);
             }
             return chain.proceed(args);
         }, float.class, Window.class, boolean.class);
@@ -238,12 +242,8 @@ final class RecentsBackgroundBlurHook {
             Object[] args = chain.getArgs().toArray(new Object[0]);
             if (args.length > 1 && args[1] instanceof Number) {
                 float nativeRatio = ((Number) args[1]).floatValue();
-                // This native value is a blur-strength/motion signal, NOT a
-                // reliable Launcher root-scale progress fraction. Use it only
-                // to isolate the already-expanded folder material before the
-                // vendor scales the root (or undo isolation after cancellation).
-                // Sample before the GUI modifies blur strength.
-                OpenFolderGlassCoordinator.onNativeRecentsGestureProgress(nativeRatio);
+                // This value controls Recents blur intensity, not folder
+                // geometry. Folder return follows semantic Recents callbacks.
                 args[1] = RecentsBlurPolicy.scaleGestureRatio(nativeRatio, liveBlurPercent);
             }
             return chain.proceed(args);
