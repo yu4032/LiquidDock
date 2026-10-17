@@ -4,6 +4,10 @@ package com.hellovoid.liquiddock;
 final class FolderNativeBlurTargetPolicy {
     private FolderNativeBlurTargetPolicy() {}
 
+    static boolean shouldArmBeforeOverviewExit(boolean recentsCovered, boolean expandedFolderOpen) {
+        return recentsCovered && expandedFolderOpen;
+    }
+
     static float capWhenFolderOwns(
             float requested, boolean nativeOpening, boolean recentsReturningToFolder, float cap) {
         if (!nativeOpening && !recentsReturningToFolder) return requested;
