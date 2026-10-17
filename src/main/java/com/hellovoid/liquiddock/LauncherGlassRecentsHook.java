@@ -33,6 +33,7 @@ final class LauncherGlassRecentsHook {
         if (installed || config == null || !config.enabled || !config.glass.enabled) return;
         LauncherRecentsCapsuleGlassHook.install(classLoader);
         installWallpaperSettleAuthority(classLoader);
+        installEarlyOverviewExitBlurAuthority(classLoader);
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
                 OemFolderBlurStrengthHook.onRecentsReturnFinished();
@@ -61,9 +62,9 @@ final class LauncherGlassRecentsHook {
                 // from inside onRecentViewHide(), so arming afterwards can miss the real start.
                 final long supersededSerial = WALLPAPER_SETTLE.pendingSerial();
                 final long serial = WALLPAPER_SETTLE.onReturnStarted();
-                // The OEM may emit HomeState's fastBlur(1.0) synchronously
-                // inside onRecentViewHide(). Arm before the native callback,
-                // so the original spring gets 0.22 as its target, not 1.0.
+                // The early Overview exit hook already covers the HOME
+                // target that Launcher writes before this callback. Re-arm
+                // here for other native exit paths that deliver hide first.
                 OemFolderBlurStrengthHook.onRecentsReturnStarted(
                         OpenFolderGlassCoordinator.isNativeExpandedFolderOpen());
                 if (supersededSerial > 0L) {
@@ -127,6 +128,49 @@ final class LauncherGlassRecentsHook {
             MainHook.log(TAG + " semantic Recents dispatcher hooks installed");
         } catch (Throwable error) {
             MainHook.log(TAG + " semantic Recents dispatcher unavailable: " + error);
+        }
+    }
+
+    /**
+     * Native LauncherStateManager.exitOverviewStateIfNeed() runs BEFORE
+     * RecentsServiceDispatcher.onRecentViewHide on the overview-background-tap
+     * return path. HomeState writes BlurUtils.fastBlur(1.0) synchronously
+     * inside that earlier call, so the existing Recents-hide hook cannot
+     * intercept the initial target.
+     *
+     * Lease only the original, still-open expanded folder's blur during that
+     * native state transition. onRecentViewHide retains normal return ownership;
+     * if the vendor skips hide/cancels the transition, clear the speculative
+     * lease as the original method unwinds while Recents remains covered.
+     */
+    private static void installEarlyOverviewExitBlurAuthority(ClassLoader loader) {
+        try {
+            HookUtil.hookMethod(loader,
+                    "com.miui.home.launcher.LauncherStateManager",
+                    "exitOverviewStateIfNeed", chain -> {
+                        Object[] args = chain.getArgs().toArray(new Object[0]);
+                        if (!FolderNativeBlurTargetPolicy.shouldArmBeforeOverviewExit(
+                                LauncherGlassSceneController.isRecentsCoveredByVendor(),
+                                OpenFolderGlassCoordinator.isNativeExpandedFolderOpen())) {
+                            return chain.proceed(args);
+                        }
+                        OemFolderBlurStrengthHook.onRecentsReturnStarted(true);
+                        MainHook.log(TAG + " early Recents-to-open-folder blur authority armed");
+                        try {
+                            return chain.proceed(args);
+                        } finally {
+                            // Do not keep a speculative lease if Overview did not
+                            // actually exit. A successful hide takes over the lease.
+                            if (LauncherGlassSceneController.isRecentsCoveredByVendor()) {
+                                OemFolderBlurStrengthHook.onRecentsReturnFinished();
+                            }
+                        }
+                    });
+            MainHook.log(TAG + " early Overview exit blur authority installed");
+        } catch (Throwable error) {
+            // Separate optional native entrypoint. The existing Recents-hide
+            // listener, wallpaper fences and normal folder opening survive.
+            MainHook.log(TAG + " early Overview exit blur authority unavailable: " + error);
         }
     }
 
