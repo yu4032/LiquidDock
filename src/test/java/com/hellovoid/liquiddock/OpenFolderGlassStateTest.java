@@ -63,6 +63,39 @@ public class OpenFolderGlassStateTest {
         assertTrue(state.owns(replacement));
     }
 
+    @Test public void nativeCloseTakesOverAnUnsettledRecentsReturn() {
+        OpenFolderGlassState state = new OpenFolderGlassState();
+        long serial = state.prepare();
+        assertTrue(state.beginOpen(serial));
+        state.onBackdropReady(serial);
+        state.onPresented(serial);
+        state.onRecentsShown(serial);
+        state.onRecentsHidden(serial);
+        assertTrue(state.isRecentsReturnPending(serial));
+
+        // The real FolderCling close is independent of the wallpaper settle
+        // callback. It must own and update every closing glass frame.
+        assertTrue(state.beginClose(serial));
+        assertTrue(state.isClosing());
+        assertFalse(state.isRecentsReturnPending(serial));
+        assertFalse(state.isRecentsCovered(serial));
+        assertFalse(state.shouldReplayAfterRecents(serial, true));
+        assertFalse(state.completeRecentsReturn(serial));
+        assertTrue(state.maySuppressNative());
+        assertTrue(state.finishClose(serial));
+    }
+
+    @Test public void closeWhileRecentsCoveredCannotRemainInRecentsClassification() {
+        OpenFolderGlassState state = new OpenFolderGlassState();
+        long serial = state.prepare();
+        assertTrue(state.beginOpen(serial));
+        state.onRecentsShown(serial);
+        assertTrue(state.isRecentsCovered(serial));
+        assertTrue(state.beginClose(serial));
+        assertFalse(state.isRecentsCovered(serial));
+        assertFalse(state.isRecentsReturnPending(serial));
+    }
+
     @Test public void capturedCloseCompletionCannotReleaseTheNextOpeningOfTheSameFolder() throws Exception {
         OpenFolderGlassState state = new OpenFolderGlassState();
         long old = state.prepare();

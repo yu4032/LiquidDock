@@ -73,6 +73,18 @@ public class RootPassBlurBackendBoundaryTest {
     }
 
     @Test
+    public void workspaceCapturePauseSurvivesLateBindAndQueuedRefresh() throws Exception {
+        String backend = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/RootPassBlurBackend.java"));
+        assertTrue(backend.contains("state.setCaptureUpdatesAllowed(enabled)"));
+        assertTrue(backend.contains("&& !state.captureUpdatesAllowed()"));
+        assertTrue("late native bind must honor the saved Workspace pause",
+                backend.contains("Miuix307PassBlurBridge.pauseUpdates(next)"));
+        assertTrue("queued refresh must not override a newer pause",
+                backend.contains("Miuix307PassBlurBridge.pauseUpdates(current)"));
+    }
+
+    @Test
     public void sourceRecoveryUsesFrameLifecycleInsteadOfFixedDelay() throws Exception {
         Path main = Path.of("src/main/java/com/hellovoid/liquiddock");
         String backend = Files.readString(main.resolve("RootPassBlurBackend.java"));

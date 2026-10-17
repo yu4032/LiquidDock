@@ -103,6 +103,22 @@ public class RootPassBlurBackendStateTest {
     }
 
     @Test
+    public void workspacePauseSurvivesLateBindAndQueuedRefreshUntilNewDemand() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        state.setCaptureUpdatesAllowed(false);
+        state.onBindSucceeded();
+        assertFalse("late bind cannot implicitly override folder pause", state.captureUpdatesAllowed());
+
+        assertTrue(state.requestFresh(30L));
+        assertTrue("explicit Recents or HOME demand resumes capture", state.captureUpdatesAllowed());
+        state.setCaptureUpdatesAllowed(false);
+        assertFalse("hidden consumer can override a queued refresh", state.captureUpdatesAllowed());
+        assertTrue(state.requestFresh(31L));
+        assertTrue("new HOME generation resumes capture after native folder close",
+                state.captureUpdatesAllowed());
+    }
+
+    @Test
     public void terminalFailureAndShutdownFailClosed() {
         RootPassBlurBackendState state = new RootPassBlurBackendState();
         assertTrue(state.requestFresh(30L));

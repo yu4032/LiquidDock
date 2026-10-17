@@ -185,4 +185,31 @@ public class LauncherRecentsCapsuleGlassContractTest {
         assertTrue(controller.contains("coveredWithoutSharedRecents"));
         assertTrue(controller.contains("keepSourceLiveDuringRecents()"));
     }
+
+    @Test public void folderCoverCannotInterposeOnRecentsSharedSourceOwnership() throws Exception {
+        String workspace = read("LauncherGlassSession.java");
+        String recents = read("RecentsCapsuleGlassSession.java");
+        String controller = read("LauncherGlassSceneController.java");
+
+        assertTrue("Recents' child callback remains independent of HOME frame validity",
+                workspace.contains("child.onSharedSourceFrame(backend, frame)"));
+        assertFalse("Folder should not reject the shared OES callback before Recents",
+                workspace.contains("if (shuttingDown || folderFrameFrozen || backend != sourceBackend"));
+        assertTrue("The folder can still stop rendering the HOME output",
+                workspace.contains("if (folderFrameFrozen) return;"));
+        assertTrue("A folder may only pause source when no visible Recents child exists",
+                workspace.contains("if (frozen && !hasVisibleRecentsConsumer())"));
+        assertTrue("Recents hidden explicitly yields shared-source ownership",
+                recents.contains("workspaceSourceOwner.onRecentsConsumerHidden(this)"));
+        assertTrue("Last Recents consumer release reconciles Folder and wallpaper-settle",
+                workspace.contains("shouldPauseAfterRecentsConsumerGone("));
+        assertTrue("Scene coverage uses the capsule policy rather than folder gate",
+                controller.contains("WorkstationProducerPolicy.keepSharedSourceLiveForRecents("));
+        assertTrue("Coverage without an attached visible capsule is not a source lease",
+                controller.contains("session.hasVisibleRecentsConsumer(), GlassRuntimeState.isRecentsCapsuleEnabled()"));
+        assertTrue("HOME requests queued before folder-open cannot reenable its source",
+                workspace.contains("if (shuttingDown || folderFrameFrozen || generation != sceneGeneration) return;"));
+        assertTrue("Wallpaper pulses cannot wake HOME capture under FolderCling",
+                workspace.contains("if (shuttingDown || folderFrameFrozen || requestedSceneGeneration != sceneGeneration"));
+    }
 }
