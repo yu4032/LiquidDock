@@ -65,7 +65,10 @@ final class MiuixFolderGlassHook {
         // Only the expanded-folder material overrides the OEM opening blur.
         // When disabled, Launcher keeps its own native folder background and
         // blur; the independent desktop small/large folder glass remains live.
-        if (glassConfig.openFolderEnabled) OemFolderBlurStrengthHook.install(classLoader);
+        if (glassConfig.openFolderEnabled) {
+            OemFolderBlurStrengthHook.onLiveConfigChanged(glassConfig);
+            OemFolderBlurStrengthHook.install(classLoader);
+        }
         folderStatusDispatcherInstalled = installFolderStatusDispatcherHooks(classLoader);
         try {
             Class<?> itemIcon = Class.forName(ITEM_ICON, false, classLoader);
