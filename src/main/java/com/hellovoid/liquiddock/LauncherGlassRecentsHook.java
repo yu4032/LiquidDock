@@ -35,6 +35,7 @@ final class LauncherGlassRecentsHook {
         installWallpaperSettleAuthority(classLoader);
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
+                OemFolderBlurStrengthHook.traceRecentsShown();
                 OemFolderBlurStrengthHook.onRecentsReturnFinished();
                 long staleReturn = WALLPAPER_SETTLE.pendingSerial();
                 WALLPAPER_SETTLE.onRecentsShown();
@@ -52,6 +53,10 @@ final class LauncherGlassRecentsHook {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewHide", chain -> {
                 boolean workstationMode = MainHook.isWorkstationMode();
                 boolean recentsCovered = LauncherGlassSceneController.isRecentsCoveredByVendor();
+                boolean expandedSession = OpenFolderGlassCoordinator.isNativeExpandedFolderOpen();
+                // Diagnose covered and uncovered hide paths BEFORE the early
+                // return. That path currently never arms #406's blur lease.
+                OemFolderBlurStrengthHook.traceRecentsHide(recentsCovered, expandedSession);
                 if (!recentsCovered) {
                     MainHook.log(TAG + " ignoring non-covered Recents hide");
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -64,8 +69,7 @@ final class LauncherGlassRecentsHook {
                 // The OEM may emit HomeState's fastBlur(1.0) synchronously
                 // inside onRecentViewHide(). Arm before the native callback,
                 // so the original spring gets 0.22 as its target, not 1.0.
-                OemFolderBlurStrengthHook.onRecentsReturnStarted(
-                        OpenFolderGlassCoordinator.isNativeExpandedFolderOpen());
+                OemFolderBlurStrengthHook.onRecentsReturnStarted(expandedSession);
                 if (supersededSerial > 0L) {
                     discardWallpaperAuthorities(supersededSerial);
                     MainHook.log(TAG + " Recents wallpaper return superseded oldSerial="
