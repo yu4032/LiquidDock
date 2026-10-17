@@ -22,9 +22,23 @@ final class OemFolderBlurStrengthHook {
     // OEM Launcher 4.50 calls fastBlurWhenOpenOrCloseFolder(..., true)
     // on BOTH open and close. The Boolean parameter does not distinguish them.
     private static volatile boolean actualFolderOpening;
+    private static volatile boolean recentsReturningToOpenFolder;
 
     static void setFolderOpening(boolean opening) {
         actualFolderOpening = opening;
+        if (!opening) recentsReturningToOpenFolder = false;
+    }
+
+    /** The semantic Recents return starts before OEM HomeState emits its
+     * fastBlur(1.0) target. Only a real, still-open expanded folder may
+     * retain its opening blur while the native return is in progress.
+     */
+    static void onRecentsReturnStarted(boolean expandedFolderOpen) {
+        recentsReturningToOpenFolder = expandedFolderOpen && actualFolderOpening;
+    }
+
+    static void onRecentsReturnFinished() {
+        recentsReturningToOpenFolder = false;
     }
     private static boolean installed;
 
@@ -51,11 +65,18 @@ final class OemFolderBlurStrengthHook {
             // Inner interception is installed before the outer scope owner.
             HookUtil.hook(inner, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (Boolean.TRUE.equals(FOLDER_OPEN.get()) && args.length == 3
+                boolean opening = Boolean.TRUE.equals(FOLDER_OPEN.get());
+                boolean recentsReturn = actualFolderOpening && recentsReturningToOpenFolder;
+                if ((opening || recentsReturn) && args.length == 3
                         && args[0] instanceof Number) {
                     float requested = ((Number) args[0]).floatValue();
-                    float adjusted = Math.max(0f, Math.min(requested, OPEN_STRENGTH));
+                    float adjusted = FolderNativeBlurTargetPolicy.capWhenFolderOwns(
+                            requested, opening, recentsReturn, OPEN_STRENGTH);
                     args[0] = adjusted;
+                    if (recentsReturn && requested > adjusted) {
+                        MainHook.log(TAG + " Recents-return fastBlur target corrected "
+                                + requested + " -> " + adjusted);
+                    }
                 }
                 return chain.proceed(args);
             });
@@ -74,9 +95,11 @@ final class OemFolderBlurStrengthHook {
                 }
             });
             installed = true;
+            MainHook.log(TAG + " native folder fastBlur owner installed");
         } catch (Throwable error) {
-            // OEM signature differs on some Launcher builds. Do not guess or
-            // change other blur callsites as a fallback.
+            // OEM signature differs on some Launcher builds. Never patch
+            // global Window blur or SurfaceControl as a fallback.
+            MainHook.log(TAG + " native folder fastBlur owner unavailable: " + error);
         }
     }
 }
