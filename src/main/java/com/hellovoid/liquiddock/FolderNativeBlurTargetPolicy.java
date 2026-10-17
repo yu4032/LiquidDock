@@ -9,9 +9,12 @@ final class FolderNativeBlurTargetPolicy {
      * and from ordinary HOME without a still-open native folder.
      */
     static boolean isCoveredRecentsHomeTarget(
-            boolean recentsCovered, boolean expandedFolderOpen,
-            boolean recentsTargetScope, float requested) {
-        return recentsCovered && expandedFolderOpen && !recentsTargetScope
+            boolean recentsCovered, boolean expandedFolderOpen, float requested) {
+        // The vendor's target-scope wrapper is not a reliable distinction on
+        // this path: HOME can issue the full target from a Recents blur wrapper.
+        // The full target and the native folder/Recents owner jointly determine
+        // the one conflicting write, regardless of its wrapper classification.
+        return recentsCovered && expandedFolderOpen
                 && Float.isFinite(requested) && requested >= .999f;
     }
 
