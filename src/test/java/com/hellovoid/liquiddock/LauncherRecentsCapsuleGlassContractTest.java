@@ -203,5 +203,7 @@ public class LauncherRecentsCapsuleGlassContractTest {
                 recents.contains("workspaceSourceOwner.onRecentsConsumerHidden(this)"));
         assertTrue("Scene coverage uses the capsule policy rather than folder gate",
                 controller.contains("WorkstationProducerPolicy.keepSharedSourceLiveForRecents("));
+        assertTrue("Coverage without an attached visible capsule is not a source lease",
+                controller.contains("session.hasVisibleRecentsConsumer(), GlassRuntimeState.isRecentsCapsuleEnabled()"));
     }
 }

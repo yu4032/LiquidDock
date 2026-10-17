@@ -18,12 +18,12 @@ public class WorkstationProducerPolicyTest {
     }
 
     @Test
-    public void recentsKeepsSharedSourceLiveWhileCovered() {
+    public void visibleRecentsConsumerKeepsSharedSourceLive() {
         assertTrue(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true));
-        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(false, true));
+        assertFalse("No visible child means no Recents capture lease",
+                WorkstationProducerPolicy.keepSharedSourceLiveForRecents(false, true));
         assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, false));
-        // No folder-state argument: a modal HOME folder must not remove
-        // Recents' right to use an already shared OES producer.
+        // A modal HOME folder does not remove a visible Recents OES consumer's lease.
     }
 
     @Test

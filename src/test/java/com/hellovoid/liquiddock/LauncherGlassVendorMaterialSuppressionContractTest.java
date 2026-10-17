@@ -166,5 +166,11 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
                 folder.contains("releaseFrozenInputs();"));
         assertTrue("Release propagates to all existing Workspace roots",
                 scene.contains("setFolderCoveredForAll(boolean covered)"));
+        int fallbackStart = folder.indexOf("private static void setOwnerSuppressed(");
+        int fallbackEnd = folder.indexOf("private static void restoreOpenedFolderOwner()", fallbackStart);
+        assertTrue("FolderIcon fallback must remain present", fallbackStart >= 0 && fallbackEnd > fallbackStart);
+        assertTrue("FolderIcon.onOpen must not re-cover HOME after master disable",
+                folder.substring(fallbackStart, fallbackEnd).contains(
+                        "if (suppressed && !GlassRuntimeState.isEnabled()) return;"));
     }
 }

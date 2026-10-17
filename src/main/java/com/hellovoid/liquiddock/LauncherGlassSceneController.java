@@ -480,10 +480,10 @@ final class LauncherGlassSceneController {
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
     }
 
-    /** Recents capsules use this same producer, regardless of Workspace layer visibility. */
+    /** Only a visible Recents GPU consumer may keep the covered Workspace source live. */
     private boolean keepSourceLiveDuringRecents() {
         return WorkstationProducerPolicy.keepSharedSourceLiveForRecents(
-                recentsCovered, GlassRuntimeState.isRecentsCapsuleEnabled());
+                session.hasVisibleRecentsConsumer(), GlassRuntimeState.isRecentsCapsuleEnabled());
     }
 
     void onRootReady() {

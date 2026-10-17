@@ -328,6 +328,9 @@ final class MiuixFolderGlassHook {
 
     private static void setOwnerSuppressed(ViewGroup owner, boolean suppressed) {
         if (owner == null) return;
+        // FolderIcon.onOpen can run after the master switch tears down all glass.
+        // Its fallback hook must not reclaim the global Workspace capture gate.
+        if (suppressed && !GlassRuntimeState.isEnabled()) return;
         // FolderIcon.onOpen runs earlier than the vendor FolderStatus dispatcher,
         // so cover the Workspace even when the semantic dispatcher is installed.
         if (suppressed) {

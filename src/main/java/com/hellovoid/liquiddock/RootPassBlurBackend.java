@@ -181,6 +181,9 @@ final class RootPassBlurBackend {
 
     void setUpdatesEnabled(boolean enabled, String reason) {
         if (shuttingDown || state.isCapturedSourceRetired()) return;
+        if (bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+            state.setCaptureUpdatesAllowed(enabled);
+        }
         Miuix307PassBlurBridge.Binding current = binding;
         if (current == null) return;
         if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
@@ -514,6 +517,12 @@ final class RootPassBlurBackend {
             requestRebind("fresh-request-invalid-binding");
             return;
         }
+        // A queued refresh must not undo a later folder/Recents-hide pause.
+        if (bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
+                && !state.captureUpdatesAllowed()) {
+            Miuix307PassBlurBridge.pauseUpdates(current);
+            return;
+        }
         if (requestedSingleFramePulse) {
             Miuix307PassBlurBridge.requestSingleUpdate(current, root);
         } else {
@@ -769,6 +778,12 @@ final class RootPassBlurBackend {
         Miuix307PassBlurBridge.setWorkspaceTransitionFrameSync(
                 next, transitionFrameSyncEnabled);
         state.onBindSucceeded();
+        // bind() enables continuous capture by default. Reapply a Workspace pause
+        // before any pending generation refresh can wake the new native endpoint.
+        if (bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
+                && !state.captureUpdatesAllowed()) {
+            Miuix307PassBlurBridge.pauseUpdates(next);
+        }
         completeRolloverCompletions(true, "bind-succeeded");
         MainHook.log(TAG + " bound root=" + next.rootName
                 + " domain=" + bindRequest.domain()

@@ -9,12 +9,12 @@ final class WorkstationProducerPolicy {
         return workspaceCovered && !workstationMode;
     }
 
-    /** A Recents capsule owns the shared input even when HOME's folder scene
-     * is frozen. Folder coverage gates Workspace output, not Recents capture.
+    /** A visible Recents capsule owns the shared input even when HOME is frozen.
+     * Semantic Recents coverage alone is not a live GPU consumer.
      */
     static boolean keepSharedSourceLiveForRecents(
-            boolean covered, boolean capsulesEnabled) {
-        return covered && capsulesEnabled;
+            boolean visibleConsumer, boolean capsulesEnabled) {
+        return visibleConsumer && capsulesEnabled;
     }
 
     /** Workspace HOME capture is continuous; coverage/presentation suspension is handled separately. */

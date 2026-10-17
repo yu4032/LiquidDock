@@ -7,6 +7,9 @@ final class RootPassBlurBackendState {
 
     private long requestedGeneration = -1L;
     private long freshGeneration = -1L;
+    // Native bind starts continuous capture. Preserve an explicit Workspace pause
+    // across a delayed bind or endpoint rollover until a new consumer requests a frame.
+    private boolean captureUpdatesAllowed = true;
     private boolean shutdown;
     private volatile boolean capturedSourceRetired;
 
@@ -24,9 +27,20 @@ final class RootPassBlurBackendState {
         return capturedSourceRetired;
     }
 
+    synchronized void setCaptureUpdatesAllowed(boolean allowed) {
+        if (!shutdown && !capturedSourceRetired) captureUpdatesAllowed = allowed;
+    }
+
+    synchronized boolean captureUpdatesAllowed() {
+        return captureUpdatesAllowed;
+    }
+
     synchronized boolean requestFresh(long generation) {
         if (shutdown || capturedSourceRetired || generation < 0L
                 || generation < requestedGeneration) return false;
+        // A new explicit HOME/Recents freshness request is allowed to wake capture.
+        // A later folder/hidden-consumer pause still wins before the queued refresh.
+        captureUpdatesAllowed = true;
         requestedGeneration = generation;
         freshGeneration = -1L;
         producerRecovery.onGeometryInvalidated();
