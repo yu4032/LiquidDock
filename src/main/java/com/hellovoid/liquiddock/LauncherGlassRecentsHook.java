@@ -85,6 +85,11 @@ final class LauncherGlassRecentsHook {
                     cancelWallpaperSettle(serial, "vendor-hide-exception");
                     throw error;
                 }
+                MainHook.log(TAG + " Recents hide native handling finished serial="
+                        + serial + " coveredAtStart=" + recentsCovered
+                        + " expandedAtStart=" + expandedSession
+                        + " expandedAfterVendor="
+                        + OpenFolderGlassCoordinator.isNativeExpandedFolderOpen());
 
                 // If vendor hide handling did not bind this return serial to either the Local
                 // spring-end path or the System wallpaper draw-end path, no future callback can
