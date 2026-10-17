@@ -8,9 +8,25 @@ final class RootPassBlurBackendState {
     private long requestedGeneration = -1L;
     private long freshGeneration = -1L;
     private boolean shutdown;
+    private volatile boolean capturedSourceRetired;
+
+    /** Preserve the already-normalized GPU snapshot while permanently ending
+     * the OPEN_FOLDER input producer's lifetime. Only a real fresh frame for
+     * this generation can authorize retirement. Never allow an implicit rebind.
+     */
+    synchronized boolean retireCapturedSource(long generation) {
+        if (capturedSourceRetired || !hasFreshFrame(generation)) return false;
+        capturedSourceRetired = true;
+        return true;
+    }
+
+    boolean isCapturedSourceRetired() {
+        return capturedSourceRetired;
+    }
 
     synchronized boolean requestFresh(long generation) {
-        if (shutdown || generation < 0L || generation < requestedGeneration) return false;
+        if (shutdown || capturedSourceRetired || generation < 0L
+                || generation < requestedGeneration) return false;
         requestedGeneration = generation;
         freshGeneration = -1L;
         producerRecovery.onGeometryInvalidated();
@@ -18,18 +34,18 @@ final class RootPassBlurBackendState {
     }
 
     synchronized ZeroCopyProducerRecoveryState.Decision requestRebind() {
-        if (shutdown) return ZeroCopyProducerRecoveryState.Decision.none();
+        if (shutdown || capturedSourceRetired) return ZeroCopyProducerRecoveryState.Decision.none();
         freshGeneration = -1L;
         return producerRecovery.onRebindRequested();
     }
 
     synchronized ZeroCopyProducerRecoveryState.Decision onProducerRecreated() {
-        if (shutdown) return ZeroCopyProducerRecoveryState.Decision.none();
+        if (shutdown || capturedSourceRetired) return ZeroCopyProducerRecoveryState.Decision.none();
         return producerRecovery.onProducerRecreated();
     }
 
     synchronized void onBindSucceeded() {
-        if (shutdown) return;
+        if (shutdown || capturedSourceRetired) return;
         producerRecovery.onBindSucceeded();
     }
 
@@ -46,19 +62,20 @@ final class RootPassBlurBackendState {
     }
 
     synchronized void onGeometryInvalidated() {
-        if (shutdown) return;
+        if (shutdown || capturedSourceRetired) return;
         freshGeneration = -1L;
         producerRecovery.onGeometryInvalidated();
     }
 
     synchronized ZeroCopyProducerRecoveryState.Decision onQualityChanged() {
-        if (shutdown) return ZeroCopyProducerRecoveryState.Decision.none();
+        if (shutdown || capturedSourceRetired) return ZeroCopyProducerRecoveryState.Decision.none();
         freshGeneration = -1L;
         return producerRecovery.onGeometryInvalidated();
     }
 
     synchronized boolean onFreshFrame(long generation) {
-        if (shutdown || generation < 0L || generation != requestedGeneration) return false;
+        if (shutdown || capturedSourceRetired || generation < 0L
+                || generation != requestedGeneration) return false;
         producerRecovery.onFreshFrameConsumed();
         freshGeneration = generation;
         return true;
