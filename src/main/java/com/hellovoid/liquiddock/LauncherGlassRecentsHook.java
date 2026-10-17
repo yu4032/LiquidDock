@@ -57,8 +57,8 @@ final class LauncherGlassRecentsHook {
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 }
 
-                // Arm before vendor hide handling. Launcher can start the wallpaper HOME spring
-                // from inside onRecentViewHide(), so arming afterwards can miss the real start.
+                // Record HOME wallpaper-return ownership before vendor hide
+                // processing; this is independent of the earlier fastBlur target.
                 final long supersededSerial = WALLPAPER_SETTLE.pendingSerial();
                 final long serial = WALLPAPER_SETTLE.onReturnStarted();
                 // This semantic hide callback retains the return lease for
