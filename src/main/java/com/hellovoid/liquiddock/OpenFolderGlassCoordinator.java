@@ -553,10 +553,13 @@ final class OpenFolderGlassCoordinator {
             View root = state.root.get();
             if (root == null || output == null || !output.isAttachedToWindow()
                     || !LauncherGlassSceneController.awaitFolderHandoff(root, () -> {
-                        // The resident Workspace output has already been presented
-                        // and its layer is visible. Keeping the temporary folder lens
-                        // for another 80 ms double-composites its shadow over HOME.
-                        if (live(state)) releaseAll();
+                        // CI ABLATION ONLY: reintroduce the old 80 ms fade
+                        // after the resident Workspace glass has been presented.
+                        if (live(state) && state.layer != null) {
+                            state.layer.fadeIntoWorkspace(() -> {
+                                if (live(state)) releaseAll();
+                            });
+                        }
                     })) {
                 releaseAll();
                 return;
