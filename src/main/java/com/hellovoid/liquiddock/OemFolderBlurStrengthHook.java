@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.view.Window;
 import java.lang.reflect.Method;
 
 /**
@@ -49,8 +48,32 @@ final class OemFolderBlurStrengthHook {
     }
     private static boolean installed;
 
+    /** Final blur-target arbitration is owned by RecentsBackgroundBlurHook.
+     * Both native folder opening and Recents-to-folder HOME return use this
+     * one path, so the independent Recents percentage cannot overwrite it.
+     */
+    static float arbitrateTarget(float requested, boolean recentsScope, int recentsPercent) {
+        boolean opening = Boolean.TRUE.equals(FOLDER_OPEN.get());
+        boolean returning = actualFolderOpening && recentsReturningToOpenFolder;
+        float resolved = FolderNativeBlurTargetPolicy.arbitrate(
+                requested, recentsScope, recentsPercent,
+                opening, returning, nativeFolderBlurRatio);
+        if (returning && resolved < requested && MainHook.debugLogging) {
+            MainHook.log(TAG + " native fastBlur final target "
+                    + requested + " -> " + resolved + " folderStrength="
+                    + nativeFolderBlurRatio + " recentsScope=" + recentsScope);
+        }
+        return resolved;
+    }
+
     private OemFolderBlurStrengthHook() {}
 
+    /**
+     * The native folder entry wrapper only marks synchronous opening scope.
+     * Do not register a second fastBlur interceptor here: the shared Recents
+     * hook is the single target writer, and installs independently of the
+     * optional OEM wrapper signature.
+     */
     static void install(ClassLoader loader) {
         if (installed || loader == null) return;
         try {
@@ -67,26 +90,6 @@ final class OemFolderBlurStrengthHook {
                         boolean.class, launcher);
                 openingArg = 0;
             }
-            Method inner = utils.getDeclaredMethod("fastBlur",
-                    float.class, Window.class, boolean.class);
-            // Inner interception is installed before the outer scope owner.
-            HookUtil.hook(inner, chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                boolean opening = Boolean.TRUE.equals(FOLDER_OPEN.get());
-                boolean recentsReturn = actualFolderOpening && recentsReturningToOpenFolder;
-                if ((opening || recentsReturn) && args.length == 3
-                        && args[0] instanceof Number) {
-                    float requested = ((Number) args[0]).floatValue();
-                    float adjusted = FolderNativeBlurTargetPolicy.capWhenFolderOwns(
-                            requested, opening, recentsReturn, nativeFolderBlurRatio);
-                    args[0] = adjusted;
-                    if (recentsReturn && requested > adjusted) {
-                        MainHook.log(TAG + " Recents-return fastBlur target corrected "
-                                + requested + " -> " + adjusted);
-                    }
-                }
-                return chain.proceed(args);
-            });
             final int which = openingArg;
             HookUtil.hook(wrapper, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
@@ -102,11 +105,11 @@ final class OemFolderBlurStrengthHook {
                 }
             });
             installed = true;
-            MainHook.log(TAG + " native folder fastBlur owner installed");
+            MainHook.log(TAG + " native opening scope installed; shared fastBlur target arbiter");
         } catch (Throwable error) {
-            // OEM signature differs on some Launcher builds. Never patch
-            // global Window blur or SurfaceControl as a fallback.
-            MainHook.log(TAG + " native folder fastBlur owner unavailable: " + error);
+            // Even if this optional wrapper is absent, the shared fastBlur
+            // target arbitration still protects a real Recents return.
+            MainHook.log(TAG + " native opening scope unavailable: " + error);
         }
     }
 }
