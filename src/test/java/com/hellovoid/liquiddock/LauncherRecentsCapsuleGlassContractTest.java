@@ -201,6 +201,8 @@ public class LauncherRecentsCapsuleGlassContractTest {
                 workspace.contains("if (frozen && !hasVisibleRecentsConsumer())"));
         assertTrue("Recents hidden explicitly yields shared-source ownership",
                 recents.contains("workspaceSourceOwner.onRecentsConsumerHidden(this)"));
+        assertTrue("Last Recents consumer release reconciles Folder and wallpaper-settle",
+                workspace.contains("shouldPauseAfterRecentsConsumerGone("));
         assertTrue("Scene coverage uses the capsule policy rather than folder gate",
                 controller.contains("WorkstationProducerPolicy.keepSharedSourceLiveForRecents("));
         assertTrue("Coverage without an attached visible capsule is not a source lease",

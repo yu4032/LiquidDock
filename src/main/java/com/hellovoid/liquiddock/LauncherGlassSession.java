@@ -257,17 +257,28 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     synchronized void detachRecentsConsumer(RecentsCapsuleGlassSession child) {
         if (recentsConsumer != child) return;
         recentsConsumer = null;
-        // No consumer remains for the OES source while FolderCling owns HOME.
-        if (folderFrameFrozen && !shuttingDown) {
-            sourceBackend.setUpdatesEnabled(false, "launcher-folder-recents-detached");
-        }
+        reconcileSourceAfterRecentsConsumerGone("launcher-recents-detached");
     }
 
     void onRecentsConsumerHidden(RecentsCapsuleGlassSession child) {
-        if (shuttingDown || recentsConsumer != child || !folderFrameFrozen) return;
-        // onRecentsShown() temporarily resumed the folder-paused source.
-        // Restore native capture idleness only after the capsule stops using it.
-        sourceBackend.setUpdatesEnabled(false, "launcher-folder-recents-hidden");
+        if (shuttingDown || recentsConsumer != child || child.isRecentsVisible()) return;
+        reconcileSourceAfterRecentsConsumerGone("launcher-recents-hidden");
+    }
+
+    private void reconcileSourceAfterRecentsConsumerGone(String reason) {
+        if (shuttingDown || hasVisibleRecentsConsumer()) return;
+        View root = rootRef.get();
+        boolean covered = LauncherGlassSceneController.isRecentsCoveredByVendor()
+                || LauncherGlassSceneController.isCoveredForRoot(root);
+        boolean wallpaperSettle =
+                LauncherGlassSceneController.isRecentsWallpaperSettlePendingForRoot(root);
+        // During vendor Recents hide, HOME can still be gated by the wallpaper
+        // return spring even after the last capsule unsubscribes. Release the
+        // shared source lease without overriding Workstation's live policy.
+        if (WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
+                folderFrameFrozen, covered, wallpaperSettle, MainHook.isWorkstationMode())) {
+            sourceBackend.setUpdatesEnabled(false, reason);
+        }
     }
 
     boolean hasVisibleRecentsConsumer() {
