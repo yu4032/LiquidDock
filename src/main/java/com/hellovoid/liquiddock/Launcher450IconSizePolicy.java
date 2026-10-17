@@ -18,4 +18,11 @@ final class Launcher450IconSizePolicy {
         if (px <= 0) return px;
         return Math.round(px * scale(enabled, percent));
     }
+
+    /** Native expanded-folder rows and labels are independent of global icon scaling. */
+    static int measuredIconSize(int nativePx, boolean enabled, int percent,
+                                boolean expandedFolderContent) {
+        return expandedFolderContent ? nativePx : scaledPx(nativePx, enabled, percent);
+    }
+
 }

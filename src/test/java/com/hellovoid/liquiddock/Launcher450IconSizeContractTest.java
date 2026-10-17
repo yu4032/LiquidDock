@@ -31,6 +31,27 @@ public class Launcher450IconSizeContractTest {
     }
 
     @Test
+    public void expandedGridKeepsNativeMeasureInBothDirections() {
+        for (int percent : new int[]{80, 90, 100, 110, 120}) {
+            assertEquals("expanded FolderGridView always returns the OEM value",
+                    96, Launcher450IconSizePolicy.measuredIconSize(
+                            96, true, percent, true));
+            assertEquals(96, Launcher450IconSizePolicy.measuredIconSize(
+                    96, false, percent, true));
+            assertEquals("other domains retain their requested icon size",
+                    Launcher450IconSizePolicy.scaledPx(96, true, percent),
+                    Launcher450IconSizePolicy.measuredIconSize(
+                            96, true, percent, false));
+        }
+        assertEquals(0, Launcher450IconSizePolicy.measuredIconSize(
+                0, true, 120, true));
+        assertEquals(115, Launcher450IconSizePolicy.measuredIconSize(
+                96, true, 120, false));
+        assertEquals(77, Launcher450IconSizePolicy.measuredIconSize(
+                96, true, 80, false));
+    }
+
+    @Test
     public void runtimeUsesLauncher450MeasureAuthoritiesOnly() throws Exception {
         Path hookPath = Path.of("src/main/java/com/hellovoid/liquiddock/Launcher450IconSizeHook.java");
         assertTrue("Launcher 4.50 hook must exist", Files.exists(hookPath));
@@ -75,6 +96,10 @@ public class Launcher450IconSizeContractTest {
                 source.contains("com.miui.home.launcher.FolderGridView"));
         assertTrue("folder inner ShortcutIcon must have an explicit measure domain",
                 source.contains("MeasureDomain.FOLDER_CONTENT"));
+        assertTrue("expanded folder uses its native-size measurement domain",
+                source.contains("domain == MeasureDomain.FOLDER_CONTENT"));
+        assertTrue("hook delegates to the typed measurement policy",
+                source.contains("Launcher450IconSizePolicy.measuredIconSize"));
     }
 
     @Test
