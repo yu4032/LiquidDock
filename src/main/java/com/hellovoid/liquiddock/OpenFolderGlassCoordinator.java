@@ -434,7 +434,7 @@ final class OpenFolderGlassCoordinator {
             if (panel == null) panel = view(invoke(folder, "getContent"));
             state.expandedFrame = panel != null ? bounds(panel, state) : null;
         }
-        if (!OWNER.beginClose(state.serial)) return;
+        OWNER.beginClose(state.serial);
         // Recents-return flags describe the earlier modal handoff, not the
         // newly accepted native CLOSE. Do not keep sync() in its Recents-only
         // early-return branch while the folder's reverse spring runs.
