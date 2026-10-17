@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Matrix;
+import android.os.Looper;
 import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 import android.view.View;
@@ -18,7 +19,6 @@ final class OpenFolderGlassCoordinator {
     private static final String TAG = "[DC][OpenFolderGlass]";
     private static final OpenFolderGlassState OWNER = new OpenFolderGlassState();
     private static State current;
-    private static final String LIFECYCLE_LOG_TAG = "LiquidDock-Folder";
 
     /** Low-frequency physical-device lifecycle evidence. Unlike the former
      * BuildConfig.DEBUG-only folder trace, this uses Android logcat directly
@@ -49,32 +49,104 @@ final class OpenFolderGlassCoordinator {
 
     static boolean hasActiveSession() { return current != null; }
 
-    /** Recents is a compositor/Launcher presentation boundary, not a folder
-     * close. Keep the already-presented cached lens in its native View stack:
-     * forcing TextureView alpha to zero here can strand it invisible because
-     * FolderCling visibility may not return in the same draw traversal.
+    /** Native Recents owns the wallpaper, screen-wide dimming and scale.
+     * OPEN_FOLDER always presents a transparent lens; semantic state changes
+     * must not switch EGL backdrop modes mid-gesture.
      */
     static void onRecentsShown() {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsShown(state.serial);
+        state.recentsGestureObserved = true;
+        state.recentsGestureReturnSignaled = false;
         trace("recents-show", state);
+    }
+
+    /** BlurUtils is an early gesture *signal*, not geometry progress.
+     * Never use its ratio to switch wallpaper authority, glass opacity,
+     * output Surface, or rendered backdrop. Geometry follows the native host
+     * matrix in the root pre-draw instead.
+     */
+    static void onNativeRecentsGestureProgress(float nativeBlurRatio) {
+        State state = current;
+        if (state == null || state.motion.isClosing() || !Float.isFinite(nativeBlurRatio)) return;
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            View root = state.root.get();
+            if (root != null) root.post(() -> {
+                if (live(state)) onNativeRecentsGestureProgress(nativeBlurRatio);
+            });
+            return;
+        }
+        if (nativeBlurRatio > 0f) {
+            state.recentsGestureObserved = true;
+            state.recentsGestureReturnSignaled = false;
+        } else if (state.recentsGestureObserved
+                && !OWNER.isRecentsCovered(state.serial)
+                && !OWNER.isRecentsReturnPending(state.serial)) {
+            state.recentsGestureReturnSignaled = true;
+        }
+        View root = state.root.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
 
     static void onRecentsHidden() {
         State state = current;
         if (state == null || state.motion.isClosing()) return;
         OWNER.onRecentsHidden(state.serial);
+        state.recentsGestureObserved = true;
+        state.recentsGestureReturnSignaled = true;
+        // A temporary invisible FolderCling is not a native folder CLOSE.
+        if (state.layer != null) state.layer.setVisibility(View.VISIBLE);
+        if (OWNER.shouldReplayAfterRecents(state.serial, true)
+                && state.session != null) state.session.requestCachedGlassRedraw();
         trace("recents-hide", state);
-        // onRecentViewHide precedes the OEM HOME presentation. isOpened()
-        // and visibility are transient here; the hooked native close callback
-        // (not a snapshot of an intermediate view flag) owns teardown.
-        if (OWNER.shouldReplayAfterRecents(state.serial, true)) {
-            if (state.session != null) state.session.requestCachedGlassRedraw();
-            if (state.layer != null) state.layer.reveal();
-        }
         View root = state.root.get();
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    /** The vendor wallpaper settle signal permits completing HOME ownership;
+     * no EGL wallpaper-mode swap or full-screen crop handoff is required.
+     */
+    static void onRecentsWallpaperSettled() {
+        State state = current;
+        if (state == null || !live(state)
+                || !OWNER.isRecentsReturnPending(state.serial)) return;
+        View root = state.root.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    /** Native FolderCling CLOSE is independent of Recents. Constrain the
+     * transparent output to the desktop folder's actual native silhouette
+     * throughout the reverse spring, including its 1x1 corner radius.
+     * The EGL surface remains resident and never recaptures the wallpaper.
+     */
+    private static void updateClosingBackdropOutline(State state, float nativeOpenProgress) {
+        if (!live(state) || state.layer == null) return;
+        OpenFolderGlassGeometry.Frame mask = OpenFolderGlassGeometry.closingBackdropMask(
+                state.closedFrame, state.width, state.height, nativeOpenProgress);
+        if (mask != null) {
+            state.layer.setFolderBackdropOutline(mask, state.width, state.height);
+        }
+        // If the desktop endpoint is temporarily unavailable, leave the
+        // current valid mask instead of clipping to a guessed coordinate.
+    }
+
+    /** Recover a folder owner orphaned by the keyguard boundary only when
+     * the native FolderCling explicitly reports CLOSED. Never infer closure
+     * from temporary visibility/detach during Recents or unlocking.
+     */
+    static void onUnlockPresentationReleased() {
+        State state = current;
+        if (state == null || !live(state)) return;
+        View root = state.root.get();
+        View cling = state.cling.get();
+        if (root == null || !root.isAttachedToWindow() || cling == null) return;
+        Object result = invoke(cling, "isOpened");
+        Boolean opened = result instanceof Boolean ? (Boolean) result : null;
+        if (OWNER.shouldAbortAfterUnlock(state.serial, opened)) {
+            trace("unlock-native-folder-closed", state);
+            releaseAll();
+        }
     }
 
     /** OWNERSHIP TOKEN for the prepared output, distinct from vendor
@@ -244,6 +316,10 @@ final class OpenFolderGlassCoordinator {
         int position = workspaceIndex >= 0 && workspaceIndex < folderIndex
                 ? workspaceIndex : folderIndex;
         ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(cling.getContext(), state.session);
+        // Inverse host compensation uses the layer's top-left as its origin.
+        // Do this once, not on every 165Hz pre-draw.
+        layer.setPivotX(0f);
+        layer.setPivotY(0f);
         state.layerHost = new WeakReference<>(host);
         state.layer = layer;
         host.addView(layer, position,
@@ -279,7 +355,17 @@ final class OpenFolderGlassCoordinator {
         // on asynchronous source-window attachment or the first EGL swap.
         // Otherwise the stock folder plate paints before our output exists.
         trackNativeMaterial(state);
-        state.closedFrame = bounds(image(sourceIcon), state);
+        // Source-folder geometry must be the exact material that the resident
+        // SMALL_FOLDER/LARGE_FOLDER static glass node owns after close.
+        // FolderIcon1x1 prefers mImageView, not necessarily the
+        // getIconImageView() used by the OEM temporary animation plate.
+        View desktopMaterial = MiuixFolderGlassHook.resolveFolderMaterial((ViewGroup) sourceIcon);
+        state.closedFrame = bounds(desktopMaterial, state, true);
+        if (state.closedFrame == null) {
+            // A detached or not-yet-measured OEM material is not a valid
+            // endpoint; retain the vendor icon-image fallback for safety.
+            state.closedFrame = bounds(image(sourceIcon), state, true);
+        }
         state.geometry.acceptAnimation(state.closedFrame, state.width, state.height);
         attachOutputLayer(state);
         state.observer = state.root.get().getViewTreeObserver();
@@ -350,11 +436,22 @@ final class OpenFolderGlassCoordinator {
         }
         OWNER.beginClose(state.serial);
         state.motion.beginClose();
+        if (!OWNER.isRecentsCovered(state.serial)
+                && !OWNER.isRecentsReturnPending(state.serial)) {
+            // Start at the complete wallpaper (radius 0). The pre-draw
+            // reverse spring then constrains it toward the desktop icon.
+            // Clearing the mask here was the root of the 1x1 regression:
+            // the GL lens shrank, but the backdrop did not.
+            updateClosingBackdropOutline(state, 1f);
+        }
         // Reuse the same prepared wallpaper and optical material for the
         // entire reverse spring. Changing the blur kernel here stalls frames
         // and causes a final-frame discontinuity at the native handoff.
         if (state.session != null) state.session.beginFolderClose();
         state.nativeCloseProgress.reset();
+        state.closeImageStart = null;
+        state.closePlateStart = null;
+        state.closeProgressLogBucket = -1;
         onClosingAnimationMaterialUpdated();
     }
 
@@ -367,10 +464,15 @@ final class OpenFolderGlassCoordinator {
         State state = current;
         if (state == null || !state.motion.isClosing()) return;
         View anim = animationImage(state);
-        if (anim == null) return;
-        state.nativeCloseProgress.capture(anim.getTranslationX(), anim.getTranslationY(),
-                anim.getScaleX(), state.nativeTargetX, state.nativeTargetY,
-                state.nativeExpandedScaleX);
+        if (anim != null) {
+            state.nativeCloseProgress.capture(anim.getTranslationX(), anim.getTranslationY(),
+                    anim.getScaleX(), state.nativeTargetX, state.nativeTargetY,
+                    state.nativeExpandedScaleX);
+            state.closeImageStart = bounds(anim, state);
+        }
+        // 1x1 rounded-folder Folme may animate the parent plate, while its
+        // child ImageView's scale/translation properties stay unchanged.
+        state.closePlateStart = bounds(nativeAnimationPlate(state), state);
     }
 
     /** The OEM close spring may replace its temporary anim-image drawable. */
@@ -426,6 +528,9 @@ final class OpenFolderGlassCoordinator {
                 state.width, state.height, icon.left, icon.top,
                 icon.right, icon.bottom, icon.radius);
         if (endpoint == null) { releaseAll(); return; }
+        // Match the final, exact desktop-folder rectangle before the
+        // terminal EGL swap and resident Workspace material handoff.
+        updateClosingBackdropOutline(state, 0f);
         state.session.finishFolderClose(endpoint, () -> {
             if (!live(state)) return;
             ShortcutPopupGlassLayer output = state.layer;
@@ -520,36 +625,31 @@ final class OpenFolderGlassCoordinator {
 
     private static void sync(State state) {
         if (!live(state) || state.finalCloseQueued) return;
-        // The native Recents transition can temporarily hide FolderCling.
-        // Keep the frozen output and source-less EGL session untouched.
-        if (OWNER.isRecentsCovered(state.serial)) return;
         try {
             View root = state.root.get(), cling = state.cling.get(), folder = state.folder.get();
             ViewGroup host = state.layerHost.get();
-            if (root == null || cling == null || folder == null || !root.isAttachedToWindow()
+            if (root == null || !root.isAttachedToWindow()
                     || root.getWidth() != state.width || root.getHeight() != state.height
                     || (root.getDisplay() != null && root.getDisplay().getRotation() != state.rotation)
                     || !enabled(state.icon.get())) { releaseAll(); return; }
-            if (!state.motion.isClosing()
-                    && (!cling.isAttachedToWindow() || cling.getVisibility() != View.VISIBLE)) {
-                // View visibility is a presentation fact, not a folder-close
-                // event. Recents may hide the Cling before its dispatcher
-                // announces the transition; never dispose a GPU snapshot
-                // here. The already-hooked native CLOSE owns release.
+            if (cling == null || folder == null) {
+                // Recents is permitted to hide/recycle FolderCling. The native
+                // CLOSE callback, not a transient weak reference, releases
+                // the frozen session.
+                if (state.recentsGestureObserved
+                        || OWNER.isRecentsCovered(state.serial)
+                        || OWNER.isRecentsReturnPending(state.serial)) return;
+                releaseAll();
                 return;
             }
-            // Draw suppression remains active even before the async input
-            // window and EGL session are ready. Register each new OEM
-            // background/plate before the native View traversal draws it.
-            trackNativeMaterial(state);
-            // Native close can hide or detach FolderCling while its separate
-            // background proxy keeps animating. The sibling output stays live.
             if (state.session == null) return;
             attachOutputLayer(state);
             host = state.layerHost.get();
             if (state.layer == null || host == null || !host.isAttachedToWindow()) return;
-            // Align the stable sibling output to the Launcher root, not to
-            // FolderCling (whose visibility and transform change during close).
+
+            // Resolve host-to-root every frame, INCLUDING covered Recents.
+            // Before this change, the covered-state early return made the
+            // fullscreen TextureView inherit an unobserved parent transform.
             float[] basis = state.basis;
             basis[0] = basis[1] = basis[3] = basis[4] = 0f;
             basis[2] = basis[5] = 1f;
@@ -559,32 +659,94 @@ final class OpenFolderGlassCoordinator {
             matrix.mapPoints(basis);
             state.rootToGlobal.reset();
             root.transformMatrixToGlobal(state.rootToGlobal);
-            if (!state.rootToGlobal.invert(state.toRoot)) { releaseAll(); return; }
+            if (!state.rootToGlobal.invert(state.toRoot)) return;
             state.toRoot.mapPoints(basis);
-            if (Math.abs(basis[2] - basis[0] - 1f) > 0.001f
-                    || Math.abs(basis[3] - basis[1]) > 0.001f
-                    || Math.abs(basis[4] - basis[0]) > 0.001f
-                    || Math.abs(basis[5] - basis[1] - 1f) > 0.001f) {
-                // Any transient host scaling/rotation invalidates only this
-                // frame's geometry, never the cached glass's lifetime.
-                // The vendor native root owns HOME/Recents transforms.
+            OpenFolderHostTransform hostFrame = OpenFolderHostTransform.fromBasis(basis);
+            if (hostFrame == null) {
+                // A rotation/shear/noninvertible host cannot be compensated
+                // using the View's scale/translation properties. Retain the
+                // last valid frame instead of synthesizing a bad transform.
                 return;
             }
-            // Wait until the native HOME transform is back to root-space
-            // identity before consuming the return protection token.
-            if (OWNER.completeRecentsReturn(state.serial)) {
-                if (state.session != null) state.session.requestCachedGlassRedraw();
-                if (state.layer != null) state.layer.reveal();
+
+            boolean recentsActive = state.recentsGestureObserved
+                    || OWNER.isRecentsCovered(state.serial)
+                    || OWNER.isRecentsReturnPending(state.serial);
+            if (state.hostBaseline == null || !recentsActive) {
+                state.hostBaseline = hostFrame;
             }
-            // The sibling host normally stays fixed. Avoid setting identical
-            // RenderNode transforms on every root pre-draw (which can schedule
-            // redundant compositions during the closing spring).
-            if (Math.abs(state.layer.getTranslationX() + basis[0]) > 0.01f) {
-                state.layer.setTranslationX(-basis[0]);
+
+            // Only cancel HOST View-tree transforms. The native Launcher
+            // WindowManager task leash, if present, remains OEM-owned; it is
+            // not observable in transformMatrixToGlobal().
+            ShortcutPopupGlassLayer layer = state.layer;
+            float inverseX = hostFrame.inverseScaleX();
+            float inverseY = hostFrame.inverseScaleY();
+            float translateX = hostFrame.inverseTranslationX(layer.getLeft());
+            float translateY = hostFrame.inverseTranslationY(layer.getTop());
+            if (Math.abs(layer.getScaleX() - inverseX) > .0001f) layer.setScaleX(inverseX);
+            if (Math.abs(layer.getScaleY() - inverseY) > .0001f) layer.setScaleY(inverseY);
+            if (Math.abs(layer.getTranslationX() - translateX) > .01f) {
+                layer.setTranslationX(translateX);
             }
-            if (Math.abs(state.layer.getTranslationY() + basis[1]) > 0.01f) {
-                state.layer.setTranslationY(-basis[1]);
+            if (Math.abs(layer.getTranslationY() - translateY) > .01f) {
+                layer.setTranslationY(translateY);
             }
+
+            if (recentsActive) {
+                // Transform the LENS GEOMETRY into current Launcher root
+                // coordinates; the glass output buffer itself remains 1:1.
+                // If the parent is scaled by native Recents, this projects the
+                // expanded material without scaling its entire backdrop.
+                OpenFolderGlassGeometry.Frame projected = hostFrame.project(
+                        state.expandedFrame, state.hostBaseline);
+                if (Api101Bridge.isDebugLoggingEnabled() && state.hostBaseline != null) {
+                    int bucket = Math.round(hostFrame.scaleX * 100f);
+                    if (bucket != state.lastRecentsHostScaleBucket) {
+                        state.lastRecentsHostScaleBucket = bucket;
+                        Api101Bridge.folderLifecycle("recents-host-matrix serial="
+                                + state.serial + " hostScale=" + hostFrame.scaleX
+                                + "/" + hostFrame.scaleY
+                                + " hostOffset=" + hostFrame.x + "/" + hostFrame.y
+                                + " layerInverse=" + inverseX + "/" + inverseY
+                                + " phase=" + (OWNER.isRecentsCovered(state.serial)
+                                        ? "covered" : "interactive-return")
+                                + " renderer=LENS_ONLY");
+                    }
+                }
+                if (projected != null) {
+                    LauncherGlassGeometry.Snapshot scene = LauncherGlassGeometry.resolveStatic(
+                            state.width, state.height,
+                            projected.left, projected.top,
+                            projected.right, projected.bottom, projected.radius);
+                    if (scene != null) state.session.updateGeometry(scene);
+                }
+                if (OWNER.isRecentsCovered(state.serial)) return;
+                boolean wallpaperSettled = !LauncherGlassSceneController
+                        .isRecentsWallpaperSettlePendingForRoot(root);
+                boolean hostRestored = hostFrame.approximatelyEquals(state.hostBaseline);
+                if (OWNER.isRecentsReturnPending(state.serial)) {
+                    if (!wallpaperSettled || !hostRestored) return;
+                    if (!OWNER.completeRecentsReturn(state.serial)) return;
+                    state.recentsGestureObserved = false;
+                    state.recentsGestureReturnSignaled = false;
+                    state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
+                    layer.reveal();
+                } else if (state.recentsGestureObserved) {
+                    // Cancelled gesture: wait for both the native blur reset
+                    // signal and restoration of the host transform. There is
+                    // deliberately no background mode to switch on either edge.
+                    if (!state.recentsGestureReturnSignaled || !hostRestored) return;
+                    state.recentsGestureObserved = false;
+                    state.recentsGestureReturnSignaled = false;
+                    state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
+                }
+            }
+            if (!state.motion.isClosing()
+                    && (!cling.isAttachedToWindow() || cling.getVisibility() != View.VISIBLE)) {
+                return;
+            }
+            trackNativeMaterial(state);
             LiquidDockConfig.Glass latest = LiveGlassConfigState.currentGlass();
             if (latest != null && latest != state.glass) {
                 state.glass = latest;
@@ -626,12 +788,54 @@ final class OpenFolderGlassCoordinator {
                         state.nativeTargetY, state.nativeExpandedScaleX);
                 if (Float.isFinite(reverse)) observed = reverse;
             }
+            if (state.motion.isClosing() && state.closedFrame != null) {
+                // Read the animated native plate only as a progress sensor.
+                // Never use its rectangle to place the glass: its local
+                // pivot differs from the Prismal root-space endpoints.
+                View plate = nativeAnimationPlate(state);
+                if (plate != null && state.closePlateStart == null) {
+                    state.closePlateStart = bounds(plate, state);
+                }
+                if (animImage != null && state.closeImageStart == null) {
+                    state.closeImageStart = bounds(animImage, state);
+                }
+                float imageProgress = OpenFolderNativeCloseProgress.sampleVisualFrame(
+                        state.closedFrame, state.closeImageStart, bounds(animImage, state));
+                float plateProgress = OpenFolderNativeCloseProgress.sampleVisualFrame(
+                        state.closedFrame, state.closePlateStart, bounds(plate, state));
+                if (Float.isFinite(imageProgress)) {
+                    observed = Float.isFinite(observed)
+                            ? Math.min(observed, imageProgress) : imageProgress;
+                }
+                if (Float.isFinite(plateProgress)) {
+                    observed = Float.isFinite(observed)
+                            ? Math.min(observed, plateProgress) : plateProgress;
+                }
+            }
             float amount = state.motion.sample(observed);
+            if (state.motion.isClosing() && Api101Bridge.isDebugLoggingEnabled()) {
+                int bucket = Math.max(0, Math.min(4, Math.round(amount * 4f)));
+                if (bucket != state.closeProgressLogBucket) {
+                    state.closeProgressLogBucket = bucket;
+                    Api101Bridge.folderLifecycle("close-progress serial=" + state.serial
+                            + " fraction=" + amount + " native=" + observed
+                            + " channels=" + state.nativeCloseProgress.channelDescription()
+                            + " radius=" + (state.closedFrame != null
+                                    ? state.closedFrame.radius : Float.NaN));
+                }
+            }
             // One root-coordinate path for OPEN and CLOSE: no child-View
             // layout-origin handoff, one-time offset or second animation.
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
+            if (state.motion.isClosing() && !OWNER.isRecentsCovered(state.serial)
+                    && !OWNER.isRecentsReturnPending(state.serial)) {
+                // The compositor crop and shader lens share this EXACT
+                // native-Folme progress snapshot. A separate Recents blur
+                // ratio cannot represent an ordinary folder close.
+                updateClosingBackdropOutline(state, amount);
+            }
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top, frame.right, frame.bottom, frame.radius), amount);
         } catch (Throwable error) {
@@ -729,6 +933,10 @@ final class OpenFolderGlassCoordinator {
     }
 
     private static OpenFolderGlassGeometry.Frame bounds(View view, State state) {
+        return bounds(view, state, false);
+    }
+
+    private static OpenFolderGlassGeometry.Frame bounds(View view, State state, boolean desktopIcon) {
         View root = state.root.get();
         if (view == null || root == null) return null;
         int width = view.getWidth(), height = view.getHeight();
@@ -750,9 +958,29 @@ final class OpenFolderGlassCoordinator {
         float bottom = Math.max(Math.max(points[1], points[3]), Math.max(points[5], points[7]));
         Drawable drawable = view instanceof ImageView ? ((ImageView) view).getDrawable() : view.getBackground();
         Object corner = invoke(drawable, "getCornerRadius");
-        float radius = corner instanceof Number ? ((Number) corner).floatValue()
-                : state.glass.largeFolderStyle.cornerRadiusDp * view.getResources().getDisplayMetrics().density;
-        if (!(radius > 0f)) radius = Math.min(width, height) * 0.16f;
+        float nativeRadius = corner instanceof Number ? ((Number) corner).floatValue()
+                : Float.NaN;
+        float density = view.getResources().getDisplayMetrics().density;
+        float radius;
+        if (desktopIcon) {
+            // Reuse exactly the native radius authority the persistent
+            // small-folder glass node uses, including mCornerRadius and its
+            // background GradientDrawable. A preview drawable may have a
+            // different radius and must not silently win.
+            nativeRadius = MiuixFolderGlassHook.readMaterialRadius(view);
+            // The desktop endpoint uses the miniature icon's own glass style.
+            // Using largeFolderStyle here leaves 1x1 with an expanded-radius
+            // endpoint, then the resident small-folder glass visibly snaps.
+            radius = OpenFolderGlassGeometry.sourceIconRadiusPx(
+                    isSmall(state.icon.get()),
+                    state.glass.smallFolderStyle.cornerRadiusDp,
+                    state.glass.largeFolderStyle.cornerRadiusDp,
+                    density, nativeRadius, width, height);
+        } else {
+            radius = Float.isFinite(nativeRadius) && nativeRadius > 0f
+                    ? nativeRadius : state.glass.largeFolderStyle.cornerRadiusDp * density;
+            if (!(radius > 0f)) radius = Math.min(width, height) * .16f;
+        }
         float scale = Math.min((right - left) / width, (bottom - top) / height);
         return new OpenFolderGlassGeometry.Frame(left, top, right, bottom, radius * scale);
     }
@@ -774,7 +1002,13 @@ final class OpenFolderGlassCoordinator {
         final float[] points = new float[8], basis = new float[6];
         OpenFolderGlassGeometry.Frame closedFrame, expandedFrame;
         final OpenFolderGlassGeometry geometry = new OpenFolderGlassGeometry();
+        boolean recentsGestureObserved;
+        boolean recentsGestureReturnSignaled;
+        OpenFolderHostTransform hostBaseline;
+        int lastRecentsHostScaleBucket = Integer.MIN_VALUE;
         final OpenFolderNativeCloseProgress nativeCloseProgress = new OpenFolderNativeCloseProgress();
+        OpenFolderGlassGeometry.Frame closeImageStart, closePlateStart;
+        int closeProgressLogBucket = -1;
         boolean finalCloseQueued;
         boolean inputsResumed;
         final OpenFolderNativeMaterial materials = new OpenFolderNativeMaterial(OWNER);

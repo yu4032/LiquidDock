@@ -25,6 +25,16 @@ final class OpenFolderGlassState {
         recentsReturnPending = true;
     }
 
+    /** The unlock completion is a semantic boundary, but a disappearing
+     * FolderCling is not itself proof of native CLOSE. Require the explicit
+     * isOpened() result and exclude overlapping Recents/close ownership.
+     */
+    boolean shouldAbortAfterUnlock(long value, Boolean nativeOpened) {
+        return owns(value) && !recentsCovered && !recentsReturnPending
+                && (phase == Phase.OPENING || phase == Phase.OPEN)
+                && Boolean.FALSE.equals(nativeOpened);
+    }
+
     boolean isRecentsCovered(long value) {
         return owns(value) && recentsCovered;
     }

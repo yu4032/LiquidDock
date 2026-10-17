@@ -167,6 +167,59 @@ public class UnlockCaptureRecoveryStateTest {
     }
 
     @Test
+    public void timedOutCaptureBarrierStillOwesFreshFrameAtRealKeyguardExit() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        long serial = state.onPrepare().serial;
+
+        UnlockCaptureRecoveryState.Decision timeout = state.onBarrierTimeout(serial);
+        assertTrue(timeout.releaseBarrier);
+        assertFalse(timeout.requestFreshReconcile);
+        assertFalse(state.isBlocked());
+
+        UnlockCaptureRecoveryState.Decision gone = state.onSystemUiGoneFinished();
+        assertFalse("timeout already released the capture gate", gone.releaseBarrier);
+        assertTrue("real exit still requires a fresh presentation", gone.requestFreshReconcile);
+        assertFalse(state.onUserPresent().requestFreshReconcile);
+    }
+
+    @Test
+    public void systemUserPresentRecoversUnlockWhenNativePrepareWasSkipped() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        state.onScreenOff();
+
+        UnlockCaptureRecoveryState.Decision present = state.onUserPresent();
+        assertFalse(present.releaseBarrier);
+        assertTrue(present.requestFreshReconcile);
+        assertFalse("duplicate platform signal must not invalidate a second generation",
+                state.onSystemUiGoneFinished().requestFreshReconcile);
+        assertFalse(state.onUserPresent().requestFreshReconcile);
+    }
+
+    @Test
+    public void normalGoneConsumesPendingFreshnessWithoutSecondGeneration() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        state.onScreenOff();
+        state.onPrepare();
+        UnlockCaptureRecoveryState.Decision gone = state.onSystemUiGoneFinished();
+        assertTrue(gone.releaseBarrier);
+        assertFalse(gone.requestFreshReconcile);
+        assertFalse(state.onUserPresent().requestFreshReconcile);
+    }
+
+    @Test
+    public void staleTimeoutCannotConsumeTheActualExitOfNextUnlock() {
+        UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
+        long first = state.onPrepare().serial;
+        state.onBarrierTimeout(first);
+        long second = state.onPrepare().serial;
+        assertFalse(state.onBarrierTimeout(first).releaseBarrier);
+        assertTrue(state.onUserPresent().releaseBarrier);
+        assertFalse(state.onSystemUiGoneFinished().requestFreshReconcile);
+        assertFalse(state.isBlocked());
+        assertNotEquals(first, second);
+    }
+
+    @Test
     public void skippedPrepareNeedsNoSyntheticFreezeAtGone() {
         UnlockCaptureRecoveryState state = new UnlockCaptureRecoveryState();
 

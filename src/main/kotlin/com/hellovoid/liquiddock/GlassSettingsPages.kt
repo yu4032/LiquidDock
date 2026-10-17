@@ -376,6 +376,14 @@ internal fun GlassFoldersPage(
             ),
         )
     }
+    var openFolderGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.OPEN_FOLDER_GLASS.name(),
+                ConfigSchema.Glass.OPEN_FOLDER_GLASS.uiDefault(),
+            ),
+        )
+    }
     SettingsList(
         padding,
         stringResource(R.string.page_glass_folders),
@@ -400,12 +408,20 @@ internal fun GlassFoldersPage(
         IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
         IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
         IntSetting(prefs, largeFolderPreviewIconScaleSpec, masterEnabled)
-        // Open-folder material owns an independent frozen screenshot and optics;
-        // it is not controlled by the icon background's large-folder toggle.
-        IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled)
-        IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled)
-        IntSetting(prefs, openFolderThicknessSpec, masterEnabled && liquidEnabled)
-        IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled)
+        // Opened FolderCling background is independent from the desktop
+        // small/large folder icon glass. Native Hooks are installed once
+        // when Launcher starts, so this switch requires a Launcher restart.
+        BooleanSetting(
+            prefs,
+            ConfigSchema.Glass.OPEN_FOLDER_GLASS,
+            "展开文件夹玻璃背景",
+            "替换文件夹展开后的原生背景；关闭后恢复系统样式，修改后需重启桌面",
+            masterEnabled && liquidEnabled,
+        ) { openFolderGlass = it }
+        IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
+        IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled && openFolderGlass)
+        IntSetting(prefs, openFolderThicknessSpec, masterEnabled && liquidEnabled && openFolderGlass)
+        IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,
