@@ -54,6 +54,16 @@ public final class Api101Bridge {
         writeError(message, error);
     }
 
+    /** Bounded folder lifecycle messages with a dedicated Android tag.
+     * The module logger may route normal debug text to LSPosed; a logcat
+     * tag lets a single on-device recurrence supply order-of-events proof.
+     * Keep this in the audited owner and honor the same debug preference.
+     */
+    static void folderLifecycle(String message) {
+        if (!debugLogging || message == null) return;
+        Log.i("LiquidDock-Folder", message);
+    }
+
     private static void writeInfo(String message) {
         try {
             module().log(Log.INFO, "LiquidDock", message);

@@ -73,7 +73,7 @@ public class OpenFolderNativeMaterialTest {
         assertFalse(suppress(policy, closingPlate));
     }
 
-    @Test public void nativeBackgroundRemainsUntilTheGlassIsActuallyPresented() throws Exception {
+    @Test public void nativeBackgroundIsSuppressedFromOpeningAndRestoredOnRelease() throws Exception {
         OpenFolderGlassState state = new OpenFolderGlassState();
         Object policy = policy(state), background = new Object(), content = new Object();
         long serial = state.prepare();
@@ -81,7 +81,8 @@ public class OpenFolderNativeMaterialTest {
         assertFalse(suppress(policy, background));
         state.onBackdropReady(serial);
         state.beginOpen(serial);
-        assertFalse(suppress(policy, background));
+        assertTrue("native material must not flash while first GPU frame is pending",
+                suppress(policy, background));
         state.onPresented(serial);
         assertTrue(suppress(policy, background));
         assertFalse(suppress(policy, content));

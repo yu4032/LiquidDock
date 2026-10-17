@@ -154,8 +154,33 @@ final class RootPassBlurBackend {
         });
     }
 
+    /** Explicit one-shot producer teardown. Leave the FBO snapshot, Prismal
+     * textures, EGL context and output surfaces alive through native close.
+     * Completion is posted only AFTER native unbind and render-thread teardown
+     * so the WindowManager capture panel may then be safely removed.
+     */
+    boolean retireFrozenFolderProducer(long generation, Runnable onRetired) {
+        if (shuttingDown || bindRequest.domain() != PassBlurDomain.OPEN_FOLDER) return false;
+        // No freshness check on the main/UI caller: onPresented() is posted
+        // before drainFreshFrame() records freshness. FIFO render-thread
+        // ownership guarantees that callback registration has completed.
+        return postToRenderThread(() -> {
+            if (!state.retireCapturedSource(generation)) {
+                MainHook.log(TAG + " frozen folder capture retirement skipped: no fresh frame");
+                return;
+            }
+            bindEpoch.incrementAndGet(); // Fence pending bind/retry callbacks.
+            Miuix307PassBlurBridge.Binding old = binding;
+            binding = null;
+            Miuix307PassBlurBridge.unbind(old);
+            releaseInputProducerEndpointOnRenderThread(true);
+            MainHook.log(TAG + " one-shot folder producer retired; GPU snapshot retained");
+            if (onRetired != null) mainHandler.post(onRetired);
+        });
+    }
+
     void setUpdatesEnabled(boolean enabled, String reason) {
-        if (shuttingDown) return;
+        if (shuttingDown || state.isCapturedSourceRetired()) return;
         Miuix307PassBlurBridge.Binding current = binding;
         if (current == null) return;
         if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
@@ -170,7 +195,8 @@ final class RootPassBlurBackend {
 
     boolean requestRebind(
             String reason, LauncherGlassSessionRegistry.RolloverCompletion rolloverComplete) {
-        if (shuttingDown || state.isShutdown() || !renderThread.isAlive()) {
+        if (shuttingDown || state.isShutdown()
+                || state.isCapturedSourceRetired() || !renderThread.isAlive()) {
             MainHook.log(TAG + " producer rebind rejected reason=" + reason
                     + " cause=shutdown domain=" + bindRequest.domain());
             return false;
@@ -199,7 +225,7 @@ final class RootPassBlurBackend {
         boolean queued = postToRenderThread(() -> {
             try {
                 if (shuttingDown || epoch != bindEpoch.get()) return;
-                releaseInputProducerEndpointOnRenderThread();
+                releaseInputProducerEndpointOnRenderThread(false);
                 if (shuttingDown || epoch != bindEpoch.get()) return;
                 createInputProducer();
                 ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
@@ -264,7 +290,7 @@ final class RootPassBlurBackend {
     }
 
     void setQuality(int physicalScalePercent, int renderFps) {
-        if (shuttingDown) return;
+        if (shuttingDown || state.isCapturedSourceRetired()) return;
         View root = rootRef.get();
         int effectiveRenderFps = root != null
                 ? DisplayRefreshRatePolicy.clampRequestedFps(root.getContext(), renderFps)
@@ -335,7 +361,7 @@ final class RootPassBlurBackend {
      * endpoint generation changes; caller-owned logical layout changes remain a domain concern.
      */
     boolean reconcileRoot() {
-        if (shuttingDown) return false;
+        if (shuttingDown || state.isCapturedSourceRetired()) return false;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return false;
         RootPassBlurEndpointBridge.Endpoint endpoint = RootPassBlurEndpointBridge.inspect(root);
@@ -473,7 +499,8 @@ final class RootPassBlurBackend {
     }
 
     private void ensureBoundAndRefresh(long generation) {
-        if (shuttingDown || generation != state.requestedGeneration()) return;
+        if (shuttingDown || state.isCapturedSourceRetired()
+                || generation != state.requestedGeneration()) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
         reconcileRoot();
@@ -498,6 +525,10 @@ final class RootPassBlurBackend {
     private void ensureEglAndSource() {
         ensureEgl();
         makePbufferCurrentUnchecked();
+        // Rendering frozen folder glass still queues work on this handler.
+        // Do not recreate its SurfaceTexture/SurfaceControl producer after
+        // the independent one-shot capture window has been destroyed.
+        if (state.isCapturedSourceRetired()) return;
         if (normalizeProgram == 0) {
             normalizeProgram = createProgram(
                     Miuix307PassBlurShaders.QUAD_VERTEX,
@@ -680,7 +711,7 @@ final class RootPassBlurBackend {
     }
 
     private void bindProducerWhenReady(int attempt) {
-        if (shuttingDown || binding != null) return;
+        if (shuttingDown || state.isCapturedSourceRetired() || binding != null) return;
         View root = rootRef.get();
         Surface producer = inputProducerSurface;
         SurfaceTexture input = inputSurfaceTexture;
@@ -713,8 +744,9 @@ final class RootPassBlurBackend {
             RootPassBlurEndpointBridge.Endpoint endpoint,
             int attempt,
             long epoch) {
-        if (shuttingDown || binding != null || producer != inputProducerSurface
-                || epoch != bindEpoch.get() || rootRef.get() != root) return;
+        if (shuttingDown || state.isCapturedSourceRetired() || binding != null
+                || producer != inputProducerSurface || epoch != bindEpoch.get()
+                || rootRef.get() != root) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(bindRequest, producer);
         if (next == null) {
             RootPassBlurEndpointBridge.Endpoint currentEndpoint =
@@ -747,7 +779,7 @@ final class RootPassBlurBackend {
     }
 
     private void retryBind(int attempt, boolean endpointUnavailable) {
-        if (shuttingDown || binding != null) return;
+        if (shuttingDown || state.isCapturedSourceRetired() || binding != null) return;
         boolean unlockPending = bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE
                 && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked();
         int budgetAttempt = PassBlurBindPolicy.retryBudgetAttempt(
@@ -805,7 +837,7 @@ final class RootPassBlurBackend {
         normalizedHeight = 0;
     }
 
-    private void releaseInputProducerEndpointOnRenderThread() {
+    private void releaseInputProducerEndpointOnRenderThread(boolean keepNormalizedSnapshot) {
         requireRenderThread();
         Surface producer = inputProducerSurface;
         inputProducerSurface = null;
@@ -824,7 +856,7 @@ final class RootPassBlurBackend {
             GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0);
             oesTexture = 0;
         }
-        releaseNormalizedTarget();
+        if (!keepNormalizedSnapshot) releaseNormalizedTarget();
     }
 
     private void releaseGl() {
@@ -832,7 +864,7 @@ final class RootPassBlurBackend {
             if (eglDisplay != EGL14.EGL_NO_DISPLAY && eglPbufferSurface != EGL14.EGL_NO_SURFACE
                     && eglContext != EGL14.EGL_NO_CONTEXT) makePbufferCurrentUnchecked();
         } catch (Throwable ignored) {}
-        try { releaseInputProducerEndpointOnRenderThread(); } catch (Throwable ignored) {}
+        try { releaseInputProducerEndpointOnRenderThread(false); } catch (Throwable ignored) {}
         if (normalizeProgram != 0) GLES20.glDeleteProgram(normalizeProgram);
         normalizeProgram = 0;
         normalizePositionLocation = normalizeUvLocation = normalizeTextureLocation = -1;
