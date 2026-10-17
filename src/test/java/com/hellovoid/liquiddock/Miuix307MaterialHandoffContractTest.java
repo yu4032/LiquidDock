@@ -86,4 +86,33 @@ public class Miuix307MaterialHandoffContractTest {
                 hook.contains("suppressVendorGpuBlur(background);\n"
                         + "                suppressVendorMaterialBody(background"));
     }
+
+    @Test
+    public void expandedFolderCannotOwnDockProducerOrEglRenderGate() throws Exception {
+        // Static architecture/API contract: OPEN_FOLDER has a separate capture owner
+        // and cannot inject a render-freeze method into Dock's 307 pipeline.
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+        String renderer = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
+        String view = Files.readString(MAIN.resolve("Miuix307PassBlurTextureView.java"));
+        String bridge = Files.readString(MAIN.resolve("Miuix307PassBlurBridge.java"));
+        String scene = Files.readString(MAIN.resolve("LauncherGlassSceneController.java"));
+
+        assertTrue(folder.contains("LauncherGlassSceneController.setFolderCoveredForAll(true)"));
+        assertFalse("Modal folder must never install a Dock-specific freeze gate",
+                folder.contains("Miuix307ZeroCopyRenderer.setFolderFrozen"));
+        assertFalse("Dock must have no synthetic OPEN_FOLDER render-freeze API",
+                renderer.contains("setFolderRenderFrozen"));
+        assertFalse("Dock OES input must never be discarded due to FolderCling",
+                view.contains("discardFrozenProducerFrame"));
+        assertFalse("Dock EGL draw must not be gated by modal folder coverage",
+                view.contains("folderRenderFrozen"));
+        assertFalse("Recents must not restore a second synthetic Dock freeze authority",
+                scene.contains("Miuix307ZeroCopyRenderer.setRecentsCovered"));
+        assertFalse("Dock must not require a special post-folder restart transaction",
+                bridge.contains("requestFreshDockFrameAfterFolder"));
+        assertTrue("Native producer still keeps the frame-sync lease",
+                view.contains("Miuix307PassBlurBridge.renewForceRefresh(binding)"));
+        assertTrue("Frame callbacks must continue to request GL composition",
+                view.contains("scheduleRender(true)"));
+    }
 }
