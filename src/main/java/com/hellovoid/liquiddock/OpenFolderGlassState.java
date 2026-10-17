@@ -101,9 +101,9 @@ final class OpenFolderGlassState {
         // Native FolderCling CLOSE is a stronger lifecycle authority than an
         // unfinished Recents-return wallpaper/host settle. Once a real close
         // begins, Recents must not block reverse-spring lens geometry.
+        // CI ABLATION ONLY: native CLOSE no longer clears Recents coverage or
+        // return-pending state. Keep the regression tests unchanged.
         phase = Phase.CLOSING;
-        recentsCovered = false;
-        recentsReturnPending = false;
         return true;
     }
 
