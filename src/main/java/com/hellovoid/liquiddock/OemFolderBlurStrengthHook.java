@@ -48,20 +48,34 @@ final class OemFolderBlurStrengthHook {
     }
     private static boolean installed;
 
-    /** Final blur-target arbitration is owned by RecentsBackgroundBlurHook.
-     * Both native folder opening and Recents-to-folder HOME return use this
-     * one path, so the independent Recents percentage cannot overwrite it.
+    /** The sole fastBlur hook owns the final OEM target. In particular,
+     * Recents HOME issues its 1.0 target before any onRecentViewHide callback.
+     * The exact current semantic state is checked at that original write.
      */
     static float arbitrateTarget(float requested, boolean recentsScope, int recentsPercent) {
         boolean opening = Boolean.TRUE.equals(FOLDER_OPEN.get());
-        boolean returning = actualFolderOpening && recentsReturningToOpenFolder;
+        // OEM HomeState emits fastBlur(1.0) BEFORE RecentsServiceDispatcher
+        // onRecentViewHide. The still-open native folder and vendor Recents
+        // coverage are already authoritative at this exact blur write.
+        // Checking them here avoids depending on an earlier guessed overload.
+        boolean coveredHomeWrite = false;
+        if (!recentsScope && Float.isFinite(requested) && requested >= .999f
+                && LauncherGlassSceneController.isRecentsCoveredByVendor()) {
+            coveredHomeWrite = FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
+                    true, OpenFolderGlassCoordinator.isNativeExpandedFolderOpen(),
+                    false, requested);
+        }
+        boolean returning = coveredHomeWrite
+                || (actualFolderOpening && recentsReturningToOpenFolder);
         float resolved = FolderNativeBlurTargetPolicy.arbitrate(
                 requested, recentsScope, recentsPercent,
                 opening, returning, nativeFolderBlurRatio);
-        if (returning && Float.compare(resolved, requested) != 0 && MainHook.debugLogging) {
+        if (Float.compare(resolved, requested) != 0
+                && (coveredHomeWrite || (returning && Api101Bridge.isDebugLoggingEnabled()))) {
             MainHook.log(TAG + " native fastBlur final target "
                     + requested + " -> " + resolved + " folderStrength="
-                    + nativeFolderBlurRatio + " recentsScope=" + recentsScope);
+                    + nativeFolderBlurRatio + " coveredHomeWrite=" + coveredHomeWrite
+                    + " recentsScope=" + recentsScope);
         }
         return resolved;
     }
