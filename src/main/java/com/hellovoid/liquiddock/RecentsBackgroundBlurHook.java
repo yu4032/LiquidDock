@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.view.Window;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -18,20 +19,24 @@ final class RecentsBackgroundBlurHook {
             "com.miui.home.recents.anim.RecentBlurParams$Companion";
     private static final String RECENTS_DIM_LAYER =
             "com.miui.home.recents.DimLayer";
-    private static final String SURFACE_CONTROL_COMPAT =
-            "com.android.systemui.shared.recents.system.SurfaceControlCompat";
     private static final AtomicInteger dimLayerSuppressLogCount = new AtomicInteger();
 
     private static final ThreadLocal<Boolean> RECENTS_TARGET_SCOPE = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> RECENTS_DIMMING_SCOPE = new ThreadLocal<>();
     private static boolean installed;
+    private static boolean recentParamsInstalled;
+    private static boolean directDimInstalled;
     private static volatile int liveBlurPercent;
     private static volatile boolean liveDisableDimming;
 
     static void onLiveConfigChanged(LiquidDockConfig.Recents config) {
         if (config == null) return;
         liveBlurPercent = config.backgroundBlurPercent;
+        boolean previous = liveDisableDimming;
         liveDisableDimming = config.disableWallpaperDimming;
+        if (installed && previous != liveDisableDimming) {
+            logDimmingCoverage();
+        }
     }
 
     private RecentsBackgroundBlurHook() {}
@@ -63,20 +68,22 @@ final class RecentsBackgroundBlurHook {
                 classLoader, "fastBlurWhenUseCompleteRecentsBlur");
         try {
             installRecentsDimmingOverride(classLoader);
+            recentParamsInstalled = true;
             anyInstalled = true;
         } catch (Throwable error) {
             MainHook.log(TAG + " RecentBlurParams dimming hooks unavailable: " + error);
         }
         try {
             installRecentsDimLayerOverride(classLoader);
+            directDimInstalled = true;
             anyInstalled = true;
         } catch (Throwable error) {
             MainHook.log(TAG + " Recents DimLayer hook unavailable: " + error);
         }
         installed = anyInstalled;
         MainHook.log(TAG + " installed=" + installed
-                + " strength=" + liveBlurPercent + "%"
-                + " wallpaperDimming=" + (liveDisableDimming ? "off" : "vendor"));
+                + " strength=" + liveBlurPercent + "%");
+        logDimmingCoverage();
         return installed;
     }
 
@@ -176,22 +183,48 @@ final class RecentsBackgroundBlurHook {
      * global Window dimming or getUseRecentBlurAnim(), as the latter also
      * removes native blur animation elements and changes their timing.
      */
-    private static void installRecentsDimLayerOverride(ClassLoader loader) {
-        HookUtil.hookMethod(loader, RECENTS_DIM_LAYER, "dim", chain -> {
-            Object[] args = chain.getArgs().toArray(new Object[0]);
-            if (liveDisableDimming && args.length == 3
-                    && args[0] instanceof Number) {
-                float nativeAmount = ((Number) args[0]).floatValue();
-                args[0] = RecentsBlurPolicy.resolveDimming(nativeAmount, true);
-                if (MainHook.debugLogging && nativeAmount > 0f
-                        && dimLayerSuppressLogCount.getAndIncrement() < 8) {
-                    MainHook.log(TAG + " Recents DimLayer suppressed native="
-                            + nativeAmount);
+    private static void installRecentsDimLayerOverride(ClassLoader loader) throws Exception {
+        Class<?> layer = Class.forName(RECENTS_DIM_LAYER, false, loader);
+        int hooked = 0;
+        // The OEM may ship a different SurfaceControlCompat class or the native
+        // SurfaceControl overload. Resolve ONLY the typed Recents dim(float,
+        // SurfaceControl, boolean) entry, not arbitrary same-name methods.
+        for (Method method : layer.getDeclaredMethods()) {
+            if (!RecentsDimLayerMethodPolicy.isDimMethod(
+                    method.getName(), method.getParameterTypes())) continue;
+            method.setAccessible(true);
+            HookUtil.hook(method, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (liveDisableDimming && args.length == 3
+                        && args[0] instanceof Number) {
+                    float nativeAmount = ((Number) args[0]).floatValue();
+                    // Always execute the OEM method with zero, including a
+                    // cancellation/return clear; skipping it strands a dim layer.
+                    args[0] = RecentsBlurPolicy.resolveDimming(nativeAmount, true);
+                    if (MainHook.debugLogging && nativeAmount > 0f
+                            && dimLayerSuppressLogCount.getAndIncrement() < 8) {
+                        MainHook.log(TAG + " Recents DimLayer suppressed native="
+                                + nativeAmount);
+                    }
                 }
-            }
-            return chain.proceed(args);
-        }, float.class, SURFACE_CONTROL_COMPAT, boolean.class);
-        MainHook.log(TAG + " Recents task-transition DimLayer.dim installed");
+                return chain.proceed(args);
+            });
+            hooked++;
+            MainHook.log(TAG + " Recents task-transition dim hooked="
+                    + method.toGenericString());
+        }
+        if (hooked == 0) {
+            throw new NoSuchMethodException("No supported " + RECENTS_DIM_LAYER
+                    + ".dim(float, SurfaceControl, boolean) overload");
+        }
+    }
+
+    private static void logDimmingCoverage() {
+        MainHook.log(TAG + " wallpaper dimming optOut=" + liveDisableDimming
+                + " RecentBlurParams=" + recentParamsInstalled
+                + " DimLayer=" + directDimInstalled
+                + (liveDisableDimming && (!recentParamsInstalled || !directDimInstalled)
+                    ? " PARTIAL: native dim may remain" : ""));
     }
 
     private static boolean tryInstallDimmingFactoryScope(
