@@ -19,7 +19,6 @@ final class OpenFolderGlassCoordinator {
     private static final String TAG = "[DC][OpenFolderGlass]";
     private static final OpenFolderGlassState OWNER = new OpenFolderGlassState();
     private static State current;
-    private static final String LIFECYCLE_LOG_TAG = "LiquidDock-Folder";
 
     /** Low-frequency physical-device lifecycle evidence. Unlike the former
      * BuildConfig.DEBUG-only folder trace, this uses Android logcat directly
@@ -116,13 +115,10 @@ final class OpenFolderGlassCoordinator {
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
 
-    /** A native CLOSE is not a Recents transition. The frozen wallpaper
-     * background must contract into the *desktop* folder's glass outline,
-     * not stay full-screen while the Prismal lens alone shrinks.
-     *
-     * The OPEN_FOLDER output TextureView remains full-sized and resident
-     * throughout close: only its compositor outline changes. No additional
-     * PassBlur, GPU recapture, alpha animation or rounded-bitmap allocation.
+    /** Native FolderCling CLOSE is independent of Recents. Constrain the
+     * transparent output to the desktop folder's actual native silhouette
+     * throughout the reverse spring, including its 1x1 corner radius.
+     * The EGL surface remains resident and never recaptures the wallpaper.
      */
     private static void updateClosingBackdropOutline(State state, float nativeOpenProgress) {
         if (!live(state) || state.layer == null) return;
