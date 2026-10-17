@@ -219,7 +219,7 @@ final class RecentsBackgroundBlurHook {
         }
     }
 
-    private static void logDimmingCoverage() {
+    static void logDimmingCoverage() {
         MainHook.log(TAG + " wallpaper dimming optOut=" + liveDisableDimming
                 + " RecentBlurParams=" + recentParamsInstalled
                 + " DimLayer=" + directDimInstalled
