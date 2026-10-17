@@ -153,6 +153,22 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
         assertTrue(folder.contains("paintResult.succeeded()"));
     }
 
+    @Test public void closingAnimationCopiesNeverRestoreNativeBlurOntoVisibleHome() throws Exception {
+        String coordinator = Files.readString(MAIN.resolve("OpenFolderGlassCoordinator.java"));
+        String gate = Files.readString(MAIN.resolve("LauncherWidgetNativeViewBlurGate.java"));
+        String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
+
+        assertTrue(coordinator.contains("retainExitingNativeBackground(closingPlate)"));
+        assertTrue(coordinator.contains("retainExitingNativeBackground(closingImage)"));
+        assertTrue(coordinator.contains("owner.isAttachedToWindow() && owner.isShown()"));
+        assertTrue(coordinator.contains("releaseClosingFolderPlate(material)"));
+        assertTrue(gate.contains("static void releaseClosingFolderPlate(View material)"));
+        assertTrue("Permanent folder materials must still use the Launcher initializer",
+                coordinator.contains("LauncherWidgetNativeViewBlurGate.releaseFolder(material)"));
+        assertTrue("Runtime disable must drop deferred closing material ownership",
+                folder.contains("OpenFolderGlassCoordinator.clearExitingNativeBackgrounds()"));
+    }
+
     @Test public void fullGlassDisableReleasesFolderCaptureWithoutAnExpandedSession()
             throws Exception {
         String folder = Files.readString(MAIN.resolve("MiuixFolderGlassHook.java"));
