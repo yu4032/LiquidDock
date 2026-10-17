@@ -35,7 +35,6 @@ final class LauncherGlassRecentsHook {
         installWallpaperSettleAuthority(classLoader);
         try {
             HookUtil.hookMethod(classLoader, RECENTS_DISPATCHER, "onRecentViewShow", chain -> {
-                OemFolderBlurStrengthHook.onRecentsReturnFinished();
                 long staleReturn = WALLPAPER_SETTLE.pendingSerial();
                 WALLPAPER_SETTLE.onRecentsShown();
                 if (staleReturn > 0L) discardWallpaperAuthorities(staleReturn);
@@ -61,11 +60,6 @@ final class LauncherGlassRecentsHook {
                 // from inside onRecentViewHide(), so arming afterwards can miss the real start.
                 final long supersededSerial = WALLPAPER_SETTLE.pendingSerial();
                 final long serial = WALLPAPER_SETTLE.onReturnStarted();
-                // This semantic hide callback retains the return lease for
-                // subsequent blur writes. The earlier HOME fastBlur(1.0) is
-                // handled at the single final target arbitration point.
-                OemFolderBlurStrengthHook.onRecentsReturnStarted(
-                        OpenFolderGlassCoordinator.isNativeExpandedFolderOpen());
                 if (supersededSerial > 0L) {
                     discardWallpaperAuthorities(supersededSerial);
                     MainHook.log(TAG + " Recents wallpaper return superseded oldSerial="
@@ -77,7 +71,6 @@ final class LauncherGlassRecentsHook {
                 try {
                     result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 } catch (Throwable error) {
-                    OemFolderBlurStrengthHook.onRecentsReturnFinished();
                     cancelWallpaperSettle(serial, "vendor-hide-exception");
                     throw error;
                 }
@@ -105,7 +98,6 @@ final class LauncherGlassRecentsHook {
                         WorkstationRecentsRecoveryPolicy.onRecentsReturn(
                                 workstationMode, rolloverAccepted);
                 if (!recovery.allowUncover) {
-                    OemFolderBlurStrengthHook.onRecentsReturnFinished();
                     cancelWallpaperSettle(serial, "workstation-rollover-rejected");
                     MainHook.log(TAG
                             + " Workstation Recents producer rollover rejected; HOME remains covered"
