@@ -125,6 +125,8 @@ Part-level whitening currently supports **RemoteViews TextView / ImageView**. In
 
 Small and large folders have separate glass switches, sizes, and corner-radius settings.
 
+Expanded folders can also use an independent Liquid Glass background while retaining the native opening and closing animations. Under **Appearance → Glass Components → Folders**, configure its switch, interior blur, refraction, thickness, tint, and native outside blur strength. The glass follows Recents and Dock transitions. Restart Launcher after enabling or disabling expanded-folder glass.
+
 On Launcher 4.50, four-preview and nine-preview large folders support a real **2×2 home-screen footprint**. Enable real large folders and titles per folder in the launcher's native folder settings. Under **Appearance → Folders**, adjust preview icon size (**60%–110%, 100% by default**) and toggle the native outline. Preview icon sizing works independently of the glass switch.
 
 ### Shortcut menus and dialogs
