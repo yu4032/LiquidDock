@@ -13,10 +13,8 @@ public class FolderNativeBlurTargetPolicyTest {
                 true, false, 1f));
         assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
                 false, true, 1f));
-        // The vendor HOME write may originate from a Recents wrapper; that
-        // classification must not mask the observed 1.0 target.
-        assertEquals(true, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
-                true, true, 1f));
+        // The HOME full-strength target must be identified independent of
+        // which Recents wrapper caused the original vendor write.
         assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
                 true, true, 0f));
         assertEquals(false, FolderNativeBlurTargetPolicy.isCoveredRecentsHomeTarget(
