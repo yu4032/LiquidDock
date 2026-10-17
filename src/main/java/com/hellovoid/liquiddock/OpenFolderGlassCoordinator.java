@@ -434,16 +434,19 @@ final class OpenFolderGlassCoordinator {
             if (panel == null) panel = view(invoke(folder, "getContent"));
             state.expandedFrame = panel != null ? bounds(panel, state) : null;
         }
-        OWNER.beginClose(state.serial);
+        if (!OWNER.beginClose(state.serial)) return;
+        // Recents-return flags describe the earlier modal handoff, not the
+        // newly accepted native CLOSE. Do not keep sync() in its Recents-only
+        // early-return branch while the folder's reverse spring runs.
+        state.recentsGestureObserved = false;
+        state.recentsGestureReturnSignaled = false;
+        state.lastRecentsHostScaleBucket = Integer.MIN_VALUE;
         state.motion.beginClose();
-        if (!OWNER.isRecentsCovered(state.serial)
-                && !OWNER.isRecentsReturnPending(state.serial)) {
-            // Start at the complete wallpaper (radius 0). The pre-draw
-            // reverse spring then constrains it toward the desktop icon.
-            // Clearing the mask here was the root of the 1x1 regression:
-            // the GL lens shrank, but the backdrop did not.
-            updateClosingBackdropOutline(state, 1f);
-        }
+        // The native closing outline must progress on every close, including
+        // one started immediately after Recents cancellation. A stale
+        // Recents-return fence previously left a full expanded glass plate
+        // visible for several frames after the icons reached their endpoints.
+        updateClosingBackdropOutline(state, 1f);
         // Reuse the same prepared wallpaper and optical material for the
         // entire reverse spring. Changing the blur kernel here stalls frames
         // and causes a final-frame discontinuity at the native handoff.
@@ -828,11 +831,10 @@ final class OpenFolderGlassCoordinator {
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
-            if (state.motion.isClosing() && !OWNER.isRecentsCovered(state.serial)
-                    && !OWNER.isRecentsReturnPending(state.serial)) {
-                // The compositor crop and shader lens share this EXACT
-                // native-Folme progress snapshot. A separate Recents blur
-                // ratio cannot represent an ordinary folder close.
+            if (state.motion.isClosing()) {
+                // Native CLOSE owns the silhouette even if an earlier Recents
+                // wallpaper settle is still pending. Follow Folme geometry,
+                // not the obsolete Recents-return classification.
                 updateClosingBackdropOutline(state, amount);
             }
             state.session.updateFolderFrame(LauncherGlassGeometry.resolveStatic(
