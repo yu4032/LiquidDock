@@ -191,4 +191,29 @@ public class LauncherGlassSceneControllerTest {
         assertFalse("fresh Workstation recovery replaces content without a second visual reveal",
                 state.consumeFadeReveal());
     }
+
+    @Test public void folderCoverStaysHiddenThroughRecentsAndTeardownNeedsFreshHomeFrame() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+        state.setFolderCovered(true, false);
+        assertFalse(state.isLayerVisible());
+        long old = state.generation();
+
+        // Both Recents show and return can reaffirm the native FolderCling
+        // cover, but neither grants HOME ownership or reveals a stale frame.
+        state.setFolderCovered(true, false);
+        state.setFolderCovered(true, false);
+        assertFalse(state.isLayerVisible());
+
+        // Full teardown (or a normal native CLOSE) ends folder coverage.
+        state.setFolderCovered(false, false);
+        state.onFreshFrameReady(old);
+        assertFalse(state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue(state.isLayerVisible());
+        assertFalse(state.consumeFadeReveal());
+    }
 }

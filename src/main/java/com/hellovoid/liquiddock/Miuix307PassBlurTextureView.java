@@ -414,9 +414,12 @@ final class Miuix307PassBlurTextureView extends TextureView
         renderHandler.postAtFrontOfQueue(() -> {
             Miuix307PassBlurBridge.Binding current = binding;
             if (shuttingDown || current == null || !current.bound) return;
-            if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
+            // Front-of-queue tasks can overtake earlier state changes. Consume the
+            // latest intent, not the boolean captured when this task was queued.
+            boolean latestEnabled = producerUpdatesEnabled;
+            if (latestEnabled) Miuix307PassBlurBridge.resumeUpdates(current);
             else Miuix307PassBlurBridge.pauseUpdates(current);
-            MainHook.log(TAG + " producer updates=" + enabled + " reason=" + reason);
+            MainHook.log(TAG + " producer updates=" + latestEnabled + " reason=" + reason);
         });
     }
 

@@ -18,11 +18,28 @@ public class WorkstationProducerPolicyTest {
     }
 
     @Test
-    public void recentsKeepsSharedSourceLiveWhileCovered() {
-        assertTrue(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true, false));
-        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(false, true, false));
-        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, false, false));
-        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true, true));
+    public void visibleRecentsConsumerKeepsSharedSourceLive() {
+        assertTrue(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, true));
+        assertFalse("No visible child means no Recents capture lease",
+                WorkstationProducerPolicy.keepSharedSourceLiveForRecents(false, true));
+        assertFalse(WorkstationProducerPolicy.keepSharedSourceLiveForRecents(true, false));
+        // A modal HOME folder does not remove a visible Recents OES consumer's lease.
+    }
+
+    @Test
+    public void recentsConsumerReleaseRespectsFolderAndWallpaperAuthorities() {
+        assertTrue(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
+                true, false, false, false));
+        assertTrue(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
+                true, true, false, true));
+        assertTrue(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
+                false, true, false, false));
+        assertTrue(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
+                false, false, true, false));
+        assertFalse(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
+                false, true, true, true));
+        assertFalse(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
+                false, false, false, false));
     }
 
     @Test

@@ -9,10 +9,24 @@ final class WorkstationProducerPolicy {
         return workspaceCovered && !workstationMode;
     }
 
-    /** Do not stop the native source if Recents glass shares its OES frame. */
+    /** A visible Recents capsule owns the shared input even when HOME is frozen.
+     * Semantic Recents coverage alone is not a live GPU consumer.
+     */
     static boolean keepSharedSourceLiveForRecents(
-            boolean covered, boolean capsulesEnabled, boolean folderCovered) {
-        return covered && capsulesEnabled && !folderCovered;
+            boolean visibleConsumer, boolean capsulesEnabled) {
+        return visibleConsumer && capsulesEnabled;
+    }
+
+    /** Releasing the final capsule restores the right owner of native capture.
+     * Folder coverage is a hard HOME freeze; ordinary Recents/presentation
+     * coverage respects Workstation's explicit always-live producer policy.
+     */
+    static boolean shouldPauseAfterRecentsConsumerGone(
+            boolean folderFrozen, boolean workspaceCovered,
+            boolean wallpaperSettlePending, boolean workstationMode) {
+        return folderFrozen
+                || shouldPauseSharedProducer(workspaceCovered || wallpaperSettlePending,
+                        workstationMode);
     }
 
     /** Workspace HOME capture is continuous; coverage/presentation suspension is handled separately. */

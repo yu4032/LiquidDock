@@ -480,10 +480,10 @@ final class LauncherGlassSceneController {
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
     }
 
-    /** Recents capsules use this same producer, regardless of Workspace layer visibility. */
+    /** Only a visible Recents GPU consumer may keep the covered Workspace source live. */
     private boolean keepSourceLiveDuringRecents() {
         return WorkstationProducerPolicy.keepSharedSourceLiveForRecents(
-                recentsCovered, GlassRuntimeState.isRecentsCapsuleEnabled(), folderCovered);
+                session.hasVisibleRecentsConsumer(), GlassRuntimeState.isRecentsCapsuleEnabled());
     }
 
     void onRootReady() {
@@ -494,10 +494,11 @@ final class LauncherGlassSceneController {
         applyLayerVisibility();
         // Recents capsules share this exact root producer. A late Workspace root-ready event
         // must not turn it off again after the capsule has resumed it for visible Recents.
-        // Folder / unlock / wallpaper-settle remain independent, stronger stop authorities.
+        // Folder still freezes HOME's visual output; an active Recents capsule
+        // may consume the shared source while the folder remains open.
         boolean coveredWithoutSharedRecents = state.state() == State.COVERED
                 && !keepSourceLiveDuringRecents();
-        if (coveredWithoutSharedRecents || folderCovered
+        if (coveredWithoutSharedRecents
                 || (unlockTransitionPending
                     && LauncherGlassHomePresentationHook.isUnlockProducerBlocked())
                 || (recentsWallpaperSettlePending && !keepSourceLiveDuringRecents())) {
