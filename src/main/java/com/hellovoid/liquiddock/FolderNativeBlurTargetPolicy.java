@@ -4,8 +4,15 @@ package com.hellovoid.liquiddock;
 final class FolderNativeBlurTargetPolicy {
     private FolderNativeBlurTargetPolicy() {}
 
-    static boolean shouldArmBeforeOverviewExit(boolean recentsCovered, boolean expandedFolderOpen) {
-        return recentsCovered && expandedFolderOpen;
+    /** Launcher 4.50 HomeState's full-strength target is emitted before
+     * onRecentViewHide. Distinguish it from explicitly scoped Recents blur
+     * and from ordinary HOME without a still-open native folder.
+     */
+    static boolean isCoveredRecentsHomeTarget(
+            boolean recentsCovered, boolean expandedFolderOpen,
+            boolean recentsTargetScope, float requested) {
+        return recentsCovered && expandedFolderOpen && !recentsTargetScope
+                && Float.isFinite(requested) && requested >= .999f;
     }
 
     static float ratioFromPercent(int percent) {
