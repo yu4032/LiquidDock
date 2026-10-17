@@ -778,6 +778,7 @@ final class MiuixFolderGlassHook {
     static void onRuntimeGlassDisabled() {
         OemFolderBlurStrengthHook.setFolderOpening(false);
         OpenFolderGlassCoordinator.releaseAll();
+        OpenFolderGlassCoordinator.clearExitingNativeBackgrounds();
         // releaseAll() only calls the abort callback when there is a live
         // OPEN_FOLDER session. A native FolderCling can be open without one;
         // clear the global Workspace coverage in both cases on master disable.
