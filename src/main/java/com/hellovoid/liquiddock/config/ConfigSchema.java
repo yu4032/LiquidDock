@@ -197,6 +197,10 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> SIDE_DARK_EDGE_LIGHT_SUPPRESSION = integer(
                 "dock_side_dark_edge_light_suppression", 100, 100, 100, 0, 100,
                 ConfigKey.ExportMode.IF_PRESENT);
+        /** Half-angle from each lateral normal; upper/lower normals stay highlight-only. */
+        public static final ConfigKey<Integer> SIDE_DARK_EDGE_ANGLE_RANGE = integer(
+                "dock_side_dark_edge_angle_range", 52, 52, 52, 5, 80,
+                ConfigKey.ExportMode.IF_PRESENT);
 
         private Dock() {}
     }
@@ -594,7 +598,8 @@ public final class ConfigSchema {
                 Dock.STROKE_SHADOW_RADIUS, Dock.STROKE_SHADOW_ALPHA, Dock.SHADOW_ENABLED,
                 Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y,
                 Dock.SIDE_DARK_EDGE_ENABLED, Dock.SIDE_DARK_EDGE_ALPHA,
-                Dock.SIDE_DARK_EDGE_WIDTH, Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION);
+                Dock.SIDE_DARK_EDGE_WIDTH, Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION,
+                Dock.SIDE_DARK_EDGE_ANGLE_RANGE);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,

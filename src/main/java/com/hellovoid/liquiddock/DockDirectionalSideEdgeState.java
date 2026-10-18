@@ -12,6 +12,8 @@ final class DockDirectionalSideEdgeState {
     private static volatile float alpha;
     private static volatile float widthPx = 3f;
     private static volatile float litSuppression = 1f;
+    // CPU computes one cosine only when settings change, not per fragment/frame.
+    private static volatile float lateralMinCos = (float) Math.cos(Math.toRadians(52));
 
     private DockDirectionalSideEdgeState() {}
 
@@ -27,10 +29,15 @@ final class DockDirectionalSideEdgeState {
         int nextSuppression = prefs.getInt(
                 ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION.name(),
                 ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION.runtimeFallback());
+        int nextAngle = prefs.getInt(
+                ConfigSchema.Dock.SIDE_DARK_EDGE_ANGLE_RANGE.name(),
+                ConfigSchema.Dock.SIDE_DARK_EDGE_ANGLE_RANGE.runtimeFallback());
         enabled = nextEnabled;
         alpha = Math.max(0, Math.min(100, nextAlpha)) * .01f;
         widthPx = Math.max(1f, Math.min(12f, nextWidth));
         litSuppression = Math.max(0, Math.min(100, nextSuppression)) * .01f;
+        lateralMinCos = (float) Math.cos(Math.toRadians(
+                Math.max(5, Math.min(80, nextAngle))));
     }
 
     static float alpha() {
@@ -39,4 +46,5 @@ final class DockDirectionalSideEdgeState {
 
     static float widthPx() { return widthPx; }
     static float litSuppression() { return litSuppression; }
+    static float lateralMinCos() { return lateralMinCos; }
 }

@@ -273,9 +273,10 @@ final class DockGlassCompositor {
         // intentionally unchanged; the OS4 highlights remain above/underneath.
         renderer.setDockSideShade(DockDirectionalSideEdgeState.alpha(),
                 DockDirectionalSideEdgeState.widthPx(),
-                DockDirectionalSideEdgeState.litSuppression());
+                DockDirectionalSideEdgeState.litSuppression(),
+                DockDirectionalSideEdgeState.lateralMinCos());
         renderer.drawGlass(dockBody, params, bodyHighlightProfile);
-        renderer.setDockSideShade(0f, 0f, 0f);
+        renderer.setDockSideShade(0f, 0f, 0f, 1f);
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;

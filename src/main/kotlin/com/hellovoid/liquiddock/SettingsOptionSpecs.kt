@@ -410,6 +410,7 @@ internal val sideDarkEdgeSpecs = listOf(
     IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_ALPHA, "侧边暗描边强度", "%"),
     IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_WIDTH, "侧边暗描边宽度", "px"),
     IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION, "受光侧黑边抑制", "%"),
+    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_ANGLE_RANGE, "侧边方向光角度范围", "°"),
 )
 internal val shadowSpecs = listOf(
     IntSpec(ConfigSchema.Dock.SHADOW_RADIUS, "Dock 阴影柔化", "dp", "dock_shadow"),

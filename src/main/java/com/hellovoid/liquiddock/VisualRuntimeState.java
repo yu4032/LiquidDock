@@ -56,7 +56,8 @@ final class VisualRuntimeState {
                     || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED)
                     || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_ALPHA)
                     || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_WIDTH)
-                    || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION);
+                    || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION)
+                    || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_ANGLE_RANGE);
             if (directionalSideEdgeChanged) {
                 DockDirectionalSideEdgeState.refresh(sharedPreferences);
                 Miuix307ZeroCopyRenderer.requestDockSceneRefresh();

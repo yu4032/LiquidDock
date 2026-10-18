@@ -27,12 +27,19 @@ final class PrismalDockSideShadeShader {
                 uniform float u_dockSideShadeAlpha;
                 uniform float u_dockSideShadeWidthPx;
                 uniform float u_dockSideShadeLightSuppression;
+                uniform float u_dockSideShadeMinCos;
                 """).replace(COLOR, """
                     if (u_dockSideShadeAlpha > 0.001) {
                         vec2 sideNormal = normalize(os4SdfGradient + vec2(0.00001));
                         // Left/right normals only: upper/lower edge stays optical highlight.
-                        float verticalSide = smoothstep(0.42, 0.85, abs(sideNormal.x));
-                        verticalSide *= 1.0 - smoothstep(0.30, 0.75, abs(sideNormal.y));
+                        // Angular aperture centered on left/right edge normals.
+                        // A smaller cosine means a longer dark contour around the corners.
+                        // Width of the transition remains fixed in cosine space; the
+                        // upper/lower center stays entirely optical (no dark strip).
+                        float verticalSide = smoothstep(
+                                u_dockSideShadeMinCos,
+                                min(1.0, u_dockSideShadeMinCos + 0.10),
+                                abs(sideNormal.x));
                         vec2 sourceDir = normalize(u_lightDir + vec2(0.00001));
                         float illuminated = max(dot(sideNormal, sourceDir), 0.0);
                         float visibleDark = 1.0 - clamp(

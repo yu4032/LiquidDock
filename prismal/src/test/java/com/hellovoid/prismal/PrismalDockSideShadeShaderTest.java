@@ -15,8 +15,9 @@ public class PrismalDockSideShadeShaderTest {
     @Test public void darkensOnlyLateralEdgesAndSuppressesIlluminatedSide() {
         String source = PrismalDockSideShadeShader.apply(base());
         assertTrue(source.contains("verticalSide = smoothstep"));
+        assertTrue(source.contains("u_dockSideShadeMinCos"));
         assertTrue(source.contains("abs(sideNormal.x)"));
-        assertTrue(source.contains("abs(sideNormal.y)"));
+        assertTrue(source.contains("abs(sideNormal.x)"));
         assertTrue(source.contains("illuminated * u_dockSideShadeLightSuppression"));
         assertTrue(source.contains("os4EdgeBand(edgeDist"));
         assertTrue(source.contains("color *= 1.0 - darkness;"));

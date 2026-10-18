@@ -81,12 +81,15 @@ public final class PrismalRenderer implements AutoCloseable {
     private int dockSideGlassProgram;
     private boolean dockSideProgramUnsupported;
     private float dockSideShadeAlpha, dockSideShadeWidthPx, dockSideShadeLightSuppression;
+    private float dockSideShadeMinCos = 0.61566f;
 
     /** Only the Dock body's next draw uses these settings; icons reset to zero. */
-    public void setDockSideShade(float alpha, float widthPx, float litSuppression) {
+    public void setDockSideShade(float alpha, float widthPx,
+                                 float litSuppression, float lateralMinCos) {
         dockSideShadeAlpha = safeUnit(alpha);
         dockSideShadeWidthPx = Math.max(0f, widthPx);
         dockSideShadeLightSuppression = safeUnit(litSuppression);
+        dockSideShadeMinCos = safeUnit(lateralMinCos);
     }
 
     private static float safeUnit(float value) {
@@ -754,6 +757,7 @@ public final class PrismalRenderer implements AutoCloseable {
             uniform1f("u_dockSideShadeAlpha", dockSideShadeAlpha);
             uniform1f("u_dockSideShadeWidthPx", dockSideShadeWidthPx);
             uniform1f("u_dockSideShadeLightSuppression", dockSideShadeLightSuppression);
+            uniform1f("u_dockSideShadeMinCos", dockSideShadeMinCos);
         }
 
         if (cachedStaticParams != p) {
