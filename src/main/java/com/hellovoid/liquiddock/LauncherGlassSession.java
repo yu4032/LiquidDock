@@ -887,16 +887,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 Trace.setCounter("LD.Workspace.StaticCandidates", staticSnapshot.length);
                 Trace.setCounter("LD.Workspace.StaticGeometryReads", staticGeometryReads);
                 Trace.setCounter("LD.Workspace.StaticCacheHits", staticCacheHits);
-                Trace.setCounter("LD.Workspace.StaticForceCaptures", forcedCaptures);
-                Trace.setCounter("LD.Workspace.StaticProxyCaptures", proxyCaptures);
-                Trace.setCounter("LD.Workspace.StaticRecheckCaptures", recheckedCaptures);
-                Trace.setCounter("LD.Workspace.WidgetGridReads", widgetWidthFrame.gridReads);
-                Trace.setCounter("LD.Workspace.WidgetGridHits", widgetWidthFrame.gridHits);
-                for (LauncherGlassNodeKind kind : LauncherGlassNodeKind.values()) {
-                    int i = kind.ordinal();
-                    Trace.setCounter("LD.Workspace." + kind + "Candidates", staticKinds[i]);
-                    Trace.setCounter("LD.Workspace." + kind + "GeometryReads", staticKindReads[i]);
-                    Trace.setCounter("LD.Workspace." + kind + "CacheHits", staticKindHits[i]);
+                // No per-kind trace work for the independent drag-only ViewRoot.
+                if (staticSnapshot.length > 0) {
+                    Trace.setCounter("LD.Workspace.StaticForcedCandidates", forcedCaptures);
+                    Trace.setCounter("LD.Workspace.StaticProxyCandidates", proxyCaptures);
+                    Trace.setCounter("LD.Workspace.StaticRecheckCandidates", recheckedCaptures);
+                    Trace.setCounter("LD.Workspace.WidgetGridReads", widgetWidthFrame.gridReads);
+                    Trace.setCounter("LD.Workspace.WidgetGridHits", widgetWidthFrame.gridHits);
+                    for (LauncherGlassNodeKind kind : LauncherGlassNodeKind.values()) {
+                        int i = kind.ordinal();
+                        Trace.setCounter("LD.Workspace." + kind + "Candidates", staticKinds[i]);
+                        Trace.setCounter("LD.Workspace." + kind + "GeometryReads", staticKindReads[i]);
+                        Trace.setCounter("LD.Workspace." + kind + "CacheHits", staticKindHits[i]);
+                    }
                 }
             }
         }
