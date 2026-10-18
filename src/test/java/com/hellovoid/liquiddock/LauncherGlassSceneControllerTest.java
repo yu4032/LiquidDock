@@ -34,6 +34,33 @@ public class LauncherGlassSceneControllerTest {
         assertFalse("OEM close already has its own transition", state.consumeFadeReveal());
     }
 
+    @Test public void folderOpenMayFadeCachedSceneButRecentsAndRotationRemainHardCovered() {
+        LauncherGlassSceneController.StateMachine state =
+                new LauncherGlassSceneController.StateMachine();
+        state.onRootReady();
+        state.onFreshFrameReady(state.generation());
+        state.consumeFadeReveal();
+        assertTrue(state.isLayerVisible());
+
+        state.setFolderCovered(true, false);
+        assertFalse("Native folder still gates the cached scene", state.isLayerVisible());
+        assertFalse("Frozen Workspace texture should animate out on folder OPEN",
+                state.requiresImmediateLayerHide(true, false));
+        assertTrue("Recents overlay cannot show a stale desktop folder silhouette",
+                state.requiresImmediateLayerHide(true, true));
+        state.onRotationStarted();
+        assertTrue("Rotation must hide mismatched pixels immediately",
+                state.requiresImmediateLayerHide(true, false));
+
+        // Ending folder coverage still requires fresh render ownership.
+        state.setFolderCovered(false, false);
+        assertFalse(state.isLayerVisible());
+        state.onFreshFrameReady(state.generation());
+        assertTrue(state.isLayerVisible());
+        assertFalse("Native close must not double-fade the Workspace",
+                state.consumeFadeReveal());
+    }
+
     @Test public void closingFolderCanRestoreSiblingsBeforeNativeSpringEnds() {
         LauncherGlassSceneController.StateMachine state =
                 new LauncherGlassSceneController.StateMachine();

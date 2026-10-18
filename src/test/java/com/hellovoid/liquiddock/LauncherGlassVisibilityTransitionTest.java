@@ -19,6 +19,17 @@ public class LauncherGlassVisibilityTransitionTest {
         assertEquals(270L, plan.durationMs);
     }
 
+    @Test public void folderOpeningDurationIsIndependentAndInterruptionsScaleRemainingDistance() {
+        LauncherGlassVisibilityTransition.Plan fade =
+                LauncherGlassVisibilityTransition.plan(1f, false, 800L);
+        assertEquals(800L, fade.durationMs);
+        assertEquals(0f, fade.targetAlpha, 0f);
+        LauncherGlassVisibilityTransition.Plan interrupted =
+                LauncherGlassVisibilityTransition.plan(0.25f, false, 800L);
+        assertEquals(200L, interrupted.durationMs);
+        assertEquals(0L, LauncherGlassVisibilityTransition.plan(1f, false, 0L).durationMs);
+    }
+
     @Test public void valuesAreClampedAndNoOpHasNoDuration() {
         LauncherGlassVisibilityTransition.Plan plan =
                 LauncherGlassVisibilityTransition.plan(2f, true);

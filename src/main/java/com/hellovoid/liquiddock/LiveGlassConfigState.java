@@ -117,6 +117,7 @@ final class LiveGlassConfigState {
     private static final Set<String> ANIMATION_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(
                     ConfigSchema.Animation.WORKSPACE_VISIBILITY.name(),
+                    ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name(),
                     ConfigSchema.Animation.DOCK_ICON_REVEAL.name(),
                     ConfigSchema.Animation.PRESS_IN.name(),
                     ConfigSchema.Animation.PRESS_OUT.name(),

@@ -152,6 +152,14 @@ final class LauncherGlassSceneController {
         }
         boolean isRotationPresentationPending() { return rotationPresentationPending; }
         boolean followsNativeFolderFade() { return nativeFolderFade; }
+
+        /** Native folder opening freezes a valid Workspace texture: it can fade out.
+         * Rotation cannot show stale-size pixels, and Recents must not expose an old
+         * folder outline through its separate modal surface.
+         */
+        boolean requiresImmediateLayerHide(boolean folderCovered, boolean recentsCovered) {
+            return rotationPresentationPending || (folderCovered && recentsCovered);
+        }
         boolean consumeFadeReveal() {
             boolean result = fadeRevealReady;
             fadeRevealReady = false;
@@ -802,13 +810,17 @@ final class LauncherGlassSceneController {
     private void applyLayerVisibility() {
         LauncherGlassStaticLayer current = layer;
         if (current != null) {
-            // Recents preserves its cached scene; native folder opening hides
-            // the cached Workspace glass until a fresh post-close frame.
+            // Native folder OPEN freezes the already-rendered Workspace scene.
+            // Fade its TextureView (sibling folders/widgets together) instead of
+            // hiding it in one frame: per-node animations cannot render while frozen.
+            // Rotation and overlapping Recents still require an immediate hard cover.
             boolean hardPresentationCover =
                     (folderCovered && !state.followsNativeFolderFade())
                     || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
-            current.setSceneVisible(visible, state.consumeFadeReveal(), hardPresentationCover);
+            current.setSceneVisible(visible, state.consumeFadeReveal(),
+                    state.requiresImmediateLayerHide(folderCovered, recentsCovered),
+                    folderCovered && !recentsCovered && !state.isRotationPresentationPending());
         }
     }
 

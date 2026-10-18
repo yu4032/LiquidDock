@@ -15,10 +15,15 @@ final class LauncherGlassVisibilityTransition {
     }
 
     static Plan plan(float currentAlpha, boolean visible) {
+        return plan(currentAlpha, visible,
+                AnimationRuntimeState.workspaceVisibilityDurationMs());
+    }
+
+    static Plan plan(float currentAlpha, boolean visible, long fullDurationMs) {
         float start = Float.isFinite(currentAlpha)
                 ? Math.max(0f, Math.min(1f, currentAlpha)) : 0f;
         float target = visible ? 1f : 0f;
-        long duration = Math.round(AnimationRuntimeState.workspaceVisibilityDurationMs()
+        long duration = Math.round(Math.max(0L, fullDurationMs)
                 * Math.abs(target - start));
         return new Plan(start, target, duration);
     }
