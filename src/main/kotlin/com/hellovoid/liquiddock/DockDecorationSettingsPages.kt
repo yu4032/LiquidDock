@@ -56,31 +56,29 @@ internal fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, master
 }
 
 @Composable
-internal fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
+internal fun ShadowPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
     val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
     var dockShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SHADOW_ENABLED.name(), ConfigSchema.Dock.SHADOW_ENABLED.uiDefault())) }
     var strokeShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_SHADOW.name(), ConfigSchema.Dock.STROKE_SHADOW.uiDefault())) }
-    var sideDarkEdge by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED.name(), ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED.uiDefault())) }
     DenseSettingsList(padding, "阴影") {
         item(key = "dock-shadow-enabled") {
             SettingsCard {
                 BooleanSetting(prefs, ConfigSchema.Dock.SHADOW_ENABLED, "整个 Dock 下方阴影", "跟随 Dock 长宽、高度和圆角", masterEnabled && dockEnabled) { dockShadow = it }
             }
         }
-        item(key = "dock-side-edge-title") { SmallTitle("光照响应边缘") }
-        item(key = "dock-side-edge-enabled") {
+        item(key = "dock-optical-response") {
             SettingsCard {
-                BooleanSetting(
-                    prefs, ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED,
-                    "光照推导暗边",
-                    "从 OS4 主光和反向补光推导背光轮廓，方向随光源旋转；Dock 下方原生阴影不变",
-                    masterEnabled && dockEnabled,
-                ) { sideDarkEdge = it }
-            }
-        }
-        items(sideDarkEdgeSpecs, key = { it.key }) { setting ->
-            SettingsCard {
-                IntSetting(prefs, setting, masterEnabled && dockEnabled && sideDarkEdge)
+                ArrowPreference(
+                    title = "玻璃边缘光照",
+                    summary = "使用 OS4 高光与背光透射微暗；保留整个 Dock 下方原生投影",
+                    enabled = masterEnabled && dockEnabled,
+                    onClick = { open(Page.DockEdge) },
+                )
             }
         }
         item(key = "stroke-shadow-enabled") {

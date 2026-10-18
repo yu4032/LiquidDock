@@ -328,6 +328,9 @@ private fun LiquidDockSettings(
                     padding, prefs, masterEnabled, GlassEdgeEffects.GLOBAL,
                     open = ::navigateTo,
                 )
+                Page.DockEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.DOCK,
+                )
                 Page.IconEdge -> GlassEdgeSettingsPage(
                     padding, prefs, masterEnabled, GlassEdgeEffects.ICON,
                 )
@@ -414,7 +417,7 @@ private fun LiquidDockSettings(
                     padding, prefs, masterEnabled, compact = false,
                 )
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
-                Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
+                Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo)
 
                 Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
                     padding = padding,
