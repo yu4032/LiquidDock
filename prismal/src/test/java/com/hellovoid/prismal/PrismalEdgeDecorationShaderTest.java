@@ -30,7 +30,7 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(exterior.contains("normalize(u_lightDir"));
         assertEquals(1, count(decorated, "uniform vec2 u_invariantLightXY;"));
         // The exterior branch must be reached before the original early discard.
-        assertTrue(decorated.indexOf("if (distMask > 0.0)")
+        assertTrue(decorated.indexOf("// Run after upstream OS4 fwidth/dFdx/dFdy")
                 < decorated.indexOf("if (opacity < 0.001) discard;"));
         // All original Fresnel/OS4 processing remains unchanged for interior pixels.
         assertTrue(decorated.contains("os4SoftLight"));
