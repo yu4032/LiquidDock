@@ -26,6 +26,8 @@ final class LauncherGlassStaticNode {
     private final LauncherGlassNodeKind nodeKind;
     private final LauncherGlassVisualOwnerState visualOwnerState =
             new LauncherGlassVisualOwnerState();
+    private final LauncherGlassStaticGeometryCache geometryCache =
+            new LauncherGlassStaticGeometryCache();
     private final float[] geometryPoints = new float[8];
     private final Matrix materialToGlobal = new Matrix();
     private final Matrix rootToGlobal = new Matrix();
@@ -167,6 +169,7 @@ final class LauncherGlassStaticNode {
                         && Float.compare(before.cornerRadiusDp, after.cornerRadiusDp) == 0) {
                     continue; // Shader-only changes already use the lightweight scene-redraw path.
                 }
+                node.geometryCache.invalidate();
                 View material = node.materialRef.get();
                 if (material != null && material.isAttachedToWindow()) {
                     View root = material.getRootView();
@@ -204,6 +207,7 @@ final class LauncherGlassStaticNode {
 
     void requestLifecycleRefresh() {
         if (disposed) return;
+        geometryCache.invalidate();
         LauncherGlassSession live = ensureLiveSession();
         View material = materialRef.get();
         View root = material != null ? material.getRootView() : null;
@@ -237,6 +241,23 @@ final class LauncherGlassStaticNode {
     }
 
     float visibilityAlpha() { return visibilityAlpha; }
+
+    /**
+     * UI-only guard. Proxy and widget geometry deliberately keep their native
+     * per-frame authority; a stable icon/folder must match its entire View ancestry.
+     */
+    boolean canReuseStaticGeometry(View root) {
+        if (visualOwnerState.isLaunchProxyActive()) {
+            geometryCache.invalidate();
+            return false;
+        }
+        return geometryCache.unchanged(materialRef.get(), root, kind,
+                componentStyle(), nativeCornerRadiusPx, visibilityAlpha);
+    }
+
+    void invalidateStaticGeometry() {
+        geometryCache.invalidate();
+    }
 
     boolean isLaunchProxyActive() { return visualOwnerState.isLaunchProxyActive(); }
 
