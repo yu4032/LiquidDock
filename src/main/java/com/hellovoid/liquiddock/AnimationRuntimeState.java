@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 /** Process-wide immutable-at-launch animation timing used by injected visual owners. */
 final class AnimationRuntimeState {
     private static volatile int workspaceVisibilityMs = 450;
+    private static volatile int folderOpenGlassFadeMs = 180;
     private static volatile int dockIconRevealMs = 450;
     private static volatile int pressInMs = 90;
     private static volatile int pressOutMs = 160;
@@ -12,6 +13,7 @@ final class AnimationRuntimeState {
     static void configure(LiquidDockConfig.Animation animation) {
         if (animation == null) return;
         workspaceVisibilityMs = animation.workspaceVisibilityMs;
+        folderOpenGlassFadeMs = animation.folderOpenGlassFadeMs;
         dockIconRevealMs = animation.dockIconRevealMs;
         pressInMs = animation.pressInMs;
         pressOutMs = animation.pressOutMs;
@@ -20,6 +22,7 @@ final class AnimationRuntimeState {
     }
 
     static int workspaceVisibilityDurationMs() { return workspaceVisibilityMs; }
+    static int folderOpenGlassFadeDurationMs() { return folderOpenGlassFadeMs; }
     static int dockIconRevealDurationMs() { return dockIconRevealMs; }
     static int pressInDurationMs() { return pressInMs; }
     static int pressOutDurationMs() { return pressOutMs; }
