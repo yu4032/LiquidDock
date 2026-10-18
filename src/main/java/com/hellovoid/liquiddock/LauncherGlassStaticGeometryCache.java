@@ -35,26 +35,28 @@ final class LauncherGlassStaticGeometryCache {
             boolean animationChanged = (candidateAnimation == null) != (animationMatrix == null)
                     || (candidateAnimation != null
                     && !candidateAnimation.equals(animationMatrix));
+            int nextLeft = candidate.getLeft(), nextTop = candidate.getTop();
+            int nextRight = candidate.getRight(), nextBottom = candidate.getBottom();
+            int nextScrollX = candidate.getScrollX(), nextScrollY = candidate.getScrollY();
+            int nextVisibility = candidate.getVisibility();
+            float nextAlpha = candidate.getAlpha();
+            float nextTranslationX = candidate.getTranslationX();
+            float nextTranslationY = candidate.getTranslationY();
             boolean changed = view != candidate
-                    || left != candidate.getLeft() || top != candidate.getTop()
-                    || right != candidate.getRight() || bottom != candidate.getBottom()
-                    || scrollX != candidate.getScrollX() || scrollY != candidate.getScrollY()
-                    || visibility != candidate.getVisibility()
-                    || Float.compare(alpha, candidate.getAlpha()) != 0
-                    || Float.compare(translationX, candidate.getTranslationX()) != 0
-                    || Float.compare(translationY, candidate.getTranslationY()) != 0
+                    || left != nextLeft || top != nextTop
+                    || right != nextRight || bottom != nextBottom
+                    || scrollX != nextScrollX || scrollY != nextScrollY
+                    || visibility != nextVisibility
+                    || Float.compare(alpha, nextAlpha) != 0
+                    || Float.compare(translationX, nextTranslationX) != 0
+                    || Float.compare(translationY, nextTranslationY) != 0
                     || matrixChanged || animationChanged;
             view = candidate;
-            left = candidate.getLeft();
-            top = candidate.getTop();
-            right = candidate.getRight();
-            bottom = candidate.getBottom();
-            scrollX = candidate.getScrollX();
-            scrollY = candidate.getScrollY();
-            visibility = candidate.getVisibility();
-            alpha = candidate.getAlpha();
-            translationX = candidate.getTranslationX();
-            translationY = candidate.getTranslationY();
+            left = nextLeft; top = nextTop;
+            right = nextRight; bottom = nextBottom;
+            scrollX = nextScrollX; scrollY = nextScrollY;
+            visibility = nextVisibility; alpha = nextAlpha;
+            translationX = nextTranslationX; translationY = nextTranslationY;
             if (matrixChanged) matrix.set(candidateMatrix);
             if (animationChanged) {
                 if (candidateAnimation == null) animationMatrix = null;
