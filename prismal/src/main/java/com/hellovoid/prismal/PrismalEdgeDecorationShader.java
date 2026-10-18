@@ -1,16 +1,13 @@
 package com.hellovoid.prismal;
 
 /**
- * One-pass optional exterior shadow / contour stroke, sharing the upstream
- * Prismal SDF, OS4 SDF normal and precomputed light direction.
- *
- * No additional draw, backdrop, FBO, SDF evaluation, or light normalization.
- * Constant arithmetic per covered fragment; raster/scissor expansion bounds
- * the actual number of affected pixels.
+ * Optical response of one rounded glass volume. The upstream OS4 Fresnel,
+ * reflection, directional highlight, AA and rounded SDF remain untouched.
+ * In the SAME draw, shade the under-illuminated rim and cast a whole-body
+ * low-frequency shadow beyond the silhouette. Never paint a black stroke.
  */
 final class PrismalEdgeDecorationShader {
     private static final String PRECISION = "precision highp float;";
-    private static final String MAIN = "void main()";
     private static final String BEFORE_DISCARD = "if (opacity < 0.001) discard;";
     private static final String FINAL =
             "gl_FragColor = vec4(color, opacity * u_transmittance);";
@@ -19,102 +16,84 @@ final class PrismalEdgeDecorationShader {
 
     static String apply(String shader) {
         requireOnce(shader, PRECISION);
-        requireOnce(shader, MAIN);
         requireOnce(shader, BEFORE_DISCARD);
         requireOnce(shader, FINAL);
         if (!shader.contains("vec2 os4SdfGradient = vec2(")
+                || !shader.contains("float edgeAa = max(fwidth(distMask), 0.75);")
+                || !shader.contains("float edgeDist = -distMask;")
                 || !shader.contains("uniform vec2 u_invariantLightXY;")
                 || !shader.contains("uniform float u_os4DirectionalIntensity;")
                 || !shader.contains("uniform float u_os4DirectionalOppositeIntensity;")) {
-            throw new IllegalStateException("Prismal OS4 edge/light invariants changed");
+            throw new IllegalStateException("Prismal OS4 optics/light contract changed");
         }
-
         return shader.replace(PRECISION, PRECISION + """
-                uniform vec4 u_outerStrokeColor;
-                uniform float u_outerStrokeWidthPx;
-                uniform float u_strokeLightResponse;
-                uniform float u_strokeMinCos;
-                uniform vec4 u_dropShadowColor;
-                uniform float u_dropShadowRadiusPx;
-                uniform float u_dropShadowOffsetYPx;
-                uniform float u_dropShadowLightFollow;
+                uniform float u_backlitWidthPx;
+                uniform float u_backlitStrength;
+                uniform float u_backlitSoftness;
+                uniform vec4 u_castShadowColor;
+                uniform float u_castShadowRadiusPx;
+                uniform float u_castShadowOffsetYPx;
+                uniform float u_castShadowLightFollow;
                 """)
-                .replace(MAIN, """
-                // Same main/opposite directional strengths as OS4 glass lighting.
-                // A balanced illumination field has no directional dark contour.
-                // No world-space side assumption: the result follows light rotation.
-                vec2 prismalBacklitContour(float normalDotLight) {
-                    float contrast = max(u_os4DirectionalIntensity, 0.0)
-                            - max(u_os4DirectionalOppositeIntensity, 0.0);
-                    float backlitNormal = -normalDotLight * sign(contrast);
-                    float aperture = clamp(
-                            (backlitNormal - u_strokeMinCos)
-                            / max(1.0 - u_strokeMinCos, 0.001), 0.0, 1.0);
-                    float taper = aperture * aperture * (3.0 - 2.0 * aperture);
-                    float energy = clamp(abs(contrast), 0.0, 1.0)
-                            * clamp(u_strokeLightResponse, 0.0, 1.0)
-                            * step(0.5, u_os4EdgeEnabled);
-                    return vec2(taper, energy);
-                }
-                """ + MAIN)
                 .replace(BEFORE_DISCARD, """
-                    // Run after upstream OS4 fwidth/dFdx/dFdy so helper quads can
-                    // compute derivatives before any optional exterior early return.
-                    // Exterior pixels would otherwise be discarded by original glass.
-                    if (distMask > 0.0) {
-                        vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
-                        float facing = dot(edgeN, u_invariantLightXY);
-                        float rim = 0.0;
-                        if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
-                            // Shadow-only glass skips all contour-angle calculations.
-                            vec2 backlight = prismalBacklitContour(facing);
-                            float strokeWidth = u_outerStrokeWidthPx * backlight.x;
-                            rim = u_outerStrokeColor.a * backlight.x * backlight.y
-                                    * (1.0 - smoothstep(
-                                            0.0, max(strokeWidth, 0.001), distMask));
+                    // Derivative-dependent OS4 SDF/normal/AA have been evaluated
+                    // before this path. Exterior fragments avoid new captures.
+                    if (distMask > 0.0 && u_castShadowRadiusPx > 0.0
+                            && u_castShadowColor.a > 0.0) {
+                        vec2 n = normalize(os4SdfGradient + vec2(0.00001));
+                        float facing = dot(n, u_invariantLightXY);
+                        // First-order signed SDF translation of the full rounded
+                        // silhouette; no second rounded-box SDF or blur pass.
+                        float projected = -facing * u_castShadowRadiusPx * 0.42
+                                * u_castShadowLightFollow
+                                - n.y * u_castShadowOffsetYPx;
+                        float distanceToCaster = max(0.0, distMask - projected);
+                        float halo = 1.0 - smoothstep(0.0,
+                                max(u_castShadowRadiusPx * 2.0, 0.001),
+                                distanceToCaster);
+                        float shadowAlpha = u_castShadowColor.a * halo * halo;
+                        if (shadowAlpha > 0.002) {
+                            gl_FragColor = vec4(u_castShadowColor.rgb,
+                                    shadowAlpha * u_transmittance);
+                            return;
                         }
-                        float shade = 0.0;
-                        if (u_dropShadowRadiusPx > 0.0 && u_dropShadowColor.a > 0.0) {
-                            // Signed projection of the constant light vector onto
-                            // the existing edge normal. No second sdRoundBox().
-                            float projectedOffset = -facing * u_dropShadowRadiusPx * 0.42
-                                    * u_dropShadowLightFollow
-                                    - edgeN.y * u_dropShadowOffsetYPx;
-                            float travel = max(0.0, distMask - projectedOffset);
-                            float decay = 1.0 - smoothstep(
-                                    0.0, u_dropShadowRadiusPx * 2.0, travel);
-                            shade = u_dropShadowColor.a * decay * decay;
-                        }
-                        float alpha = clamp(rim + shade * (1.0 - rim), 0.0, 1.0);
-                        if (alpha < 0.002) discard;
-                        vec3 rgb = (u_outerStrokeColor.rgb * rim
-                                + u_dropShadowColor.rgb * shade * (1.0 - rim))
-                                / max(alpha, 0.002);
-                        gl_FragColor = vec4(rgb, alpha * u_transmittance);
-                        return;
                     }
                     """ + BEFORE_DISCARD)
                 .replace(FINAL, """
-                    // Interior half of the outline uses the same normal and
-                    // pre-normalized direction as the OS4 rim shader.
-                    if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
-                        vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
-                        float facing = dot(edgeN, u_invariantLightXY);
-                        vec2 backlight = prismalBacklitContour(facing);
-                        float strokeWidth = u_outerStrokeWidthPx * backlight.x;
-                        float rim = 1.0 - smoothstep(
-                                0.0, max(strokeWidth, 0.001), -distMask);
-                        color = mix(color, u_outerStrokeColor.rgb,
-                                clamp(u_outerStrokeColor.a * backlight.x * backlight.y * rim, 0.0, 1.0));
+                    // Light-facing high gloss is provided by upstream Prismal
+                    // OS4. Only attenuate the other half of the SAME optical
+                    // edge, with continuous irradiance and a soft width falloff.
+                    if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0
+                            && u_os4EdgeEnabled > 0.5) {
+                        vec2 n = normalize(os4SdfGradient + vec2(0.00001));
+                        float facing = dot(n, u_invariantLightXY);
+                        float key = max(u_os4DirectionalIntensity, 0.0);
+                        float fill = max(u_os4DirectionalOppositeIntensity, 0.0);
+                        float reference = max(key, fill);
+                        if (reference > 0.001) {
+                            float localLight = key * max(facing, 0.0)
+                                    + fill * max(-facing, 0.0);
+                            float deficit = clamp(
+                                    (reference - localLight) / reference, 0.0, 1.0);
+                            float transition = smoothstep(
+                                    0.0, max(u_backlitSoftness, 0.05), deficit);
+                            float edgeBand = os4EdgeBand(
+                                    edgeDist, u_backlitWidthPx, edgeAa);
+                            float darken = clamp(transition * edgeBand
+                                    * u_backlitStrength
+                                    * clamp(reference, 0.0, 1.0) * 0.34,
+                                    0.0, 0.22);
+                            color *= 1.0 - darken;
+                        }
                     }
                     """ + FINAL);
     }
 
-    private static void requireOnce(String shader, String needle) {
-        if (shader == null) throw new IllegalArgumentException("shader == null");
-        int first = shader.indexOf(needle);
-        if (first < 0 || shader.indexOf(needle, first + needle.length()) >= 0) {
-            throw new IllegalStateException("Optional edge shader anchor changed: " + needle);
+    private static void requireOnce(String source, String token) {
+        if (source == null) throw new IllegalArgumentException("shader == null");
+        int i = source.indexOf(token);
+        if (i < 0 || source.indexOf(token, i + token.length()) >= 0) {
+            throw new IllegalStateException("Prismal optical shader contract: " + token);
         }
     }
 }
