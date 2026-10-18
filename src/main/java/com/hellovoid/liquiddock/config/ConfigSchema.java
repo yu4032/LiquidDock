@@ -212,6 +212,39 @@ public final class ConfigSchema {
     }
 
     public static final class Glass {
+        // External shadow/stroke are distinct from Prismal's interior shadow and OS4 rim.
+        // Both are opt-in to preserve rendering with older presets and OEM native shadows.
+        public static final ConfigKey<Boolean> OUTER_SHADOW_ENABLED = bool(
+                "liquid_outer_shadow_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_SHADOW_RADIUS = dp(
+                "liquid_outer_shadow_radius", 16, 16, 16, 0, 24, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_SHADOW_OFFSET_Y = dp(
+                "liquid_outer_shadow_offset_y", 3, 3, 3, -16, 16, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_SHADOW_RED = integer(
+                "liquid_outer_shadow_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_SHADOW_GREEN = integer(
+                "liquid_outer_shadow_g", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_SHADOW_BLUE = integer(
+                "liquid_outer_shadow_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_SHADOW_ALPHA = integer(
+                "liquid_outer_shadow_alpha", 36, 36, 36, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_SHADOW_LIGHT_FOLLOW = integer(
+                "liquid_outer_shadow_light_follow", 65, 65, 65, 0, 100, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> OUTER_STROKE_ENABLED = bool(
+                "liquid_outer_stroke_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_STROKE_WIDTH = dp(
+                "liquid_outer_stroke_width", 1, 1, 1, 0, 4, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_STROKE_RED = integer(
+                "liquid_outer_stroke_r", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_STROKE_GREEN = integer(
+                "liquid_outer_stroke_g", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_STROKE_BLUE = integer(
+                "liquid_outer_stroke_b", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_STROKE_ALPHA = integer(
+                "liquid_outer_stroke_alpha", 66, 66, 66, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OUTER_STROKE_LIGHT_RESPONSE = integer(
+                "liquid_outer_stroke_light_response", 80, 80, 80, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
@@ -582,6 +615,12 @@ public final class ConfigSchema {
                 Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
+        add(keys, Glass.OUTER_SHADOW_ENABLED, Glass.OUTER_SHADOW_RADIUS,
+                Glass.OUTER_SHADOW_OFFSET_Y, Glass.OUTER_SHADOW_RED, Glass.OUTER_SHADOW_GREEN,
+                Glass.OUTER_SHADOW_BLUE, Glass.OUTER_SHADOW_ALPHA, Glass.OUTER_SHADOW_LIGHT_FOLLOW,
+                Glass.OUTER_STROKE_ENABLED, Glass.OUTER_STROKE_WIDTH, Glass.OUTER_STROKE_RED,
+                Glass.OUTER_STROKE_GREEN, Glass.OUTER_STROKE_BLUE, Glass.OUTER_STROKE_ALPHA,
+                Glass.OUTER_STROKE_LIGHT_RESPONSE);
         add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
