@@ -102,7 +102,6 @@ final class HomeGridCellGeometryHook {
     }
 
     private static final class WidgetGridBaseline {
-        static final WidgetGridBaseline NONE = new WidgetGridBaseline(0, 0, false);
         final int cellSize;
         final int widthGap;
         final boolean portrait;
@@ -149,14 +148,13 @@ final class HomeGridCellGeometryHook {
             if (grid == null || grid.portrait != portrait) {
                 if (frame != null) frame.gridReads++;
                 grid = readWidgetGridBaseline(cellLayoutView, current, portrait);
-                if (frame != null) {
-                    frame.grids.put(cellLayoutView, grid != null
-                            ? grid : WidgetGridBaseline.NONE);
-                }
+                // Do not memoize failed/unknown OEM state: fail open on
+                // a second node even if the vendor changes it mid-traversal.
+                if (frame != null && grid != null) frame.grids.put(cellLayoutView, grid);
             } else if (frame != null) {
                 frame.gridHits++;
             }
-            if (grid == null || grid == WidgetGridBaseline.NONE) return 0;
+            if (grid == null) return 0;
 
             // Never share the actual widget span or frame bounds: native resize
             // and drag can change these between separate nodes in one traversal.
