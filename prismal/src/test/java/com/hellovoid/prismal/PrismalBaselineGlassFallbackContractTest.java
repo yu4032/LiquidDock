@@ -9,7 +9,7 @@ import static org.junit.Assert.*;
 public class PrismalBaselineGlassFallbackContractTest {
     @Test public void originalShaderAlwaysLoadsWithoutOptionalEdgeSource() throws Exception {
         String source = Files.readString(Path.of(
-                "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
+                "src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
         String vertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
         assertFalse(vertex.contains("u_edgeRasterGuardPx"));
         assertTrue(source.contains("baselineGlassProgram = glassProgram;"));

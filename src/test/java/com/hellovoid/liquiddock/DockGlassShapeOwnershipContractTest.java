@@ -73,7 +73,8 @@ public class DockGlassShapeOwnershipContractTest {
                 "PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX)"));
         assertTrue(Files.exists(PRISMAL_RASTER_GUARD));
         String guard = Files.readString(PRISMAL_RASTER_GUARD);
-        assertTrue(guard.contains("vec2 rasterScale = (safeGlassSize + vec2(4.0 + 2.0 * u_edgeRasterGuardPx))"));
+        assertTrue(guard.contains("vec2 rasterScale = (safeGlassSize + vec2(4.0)) / safeGlassSize;"));
+        assertTrue(guard.contains("static String applyWithEdgeGuard(String upstreamVertex)"));
         assertTrue(guard.contains("uniform float u_edgeRasterGuardPx;"));
         assertTrue(guard.contains("vec2 rasterPosition = a_position * rasterScale;"));
         assertTrue(guard.contains("v_shapeCoord = rasterPosition;"));
