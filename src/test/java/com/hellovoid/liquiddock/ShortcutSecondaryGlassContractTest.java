@@ -131,35 +131,55 @@ public class ShortcutSecondaryGlassContractTest {
         assertFalse(layer.contains("fadeOutFast();\n        session.shutdown()"));
     }
 
-    @Test public void shortcutPopupReplacementHasDedicatedDefaultOnSetting() throws Exception {
+    @Test public void shortcutPopupReplacementHasDedicatedDefaultOnSettingsSubpage() throws Exception {
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
         String hook = Files.readString(MAIN.resolve("MiuixShortcutMenuGlassHook.java"));
-        String settings = SourceContractText.read(Path.of(
+        String menus = SourceContractText.read(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"));
+        String settings = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ShortcutPopupGlassSettingsPage.kt"));
+        String routes = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsNavigationModel.kt"));
+        String activity = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        String zh = Files.readString(Path.of("src/main/res/values-zh-rCN/strings.xml"));
 
         assertTrue(schema.contains("SHORTCUT_POPUP_GLASS = bool("));
         assertTrue(schema.contains("\"liquid_shortcut_popup_glass\", true, true, true"));
         assertTrue(hook.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
+        assertTrue(menus.contains("onClick = { open(Page.ShortcutPopupCustomization) }"));
+        assertFalse(menus.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,"));
+        assertTrue(routes.contains("ShortcutPopupCustomization(R.string.page_shortcut_popup)"));
+        assertTrue(activity.contains(
+                "Page.ShortcutPopupCustomization -> ShortcutPopupGlassSettingsPage("));
+        assertTrue(zh.contains("<string name=\"page_shortcut_popup\">快捷菜单自定义</string>"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
-        assertTrue(settings.contains("桌面快捷菜单玻璃背景"));
+        assertTrue(settings.contains("启用快捷菜单玻璃"));
         assertTrue(settings.contains("已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面"));
+        assertTrue(settings.contains("ScopedGlassSlider("));
+        assertTrue(settings.contains("恢复继承全局外观"));
+        assertTrue(settings.contains("onOpenAll ="));
+        assertTrue(activity.contains("navigateTo(Page.ShortcutPopupAll)"));
     }
 
-    @Test public void shortcutMenuDarkModeHasDedicatedDefaultOffSettingInMenuPage() throws Exception {
+    @Test public void shortcutMenuDarkModeHasDedicatedDefaultOffSettingOnCustomizationPage()
+            throws Exception {
         String schema = Files.readString(Path.of(
                 "src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
-        String settings = SourceContractText.read(Path.of(
+        String menus = SourceContractText.read(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"));
+        String settings = SourceContractText.read(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ShortcutPopupGlassSettingsPage.kt"));
 
         assertTrue(schema.contains("SHORTCUT_POPUP_DARK_TEXT = bool("));
         assertTrue(schema.contains("\"liquid_shortcut_popup_dark_text\", false, false, false"));
         assertTrue(schema.contains("Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT"));
-        assertTrue(settings.contains("internal fun GlassMenusPage("));
-        assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_GLASS"));
+        assertTrue(menus.contains("internal fun GlassMenusPage("));
+        assertFalse(menus.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,"));
         assertTrue(settings.contains("ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT"));
         assertTrue(settings.contains("快捷菜单深色模式适配"));
-        assertTrue(settings.contains("将快捷菜单文字和图标统一改为白色"));
+        assertTrue(settings.contains("保留彩色应用图标"));
     }
 
 

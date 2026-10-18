@@ -97,7 +97,7 @@ internal fun ShortcutPopupGlassSettingsPage(
                     prefs,
                     ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
                     "启用快捷菜单玻璃",
-                    "替换长按图标时的菜单背景；关闭后恢复原生材质，已有 Hook 时实时生效",
+                    "替换长按图标时的菜单背景；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面",
                     masterEnabled && liquidEnabled,
                 ) { popupEnabled = it }
                 ModernListDivider()
