@@ -63,7 +63,7 @@ final class ExternalGlassLiveConfigState {
                 SecurityCenterGlassHook.onLiveGlassConfigChanged(config);
                 AnimationRuntimeState.configure(config.animation);
             } else if ("com.android.systemui".equals(target)) {
-                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(config);
+                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(reader, config);
             }
         } catch (Throwable error) {
             Api101Bridge.log("[DC][ExternalLiveConfig] update failed target="

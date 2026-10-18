@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Separate persisted Prismal optics for the three independently designed UI scopes.
+ * Separate persisted Prismal optics for independently rendered glass scopes.
  * Missing values inherit the entire current global glass profile; legacy per-scope
  * color and blur keys still take priority in their existing owners.
  */
@@ -20,13 +20,14 @@ public final class ScopedGlassOptics {
     public static final String SEARCHBOX = "searchbox";
     public static final String DIALOG = "dialog";
     public static final String POPUP = "popup";
+    public static final String HANDLE_MENU = "handle_menu";
 
-    // Popup-only controls deliberately do not add duplicate global material keys.
-    private static final List<ConfigKey<Integer>> POPUP_BASICS = Collections.unmodifiableList(
+    // Menu-owned controls do not add duplicate global material keys.
+    private static final List<ConfigKey<Integer>> MENU_BASICS = Collections.unmodifiableList(
             Arrays.asList(ConfigSchema.Glass.BLUR, ConfigSchema.Glass.TINT_RED,
                     ConfigSchema.Glass.TINT_GREEN, ConfigSchema.Glass.TINT_BLUE,
                     ConfigSchema.Glass.TINT_ALPHA));
-    private static final List<ConfigKey<Boolean>> POPUP_HIGHLIGHTS = Collections.unmodifiableList(
+    private static final List<ConfigKey<Boolean>> MENU_HIGHLIGHTS = Collections.unmodifiableList(
             Arrays.asList(ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE,
                     ConfigSchema.LauncherHighlight.LARGE_CAUSTICS,
                     ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW));
@@ -80,28 +81,40 @@ public final class ScopedGlassOptics {
 
     public static List<ConfigKey<Integer>> keysForScope(String scope) {
         validateScope(scope);
-        if (!POPUP.equals(scope)) return OPTICAL_KEYS;
-        List<ConfigKey<Integer>> keys = new ArrayList<>(POPUP_BASICS);
+        if (!isMenuScope(scope)) return OPTICAL_KEYS;
+        List<ConfigKey<Integer>> keys = new ArrayList<>(MENU_BASICS);
         keys.addAll(OPTICAL_KEYS);
         return Collections.unmodifiableList(keys);
     }
 
+    public static boolean isMenuScope(String scope) {
+        return POPUP.equals(scope) || HANDLE_MENU.equals(scope);
+    }
+
+    public static List<ConfigKey<Boolean>> menuHighlightKeys() {
+        return MENU_HIGHLIGHTS;
+    }
+
+    public static String menuHighlightKey(String scope, ConfigKey<Boolean> original) {
+        if (!isMenuScope(scope) || !MENU_HIGHLIGHTS.contains(original)) {
+            throw new IllegalArgumentException("not a menu highlight key: " + scope + "/" + original.name());
+        }
+        // Launcher highlight keys are outside the liquid_* namespace.
+        return "liquid_scope_" + scope + "_" + original.name();
+    }
+
     public static List<ConfigKey<Boolean>> popupHighlightKeys() {
-        return POPUP_HIGHLIGHTS;
+        return menuHighlightKeys();
     }
 
     public static String popupHighlightKey(ConfigKey<Boolean> original) {
-        if (!POPUP_HIGHLIGHTS.contains(original)) {
-            throw new IllegalArgumentException("not a popup highlight key: " + original.name());
-        }
-        // Launcher highlight keys are not in the liquid_* namespace.
-        return "liquid_scope_popup_" + original.name();
+        return menuHighlightKey(POPUP, original);
     }
 
     public static String key(String scope, ConfigKey<Integer> original) {
         validateScope(scope);
         if (!OPTICAL_KEYS.contains(original)
-                && !(POPUP.equals(scope) && POPUP_BASICS.contains(original))) {
+                && !(isMenuScope(scope) && MENU_BASICS.contains(original))) {
             throw new IllegalArgumentException("not a scoped glass key: " + original.name());
         }
         return prefix(scope, original.name());
@@ -120,7 +133,7 @@ public final class ScopedGlassOptics {
     }
 
     private static void validateScope(String scope) {
-        if (!GBOARD.equals(scope) && !SEARCHBOX.equals(scope) && !DIALOG.equals(scope) && !POPUP.equals(scope)) {
+        if (!GBOARD.equals(scope) && !SEARCHBOX.equals(scope) && !DIALOG.equals(scope) && !isMenuScope(scope)) {
             throw new IllegalArgumentException("unsupported scope: " + scope);
         }
     }
@@ -149,9 +162,9 @@ public final class ScopedGlassOptics {
                 updates.put(config.name() + "_tenths", boundedTenths);
             }
         }
-        if (POPUP.equals(scope)) {
-            for (ConfigKey<Boolean> config : POPUP_HIGHLIGHTS) {
-                String scopedKey = popupHighlightKey(config);
+        if (isMenuScope(scope)) {
+            for (ConfigKey<Boolean> config : MENU_HIGHLIGHTS) {
+                String scopedKey = menuHighlightKey(scope, config);
                 if (reader.has(scopedKey)) {
                     updates.put(config.name(), reader.b(scopedKey, config.runtimeFallback()));
                 }

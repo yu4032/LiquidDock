@@ -11,7 +11,8 @@ final class ScopedGlassConfigCodec {
             ScopedGlassOptics.GBOARD,
             ScopedGlassOptics.SEARCHBOX,
             ScopedGlassOptics.DIALOG,
-            ScopedGlassOptics.POPUP
+            ScopedGlassOptics.POPUP,
+            ScopedGlassOptics.HANDLE_MENU
     };
 
     private ScopedGlassConfigCodec() {}
@@ -29,9 +30,9 @@ final class ScopedGlassConfigCodec {
                     out.put(key, raw);
                 }
             }
-            if (ScopedGlassOptics.POPUP.equals(scope)) {
-                for (ConfigKey<Boolean> config : ScopedGlassOptics.popupHighlightKeys()) {
-                    String highlight = ScopedGlassOptics.popupHighlightKey(config);
+            if (ScopedGlassOptics.isMenuScope(scope)) {
+                for (ConfigKey<Boolean> config : ScopedGlassOptics.menuHighlightKeys()) {
+                    String highlight = ScopedGlassOptics.menuHighlightKey(scope, config);
                     if (prefs.get(highlight) instanceof Boolean) {
                         out.put(highlight, prefs.get(highlight));
                     }
@@ -62,9 +63,9 @@ final class ScopedGlassConfigCodec {
                     out.put(key, (int) Math.round(bounded));
                 }
             }
-            if (ScopedGlassOptics.POPUP.equals(scope)) {
-                for (ConfigKey<Boolean> config : ScopedGlassOptics.popupHighlightKeys()) {
-                    String highlight = ScopedGlassOptics.popupHighlightKey(config);
+            if (ScopedGlassOptics.isMenuScope(scope)) {
+                for (ConfigKey<Boolean> config : ScopedGlassOptics.menuHighlightKeys()) {
+                    String highlight = ScopedGlassOptics.menuHighlightKey(scope, config);
                     if (values.get(highlight) instanceof Boolean) {
                         out.put(highlight, values.get(highlight));
                     }

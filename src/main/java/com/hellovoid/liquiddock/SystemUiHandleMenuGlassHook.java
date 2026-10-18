@@ -43,11 +43,13 @@ final class SystemUiHandleMenuGlassHook {
 
     private SystemUiHandleMenuGlassHook() {}
 
-    static void onLiveGlassConfigChanged(LiquidDockConfig config) {
+    static void onLiveGlassConfigChanged(ConfigReader reader, LiquidDockConfig config) {
         if (config == null) return;
         liveEnabled = config.enabled && config.glass.enabled
                 && config.glass.systemUiHandleMenuEnabled;
-        glassConfig = config.glass;
+        LiquidDockConfig.Glass resolved = ScopedGlassOptics.resolve(
+                reader, config.glass, ScopedGlassOptics.HANDLE_MENU);
+        glassConfig = resolved;
         // The synchronized WeakHashMaps still require an explicit lock while
         // materializing a stable iteration snapshot.
         ArrayList<View> activeRoots;
@@ -68,20 +70,23 @@ final class SystemUiHandleMenuGlassHook {
             return;
         }
         for (PendingBinding pending : pendingBindings) {
-            if (pending != null && !pending.released) pending.glass = config.glass;
+            if (pending != null && !pending.released) pending.glass = resolved;
         }
         for (Binding binding : activeBindings) {
             if (binding == null || binding.released) continue;
-            binding.glassConfig = config.glass;
+            binding.glassConfig = resolved;
+            binding.nativeBlurRadiusPx = Math.max(1, Math.round(resolved.blur));
             if (binding.prismalSession != null) {
-                binding.prismalSession.applyLiveGlassConfig(config.glass);
+                binding.prismalSession.applyLiveGlassConfig(resolved);
+            } else {
+                binding.applyMaterialFade(binding.pendingSurfaceAlpha);
             }
         }
     }
 
     static void install(ClassLoader classLoader, LiquidDockConfig.Glass glass) {
         if (installed || classLoader == null || glass == null) return;
-        glassConfig = glass;
+        if (glassConfig == null) glassConfig = glass;
         // One-time Hook registration; runtime callbacks are gated by liveEnabled.
 
         int installedCount = 0;
@@ -316,7 +321,7 @@ final class SystemUiHandleMenuGlassHook {
         final View sourceRoot;
         final View target;
         final Drawable stockBackground;
-        final int nativeBlurRadiusPx;
+        int nativeBlurRadiusPx;
         LiquidDockConfig.Glass glassConfig;
         final SurfaceControl menuSurface;
         final boolean trackNativeSurfaceAnimation;
