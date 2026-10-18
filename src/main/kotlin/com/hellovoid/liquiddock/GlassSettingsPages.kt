@@ -463,25 +463,11 @@ internal fun GlassMenusPage(
             "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；已有 Hook 时实时生效，首次加载失败则需重启系统界面",
             masterEnabled && liquidEnabled,
         )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
-            "桌面快捷菜单玻璃背景",
-            "替换长按桌面图标弹出的快捷菜单背景；关闭后恢复系统材质；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面",
-            masterEnabled && liquidEnabled,
-        )
         ArrowPreference(
-            title = "快捷菜单独立玻璃参数",
-            summary = "独立调整模糊、颜色、折射、光照与阴影；未设置时继承全局参数",
+            title = stringResource(R.string.page_shortcut_popup),
+            summary = "长按快捷菜单的玻璃、深色模式、模糊、颜色及独立光学参数",
             enabled = masterEnabled && liquidEnabled,
-            onClick = { open(Page.ShortcutPopupAll) },
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
-            "快捷菜单深色模式适配",
-            "将快捷菜单文字和图标统一改为白色；关闭后恢复系统原样；已有 Hook 时实时生效",
-            masterEnabled && liquidEnabled,
+            onClick = { open(Page.ShortcutPopupCustomization) },
         )
         ArrowPreference(
             title = stringResource(R.string.page_dialog_customization),

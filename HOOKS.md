@@ -201,7 +201,7 @@ Folder open/close、drag、press、preview/content geometry 与 vendor backgroun
 
 ### Independent ShortcutMenu optics
 
-The long-press Launcher ShortcutMenu uses its own `liquid_scope_popup_*` Prismal optical profile. Missing fields inherit the current global glass material; no override modifies other Launcher glass surfaces. The scoped controls live under **Menus & popups → Shortcut menu glass** and can be reset as a group. Popup-only highlight switches use the current large-surface highlight profile as their default.
+The long-press Launcher ShortcutMenu uses its own `liquid_scope_popup_*` Prismal optical profile. Missing fields inherit the current global glass material; no override modifies other Launcher glass surfaces. The scoped controls live under **Menus & popups → Shortcut menu customization**, with enable and dark-content toggles, basic color/blur controls, and an **All parameters** detail page. Appearance resets and complete scope resets remove only popup overrides. Popup-only highlight switches use the current large-surface highlight profile as their default.
 
 On launch, `LiveGlassConfigState.currentPopupGlass()` supplies the resolved immutable profile without reading remote preferences on the touch path. Edits update an active menu using its frozen capture (no recursive recapture). Turning the menu glass off restores the vendor material; capture scale and frame rate remain inherited from the global profile.
 

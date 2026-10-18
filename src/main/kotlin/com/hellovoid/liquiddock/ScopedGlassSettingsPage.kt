@@ -342,7 +342,7 @@ private fun profileOptionKey(scope: String, field: String): String {
 }
 
 @Composable
-private fun ScopedGlassSlider(
+internal fun ScopedGlassSlider(
     prefs: SharedPreferences,
     key: String,
     fallback: ConfigKey<Int>,
@@ -351,6 +351,7 @@ private fun ScopedGlassSlider(
     enabled: Boolean,
     generation: Int,
     decimal: Boolean,
+    onPersisted: () -> Unit = {},
 ) {
     fun inherited(): Float {
         val global = fallback.name()
@@ -385,6 +386,7 @@ private fun ScopedGlassSlider(
             val editor = prefs.edit().putInt(key, bounded.roundToInt())
             if (decimal) editor.putInt("${key}_tenths", (bounded * 10f).roundToInt())
             editor.apply()
+            onPersisted()
         },
         title = title,
         summary = if (overridden) "独立设置 · $title" else "继承全局液态玻璃",
