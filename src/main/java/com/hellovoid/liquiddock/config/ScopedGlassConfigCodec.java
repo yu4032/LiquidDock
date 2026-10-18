@@ -47,7 +47,7 @@ final class ScopedGlassConfigCodec {
     static void importInto(Map<String, ?> values, LinkedHashMap<String, Object> out) {
         if (values == null || out == null) return;
         for (String scope : SCOPES) {
-            for (ConfigKey<Integer> config : ScopedGlassOptics.opticalKeys()) {
+            for (ConfigKey<Integer> config : ScopedGlassOptics.keysForScope(scope)) {
                 String key = ScopedGlassOptics.key(scope, config);
                 Object value = values.get(key);
                 if (!(value instanceof Number)) continue;
