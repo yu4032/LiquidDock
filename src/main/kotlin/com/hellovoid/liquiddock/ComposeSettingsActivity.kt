@@ -376,7 +376,9 @@ private fun LiquidDockSettings(
                     padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
                 )
                 Page.DialogCustomization -> DialogGlassSettingsPage(
-                padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.DialogAll) },
+                padding, prefs, masterEnabled,
+                onOpenAll = { navigateTo(Page.DialogAll) },
+                onOpenEdge = { navigateTo(Page.DialogEdge) },
             )
             Page.DialogAll -> ScopedGlassSettingsPage(
                 padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",

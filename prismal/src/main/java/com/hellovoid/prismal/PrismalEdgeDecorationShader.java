@@ -37,7 +37,8 @@ final class PrismalEdgeDecorationShader {
                         float stroke = 0.0;
                         float lighting = 1.0;
                         if (u_outerStrokeColor.a > 0.001 && u_outerStrokeWidthPx > 0.0) {
-                            vec2 normal = normalize(vec2(dFdx(distMask), dFdy(distMask))
+                            vec2 sdfNormal = gradSdRoundedRectRealistic(cKy, halfSz, radCorner);
+                            vec2 normal = normalize(vec2(sdfNormal.x, -sdfNormal.y)
                                     + vec2(1e-5));
                             vec2 light = normalize(u_lightDir + vec2(1e-4));
                             lighting = mix(1.0, 0.82 + 0.36 * max(dot(normal, light), 0.0),
@@ -72,7 +73,8 @@ final class PrismalEdgeDecorationShader {
                 """)
                 .replace(FINAL, """
                     if (u_outerStrokeColor.a > 0.001 && u_outerStrokeWidthPx > 0.0) {
-                        vec2 normal = normalize(vec2(dFdx(distMask), dFdy(distMask))
+                        vec2 sdfNormal = gradSdRoundedRectRealistic(cKy, halfSz, radCorner);
+                        vec2 normal = normalize(vec2(sdfNormal.x, -sdfNormal.y)
                                 + vec2(1e-5));
                         vec2 light = normalize(u_lightDir + vec2(1e-4));
                         float facing = max(dot(normal, light), 0.0);
