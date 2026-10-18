@@ -134,6 +134,9 @@ public final class PresetManager {
         Map<String, Object> source = new LinkedHashMap<>();
         source.put("liquiddock_enabled", Boolean.TRUE);
         source.put("animation_workspace_visibility_ms", 0);
+        // Folder opening has its own visual timing. The general Workspace
+        // visibility preset intentionally remains immediate.
+        source.put(ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name(), 180);
         source.put("animation_dock_icon_reveal_ms", 278);
         source.put("animation_press_in_ms", 90);
         source.put("animation_press_out_ms", 160);
