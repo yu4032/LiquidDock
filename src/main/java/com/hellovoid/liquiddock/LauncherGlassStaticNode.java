@@ -247,7 +247,8 @@ final class LauncherGlassStaticNode {
      * correction every pre-draw; only unchanged coordinate mapping is reused.
      */
     boolean canReuseStaticGeometry(
-            View root, HomeGridCellGeometryHook.WidgetWidthFrame widgetWidthFrame) {
+            View root, HomeGridCellGeometryHook.WidgetWidthFrame widgetWidthFrame,
+            LauncherGlassStaticGeometryCache.Frame staticViewFrame) {
         if (disposed || visualOwnerState.isLaunchProxyActive()) {
             geometryCache.invalidate();
             return false;
@@ -264,7 +265,7 @@ final class LauncherGlassStaticNode {
         }
         return geometryCache.unchanged(material, root, kind,
                 componentStyle(), nativeCornerRadiusPx, visibilityAlpha,
-                spanOwner, spanX, widthDelta);
+                spanOwner, spanX, widthDelta, staticViewFrame);
     }
 
     void invalidateStaticGeometry() {
