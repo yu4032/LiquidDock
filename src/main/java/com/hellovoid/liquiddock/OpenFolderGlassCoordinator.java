@@ -635,24 +635,9 @@ final class OpenFolderGlassCoordinator {
             // Resolve host-to-root every frame, INCLUDING covered Recents.
             // Before this change, the covered-state early return made the
             // fullscreen TextureView inherit an unobserved parent transform.
-            float[] basis = state.basis;
-            basis[0] = basis[1] = basis[3] = basis[4] = 0f;
-            basis[2] = basis[5] = 1f;
-            Matrix matrix = state.toGlobal;
-            matrix.reset();
-            host.transformMatrixToGlobal(matrix);
-            matrix.mapPoints(basis);
-            state.rootToGlobal.reset();
-            root.transformMatrixToGlobal(state.rootToGlobal);
-            if (!state.rootToGlobal.invert(state.toRoot)) return;
-            state.toRoot.mapPoints(basis);
-            OpenFolderHostTransform hostFrame = OpenFolderHostTransform.fromBasis(basis);
-            if (hostFrame == null) {
-                // A rotation/shear/noninvertible host cannot be compensated
-                // using the View's scale/translation properties. Retain the
-                // last valid frame instead of synthesizing a bad transform.
-                return;
-            }
+            // A noninvertible/sheared host cannot be represented by layer scale and translation.
+            OpenFolderHostTransform hostFrame = resolveHostFrame(state, root, host);
+            if (hostFrame == null) return;
 
             boolean recentsActive = state.recentsGestureObserved
                     || OWNER.isRecentsCovered(state.serial)
@@ -665,53 +650,9 @@ final class OpenFolderGlassCoordinator {
             // WindowManager task leash, if present, remains OEM-owned; it is
             // not observable in transformMatrixToGlobal().
             ShortcutPopupGlassLayer layer = state.layer;
-            float inverseX = hostFrame.inverseScaleX();
-            float inverseY = hostFrame.inverseScaleY();
-            float translateX = hostFrame.inverseTranslationX(layer.getLeft());
-            float translateY = hostFrame.inverseTranslationY(layer.getTop());
-            if (Math.abs(layer.getScaleX() - inverseX) > .0001f) layer.setScaleX(inverseX);
-            if (Math.abs(layer.getScaleY() - inverseY) > .0001f) layer.setScaleY(inverseY);
-            if (Math.abs(layer.getTranslationX() - translateX) > .01f) {
-                layer.setTranslationX(translateX);
-            }
-            if (Math.abs(layer.getTranslationY() - translateY) > .01f) {
-                layer.setTranslationY(translateY);
-            }
+            compensateOutputHost(layer, hostFrame);
 
-            if (recentsActive) {
-                // Transform the LENS GEOMETRY into current Launcher root
-                // coordinates; the glass output buffer itself remains 1:1.
-                // If the parent is scaled by native Recents, this projects the
-                // expanded material without scaling its entire backdrop.
-                OpenFolderGlassGeometry.Frame projected = hostFrame.project(
-                        state.expandedFrame, state.hostBaseline);
-                if (projected != null) {
-                    LauncherGlassGeometry.Snapshot scene = LauncherGlassGeometry.resolveStatic(
-                            state.width, state.height,
-                            projected.left, projected.top,
-                            projected.right, projected.bottom, projected.radius);
-                    if (scene != null) state.session.updateGeometry(scene);
-                }
-                if (OWNER.isRecentsCovered(state.serial)) return;
-                boolean wallpaperSettled = !LauncherGlassSceneController
-                        .isRecentsWallpaperSettlePendingForRoot(root);
-                boolean hostRestored = hostFrame.approximatelyEquals(state.hostBaseline);
-                if (OWNER.isRecentsReturnPending(state.serial)) {
-                    if (!wallpaperSettled || !hostRestored) return;
-                    if (!OWNER.completeRecentsReturn(state.serial)) return;
-                    state.recentsGestureObserved = false;
-                    state.recentsGestureReturnSignaled = false;
-                    layer.reveal();
-                    OemFolderBlurStrengthHook.onRecentsReturnFinished();
-                } else if (state.recentsGestureObserved) {
-                    // Cancelled gesture: wait for both the native blur reset
-                    // signal and restoration of the host transform. There is
-                    // deliberately no background mode to switch on either edge.
-                    if (!state.recentsGestureReturnSignaled || !hostRestored) return;
-                    state.recentsGestureObserved = false;
-                    state.recentsGestureReturnSignaled = false;
-                }
-            }
+            if (recentsActive && !syncRecentsOwnership(state, root, hostFrame, layer)) return;
             if (!state.motion.isClosing()
                     && (!cling.isAttachedToWindow() || cling.getVisibility() != View.VISIBLE)) {
                 return;
@@ -728,60 +669,7 @@ final class OpenFolderGlassCoordinator {
             if (panel == null || panel.getWidth() <= 0 || panel.getHeight() <= 0) panel = view(invoke(folder, "getContent"));
             OpenFolderGlassGeometry.Frame target = state.motion.isClosing() ? state.expandedFrame : bounds(panel, state);
             if (target != null && !state.motion.isClosing()) state.expandedFrame = target;
-            float observed = Float.NaN;
-            if (state.animationSpecReady && animImage != null) {
-                observed = OpenFolderBackdropPolicy.nativeVisualProgress(
-                        animImage.getTranslationX(), animImage.getTranslationY(),
-                        state.nativeTargetX, state.nativeTargetY,
-                        animImage.getScaleX(), state.nativeExpandedScaleX);
-                if (!Float.isFinite(observed) && (state.nativeTargetWidth != state.nativeSourceWidth
-                        || state.nativeTargetHeight != state.nativeSourceHeight)) {
-                    observed = OpenFolderBackdropPolicy.openProgress(state.nativeSourceWidth, state.nativeTargetWidth,
-                            animImage.getWidth(), state.nativeSourceHeight, state.nativeTargetHeight, animImage.getHeight());
-                }
-            }
-            // The OEM may animate translation and scale on independent Folme
-            // curves. Use whichever actually moved, but NEVER use the native
-            // ImageView's own root-space rectangle as the glass silhouette:
-            // its bounds/pivot can differ from both material endpoints.
-            if (state.motion.isClosing()) observed = Float.NaN;
-            if (state.motion.isClosing() && animImage != null) {
-                if (!state.nativeCloseProgress.hasChannels()) {
-                    state.nativeCloseProgress.capture(animImage.getTranslationX(),
-                            animImage.getTranslationY(), animImage.getScaleX(),
-                            state.nativeTargetX, state.nativeTargetY,
-                            state.nativeExpandedScaleX);
-                }
-                float reverse = state.nativeCloseProgress.sample(
-                        animImage.getTranslationX(), animImage.getTranslationY(),
-                        animImage.getScaleX(), state.nativeTargetX,
-                        state.nativeTargetY, state.nativeExpandedScaleX);
-                if (Float.isFinite(reverse)) observed = reverse;
-            }
-            if (state.motion.isClosing() && state.closedFrame != null) {
-                // Read the animated native plate only as a progress sensor.
-                // Never use its rectangle to place the glass: its local
-                // pivot differs from the Prismal root-space endpoints.
-                View plate = nativeAnimationPlate(state);
-                if (plate != null && state.closePlateStart == null) {
-                    state.closePlateStart = bounds(plate, state);
-                }
-                if (animImage != null && state.closeImageStart == null) {
-                    state.closeImageStart = bounds(animImage, state);
-                }
-                float imageProgress = OpenFolderNativeCloseProgress.sampleVisualFrame(
-                        state.closedFrame, state.closeImageStart, bounds(animImage, state));
-                float plateProgress = OpenFolderNativeCloseProgress.sampleVisualFrame(
-                        state.closedFrame, state.closePlateStart, bounds(plate, state));
-                if (Float.isFinite(imageProgress)) {
-                    observed = Float.isFinite(observed)
-                            ? Math.min(observed, imageProgress) : imageProgress;
-                }
-                if (Float.isFinite(plateProgress)) {
-                    observed = Float.isFinite(observed)
-                            ? Math.min(observed, plateProgress) : plateProgress;
-                }
-            }
+            float observed = sampleNativeProgress(state, animImage);
             float amount = state.motion.sample(observed);
             if (state.motion.isClosing() && Api101Bridge.isDebugLoggingEnabled()) {
                 int bucket = Math.max(0, Math.min(4, Math.round(amount * 4f)));
@@ -807,6 +695,135 @@ final class OpenFolderGlassCoordinator {
             MainHook.log(TAG + " geometry fallback: " + error);
             releaseAll();
         }
+    }
+
+    /** View-tree transform only; never substitute a WindowManager task-leash transform. */
+    private static OpenFolderHostTransform resolveHostFrame(
+            State state, View root, ViewGroup host) {
+        float[] basis = state.basis;
+        basis[0] = basis[1] = basis[3] = basis[4] = 0f;
+        basis[2] = basis[5] = 1f;
+        Matrix matrix = state.toGlobal;
+        matrix.reset();
+        host.transformMatrixToGlobal(matrix);
+        matrix.mapPoints(basis);
+        state.rootToGlobal.reset();
+        root.transformMatrixToGlobal(state.rootToGlobal);
+        if (!state.rootToGlobal.invert(state.toRoot)) return null;
+        state.toRoot.mapPoints(basis);
+        return OpenFolderHostTransform.fromBasis(basis);
+    }
+
+    /** Cancel only the host's View transform, keeping the backdrop buffer root-aligned. */
+    private static void compensateOutputHost(
+            ShortcutPopupGlassLayer layer, OpenFolderHostTransform hostFrame) {
+        float inverseX = hostFrame.inverseScaleX();
+        float inverseY = hostFrame.inverseScaleY();
+        float translateX = hostFrame.inverseTranslationX(layer.getLeft());
+        float translateY = hostFrame.inverseTranslationY(layer.getTop());
+        if (Math.abs(layer.getScaleX() - inverseX) > .0001f) layer.setScaleX(inverseX);
+        if (Math.abs(layer.getScaleY() - inverseY) > .0001f) layer.setScaleY(inverseY);
+        if (Math.abs(layer.getTranslationX() - translateX) > .01f) {
+            layer.setTranslationX(translateX);
+        }
+        if (Math.abs(layer.getTranslationY() - translateY) > .01f) {
+            layer.setTranslationY(translateY);
+        }
+    }
+
+    /** Recents projection and owner gate. False means the current pre-draw must stop. */
+    private static boolean syncRecentsOwnership(
+            State state, View root, OpenFolderHostTransform hostFrame,
+            ShortcutPopupGlassLayer layer) {
+        // Transform the LENS GEOMETRY into current Launcher root
+        // coordinates; the glass output buffer itself remains 1:1.
+        // If the parent is scaled by native Recents, this projects the
+        // expanded material without scaling its entire backdrop.
+        OpenFolderGlassGeometry.Frame projected = hostFrame.project(
+                state.expandedFrame, state.hostBaseline);
+        if (projected != null) {
+            LauncherGlassGeometry.Snapshot scene = LauncherGlassGeometry.resolveStatic(
+                    state.width, state.height,
+                    projected.left, projected.top,
+                    projected.right, projected.bottom, projected.radius);
+            if (scene != null) state.session.updateGeometry(scene);
+        }
+        if (OWNER.isRecentsCovered(state.serial)) return false;
+        boolean wallpaperSettled = !LauncherGlassSceneController
+                .isRecentsWallpaperSettlePendingForRoot(root);
+        boolean hostRestored = hostFrame.approximatelyEquals(state.hostBaseline);
+        if (OWNER.isRecentsReturnPending(state.serial)) {
+            if (!wallpaperSettled || !hostRestored) return false;
+            if (!OWNER.completeRecentsReturn(state.serial)) return false;
+            state.recentsGestureObserved = false;
+            state.recentsGestureReturnSignaled = false;
+            layer.reveal();
+            OemFolderBlurStrengthHook.onRecentsReturnFinished();
+        } else if (state.recentsGestureObserved) {
+            // Cancelled gesture: wait for both the native blur reset
+            // signal and restoration of the host transform. There is
+            // deliberately no background mode to switch on either edge.
+            if (!state.recentsGestureReturnSignaled || !hostRestored) return false;
+            state.recentsGestureObserved = false;
+            state.recentsGestureReturnSignaled = false;
+        }
+        return true;
+    }
+
+    /** Sample the OEM's progress channels; geometry remains endpoint-owned. */
+    private static float sampleNativeProgress(State state, View animImage) {
+        float observed = Float.NaN;
+        if (state.animationSpecReady && animImage != null) {
+            observed = OpenFolderBackdropPolicy.nativeVisualProgress(
+                    animImage.getTranslationX(), animImage.getTranslationY(),
+                    state.nativeTargetX, state.nativeTargetY,
+                    animImage.getScaleX(), state.nativeExpandedScaleX);
+            if (!Float.isFinite(observed) && (state.nativeTargetWidth != state.nativeSourceWidth
+                    || state.nativeTargetHeight != state.nativeSourceHeight)) {
+                observed = OpenFolderBackdropPolicy.openProgress(
+                        state.nativeSourceWidth, state.nativeTargetWidth,
+                        animImage.getWidth(), state.nativeSourceHeight,
+                        state.nativeTargetHeight, animImage.getHeight());
+            }
+        }
+        // Independent Folme translation/scale curves are progress sensors,
+        // never alternate sources of root-space glass geometry.
+        if (state.motion.isClosing()) observed = Float.NaN;
+        if (state.motion.isClosing() && animImage != null) {
+            if (!state.nativeCloseProgress.hasChannels()) {
+                state.nativeCloseProgress.capture(animImage.getTranslationX(),
+                        animImage.getTranslationY(), animImage.getScaleX(),
+                        state.nativeTargetX, state.nativeTargetY,
+                        state.nativeExpandedScaleX);
+            }
+            float reverse = state.nativeCloseProgress.sample(
+                    animImage.getTranslationX(), animImage.getTranslationY(),
+                    animImage.getScaleX(), state.nativeTargetX,
+                    state.nativeTargetY, state.nativeExpandedScaleX);
+            if (Float.isFinite(reverse)) observed = reverse;
+        }
+        if (state.motion.isClosing() && state.closedFrame != null) {
+            View plate = nativeAnimationPlate(state);
+            if (plate != null && state.closePlateStart == null) {
+                state.closePlateStart = bounds(plate, state);
+            }
+            if (animImage != null && state.closeImageStart == null) {
+                state.closeImageStart = bounds(animImage, state);
+            }
+            float imageProgress = OpenFolderNativeCloseProgress.sampleVisualFrame(
+                    state.closedFrame, state.closeImageStart, bounds(animImage, state));
+            float plateProgress = OpenFolderNativeCloseProgress.sampleVisualFrame(
+                    state.closedFrame, state.closePlateStart, bounds(plate, state));
+            if (Float.isFinite(imageProgress)) {
+                observed = Float.isFinite(observed)
+                        ? Math.min(observed, imageProgress) : imageProgress;
+            }
+            if (Float.isFinite(plateProgress)) {
+                observed = Float.isFinite(observed)
+                        ? Math.min(observed, plateProgress) : plateProgress;
+            }
+        }
+        return observed;
     }
 
     /** OEM material draw ownership, independent of PassBlur source attachment
