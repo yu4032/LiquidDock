@@ -26,13 +26,15 @@ final class LauncherGlassStaticGeometryCache {
         float alpha;
 
         boolean observe(View candidate) {
+            Matrix candidateMatrix = candidate.getMatrix();
+            boolean matrixChanged = !matrix.equals(candidateMatrix);
             boolean changed = view != candidate
                     || left != candidate.getLeft() || top != candidate.getTop()
                     || right != candidate.getRight() || bottom != candidate.getBottom()
                     || scrollX != candidate.getScrollX() || scrollY != candidate.getScrollY()
                     || visibility != candidate.getVisibility()
                     || Float.compare(alpha, candidate.getAlpha()) != 0
-                    || !matrix.equals(candidate.getMatrix());
+                    || matrixChanged;
             view = candidate;
             left = candidate.getLeft();
             top = candidate.getTop();
@@ -42,7 +44,7 @@ final class LauncherGlassStaticGeometryCache {
             scrollY = candidate.getScrollY();
             visibility = candidate.getVisibility();
             alpha = candidate.getAlpha();
-            matrix.set(candidate.getMatrix());
+            if (matrixChanged) matrix.set(candidateMatrix);
             return changed;
         }
     }
@@ -135,6 +137,7 @@ final class LauncherGlassStaticGeometryCache {
         int depth = 0;
         View cursor = material;
         boolean reachedRoot = false;
+        boolean transientMotion = false;
         while (cursor != null) {
             if (depth == ancestry.size()) ancestry.add(new ViewStamp());
             dirty |= ancestry.get(depth).observe(cursor);
@@ -142,8 +145,7 @@ final class LauncherGlassStaticGeometryCache {
             if (cursor.isLayoutRequested() || cursor.hasTransientState()
                     || (cursor.getAnimation() != null && !cursor.getAnimation().hasEnded())) {
                 dirty = true;
-                // These authorities can change without a stable View property matrix.
-                valid = false;
+                transientMotion = true; // These motions may bypass View property matrices.
             }
             if (cursor == root) {
                 reachedRoot = true;
@@ -168,7 +170,9 @@ final class LauncherGlassStaticGeometryCache {
         styleRadiusDp = style != null ? style.cornerRadiusDp : 0f;
         density = currentDensity;
         boolean reusable = valid && !dirty;
-        valid = true;
+        // First non-transient frame must recapture, even if a Canvas animation
+        // left the observed View properties unchanged from the previous frame.
+        valid = !transientMotion;
         return reusable;
     }
 }
