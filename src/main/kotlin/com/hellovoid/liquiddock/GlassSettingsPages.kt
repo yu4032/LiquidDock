@@ -298,12 +298,16 @@ internal fun GlassIconsPage(
                 )
             }
         }
-        ArrowPreference(
-            title = "外阴影与描边",
-            summary = "桌面图标使用独立边缘效果",
-            enabled = masterEnabled && liquidEnabled,
-            onClick = { open(Page.IconEdge) },
-        )
+        item(key = "icons-glass-edge") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "外阴影与描边",
+                    summary = "桌面图标使用独立边缘效果",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.IconEdge) },
+                )
+            }
+        }
     }
 }
 
