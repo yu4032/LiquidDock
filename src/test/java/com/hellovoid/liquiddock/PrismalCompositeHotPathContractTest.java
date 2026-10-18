@@ -57,6 +57,26 @@ public class PrismalCompositeHotPathContractTest {
     }
 
     @Test
+    public void workspaceEmptyGeometryCanPrimeReuseWithoutSkippingFailedCapture() throws Exception {
+        String source = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        // A null geometry on a valid root transform must be represented by a
+        // completed empty frame, not confused with an uninitialized frame.
+        assertTrue(source.contains(
+                "oldFrame == null && observed == null && staticRootTransformValid"));
+        assertTrue(source.contains(
+                "state.frame = new StaticGeometryFrame(null,"));
+        // The first observation must still traverse/capture, including when the
+        // guard's own fingerprint has become stable before a frame exists.
+        assertTrue(source.contains(
+                "node.canReuseStaticGeometry(root) && state.frame != null"));
+        // Dynamic proxies and widgets never share the empty-folder cache path.
+        assertTrue(source.contains(
+                "node.nodeKind() != LauncherGlassNodeKind.WIDGET"));
+        assertTrue(source.contains("!node.isLaunchProxyActive()"));
+        assertTrue(source.contains("LD.Workspace.StaticNullCacheHits"));
+    }
+
+    @Test
     public void securityCenterCompositeDoesNotPollGlErrorEveryPresent() throws Exception {
         String source = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
         assertFalse(source.contains("GLES20.glGetError()"));
