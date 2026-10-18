@@ -181,6 +181,32 @@ public class SystemUiHandleMenuGlassContractTest {
     }
 
     @Test
+    public void scopedHandleMenuGlassUpdatesTheActiveSessionWithoutReplacingSource() throws Exception {
+        String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
+        String remote = Files.readString(MAIN.resolve("ExternalGlassLiveConfigState.java"));
+        String scope = Files.readString(MAIN.resolve("ScopedGlassOptics.java"));
+        String settings = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ShortcutPopupGlassSettingsPage.kt"));
+        String menus = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"));
+        String activity = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
+        assertTrue(scope.contains("public static final String HANDLE_MENU = \"handle_menu\""));
+        assertTrue(hook.contains("ScopedGlassOptics.resolve("));
+        assertTrue(hook.contains("reader, config.glass, ScopedGlassOptics.HANDLE_MENU"));
+        assertTrue(hook.contains("binding.prismalSession.applyLiveGlassConfig(resolved)"));
+        assertTrue(hook.contains("binding.nativeBlurRadiusPx = Math.max(1, Math.round(resolved.blur))"));
+        assertTrue(remote.contains("SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(reader, config)"));
+        assertTrue(menus.contains("onClick = { open(Page.HandleMenuCustomization) }"));
+        assertTrue(settings.contains("internal fun HandleMenuGlassSettingsPage("));
+        assertTrue(settings.contains("ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS"));
+        assertTrue(settings.contains("ScopedGlassOptics.HANDLE_MENU"));
+        assertTrue(activity.contains("Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage("));
+        assertTrue(activity.contains("Page.HandleMenuAll -> ScopedGlassSettingsPage("));
+        assertTrue(activity.contains("navigateTo(Page.HandleMenuAll)"));
+    }
+
+    @Test
     public void moduleAndSchemaKeepFeatureOptIn() throws Exception {
         String module = Files.readString(MAIN.resolve("ModuleMain.java"));
         String config = Files.readString(MAIN.resolve("LiquidDockConfig.java"));
@@ -188,7 +214,7 @@ public class SystemUiHandleMenuGlassContractTest {
                 Path.of("src/main/java/com/hellovoid/liquiddock/config/ConfigSchema.java"));
 
         // Register the hook once and keep it inert until the live runtime policy enables glass.
-        assertTrue(module.contains("SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(runtimeConfig)"));
+        assertTrue(module.contains("SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(configReader, runtimeConfig)"));
         assertTrue(module.contains("ExternalGlassLiveConfigState.initialize(packageName)"));
         String hook = Files.readString(MAIN.resolve("SystemUiHandleMenuGlassHook.java"));
         assertTrue(hook.contains("config.glass.systemUiHandleMenuEnabled"));

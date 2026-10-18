@@ -57,6 +57,44 @@ public class ScopedGlassOpticsTest {
         assertEquals(35, global.tintAlpha);
     }
 
+    @Test public void handleMenuInheritsGlobalUntilItsOwnOverrideAndNeverChangesPopup() {
+        Map<String, Object> values = new HashMap<>();
+        values.put(ConfigSchema.Glass.BLUR.name(), 9);
+        values.put(ConfigSchema.Glass.BLUR.name() + "_tenths", 92);
+        values.put(ConfigSchema.Glass.TINT_GREEN.name(), 100);
+        values.put(ConfigSchema.LauncherHighlight.LARGE_CAUSTICS.name(), true);
+        String menuBlur = ScopedGlassOptics.key(
+                ScopedGlassOptics.HANDLE_MENU, ConfigSchema.Glass.BLUR);
+        String menuLens = ScopedGlassOptics.key(
+                ScopedGlassOptics.HANDLE_MENU, ConfigSchema.Glass.LENS_REFRACTION);
+        String menuHighlight = ScopedGlassOptics.menuHighlightKey(
+                ScopedGlassOptics.HANDLE_MENU, ConfigSchema.LauncherHighlight.LARGE_CAUSTICS);
+        String popupHighlight = ScopedGlassOptics.menuHighlightKey(
+                ScopedGlassOptics.POPUP, ConfigSchema.LauncherHighlight.LARGE_CAUSTICS);
+        assertFalse(menuHighlight.equals(popupHighlight));
+        assertTrue(menuBlur.startsWith("liquid_scope_handle_menu_"));
+        values.put(menuBlur, 18);
+        values.put(menuBlur + "_tenths", 185);
+        values.put(menuLens + "_tenths", 24);
+        values.put(menuHighlight, false);
+        ConfigReader reader = new ConfigReader(values);
+        LiquidDockConfig.Glass global = LiquidDockConfig.from(reader).glass;
+        LiquidDockConfig.Glass topMenu = ScopedGlassOptics.resolve(
+                reader, global, ScopedGlassOptics.HANDLE_MENU);
+        LiquidDockConfig.Glass shortcut = ScopedGlassOptics.resolve(
+                reader, global, ScopedGlassOptics.POPUP);
+        assertEquals(9.2f, global.blur, 0.0001f);
+        assertEquals(18.5f, topMenu.blur, 0.0001f);
+        assertEquals(2.4f, topMenu.lensRefraction, 0.0001f);
+        assertEquals(100, topMenu.tintG);
+        assertFalse(topMenu.largeSurfaceHighlightProfile.caustics);
+        assertTrue(global.largeSurfaceHighlightProfile.caustics);
+        assertEquals(9.2f, shortcut.blur, 0.0001f);
+        assertTrue(shortcut.largeSurfaceHighlightProfile.caustics);
+        assertTrue(ScopedGlassOptics.keysForScope(ScopedGlassOptics.HANDLE_MENU)
+                .contains(ConfigSchema.Glass.TINT_ALPHA));
+    }
+
     @Test public void popupInheritsGlobalChangesUntilOverridden() {
         Map<String, Object> values = new HashMap<>();
         values.put(ConfigSchema.Glass.BLUR.name(), 6);

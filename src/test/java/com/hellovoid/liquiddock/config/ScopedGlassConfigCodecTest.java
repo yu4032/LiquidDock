@@ -54,6 +54,30 @@ public class ScopedGlassConfigCodecTest {
                 imported.get(ConfigSchema.Glass.BLUR.name()));
     }
 
+    @Test public void handleMenuBackupRoundTripIsIndependentOfPopup() {
+        String blur = ScopedGlassOptics.key(
+                ScopedGlassOptics.HANDLE_MENU, ConfigSchema.Glass.BLUR);
+        String alpha = ScopedGlassOptics.key(
+                ScopedGlassOptics.HANDLE_MENU, ConfigSchema.Glass.TINT_ALPHA);
+        String highlight = ScopedGlassOptics.menuHighlightKey(
+                ScopedGlassOptics.HANDLE_MENU, ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE);
+        Map<String, Object> prefs = new LinkedHashMap<>();
+        prefs.put(blur, 18);
+        prefs.put(blur + "_tenths", 187);
+        prefs.put(alpha, 63);
+        prefs.put(highlight, true);
+        Map<String, Object> exported = ConfigCodec.exportValues(prefs);
+        assertEquals(18.7d, ((Number) exported.get(blur)).doubleValue(), 0.0001d);
+        assertEquals(63, exported.get(alpha));
+        assertEquals(true, exported.get(highlight));
+        Map<String, Object> imported = ConfigCodec.importValues(exported);
+        assertEquals(187, imported.get(blur + "_tenths"));
+        assertEquals(63, imported.get(alpha));
+        assertEquals(true, imported.get(highlight));
+        assertFalse(imported.containsKey(
+                ScopedGlassOptics.key(ScopedGlassOptics.POPUP, ConfigSchema.Glass.BLUR)));
+    }
+
     @Test public void invalidValuesAreClampedWithoutCrossScopeWrites() {
         String ior = ScopedGlassOptics.key(
                 ScopedGlassOptics.DIALOG, ConfigSchema.Glass.IOR);
