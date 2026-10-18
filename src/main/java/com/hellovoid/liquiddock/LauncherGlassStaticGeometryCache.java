@@ -14,8 +14,9 @@ import java.util.ArrayList;
  *
  * It compares the same View ancestry whose transforms are used by
  * transformMatrixToGlobal(), including parent identity, layout, scroll, alpha,
- * visibility and property matrices. It deliberately fails open for widgets,
- * native proxy geometry, transient/legacy animations, and unknown ancestry.
+ * visibility and property matrices. Widget bounds additionally check the current
+ * native span and computed horizontal width offset on every pre-draw. Native
+ * proxies, transient/legacy animations and unknown ancestry fail open.
  * No timers or View invalidation hooks are installed.
  */
 final class LauncherGlassStaticGeometryCache {
@@ -128,6 +129,8 @@ final class LauncherGlassStaticGeometryCache {
     private int rootWidth, rootHeight;
     private float radiusPx, sizeOffsetDp, styleRadiusDp, density;
     private boolean enabled, visible;
+    private View widgetSpanOwner;
+    private int widgetSpanX, widgetWidthDeltaPx;
 
     void invalidate() {
         valid = false;
@@ -135,11 +138,10 @@ final class LauncherGlassStaticGeometryCache {
 
     boolean unchanged(
             View material, View root, LauncherGlassDragState.Kind kind,
-            GlassComponentStyle style, float nativeRadiusPx, float visibilityAlpha) {
-        // Widget span adjustment reads mutable OEM fields; leave it on the original
-        // full-capture path until it has a separately proven revision authority.
-        if (kind == LauncherGlassDragState.Kind.WIDGET
-                || material == null || root == null || !material.isAttachedToWindow()) {
+            GlassComponentStyle style, float nativeRadiusPx, float visibilityAlpha,
+            View currentWidgetSpanOwner, int currentWidgetSpanX,
+            int currentWidgetWidthDeltaPx) {
+        if (material == null || root == null || !material.isAttachedToWindow()) {
             invalidate();
             return false;
         }
@@ -148,6 +150,10 @@ final class LauncherGlassStaticGeometryCache {
         boolean nowVisible = visibilityAlpha > 0.001f;
         float currentDensity = material.getResources().getDisplayMetrics().density;
         boolean dirty = !valid || rootWidth != root.getWidth() || rootHeight != root.getHeight()
+                || (kind == LauncherGlassDragState.Kind.WIDGET
+                && (widgetSpanOwner != currentWidgetSpanOwner
+                || widgetSpanX != currentWidgetSpanX
+                || widgetWidthDeltaPx != currentWidgetWidthDeltaPx))
                 || enabled != nowEnabled || visible != nowVisible
                 || Float.compare(radiusPx, nativeRadiusPx) != 0
                 || Float.compare(sizeOffsetDp, style != null ? style.sizeOffsetDp : 0f) != 0
@@ -189,6 +195,11 @@ final class LauncherGlassStaticGeometryCache {
         sizeOffsetDp = style != null ? style.sizeOffsetDp : 0f;
         styleRadiusDp = style != null ? style.cornerRadiusDp : 0f;
         density = currentDensity;
+        if (kind == LauncherGlassDragState.Kind.WIDGET) {
+            widgetSpanOwner = currentWidgetSpanOwner;
+            widgetSpanX = currentWidgetSpanX;
+            widgetWidthDeltaPx = currentWidgetWidthDeltaPx;
+        }
         boolean reusable = valid && !dirty;
         // First non-transient frame must recapture, even if a Canvas animation
         // left the observed View properties unchanged from the previous frame.
