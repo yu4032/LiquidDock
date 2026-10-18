@@ -64,10 +64,11 @@ final class PrismalEdgeDecorationShader {
                     if (distMask > 0.0) {
                         vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
                         float facing = dot(edgeN, u_invariantLightXY);
-                        vec2 backlight = prismalBacklitContour(facing);
-                        float strokeWidth = u_outerStrokeWidthPx * backlight.x;
                         float rim = 0.0;
                         if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
+                            // Shadow-only glass skips all contour-angle calculations.
+                            vec2 backlight = prismalBacklitContour(facing);
+                            float strokeWidth = u_outerStrokeWidthPx * backlight.x;
                             rim = u_outerStrokeColor.a * backlight.x * backlight.y
                                     * (1.0 - smoothstep(
                                             0.0, max(strokeWidth, 0.001), distMask));

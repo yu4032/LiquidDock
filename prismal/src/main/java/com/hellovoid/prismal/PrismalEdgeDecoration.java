@@ -9,7 +9,7 @@ public final class PrismalEdgeDecoration {
     public final float strokeWidthDp, strokeR, strokeG, strokeB, strokeA;
     public final float shadowRadiusDp, shadowOffsetYDp, shadowR, shadowG, shadowB, shadowA;
     public final float shadowLightFollow, strokeLightResponse;
-    /** Cosine of lateral half-angle, computed once per preferences update. */
+    /** Cosine of the backlit contour half-angle, computed on configuration update. */
     public final float strokeMinCos;
 
     public PrismalEdgeDecoration(float strokeWidthDp,
@@ -48,7 +48,7 @@ public final class PrismalEdgeDecoration {
     public boolean hasStroke() { return strokeA > 0f && strokeWidthDp > 0f; }
     public boolean hasShadow() { return shadowA > 0f && shadowRadiusDp > 0f; }
 
-    /** Native Dock/SystemUI shadows own external pixels, but Prismal may own the stroke. */
+    /** Native Dock/SystemUI shadows own external pixels, but Prismal may own the contour. */
     public PrismalEdgeDecoration strokeOnly() {
         if (!hasShadow()) return this;
         return new PrismalEdgeDecoration(strokeWidthDp, strokeR, strokeG, strokeB, strokeA,
