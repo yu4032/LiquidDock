@@ -809,11 +809,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         int staticCacheHits = 0;
         // Native WindowElement/Recents/unlock may animate independently of View properties.
         // Keep their existing per-frame capture authority; only reuse genuinely stable nodes.
-        boolean forceStaticCapture = rootGeometryChanged || rotationSettlePending
+        boolean forceStaticCapture = staticSnapshot.length > 0
+                && (rootGeometryChanged || rotationSettlePending
                 || transitionFrameSync.isActive()
                 || LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
                 || LauncherGlassSceneController.isRecentsCoveredByVendor()
-                || LauncherGlassSceneController.isRecentsWallpaperSettlePendingForRoot(root);
+                || LauncherGlassSceneController.isRecentsWallpaperSettlePendingForRoot(root));
         if (tracing) Trace.beginSection("LD.Workspace.StaticNodes");
         try {
             Integer workspaceScrollX = null;
