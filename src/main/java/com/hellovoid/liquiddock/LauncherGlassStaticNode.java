@@ -243,16 +243,29 @@ final class LauncherGlassStaticNode {
     float visibilityAlpha() { return visibilityAlpha; }
 
     /**
-     * UI-only guard. Proxy and widget geometry deliberately keep their native
-     * per-frame authority; a stable icon/folder must match its entire View ancestry.
+     * UI-only guard. Widgets still read their native span and grid-derived width
+     * correction every pre-draw; only unchanged coordinate mapping is reused.
      */
-    boolean canReuseStaticGeometry(View root) {
-        if (visualOwnerState.isLaunchProxyActive()) {
+    boolean canReuseStaticGeometry(
+            View root, HomeGridCellGeometryHook.WidgetWidthFrame widgetWidthFrame,
+            LauncherGlassStaticGeometryCache.Frame staticViewFrame) {
+        if (disposed || visualOwnerState.isLaunchProxyActive()) {
             geometryCache.invalidate();
             return false;
         }
-        return geometryCache.unchanged(materialRef.get(), root, kind,
-                componentStyle(), nativeCornerRadiusPx, visibilityAlpha);
+        View material = materialRef.get();
+        View spanOwner = null;
+        int spanX = 0;
+        int widthDelta = 0;
+        if (kind == LauncherGlassDragState.Kind.WIDGET) {
+            spanOwner = findWidgetSpanOwner(material);
+            spanX = resolveWidgetSpanX(spanOwner);
+            widthDelta = HomeGridCellGeometryHook.widgetHorizontalSpanDeltaPx(
+                    spanOwner, spanX, widgetWidthFrame);
+        }
+        return geometryCache.unchanged(material, root, kind,
+                componentStyle(), nativeCornerRadiusPx, visibilityAlpha,
+                spanOwner, spanX, widthDelta, staticViewFrame);
     }
 
     void invalidateStaticGeometry() {
