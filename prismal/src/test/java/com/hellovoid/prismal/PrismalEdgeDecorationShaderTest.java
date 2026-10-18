@@ -16,7 +16,8 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(result.contains("float os4SoftLight"));
         assertTrue(result.contains("u_os4DirectionalIntensity"));
         assertTrue(result.contains("u_os4DirectionalOppositeIntensity"));
-        assertTrue(result.contains("os4EdgeBand(edgeDist, u_backlitWidthPx, edgeAa)"));
+        assertTrue(result.contains("float edgeBand = os4EdgeBand("));
+        assertTrue(result.contains("edgeDist, u_backlitWidthPx, edgeAa));"));
         assertTrue(result.contains("color *= 1.0 - darken;"));
         assertTrue(result.contains("smoothstep("));
         assertFalse(result.contains("abs(n.x)"));
