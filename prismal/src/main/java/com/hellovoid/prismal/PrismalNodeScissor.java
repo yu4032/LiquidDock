@@ -32,19 +32,25 @@ final class PrismalNodeScissor {
     /** No allocation in the GL render loop. */
     static boolean computeInto(PrismalGeometry geometry, int targetWidth,
                                int targetHeight, Rect output) {
+        return computeInto(geometry, targetWidth, targetHeight, output, 0f);
+    }
+
+    static boolean computeInto(PrismalGeometry geometry, int targetWidth,
+                               int targetHeight, Rect output, float extraGuardPx) {
         if (output == null || geometry == null || targetWidth <= 0 || targetHeight <= 0
                 || !Float.isFinite(geometry.left()) || !Float.isFinite(geometry.right())
                 || !Float.isFinite(geometry.top()) || !Float.isFinite(geometry.bottom())) {
             return false;
         }
+        float margin = EDGE_GUARD_PX + Math.max(0f, extraGuardPx);
         float scaleX = targetWidth / (float) geometry.framebufferWidth;
         float scaleY = targetHeight / (float) geometry.framebufferHeight;
-        int x0 = clampFloor((geometry.left() - EDGE_GUARD_PX) * scaleX, targetWidth);
-        int x1 = clampCeil((geometry.right() + EDGE_GUARD_PX) * scaleX, targetWidth);
+        int x0 = clampFloor((geometry.left() - margin) * scaleX, targetWidth);
+        int x1 = clampCeil((geometry.right() + margin) * scaleX, targetWidth);
         int y0 = clampFloor((geometry.framebufferHeight - geometry.bottom()
-                - EDGE_GUARD_PX) * scaleY, targetHeight);
+                - margin) * scaleY, targetHeight);
         int y1 = clampCeil((geometry.framebufferHeight - geometry.top()
-                + EDGE_GUARD_PX) * scaleY, targetHeight);
+                + margin) * scaleY, targetHeight);
         if (x1 <= x0 || y1 <= y0) return false;
         output.x = x0;
         output.y = y0;
