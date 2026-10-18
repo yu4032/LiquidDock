@@ -225,6 +225,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         layerAlpha.setSceneAlpha(plan.startAlpha);
         applyLayerAlpha();
         if (plan.durationMs == 0L) {
+            folderOpeningFadeRunning = false;
             layerAlpha.setSceneAlpha(plan.targetAlpha);
             applyLayerAlpha();
             return;
