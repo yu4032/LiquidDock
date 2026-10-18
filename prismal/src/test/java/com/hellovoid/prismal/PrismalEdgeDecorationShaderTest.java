@@ -10,13 +10,16 @@ public class PrismalEdgeDecorationShaderTest {
                         PrismalOpticalEdgeShader.apply(
                                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
         String decorated = PrismalEdgeDecorationShader.apply(original);
-        assertTrue(decorated.contains("vec2 cast = -light * u_dropShadowRadiusPx"));
+        assertTrue(decorated.contains("float offset = -facing * u_dropShadowRadiusPx"));
         assertTrue(decorated.contains("u_dropShadowLightFollow"));
-        assertTrue(decorated.contains("gradSdRoundedRectRealistic(cKy, halfSz, radCorner)"));
+        assertTrue(decorated.contains("dot(vec2(outward.x, -outward.y), light)"));
         assertTrue(decorated.contains("u_strokeLightResponse"));
         assertTrue(decorated.contains("if (distMask > 0.0)"));
         assertTrue(decorated.contains("vec2 baseOffset = edgeRefractionUv;"));
         assertTrue(decorated.contains("u_os4DirectionalIntensity"));
+        assertTrue(decorated.contains("vec3 edgeRgb ="));
+        assertFalse(decorated.contains("float shadowDist = sdRoundBox"));
+        assertFalse(decorated.contains("float contact = exp("));
         assertEquals(1, count(decorated, "uniform float u_dropShadowRadiusPx;"));
     }
 
