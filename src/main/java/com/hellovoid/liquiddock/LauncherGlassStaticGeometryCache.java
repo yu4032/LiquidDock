@@ -22,19 +22,26 @@ final class LauncherGlassStaticGeometryCache {
     private static final class ViewStamp {
         View view;
         final Matrix matrix = new Matrix();
+        Matrix animationMatrix;
         int left, top, right, bottom, scrollX, scrollY, visibility;
         float alpha;
 
         boolean observe(View candidate) {
             Matrix candidateMatrix = candidate.getMatrix();
             boolean matrixChanged = !matrix.equals(candidateMatrix);
+            // Transition.setAnimationMatrix is independent of View#getMatrix().
+            // It can drive native per-frame geometry without changing normal properties.
+            Matrix candidateAnimation = candidate.getAnimationMatrix();
+            boolean animationChanged = (candidateAnimation == null) != (animationMatrix == null)
+                    || (candidateAnimation != null
+                    && !candidateAnimation.equals(animationMatrix));
             boolean changed = view != candidate
                     || left != candidate.getLeft() || top != candidate.getTop()
                     || right != candidate.getRight() || bottom != candidate.getBottom()
                     || scrollX != candidate.getScrollX() || scrollY != candidate.getScrollY()
                     || visibility != candidate.getVisibility()
                     || Float.compare(alpha, candidate.getAlpha()) != 0
-                    || matrixChanged;
+                    || matrixChanged || animationChanged;
             view = candidate;
             left = candidate.getLeft();
             top = candidate.getTop();
@@ -45,6 +52,13 @@ final class LauncherGlassStaticGeometryCache {
             visibility = candidate.getVisibility();
             alpha = candidate.getAlpha();
             if (matrixChanged) matrix.set(candidateMatrix);
+            if (animationChanged) {
+                if (candidateAnimation == null) animationMatrix = null;
+                else {
+                    if (animationMatrix == null) animationMatrix = new Matrix();
+                    animationMatrix.set(candidateAnimation);
+                }
+            }
             return changed;
         }
     }
