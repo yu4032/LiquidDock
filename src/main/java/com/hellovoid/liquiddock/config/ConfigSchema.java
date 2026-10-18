@@ -184,6 +184,18 @@ public final class ConfigSchema {
                 "dock_shadow_alpha", 140, 140, 140, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_Y = dp(
                 "dock_shadow_y", 4, 12, 12, -24, 24, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> SIDE_DARK_EDGE_ENABLED = bool(
+                "dock_side_dark_edge_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SIDE_DARK_EDGE_ALPHA = integer(
+                "dock_side_dark_edge_alpha", 70, 70, 70, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SIDE_DARK_EDGE_WIDTH = integer(
+                "dock_side_dark_edge_width_px", 3, 3, 3, 1, 12, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SIDE_DARK_EDGE_LIGHT_SUPPRESSION = integer(
+                "dock_side_dark_edge_light_suppression", 100, 100, 100, 0, 100,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SIDE_DARK_EDGE_ANGLE_RANGE = integer(
+                "dock_side_dark_edge_angle_range", 52, 52, 52, 5, 80,
+                ConfigKey.ExportMode.IF_PRESENT);
 
         private Dock() {}
     }
@@ -234,12 +246,15 @@ public final class ConfigSchema {
                 "liquid_outer_stroke_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_WIDTH = dp(
                 "liquid_outer_stroke_width", 1, 1, 1, 0, 4, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> OUTER_STROKE_ANGLE_RANGE = integer(
+                "liquid_outer_stroke_angle_range", 52, 52, 52, 5, 80,
+                ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_RED = integer(
-                "liquid_outer_stroke_r", 255, 255, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_outer_stroke_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_GREEN = integer(
-                "liquid_outer_stroke_g", 255, 255, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_outer_stroke_g", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_BLUE = integer(
-                "liquid_outer_stroke_b", 255, 255, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_outer_stroke_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_ALPHA = integer(
                 "liquid_outer_stroke_alpha", 66, 66, 66, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_LIGHT_RESPONSE = integer(
@@ -612,13 +627,17 @@ public final class ConfigSchema {
                 Dock.STANDARD_STROKE_WIDTH, Dock.STROKE_RED, Dock.STROKE_GREEN,
                 Dock.STROKE_BLUE, Dock.STROKE_ALPHA, Dock.STROKE_SHADOW,
                 Dock.STROKE_SHADOW_RADIUS, Dock.STROKE_SHADOW_ALPHA, Dock.SHADOW_ENABLED,
-                Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
+                Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y,
+                Dock.SIDE_DARK_EDGE_ENABLED, Dock.SIDE_DARK_EDGE_ALPHA,
+                Dock.SIDE_DARK_EDGE_WIDTH, Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION,
+                Dock.SIDE_DARK_EDGE_ANGLE_RANGE);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.OUTER_SHADOW_ENABLED, Glass.OUTER_SHADOW_RADIUS,
                 Glass.OUTER_SHADOW_OFFSET_Y, Glass.OUTER_SHADOW_RED, Glass.OUTER_SHADOW_GREEN,
                 Glass.OUTER_SHADOW_BLUE, Glass.OUTER_SHADOW_ALPHA, Glass.OUTER_SHADOW_LIGHT_FOLLOW,
-                Glass.OUTER_STROKE_ENABLED, Glass.OUTER_STROKE_WIDTH, Glass.OUTER_STROKE_RED,
+                Glass.OUTER_STROKE_ENABLED, Glass.OUTER_STROKE_WIDTH,
+                Glass.OUTER_STROKE_ANGLE_RANGE, Glass.OUTER_STROKE_RED,
                 Glass.OUTER_STROKE_GREEN, Glass.OUTER_STROKE_BLUE, Glass.OUTER_STROKE_ALPHA,
                 Glass.OUTER_STROKE_LIGHT_RESPONSE);
         add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,

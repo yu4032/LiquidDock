@@ -788,6 +788,7 @@ public final class PrismalRenderer implements AutoCloseable {
                     || lastUploadedMinDimension != minDimension) {
                 uniform1f("u_outerStrokeWidthPx", decoration.strokeWidthDp * edgeDensity);
                 uniform1f("u_strokeLightResponse", decoration.strokeLightResponse);
+                uniform1f("u_strokeMinCos", decoration.strokeMinCos);
                 uniform4f("u_outerStrokeColor", decoration.strokeR, decoration.strokeG,
                         decoration.strokeB, decoration.strokeA);
                 uniform1f("u_dropShadowRadiusPx",

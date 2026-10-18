@@ -9,12 +9,27 @@ public final class PrismalEdgeDecoration {
     public final float strokeWidthDp, strokeR, strokeG, strokeB, strokeA;
     public final float shadowRadiusDp, shadowOffsetYDp, shadowR, shadowG, shadowB, shadowA;
     public final float shadowLightFollow, strokeLightResponse;
+    /** Cosine of lateral half-angle, computed once per preferences update. */
+    public final float strokeMinCos;
 
     public PrismalEdgeDecoration(float strokeWidthDp,
                                  float strokeR, float strokeG, float strokeB, float strokeA,
                                  float shadowRadiusDp, float shadowOffsetYDp,
                                  float shadowR, float shadowG, float shadowB, float shadowA,
                                  float shadowLightFollow, float strokeLightResponse) {
+        this(strokeWidthDp, strokeR, strokeG, strokeB, strokeA,
+                shadowRadiusDp, shadowOffsetYDp, shadowR, shadowG, shadowB, shadowA,
+                shadowLightFollow, strokeLightResponse, 52f);
+    }
+
+    public PrismalEdgeDecoration(float strokeWidthDp,
+                                 float strokeR, float strokeG, float strokeB, float strokeA,
+                                 float shadowRadiusDp, float shadowOffsetYDp,
+                                 float shadowR, float shadowG, float shadowB, float shadowA,
+                                 float shadowLightFollow, float strokeLightResponse,
+                                 float strokeAngleDegrees) {
+        strokeMinCos = (float) Math.cos(Math.toRadians(
+                safe(strokeAngleDegrees, 5f, 80f)));
         this.strokeWidthDp = safe(strokeWidthDp, 0f, 4f);
         this.strokeR = safe(strokeR, 0f, 1f);
         this.strokeG = safe(strokeG, 0f, 1f);
@@ -38,7 +53,8 @@ public final class PrismalEdgeDecoration {
         if (!hasShadow()) return this;
         return new PrismalEdgeDecoration(strokeWidthDp, strokeR, strokeG, strokeB, strokeA,
                 0f, 0f, shadowR, shadowG, shadowB, 0f,
-                0f, strokeLightResponse);
+                0f, strokeLightResponse,
+                (float) Math.toDegrees(Math.acos(strokeMinCos)));
     }
 
     /** Extra guard beyond the upstream Prismal AA raster fringe. */

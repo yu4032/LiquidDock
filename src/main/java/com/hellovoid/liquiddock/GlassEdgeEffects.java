@@ -42,6 +42,7 @@ public final class GlassEdgeEffects {
             ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW,
             ConfigSchema.Glass.OUTER_STROKE_ENABLED,
             ConfigSchema.Glass.OUTER_STROKE_WIDTH,
+            ConfigSchema.Glass.OUTER_STROKE_ANGLE_RANGE,
             ConfigSchema.Glass.OUTER_STROKE_RED,
             ConfigSchema.Glass.OUTER_STROKE_GREEN,
             ConfigSchema.Glass.OUTER_STROKE_BLUE,
@@ -83,7 +84,8 @@ public final class GlassEdgeEffects {
                 integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_BLUE) / 255f,
                 shadow ? integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_ALPHA) / 255f : 0f,
                 integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW) / 100f,
-                integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE) / 100f);
+                integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE) / 100f,
+                integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_ANGLE_RANGE));
     }
 
     public static synchronized void refresh(ConfigReader reader) {
