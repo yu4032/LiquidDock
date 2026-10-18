@@ -29,6 +29,7 @@ final class PrismalEdgeDecorationShader {
                 uniform vec4 u_outerStrokeColor;
                 uniform float u_outerStrokeWidthPx;
                 uniform float u_strokeLightResponse;
+                uniform float u_strokeMinCos;
                 uniform vec4 u_dropShadowColor;
                 uniform float u_dropShadowRadiusPx;
                 uniform float u_dropShadowOffsetYPx;
@@ -41,12 +42,20 @@ final class PrismalEdgeDecorationShader {
                     if (distMask > 0.0) {
                         vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
                         float facing = dot(edgeN, u_invariantLightXY);
+                        // Side aperture is shared by Dock and every other glass.
+                        // At each endpoint the border thickness AND alpha taper to zero.
+                        float sideT = clamp(
+                                (abs(edgeN.x) - u_strokeMinCos)
+                                / max(1.0 - u_strokeMinCos, 0.001), 0.0, 1.0);
+                        float sideCoverage = sideT * sideT * (3.0 - 2.0 * sideT);
+                        float strokeWidth = u_outerStrokeWidthPx * sideCoverage;
+                        float darkFacing = 1.0 - clamp(
+                                max(facing, 0.0) * u_strokeLightResponse, 0.0, 1.0);
                         float rim = 0.0;
                         if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
-                            float brightness = mix(1.0, 0.8 + 0.4 * max(facing, 0.0),
-                                    u_strokeLightResponse);
-                            rim = u_outerStrokeColor.a * brightness *
-                                    (1.0 - smoothstep(0.0, u_outerStrokeWidthPx, distMask));
+                            rim = u_outerStrokeColor.a * sideCoverage * darkFacing
+                                    * (1.0 - smoothstep(
+                                            0.0, max(strokeWidth, 0.001), distMask));
                         }
                         float shade = 0.0;
                         if (u_dropShadowRadiusPx > 0.0 && u_dropShadowColor.a > 0.0) {
@@ -74,13 +83,18 @@ final class PrismalEdgeDecorationShader {
                     // pre-normalized direction as the OS4 rim shader.
                     if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
                         vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
-                        float lit = max(dot(edgeN, u_invariantLightXY), 0.0);
-                        float brightness = mix(1.0, 0.8 + 0.4 * lit,
-                                u_strokeLightResponse);
+                        float facing = dot(edgeN, u_invariantLightXY);
+                        float sideT = clamp(
+                                (abs(edgeN.x) - u_strokeMinCos)
+                                / max(1.0 - u_strokeMinCos, 0.001), 0.0, 1.0);
+                        float sideCoverage = sideT * sideT * (3.0 - 2.0 * sideT);
+                        float strokeWidth = u_outerStrokeWidthPx * sideCoverage;
+                        float darkFacing = 1.0 - clamp(
+                                max(facing, 0.0) * u_strokeLightResponse, 0.0, 1.0);
                         float rim = 1.0 - smoothstep(
-                                0.0, u_outerStrokeWidthPx, -distMask);
+                                0.0, max(strokeWidth, 0.001), -distMask);
                         color = mix(color, u_outerStrokeColor.rgb,
-                                clamp(u_outerStrokeColor.a * brightness * rim, 0.0, 1.0));
+                                clamp(u_outerStrokeColor.a * sideCoverage * darkFacing * rim, 0.0, 1.0));
                     }
                     """ + FINAL);
     }

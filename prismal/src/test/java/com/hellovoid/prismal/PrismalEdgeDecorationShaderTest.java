@@ -14,6 +14,10 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(decorated.contains("u_dropShadowLightFollow"));
         assertTrue(decorated.contains("dot(edgeN, u_invariantLightXY)"));
         assertTrue(decorated.contains("u_strokeLightResponse"));
+        assertTrue(decorated.contains("u_strokeMinCos"));
+        assertTrue(decorated.contains("float strokeWidth = u_outerStrokeWidthPx * sideCoverage;"));
+        assertTrue(decorated.contains("sideT * sideT * (3.0 - 2.0 * sideT)"));
+        assertTrue(decorated.contains("sideCoverage * darkFacing"));
         assertTrue(decorated.contains("if (distMask > 0.0)"));
         assertTrue(decorated.contains("vec2 baseOffset = edgeRefractionUv;"));
         assertTrue(decorated.contains("u_os4DirectionalIntensity"));
@@ -49,6 +53,18 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(PrismalNodeScissor.computeInto(geometry, 1000, 800, expanded, 22f));
         assertEquals(baseline.width + 44, expanded.width);
         assertEquals(baseline.height + 44, expanded.height);
+    }
+
+    @Test public void widerAngleExtendsTheTaperedContour() {
+        PrismalEdgeDecoration wide = new PrismalEdgeDecoration(
+                4f, 0f, 0f, 0f, 0.6f,
+                0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f, 80f);
+        PrismalEdgeDecoration narrow = new PrismalEdgeDecoration(
+                4f, 0f, 0f, 0f, 0.6f,
+                0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f, 5f);
+        assertTrue(wide.strokeMinCos < narrow.strokeMinCos);
+        assertFalse(wide.hasShadow());
+        assertTrue(wide.hasStroke());
     }
 
     @Test public void disabledStyleHasZeroExtraOverdraw() {
