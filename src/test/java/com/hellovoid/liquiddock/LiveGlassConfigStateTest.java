@@ -82,6 +82,15 @@ public class LiveGlassConfigStateTest {
                 ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name()));
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(ScopedGlassOptics.key(
+                ScopedGlassOptics.POPUP, ConfigSchema.Glass.BLUR) + "_tenths"));
+        assertTrue(LiveGlassConfigState.isLiveKey(ScopedGlassOptics.key(
+                ScopedGlassOptics.POPUP, ConfigSchema.Glass.IOR)));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ScopedGlassOptics.popupHighlightKey(
+                        ConfigSchema.LauncherHighlight.LARGE_CAUSTICS)));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ScopedGlassOptics.normalsKey(ScopedGlassOptics.POPUP)));
         // System-process wallpaper composition is owned outside the Launcher callback.
         assertFalse(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name()));

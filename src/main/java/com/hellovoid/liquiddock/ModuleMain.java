@@ -68,7 +68,7 @@ public final class ModuleMain extends XposedModule {
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 // Install once regardless of initial preference. The hook's runtime gate
                 // stays inert until the user enables caption-menu glass.
-                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(runtimeConfig);
+                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(configReader, runtimeConfig);
                 if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
                     SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
                 } else {

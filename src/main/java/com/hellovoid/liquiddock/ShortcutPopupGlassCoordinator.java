@@ -104,8 +104,10 @@ final class ShortcutPopupGlassCoordinator {
             View earlyOwner,
             String replaceReason) {
         releaseLocked(replaceReason);
-        LiquidDockConfig.Glass latest = LiveGlassConfigState.currentGlass();
+        LiquidDockConfig.Glass latest = LiveGlassConfigState.currentPopupGlass();
         if (latest != null) glassConfig = latest;
+        else glassConfig = ScopedGlassOptics.resolve(
+                ConfigReader.load(), glassConfig, ScopedGlassOptics.POPUP);
         if (captureRoot == null || glassConfig == null || !GlassRuntimeState.isEnabled()
                 || !captureRoot.isAttachedToWindow()) return;
         State state = new State(captureRoot, glassConfig, early, earlyOwner);
