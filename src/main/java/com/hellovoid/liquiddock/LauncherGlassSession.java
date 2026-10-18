@@ -127,6 +127,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // UI-only scratch, cleared at the start of every Workspace static pre-draw.
     private final HomeGridCellGeometryHook.WidgetWidthFrame widgetWidthFrame =
             new HomeGridCellGeometryHook.WidgetWidthFrame();
+    private final LauncherGlassStaticGeometryCache.Frame staticViewFrame =
+            new LauncherGlassStaticGeometryCache.Frame();
     // UI-thread scratch. Root-to-global is common to every Workspace node in one pre-draw, so
     // invert it once instead of repeating the same matrix walk/inversion for every icon/widget.
     private final Matrix uiRootToGlobal = new Matrix();
@@ -815,6 +817,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         long staticGuardNs = 0L;
         long staticWidgetGuardNs = 0L;
         widgetWidthFrame.reset();
+        staticViewFrame.reset();
         // Native WindowElement/Recents/unlock may animate independently of View properties.
         // Keep their existing per-frame capture authority; only reuse genuinely stable nodes.
         boolean forceStaticCapture = staticSnapshot.length > 0
@@ -838,7 +841,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     node.invalidateStaticGeometry();
                 } else {
                     long guardStartNs = tracing ? System.nanoTime() : 0L;
-                    geometryReusable = node.canReuseStaticGeometry(root, widgetWidthFrame);
+                    geometryReusable = node.canReuseStaticGeometry(root, widgetWidthFrame, staticViewFrame);
                     if (tracing) {
                         long elapsedNs = System.nanoTime() - guardStartNs;
                         staticGuardNs += elapsedNs;
@@ -905,6 +908,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     Trace.setCounter("LD.Workspace.StaticWidgetCacheHits", staticWidgetCacheHits);
                     Trace.setCounter("LD.Workspace.StaticGuardNs", staticGuardNs);
                     Trace.setCounter("LD.Workspace.StaticWidgetGuardNs", staticWidgetGuardNs);
+                    Trace.setCounter("LD.Workspace.StaticViewReads", staticViewFrame.viewReads);
+                    Trace.setCounter("LD.Workspace.StaticViewReuseHits", staticViewFrame.sharedHits);
                     Trace.setCounter("LD.Workspace.WidgetGridReads", widgetWidthFrame.gridReads);
                     Trace.setCounter("LD.Workspace.WidgetGridHits", widgetWidthFrame.gridHits);
                 }
