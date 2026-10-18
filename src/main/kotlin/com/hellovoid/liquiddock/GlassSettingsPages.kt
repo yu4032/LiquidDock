@@ -301,7 +301,7 @@ internal fun GlassIconsPage(
         item(key = "icons-glass-edge") {
             SettingsCard {
                 ArrowPreference(
-                    title = "外阴影与描边",
+                    title = "玻璃光照与投影",
                     summary = "桌面图标使用独立边缘效果",
                     enabled = masterEnabled && liquidEnabled,
                     onClick = { open(Page.IconEdge) },
@@ -352,7 +352,7 @@ internal fun GlassWidgetsPage(
         IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
         IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
         ArrowPreference(
-            title = "外阴影与描边",
+            title = "玻璃光照与投影",
             summary = "小组件独立控制，未调整时继承全局",
             enabled = masterEnabled && liquidEnabled && widgetGlass,
             onClick = { open(Page.WidgetEdge) },
@@ -441,7 +441,7 @@ internal fun GlassFoldersPage(
         IntSetting(prefs, openFolderThicknessSpec, masterEnabled && liquidEnabled && openFolderGlass)
         IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
         ArrowPreference(
-            title = "外阴影与描边",
+            title = "玻璃光照与投影",
             summary = "桌面大小文件夹以及展开文件夹使用独立设置",
             enabled = masterEnabled && liquidEnabled,
             onClick = { open(Page.FolderEdge) },
