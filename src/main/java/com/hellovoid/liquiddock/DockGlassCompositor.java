@@ -239,21 +239,27 @@ final class DockGlassCompositor {
                 ? dockBodyHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
         DockGlassSceneSnapshot stable = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
 
-        float currentLeft = dockBody.left() - RASTER_GUARD_PX;
-        float currentTop = dockBody.top() - RASTER_GUARD_PX;
-        float currentRight = dockBody.right() + RASTER_GUARD_PX;
-        float currentBottom = dockBody.bottom() + RASTER_GUARD_PX;
+        // The dirty-region guard must also enclose optional exterior paint.
+        // Keep the previous-frame union below to prevent trails during movement.
+        float bodyFringe = RASTER_GUARD_PX + DockDirectionalSideEdgeState.current()
+                .extraGuardPx(1f, Math.min(dockBody.glassWidth, dockBody.glassHeight));
+        float currentLeft = dockBody.left() - bodyFringe;
+        float currentTop = dockBody.top() - bodyFringe;
+        float currentRight = dockBody.right() + bodyFringe;
+        float currentBottom = dockBody.bottom() + bodyFringe;
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
+            float iconFringe = RASTER_GUARD_PX + GlassEdgeEffects.current(GlassEdgeEffects.ICON)
+                    .extraGuardPx(1f, Math.min(geometry.width, geometry.height));
             currentLeft = Math.min(
-                    currentLeft, geometry.centerX - geometry.width * 0.5f - RASTER_GUARD_PX);
+                    currentLeft, geometry.centerX - geometry.width * 0.5f - iconFringe);
             currentTop = Math.min(
-                    currentTop, geometry.centerY - geometry.height * 0.5f - RASTER_GUARD_PX);
+                    currentTop, geometry.centerY - geometry.height * 0.5f - iconFringe);
             currentRight = Math.max(
-                    currentRight, geometry.centerX + geometry.width * 0.5f + RASTER_GUARD_PX);
+                    currentRight, geometry.centerX + geometry.width * 0.5f + iconFringe);
             currentBottom = Math.max(
-                    currentBottom, geometry.centerY + geometry.height * 0.5f + RASTER_GUARD_PX);
+                    currentBottom, geometry.centerY + geometry.height * 0.5f + iconFringe);
         }
 
         boolean sameFramebuffer = lastDirtyValid
@@ -269,7 +275,12 @@ final class DockGlassCompositor {
             renderer.beginGlassFrame();
         }
 
+        // One Prismal draw per node. Dock's whole-body cast shadow remains OEM
+        // MiShadow; its optical dark sides and all other glass contours use the
+        // identical light-aware SDF shader with distinct immutable recipes.
+        renderer.setEdgeDecoration(DockDirectionalSideEdgeState.current(), 1f);
         renderer.drawGlass(dockBody, params, bodyHighlightProfile);
+        renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), 1f);
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
@@ -278,6 +289,7 @@ final class DockGlassCompositor {
                     geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
         }
 
+        renderer.setEdgeDecoration(null, 1f);
         lastDirtyValid = true;
         lastDirtyFramebufferWidth = framebufferWidth;
         lastDirtyFramebufferHeight = framebufferHeight;
