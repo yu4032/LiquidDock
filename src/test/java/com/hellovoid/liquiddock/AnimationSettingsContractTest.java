@@ -37,6 +37,8 @@ public class AnimationSettingsContractTest {
         assertTrue(ui.contains("Page.AnimationWorkspace -> AnimationWorkspacePage("));
 
         assertTrue(specs.contains("ConfigSchema.Animation.WORKSPACE_VISIBILITY"));
+        assertTrue(specs.contains("ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE"));
+        assertTrue(pages.contains("IntSetting(prefs, animationFolderOpenGlassFadeSpec, masterEnabled)"));
         assertTrue(specs.contains("ConfigSchema.Animation.DOCK_ICON_REVEAL"));
         assertTrue(specs.contains("ConfigSchema.Animation.PRESS_IN"));
         assertTrue(specs.contains("ConfigSchema.Animation.PRESS_OUT"));
