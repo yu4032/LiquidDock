@@ -577,7 +577,7 @@ public final class PrismalRenderer implements AutoCloseable {
             // One-time diagnostic distinguishes an absent setting/renderer route
             // from an unsupported Mali shader. No per-frame log or allocation.
             android.util.Log.i("LiquidDock-Prismal",
-                    "Compiling in-pass SDF edge: stroke=" + edgeDecoration.hasStroke()
+                    "Compiling glass optical response: backlit=" + edgeDecoration.hasBacklit()
                             + ", shadow=" + edgeDecoration.hasShadow());
             try {
                 String fragment = PrismalOs4InvariantShader.apply(
