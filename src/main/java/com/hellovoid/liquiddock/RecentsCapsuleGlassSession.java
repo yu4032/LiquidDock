@@ -276,7 +276,7 @@ final class RecentsCapsuleGlassSession {
     private void drawGlass(LauncherGlassGeometry.Snapshot g) {
         if (g == null) return;
         prismalRenderer.setEdgeDecoration(
-                GlassEdgeEffects.current(GlassEdgeEffects.ICON), 1f);
+                GlassEdgeEffects.strokeOnly(GlassEdgeEffects.ICON), 1f);
         prismalRenderer.drawGlass(
                 new PrismalGeometry(logicalWidth, logicalHeight, g.centerX, g.centerY,
                         g.width, g.height, g.cornerRadius),

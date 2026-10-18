@@ -28,6 +28,9 @@ internal fun GlassEdgeSettingsPage(
     open: (Page) -> Unit = {},
 ) {
     val global = scope == GlassEdgeEffects.GLOBAL
+    val nativeShadowOwner = scope == GlassEdgeEffects.HANDLE_MENU
+        || scope == GlassEdgeEffects.DIALOG
+        || scope == GlassEdgeEffects.SECURITY_CENTER
     val active = masterEnabled && prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
     var revision by remember(scope) { mutableIntStateOf(0) }
@@ -100,9 +103,12 @@ internal fun GlassEdgeSettingsPage(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item(key = "edge-intro") {
             PageHeader("外阴影与描边",
-                "$scopeLabel · 外部阴影与真实描边独立控制。阴影方向跟随 Prismal 光源，" +
-                (if (global) "其他组件可继承此配置。" else "未覆盖时继承全局默认。"))
+                "$scopeLabel · 外部阴影与真实描边独立控制，光源方向与 Prismal 一致。" +
+                (if (nativeShadowOwner) "此组件保留系统窗口阴影，仅新增独立描边。"
+                 else if (global) "其他组件可继承此配置。"
+                 else "未覆盖时继承全局默认。"))
         }
+        if (!nativeShadowOwner) {
         item(key = "shadow-label") { SmallTitle("外阴影") }
         item(key = "shadow-switch") {
             SettingsCard {
@@ -128,6 +134,7 @@ internal fun GlassEdgeSettingsPage(
             SettingsCard {
                 number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝")
             }
+        }
         }
         item(key = "stroke-label") { SmallTitle("描边") }
         item(key = "stroke-switch") {
@@ -187,8 +194,11 @@ internal fun GlassEdgeSettingsPage(
                         "搜索框", "系统搜索框玻璃",
                         enabled = active, onClick = { open(Page.SearchboxEdge) })
                     ArrowPreference(
-                        "安全中心", "工具箱与侧边栏玻璃",
+                        "安全中心", "工具箱与侧边栏玻璃，保留原生投影",
                         enabled = active, onClick = { open(Page.SecurityCenterEdge) })
+                    ArrowPreference(
+                        "Dock 原生描边与阴影", "Dock 使用独立 MiShadow 和描边渲染器",
+                        enabled = active, onClick = { open(Page.Shadow) })
                 }
             }
         }
