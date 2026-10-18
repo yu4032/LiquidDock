@@ -401,11 +401,17 @@ final class LauncherGlassStaticNode {
         root.transformMatrixToGlobal(rootToGlobal);
         globalToRoot.reset();
         if (!rootToGlobal.invert(globalToRoot)) return null;
-        return captureGeometry(root, globalToRoot, root.getWidth(), root.getHeight());
+        return captureGeometry(root, globalToRoot, root.getWidth(), root.getHeight(), null);
     }
 
     LauncherGlassGeometry.Snapshot captureGeometry(
             View root, Matrix sharedGlobalToRoot, int rootWidth, int rootHeight) {
+        return captureGeometry(root, sharedGlobalToRoot, rootWidth, rootHeight, null);
+    }
+
+    LauncherGlassGeometry.Snapshot captureGeometry(
+            View root, Matrix sharedGlobalToRoot, int rootWidth, int rootHeight,
+            HomeGridCellGeometryHook.WidgetWidthFrame widgetWidthFrame) {
         View material = materialRef.get();
         GlassComponentStyle style = componentStyle();
         if (disposed || material == null || root == null || sharedGlobalToRoot == null
@@ -464,7 +470,7 @@ final class LauncherGlassStaticNode {
             View spanOwner = findWidgetSpanOwner(material);
             int spanX = resolveWidgetSpanX(spanOwner);
             int widthDelta = HomeGridCellGeometryHook.widgetHorizontalSpanDeltaPx(
-                    spanOwner, spanX);
+                    spanOwner, spanX, widgetWidthFrame);
             if (widthDelta != 0) {
                 float center = (localLeft + localRight) * 0.5f;
                 float targetWidth = Math.max(1f, (localRight - localLeft) + widthDelta);
