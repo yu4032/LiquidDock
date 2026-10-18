@@ -51,6 +51,30 @@ public final class PrismalEdgeDecoration {
         return Math.min(96f, Math.max(stroke, shadow));
     }
 
+    /** Keep the wide shadow lobe proportional on 40–60dp icons. */
+    public float effectiveShadowRadiusPx(float density, float minDimensionPx) {
+        if (!hasShadow()) return 0f;
+        return Math.min(shadowRadiusDp * safe(density, .1f, 5f),
+                Math.max(1f, minDimensionPx * 0.18f));
+    }
+
+    public float effectiveShadowOffsetYPx(float density, float minDimensionPx) {
+        float radius = effectiveShadowRadiusPx(density, minDimensionPx);
+        if (radius <= 0f) return 0f;
+        return safe(shadowOffsetYDp * safe(density, .1f, 5f),
+                -radius * 0.6f, radius * 0.6f);
+    }
+
+    public float extraGuardPx(float density, float minDimensionPx) {
+        float stroke = hasStroke() ? strokeWidthDp * safe(density, .1f, 5f) : 0f;
+        float radius = effectiveShadowRadiusPx(density, minDimensionPx);
+        float halo = radius > 0f
+                ? radius * (2.5f + 0.42f * shadowLightFollow)
+                        + Math.abs(effectiveShadowOffsetYPx(density, minDimensionPx))
+                : 0f;
+        return Math.min(96f, Math.max(stroke, halo));
+    }
+
     private static float safe(float value, float min, float max) {
         return Float.isFinite(value) ? Math.max(min, Math.min(max, value)) : min;
     }

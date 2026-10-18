@@ -124,6 +124,10 @@ public final class PrismalRenderer implements AutoCloseable {
             new PrismalNodeScissor.Rect(0, 0, 0, 0);
     private PrismalEdgeDecoration edgeDecoration = PrismalEdgeDecoration.NONE;
     private float edgeDensity = 1f;
+    private PrismalEdgeDecoration lastUploadedEdge;
+    private float lastUploadedEdgeDensity = Float.NaN;
+    private float lastUploadedMinDimension = Float.NaN;
+    private float lastUploadedGuard = Float.NaN;
 
     /** Changes the edge paint only; the caller still owns the backdrop and geometry. */
     public void setEdgeDecoration(PrismalEdgeDecoration style, float density) {
@@ -543,6 +547,10 @@ public final class PrismalRenderer implements AutoCloseable {
         }
         cachedStaticParams = null;
         cachedHighlightMask = Integer.MIN_VALUE;
+        lastUploadedEdge = null;
+        lastUploadedEdgeDensity = Float.NaN;
+        lastUploadedMinDimension = Float.NaN;
+        lastUploadedGuard = Float.NaN;
         cachedResolutionWidth = -1;
         cachedResolutionHeight = -1;
         cachedBlurWidth = -1;
@@ -667,7 +675,8 @@ public final class PrismalRenderer implements AutoCloseable {
         // The fragment shader renders a full-frame quad per glass node. Restrict its expensive
         // refraction/highlight shading to the SDF silhouette with an AA guard. This preserves
         // native-pixel edge fidelity at reduced backdrop capture density.
-        float edgeGuard = edgeDecoration.extraGuardPx(edgeDensity);
+        float minDimension = Math.min(g.glassWidth, g.glassHeight);
+        float edgeGuard = edgeDecoration.extraGuardPx(edgeDensity, minDimension);
         if (!PrismalNodeScissor.computeInto(
                 g, frameTarget.width, frameTarget.height, nodeScissor, edgeGuard)) return;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
@@ -701,17 +710,31 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform2f("u_glassSize", g.glassWidth, g.glassHeight);
         uniform4f("u_cornerRadii", g.topLeftRadius, g.topRightRadius,
                 g.bottomRightRadius, g.bottomLeftRadius);
-        uniform1f("u_edgeRasterGuardPx", edgeGuard);
+        if (lastUploadedGuard != edgeGuard) {
+            uniform1f("u_edgeRasterGuardPx", edgeGuard);
+            lastUploadedGuard = edgeGuard;
+        }
         PrismalEdgeDecoration decoration = edgeDecoration;
-        uniform1f("u_outerStrokeWidthPx", decoration.strokeWidthDp * edgeDensity);
-        uniform1f("u_strokeLightResponse", decoration.strokeLightResponse);
-        uniform4f("u_outerStrokeColor", decoration.strokeR, decoration.strokeG,
-                decoration.strokeB, decoration.strokeA * opacity);
-        uniform1f("u_dropShadowRadiusPx", decoration.shadowRadiusDp * edgeDensity);
-        uniform1f("u_dropShadowLightFollow", decoration.shadowLightFollow);
-        uniform1f("u_dropShadowOffsetYPx", decoration.shadowOffsetYDp * edgeDensity);
-        uniform4f("u_dropShadowColor", decoration.shadowR, decoration.shadowG,
-                decoration.shadowB, decoration.shadowA * opacity);
+        // Cache decoration uniforms; icon-heavy pages must not re-upload ~8 uniforms
+        // per node. Node visibility remains in the existing u_transmittance only once.
+        if (lastUploadedEdge != decoration
+                || lastUploadedEdgeDensity != edgeDensity
+                || lastUploadedMinDimension != minDimension) {
+            uniform1f("u_outerStrokeWidthPx", decoration.strokeWidthDp * edgeDensity);
+            uniform1f("u_strokeLightResponse", decoration.strokeLightResponse);
+            uniform4f("u_outerStrokeColor", decoration.strokeR, decoration.strokeG,
+                    decoration.strokeB, decoration.strokeA);
+            uniform1f("u_dropShadowRadiusPx",
+                    decoration.effectiveShadowRadiusPx(edgeDensity, minDimension));
+            uniform1f("u_dropShadowLightFollow", decoration.shadowLightFollow);
+            uniform1f("u_dropShadowOffsetYPx",
+                    decoration.effectiveShadowOffsetYPx(edgeDensity, minDimension));
+            uniform4f("u_dropShadowColor", decoration.shadowR, decoration.shadowG,
+                    decoration.shadowB, decoration.shadowA);
+            lastUploadedEdge = decoration;
+            lastUploadedEdgeDensity = edgeDensity;
+            lastUploadedMinDimension = minDimension;
+        }
 
         if (cachedStaticParams != p) {
             uploadStaticGlassParams(p);
@@ -1021,5 +1044,9 @@ public final class PrismalRenderer implements AutoCloseable {
         cachedBlurSigma = Float.NaN;
         glassTexturesBound = false;
         glassUniformLocations.clear();
+        lastUploadedEdge = null;
+        lastUploadedEdgeDensity = Float.NaN;
+        lastUploadedMinDimension = Float.NaN;
+        lastUploadedGuard = Float.NaN;
     }
 }
