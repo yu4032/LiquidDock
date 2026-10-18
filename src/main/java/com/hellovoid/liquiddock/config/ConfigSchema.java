@@ -184,6 +184,19 @@ public final class ConfigSchema {
                 "dock_shadow_alpha", 140, 140, 140, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_Y = dp(
                 "dock_shadow_y", 4, 12, 12, -24, 24, ConfigKey.ExportMode.ALWAYS);
+        // Optical border shading does not move the whole-Dock native MiShadow.
+        public static final ConfigKey<Boolean> SIDE_DARK_EDGE_ENABLED = bool(
+                "dock_side_dark_edge_enabled", false, false, false,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SIDE_DARK_EDGE_ALPHA = integer(
+                "dock_side_dark_edge_alpha", 70, 70, 70, 0, 100,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SIDE_DARK_EDGE_WIDTH = integer(
+                "dock_side_dark_edge_width_px", 3, 3, 3, 1, 12,
+                ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SIDE_DARK_EDGE_LIGHT_SUPPRESSION = integer(
+                "dock_side_dark_edge_light_suppression", 100, 100, 100, 0, 100,
+                ConfigKey.ExportMode.IF_PRESENT);
 
         private Dock() {}
     }
@@ -579,7 +592,9 @@ public final class ConfigSchema {
                 Dock.STANDARD_STROKE_WIDTH, Dock.STROKE_RED, Dock.STROKE_GREEN,
                 Dock.STROKE_BLUE, Dock.STROKE_ALPHA, Dock.STROKE_SHADOW,
                 Dock.STROKE_SHADOW_RADIUS, Dock.STROKE_SHADOW_ALPHA, Dock.SHADOW_ENABLED,
-                Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
+                Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y,
+                Dock.SIDE_DARK_EDGE_ENABLED, Dock.SIDE_DARK_EDGE_ALPHA,
+                Dock.SIDE_DARK_EDGE_WIDTH, Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,

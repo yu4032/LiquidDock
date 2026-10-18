@@ -60,10 +60,27 @@ internal fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, master
     val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
     var dockShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SHADOW_ENABLED.name(), ConfigSchema.Dock.SHADOW_ENABLED.uiDefault())) }
     var strokeShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_SHADOW.name(), ConfigSchema.Dock.STROKE_SHADOW.uiDefault())) }
+    var sideDarkEdge by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED.name(), ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED.uiDefault())) }
     DenseSettingsList(padding, "阴影") {
         item(key = "dock-shadow-enabled") {
             SettingsCard {
                 BooleanSetting(prefs, ConfigSchema.Dock.SHADOW_ENABLED, "整个 Dock 下方阴影", "跟随 Dock 长宽、高度和圆角", masterEnabled && dockEnabled) { dockShadow = it }
+            }
+        }
+        item(key = "dock-side-edge-title") { SmallTitle("光照响应边缘") }
+        item(key = "dock-side-edge-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs, ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED,
+                    "仅在侧边显示暗描边",
+                    "上下由 OS4 高光负责，受光侧黑边淡出；下方 Dock 阴影保持原位",
+                    masterEnabled && dockEnabled,
+                ) { sideDarkEdge = it }
+            }
+        }
+        items(sideDarkEdgeSpecs, key = { it.key }) { setting ->
+            SettingsCard {
+                IntSetting(prefs, setting, masterEnabled && dockEnabled && sideDarkEdge)
             }
         }
         item(key = "stroke-shadow-enabled") {

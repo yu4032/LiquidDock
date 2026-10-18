@@ -269,7 +269,13 @@ final class DockGlassCompositor {
             renderer.beginGlassFrame();
         }
 
+        // Same GL draw as the Dock glass. OEM MiShadow below the full Dock is
+        // intentionally unchanged; the OS4 highlights remain above/underneath.
+        renderer.setDockSideShade(DockDirectionalSideEdgeState.alpha(),
+                DockDirectionalSideEdgeState.widthPx(),
+                DockDirectionalSideEdgeState.litSuppression());
         renderer.drawGlass(dockBody, params, bodyHighlightProfile);
+        renderer.setDockSideShade(0f, 0f, 0f);
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;

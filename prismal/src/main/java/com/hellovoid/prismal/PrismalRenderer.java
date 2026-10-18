@@ -77,6 +77,21 @@ public final class PrismalRenderer implements AutoCloseable {
     private int blurHProgram;
     private int blurVProgram;
     private int glassProgram;
+    private int baselineGlassProgram;
+    private int dockSideGlassProgram;
+    private boolean dockSideProgramUnsupported;
+    private float dockSideShadeAlpha, dockSideShadeWidthPx, dockSideShadeLightSuppression;
+
+    /** Only the Dock body's next draw uses these settings; icons reset to zero. */
+    public void setDockSideShade(float alpha, float widthPx, float litSuppression) {
+        dockSideShadeAlpha = safeUnit(alpha);
+        dockSideShadeWidthPx = Math.max(0f, widthPx);
+        dockSideShadeLightSuppression = safeUnit(litSuppression);
+    }
+
+    private static float safeUnit(float value) {
+        return Float.isFinite(value) ? Math.max(0f, Math.min(1f, value)) : 0f;
+    }
 
     // Program locations are immutable after link. Cache them once instead of crossing the
     // Java/driver boundary with glGet*Location on every backdrop rebuild.
@@ -491,6 +506,7 @@ public final class PrismalRenderer implements AutoCloseable {
         String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
         if (dualBlurEnabled) glassFragment = PrismalDualBlurShader.apply(glassFragment);
         glassProgram = createProgram(glassVertex, glassFragment);
+        baselineGlassProgram = glassProgram;
         glassUniformLocations.clear();
         if (sourceProgram == 0 || blurHProgram == 0 || blurVProgram == 0 || glassProgram == 0) {
             throw new IllegalStateException("Prismal shader program creation failed");
@@ -540,6 +556,48 @@ public final class PrismalRenderer implements AutoCloseable {
         cachedBlurHeight = -1;
         cachedBlurSigma = Float.NaN;
         glassTexturesBound = false;
+    }
+
+    /** Lazily compile Dock-specific dark sides without risking the original glass shader. */
+    private boolean selectDockSideGlassProgram() {
+        boolean wanted = dockSideShadeAlpha > 0.001f;
+        if (wanted && dockSideGlassProgram == 0 && !dockSideProgramUnsupported) {
+            try {
+                String fragment = PrismalOs4InvariantShader.apply(
+                        PrismalComponentGateShader.apply(
+                                PrismalOpticalEdgeShader.apply(
+                                        PrismalSingleEdgeShader.apply(
+                                                PrismalShaderSources.FRAGMENT))));
+                fragment = PrismalDockSideShadeShader.apply(fragment);
+                if (dualBlurEnabled) fragment = PrismalDualBlurShader.apply(fragment);
+                dockSideGlassProgram = createProgram(
+                        PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX), fragment);
+                android.util.Log.i("LiquidDock-Prismal", "Dock side shading program ready");
+            } catch (RuntimeException unavailable) {
+                dockSideProgramUnsupported = true;
+                android.util.Log.e("LiquidDock-Prismal",
+                        "Optional Dock shading unavailable; preserving original glass", unavailable);
+            }
+        }
+        int selected = wanted && dockSideGlassProgram != 0
+                ? dockSideGlassProgram : baselineGlassProgram;
+        if (glassProgram != selected) {
+            glassProgram = selected;
+            glassPositionLocation = requireAttrib(glassProgram, "a_position");
+            glassUniformLocations.clear();
+            GLES20.glUseProgram(glassProgram);
+            GLES20.glUniform1i(glassUniformLocation("u_backgroundTexture"), 0);
+            GLES20.glUniform1i(glassUniformLocation("u_blurredTexture"), 1);
+            GLES20.glUniform1i(glassUniformLocation("u_useBlurredTexture"), 1);
+            if (dualBlurEnabled) {
+                GLES20.glUniform1i(glassUniformLocation("u_workspaceBlurredTexture"), 2);
+            }
+            cachedStaticParams = null;
+            cachedHighlightMask = Integer.MIN_VALUE;
+            cachedResolutionWidth = cachedResolutionHeight = -1;
+            glassTexturesBound = false;
+        }
+        return selected == dockSideGlassProgram && selected != 0;
     }
 
     private void ensureTargets(int nextWidth, int nextHeight) {
@@ -655,6 +713,7 @@ public final class PrismalRenderer implements AutoCloseable {
                                  PrismalInteractionState interactionState,
                                  boolean composite, float opacity) {
         highlights = highlights.withOs4EdgeReplacingLegacyEdge();
+        boolean dockSideProgramActive = selectDockSideGlassProgram();
         // The fragment shader renders a full-frame quad per glass node. Restrict its expensive
         // refraction/highlight shading to the SDF silhouette with an AA guard. This preserves
         // native-pixel edge fidelity at reduced backdrop capture density.
@@ -691,6 +750,11 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform2f("u_glassSize", g.glassWidth, g.glassHeight);
         uniform4f("u_cornerRadii", g.topLeftRadius, g.topRightRadius,
                 g.bottomRightRadius, g.bottomLeftRadius);
+        if (dockSideProgramActive) {
+            uniform1f("u_dockSideShadeAlpha", dockSideShadeAlpha);
+            uniform1f("u_dockSideShadeWidthPx", dockSideShadeWidthPx);
+            uniform1f("u_dockSideShadeLightSuppression", dockSideShadeLightSuppression);
+        }
 
         if (cachedStaticParams != p) {
             uploadStaticGlassParams(p);
@@ -984,8 +1048,12 @@ public final class PrismalRenderer implements AutoCloseable {
         if (sourceProgram != 0) GLES20.glDeleteProgram(sourceProgram);
         if (blurHProgram != 0) GLES20.glDeleteProgram(blurHProgram);
         if (blurVProgram != 0) GLES20.glDeleteProgram(blurVProgram);
-        if (glassProgram != 0) GLES20.glDeleteProgram(glassProgram);
-        sourceProgram = blurHProgram = blurVProgram = glassProgram = 0;
+        if (baselineGlassProgram != 0) GLES20.glDeleteProgram(baselineGlassProgram);
+        if (dockSideGlassProgram != 0) GLES20.glDeleteProgram(dockSideGlassProgram);
+        baselineGlassProgram = dockSideGlassProgram = glassProgram = 0;
+        dockSideProgramUnsupported = false;
+        dockSideShadeAlpha = 0f;
+        sourceProgram = blurHProgram = blurVProgram = 0;
         sourcePositionLocation = sourceUvLocation = sourceTextureLocation = -1;
         blurHPositionLocation = blurHTextureLocation = blurHTexelSizeLocation
                 = blurHWeightsLocation = blurHSigmaLocation = -1;
