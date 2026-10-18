@@ -216,12 +216,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         LauncherGlassVisibilityTransition.Plan plan =
                 LauncherGlassVisibilityTransition.plan(
                         layerAlpha.sceneAlpha(), visible, fullDuration);
-        if (folderOpeningFade && Api101Bridge.isDebugLoggingEnabled()) {
-            MainHook.log("[DC][FolderOpenFade] begin durationMs=" + plan.durationMs
-                    + " from=" + plan.startAlpha + " to=" + plan.targetAlpha
-                    + " viewAlpha=" + getAlpha()
-                    + " attached=" + isAttachedToWindow());
-        }
         layerAlpha.setSceneAlpha(plan.startAlpha);
         applyLayerAlpha();
         if (plan.durationMs == 0L) {
@@ -244,9 +238,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 if (sceneAnimator == animation) {
                     sceneAnimator = null;
                     folderOpeningFadeRunning = false;
-                    if (folderOpeningFade && Api101Bridge.isDebugLoggingEnabled()) {
-                        MainHook.log("[DC][FolderOpenFade] end viewAlpha=" + getAlpha());
-                    }
                 }
             }
         });
