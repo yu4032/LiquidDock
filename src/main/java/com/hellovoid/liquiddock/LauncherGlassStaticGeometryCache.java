@@ -8,9 +8,10 @@ import android.view.ViewParent;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 
 /**
- * UI-thread-only guard for reusing a stable icon/folder geometry snapshot.
+ * UI-thread-only guard for reusing stable Launcher glass geometry snapshots.
  *
  * It compares the same View ancestry whose transforms are used by
  * transformMatrixToGlobal(), including parent identity, layout, scroll, alpha,
@@ -20,6 +21,71 @@ import java.util.ArrayList;
  * No timers or View invalidation hooks are installed.
  */
 final class LauncherGlassStaticGeometryCache {
+    /**
+     * A consistent UI-thread view of each ancestor for ONE Workspace PreDraw.
+     * Node-specific history remains in ViewStamp; no reading is retained as
+     * authority between frames. Recycle slots to avoid hot-path allocations.
+     */
+    static final class Frame {
+        private final IdentityHashMap<View, ViewSample> observed = new IdentityHashMap<>();
+        private final ArrayList<ViewSample> samples = new ArrayList<>();
+        private int used;
+        int viewReads, sharedHits;
+
+        void reset() {
+            observed.clear();
+            used = 0;
+            viewReads = 0;
+            sharedHits = 0;
+        }
+
+        ViewSample sample(View view) {
+            ViewSample existing = observed.get(view);
+            if (existing != null) {
+                sharedHits++;
+                return existing;
+            }
+            if (used == samples.size()) samples.add(new ViewSample());
+            ViewSample next = samples.get(used++);
+            next.read(view);
+            observed.put(view, next);
+            viewReads++;
+            return next;
+        }
+    }
+
+    private static final class ViewSample {
+        final Matrix matrix = new Matrix();
+        Matrix animationMatrix;
+        int left, top, right, bottom, scrollX, scrollY, visibility;
+        float alpha, translationX, translationY;
+        boolean transientMotion;
+
+        void read(View view) {
+            matrix.set(view.getMatrix());
+            Matrix animated = view.getAnimationMatrix();
+            if (animated == null) {
+                animationMatrix = null;
+            } else {
+                if (animationMatrix == null) animationMatrix = new Matrix();
+                animationMatrix.set(animated);
+            }
+            left = view.getLeft();
+            top = view.getTop();
+            right = view.getRight();
+            bottom = view.getBottom();
+            scrollX = view.getScrollX();
+            scrollY = view.getScrollY();
+            visibility = view.getVisibility();
+            alpha = view.getAlpha();
+            translationX = view.getTranslationX();
+            translationY = view.getTranslationY();
+            android.view.animation.Animation animation = view.getAnimation();
+            transientMotion = view.isLayoutRequested() || view.hasTransientState()
+                    || (animation != null && !animation.hasEnded());
+        }
+    }
+
     private static final class ViewStamp {
         View view;
         final Matrix matrix = new Matrix();
@@ -27,43 +93,35 @@ final class LauncherGlassStaticGeometryCache {
         int left, top, right, bottom, scrollX, scrollY, visibility;
         float alpha, translationX, translationY;
 
-        boolean observe(View candidate) {
-            Matrix candidateMatrix = candidate.getMatrix();
-            boolean matrixChanged = !matrix.equals(candidateMatrix);
-            // Transition.setAnimationMatrix is independent of View#getMatrix().
-            // It can drive native per-frame geometry without changing normal properties.
-            Matrix candidateAnimation = candidate.getAnimationMatrix();
-            boolean animationChanged = (candidateAnimation == null) != (animationMatrix == null)
-                    || (candidateAnimation != null
-                    && !candidateAnimation.equals(animationMatrix));
-            int nextLeft = candidate.getLeft(), nextTop = candidate.getTop();
-            int nextRight = candidate.getRight(), nextBottom = candidate.getBottom();
-            int nextScrollX = candidate.getScrollX(), nextScrollY = candidate.getScrollY();
-            int nextVisibility = candidate.getVisibility();
-            float nextAlpha = candidate.getAlpha();
-            float nextTranslationX = candidate.getTranslationX();
-            float nextTranslationY = candidate.getTranslationY();
+        boolean observe(View candidate, ViewSample current) {
+            boolean matrixChanged = !matrix.equals(current.matrix);
+            // Native Transition animationMatrix is independent from getMatrix.
+            boolean animationChanged =
+                    (current.animationMatrix == null) != (animationMatrix == null)
+                    || (current.animationMatrix != null
+                    && !current.animationMatrix.equals(animationMatrix));
             boolean changed = view != candidate
-                    || left != nextLeft || top != nextTop
-                    || right != nextRight || bottom != nextBottom
-                    || scrollX != nextScrollX || scrollY != nextScrollY
-                    || visibility != nextVisibility
-                    || Float.compare(alpha, nextAlpha) != 0
-                    || Float.compare(translationX, nextTranslationX) != 0
-                    || Float.compare(translationY, nextTranslationY) != 0
+                    || left != current.left || top != current.top
+                    || right != current.right || bottom != current.bottom
+                    || scrollX != current.scrollX || scrollY != current.scrollY
+                    || visibility != current.visibility
+                    || Float.compare(alpha, current.alpha) != 0
+                    || Float.compare(translationX, current.translationX) != 0
+                    || Float.compare(translationY, current.translationY) != 0
                     || matrixChanged || animationChanged;
             view = candidate;
-            left = nextLeft; top = nextTop;
-            right = nextRight; bottom = nextBottom;
-            scrollX = nextScrollX; scrollY = nextScrollY;
-            visibility = nextVisibility; alpha = nextAlpha;
-            translationX = nextTranslationX; translationY = nextTranslationY;
-            if (matrixChanged) matrix.set(candidateMatrix);
+            left = current.left; top = current.top;
+            right = current.right; bottom = current.bottom;
+            scrollX = current.scrollX; scrollY = current.scrollY;
+            visibility = current.visibility; alpha = current.alpha;
+            translationX = current.translationX;
+            translationY = current.translationY;
+            if (matrixChanged) matrix.set(current.matrix);
             if (animationChanged) {
-                if (candidateAnimation == null) animationMatrix = null;
+                if (current.animationMatrix == null) animationMatrix = null;
                 else {
                     if (animationMatrix == null) animationMatrix = new Matrix();
-                    animationMatrix.set(candidateAnimation);
+                    animationMatrix.set(current.animationMatrix);
                 }
             }
             return changed;
@@ -140,8 +198,8 @@ final class LauncherGlassStaticGeometryCache {
             View material, View root, LauncherGlassDragState.Kind kind,
             GlassComponentStyle style, float nativeRadiusPx, float visibilityAlpha,
             View currentWidgetSpanOwner, int currentWidgetSpanX,
-            int currentWidgetWidthDeltaPx) {
-        if (material == null || root == null || !material.isAttachedToWindow()) {
+            int currentWidgetWidthDeltaPx, Frame frame) {
+        if (frame == null || material == null || root == null || !material.isAttachedToWindow()) {
             invalidate();
             return false;
         }
@@ -166,10 +224,10 @@ final class LauncherGlassStaticGeometryCache {
         boolean transientMotion = false;
         while (cursor != null) {
             if (depth == ancestry.size()) ancestry.add(new ViewStamp());
-            dirty |= ancestry.get(depth).observe(cursor);
+            ViewSample current = frame.sample(cursor);
+            dirty |= ancestry.get(depth).observe(cursor, current);
             depth++;
-            if (cursor.isLayoutRequested() || cursor.hasTransientState()
-                    || (cursor.getAnimation() != null && !cursor.getAnimation().hasEnded())) {
+            if (current.transientMotion) {
                 dirty = true;
                 transientMotion = true; // These motions may bypass View property matrices.
             }
