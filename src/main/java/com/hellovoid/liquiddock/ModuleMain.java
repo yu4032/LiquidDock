@@ -65,6 +65,7 @@ public final class ModuleMain extends XposedModule {
             try {
                 SystemUiKeyguardGoneSource.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
+                GlassEdgeEffects.refresh(configReader);
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 // Install once regardless of initial preference. The hook's runtime gate
                 // stays inert until the user enables caption-menu glass.
@@ -87,6 +88,7 @@ public final class ModuleMain extends XposedModule {
                 ClassLoader classLoader = param.getClassLoader();
                 if (classLoader == null) return;
                 ConfigReader configReader = ConfigReader.load();
+                GlassEdgeEffects.refresh(configReader);
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 AnimationRuntimeState.configure(runtimeConfig.animation);
                 boolean sideSlideEnabled = SideSlideHoldFeatureConfig.isEnabled(configReader);
@@ -123,6 +125,7 @@ public final class ModuleMain extends XposedModule {
             try {
                 ClassLoader classLoader = param.getClassLoader();
                 if (classLoader == null) return;
+                GlassEdgeEffects.refresh(ConfigReader.load());
                 if (!ThirdPartyGlassAdapterRegistry.install(packageName, classLoader)) {
                     Api101Bridge.log("[DC][ThirdPartyGlass] adapter install failed package=" + packageName);
                 }
@@ -139,6 +142,7 @@ public final class ModuleMain extends XposedModule {
             initializeCurrentProfileIfEmpty();
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
+            GlassEdgeEffects.refresh(configReader);
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
             if (runtimeConfig.enabled) {
                 // Folder picker/model hooks are independent of the glass renderers.

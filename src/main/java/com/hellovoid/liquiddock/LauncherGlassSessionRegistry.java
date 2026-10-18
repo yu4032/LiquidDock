@@ -64,6 +64,13 @@ final class LauncherGlassSessionRegistry {
         }
     }
 
+    /** Edge effects only touch GPU-resident output; no source recapture. */
+    static synchronized void requestEffectsRedrawToAll() {
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session != null && !session.isShutdown()) session.requestSceneRedraw();
+        }
+    }
+
     static View resolveStableRoot(View materialHost) {
         if (materialHost == null || !materialHost.isAttachedToWindow()
                 || materialHost.getWidth() <= 0 || materialHost.getHeight() <= 0) return null;

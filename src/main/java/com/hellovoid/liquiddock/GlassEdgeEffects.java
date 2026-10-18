@@ -50,6 +50,8 @@ public final class GlassEdgeEffects {
 
     private static volatile Map<String, PrismalEdgeDecoration> current =
             Collections.emptyMap();
+    private static volatile Map<String, PrismalEdgeDecoration> strokesOnly =
+            Collections.emptyMap();
 
     private GlassEdgeEffects() {}
 
@@ -89,6 +91,11 @@ public final class GlassEdgeEffects {
         resolved.put(GLOBAL, resolve(reader, GLOBAL));
         for (String scope : SCOPES) resolved.put(scope, resolve(reader, scope));
         current = Collections.unmodifiableMap(resolved);
+        Map<String, PrismalEdgeDecoration> withoutNativeShadows = new HashMap<>();
+        for (Map.Entry<String, PrismalEdgeDecoration> entry : resolved.entrySet()) {
+            withoutNativeShadows.put(entry.getKey(), entry.getValue().strokeOnly());
+        }
+        strokesOnly = Collections.unmodifiableMap(withoutNativeShadows);
     }
 
     public static PrismalEdgeDecoration current(String scope) {
@@ -98,7 +105,8 @@ public final class GlassEdgeEffects {
 
     /** On surfaces with a native shadow owner, do not draw a second GPU halo. */
     public static PrismalEdgeDecoration strokeOnly(String scope) {
-        return current(scope).strokeOnly();
+        PrismalEdgeDecoration style = strokesOnly.get(scope);
+        return style != null ? style : PrismalEdgeDecoration.NONE;
     }
 
     private static String readKey(ConfigReader reader, String scope, ConfigKey<?> config) {
