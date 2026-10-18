@@ -30,26 +30,19 @@ final class LauncherGlassStaticGeometryCache {
         private final IdentityHashMap<View, ViewSample> observed = new IdentityHashMap<>();
         private final ArrayList<ViewSample> samples = new ArrayList<>();
         private int used;
-        int viewReads, sharedHits;
 
         void reset() {
             observed.clear();
             used = 0;
-            viewReads = 0;
-            sharedHits = 0;
         }
 
         ViewSample sample(View view) {
             ViewSample existing = observed.get(view);
-            if (existing != null) {
-                sharedHits++;
-                return existing;
-            }
+            if (existing != null) return existing;
             if (used == samples.size()) samples.add(new ViewSample());
             ViewSample next = samples.get(used++);
             next.read(view);
             observed.put(view, next);
-            viewReads++;
             return next;
         }
     }
