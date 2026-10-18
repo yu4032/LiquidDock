@@ -215,36 +215,36 @@ public final class ConfigSchema {
         // External shadow/stroke are distinct from Prismal's interior shadow and OS4 rim.
         // Both are opt-in to preserve rendering with older presets and OEM native shadows.
         public static final ConfigKey<Boolean> OUTER_SHADOW_ENABLED = bool(
-                "liquid_outer_shadow_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_shadow_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_RADIUS = dp(
-                "liquid_outer_shadow_radius", 16, 16, 16, 0, 24, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_shadow_radius", 16, 16, 16, 0, 24, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_OFFSET_Y = dp(
-                "liquid_outer_shadow_offset_y", 3, 3, 3, -16, 16, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_shadow_offset_y", 3, 3, 3, -16, 16, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_RED = integer(
-                "liquid_outer_shadow_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_shadow_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_GREEN = integer(
-                "liquid_outer_shadow_g", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_shadow_g", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_BLUE = integer(
-                "liquid_outer_shadow_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_shadow_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_ALPHA = integer(
-                "liquid_outer_shadow_alpha", 36, 36, 36, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_shadow_alpha", 36, 36, 36, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_LIGHT_FOLLOW = integer(
-                "liquid_outer_shadow_light_follow", 65, 65, 65, 0, 100, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_shadow_light_follow", 65, 65, 65, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> OUTER_STROKE_ENABLED = bool(
-                "liquid_outer_stroke_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_stroke_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_WIDTH = dp(
-                "liquid_outer_stroke_width", 1, 1, 1, 0, 4, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_stroke_width", 1, 1, 1, 0, 4, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_RED = integer(
-                "liquid_outer_stroke_r", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_stroke_r", 255, 255, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_GREEN = integer(
-                "liquid_outer_stroke_g", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_stroke_g", 255, 255, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_BLUE = integer(
-                "liquid_outer_stroke_b", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_stroke_b", 255, 255, 255, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_ALPHA = integer(
-                "liquid_outer_stroke_alpha", 66, 66, 66, 0, 255, ConfigKey.ExportMode.ALWAYS);
+                "liquid_outer_stroke_alpha", 66, 66, 66, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_LIGHT_RESPONSE = integer(
                 "liquid_outer_stroke_light_response", 80, 80, 80, 0, 100,
-                ConfigKey.ExportMode.ALWAYS);
+                ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
