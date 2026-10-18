@@ -324,6 +324,27 @@ private fun LiquidDockSettings(
                     liquidColorSpecs,
                 )
                 Page.LiquidLighting -> LiquidLightingPage(padding, prefs, masterEnabled)
+                Page.GlassEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.GLOBAL,
+                )
+                Page.IconEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.ICON,
+                )
+                Page.WidgetEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.WIDGET,
+                )
+                Page.FolderEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.FOLDER,
+                )
+                Page.PopupEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.POPUP,
+                )
+                Page.HandleMenuEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.HANDLE_MENU,
+                )
+                Page.DialogEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.DIALOG,
+                )
                 Page.LiquidShadow -> LiquidSpecPage(
                     padding,
                     prefs,
@@ -336,11 +357,12 @@ private fun LiquidDockSettings(
                 Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
                 Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled)
+                Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage(
                     padding, prefs, masterEnabled,
                     onOpenAll = { navigateTo(Page.HandleMenuAll) },
+                    onOpenEdge = { navigateTo(Page.HandleMenuEdge) },
                 )
                 Page.HandleMenuAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.HANDLE_MENU, "应用顶部菜单",
@@ -348,6 +370,7 @@ private fun LiquidDockSettings(
                 Page.ShortcutPopupCustomization -> ShortcutPopupGlassSettingsPage(
                     padding, prefs, masterEnabled,
                     onOpenAll = { navigateTo(Page.ShortcutPopupAll) },
+                    onOpenEdge = { navigateTo(Page.PopupEdge) },
                 )
                 Page.ShortcutPopupAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
