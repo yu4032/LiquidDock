@@ -77,7 +77,9 @@ internal fun ShortcutPopupGlassSettingsPage(
             enabled = controlsEnabled,
             generation = resetGeneration,
             decimal = config.storageMode() == ConfigKey.StorageMode.DP_TENTHS,
-            onPersisted = { appearanceRevision++ },
+            // The reset action only needs to wake once when the first override appears.
+            // Recompose neither the section nor its other sliders on each drag frame.
+            onPersisted = { if (!hasAppearanceOverride) appearanceRevision++ },
         )
     }
 
