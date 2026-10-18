@@ -812,6 +812,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         int staticCacheHits = 0;
         int staticNullCacheHits = 0;
         int staticWidgetCacheHits = 0;
+        long staticGuardNs = 0L;
+        long staticWidgetGuardNs = 0L;
         widgetWidthFrame.reset();
         // Native WindowElement/Recents/unlock may animate independently of View properties.
         // Keep their existing per-frame capture authority; only reuse genuinely stable nodes.
@@ -831,10 +833,21 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 if (node == null) continue;
                 if (workspaceMaterial == null) workspaceMaterial = node.materialHost();
                 launchProxyActive |= node.isLaunchProxyActive();
+                boolean geometryReusable = false;
                 if (forceStaticCapture) {
                     node.invalidateStaticGeometry();
-                } else if (node.canReuseStaticGeometry(root, widgetWidthFrame)
-                        && state.frame != null) {
+                } else {
+                    long guardStartNs = tracing ? System.nanoTime() : 0L;
+                    geometryReusable = node.canReuseStaticGeometry(root, widgetWidthFrame);
+                    if (tracing) {
+                        long elapsedNs = System.nanoTime() - guardStartNs;
+                        staticGuardNs += elapsedNs;
+                        if (node.nodeKind() == LauncherGlassNodeKind.WIDGET) {
+                            staticWidgetGuardNs += elapsedNs;
+                        }
+                    }
+                }
+                if (geometryReusable && state.frame != null) {
                     if (tracing) {
                         staticCacheHits++;
                         if (state.frame.geometry == null) staticNullCacheHits++;
@@ -890,6 +903,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 Trace.setCounter("LD.Workspace.StaticNullCacheHits", staticNullCacheHits);
                 if (staticSnapshot.length > 0) {
                     Trace.setCounter("LD.Workspace.StaticWidgetCacheHits", staticWidgetCacheHits);
+                    Trace.setCounter("LD.Workspace.StaticGuardNs", staticGuardNs);
+                    Trace.setCounter("LD.Workspace.StaticWidgetGuardNs", staticWidgetGuardNs);
                     Trace.setCounter("LD.Workspace.WidgetGridReads", widgetWidthFrame.gridReads);
                     Trace.setCounter("LD.Workspace.WidgetGridHits", widgetWidthFrame.gridHits);
                 }
