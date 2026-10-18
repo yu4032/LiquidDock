@@ -122,6 +122,14 @@ public final class PrismalRenderer implements AutoCloseable {
     // Reused by the GL thread; do not allocate one clip rect for every icon per frame.
     private final PrismalNodeScissor.Rect nodeScissor =
             new PrismalNodeScissor.Rect(0, 0, 0, 0);
+    private PrismalEdgeDecoration edgeDecoration = PrismalEdgeDecoration.NONE;
+    private float edgeDensity = 1f;
+
+    /** Changes the edge paint only; the caller still owns the backdrop and geometry. */
+    public void setEdgeDecoration(PrismalEdgeDecoration style, float density) {
+        edgeDecoration = style != null ? style : PrismalEdgeDecoration.NONE;
+        edgeDensity = Float.isFinite(density) ? Math.max(0.1f, density) : 1f;
+    }
     private int sourceTexture;
     private int sourceFramebuffer;
     private int blurTextureH;
@@ -488,6 +496,7 @@ public final class PrismalRenderer implements AutoCloseable {
                 PrismalComponentGateShader.apply(
                         PrismalOpticalEdgeShader.apply(
                                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
+        glassFragment = PrismalEdgeDecorationShader.apply(glassFragment);
         String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
         if (dualBlurEnabled) glassFragment = PrismalDualBlurShader.apply(glassFragment);
         glassProgram = createProgram(glassVertex, glassFragment);
@@ -658,8 +667,9 @@ public final class PrismalRenderer implements AutoCloseable {
         // The fragment shader renders a full-frame quad per glass node. Restrict its expensive
         // refraction/highlight shading to the SDF silhouette with an AA guard. This preserves
         // native-pixel edge fidelity at reduced backdrop capture density.
+        float edgeGuard = edgeDecoration.extraGuardPx(edgeDensity);
         if (!PrismalNodeScissor.computeInto(
-                g, frameTarget.width, frameTarget.height, nodeScissor)) return;
+                g, frameTarget.width, frameTarget.height, nodeScissor, edgeGuard)) return;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
         GLES20.glViewport(0, 0, frameTarget.width, frameTarget.height);
         GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
@@ -691,6 +701,15 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform2f("u_glassSize", g.glassWidth, g.glassHeight);
         uniform4f("u_cornerRadii", g.topLeftRadius, g.topRightRadius,
                 g.bottomRightRadius, g.bottomLeftRadius);
+        uniform1f("u_edgeRasterGuardPx", edgeGuard);
+        PrismalEdgeDecoration decoration = edgeDecoration;
+        uniform1f("u_outerStrokeWidthPx", decoration.strokeWidthDp * edgeDensity);
+        uniform4f("u_outerStrokeColor", decoration.strokeR, decoration.strokeG,
+                decoration.strokeB, decoration.strokeA * opacity);
+        uniform1f("u_dropShadowRadiusPx", decoration.shadowRadiusDp * edgeDensity);
+        uniform1f("u_dropShadowOffsetYPx", decoration.shadowOffsetYDp * edgeDensity);
+        uniform4f("u_dropShadowColor", decoration.shadowR, decoration.shadowG,
+                decoration.shadowB, decoration.shadowA * opacity);
 
         if (cachedStaticParams != p) {
             uploadStaticGlassParams(p);

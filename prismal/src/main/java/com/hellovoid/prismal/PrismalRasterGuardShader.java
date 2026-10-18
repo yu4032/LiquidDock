@@ -17,7 +17,8 @@ final class PrismalRasterGuardShader {
 
     private static final String GUARDED_SCREEN_POSITION = """
             vec2 safeGlassSize = max(u_glassSize, vec2(1.0));
-            vec2 rasterScale = (safeGlassSize + vec2(4.0)) / safeGlassSize;
+            vec2 rasterScale = (safeGlassSize + vec2(4.0 + 2.0 * u_edgeRasterGuardPx))
+                    / safeGlassSize;
             vec2 rasterPosition = a_position * rasterScale;
             vec2 screenPos = u_mousePos + rasterPosition * u_glassSize;
             """;
@@ -29,6 +30,10 @@ final class PrismalRasterGuardShader {
         String guarded = replaceExactlyOnce(
                 upstreamVertex, SCREEN_POSITION, GUARDED_SCREEN_POSITION,
                 "Prismal raster screen position");
+        guarded = replaceExactlyOnce(
+                guarded, "uniform vec2 u_glassSize;",
+                "uniform vec2 u_glassSize;\nuniform float u_edgeRasterGuardPx;",
+                "Prismal raster expansion uniform");
         return replaceExactlyOnce(
                 guarded, SHAPE_COORD, "v_shapeCoord = rasterPosition;",
                 "Prismal raster shape coordinate");
