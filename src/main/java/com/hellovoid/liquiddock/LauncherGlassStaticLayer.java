@@ -32,6 +32,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
     private ValueAnimator motionAnimator;
+    private boolean sceneTargetVisible;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
@@ -189,8 +190,14 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 + " durationMs=" + duration);
     }
 
-    void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {
+    void setSceneVisible(
+            boolean visible, boolean fadeReveal, boolean immediateHide,
+            boolean folderOpeningFade) {
         if (disposed) return;
+        // Coverage notifications can reapply the same target in one native
+        // opening. Preserve the animator instead of restarting it each time.
+        if (!immediateHide && sceneAnimator != null && sceneTargetVisible == visible) return;
+        sceneTargetVisible = visible;
         cancelSceneAnimation();
         if (!visible && immediateHide) {
             layerAlpha.setSceneAlpha(0f);
@@ -202,8 +209,18 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             applyLayerAlpha();
             return;
         }
+        long fullDuration = folderOpeningFade && !visible
+                ? AnimationRuntimeState.folderOpenGlassFadeDurationMs()
+                : AnimationRuntimeState.workspaceVisibilityDurationMs();
         LauncherGlassVisibilityTransition.Plan plan =
-                LauncherGlassVisibilityTransition.plan(layerAlpha.sceneAlpha(), visible);
+                LauncherGlassVisibilityTransition.plan(
+                        layerAlpha.sceneAlpha(), visible, fullDuration);
+        if (folderOpeningFade && Api101Bridge.isDebugLoggingEnabled()) {
+            MainHook.log("[DC][FolderOpenFade] begin durationMs=" + plan.durationMs
+                    + " from=" + plan.startAlpha + " to=" + plan.targetAlpha
+                    + " viewAlpha=" + getAlpha()
+                    + " attached=" + isAttachedToWindow());
+        }
         layerAlpha.setSceneAlpha(plan.startAlpha);
         applyLayerAlpha();
         if (plan.durationMs == 0L) {
@@ -222,7 +239,12 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
-                if (sceneAnimator == animation) sceneAnimator = null;
+                if (sceneAnimator == animation) {
+                    sceneAnimator = null;
+                    if (folderOpeningFade && Api101Bridge.isDebugLoggingEnabled()) {
+                        MainHook.log("[DC][FolderOpenFade] end viewAlpha=" + getAlpha());
+                    }
+                }
             }
         });
         animator.start();
