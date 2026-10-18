@@ -24,7 +24,7 @@ final class LauncherGlassStaticGeometryCache {
         final Matrix matrix = new Matrix();
         Matrix animationMatrix;
         int left, top, right, bottom, scrollX, scrollY, visibility;
-        float alpha;
+        float alpha, translationX, translationY;
 
         boolean observe(View candidate) {
             Matrix candidateMatrix = candidate.getMatrix();
@@ -41,6 +41,8 @@ final class LauncherGlassStaticGeometryCache {
                     || scrollX != candidate.getScrollX() || scrollY != candidate.getScrollY()
                     || visibility != candidate.getVisibility()
                     || Float.compare(alpha, candidate.getAlpha()) != 0
+                    || Float.compare(translationX, candidate.getTranslationX()) != 0
+                    || Float.compare(translationY, candidate.getTranslationY()) != 0
                     || matrixChanged || animationChanged;
             view = candidate;
             left = candidate.getLeft();
@@ -51,6 +53,8 @@ final class LauncherGlassStaticGeometryCache {
             scrollY = candidate.getScrollY();
             visibility = candidate.getVisibility();
             alpha = candidate.getAlpha();
+            translationX = candidate.getTranslationX();
+            translationY = candidate.getTranslationY();
             if (matrixChanged) matrix.set(candidateMatrix);
             if (animationChanged) {
                 if (candidateAnimation == null) animationMatrix = null;
