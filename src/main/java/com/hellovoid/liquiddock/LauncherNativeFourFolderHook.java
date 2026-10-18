@@ -101,545 +101,18 @@ final class LauncherNativeFourFolderHook {
     static boolean install(ClassLoader loader) {
         if (installed || loader == null) return installed;
         try {
-            // Launcher revisions may inline individual OEM helpers: install
-            // independently instead of disabling the entire custom folder.
-            Class<?> cell = vendorClass(loader, "com.miui.home.launcher.CellLayout");
-            Class<?> content = vendorClass(loader, CONTENT_HOST);
-            Class<?> config = vendorClass(loader, "com.miui.home.launcher.DeviceConfig");
-            Class<?> folderIcon = vendorClass(loader, "com.miui.home.launcher.FolderIcon");
-            Class<?> launcher = vendorClass(loader, "com.miui.home.launcher.Launcher");
-            Class<?> infoType = vendorClass(loader, "com.miui.home.launcher.FolderInfo");
-            Class<?> itemIcon = vendorClass(loader, "com.miui.home.launcher.ItemIcon");
-            Class<?> nativeImageClass = vendorClass(loader,
-                    "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView");
+            // Launcher revisions may inline individual OEM helpers. Keep every
+            // hook independent and retain its original installation order.
+            VendorCapabilities vendor = new VendorCapabilities(loader);
             int installedHooks = 0;
-
-            // Hook the OEM measurement boundary; LayoutParams alone do
-            // not establish the native image or preview's measured size.
-            if (nativeImageClass != null) {
-                try {
-                    java.lang.reflect.Method measure = HookUtil.findMethodExact(
-                            nativeImageClass, "onMeasure",
-                            new Class<?>[]{int.class, int.class});
-                    // Do not hook Android framework ImageView/ViewGroup
-                    // onMeasure globally if OEM removed its override.
-                    if (!measure.getDeclaringClass().getName().startsWith(
-                            "com.miui.home.")) {
-                        throw new NoSuchMethodException("vendor onMeasure absent: "
-                                + measure.toGenericString());
-                    }
-                    HookUtil.hook(measure, chain -> {
-                        Object instance = chain.getThisObject();
-                        if (!(instance instanceof View)
-                                || !instance.getClass().getName().equals(
-                                "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView")) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        View surface = (View) instance;
-                        View root = ancestorFolder(surface);
-                        if (root == null || !eligible(root)) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        int[] frame = visualFrame(root);
-                        if (frame == null) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        NativeFourFolderSizing.Size size = nativeSizing(root, frame);
-                        if (size == null) return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        // FolderAnimController interpolates mCustomWidth/Height on
-                        // its own native copy. Preserve those per-frame values.
-                        if (workspaceSource(root) != root
-                                && (HookUtil.getIntField(surface, "mCustomWidth") > 0
-                                || HookUtil.getIntField(surface, "mCustomHeight") > 0)) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        frame = new int[]{size.backgroundWidth, size.backgroundHeight};
-                        // Launcher 4.50 explicitly supports per-view custom dimensions.
-                        // Let ImageView measure normally so its drawable matrix also updates.
-                        // LauncherIconImageView.onMeasure always measures 1x1
-                        // unless mCustomWidth/Height remain set. A locked-workspace
-                        // long press can trigger a new native pass while the
-                        // CellLayout coordinate arrays are temporarily invalid.
-                        // Persist the override only for the actual workspace
-                        // folder; native folder-animation copies keep ownership
-                        // of their own transient interpolated dimensions.
-                        boolean workspaceOwner = NativeFourFolderSizing.shouldPersistImageSize(
-                                workspaceSource(root) == root, frame[0], frame[1]);
-                        int previousWidth = HookUtil.getIntField(surface, "mCustomWidth");
-                        int previousHeight = HookUtil.getIntField(surface, "mCustomHeight");
-                        HookUtil.setIntField(surface, "mCustomWidth", frame[0]);
-                        HookUtil.setIntField(surface, "mCustomHeight", frame[1]);
-                        try {
-                            Object result = chain.proceed(new Object[]{exact(frame[0]), exact(frame[1])});
-                            forceMeasuredFrame(surface, frame, "image");
-                            return result;
-                        } finally {
-                            if (!workspaceOwner) {
-                                HookUtil.setIntField(surface, "mCustomWidth", previousWidth);
-                                HookUtil.setIntField(surface, "mCustomHeight", previousHeight);
-                            }
-                        }
-                    });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " native image onMeasure unavailable", error);
-                }
-                try {
-                    HookUtil.hook(nativeImageClass.getDeclaredMethod("getOriginalSize"), chain -> {
-                        View surface = (View) chain.getThisObject();
-                        View root = ancestorFolder(surface);
-                        if (root == null || !eligible(root)) return chain.proceed();
-                        int[] frame = visualFrame(root);
-                        NativeFourFolderSizing.Size size = frame == null ? null : nativeSizing(root, frame);
-                        if (size != null) {
-                            return new int[]{size.backgroundWidth, size.backgroundHeight};
-                        }
-                        // Transient native remeasures must not regress the
-                        // workspace original-size metadata to the stock 1x1.
-                        if (workspaceSource(root) == root) {
-                            int width = HookUtil.getIntField(surface, "mCustomWidth");
-                            int height = HookUtil.getIntField(surface, "mCustomHeight");
-                            if (NativeFourFolderSizing.shouldPersistImageSize(
-                                    true, width, height)) return new int[]{width, height};
-                        }
-                        return chain.proceed();
-                    });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " native original image size unavailable", error);
-                }
-            }
-            // Each OEM preview type owns its child count and positioning.
-            // Four-preview uses 3 large + 4 small; nine-preview uses
-            // 8 large + 4 small in the bottom-right cell.
-            java.util.Set<java.lang.reflect.Method> hookedMeasures = new java.util.HashSet<>();
-            java.util.Set<java.lang.reflect.Method> hookedPreMeasures = new java.util.HashSet<>();
-            for (String previewName : new String[]{PREVIEW_FOUR, PREVIEW_NINE}) {
-                Class<?> previewType = vendorClass(loader, previewName);
-                if (previewType == null) continue;
-                try {
-                    java.lang.reflect.Method pre = HookUtil.findMethodExact(
-                            previewType, "preMeasure2x2",
-                            new Class<?>[]{int.class, int.class});
-                    if (pre.getDeclaringClass().getName().startsWith("com.miui.home.")
-                            && hookedPreMeasures.add(pre)) {
-                        HookUtil.hook(pre, chain -> {
-                            Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                            View preview = (View) chain.getThisObject();
-                            if (!nativePreviewClass(preview)) return result;
-                            View root = ancestorFolder(preview);
-                            if (root == null || !eligible(root)) return result;
-                            int[] frame = visualFrame(root);
-                            if (frame == null) return result;
-                            NativeFourFolderSizing.Size size = nativeSizing(root, frame);
-                            if (size == null) return result;
-                            preview.setPadding(size.insetX, size.insetY, size.insetX, size.insetY);
-                            if (PREVIEW_FOUR.equals(preview.getClass().getName())) {
-                                applyFourPreviewGeometry(preview, size);
-                            } else {
-                                applyNinePreviewGeometry(preview, size);
-                            }
-                            return result;
-                        });
-                        installedHooks++;
-                    }
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " native preview geometry unavailable " + previewName, error);
-                }
-                try {
-                    java.lang.reflect.Method measure = HookUtil.findMethodExact(
-                            previewType, "onMeasure",
-                            new Class<?>[]{int.class, int.class});
-                    if (!measure.getDeclaringClass().getName().startsWith("com.miui.home.")) {
-                        throw new NoSuchMethodException("vendor preview onMeasure absent");
-                    }
-                    if (hookedMeasures.add(measure)) {
-                        HookUtil.hook(measure, chain -> {
-                            Object instance = chain.getThisObject();
-                            if (!(instance instanceof View)
-                                    || !nativePreviewClass((View) instance)) {
-                                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                            }
-                            View preview = (View) instance;
-                            View root = ancestorFolder(preview);
-                            if (root == null || !eligible(root)) {
-                                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                            }
-                            int[] frame = visualFrame(root);
-                            if (frame == null) return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                            Object result = chain.proceed(new Object[]{
-                                    exact(frame[0]), exact(frame[1])});
-                            forceMeasuredFrame(preview, frame, "preview");
-                            return result;
-                        });
-                        installedHooks++;
-                    }
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " native preview onMeasure unavailable " + previewName, error);
-                }
-            }
-
-            // FolderIcon#getSpanX/Y already returns FolderInfo.spanX/Y.
-            // The actual remaining clamp is ItemIcon#onMeasure, where the
-            // DeviceConfig single-cell width can differ from the custom
-            // workspace grid pitch. Scope the width override to the actual
-            // native four-folder root measurement; never affect other icons.
-            if (config != null) {
-                try {
-            HookUtil.hook(config.getDeclaredMethod("getCellWidth"), chain -> {
-                Object original = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                int[] frame = ROOT_FRAME.get();
-                if (frame == null || frame[0] <= 0) return original;
-                int minCellWidth = (frame[0] + 1) / 2;
-                return Math.max(((Number) original).intValue(), minCellWidth);
-            });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " DeviceConfig#getCellWidth unavailable on this launcher", error);
-                }
-            } else {
-                Api101Bridge.log(TAG + " DeviceConfig#getCellWidth class unavailable");
-            }
-            if (itemIcon != null) {
-                try {
-            HookUtil.hook(itemIcon.getDeclaredMethod(
-                    "onMeasure", int.class, int.class), chain -> {
-                Object owner = chain.getThisObject();
-                if (!(owner instanceof View) || !eligible((View) owner)) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                View folder = (View) owner;
-                int[] frame = desiredFrame(folder);
-                if (frame == null) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                int[] previous = ROOT_FRAME.get();
-                ROOT_FRAME.set(frame);
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                args[0] = exact(frame[0]);
-                args[1] = exact(frame[1]);
-                try {
-                    Object result = chain.proceed(args);
-                    return result;
-                } finally {
-                    if (previous == null) ROOT_FRAME.remove();
-                    else ROOT_FRAME.set(previous);
-                }
-            });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " ItemIcon#onMeasure unavailable on this launcher", error);
-                }
-            } else {
-                Api101Bridge.log(TAG + " ItemIcon#onMeasure class unavailable");
-            }
-
-            // Launcher 4.50 calls this private title visibility decision
-            // from BOTH onMeasure and onDraw. Intercept that decision once,
-            // leaving unrelated native items and no-word mode unchanged.
-            if (itemIcon != null) {
-                try {
-                    Class<?> gridConfig = Class.forName(
-                            "com.miui.home.launcher.grid.GridConfig", false, loader);
-                    java.lang.reflect.Method visibility = itemIcon.getDeclaredMethod(
-                            "executeChildrenVisibility", gridConfig);
-                    java.lang.reflect.Method noWord = Class.forName(
-                            "com.miui.home.launcher.common.Utilities", false, loader)
-                            .getDeclaredMethod("isNoWordModel");
-                    HookUtil.hook(visibility, chain -> {
-                        Object owner = chain.getThisObject();
-                        if (!(owner instanceof View)) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        View folder = (View) owner;
-                        // Every stock ItemIcon keeps the unmodified native path.
-                        if (!nativeFolderClass(folder) || !eligible(folder)) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        Object info = folder.getTag();
-                        HookUtil.InvocationResult<Object> hiddenResult =
-                                HookUtil.tryInvoke(info, "needHideTitleByFlags");
-                        HookUtil.InvocationResult<Object> hotseatResult =
-                                HookUtil.tryInvoke(folder, "isInHotSeat");
-                        Object titleValue = HookUtil.tryInvoke(folder, "getTitleContainer").value();
-                        Object titleText = HookUtil.tryInvoke(folder, "getTitleView").value();
-                        if (!hiddenResult.succeeded() || !hotseatResult.succeeded()
-                                || !(titleValue instanceof View) || !(titleText instanceof View)) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        boolean noWordEnabled;
-                        try {
-                            noWordEnabled = Boolean.TRUE.equals(noWord.invoke(null));
-                        } catch (Throwable ignored) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        if (!LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(true,
-                                LauncherLargeFolderPickerHook.shouldShowTitle(
-                                        folder.getContext(), info),
-                                Boolean.TRUE.equals(hiddenResult.value()), noWordEnabled,
-                                Boolean.TRUE.equals(hotseatResult.value()))) {
-                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        }
-                        // This exact OEM method ONLY decides title visibility.
-                        // Bypass its span>1 INVISIBLE branch for a selected
-                        // folder. Reusing the same View state avoids setting
-                        // INVISIBLE then VISIBLE on every draw frame.
-                        View title = (View) titleValue;
-                        if (title.getVisibility() != View.VISIBLE) {
-                            title.setVisibility(View.VISIBLE);
-                        }
-                        return null; // void OEM executeChildrenVisibility
-                    });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " ItemIcon#executeChildrenVisibility unavailable", error);
-                }
-            }
-
-            // The built-in 2x2 content also calls DeviceConfig for widget
-            // dimensions. Previously NATIVE_SIZE was taken from the inner
-            // MeasureSpec, which was already 1x1 -- feeding that value back
-            // reproduced the shrinking forever. Use the ROOT 2x2 allocation.
-
-            if (config != null) {
-                try {
-            HookUtil.hook(config.getDeclaredMethod("getMiuiWidgetSizeSpec",
-                    int.class, int.class, boolean.class), chain -> {
-                int[] size = NATIVE_SIZE.get();
-                Object nativeValue = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (size == null
-                        || ((Integer) chain.getArg(0)) != 2
-                        || ((Integer) chain.getArg(1)) != 2
-                        || !Boolean.TRUE.equals(chain.getArg(2))) return nativeValue;
-                return ((long) size[0] << 32) | (size[1] & 0xffffffffL);
-            });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " DeviceConfig#getMiuiWidgetSizeSpec unavailable on this launcher", error);
-                }
-            } else {
-                Api101Bridge.log(TAG + " DeviceConfig#getMiuiWidgetSizeSpec class unavailable");
-            }
-            if (content != null) {
-                try {
-            HookUtil.hook(content.getDeclaredMethod(
-                    "onMeasure", int.class, int.class), chain -> {
-                View child = (View) chain.getThisObject();
-                View host = ancestorFolder(child);
-                if (host == null || !eligible(host)) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                // Do NOT feed the child's incoming MeasureSpec back into
-                // DeviceConfig. It may be only one cell due to wrap_content.
-                int[] frame = ROOT_FRAME.get();
-                if (frame == null) {
-                    frame = visualFrame(host);
-                }
-                if (frame == null) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                // Device-confirmed defect (2026-10-14):
-                // native host=718x721, icon background=287x287,
-                // preview=359x359. These are *child* layout parameters
-                // inherited from the stock compact folder, not a span,
-                // CellLayout or host measurement problem. Adjust the
-                // actual native children BEFORE FrameLayout measures them.
-                // The native FolderIconPreviewContainer2X2_4 still owns its
-                // three-large + fourth-quadrant four-small icon algorithm.
-                resizeNativePreviewChildren(child, frame[0], frame[1]);
-                int[] previous = NATIVE_SIZE.get();
-                NATIVE_SIZE.set(frame);
-                try {
-                    Object result = chain.proceed(new Object[]{exact(frame[0]), exact(frame[1])});
-                    // This parent onMeasure IS confirmed executing on the
-                    // device. If a vendor subclass ignores the child hook
-                    // (inlined/renamed in Launcher 4.50), reconcile measured
-                    // dimensions here before FrameLayout performs layout.
-                    reconcileNativeMeasuredChildren(child, frame);
-                    return result;
-                } finally {
-                    if (previous == null) NATIVE_SIZE.remove();
-                    else NATIVE_SIZE.set(previous);
-                }
-            });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " LauncherFolder2x2IconContainer#onMeasure unavailable on this launcher", error);
-                }
-            } else {
-                Api101Bridge.log(TAG + " LauncherFolder2x2IconContainer#onMeasure class unavailable");
-            }
-
-            // Native FolderIcon.fromXml() caches mBuddyIconView across resize.
-            // If it still points to a 1x1 folder after conversion, force the
-            // correct OEM 2x2_4 binding instead of layering another renderer.
-            if (folderIcon != null && launcher != null && infoType != null) {
-                try {
-            HookUtil.hook(folderIcon.getDeclaredMethod("fromXml",
-                    int.class, launcher, ViewGroup.class, infoType), chain -> {
-                Object info = chain.getArg(3);
-                ViewGroup parent = (ViewGroup) chain.getArg(2);
-                if (info != null) {
-                    boolean marked = LauncherLargeFolderPickerHook.isMarked(
-                            parent.getContext(), info);
-                    HookUtil.InvocationResult<Object> cached =
-                            HookUtil.tryInvoke(info, "getBuddyIconView");
-                    if (cached.succeeded() && cached.value() instanceof View) {
-                        View old = (View) cached.value();
-                        boolean wrongClass = marked && isFourGridInfo(info)
-                                && !expectedFolderClass(info).equals(old.getClass().getName());
-                        boolean previouslyCustom = !marked && CUSTOM_SIZED.remove(old);
-                        if (wrongClass || previouslyCustom) {
-                            ViewParent p = old.getParent();
-                            if (p == null || p == parent) {
-                                if (p == parent) parent.removeView(old);
-                                HookUtil.tryInvoke(info, "setBuddyIconView", (Object) null);
-                            }
-                        }
-                    }
-                }
-                return chain.proceed(chain.getArgs().toArray(new Object[0]));
-            });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " FolderIcon#fromXml unavailable on this launcher", error);
-                }
-            } else {
-                Api101Bridge.log(TAG + " FolderIcon#fromXml class unavailable");
-            }
-
-            // The original HomeGrid four-argument hook delegates marked-folder
-            // sizing here. This owner installs only the edit-aware OEM overload,
-            // so no method is intercepted twice.
-            if (cell != null) {
-                Class<?> itemInfoClass = vendorClass(loader, "com.miui.home.launcher.ItemInfo");
-                Class<?> paramsClass = vendorClass(
-                        loader, "com.miui.home.launcher.CellLayout$LayoutParams");
-                if (itemInfoClass != null && paramsClass != null) {
-                    try {
-                        HookUtil.hookMethod(cell, "setupLayoutParam",
-                                new Class<?>[]{int.class, int.class, itemInfoClass,
-                                        boolean.class, paramsClass}, chain -> {
-                                    Object[] args = chain.getArgs().toArray(new Object[0]);
-                                    Object result = chain.proceed(args);
-                                    prepareFolderLayoutParams(chain.getThisObject(),
-                                            (Integer) args[0], (Integer) args[1], args[2], args[4]);
-                                    return result;
-                                });
-                        installedHooks++;
-                    } catch (Throwable error) {
-                        Api101Bridge.log(TAG + " edit-aware folder setupLayoutParam unavailable", error);
-                    }
-                }
-                // OEM initial measurement can permanently cache a compact
-                // preview. Restore the previously working post-measure correction
-                // here rather than removing it under the single-owner refactor.
-                try {
-                    HookUtil.hookMethod(cell, "measureChild",
-                            new Class<?>[]{View.class}, chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        View child = (View) chain.getArg(0);
-                        if (!eligible(child)) return result;
-                        ViewGroup.LayoutParams params = child.getLayoutParams();
-                        Object info = child.getTag();
-                        if (params == null || info == null || isDragging(params)) return result;
-                        try {
-                            prepareFolderLayoutParams(chain.getThisObject(),
-                                    HookUtil.getIntField(info, "cellX"),
-                                    HookUtil.getIntField(info, "cellY"), info, params);
-                            if (params.width > 0 && params.height > 0
-                                    && (child.getMeasuredWidth() != params.width
-                                    || child.getMeasuredHeight() != params.height)) {
-                                child.measure(exact(params.width), exact(params.height));
-                            }
-                        } catch (Throwable error) {
-                            Api101Bridge.log(TAG + " native folder first measure unavailable", error);
-                        }
-                        return result;
-                    });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " CellLayout#measureChild unavailable", error);
-                }
-            }
-
-            if (cell != null) {
-                // The destination CellLayout can commit a cross-page edit-mode
-                // move without another onLayout pass. Reconcile only after the
-                // OEM has persisted the new model positions; never rely on a
-                // delayed whole-workspace refresh or source-page drop callback.
-                try {
-                    HookUtil.hookMethod(cell, "saveCurrentLayout",
-                            new Class<?>[]{boolean.class, boolean.class}, chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        if (Boolean.TRUE.equals(chain.getArg(1))
-                                && chain.getThisObject() instanceof ViewGroup) {
-                            scheduleCommittedFolderReconcile(
-                                    (ViewGroup) chain.getThisObject());
-                        }
-                        return result;
-                    });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " CellLayout committed folder sizing unavailable", error);
-                }
-            }
-
-            if (cell != null) {
-                // OEM may leave the dragged FolderIcon root INVISIBLE after
-                // reattaching it to the desktop. The label itself is VISIBLE,
-                // so title-only invalidation cannot make it appear.
-                try {
-                    HookUtil.hook(cell.getDeclaredMethod("onDropCompleted"), chain -> {
-                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                        Object target = chain.getThisObject();
-                        if (target instanceof ViewGroup) {
-                            ViewGroup workspace = (ViewGroup) target;
-                            scheduleCommittedFolderReconcile(workspace);
-                            for (int i = 0; i < workspace.getChildCount(); i++) {
-                                View child = workspace.getChildAt(i);
-                                if (!eligible(child)) continue;
-                                if (child.getVisibility() == View.INVISIBLE) {
-                                    // Restore only the settled marked folder(s)
-                                    // hidden by this drop, not unrelated Views.
-                                    child.postOnAnimation(() -> restoreDroppedFolder(child));
-                                } else {
-                                    queueTitleRestore(child);
-                                }
-                            }
-                        }
-                        return result;
-                    });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " CellLayout#onDropCompleted unavailable", error);
-                }
-                try {
-            HookUtil.hook(cell.getDeclaredMethod("onLayout",
-                    boolean.class, int.class, int.class, int.class, int.class), chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                if (chain.getThisObject() instanceof ViewGroup) {
-                    ViewGroup workspace = (ViewGroup) chain.getThisObject();
-                    for (int i = 0; i < workspace.getChildCount(); i++) {
-                        View folder = workspace.getChildAt(i);
-                        if (!eligible(folder)) continue;
-                        try {
-                            alignNativeFolderToWidget(workspace, folder);
-                        } catch (Throwable error) {
-                            Api101Bridge.log(TAG + " native 2x2 alignment failed: " + error);
-                        }
-                    }
-                }
-                return result;
-            });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " CellLayout#onLayout unavailable on this launcher", error);
-                }
-            } else {
-                Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
-            }
-            // Exactly the original independent OEM-hook activation contract.
+            installedHooks += installNativeImageHooks(vendor.nativeImageClass);
+            installedHooks += installNativePreviewHooks(loader);
+            installedHooks += installNativeMeasureAndTitleHooks(
+                    loader, vendor.config, vendor.itemIcon, vendor.content);
+            installedHooks += installNativeBindingHook(
+                    vendor.folderIcon, vendor.launcher, vendor.infoType);
+            installedHooks += installCellSizingHooks(loader, vendor.cell);
+            installedHooks += installCellCommitHooks(vendor.cell);
             installed = installedHooks > 0;
             if (installed) bindPreviewScale();
             return installed;
@@ -647,6 +120,581 @@ final class LauncherNativeFourFolderHook {
             Api101Bridge.log(TAG + " installation unavailable: " + error);
             return false;
         }
+    }
+
+    /** One discovery snapshot; absent OEM classes disable only their own hooks. */
+    private static final class VendorCapabilities {
+        final Class<?> cell;
+        final Class<?> content;
+        final Class<?> config;
+        final Class<?> folderIcon;
+        final Class<?> launcher;
+        final Class<?> infoType;
+        final Class<?> itemIcon;
+        final Class<?> nativeImageClass;
+
+        VendorCapabilities(ClassLoader loader) {
+            cell = vendorClass(loader, "com.miui.home.launcher.CellLayout");
+            content = vendorClass(loader, CONTENT_HOST);
+            config = vendorClass(loader, "com.miui.home.launcher.DeviceConfig");
+            folderIcon = vendorClass(loader, "com.miui.home.launcher.FolderIcon");
+            launcher = vendorClass(loader, "com.miui.home.launcher.Launcher");
+            infoType = vendorClass(loader, "com.miui.home.launcher.FolderInfo");
+            itemIcon = vendorClass(loader, "com.miui.home.launcher.ItemIcon");
+            nativeImageClass = vendorClass(loader,
+                    "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView");
+        }
+    }
+
+    private static int installNativeImageHooks(Class<?> nativeImageClass) {
+        int installedHooks = 0;
+        // Hook the OEM measurement boundary; LayoutParams alone do
+        // not establish the native image or preview's measured size.
+        if (nativeImageClass != null) {
+            try {
+                java.lang.reflect.Method measure = HookUtil.findMethodExact(
+                        nativeImageClass, "onMeasure",
+                        new Class<?>[]{int.class, int.class});
+                // Do not hook Android framework ImageView/ViewGroup
+                // onMeasure globally if OEM removed its override.
+                if (!measure.getDeclaringClass().getName().startsWith(
+                        "com.miui.home.")) {
+                    throw new NoSuchMethodException("vendor onMeasure absent: "
+                            + measure.toGenericString());
+                }
+                HookUtil.hook(measure, chain -> {
+                    Object instance = chain.getThisObject();
+                    if (!(instance instanceof View)
+                            || !instance.getClass().getName().equals(
+                            "com.miui.home.launcher.folder.LauncherFolder2x2IconImageView")) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    View surface = (View) instance;
+                    View root = ancestorFolder(surface);
+                    if (root == null || !eligible(root)) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    int[] frame = visualFrame(root);
+                    if (frame == null) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    NativeFourFolderSizing.Size size = nativeSizing(root, frame);
+                    if (size == null) return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    // FolderAnimController interpolates mCustomWidth/Height on
+                    // its own native copy. Preserve those per-frame values.
+                    if (workspaceSource(root) != root
+                            && (HookUtil.getIntField(surface, "mCustomWidth") > 0
+                            || HookUtil.getIntField(surface, "mCustomHeight") > 0)) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    frame = new int[]{size.backgroundWidth, size.backgroundHeight};
+                    // Launcher 4.50 explicitly supports per-view custom dimensions.
+                    // Let ImageView measure normally so its drawable matrix also updates.
+                    // LauncherIconImageView.onMeasure always measures 1x1
+                    // unless mCustomWidth/Height remain set. A locked-workspace
+                    // long press can trigger a new native pass while the
+                    // CellLayout coordinate arrays are temporarily invalid.
+                    // Persist the override only for the actual workspace
+                    // folder; native folder-animation copies keep ownership
+                    // of their own transient interpolated dimensions.
+                    boolean workspaceOwner = NativeFourFolderSizing.shouldPersistImageSize(
+                            workspaceSource(root) == root, frame[0], frame[1]);
+                    int previousWidth = HookUtil.getIntField(surface, "mCustomWidth");
+                    int previousHeight = HookUtil.getIntField(surface, "mCustomHeight");
+                    HookUtil.setIntField(surface, "mCustomWidth", frame[0]);
+                    HookUtil.setIntField(surface, "mCustomHeight", frame[1]);
+                    try {
+                        Object result = chain.proceed(new Object[]{exact(frame[0]), exact(frame[1])});
+                        forceMeasuredFrame(surface, frame, "image");
+                        return result;
+                    } finally {
+                        if (!workspaceOwner) {
+                            HookUtil.setIntField(surface, "mCustomWidth", previousWidth);
+                            HookUtil.setIntField(surface, "mCustomHeight", previousHeight);
+                        }
+                    }
+                });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " native image onMeasure unavailable", error);
+            }
+            try {
+                HookUtil.hook(nativeImageClass.getDeclaredMethod("getOriginalSize"), chain -> {
+                    View surface = (View) chain.getThisObject();
+                    View root = ancestorFolder(surface);
+                    if (root == null || !eligible(root)) return chain.proceed();
+                    int[] frame = visualFrame(root);
+                    NativeFourFolderSizing.Size size = frame == null ? null : nativeSizing(root, frame);
+                    if (size != null) {
+                        return new int[]{size.backgroundWidth, size.backgroundHeight};
+                    }
+                    // Transient native remeasures must not regress the
+                    // workspace original-size metadata to the stock 1x1.
+                    if (workspaceSource(root) == root) {
+                        int width = HookUtil.getIntField(surface, "mCustomWidth");
+                        int height = HookUtil.getIntField(surface, "mCustomHeight");
+                        if (NativeFourFolderSizing.shouldPersistImageSize(
+                                true, width, height)) return new int[]{width, height};
+                    }
+                    return chain.proceed();
+                });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " native original image size unavailable", error);
+            }
+        }
+        return installedHooks;
+    }
+
+    private static int installNativePreviewHooks(ClassLoader loader) {
+        int installedHooks = 0;
+        // Each OEM preview type owns its child count and positioning.
+        // Four-preview uses 3 large + 4 small; nine-preview uses
+        // 8 large + 4 small in the bottom-right cell.
+        java.util.Set<java.lang.reflect.Method> hookedMeasures = new java.util.HashSet<>();
+        java.util.Set<java.lang.reflect.Method> hookedPreMeasures = new java.util.HashSet<>();
+        for (String previewName : new String[]{PREVIEW_FOUR, PREVIEW_NINE}) {
+            Class<?> previewType = vendorClass(loader, previewName);
+            if (previewType == null) continue;
+            try {
+                java.lang.reflect.Method pre = HookUtil.findMethodExact(
+                        previewType, "preMeasure2x2",
+                        new Class<?>[]{int.class, int.class});
+                if (pre.getDeclaringClass().getName().startsWith("com.miui.home.")
+                        && hookedPreMeasures.add(pre)) {
+                    HookUtil.hook(pre, chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        View preview = (View) chain.getThisObject();
+                        if (!nativePreviewClass(preview)) return result;
+                        View root = ancestorFolder(preview);
+                        if (root == null || !eligible(root)) return result;
+                        int[] frame = visualFrame(root);
+                        if (frame == null) return result;
+                        NativeFourFolderSizing.Size size = nativeSizing(root, frame);
+                        if (size == null) return result;
+                        preview.setPadding(size.insetX, size.insetY, size.insetX, size.insetY);
+                        if (PREVIEW_FOUR.equals(preview.getClass().getName())) {
+                            applyFourPreviewGeometry(preview, size);
+                        } else {
+                            applyNinePreviewGeometry(preview, size);
+                        }
+                        return result;
+                    });
+                    installedHooks++;
+                }
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " native preview geometry unavailable " + previewName, error);
+            }
+            try {
+                java.lang.reflect.Method measure = HookUtil.findMethodExact(
+                        previewType, "onMeasure",
+                        new Class<?>[]{int.class, int.class});
+                if (!measure.getDeclaringClass().getName().startsWith("com.miui.home.")) {
+                    throw new NoSuchMethodException("vendor preview onMeasure absent");
+                }
+                if (hookedMeasures.add(measure)) {
+                    HookUtil.hook(measure, chain -> {
+                        Object instance = chain.getThisObject();
+                        if (!(instance instanceof View)
+                                || !nativePreviewClass((View) instance)) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        View preview = (View) instance;
+                        View root = ancestorFolder(preview);
+                        if (root == null || !eligible(root)) {
+                            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        }
+                        int[] frame = visualFrame(root);
+                        if (frame == null) return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object result = chain.proceed(new Object[]{
+                                exact(frame[0]), exact(frame[1])});
+                        forceMeasuredFrame(preview, frame, "preview");
+                        return result;
+                    });
+                    installedHooks++;
+                }
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " native preview onMeasure unavailable " + previewName, error);
+            }
+        }
+        return installedHooks;
+    }
+
+    private static int installNativeMeasureAndTitleHooks(ClassLoader loader, Class<?> config, Class<?> itemIcon, Class<?> content) {
+        int installedHooks = 0;
+        // FolderIcon#getSpanX/Y already returns FolderInfo.spanX/Y.
+        // The actual remaining clamp is ItemIcon#onMeasure, where the
+        // DeviceConfig single-cell width can differ from the custom
+        // workspace grid pitch. Scope the width override to the actual
+        // native four-folder root measurement; never affect other icons.
+        if (config != null) {
+            try {
+        HookUtil.hook(config.getDeclaredMethod("getCellWidth"), chain -> {
+            Object original = chain.proceed(chain.getArgs().toArray(new Object[0]));
+            int[] frame = ROOT_FRAME.get();
+            if (frame == null || frame[0] <= 0) return original;
+            int minCellWidth = (frame[0] + 1) / 2;
+            return Math.max(((Number) original).intValue(), minCellWidth);
+        });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " DeviceConfig#getCellWidth unavailable on this launcher", error);
+            }
+        } else {
+            Api101Bridge.log(TAG + " DeviceConfig#getCellWidth class unavailable");
+        }
+        if (itemIcon != null) {
+            try {
+        HookUtil.hook(itemIcon.getDeclaredMethod(
+                "onMeasure", int.class, int.class), chain -> {
+            Object owner = chain.getThisObject();
+            if (!(owner instanceof View) || !eligible((View) owner)) {
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            }
+            View folder = (View) owner;
+            int[] frame = desiredFrame(folder);
+            if (frame == null) {
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            }
+            int[] previous = ROOT_FRAME.get();
+            ROOT_FRAME.set(frame);
+            Object[] args = chain.getArgs().toArray(new Object[0]);
+            args[0] = exact(frame[0]);
+            args[1] = exact(frame[1]);
+            try {
+                Object result = chain.proceed(args);
+                return result;
+            } finally {
+                if (previous == null) ROOT_FRAME.remove();
+                else ROOT_FRAME.set(previous);
+            }
+        });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " ItemIcon#onMeasure unavailable on this launcher", error);
+            }
+        } else {
+            Api101Bridge.log(TAG + " ItemIcon#onMeasure class unavailable");
+        }
+
+        // Launcher 4.50 calls this private title visibility decision
+        // from BOTH onMeasure and onDraw. Intercept that decision once,
+        // leaving unrelated native items and no-word mode unchanged.
+        if (itemIcon != null) {
+            try {
+                Class<?> gridConfig = Class.forName(
+                        "com.miui.home.launcher.grid.GridConfig", false, loader);
+                java.lang.reflect.Method visibility = itemIcon.getDeclaredMethod(
+                        "executeChildrenVisibility", gridConfig);
+                java.lang.reflect.Method noWord = Class.forName(
+                        "com.miui.home.launcher.common.Utilities", false, loader)
+                        .getDeclaredMethod("isNoWordModel");
+                HookUtil.hook(visibility, chain -> {
+                    Object owner = chain.getThisObject();
+                    if (!(owner instanceof View)) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    View folder = (View) owner;
+                    // Every stock ItemIcon keeps the unmodified native path.
+                    if (!nativeFolderClass(folder) || !eligible(folder)) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    Object info = folder.getTag();
+                    HookUtil.InvocationResult<Object> hiddenResult =
+                            HookUtil.tryInvoke(info, "needHideTitleByFlags");
+                    HookUtil.InvocationResult<Object> hotseatResult =
+                            HookUtil.tryInvoke(folder, "isInHotSeat");
+                    Object titleValue = HookUtil.tryInvoke(folder, "getTitleContainer").value();
+                    Object titleText = HookUtil.tryInvoke(folder, "getTitleView").value();
+                    if (!hiddenResult.succeeded() || !hotseatResult.succeeded()
+                            || !(titleValue instanceof View) || !(titleText instanceof View)) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    boolean noWordEnabled;
+                    try {
+                        noWordEnabled = Boolean.TRUE.equals(noWord.invoke(null));
+                    } catch (Throwable ignored) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    if (!LargeFolderTitlePolicy.shouldOverrideNativeSpanHide(true,
+                            LauncherLargeFolderPickerHook.shouldShowTitle(
+                                    folder.getContext(), info),
+                            Boolean.TRUE.equals(hiddenResult.value()), noWordEnabled,
+                            Boolean.TRUE.equals(hotseatResult.value()))) {
+                        return chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    }
+                    // This exact OEM method ONLY decides title visibility.
+                    // Bypass its span>1 INVISIBLE branch for a selected
+                    // folder. Reusing the same View state avoids setting
+                    // INVISIBLE then VISIBLE on every draw frame.
+                    View title = (View) titleValue;
+                    if (title.getVisibility() != View.VISIBLE) {
+                        title.setVisibility(View.VISIBLE);
+                    }
+                    return null; // void OEM executeChildrenVisibility
+                });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " ItemIcon#executeChildrenVisibility unavailable", error);
+            }
+        }
+
+        // The built-in 2x2 content also calls DeviceConfig for widget
+        // dimensions. Previously NATIVE_SIZE was taken from the inner
+        // MeasureSpec, which was already 1x1 -- feeding that value back
+        // reproduced the shrinking forever. Use the ROOT 2x2 allocation.
+
+        if (config != null) {
+            try {
+        HookUtil.hook(config.getDeclaredMethod("getMiuiWidgetSizeSpec",
+                int.class, int.class, boolean.class), chain -> {
+            int[] size = NATIVE_SIZE.get();
+            Object nativeValue = chain.proceed(chain.getArgs().toArray(new Object[0]));
+            if (size == null
+                    || ((Integer) chain.getArg(0)) != 2
+                    || ((Integer) chain.getArg(1)) != 2
+                    || !Boolean.TRUE.equals(chain.getArg(2))) return nativeValue;
+            return ((long) size[0] << 32) | (size[1] & 0xffffffffL);
+        });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " DeviceConfig#getMiuiWidgetSizeSpec unavailable on this launcher", error);
+            }
+        } else {
+            Api101Bridge.log(TAG + " DeviceConfig#getMiuiWidgetSizeSpec class unavailable");
+        }
+        if (content != null) {
+            try {
+        HookUtil.hook(content.getDeclaredMethod(
+                "onMeasure", int.class, int.class), chain -> {
+            View child = (View) chain.getThisObject();
+            View host = ancestorFolder(child);
+            if (host == null || !eligible(host)) {
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            }
+            // Do NOT feed the child's incoming MeasureSpec back into
+            // DeviceConfig. It may be only one cell due to wrap_content.
+            int[] frame = ROOT_FRAME.get();
+            if (frame == null) {
+                frame = visualFrame(host);
+            }
+            if (frame == null) {
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            }
+            // Device-confirmed defect (2026-10-14):
+            // native host=718x721, icon background=287x287,
+            // preview=359x359. These are *child* layout parameters
+            // inherited from the stock compact folder, not a span,
+            // CellLayout or host measurement problem. Adjust the
+            // actual native children BEFORE FrameLayout measures them.
+            // The native FolderIconPreviewContainer2X2_4 still owns its
+            // three-large + fourth-quadrant four-small icon algorithm.
+            resizeNativePreviewChildren(child, frame[0], frame[1]);
+            int[] previous = NATIVE_SIZE.get();
+            NATIVE_SIZE.set(frame);
+            try {
+                Object result = chain.proceed(new Object[]{exact(frame[0]), exact(frame[1])});
+                // This parent onMeasure IS confirmed executing on the
+                // device. If a vendor subclass ignores the child hook
+                // (inlined/renamed in Launcher 4.50), reconcile measured
+                // dimensions here before FrameLayout performs layout.
+                reconcileNativeMeasuredChildren(child, frame);
+                return result;
+            } finally {
+                if (previous == null) NATIVE_SIZE.remove();
+                else NATIVE_SIZE.set(previous);
+            }
+        });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " LauncherFolder2x2IconContainer#onMeasure unavailable on this launcher", error);
+            }
+        } else {
+            Api101Bridge.log(TAG + " LauncherFolder2x2IconContainer#onMeasure class unavailable");
+        }
+        return installedHooks;
+    }
+
+    private static int installNativeBindingHook(Class<?> folderIcon, Class<?> launcher, Class<?> infoType) {
+        int installedHooks = 0;
+        // Native FolderIcon.fromXml() caches mBuddyIconView across resize.
+        // If it still points to a 1x1 folder after conversion, force the
+        // correct OEM 2x2_4 binding instead of layering another renderer.
+        if (folderIcon != null && launcher != null && infoType != null) {
+            try {
+        HookUtil.hook(folderIcon.getDeclaredMethod("fromXml",
+                int.class, launcher, ViewGroup.class, infoType), chain -> {
+            Object info = chain.getArg(3);
+            ViewGroup parent = (ViewGroup) chain.getArg(2);
+            if (info != null) {
+                boolean marked = LauncherLargeFolderPickerHook.isMarked(
+                        parent.getContext(), info);
+                HookUtil.InvocationResult<Object> cached =
+                        HookUtil.tryInvoke(info, "getBuddyIconView");
+                if (cached.succeeded() && cached.value() instanceof View) {
+                    View old = (View) cached.value();
+                    boolean wrongClass = marked && isFourGridInfo(info)
+                            && !expectedFolderClass(info).equals(old.getClass().getName());
+                    boolean previouslyCustom = !marked && CUSTOM_SIZED.remove(old);
+                    if (wrongClass || previouslyCustom) {
+                        ViewParent p = old.getParent();
+                        if (p == null || p == parent) {
+                            if (p == parent) parent.removeView(old);
+                            HookUtil.tryInvoke(info, "setBuddyIconView", (Object) null);
+                        }
+                    }
+                }
+            }
+            return chain.proceed(chain.getArgs().toArray(new Object[0]));
+        });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " FolderIcon#fromXml unavailable on this launcher", error);
+            }
+        } else {
+            Api101Bridge.log(TAG + " FolderIcon#fromXml class unavailable");
+        }
+        return installedHooks;
+    }
+
+    private static int installCellSizingHooks(ClassLoader loader, Class<?> cell) {
+        int installedHooks = 0;
+        // The original HomeGrid four-argument hook delegates marked-folder
+        // sizing here. This owner installs only the edit-aware OEM overload,
+        // so no method is intercepted twice.
+        if (cell != null) {
+            Class<?> itemInfoClass = vendorClass(loader, "com.miui.home.launcher.ItemInfo");
+            Class<?> paramsClass = vendorClass(
+                    loader, "com.miui.home.launcher.CellLayout$LayoutParams");
+            if (itemInfoClass != null && paramsClass != null) {
+                try {
+                    HookUtil.hookMethod(cell, "setupLayoutParam",
+                            new Class<?>[]{int.class, int.class, itemInfoClass,
+                                    boolean.class, paramsClass}, chain -> {
+                                Object[] args = chain.getArgs().toArray(new Object[0]);
+                                Object result = chain.proceed(args);
+                                prepareFolderLayoutParams(chain.getThisObject(),
+                                        (Integer) args[0], (Integer) args[1], args[2], args[4]);
+                                return result;
+                            });
+                    installedHooks++;
+                } catch (Throwable error) {
+                    Api101Bridge.log(TAG + " edit-aware folder setupLayoutParam unavailable", error);
+                }
+            }
+            // OEM initial measurement can permanently cache a compact
+            // preview. Restore the previously working post-measure correction
+            // here rather than removing it under the single-owner refactor.
+            try {
+                HookUtil.hookMethod(cell, "measureChild",
+                        new Class<?>[]{View.class}, chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    View child = (View) chain.getArg(0);
+                    if (!eligible(child)) return result;
+                    ViewGroup.LayoutParams params = child.getLayoutParams();
+                    Object info = child.getTag();
+                    if (params == null || info == null || isDragging(params)) return result;
+                    try {
+                        prepareFolderLayoutParams(chain.getThisObject(),
+                                HookUtil.getIntField(info, "cellX"),
+                                HookUtil.getIntField(info, "cellY"), info, params);
+                        if (params.width > 0 && params.height > 0
+                                && (child.getMeasuredWidth() != params.width
+                                || child.getMeasuredHeight() != params.height)) {
+                            child.measure(exact(params.width), exact(params.height));
+                        }
+                    } catch (Throwable error) {
+                        Api101Bridge.log(TAG + " native folder first measure unavailable", error);
+                    }
+                    return result;
+                });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " CellLayout#measureChild unavailable", error);
+            }
+        }
+        return installedHooks;
+    }
+
+    private static int installCellCommitHooks(Class<?> cell) {
+        int installedHooks = 0;
+        if (cell != null) {
+            // The destination CellLayout can commit a cross-page edit-mode
+            // move without another onLayout pass. Reconcile only after the
+            // OEM has persisted the new model positions; never rely on a
+            // delayed whole-workspace refresh or source-page drop callback.
+            try {
+                HookUtil.hookMethod(cell, "saveCurrentLayout",
+                        new Class<?>[]{boolean.class, boolean.class}, chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    if (Boolean.TRUE.equals(chain.getArg(1))
+                            && chain.getThisObject() instanceof ViewGroup) {
+                        scheduleCommittedFolderReconcile(
+                                (ViewGroup) chain.getThisObject());
+                    }
+                    return result;
+                });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " CellLayout committed folder sizing unavailable", error);
+            }
+        }
+
+        if (cell != null) {
+            // OEM may leave the dragged FolderIcon root INVISIBLE after
+            // reattaching it to the desktop. The label itself is VISIBLE,
+            // so title-only invalidation cannot make it appear.
+            try {
+                HookUtil.hook(cell.getDeclaredMethod("onDropCompleted"), chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object target = chain.getThisObject();
+                    if (target instanceof ViewGroup) {
+                        ViewGroup workspace = (ViewGroup) target;
+                        scheduleCommittedFolderReconcile(workspace);
+                        for (int i = 0; i < workspace.getChildCount(); i++) {
+                            View child = workspace.getChildAt(i);
+                            if (!eligible(child)) continue;
+                            if (child.getVisibility() == View.INVISIBLE) {
+                                // Restore only the settled marked folder(s)
+                                // hidden by this drop, not unrelated Views.
+                                child.postOnAnimation(() -> restoreDroppedFolder(child));
+                            } else {
+                                queueTitleRestore(child);
+                            }
+                        }
+                    }
+                    return result;
+                });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " CellLayout#onDropCompleted unavailable", error);
+            }
+            try {
+        HookUtil.hook(cell.getDeclaredMethod("onLayout",
+                boolean.class, int.class, int.class, int.class, int.class), chain -> {
+            Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+            if (chain.getThisObject() instanceof ViewGroup) {
+                ViewGroup workspace = (ViewGroup) chain.getThisObject();
+                for (int i = 0; i < workspace.getChildCount(); i++) {
+                    View folder = workspace.getChildAt(i);
+                    if (!eligible(folder)) continue;
+                    try {
+                        alignNativeFolderToWidget(workspace, folder);
+                    } catch (Throwable error) {
+                        Api101Bridge.log(TAG + " native 2x2 alignment failed: " + error);
+                    }
+                }
+            }
+            return result;
+        });
+                installedHooks++;
+            } catch (Throwable error) {
+                Api101Bridge.log(TAG + " CellLayout#onLayout unavailable on this launcher", error);
+            }
+        } else {
+            Api101Bridge.log(TAG + " CellLayout#onLayout class unavailable");
+        }
+        return installedHooks;
     }
 
     private static Class<?> vendorClass(ClassLoader loader, String name) {
