@@ -806,16 +806,36 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         View workspaceMaterial = null;
         boolean launchProxyActive = false;
         int staticGeometryReads = 0;
+        int staticCacheHits = 0;
+        // Native WindowElement/Recents/unlock may animate independently of View properties.
+        // Keep their existing per-frame capture authority; only reuse genuinely stable nodes.
+        boolean forceStaticCapture = rootGeometryChanged || rotationSettlePending
+                || transitionFrameSync.isActive()
+                || LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
+                || LauncherGlassSceneController.isRecentsCoveredByVendor()
+                || LauncherGlassSceneController.isRecentsWallpaperSettlePendingForRoot(root);
         if (tracing) Trace.beginSection("LD.Workspace.StaticNodes");
         try {
-            Integer workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
-            boolean staticRootTransformValid =
-                    staticSnapshot.length == 0 || prepareStaticRootCaptureTransform(root);
+            Integer workspaceScrollX = null;
+            boolean rootTransformPrepared = false;
+            boolean staticRootTransformValid = false;
             for (StaticNodeState state : staticSnapshot) {
                 LauncherGlassStaticNode node = state.nodeRef.get();
                 if (node == null) continue;
                 if (workspaceMaterial == null) workspaceMaterial = node.materialHost();
                 launchProxyActive |= node.isLaunchProxyActive();
+                if (forceStaticCapture) node.invalidateStaticGeometry();
+                else if (state.frame != null && node.canReuseStaticGeometry(root)) {
+                    if (tracing) staticCacheHits++;
+                    continue;
+                }
+                // On an unchanged Workspace this work is avoided entirely. When any
+                // node changes, share the anchor/matrix inversion across captures.
+                if (!rootTransformPrepared) {
+                    workspaceScrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
+                    staticRootTransformValid = prepareStaticRootCaptureTransform(root);
+                    rootTransformPrepared = true;
+                }
                 if (tracing && staticRootTransformValid) staticGeometryReads++;
                 LauncherGlassGeometry.Snapshot observed = staticRootTransformValid
                         ? node.captureGeometry(root, uiGlobalToRoot, rootWidth, rootHeight)
@@ -839,6 +859,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 Trace.endSection();
                 Trace.setCounter("LD.Workspace.StaticCandidates", staticSnapshot.length);
                 Trace.setCounter("LD.Workspace.StaticGeometryReads", staticGeometryReads);
+                Trace.setCounter("LD.Workspace.StaticCacheHits", staticCacheHits);
             }
         }
 
