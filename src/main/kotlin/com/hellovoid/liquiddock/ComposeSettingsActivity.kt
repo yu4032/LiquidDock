@@ -338,6 +338,13 @@ private fun LiquidDockSettings(
                 Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled)
                 Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage(
+                    padding, prefs, masterEnabled,
+                    onOpenAll = { navigateTo(Page.HandleMenuAll) },
+                )
+                Page.HandleMenuAll -> ScopedGlassSettingsPage(
+                    padding, prefs, masterEnabled, ScopedGlassOptics.HANDLE_MENU, "应用顶部菜单",
+                )
                 Page.ShortcutPopupCustomization -> ShortcutPopupGlassSettingsPage(
                     padding, prefs, masterEnabled,
                     onOpenAll = { navigateTo(Page.ShortcutPopupAll) },

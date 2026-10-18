@@ -40,6 +40,8 @@ internal enum class Page(val titleRes: Int) {
     GlassWidgets(R.string.page_glass_widgets),
     GlassFolders(R.string.page_glass_folders),
     GlassMenus(R.string.page_glass_menus),
+    HandleMenuCustomization(R.string.page_handle_menu),
+    HandleMenuAll(R.string.page_handle_menu),
     ShortcutPopupCustomization(R.string.page_shortcut_popup),
     ShortcutPopupAll(R.string.page_shortcut_popup),
     DialogCustomization(R.string.page_dialog_customization),

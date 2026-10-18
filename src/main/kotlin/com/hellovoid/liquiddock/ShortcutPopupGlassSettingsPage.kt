@@ -16,27 +16,65 @@ import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
 import top.yukonga.miuix.kmp.basic.SmallTitle
 
-/** ShortcutMenu-only controls; the full optics page shares the same scoped keys. */
+/** Both native menu surfaces use the same settings cells but independent scoped keys. */
 @Composable
 internal fun ShortcutPopupGlassSettingsPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
+) = ScopedMenuGlassSettingsPage(
+    padding, prefs, masterEnabled, onOpenAll,
+    scope = ScopedGlassOptics.POPUP,
+    titleRes = R.string.page_shortcut_popup,
+    description = "独立调整桌面长按快捷菜单的玻璃外观；未单独设置的参数继承全局液态玻璃。",
+    toggleKey = ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
+    toggleTitle = "启用快捷菜单玻璃",
+    toggleDescription = "替换长按图标时的菜单背景；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面",
+    blurTitle = "菜单背景模糊",
+)
+
+@Composable
+internal fun HandleMenuGlassSettingsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    onOpenAll: () -> Unit,
+) = ScopedMenuGlassSettingsPage(
+    padding, prefs, masterEnabled, onOpenAll,
+    scope = ScopedGlassOptics.HANDLE_MENU,
+    titleRes = R.string.page_handle_menu,
+    description = "独立调整应用顶部控制器弹出菜单的玻璃；未单独设置的参数继承全局液态玻璃。",
+    toggleKey = ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS,
+    toggleTitle = "启用应用顶部菜单玻璃",
+    toggleDescription = "替换应用顶部控制器展开的分屏、小窗菜单；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启系统界面",
+    blurTitle = "顶部菜单背景模糊",
+)
+
+@Composable
+private fun ScopedMenuGlassSettingsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    onOpenAll: () -> Unit,
+    scope: String,
+    titleRes: Int,
+    description: String,
+    toggleKey: ConfigKey<Boolean>,
+    toggleTitle: String,
+    toggleDescription: String,
+    blurTitle: String,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
-    var popupEnabled by remember {
-        mutableStateOf(prefs.getBoolean(
-            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
-            ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.uiDefault(),
-        ))
+    var menuEnabled by remember(scope) {
+        mutableStateOf(prefs.getBoolean(toggleKey.name(), toggleKey.uiDefault()))
     }
-    val controlsEnabled = masterEnabled && liquidEnabled && popupEnabled
-    var resetGeneration by remember { mutableIntStateOf(0) }
-    var appearanceRevision by remember { mutableIntStateOf(0) }
+    val controlsEnabled = masterEnabled && liquidEnabled && menuEnabled
+    var resetGeneration by remember(scope) { mutableIntStateOf(0) }
+    var appearanceRevision by remember(scope) { mutableIntStateOf(0) }
 
     val basicKeys = listOf(
         ConfigSchema.Glass.BLUR,
@@ -47,14 +85,14 @@ internal fun ShortcutPopupGlassSettingsPage(
     )
     val hasAppearanceOverride = appearanceRevision.let {
         basicKeys.any { config ->
-            val key = ScopedGlassOptics.key(ScopedGlassOptics.POPUP, config)
+            val key = ScopedGlassOptics.key(scope, config)
             prefs.contains(key) || prefs.contains("${key}_tenths")
         }
     }
     fun resetAppearance() {
         val editor = prefs.edit()
         basicKeys.forEach { config ->
-            val key = ScopedGlassOptics.key(ScopedGlassOptics.POPUP, config)
+            val key = ScopedGlassOptics.key(scope, config)
             editor.remove(key).remove("${key}_tenths")
         }
         editor.apply()
@@ -70,7 +108,7 @@ internal fun ShortcutPopupGlassSettingsPage(
     ) {
         ScopedGlassSlider(
             prefs = prefs,
-            key = ScopedGlassOptics.key(ScopedGlassOptics.POPUP, config),
+            key = ScopedGlassOptics.key(scope, config),
             fallback = config,
             title = title,
             unit = unit,
@@ -86,8 +124,8 @@ internal fun ShortcutPopupGlassSettingsPage(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item(key = "shortcut-header") {
             PageHeader(
-                stringResource(R.string.page_shortcut_popup),
-                "独立调整桌面长按快捷菜单的玻璃外观；未单独设置的参数继承全局液态玻璃。",
+                stringResource(titleRes),
+                description,
             )
         }
         item(key = "shortcut-function-title") { SmallTitle("功能") }
@@ -95,19 +133,21 @@ internal fun ShortcutPopupGlassSettingsPage(
             SettingsCard {
                 BooleanSetting(
                     prefs,
-                    ConfigSchema.Glass.SHORTCUT_POPUP_GLASS,
-                    "启用快捷菜单玻璃",
-                    "替换长按图标时的菜单背景；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面",
+                    toggleKey,
+                    toggleTitle,
+                    toggleDescription,
                     masterEnabled && liquidEnabled,
-                ) { popupEnabled = it }
-                ModernListDivider()
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
-                    "快捷菜单深色模式适配",
-                    "文字与单色图标适配为浅色；保留彩色应用图标",
-                    masterEnabled && liquidEnabled,
-                )
+                ) { menuEnabled = it }
+                if (scope == ScopedGlassOptics.POPUP) {
+                    ModernListDivider()
+                    BooleanSetting(
+                        prefs,
+                        ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
+                        "快捷菜单深色模式适配",
+                        "文字与单色图标适配为浅色；保留彩色应用图标",
+                        masterEnabled && liquidEnabled,
+                    )
+                }
             }
         }
         item(key = "shortcut-color-title") { SmallTitle("玻璃颜色") }
@@ -122,10 +162,10 @@ internal fun ShortcutPopupGlassSettingsPage(
         item(key = "shortcut-blur-title") { SmallTitle("模糊") }
         item(key = "shortcut-blur") {
             SettingsCard {
-                appearance(ConfigSchema.Glass.BLUR, "菜单背景模糊", "px")
+                appearance(ConfigSchema.Glass.BLUR, blurTitle, "px")
                 ArrowPreference(
                     title = "恢复继承全局外观",
-                    summary = "只清除快捷菜单的颜色与模糊覆盖，不影响独立光学参数",
+                    summary = "只清除当前菜单的颜色与模糊覆盖，不影响独立光学参数",
                     enabled = controlsEnabled && hasAppearanceOverride,
                     onClick = { resetAppearance() },
                 )

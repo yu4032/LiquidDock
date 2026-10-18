@@ -39,7 +39,7 @@ internal fun ScopedGlassSettingsPage(
     val optics = scopedOpticalDescriptors
     val normalsKey = ScopedGlassOptics.normalsKey(scope)
     val extras = when (scope) {
-        ScopedGlassOptics.DIALOG, ScopedGlassOptics.POPUP -> emptyList()
+        ScopedGlassOptics.DIALOG, ScopedGlassOptics.POPUP, ScopedGlassOptics.HANDLE_MENU -> emptyList()
         ScopedGlassOptics.GBOARD -> listOf("capture_scale_percent", "render_fps")
         else -> listOf("capture_scale_percent", "render_fps", "corner_radius_dp")
     }
@@ -70,15 +70,15 @@ internal fun ScopedGlassSettingsPage(
                             edit.remove(key).remove("${key}_tenths")
                         }
                         edit.remove(normalsKey)
-                        if (scope == ScopedGlassOptics.POPUP) {
+                        if (ScopedGlassOptics.isMenuScope(scope)) {
                             for (setting in profileHighlightSpecs) {
-                                edit.remove(ScopedGlassOptics.popupHighlightKey(setting.global))
+                                edit.remove(ScopedGlassOptics.menuHighlightKey(scope, setting.global))
                             }
                         }
                         for (name in extras) {
                             edit.remove(profileOptionKey(scope, name))
                         }
-                        if (scope != ScopedGlassOptics.DIALOG && scope != ScopedGlassOptics.POPUP) {
+                        if (scope != ScopedGlassOptics.DIALOG && !ScopedGlassOptics.isMenuScope(scope)) {
                             for (setting in profileHighlightSpecs) {
                                 edit.remove(profileOptionKey(scope, setting.field))
                             }
@@ -104,7 +104,7 @@ internal fun ScopedGlassSettingsPage(
                         unit = b.unit,
                         enabled = enabled,
                         generation = resetGeneration,
-                        decimal = scope == ScopedGlassOptics.POPUP &&
+                        decimal = ScopedGlassOptics.isMenuScope(scope) &&
                             b.fallback.storageMode() == ConfigKey.StorageMode.DP_TENTHS,
                     )
                 }
@@ -152,12 +152,12 @@ internal fun ScopedGlassSettingsPage(
                 )
             }
         }
-        if (scope == ScopedGlassOptics.POPUP) {
+        if (ScopedGlassOptics.isMenuScope(scope)) {
             item(key = "popup-highlight-heading") { SmallTitle("独立高光开关") }
             for (setting in profileHighlightSpecs) {
                 item(key = "popup-${setting.field}") {
                     SettingsCard {
-                        val key = ScopedGlassOptics.popupHighlightKey(setting.global)
+                        val key = ScopedGlassOptics.menuHighlightKey(scope, setting.global)
                         val inherited = prefs.getBoolean(
                             setting.global.name(), setting.global.uiDefault(),
                         )
@@ -178,7 +178,7 @@ internal fun ScopedGlassSettingsPage(
                 }
             }
         }
-        if (scope != ScopedGlassOptics.DIALOG && scope != ScopedGlassOptics.POPUP) {
+        if (scope != ScopedGlassOptics.DIALOG && !ScopedGlassOptics.isMenuScope(scope)) {
             item(key = "quality-heading") { SmallTitle("背景采样与轮廓") }
             for (field in extras) {
                 val config = when (field) {
@@ -314,7 +314,7 @@ private fun basicScopeSpecs(scope: String): List<BasicScopeSpec> {
             ConfigSchema.Glass.DIALOG_TINT_BLUE.name(),
             ConfigSchema.Glass.DIALOG_TINT_ALPHA.name(),
         )
-        ScopedGlassOptics.POPUP -> listOf(
+        ScopedGlassOptics.POPUP, ScopedGlassOptics.HANDLE_MENU -> listOf(
             ConfigSchema.Glass.BLUR, ConfigSchema.Glass.TINT_RED,
             ConfigSchema.Glass.TINT_GREEN, ConfigSchema.Glass.TINT_BLUE,
             ConfigSchema.Glass.TINT_ALPHA,

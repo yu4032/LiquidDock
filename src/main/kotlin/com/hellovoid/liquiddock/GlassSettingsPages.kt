@@ -456,12 +456,11 @@ internal fun GlassMenusPage(
             "仅在壁纸闪烁时开启；需要为 LiquidDock 启用 System Framework（system）作用域并重启设备",
             masterEnabled && liquidEnabled,
         )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS,
-            "应用顶部菜单液态玻璃",
-            "将应用顶部控制器展开后的分屏、小窗等胶囊背景替换为液态玻璃；已有 Hook 时实时生效，首次加载失败则需重启系统界面",
-            masterEnabled && liquidEnabled,
+        ArrowPreference(
+            title = stringResource(R.string.page_handle_menu),
+            summary = "应用顶部控制器的菜单玻璃、颜色、模糊与独立光学参数",
+            enabled = masterEnabled && liquidEnabled,
+            onClick = { open(Page.HandleMenuCustomization) },
         )
         ArrowPreference(
             title = stringResource(R.string.page_shortcut_popup),
