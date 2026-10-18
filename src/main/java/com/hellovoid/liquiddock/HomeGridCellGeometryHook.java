@@ -83,7 +83,43 @@ final class HomeGridCellGeometryHook {
                 ? HomeGridWorkstationGeometryConfig.NONE : config;
     }
 
+    /**
+     * Scratch for a single Workspace pre-draw. One CellLayout has one vendor grid
+     * baseline per frame; widget-specific span, width and margins are never memoized.
+     * No references or grid values are retained across pre-draws.
+     */
+    static final class WidgetWidthFrame {
+        final java.util.IdentityHashMap<View, WidgetGridBaseline> grids =
+                new java.util.IdentityHashMap<>();
+        int gridReads;
+        int gridHits;
+
+        void reset() {
+            grids.clear();
+            gridReads = 0;
+            gridHits = 0;
+        }
+    }
+
+    private static final class WidgetGridBaseline {
+        static final WidgetGridBaseline NONE = new WidgetGridBaseline(0, 0, false);
+        final int cellSize;
+        final int widthGap;
+        final boolean portrait;
+
+        WidgetGridBaseline(int cellSize, int widthGap, boolean portrait) {
+            this.cellSize = cellSize;
+            this.widthGap = widthGap;
+            this.portrait = portrait;
+        }
+    }
+
     static int widgetHorizontalSpanDeltaPx(View spanOwner, int spanX) {
+        return widgetHorizontalSpanDeltaPx(spanOwner, spanX, null);
+    }
+
+    static int widgetHorizontalSpanDeltaPx(
+            View spanOwner, int spanX, WidgetWidthFrame frame) {
         HomeGridInstallConfig current = installConfig;
         if (spanOwner == null || current == null || !current.enabled
                 || !current.widgetHorizontalStretch || spanX <= 1
@@ -102,64 +138,30 @@ final class HomeGridCellGeometryHook {
         }
         if (cellLayoutView == null
                 || !"com.miui.home.launcher.CellLayout".equals(
-                        cellLayoutView.getClass().getName())
-                || isLaptopAllApps(cellLayoutView)) {
+                        cellLayoutView.getClass().getName())) {
             return 0;
         }
 
         try {
-            Object gridConfig = HookUtil.getField(cellLayoutView, "mGridConfig");
-            if (gridConfig == null) return 0;
-            Object gridNameValue = HookUtil.requireInvoke(gridConfig, "getName");
-            String gridName = gridNameValue == null ? "" : String.valueOf(gridNameValue);
-            if (HomeGridWorkspaceGridPolicy.isSplitGridName(gridName)) return 0;
-
             boolean portrait = spanOwner.getResources().getConfiguration().orientation
                     == Configuration.ORIENTATION_PORTRAIT;
-            int countX = (Integer) HookUtil.requireInvoke(gridConfig, "getCountX");
-            int countY = (Integer) HookUtil.requireInvoke(gridConfig, "getCountY");
-            int baseCell = (Integer) HookUtil.requireInvoke(gridConfig, "getCellSize");
-            int configLeft = (Integer) HookUtil.requireInvoke(gridConfig, "getLeft");
-            int baseTop = (Integer) HookUtil.requireInvoke(gridConfig, "getTop");
-            int width = cellLayoutView.getWidth();
-            int height = cellLayoutView.getHeight();
-            if (countX <= 0 || countY <= 0 || baseCell <= 0 || width <= 0 || height <= 0) {
-                return 0;
+            WidgetGridBaseline grid = frame != null ? frame.grids.get(cellLayoutView) : null;
+            if (grid == null || grid.portrait != portrait) {
+                if (frame != null) frame.gridReads++;
+                grid = readWidgetGridBaseline(cellLayoutView, current, portrait);
+                if (frame != null) {
+                    frame.grids.put(cellLayoutView, grid != null
+                            ? grid : WidgetGridBaseline.NONE);
+                }
+            } else if (frame != null) {
+                frame.gridHits++;
             }
+            if (grid == null || grid == WidgetGridBaseline.NONE) return 0;
 
-            int dockBarHeight = 0;
-            HookUtil.InvocationResult<Object> dockResult =
-                    HookUtil.tryInvoke(gridConfig, "getDockBarHeight");
-            if (dockResult.succeeded() && dockResult.value() instanceof Integer) {
-                dockBarHeight = Math.max(0, (Integer) dockResult.value());
-            }
-
-            int baseWidthGap = Math.max(
-                    0, HookUtil.getIntField(cellLayoutView, "mWidthGap"));
-            int baseHeightGap = Math.max(
-                    0, HookUtil.getIntField(cellLayoutView, "mHeightGap"));
-            HomeGridCellGeometryPolicy.Result zeroOffset =
-                    HomeGridCellGeometryPolicy.calculate(
-                            new HomeGridCellGeometryPolicy.Input(
-                                    current.withZeroHorizontalOffsets(),
-                                    workstationConfig,
-                                    portrait,
-                                    false,
-                                    false,
-                                    width,
-                                    height,
-                                    countX,
-                                    countY,
-                                    baseCell,
-                                    configLeft,
-                                    baseTop,
-                                    baseWidthGap,
-                                    baseHeightGap,
-                                    dockBarHeight));
-            if (zeroOffset == null) return 0;
-
-            long baselineAllocation = (long) zeroOffset.cellSize * spanX
-                    + (long) Math.max(0, spanX - 1) * zeroOffset.widthGap;
+            // Never share the actual widget span or frame bounds: native resize
+            // and drag can change these between separate nodes in one traversal.
+            long baselineAllocation = (long) grid.cellSize * spanX
+                    + (long) Math.max(0, spanX - 1) * grid.widthGap;
             int horizontalInset = 0;
             ViewGroup.LayoutParams lp = spanOwner.getLayoutParams();
             if (lp instanceof ViewGroup.MarginLayoutParams) {
@@ -174,6 +176,58 @@ final class HomeGridCellGeometryHook {
         } catch (Throwable ignored) {
             return 0;
         }
+    }
+
+    private static WidgetGridBaseline readWidgetGridBaseline(
+            View cellLayoutView, HomeGridInstallConfig current, boolean portrait) {
+        if (isLaptopAllApps(cellLayoutView)) return null;
+
+        Object gridConfig = HookUtil.getField(cellLayoutView, "mGridConfig");
+        if (gridConfig == null) return null;
+        Object gridNameValue = HookUtil.requireInvoke(gridConfig, "getName");
+        String gridName = gridNameValue == null ? "" : String.valueOf(gridNameValue);
+        if (HomeGridWorkspaceGridPolicy.isSplitGridName(gridName)) return null;
+
+        int countX = (Integer) HookUtil.requireInvoke(gridConfig, "getCountX");
+        int countY = (Integer) HookUtil.requireInvoke(gridConfig, "getCountY");
+        int baseCell = (Integer) HookUtil.requireInvoke(gridConfig, "getCellSize");
+        int configLeft = (Integer) HookUtil.requireInvoke(gridConfig, "getLeft");
+        int baseTop = (Integer) HookUtil.requireInvoke(gridConfig, "getTop");
+        int width = cellLayoutView.getWidth();
+        int height = cellLayoutView.getHeight();
+        if (countX <= 0 || countY <= 0 || baseCell <= 0 || width <= 0 || height <= 0) {
+            return null;
+        }
+
+        int dockBarHeight = 0;
+        HookUtil.InvocationResult<Object> dockResult =
+                HookUtil.tryInvoke(gridConfig, "getDockBarHeight");
+        if (dockResult.succeeded() && dockResult.value() instanceof Integer) {
+            dockBarHeight = Math.max(0, (Integer) dockResult.value());
+        }
+        int baseWidthGap = Math.max(0, HookUtil.getIntField(cellLayoutView, "mWidthGap"));
+        int baseHeightGap = Math.max(0, HookUtil.getIntField(cellLayoutView, "mHeightGap"));
+        HomeGridCellGeometryPolicy.Result zeroOffset =
+                HomeGridCellGeometryPolicy.calculate(
+                        new HomeGridCellGeometryPolicy.Input(
+                                current.withZeroHorizontalOffsets(),
+                                workstationConfig,
+                                portrait,
+                                false,
+                                false,
+                                width,
+                                height,
+                                countX,
+                                countY,
+                                baseCell,
+                                configLeft,
+                                baseTop,
+                                baseWidthGap,
+                                baseHeightGap,
+                                dockBarHeight));
+        return zeroOffset != null
+                ? new WidgetGridBaseline(zeroOffset.cellSize, zeroOffset.widthGap, portrait)
+                : null;
     }
 
     static boolean sizeMatchesOrientation(View view, int width, int height) {
