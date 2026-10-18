@@ -286,6 +286,7 @@ final class MiuixFolderGlassHook {
             try {
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             } catch (Throwable error) {
+                if (owner instanceof ViewGroup) setOwnerSuppressed((ViewGroup) owner, false);
                 onFolderOpeningFailed();
                 throw error;
             }
