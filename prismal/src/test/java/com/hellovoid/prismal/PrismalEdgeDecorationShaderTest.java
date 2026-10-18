@@ -10,16 +10,24 @@ public class PrismalEdgeDecorationShaderTest {
                         PrismalOpticalEdgeShader.apply(
                                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
         String decorated = PrismalEdgeDecorationShader.apply(original);
-        assertTrue(decorated.contains("float offset = -facing * u_dropShadowRadiusPx"));
+        assertTrue(decorated.contains("float projectedOffset = -facing * u_dropShadowRadiusPx"));
         assertTrue(decorated.contains("u_dropShadowLightFollow"));
-        assertTrue(decorated.contains("dot(vec2(outward.x, -outward.y), light)"));
+        assertTrue(decorated.contains("dot(edgeN, u_invariantLightXY)"));
         assertTrue(decorated.contains("u_strokeLightResponse"));
         assertTrue(decorated.contains("if (distMask > 0.0)"));
         assertTrue(decorated.contains("vec2 baseOffset = edgeRefractionUv;"));
         assertTrue(decorated.contains("u_os4DirectionalIntensity"));
-        assertTrue(decorated.contains("vec3 edgeRgb ="));
+        assertTrue(decorated.contains("vec3 rgb ="));
         assertFalse(decorated.contains("float shadowDist = sdRoundBox"));
         assertFalse(decorated.contains("float contact = exp("));
+        assertTrue(decorated.contains("vec2 edgeN = normalize(os4SdfGradient"));
+        assertFalse(decorated.contains("sdRoundBox(pPx -"));
+        assertEquals(1, count(decorated, "uniform vec2 u_invariantLightXY;"));
+        // The exterior branch must be reached before the original early discard.
+        assertTrue(decorated.indexOf("if (distMask > 0.0)")
+                < decorated.indexOf("if (opacity < 0.001) discard;"));
+        // All original Fresnel/OS4 processing remains unchanged for interior pixels.
+        assertTrue(decorated.contains("os4SoftLight"));
         assertEquals(1, count(decorated, "uniform float u_dropShadowRadiusPx;"));
     }
 

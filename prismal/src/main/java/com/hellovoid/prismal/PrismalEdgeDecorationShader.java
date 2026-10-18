@@ -1,25 +1,31 @@
 package com.hellovoid.prismal;
 
 /**
- * Pure insertion around upstream Prismal's existing rounded-rect SDF.
- * No changes to lens, OS4 Fresnel/light/reflection or the vendored shader.
+ * One-pass optional exterior shadow / contour stroke, sharing the upstream
+ * Prismal SDF, OS4 SDF normal and precomputed light direction.
+ *
+ * No additional draw, backdrop, FBO, SDF evaluation, or light normalization.
+ * Constant arithmetic per covered fragment; raster/scissor expansion bounds
+ * the actual number of affected pixels.
  */
 final class PrismalEdgeDecorationShader {
-    private static final String DIST =
-            "float distMask = sdRoundBox(pPx, halfSz, crMask, u_sminSmoothing);";
+    private static final String PRECISION = "precision highp float;";
+    private static final String BEFORE_DISCARD = "if (opacity < 0.001) discard;";
     private static final String FINAL =
             "gl_FragColor = vec4(color, opacity * u_transmittance);";
 
     private PrismalEdgeDecorationShader() {}
 
     static String apply(String shader) {
-        if (shader == null || shader.indexOf(DIST) < 0 || shader.indexOf(FINAL) < 0
-                || shader.indexOf(DIST) != shader.lastIndexOf(DIST)
-                || shader.indexOf(FINAL) != shader.lastIndexOf(FINAL)) {
-            throw new IllegalStateException("Prismal edge decoration shader anchor changed");
+        requireOnce(shader, PRECISION);
+        requireOnce(shader, BEFORE_DISCARD);
+        requireOnce(shader, FINAL);
+        if (!shader.contains("vec2 os4SdfGradient = vec2(")
+                || !shader.contains("uniform vec2 u_invariantLightXY;")) {
+            throw new IllegalStateException("Prismal OS4 edge/light invariants changed");
         }
-        return shader.replace("precision highp float;", """
-                precision highp float;
+
+        return shader.replace(PRECISION, PRECISION + """
                 uniform vec4 u_outerStrokeColor;
                 uniform float u_outerStrokeWidthPx;
                 uniform float u_strokeLightResponse;
@@ -28,56 +34,62 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_dropShadowOffsetYPx;
                 uniform float u_dropShadowLightFollow;
                 """)
-                .replace(DIST, DIST + """
-                    // Exterior pixels use the original Prismal SDF only; no extra
-                    // sdRoundBox, gradSDF, derivative, exp, or pow operations.
-                    // This path runs before the backdrop/refraction sampling.
+                .replace(BEFORE_DISCARD, """
+                    // Run after upstream OS4 fwidth/dFdx/dFdy so helper quads can
+                    // compute derivatives before any optional exterior early return.
+                    // Exterior pixels would otherwise be discarded by original glass.
                     if (distMask > 0.0) {
-                        vec2 edgeN = normalize(pPx / max(halfSz, vec2(1.0))
-                                + vec2(0.0001));
-                        vec2 light = normalize(u_lightDir + vec2(0.0001));
-                        float facing = dot(edgeN, light);
+                        vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
+                        float facing = dot(edgeN, u_invariantLightXY);
                         float rim = 0.0;
-                        if (u_outerStrokeColor.a > 0.0 && u_outerStrokeWidthPx > 0.0) {
-                            float lit = mix(1.0, 0.8 + 0.4 * max(facing, 0.0),
+                        if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
+                            float brightness = mix(1.0, 0.8 + 0.4 * max(facing, 0.0),
                                     u_strokeLightResponse);
-                            rim = u_outerStrokeColor.a * lit * (1.0 - smoothstep(
-                                    0.0, u_outerStrokeWidthPx, distMask));
+                            rim = u_outerStrokeColor.a * brightness *
+                                    (1.0 - smoothstep(0.0, u_outerStrokeWidthPx, distMask));
                         }
                         float shade = 0.0;
-                        if (u_dropShadowColor.a > 0.0 && u_dropShadowRadiusPx > 0.0) {
-                            // Project the cast offset onto the SDF normal.
-                            // Existing optical light direction drives the shadow too.
-                            float offset = -facing * u_dropShadowRadiusPx * 0.42
+                        if (u_dropShadowRadiusPx > 0.0 && u_dropShadowColor.a > 0.0) {
+                            // Signed projection of the constant light vector onto
+                            // the existing edge normal. No second sdRoundBox().
+                            float projectedOffset = -facing * u_dropShadowRadiusPx * 0.42
                                     * u_dropShadowLightFollow
                                     - edgeN.y * u_dropShadowOffsetYPx;
-                            float reach = max(0.0, distMask - offset);
-                            float falloff = 1.0 - smoothstep(
-                                    0.0, u_dropShadowRadiusPx * 2.0, reach);
-                            shade = u_dropShadowColor.a * falloff * falloff;
+                            float travel = max(0.0, distMask - projectedOffset);
+                            float decay = 1.0 - smoothstep(
+                                    0.0, u_dropShadowRadiusPx * 2.0, travel);
+                            shade = u_dropShadowColor.a * decay * decay;
                         }
-                        float edgeAlpha = clamp(rim + shade * (1.0 - rim), 0.0, 1.0);
-                        if (edgeAlpha < 0.002) discard;
-                        vec3 edgeRgb = (u_outerStrokeColor.rgb * rim
+                        float alpha = clamp(rim + shade * (1.0 - rim), 0.0, 1.0);
+                        if (alpha < 0.002) discard;
+                        vec3 rgb = (u_outerStrokeColor.rgb * rim
                                 + u_dropShadowColor.rgb * shade * (1.0 - rim))
-                                / max(edgeAlpha, 0.002);
-                        gl_FragColor = vec4(edgeRgb, edgeAlpha * u_transmittance);
+                                / max(alpha, 0.002);
+                        gl_FragColor = vec4(rgb, alpha * u_transmittance);
                         return;
                     }
-                """)
+                    """ + BEFORE_DISCARD)
                 .replace(FINAL, """
-                    // Prismal already computed 'outward' from its optical SDF.
-                    // Reuse that normal for the inner half of the custom stroke.
-                    if (u_outerStrokeColor.a > 0.0 && u_outerStrokeWidthPx > 0.0) {
-                        vec2 light = normalize(u_lightDir + vec2(0.0001));
-                        float facing = max(dot(vec2(outward.x, -outward.y), light), 0.0);
-                        float lit = mix(1.0, 0.8 + 0.4 * facing,
+                    // Interior half of the outline uses the same normal and
+                    // pre-normalized direction as the OS4 rim shader.
+                    if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
+                        vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
+                        float lit = max(dot(edgeN, u_invariantLightXY), 0.0);
+                        float brightness = mix(1.0, 0.8 + 0.4 * lit,
                                 u_strokeLightResponse);
-                        float insideStroke = 1.0 - smoothstep(
+                        float rim = 1.0 - smoothstep(
                                 0.0, u_outerStrokeWidthPx, -distMask);
                         color = mix(color, u_outerStrokeColor.rgb,
-                                clamp(u_outerStrokeColor.a * lit * insideStroke, 0.0, 1.0));
+                                clamp(u_outerStrokeColor.a * brightness * rim, 0.0, 1.0));
                     }
                     """ + FINAL);
+    }
+
+    private static void requireOnce(String shader, String needle) {
+        if (shader == null) throw new IllegalArgumentException("shader == null");
+        int first = shader.indexOf(needle);
+        if (first < 0 || shader.indexOf(needle, first + needle.length()) >= 0) {
+            throw new IllegalStateException("Optional edge shader anchor changed: " + needle);
+        }
     }
 }
