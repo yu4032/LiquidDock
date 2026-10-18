@@ -1331,6 +1331,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     state, frame, geometry, projectedCenterX);
             PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
+            prismalRenderer.setEdgeDecoration(
+                    GlassEdgeEffects.current(edgeScope(node.nodeKind())),
+                    rootRef.get() != null
+                            ? rootRef.get().getResources().getDisplayMetrics().density : 1f);
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
         }
@@ -1363,6 +1367,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         return created;
     }
 
+    private static String edgeScope(LauncherGlassNodeKind kind) {
+        return kind == LauncherGlassNodeKind.ICON
+                ? GlassEdgeEffects.ICON
+                : kind == LauncherGlassNodeKind.WIDGET
+                ? GlassEdgeEffects.WIDGET : GlassEdgeEffects.FOLDER;
+    }
+
     private void renderDragOutputs(PrismalParams params) {
         for (Map.Entry<LauncherGlassSinkView, OutputState> entry : outputs.entrySet()) {
             NodeState node = nodes.get(entry.getKey());
@@ -1380,6 +1391,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     ? sink.nodeKind() : LauncherGlassNodeKind.LARGE_FOLDER;
             PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
                     kind, launcherHighlightProfile, largeSurfaceHighlightProfile);
+            prismalRenderer.setEdgeDecoration(
+                    sink != null && sink.isExternalSessionAuthority()
+                            ? GlassEdgeEffects.strokeOnly(GlassEdgeEffects.DIALOG)
+                            : GlassEdgeEffects.strokeOnly(edgeScope(kind)),
+                    rootRef.get() != null
+                            ? rootRef.get().getResources().getDisplayMetrics().density : 1f);
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, node.interaction);
             present(prismalRenderer.outputTexture(), geometry, entry.getValue());

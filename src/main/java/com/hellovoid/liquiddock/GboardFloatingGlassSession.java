@@ -430,6 +430,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             } else {
                 prismalRenderer.beginGlassFrame();
             }
+            prismalRenderer.setEdgeDecoration(
+                    outputMode == OutputMode.FULLSCREEN_REGION
+                            ? GlassEdgeEffects.current(GlassEdgeEffects.GBOARD)
+                            : GlassEdgeEffects.strokeOnly(GlassEdgeEffects.GBOARD),
+                    root.getResources().getDisplayMetrics().density);
             prismalRenderer.drawGlass(
                     currentGeometry.toPrismalGeometry(),
                     prismalParams,
@@ -472,6 +477,16 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
+    /** Shadow guard is shared by dirty clears and output presentation. */
+    private float edgeMarginPx(GboardFloatingGlassGeometry geometry) {
+        if (geometry == null) return 0f;
+        View root = rootRef.get();
+        float density = root != null
+                ? root.getResources().getDisplayMetrics().density : 1f;
+        return 3f + GlassEdgeEffects.current(GlassEdgeEffects.GBOARD)
+                .extraGuardPx(density, Math.min(geometry.width, geometry.height));
+    }
+
     private void beginKeyboardDirtyFrame(GboardFloatingGlassGeometry current) {
         GboardFloatingGlassGeometry previous = lastRenderedGeometry;
         if (previous == null
@@ -480,7 +495,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.beginGlassFrame();
             return;
         }
-        float margin = 8f;
+        float margin = Math.max(8f, edgeMarginPx(current));
         float left = Math.min(previous.left, current.left) - margin;
         float top = Math.min(previous.top, current.top) - margin;
         float right = Math.max(
@@ -503,7 +518,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
         float scaleX = current.width / (float) logicalWidth;
         float scaleY = current.height / (float) logicalHeight;
-        float margin = 6f;
+        float margin = Math.max(6f, edgeMarginPx(geometry));
         float left = Math.max(0f, geometry.left - margin);
         float top = Math.max(0f, geometry.top - margin);
         float right = Math.min(logicalWidth, geometry.left + geometry.width + margin);
