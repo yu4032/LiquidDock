@@ -810,14 +810,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         boolean launchProxyActive = false;
         int staticGeometryReads = 0;
         int staticCacheHits = 0;
-        // The four per-kind counters have no allocation or extra matrix reads
-        // without Perfetto tracing; they explain which static nodes remain hot.
-        int[] staticKinds = tracing ? new int[4] : null;
-        int[] staticKindReads = tracing ? new int[4] : null;
-        int[] staticKindHits = tracing ? new int[4] : null;
-        int forcedCaptures = 0;
-        int proxyCaptures = 0;
-        int recheckedCaptures = 0;
         widgetWidthFrame.reset();
         // Native WindowElement/Recents/unlock may animate independently of View properties.
         // Keep their existing per-frame capture authority; only reuse genuinely stable nodes.
@@ -837,20 +829,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 if (node == null) continue;
                 if (workspaceMaterial == null) workspaceMaterial = node.materialHost();
                 launchProxyActive |= node.isLaunchProxyActive();
-                int nodeKind = tracing ? node.nodeKind().ordinal() : -1;
-                if (tracing) staticKinds[nodeKind]++;
                 if (forceStaticCapture) {
                     node.invalidateStaticGeometry();
-                    if (tracing) forcedCaptures++;
                 } else if (state.frame != null && node.canReuseStaticGeometry(root)) {
-                    if (tracing) {
-                        staticCacheHits++;
-                        staticKindHits[nodeKind]++;
-                    }
+                    if (tracing) staticCacheHits++;
                     continue;
-                } else if (tracing) {
-                    if (node.isLaunchProxyActive()) proxyCaptures++;
-                    else if (node.nodeKind() != LauncherGlassNodeKind.WIDGET) recheckedCaptures++;
                 }
                 // On an unchanged Workspace this work is avoided entirely. When any
                 // node changes, share the anchor/matrix inversion across captures.
@@ -859,10 +842,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     staticRootTransformValid = prepareStaticRootCaptureTransform(root);
                     rootTransformPrepared = true;
                 }
-                if (tracing && staticRootTransformValid) {
-                    staticGeometryReads++;
-                    staticKindReads[nodeKind]++;
-                }
+                if (tracing && staticRootTransformValid) staticGeometryReads++;
                 LauncherGlassGeometry.Snapshot observed = staticRootTransformValid
                         ? node.captureGeometry(root, uiGlobalToRoot, rootWidth, rootHeight,
                                 widgetWidthFrame)
@@ -887,19 +867,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 Trace.setCounter("LD.Workspace.StaticCandidates", staticSnapshot.length);
                 Trace.setCounter("LD.Workspace.StaticGeometryReads", staticGeometryReads);
                 Trace.setCounter("LD.Workspace.StaticCacheHits", staticCacheHits);
-                // No per-kind trace work for the independent drag-only ViewRoot.
                 if (staticSnapshot.length > 0) {
-                    Trace.setCounter("LD.Workspace.StaticForcedCandidates", forcedCaptures);
-                    Trace.setCounter("LD.Workspace.StaticProxyCandidates", proxyCaptures);
-                    Trace.setCounter("LD.Workspace.StaticRecheckCandidates", recheckedCaptures);
                     Trace.setCounter("LD.Workspace.WidgetGridReads", widgetWidthFrame.gridReads);
                     Trace.setCounter("LD.Workspace.WidgetGridHits", widgetWidthFrame.gridHits);
-                    for (LauncherGlassNodeKind kind : LauncherGlassNodeKind.values()) {
-                        int i = kind.ordinal();
-                        Trace.setCounter("LD.Workspace." + kind + "Candidates", staticKinds[i]);
-                        Trace.setCounter("LD.Workspace." + kind + "GeometryReads", staticKindReads[i]);
-                        Trace.setCounter("LD.Workspace." + kind + "CacheHits", staticKindHits[i]);
-                    }
                 }
             }
         }
