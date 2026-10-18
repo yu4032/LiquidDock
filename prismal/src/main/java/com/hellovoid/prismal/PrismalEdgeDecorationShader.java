@@ -10,6 +10,7 @@ package com.hellovoid.prismal;
  */
 final class PrismalEdgeDecorationShader {
     private static final String PRECISION = "precision highp float;";
+    private static final String MAIN = "void main()";
     private static final String BEFORE_DISCARD = "if (opacity < 0.001) discard;";
     private static final String FINAL =
             "gl_FragColor = vec4(color, opacity * u_transmittance);";
@@ -18,6 +19,7 @@ final class PrismalEdgeDecorationShader {
 
     static String apply(String shader) {
         requireOnce(shader, PRECISION);
+        requireOnce(shader, MAIN);
         requireOnce(shader, BEFORE_DISCARD);
         requireOnce(shader, FINAL);
         if (!shader.contains("vec2 os4SdfGradient = vec2(")
@@ -36,9 +38,25 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_dropShadowRadiusPx;
                 uniform float u_dropShadowOffsetYPx;
                 uniform float u_dropShadowLightFollow;
-                // The same two irradiance controls as Prismal's OS4 highlights.
-                // u_strokeMinCos is the user-tunable shadow-side cone half angle.
                 """)
+                .replace(MAIN, """
+                // Same main/opposite directional strengths as OS4 glass lighting.
+                // A balanced illumination field has no directional dark contour.
+                // No world-space side assumption: the result follows light rotation.
+                vec2 prismalBacklitContour(float normalDotLight) {
+                    float contrast = max(u_os4DirectionalIntensity, 0.0)
+                            - max(u_os4DirectionalOppositeIntensity, 0.0);
+                    float backlitNormal = -normalDotLight * sign(contrast);
+                    float aperture = clamp(
+                            (backlitNormal - u_strokeMinCos)
+                            / max(1.0 - u_strokeMinCos, 0.001), 0.0, 1.0);
+                    float taper = aperture * aperture * (3.0 - 2.0 * aperture);
+                    float energy = clamp(abs(contrast), 0.0, 1.0)
+                            * clamp(u_strokeLightResponse, 0.0, 1.0)
+                            * step(0.5, u_os4EdgeEnabled);
+                    return vec2(taper, energy);
+                }
+                """ + MAIN)
                 .replace(BEFORE_DISCARD, """
                     // Run after upstream OS4 fwidth/dFdx/dFdy so helper quads can
                     // compute derivatives before any optional exterior early return.
@@ -46,24 +64,11 @@ final class PrismalEdgeDecorationShader {
                     if (distMask > 0.0) {
                         vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
                         float facing = dot(edgeN, u_invariantLightXY);
-                        // Signed directional irradiance difference: negative is unlit.
-                        // No orientation mask: the contour may appear on ANY edge.
-                        // With balanced/disabled directions, no artificial dark border.
-                        float lightContrast = max(u_os4DirectionalIntensity, 0.0)
-                                - max(u_os4DirectionalOppositeIntensity, 0.0);
-                        float unlitFacing = -facing * sign(lightContrast);
-                        // Angular falloff is measured FROM the actual unlit normal.
-                        // Smooth coverage and width both vanish at cone boundaries.
-                        float coneT = clamp(
-                                (unlitFacing - u_strokeMinCos)
-                                / max(1.0 - u_strokeMinCos, 0.001), 0.0, 1.0);
-                        float darkCoverage = coneT * coneT * (3.0 - 2.0 * coneT);
-                        float strokeWidth = u_outerStrokeWidthPx * darkCoverage;
-                        float irradianceContrast = clamp(abs(lightContrast), 0.0, 1.0)
-                                * u_strokeLightResponse;
+                        vec2 backlight = prismalBacklitContour(facing);
+                        float strokeWidth = u_outerStrokeWidthPx * backlight.x;
                         float rim = 0.0;
                         if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
-                            rim = u_outerStrokeColor.a * darkCoverage * irradianceContrast
+                            rim = u_outerStrokeColor.a * backlight.x * backlight.y
                                     * (1.0 - smoothstep(
                                             0.0, max(strokeWidth, 0.001), distMask));
                         }
@@ -94,25 +99,12 @@ final class PrismalEdgeDecorationShader {
                     if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
                         vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
                         float facing = dot(edgeN, u_invariantLightXY);
-                        // Signed directional irradiance difference: negative is unlit.
-                        // No orientation mask: the contour may appear on ANY edge.
-                        // With balanced/disabled directions, no artificial dark border.
-                        float lightContrast = max(u_os4DirectionalIntensity, 0.0)
-                                - max(u_os4DirectionalOppositeIntensity, 0.0);
-                        float unlitFacing = -facing * sign(lightContrast);
-                        // Angular falloff is measured FROM the actual unlit normal.
-                        // Smooth coverage and width both vanish at cone boundaries.
-                        float coneT = clamp(
-                                (unlitFacing - u_strokeMinCos)
-                                / max(1.0 - u_strokeMinCos, 0.001), 0.0, 1.0);
-                        float darkCoverage = coneT * coneT * (3.0 - 2.0 * coneT);
-                        float strokeWidth = u_outerStrokeWidthPx * darkCoverage;
-                        float irradianceContrast = clamp(abs(lightContrast), 0.0, 1.0)
-                                * u_strokeLightResponse;
+                        vec2 backlight = prismalBacklitContour(facing);
+                        float strokeWidth = u_outerStrokeWidthPx * backlight.x;
                         float rim = 1.0 - smoothstep(
                                 0.0, max(strokeWidth, 0.001), -distMask);
                         color = mix(color, u_outerStrokeColor.rgb,
-                                clamp(u_outerStrokeColor.a * darkCoverage * irradianceContrast * rim, 0.0, 1.0));
+                                clamp(u_outerStrokeColor.a * backlight.x * backlight.y * rim, 0.0, 1.0));
                     }
                     """ + FINAL);
     }
