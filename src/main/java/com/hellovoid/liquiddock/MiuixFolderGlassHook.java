@@ -278,13 +278,17 @@ final class MiuixFolderGlassHook {
         // the original material View.
 
         HookUtil.hook(HookUtil.findMethodExact(folderIcon, "onOpen", new Class<?>[0]), chain -> {
-            // OEM FolderIcon.onOpen may precede Launcher.openFolder. Wallpaper
-            // capture excludes Launcher, so neither path needs a deadline fence.
-            Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-            if (chain.getThisObject() instanceof ViewGroup) {
-                setOwnerSuppressed((ViewGroup) chain.getThisObject(), true);
+            // Start the sibling-glass fade BEFORE OEM onOpen mutates native
+            // Workspace visibility. Doing this after proceed means the first
+            // native covered frame can already occlude the TextureView fade.
+            Object owner = chain.getThisObject();
+            if (owner instanceof ViewGroup) setOwnerSuppressed((ViewGroup) owner, true);
+            try {
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            } catch (Throwable error) {
+                onFolderOpeningFailed();
+                throw error;
             }
-            return result;
         });
         HookUtil.hook(HookUtil.findMethodExact(folderIcon, "onClose", new Class<?>[0]), chain ->
                 chain.proceed(chain.getArgs().toArray(new Object[0])));
