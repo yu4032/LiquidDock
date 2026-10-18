@@ -159,7 +159,7 @@ public class ShortcutSecondaryGlassContractTest {
         assertTrue(settings.contains("已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面"));
         assertTrue(settings.contains("ScopedGlassSlider("));
         assertTrue(settings.contains("恢复继承全局外观"));
-        assertTrue(settings.contains("onOpenAll ="));
+        assertTrue(settings.contains("onClick = onOpenAll"));
         assertTrue(activity.contains("navigateTo(Page.ShortcutPopupAll)"));
     }
 
