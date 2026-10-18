@@ -145,9 +145,10 @@ internal fun GlassEdgeSettingsPage(
         }
         item(key = "stroke-geometry") {
             SettingsCard {
-                number(ConfigSchema.Glass.OUTER_STROKE_WIDTH, "描边宽度", "dp")
+                number(ConfigSchema.Glass.OUTER_STROKE_WIDTH, "侧边描边宽度", "dp")
+                number(ConfigSchema.Glass.OUTER_STROKE_ANGLE_RANGE, "侧边描边延伸角度", "°")
                 number(ConfigSchema.Glass.OUTER_STROKE_ALPHA, "描边不透明度")
-                number(ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE, "描边光照响应", "%")
+                number(ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE, "受光侧黑边抑制", "%")
             }
         }
         item(key = "stroke-color") {
