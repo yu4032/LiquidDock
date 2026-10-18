@@ -57,6 +57,8 @@ public class UserFacingPreferenceSchemaTest {
                             || name.startsWith("third_party_glass."));
         }
 
+        assertEquals(0, defaults.get(ConfigSchema.Animation.WORKSPACE_VISIBILITY.name()));
+        assertEquals(180, defaults.get(ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name()));
         assertEquals(Boolean.FALSE,
                 defaults.get(ConfigSchema.Glass.SECURITY_CENTER_GLASS.name()));
         assertEquals(Boolean.FALSE,
