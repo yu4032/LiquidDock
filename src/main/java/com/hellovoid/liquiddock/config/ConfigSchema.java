@@ -184,21 +184,6 @@ public final class ConfigSchema {
                 "dock_shadow_alpha", 140, 140, 140, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_Y = dp(
                 "dock_shadow_y", 4, 12, 12, -24, 24, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Boolean> SIDE_DARK_EDGE_ENABLED = bool(
-                "dock_side_dark_edge_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> SIDE_DARK_EDGE_ALPHA = integer(
-                "dock_side_dark_edge_alpha", 70, 70, 70, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> SIDE_DARK_EDGE_WIDTH = integer(
-                "dock_side_dark_edge_width_px", 3, 3, 3, 1, 12, ConfigKey.ExportMode.IF_PRESENT);
-        // Historical preference key retained: value now scales actual OS4
-        // directional irradiance contrast, not a fixed left/right mask.
-        public static final ConfigKey<Integer> SIDE_DARK_EDGE_LIGHT_SUPPRESSION = integer(
-                "dock_side_dark_edge_light_suppression", 100, 100, 100, 0, 100,
-                ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> SIDE_DARK_EDGE_ANGLE_RANGE = integer(
-                "dock_side_dark_edge_angle_range", 52, 52, 52, 5, 80,
-                ConfigKey.ExportMode.IF_PRESENT);
-
         private Dock() {}
     }
 
@@ -226,7 +211,8 @@ public final class ConfigSchema {
     }
 
     public static final class Glass {
-        // External shadow/stroke are distinct from Prismal's interior shadow and OS4 rim.
+        // Whole-silhouette cast shadow and weak backlight attenuation are distinct
+        // from Prismal's interior optical shading and OS4 light-facing highlights.
         // Both are opt-in to preserve rendering with older presets and OEM native shadows.
         public static final ConfigKey<Boolean> OUTER_SHADOW_ENABLED = bool(
                 "liquid_outer_shadow_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
@@ -244,26 +230,16 @@ public final class ConfigSchema {
                 "liquid_outer_shadow_alpha", 36, 36, 36, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_LIGHT_FOLLOW = integer(
                 "liquid_outer_shadow_light_follow", 65, 65, 65, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Boolean> OUTER_STROKE_ENABLED = bool(
-                "liquid_outer_stroke_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> OUTER_STROKE_WIDTH = dp(
-                "liquid_outer_stroke_width", 1, 1, 1, 0, 4, ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> OUTER_STROKE_ANGLE_RANGE = integer(
-                "liquid_outer_stroke_angle_range", 52, 52, 52, 5, 80,
-                ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> OUTER_STROKE_RED = integer(
-                "liquid_outer_stroke_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> OUTER_STROKE_GREEN = integer(
-                "liquid_outer_stroke_g", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> OUTER_STROKE_BLUE = integer(
-                "liquid_outer_stroke_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
-        public static final ConfigKey<Integer> OUTER_STROKE_ALPHA = integer(
-                "liquid_outer_stroke_alpha", 66, 66, 66, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
-        // Controls conversion from the OS4 main/opposite irradiance delta to
-        // perceptual darkening; the rendering direction comes from the light vector.
-        public static final ConfigKey<Integer> OUTER_STROKE_LIGHT_RESPONSE = integer(
-                "liquid_outer_stroke_light_response", 80, 80, 80, 0, 100,
-                ConfigKey.ExportMode.IF_PRESENT);
+        // Optically derived backlight attenuation; independent of whole shadow.
+        // Defaults off and preserves the existing Prismal OS4 light-facing rim.
+        public static final ConfigKey<Boolean> BACKLIT_ENABLED = bool(
+                "liquid_backlit_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> BACKLIT_WIDTH = dp(
+                "liquid_backlit_width", 8, 8, 8, 1, 24, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> BACKLIT_STRENGTH = integer(
+                "liquid_backlit_strength", 65, 65, 65, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> BACKLIT_SOFTNESS = integer(
+                "liquid_backlit_softness", 60, 60, 60, 5, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
@@ -631,19 +607,14 @@ public final class ConfigSchema {
                 Dock.STANDARD_STROKE_WIDTH, Dock.STROKE_RED, Dock.STROKE_GREEN,
                 Dock.STROKE_BLUE, Dock.STROKE_ALPHA, Dock.STROKE_SHADOW,
                 Dock.STROKE_SHADOW_RADIUS, Dock.STROKE_SHADOW_ALPHA, Dock.SHADOW_ENABLED,
-                Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y,
-                Dock.SIDE_DARK_EDGE_ENABLED, Dock.SIDE_DARK_EDGE_ALPHA,
-                Dock.SIDE_DARK_EDGE_WIDTH, Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION,
-                Dock.SIDE_DARK_EDGE_ANGLE_RANGE);
+                Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
         add(keys, Glass.OUTER_SHADOW_ENABLED, Glass.OUTER_SHADOW_RADIUS,
                 Glass.OUTER_SHADOW_OFFSET_Y, Glass.OUTER_SHADOW_RED, Glass.OUTER_SHADOW_GREEN,
                 Glass.OUTER_SHADOW_BLUE, Glass.OUTER_SHADOW_ALPHA, Glass.OUTER_SHADOW_LIGHT_FOLLOW,
-                Glass.OUTER_STROKE_ENABLED, Glass.OUTER_STROKE_WIDTH,
-                Glass.OUTER_STROKE_ANGLE_RANGE, Glass.OUTER_STROKE_RED,
-                Glass.OUTER_STROKE_GREEN, Glass.OUTER_STROKE_BLUE, Glass.OUTER_STROKE_ALPHA,
-                Glass.OUTER_STROKE_LIGHT_RESPONSE);
+                Glass.BACKLIT_ENABLED, Glass.BACKLIT_WIDTH,
+                Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS);
         add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
