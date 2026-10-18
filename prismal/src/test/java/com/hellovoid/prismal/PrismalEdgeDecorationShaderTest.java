@@ -21,7 +21,12 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(decorated.contains("float shadowDist = sdRoundBox"));
         assertFalse(decorated.contains("float contact = exp("));
         assertTrue(decorated.contains("vec2 edgeN = normalize(os4SdfGradient"));
-        assertFalse(decorated.contains("sdRoundBox(pPx -"));
+        // Upstream gradient sampling legitimately uses shifted SDF calls.
+        // The newly inserted exterior branch must not add another one.
+        String exterior = decorated.substring(decorated.indexOf("if (distMask > 0.0)"),
+                decorated.indexOf("if (opacity < 0.001) discard;"));
+        assertFalse(exterior.contains("sdRoundBox("));
+        assertFalse(exterior.contains("normalize(u_lightDir"));
         assertEquals(1, count(decorated, "uniform vec2 u_invariantLightXY;"));
         // The exterior branch must be reached before the original early discard.
         assertTrue(decorated.indexOf("if (distMask > 0.0)")
