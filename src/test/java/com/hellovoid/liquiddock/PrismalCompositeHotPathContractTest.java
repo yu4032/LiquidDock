@@ -68,7 +68,7 @@ public class PrismalCompositeHotPathContractTest {
         // The first observation must still traverse/capture, including when the
         // guard's own fingerprint has become stable before a frame exists.
         assertTrue(source.contains(
-                "node.canReuseStaticGeometry(root, widgetWidthFrame)"));
+                "node.canReuseStaticGeometry(root, widgetWidthFrame, staticViewFrame)"));
         assertTrue(source.contains("&& state.frame != null"));
         // Dynamic proxies and widgets never share the empty-folder cache path.
         assertTrue(source.contains(
@@ -91,11 +91,36 @@ public class PrismalCompositeHotPathContractTest {
         assertTrue(node.contains("spanX = resolveWidgetSpanX(spanOwner)"));
         assertTrue(node.contains("widthDelta = HomeGridCellGeometryHook.widgetHorizontalSpanDeltaPx("));
         assertTrue(session.contains(
-                "node.canReuseStaticGeometry(root, widgetWidthFrame)"));
+                "node.canReuseStaticGeometry(root, widgetWidthFrame, staticViewFrame)"));
         // The forced native-animation path must invalidate before checking cache.
         assertTrue(session.contains("if (forceStaticCapture) {"));
         assertTrue(session.contains("node.invalidateStaticGeometry();"));
         assertTrue(session.contains("LD.Workspace.StaticWidgetCacheHits"));
+    }
+
+    @Test
+    public void workspaceStaticAncestorSamplingIsFrameLocalAndKeepsNodeHistory()
+            throws Exception {
+        String cache = Files.readString(MAIN.resolve("LauncherGlassStaticGeometryCache.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+        String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
+
+        // A shared View observation is never a cross-frame revision authority.
+        assertTrue(cache.contains("IdentityHashMap<View, ViewSample> observed"));
+        assertTrue(cache.contains("observed.clear();"));
+        assertTrue(cache.contains("next.read(view);"));
+        assertTrue(cache.contains("dirty |= ancestry.get(depth).observe(cursor, current);"));
+        assertTrue(cache.contains("current.transientMotion"));
+        assertTrue(cache.contains("animationMatrix"));
+        assertTrue(cache.contains("cursor == root"));
+        assertTrue(cache.contains("widgetSpanX != currentWidgetSpanX"));
+        assertTrue(cache.contains("widgetWidthDeltaPx != currentWidgetWidthDeltaPx"));
+        assertTrue(session.contains("staticViewFrame.reset();"));
+        assertTrue(session.contains("if (forceStaticCapture) {"));
+        assertTrue(session.contains("node.invalidateStaticGeometry();"));
+        assertTrue(node.contains("spanOwner, spanX, widthDelta, staticViewFrame"));
+        assertTrue(session.contains("LD.Workspace.StaticViewReads"));
+        assertTrue(session.contains("LD.Workspace.StaticViewReuseHits"));
     }
 
     @Test
