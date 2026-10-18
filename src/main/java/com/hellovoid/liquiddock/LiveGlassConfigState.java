@@ -271,6 +271,9 @@ final class LiveGlassConfigState {
             if (effectsChanged && !glassChanged && GlassRuntimeState.isEnabled()) {
                 // Uniform/geometry-only: do not ask the PassBlur producer for a new frame.
                 LauncherGlassSessionRegistry.requestEffectsRedrawToAll();
+                // Dock shares the optical material but owns its compositor.
+                // Refresh GPU-resident Dock output without a new PassBlur capture.
+                Miuix307ZeroCopyRenderer.requestDockSceneRefresh();
             }
             if (workstationChanged) {
                 lastWorkstation = workstation;
