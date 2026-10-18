@@ -2,6 +2,8 @@
 
 基准：**2026-10-10 `main` / HyperOS 3 平板 / Launcher 4.50 / libxposed API 101**。
 
+Workspace 性能清单状态更新：**2026-10-18**；P0 静态几何复用已合并并实机验收，详见 [收尾报告](docs/perf/workspace-static-geometry-p0-20261018.md)。
+
 活跃清单只记录仍需代码、验证或设计决策的事项；完成与主动取消的项目在末尾分别归档。
 状态以**已经合并到 `main` 的代码**为准；未合并 PR 必须显式标注，不能提前算作完成。
 
@@ -18,35 +20,24 @@
 
 # P1 · Runtime performance
 
-## 1. Workspace glass dirty-scene optimization
+## 1. Workspace glass dynamic-scene / frame-time investigation
 
-**状态：待测量 / 待设计。**
+**状态：P0 静态几何重复捕获已完成（2026-10-18）；P1 动态帧及端到端掉帧归因未完成。**
 
-当前 Workspace glass 在 Launcher root `OnPreDraw` 中同步：
+已完成并进入 `main`（[P0 收尾记录](docs/perf/workspace-static-geometry-p0-20261018.md)）：
 
-- drag/static node 快照；
-- static node geometry capture；
-- ancestor visibility/alpha；
-- global matrix transform；
-- root rotation；
-- source backend reconcile。
+- 静态节点有效几何复用、共用 root transform 与 Widget 同帧网格基准去重（[#420](https://github.com/yu4032/LiquidDock/pull/420)）。
+- 空几何文件夹的有效帧 token 与稳定期复用（[#421](https://github.com/yu4032/LiquidDock/pull/421)）。
+- Widget 逐帧核对原生 `spanX` / width delta 后复用稳定几何；同帧共享祖先 View 采样，保留节点独立历史指纹（[#422](https://github.com/yu4032/LiquidDock/pull/422)）。
+- 实机验收与 Perfetto 复核：17 个稳定候选从 **8 次完整捕获 / 9 次缓存命中**降为 **0 次捕获 / 17 次命中**；其中 Widget 命中 8。20:12 诊断构建记录共享祖先读取 281→79 次、复用 202 次；临时纳秒计时与采样次数探针已在 #422 合并前清理。
 
-Perfetto 分段诊断已经进入 main：
+**尚待研究，不计入上述 P0 完成状态：**
 
-- `LD.Workspace.SceneSync`
-- `LD.Workspace.DragNodes`
-- `LD.Workspace.StaticNodes`
-- `LD.Workspace.SourceReconcile`
+- 分页、HOME/解锁、Recents、拖拽与 native proxy 动画仍需原生运动帧的几何 authority，分页强制 17/17 捕获是当前保守且受验证的策略；只有确认处于帧截止期关键路径，才设计更细的事件失效模型。
+- 在 CPU scheduler、频率/温度、RenderThread、EGL swap、GPU 和 SurfaceFlinger / FrameTimeline 层定位真实漏帧原因，进行同条件 A/B；不能从 `SceneSync` 单阶段 p95 推断整体 FPS。
+- 静止低频唤醒的长尾、allocation/GC 及不同实际节点数量的伸缩性仍需独立测量；旧 `home_few`/`home_many` 实际均为 17 候选，不能用于 O(N) 系数推断。
 
-下一步：
-
-- 使用 stable/paging/drag/unlock 场景采样真实成本；
-- 设计 dirty-node / dirty-scene 模型；
-- layout、attach、detach、visibility、scale、translation、drag、proxy 等真实事件驱动更新；
-- 保留 Workspace scroll projection；
-- 保证 HOME spring、分页、widget、folder、proxy geometry 不回归。
-
-目标：静止 Workspace 从 O(N) node scan 降低到接近 O(1) bookkeeping。
+保持事件驱动、Workspace scroll projection、Widget resize/stretch、HOME spring、旋转、文件夹与 proxy 几何正确性；**不以去掉 OEM 检查换取更高命中率**。
 
 ---
 
@@ -244,18 +235,11 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 
 ## Workspace performance validation
 
-待采样：
+**状态：P0 静态几何复用的稳定桌面 / 分页 Perfetto 与实机验收已完成；端到端帧率归因仍待验证。**
 
-- 静止桌面；
-- 页面切换；
-- 拖动图标；
-- 解锁进入桌面。
-
-关注：
-
-- UI thread p95；
-- StaticNodes 成本；
-- allocation/GC。
+- 已完成：静止桌面及分页的多轮 trace、`StaticCandidates/StaticGeometryReads/StaticCacheHits` 守恒、Widget 缓存命中和同帧祖先复用验证（见 [P0 收尾记录](docs/perf/workspace-static-geometry-p0-20261018.md)）。
+- 仍需：可复现拖动、HOME/解锁及文件夹→多任务交互的完整 FrameTimeline；旧 24-trace 部分 `app_home`/`unlock` 样本有事件丢失。
+- 重点核对 UI thread / RenderThread、`StaticNodes`、CPU 调度/频率、allocation/GC、EGL Swap、GPU 与 SurfaceFlinger，不能仅依据缓存命中推断帧率。
 
 ---
 
@@ -265,7 +249,9 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 
 - 既定阶段的 GUI 结构清理；不再以减少类大小为目标机械拆分；
 - Prismal 弹窗动画开发；
-- Perfetto 分段诊断接入（**不代表** Workspace / Dock 性能优化已完成）；
+- Perfetto 分段诊断接入（单独的观测能力；不代表 Dock 或端到端 FPS 问题已解决）；
+- Workspace 稳态静态几何缓存 P0：[PR #420](https://github.com/yu4032/LiquidDock/pull/420) 稳定几何/网格基准复用、[PR #421](https://github.com/yu4032/LiquidDock/pull/421) 空文件夹有效帧缓存、[PR #422](https://github.com/yu4032/LiquidDock/pull/422) Widget 稳定几何与祖先采样复用；均已合并、完成实机/Perfetto 验收，详见 [2026-10-18 收尾记录](docs/perf/workspace-static-geometry-p0-20261018.md)；
+- 文件夹打开时其他玻璃渐隐与独立时长配置（[PR #423](https://github.com/yu4032/LiquidDock/pull/423)，实机验收、已合并；属于视觉行为修复，不作为静态几何性能收益）；
 - GL location caching；
 - 滑块数值区域宽度修复（[PR #325](https://github.com/yu4032/LiquidDock/pull/325)）；
 - RemoteViews 精确白化、与隐藏的同节点互斥、隐藏规则导入冲突处理（[PR #326](https://github.com/yu4032/LiquidDock/pull/326)，真机验证通过）；
