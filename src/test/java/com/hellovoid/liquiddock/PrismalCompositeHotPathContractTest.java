@@ -77,6 +77,27 @@ public class PrismalCompositeHotPathContractTest {
     }
 
     @Test
+    public void workspaceWidgetGeometryCacheVerifiesLiveSpanAndGridOffset() throws Exception {
+        String cache = Files.readString(MAIN.resolve("LauncherGlassStaticGeometryCache.java"));
+        String node = Files.readString(MAIN.resolve("LauncherGlassStaticNode.java"));
+        String session = Files.readString(MAIN.resolve("LauncherGlassSession.java"));
+
+        // OEM widget geometry changes without changing the material's View matrix:
+        // both the current grid-dependent correction and native span must be checked.
+        assertTrue(cache.contains("widgetSpanOwner != currentWidgetSpanOwner"));
+        assertTrue(cache.contains("widgetSpanX != currentWidgetSpanX"));
+        assertTrue(cache.contains("widgetWidthDeltaPx != currentWidgetWidthDeltaPx"));
+        assertTrue(node.contains("spanX = resolveWidgetSpanX(spanOwner)"));
+        assertTrue(node.contains("widthDelta = HomeGridCellGeometryHook.widgetHorizontalSpanDeltaPx("));
+        assertTrue(session.contains(
+                "node.canReuseStaticGeometry(root, widgetWidthFrame)"));
+        // The forced native-animation path must invalidate before checking cache.
+        assertTrue(session.contains("if (forceStaticCapture) {"));
+        assertTrue(session.contains("node.invalidateStaticGeometry();"));
+        assertTrue(session.contains("LD.Workspace.StaticWidgetCacheHits"));
+    }
+
+    @Test
     public void securityCenterCompositeDoesNotPollGlErrorEveryPresent() throws Exception {
         String source = Files.readString(MAIN.resolve("SecurityCenterGlassSession.java"));
         assertFalse(source.contains("GLES20.glGetError()"));
