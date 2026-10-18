@@ -16,6 +16,8 @@ public class PrismalDockSideShadeShaderTest {
         String source = PrismalDockSideShadeShader.apply(base());
         assertTrue(source.contains("verticalSide = smoothstep"));
         assertTrue(source.contains("u_dockSideShadeMinCos"));
+        assertTrue(source.contains("dot(sideNormal, u_invariantLightXY)"));
+        assertFalse(source.contains("vec2 sourceDir = normalize(u_lightDir"));
         assertTrue(source.contains("abs(sideNormal.x)"));
         assertTrue(source.contains("abs(sideNormal.x)"));
         assertTrue(source.contains("illuminated * u_dockSideShadeLightSuppression"));

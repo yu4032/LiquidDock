@@ -19,7 +19,7 @@ final class PrismalDockSideShadeShader {
         requireOnce(source, UNIFORM);
         requireOnce(source, COLOR);
         if (!source.contains("os4SdfGradient") || !source.contains("os4EdgeBand(")
-                || !source.contains("u_lightDir") || !source.contains("edgeAa")) {
+                || !source.contains("u_invariantLightXY") || !source.contains("edgeAa")) {
             throw new IllegalStateException("OS4 Dock side shade prerequisites changed");
         }
         return source.replace(UNIFORM, UNIFORM + """
@@ -40,8 +40,9 @@ final class PrismalDockSideShadeShader {
                                 u_dockSideShadeMinCos,
                                 min(1.0, u_dockSideShadeMinCos + 0.10),
                                 abs(sideNormal.x));
-                        vec2 sourceDir = normalize(u_lightDir + vec2(0.00001));
-                        float illuminated = max(dot(sideNormal, sourceDir), 0.0);
+                        // Upstream computes/normalizes its light direction on the
+                        // CPU. Reuse that per-frame uniform; no per-pixel light sqrt.
+                        float illuminated = max(dot(sideNormal, u_invariantLightXY), 0.0);
                         float visibleDark = 1.0 - clamp(
                                 illuminated * u_dockSideShadeLightSuppression, 0.0, 1.0);
                         float band = os4EdgeBand(edgeDist,
