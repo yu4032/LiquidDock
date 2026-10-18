@@ -574,6 +574,11 @@ public final class PrismalRenderer implements AutoCloseable {
     private boolean selectGlassProgramForNode() {
         boolean wantsDecorations = edgeDecoration.hasStroke() || edgeDecoration.hasShadow();
         if (wantsDecorations && decoratedGlassProgram == 0 && !decorationProgramUnavailable) {
+            // One-time diagnostic distinguishes an absent setting/renderer route
+            // from an unsupported Mali shader. No per-frame log or allocation.
+            android.util.Log.i("LiquidDock-Prismal",
+                    "Compiling in-pass SDF edge: stroke=" + edgeDecoration.hasStroke()
+                            + ", shadow=" + edgeDecoration.hasShadow());
             try {
                 String fragment = PrismalOs4InvariantShader.apply(
                         PrismalComponentGateShader.apply(
@@ -584,6 +589,7 @@ public final class PrismalRenderer implements AutoCloseable {
                 decoratedGlassProgram = createProgram(
                         PrismalRasterGuardShader.applyWithEdgeGuard(
                                 PrismalShaderSources.VERTEX), fragment);
+                android.util.Log.i("LiquidDock-Prismal", "In-pass SDF edge shader ready");
             } catch (RuntimeException gpuRejectedShader) {
                 decorationProgramUnavailable = true;
                 android.util.Log.e("LiquidDock-Prismal",
