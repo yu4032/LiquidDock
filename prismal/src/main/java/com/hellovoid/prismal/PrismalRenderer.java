@@ -704,9 +704,11 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform1f("u_edgeRasterGuardPx", edgeGuard);
         PrismalEdgeDecoration decoration = edgeDecoration;
         uniform1f("u_outerStrokeWidthPx", decoration.strokeWidthDp * edgeDensity);
+        uniform1f("u_strokeLightResponse", decoration.strokeLightResponse);
         uniform4f("u_outerStrokeColor", decoration.strokeR, decoration.strokeG,
                 decoration.strokeB, decoration.strokeA * opacity);
         uniform1f("u_dropShadowRadiusPx", decoration.shadowRadiusDp * edgeDensity);
+        uniform1f("u_dropShadowLightFollow", decoration.shadowLightFollow);
         uniform1f("u_dropShadowOffsetYPx", decoration.shadowOffsetYDp * edgeDensity);
         uniform4f("u_dropShadowColor", decoration.shadowR, decoration.shadowG,
                 decoration.shadowB, decoration.shadowA * opacity);
