@@ -16,8 +16,9 @@ import com.hellovoid.liquiddock.config.ConfigSchema
 import top.yukonga.miuix.kmp.basic.SmallTitle
 
 /**
- * Shadow and outline are independent presentation effects, not Prismal's internal
- * shadow or the OS4 optical reflection. Scoped fields inherit by preference absence.
+ * Unified Prismal/OS4 glass lighting and whole-silhouette projection.
+ * Backlight is multiplicative optical attenuation, never a painted dark stroke.
+ * Component-local preferences inherit absent values from the global material.
  */
 @Composable
 internal fun GlassEdgeSettingsPage(
@@ -28,7 +29,8 @@ internal fun GlassEdgeSettingsPage(
     open: (Page) -> Unit = {},
 ) {
     val global = scope == GlassEdgeEffects.GLOBAL
-    val nativeShadowOwner = scope == GlassEdgeEffects.HANDLE_MENU
+    val nativeShadowOwner = scope == GlassEdgeEffects.DOCK
+        || scope == GlassEdgeEffects.HANDLE_MENU
         || scope == GlassEdgeEffects.DIALOG
         || scope == GlassEdgeEffects.SECURITY_CENTER
     val active = masterEnabled && prefs.getBoolean(
@@ -88,6 +90,7 @@ internal fun GlassEdgeSettingsPage(
 
     val scopeLabel = when (scope) {
         GlassEdgeEffects.GLOBAL -> "全局默认"
+        GlassEdgeEffects.DOCK -> "Dock 本体"
         GlassEdgeEffects.ICON -> "桌面图标"
         GlassEdgeEffects.WIDGET -> "小组件"
         GlassEdgeEffects.FOLDER -> "文件夹"
@@ -101,125 +104,114 @@ internal fun GlassEdgeSettingsPage(
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item(key = "edge-intro") {
-            PageHeader("外阴影与描边",
-                "$scopeLabel · 外部阴影与真实描边独立控制，光源方向与 Prismal 一致。" +
-                (if (nativeShadowOwner) "此组件保留系统窗口阴影，仅新增独立描边。"
-                 else if (global) "其他组件可继承此配置。"
-                 else "未覆盖时继承全局默认。"))
+        item(key = "material-intro") {
+            PageHeader(
+                "玻璃边缘光照与投影",
+                "$scopeLabel · Prismal OS4 的高光、反射与折射保持不变。" +
+                    "背光边缘仅轻微减弱透射，不绘制独立黑色描边。" +
+                    (if (nativeShadowOwner) "此组件保留原生整体阴影，不叠加 GPU 投影。"
+                     else if (global) "以下参数可由各个组件继承。"
+                     else "本页缺省参数继承全局默认。")
+            )
+        }
+        item(key = "backlight-header") { SmallTitle("玻璃边缘光照") }
+        item(key = "backlight-on") {
+            SettingsCard {
+                toggle(
+                    ConfigSchema.Glass.BACKLIT_ENABLED,
+                    "启用背光边缘微暗",
+                    "受光侧继续使用 OS4 高光；背光侧按法线与实际照度平滑压暗",
+                )
+            }
+        }
+        item(key = "backlight-levels") {
+            SettingsCard {
+                number(ConfigSchema.Glass.BACKLIT_STRENGTH, "背光微暗强度", "%")
+                number(ConfigSchema.Glass.BACKLIT_WIDTH, "边缘响应宽度", "dp")
+                number(ConfigSchema.Glass.BACKLIT_SOFTNESS, "光照过渡柔和度", "%")
+            }
         }
         if (!nativeShadowOwner) {
-        item(key = "shadow-label") { SmallTitle("外阴影") }
-        item(key = "shadow-switch") {
-            SettingsCard {
-                toggle(ConfigSchema.Glass.OUTER_SHADOW_ENABLED, "启用外阴影",
-                    "独立于玻璃内部阴影")
+            item(key = "shadow-header") { SmallTitle("整块玻璃的柔和投影") }
+            item(key = "shadow-on") {
+                SettingsCard {
+                    toggle(
+                        ConfigSchema.Glass.OUTER_SHADOW_ENABLED,
+                        "启用整体外阴影",
+                        "以整个圆角玻璃轮廓投影，不模拟黑色轮廓线",
+                    )
+                }
             }
-        }
-        item(key = "shadow-geometry") {
-            SettingsCard {
-                number(ConfigSchema.Glass.OUTER_SHADOW_RADIUS, "柔和半径", "dp")
-                number(ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y, "垂直偏移", "dp")
-                number(ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW, "光照方向跟随", "%")
+            item(key = "shadow-shape") {
+                SettingsCard {
+                    number(ConfigSchema.Glass.OUTER_SHADOW_RADIUS, "阴影柔和半径", "dp")
+                    number(ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y, "基础垂直偏移", "dp")
+                    number(ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW, "方向光响应", "%")
+                }
             }
-        }
-        item(key = "shadow-color") {
-            SettingsCard {
-                number(ConfigSchema.Glass.OUTER_SHADOW_ALPHA, "阴影不透明度")
-                number(ConfigSchema.Glass.OUTER_SHADOW_RED, "阴影红")
-                number(ConfigSchema.Glass.OUTER_SHADOW_GREEN, "阴影绿")
-            }
-        }
-        item(key = "shadow-color-blue") {
-            SettingsCard {
-                number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝")
-            }
-        }
-        }
-        item(key = "stroke-label") { SmallTitle("描边") }
-        item(key = "stroke-switch") {
-            SettingsCard {
-                toggle(ConfigSchema.Glass.OUTER_STROKE_ENABLED, "启用独立描边",
-                    "背光侧按主光与反向补光照度差生成，光向改变时自动旋转")
-            }
-        }
-        item(key = "stroke-geometry") {
-            SettingsCard {
-                number(ConfigSchema.Glass.OUTER_STROKE_WIDTH, "背光描边宽度", "dp")
-                number(ConfigSchema.Glass.OUTER_STROKE_ANGLE_RANGE, "背光轮廓角度范围", "°")
-                number(ConfigSchema.Glass.OUTER_STROKE_ALPHA, "描边不透明度")
-                number(ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE, "照度差响应强度", "%")
-            }
-        }
-        item(key = "stroke-color") {
-            SettingsCard {
-                number(ConfigSchema.Glass.OUTER_STROKE_RED, "描边红")
-                number(ConfigSchema.Glass.OUTER_STROKE_GREEN, "描边绿")
-                number(ConfigSchema.Glass.OUTER_STROKE_BLUE, "描边蓝")
+            item(key = "shadow-color") {
+                SettingsCard {
+                    number(ConfigSchema.Glass.OUTER_SHADOW_ALPHA, "阴影不透明度")
+                    number(ConfigSchema.Glass.OUTER_SHADOW_RED, "阴影红")
+                    number(ConfigSchema.Glass.OUTER_SHADOW_GREEN, "阴影绿")
+                    number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝")
+                }
             }
         }
         if (global) {
-            item(key = "scope-title") { SmallTitle("组件独立设置") }
+            item(key = "scope-title") { SmallTitle("各玻璃组件的独立设置") }
             item(key = "scope-launcher") {
                 SettingsCard {
-                    ArrowPreference(
-                        "桌面图标", "图标与多任务胶囊",
+                    ArrowPreference("Dock 本体", "保留系统原生 MiShadow",
+                        enabled = active, onClick = { open(Page.DockEdge) })
+                    ArrowPreference("桌面图标", "图标和多任务胶囊",
                         enabled = active, onClick = { open(Page.IconEdge) })
-                    ArrowPreference(
-                        "小组件", "独立边缘效果",
+                    ArrowPreference("小组件", "宽大玻璃表面的柔和光学变化",
                         enabled = active, onClick = { open(Page.WidgetEdge) })
-                    ArrowPreference(
-                        "文件夹", "大小文件夹和展开文件夹",
+                    ArrowPreference("文件夹", "小文件夹与展开文件夹",
                         enabled = active, onClick = { open(Page.FolderEdge) })
                 }
             }
-            item(key = "scope-menu") {
+            item(key = "scope-menus") {
                 SettingsCard {
-                    ArrowPreference(
-                        "快捷菜单", "长按应用菜单",
+                    ArrowPreference("快捷菜单", "长按应用菜单",
                         enabled = active, onClick = { open(Page.PopupEdge) })
-                    ArrowPreference(
-                        "顶部菜单", "保留系统窗口原生投影",
+                    ArrowPreference("顶部菜单", "保留原生窗口阴影",
                         enabled = active, onClick = { open(Page.HandleMenuEdge) })
-                    ArrowPreference(
-                        "对话弹窗", "保留原生窗口投影",
+                    ArrowPreference("对话弹窗", "保留系统阴影",
                         enabled = active, onClick = { open(Page.DialogEdge) })
                 }
             }
-            item(key = "scope-app") {
+            item(key = "scope-more") {
                 SettingsCard {
-                    ArrowPreference(
-                        "Gboard", "输入法浮层玻璃",
+                    ArrowPreference("Gboard", "浮层玻璃",
                         enabled = active, onClick = { open(Page.GboardEdge) })
-                    ArrowPreference(
-                        "搜索框", "系统搜索框玻璃",
+                    ArrowPreference("搜索框", "系统搜索框",
                         enabled = active, onClick = { open(Page.SearchboxEdge) })
-                    ArrowPreference(
-                        "安全中心", "工具箱与侧边栏玻璃，保留原生投影",
+                    ArrowPreference("安全中心", "保留已有窗口阴影",
                         enabled = active, onClick = { open(Page.SecurityCenterEdge) })
-                    ArrowPreference(
-                        "Dock 原生描边与阴影", "Dock 使用独立 MiShadow 和描边渲染器",
-                        enabled = active, onClick = { open(Page.Shadow) })
                 }
             }
         }
-        if (!global) item(key = "edge-reset") {
-            SettingsCard {
-                ArrowPreference(
-                    title = "恢复继承全局外阴影与描边",
-                    summary = "删除本组件全部覆盖参数，不改变其他组件",
-                    enabled = active && hasOverrides,
-                    onClick = {
-                        val editor = prefs.edit()
-                        GlassEdgeEffects.KEYS.forEach { config ->
-                            val key = GlassEdgeEffects.key(scope, config)
-                            editor.remove(key).remove("${key}_tenths")
-                        }
-                        editor.apply()
-                        revision++
-                        resetGeneration++
-                    },
-                )
+        if (!global) {
+            item(key = "restore-inheritance") {
+                SettingsCard {
+                    ArrowPreference(
+                        title = "恢复继承全局光照参数",
+                        summary = "仅清除该组件的覆盖参数，其他玻璃不受影响",
+                        enabled = active && hasOverrides,
+                        onClick = {
+                            val editor = prefs.edit()
+                            GlassEdgeEffects.KEYS.forEach { config ->
+                                val key = GlassEdgeEffects.key(scope, config)
+                                editor.remove(key).remove("${key}_tenths")
+                            }
+                            editor.apply()
+                            revision++
+                            resetGeneration++
+                        },
+                    )
+                }
             }
         }
     }
