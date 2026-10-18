@@ -327,6 +327,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             ensureGl();
             sourceBackend.makePbufferCurrent();
             prismalRenderer.beginGlassFrame();
+            prismalRenderer.setEdgeDecoration(
+                    GlassEdgeEffects.current(GlassEdgeEffects.SEARCHBOX),
+                    root.getResources().getDisplayMetrics().density);
             prismalRenderer.drawGlass(
                     currentGeometry.toPrismalGeometry(),
                     prismalParams,
