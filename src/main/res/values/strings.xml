@@ -102,6 +102,7 @@
     <string name="page_glass_widgets">Widgets</string>
     <string name="page_glass_folders">Folders</string>
     <string name="page_glass_menus">Menus &amp; popups</string>
+    <string name="page_glass_edge">Outer shadow and outline</string>
     <string name="page_shortcut_popup">Shortcut menu customization</string>
     <string name="page_handle_menu">Top menu customization</string>
     <string name="page_liquid_material">Material basics</string>
