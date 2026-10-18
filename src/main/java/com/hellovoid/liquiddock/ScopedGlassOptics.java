@@ -94,7 +94,8 @@ public final class ScopedGlassOptics {
         if (!POPUP_HIGHLIGHTS.contains(original)) {
             throw new IllegalArgumentException("not a popup highlight key: " + original.name());
         }
-        return prefix(POPUP, original.name());
+        // Launcher highlight keys are not in the liquid_* namespace.
+        return "liquid_scope_popup_" + original.name();
     }
 
     public static String key(String scope, ConfigKey<Integer> original) {

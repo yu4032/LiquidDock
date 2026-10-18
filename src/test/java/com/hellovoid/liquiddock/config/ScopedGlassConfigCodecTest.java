@@ -30,6 +30,28 @@ public class ScopedGlassConfigCodecTest {
                         ConfigSchema.Glass.LENS_REFRACTION)));
     }
 
+    @Test public void popupRoundTripPreservesFractionalBlurTintAndHighlight() {
+        String blur = ScopedGlassOptics.key(ScopedGlassOptics.POPUP, ConfigSchema.Glass.BLUR);
+        String tint = ScopedGlassOptics.key(
+                ScopedGlassOptics.POPUP, ConfigSchema.Glass.TINT_ALPHA);
+        String caustics = ScopedGlassOptics.popupHighlightKey(
+                ConfigSchema.LauncherHighlight.LARGE_CAUSTICS);
+        LinkedHashMap<String, Object> prefs = new LinkedHashMap<>();
+        prefs.put(blur, 14);
+        prefs.put(blur + "_tenths", 145);
+        prefs.put(tint, 80);
+        prefs.put(caustics, false);
+        Map<String, Object> exported = ConfigCodec.exportValues(prefs);
+        assertEquals(14.5d, ((Number) exported.get(blur)).doubleValue(), 0.0001d);
+        assertEquals(80, exported.get(tint));
+        assertEquals(false, exported.get(caustics));
+        Map<String, Object> imported = ConfigCodec.importValues(exported);
+        assertEquals(145, imported.get(blur + "_tenths"));
+        assertEquals(80, imported.get(tint));
+        assertEquals(false, imported.get(caustics));
+        assertFalse(imported.containsKey(ConfigSchema.Glass.BLUR.name()));
+    }
+
     @Test public void invalidValuesAreClampedWithoutCrossScopeWrites() {
         String ior = ScopedGlassOptics.key(
                 ScopedGlassOptics.DIALOG, ConfigSchema.Glass.IOR);

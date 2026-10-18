@@ -23,6 +23,54 @@ public class ScopedGlassOpticsTest {
         assertEquals(37, ScopedGlassOptics.opticalKeys().size());
     }
 
+    @Test public void popupOverridesBasicOpticsAndHighlightsWithoutChangingGlobalMaterial() {
+        Map<String, Object> values = new HashMap<>();
+        values.put(ConfigSchema.Glass.BLUR.name(), 7);
+        values.put(ConfigSchema.Glass.BLUR.name() + "_tenths", 73);
+        values.put(ConfigSchema.Glass.TINT_ALPHA.name(), 35);
+        values.put(ConfigSchema.Glass.IOR.name(), 150);
+        values.put(ConfigSchema.LauncherHighlight.LARGE_CAUSTICS.name(), true);
+        values.put(ScopedGlassOptics.key(ScopedGlassOptics.POPUP,
+                ConfigSchema.Glass.BLUR), 14);
+        values.put(ScopedGlassOptics.key(ScopedGlassOptics.POPUP,
+                ConfigSchema.Glass.BLUR) + "_tenths", 145);
+        values.put(ScopedGlassOptics.key(ScopedGlassOptics.POPUP,
+                ConfigSchema.Glass.TINT_ALPHA), 90);
+        values.put(ScopedGlassOptics.key(ScopedGlassOptics.POPUP,
+                ConfigSchema.Glass.IOR), 181);
+        values.put(ScopedGlassOptics.popupHighlightKey(
+                ConfigSchema.LauncherHighlight.LARGE_CAUSTICS), false);
+
+        ConfigReader reader = new ConfigReader(values);
+        LiquidDockConfig.Glass global = LiquidDockConfig.from(reader).glass;
+        LiquidDockConfig.Glass popup = ScopedGlassOptics.resolve(
+                reader, global, ScopedGlassOptics.POPUP);
+        LiquidDockConfig.Glass dialog = ScopedGlassOptics.resolve(
+                reader, global, ScopedGlassOptics.DIALOG);
+        assertEquals(7.3f, global.blur, 0.0001f);
+        assertEquals(14.5f, popup.blur, 0.0001f);
+        assertEquals(90, popup.tintAlpha);
+        assertEquals(1.81f, popup.ior, 0.0001f);
+        assertFalse(popup.largeSurfaceHighlightProfile.caustics);
+        assertTrue(global.largeSurfaceHighlightProfile.caustics);
+        assertEquals(7.3f, dialog.blur, 0.0001f);
+        assertEquals(35, global.tintAlpha);
+    }
+
+    @Test public void popupInheritsGlobalChangesUntilOverridden() {
+        Map<String, Object> values = new HashMap<>();
+        values.put(ConfigSchema.Glass.BLUR.name(), 6);
+        ConfigReader initial = new ConfigReader(values);
+        LiquidDockConfig.Glass initialGlobal = LiquidDockConfig.from(initial).glass;
+        assertTrue(ScopedGlassOptics.resolve(initial, initialGlobal, ScopedGlassOptics.POPUP)
+                == initialGlobal);
+        values.put(ConfigSchema.Glass.BLUR.name(), 12);
+        ConfigReader revised = new ConfigReader(values);
+        LiquidDockConfig.Glass revisedGlobal = LiquidDockConfig.from(revised).glass;
+        assertEquals(12f, ScopedGlassOptics.resolve(
+                revised, revisedGlobal, ScopedGlassOptics.POPUP).blur, 0.0001f);
+    }
+
     @Test public void oneScopeDoesNotChangeAnotherOrGlobalOptics() {
         Map<String, Object> values = new HashMap<>();
         values.put(ConfigSchema.Glass.LENS_REFRACTION.name(), 1);
