@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import com.hellovoid.liquiddock.config.ConfigKey;
 import com.hellovoid.liquiddock.config.ConfigSchema;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -18,6 +19,17 @@ public final class ScopedGlassOptics {
     public static final String GBOARD = "gboard";
     public static final String SEARCHBOX = "searchbox";
     public static final String DIALOG = "dialog";
+    public static final String POPUP = "popup";
+
+    // Popup-only controls deliberately do not add duplicate global material keys.
+    private static final List<ConfigKey<Integer>> POPUP_BASICS = Collections.unmodifiableList(
+            Arrays.asList(ConfigSchema.Glass.BLUR, ConfigSchema.Glass.TINT_RED,
+                    ConfigSchema.Glass.TINT_GREEN, ConfigSchema.Glass.TINT_BLUE,
+                    ConfigSchema.Glass.TINT_ALPHA));
+    private static final List<ConfigKey<Boolean>> POPUP_HIGHLIGHTS = Collections.unmodifiableList(
+            Arrays.asList(ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE,
+                    ConfigSchema.LauncherHighlight.LARGE_CAUSTICS,
+                    ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW));
 
     private static final List<ConfigKey<Integer>> OPTICAL_KEYS =
             Collections.unmodifiableList(Arrays.asList(
@@ -66,12 +78,39 @@ public final class ScopedGlassOptics {
         return OPTICAL_KEYS;
     }
 
+    public static List<ConfigKey<Integer>> keysForScope(String scope) {
+        validateScope(scope);
+        if (!POPUP.equals(scope)) return OPTICAL_KEYS;
+        List<ConfigKey<Integer>> keys = new ArrayList<>(POPUP_BASICS);
+        keys.addAll(OPTICAL_KEYS);
+        return Collections.unmodifiableList(keys);
+    }
+
+    public static List<ConfigKey<Boolean>> popupHighlightKeys() {
+        return POPUP_HIGHLIGHTS;
+    }
+
+    public static String popupHighlightKey(ConfigKey<Boolean> original) {
+        if (!POPUP_HIGHLIGHTS.contains(original)) {
+            throw new IllegalArgumentException("not a popup highlight key: " + original.name());
+        }
+        return prefix(POPUP, original.name());
+    }
+
     public static String key(String scope, ConfigKey<Integer> original) {
         validateScope(scope);
-        if (!OPTICAL_KEYS.contains(original)) {
-            throw new IllegalArgumentException("not an optical key: " + original.name());
+        if (!OPTICAL_KEYS.contains(original)
+                && !(POPUP.equals(scope) && POPUP_BASICS.contains(original))) {
+            throw new IllegalArgumentException("not a scoped glass key: " + original.name());
         }
-        return "liquid_scope_" + scope + "_" + original.name().substring("liquid_".length());
+        return prefix(scope, original.name());
+    }
+
+    private static String prefix(String scope, String globalName) {
+        if (!globalName.startsWith("liquid_")) {
+            throw new IllegalArgumentException("unsupported global glass key: " + globalName);
+        }
+        return "liquid_scope_" + scope + "_" + globalName.substring("liquid_".length());
     }
 
     public static String normalsKey(String scope) {
@@ -80,7 +119,7 @@ public final class ScopedGlassOptics {
     }
 
     private static void validateScope(String scope) {
-        if (!GBOARD.equals(scope) && !SEARCHBOX.equals(scope) && !DIALOG.equals(scope)) {
+        if (!GBOARD.equals(scope) && !SEARCHBOX.equals(scope) && !DIALOG.equals(scope) && !POPUP.equals(scope)) {
             throw new IllegalArgumentException("unsupported scope: " + scope);
         }
     }
@@ -90,7 +129,7 @@ public final class ScopedGlassOptics {
         if (reader == null || inherited == null) return inherited;
         validateScope(scope);
         Map<String, Object> updates = new HashMap<>();
-        for (ConfigKey<Integer> config : OPTICAL_KEYS) {
+        for (ConfigKey<Integer> config : keysForScope(scope)) {
             String scopedKey = key(scope, config);
             if (reader.has(scopedKey)) {
                 int bounded = Math.max(config.minInt(), Math.min(config.maxInt(),
@@ -107,6 +146,14 @@ public final class ScopedGlassOptics {
                         Math.min(config.maxInt() * 10, reader.i(tenthsKey, config.uiDefault() * 10)));
                 updates.put(config.name(), Math.round(boundedTenths / 10f));
                 updates.put(config.name() + "_tenths", boundedTenths);
+            }
+        }
+        if (POPUP.equals(scope)) {
+            for (ConfigKey<Boolean> config : POPUP_HIGHLIGHTS) {
+                String scopedKey = popupHighlightKey(config);
+                if (reader.has(scopedKey)) {
+                    updates.put(config.name(), reader.b(scopedKey, config.runtimeFallback()));
+                }
             }
         }
         String normals = normalsKey(scope);

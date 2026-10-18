@@ -470,6 +470,12 @@ internal fun GlassMenusPage(
             "替换长按桌面图标弹出的快捷菜单背景；关闭后恢复系统材质；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面",
             masterEnabled && liquidEnabled,
         )
+        ArrowPreference(
+            title = "快捷菜单独立玻璃参数",
+            summary = "独立调整模糊、颜色、折射、光照与阴影；未设置时继承全局参数",
+            enabled = masterEnabled && liquidEnabled,
+            onClick = { open(Page.ShortcutPopupAll) },
+        )
         BooleanSetting(
             prefs,
             ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,

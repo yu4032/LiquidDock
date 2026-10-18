@@ -105,9 +105,23 @@ final class LiveGlassConfigState {
                     ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET.name())));
-    private static final Set<String> POPUP_KEYS = Collections.unmodifiableSet(new HashSet<>(
-            Arrays.asList(ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
-                    ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name())));
+    private static final Set<String> POPUP_KEYS = popupKeys();
+
+    private static Set<String> popupKeys() {
+        Set<String> keys = new HashSet<>(Arrays.asList(
+                ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
+                ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name()));
+        for (com.hellovoid.liquiddock.config.ConfigKey<Integer> config
+                : ScopedGlassOptics.keysForScope(ScopedGlassOptics.POPUP)) {
+            keys.add(ScopedGlassOptics.key(ScopedGlassOptics.POPUP, config));
+        }
+        for (com.hellovoid.liquiddock.config.ConfigKey<Boolean> config
+                : ScopedGlassOptics.popupHighlightKeys()) {
+            keys.add(ScopedGlassOptics.popupHighlightKey(config));
+        }
+        keys.add(ScopedGlassOptics.normalsKey(ScopedGlassOptics.POPUP));
+        return Collections.unmodifiableSet(keys);
+    }
     private static final Set<String> RECENTS_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name(),
                     ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING.name())));
@@ -132,6 +146,7 @@ final class LiveGlassConfigState {
     private static Map<String, ?> lastWorkstation = Collections.emptyMap();
     private static Map<String, ?> lastAnimation = Collections.emptyMap();
     private static volatile LiquidDockConfig.Glass currentGlass;
+    private static volatile LiquidDockConfig.Glass currentPopupGlass;
     private static volatile long generation;
 
     private LiveGlassConfigState() {}
@@ -146,6 +161,8 @@ final class LiveGlassConfigState {
         generation = 0L;
         FRAME_PENDING.set(false);
         Map<String, ?> all = snapshot(remote);
+        currentPopupGlass = ScopedGlassOptics.resolve(
+                new ConfigReader(all), initial.glass, ScopedGlassOptics.POPUP);
         lastGlass = project(all, GLASS_KEYS);
         lastRecents = project(all, RECENTS_KEYS);
         lastPopup = project(all, POPUP_KEYS);
@@ -166,6 +183,10 @@ final class LiveGlassConfigState {
         return currentGlass;
     }
 
+    static LiquidDockConfig.Glass currentPopupGlass() {
+        return currentPopupGlass;
+    }
+
     static long generation() {
         return generation;
     }
@@ -177,7 +198,8 @@ final class LiveGlassConfigState {
                 || ANIMATION_KEYS.contains(key)) return true;
         if (!key.endsWith("_tenths")) return false;
         String stem = key.substring(0, key.length() - "_tenths".length());
-        return GLASS_KEYS.contains(stem) || WORKSTATION_KEYS.contains(stem);
+        return GLASS_KEYS.contains(stem) || POPUP_KEYS.contains(stem)
+                || WORKSTATION_KEYS.contains(stem);
     }
 
     private static void scheduleFrame() {
@@ -215,7 +237,7 @@ final class LiveGlassConfigState {
                     Miuix307ZeroCopyRenderer.requestDockSceneRefresh();
                     LauncherGlassStaticNode.applyLiveGlassConfigToAll(next.glass);
                     LauncherGlassSessionRegistry.applyLiveGlassConfigToAll(next.glass);
-                    ShortcutPopupGlassCoordinator.onLiveGlassConfigChanged(next.glass);
+                    // Shortcut popup owns a separate resolved optical profile.
                     MiuixLauncherStaticGlassHook.onLiveGlassConfigChanged(next.glass);
                 }
                 MainHook.log(TAG + " glass generation=" + generation
@@ -226,6 +248,13 @@ final class LiveGlassConfigState {
                 WorkstationDockCustomizationHook.applyLiveConfig(next.workstation);
                 WorkstationDockGeometryHook.applyLiveConfig(next.workstation);
                 MainHook.log(TAG + " workstation Dock geometry updated");
+            }
+            if (glassChanged || popupChanged) {
+                currentPopupGlass = ScopedGlassOptics.resolve(
+                        new ConfigReader(all), next.glass, ScopedGlassOptics.POPUP);
+                if (GlassRuntimeState.isEnabled()) {
+                    ShortcutPopupGlassCoordinator.onLiveGlassConfigChanged(currentPopupGlass);
+                }
             }
             if (popupChanged) {
                 lastPopup = popup;

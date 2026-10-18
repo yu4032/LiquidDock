@@ -10,7 +10,8 @@ final class ScopedGlassConfigCodec {
     private static final String[] SCOPES = {
             ScopedGlassOptics.GBOARD,
             ScopedGlassOptics.SEARCHBOX,
-            ScopedGlassOptics.DIALOG
+            ScopedGlassOptics.DIALOG,
+            ScopedGlassOptics.POPUP
     };
 
     private ScopedGlassConfigCodec() {}
@@ -18,7 +19,7 @@ final class ScopedGlassConfigCodec {
     static void exportInto(Map<String, ?> prefs, LinkedHashMap<String, Object> out) {
         if (prefs == null || out == null) return;
         for (String scope : SCOPES) {
-            for (ConfigKey<Integer> config : ScopedGlassOptics.opticalKeys()) {
+            for (ConfigKey<Integer> config : ScopedGlassOptics.keysForScope(scope)) {
                 String key = ScopedGlassOptics.key(scope, config);
                 Object raw = prefs.get(key);
                 if (config.storageMode() == ConfigKey.StorageMode.DP_TENTHS
@@ -26,6 +27,14 @@ final class ScopedGlassConfigCodec {
                     out.put(key, ((Number) prefs.get(key + "_tenths")).intValue() / 10.0d);
                 } else if (raw instanceof Number) {
                     out.put(key, raw);
+                }
+            }
+            if (ScopedGlassOptics.POPUP.equals(scope)) {
+                for (ConfigKey<Boolean> config : ScopedGlassOptics.popupHighlightKeys()) {
+                    String highlight = ScopedGlassOptics.popupHighlightKey(config);
+                    if (prefs.get(highlight) instanceof Boolean) {
+                        out.put(highlight, prefs.get(highlight));
+                    }
                 }
             }
             String normals = ScopedGlassOptics.normalsKey(scope);
@@ -51,6 +60,14 @@ final class ScopedGlassConfigCodec {
                     out.put(key + "_tenths", tenths);
                 } else {
                     out.put(key, (int) Math.round(bounded));
+                }
+            }
+            if (ScopedGlassOptics.POPUP.equals(scope)) {
+                for (ConfigKey<Boolean> config : ScopedGlassOptics.popupHighlightKeys()) {
+                    String highlight = ScopedGlassOptics.popupHighlightKey(config);
+                    if (values.get(highlight) instanceof Boolean) {
+                        out.put(highlight, values.get(highlight));
+                    }
                 }
             }
             String normals = ScopedGlassOptics.normalsKey(scope);

@@ -338,6 +338,9 @@ private fun LiquidDockSettings(
                 Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled)
                 Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
+                Page.ShortcutPopupAll -> ScopedGlassSettingsPage(
+                    padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
+                )
                 Page.DialogCustomization -> DialogGlassSettingsPage(
                 padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.DialogAll) },
             )
