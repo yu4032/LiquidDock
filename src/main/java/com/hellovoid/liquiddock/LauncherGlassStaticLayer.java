@@ -32,7 +32,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
     private ValueAnimator motionAnimator;
-    private boolean sceneTargetVisible;
+    private boolean folderOpeningFadeRunning;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
@@ -196,9 +196,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (disposed) return;
         // Coverage notifications can reapply the same target in one native
         // opening. Preserve the animator instead of restarting it each time.
-        if (!immediateHide && sceneAnimator != null && sceneTargetVisible == visible) return;
-        sceneTargetVisible = visible;
+        if (folderOpeningFade && !immediateHide && folderOpeningFadeRunning
+                && sceneAnimator != null) return;
         cancelSceneAnimation();
+        folderOpeningFadeRunning = folderOpeningFade && !visible && !immediateHide;
         if (!visible && immediateHide) {
             layerAlpha.setSceneAlpha(0f);
             applyLayerAlpha();
@@ -241,6 +242,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             @Override public void onAnimationEnd(Animator animation) {
                 if (sceneAnimator == animation) {
                     sceneAnimator = null;
+                    folderOpeningFadeRunning = false;
                     if (folderOpeningFade && Api101Bridge.isDebugLoggingEnabled()) {
                         MainHook.log("[DC][FolderOpenFade] end viewAlpha=" + getAlpha());
                     }
@@ -255,6 +257,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private void cancelSceneAnimation() {
         ValueAnimator previous = sceneAnimator;
         sceneAnimator = null;
+        folderOpeningFadeRunning = false;
         if (previous != null) previous.cancel();
     }
 
