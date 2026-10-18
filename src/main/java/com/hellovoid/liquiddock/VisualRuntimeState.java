@@ -49,19 +49,7 @@ final class VisualRuntimeState {
                 : nextPrefs.getBoolean(ConfigSchema.Dock.FRAME_SYNC.name(),
                         ConfigSchema.Dock.FRAME_SYNC.runtimeFallback());
         if (nextPrefs == null) return;
-        DockDirectionalSideEdgeState.refresh(nextPrefs);
-
         listener = (sharedPreferences, key) -> {
-            boolean directionalSideEdgeChanged = key == null
-                    || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED)
-                    || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_ALPHA)
-                    || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_WIDTH)
-                    || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION)
-                    || matchesOptionChange(key, ConfigSchema.Dock.SIDE_DARK_EDGE_ANGLE_RANGE);
-            if (directionalSideEdgeChanged) {
-                DockDirectionalSideEdgeState.refresh(sharedPreferences);
-                Miuix307ZeroCopyRenderer.requestDockSceneRefresh();
-            }
             boolean strokeStyleChanged = key == null || matchesOptionChange(key, ConfigSchema.Dock.SQUIRCLE)
                     || matchesOptionChange(key, ConfigSchema.Dock.FILL_DIFF)
                     || matchesOptionChange(key, ConfigSchema.Dock.SQUIRCLE_CONTROL_POINT)

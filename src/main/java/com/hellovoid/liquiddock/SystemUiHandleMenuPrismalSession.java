@@ -388,7 +388,7 @@ final class SystemUiHandleMenuPrismalSession {
         // The native caption Surface owns its drop shadow. Its cropped child
         // TextureView may paint the independent SDF stroke, never a second halo.
         prismalRenderer.setEdgeDecoration(
-                GlassEdgeEffects.strokeOnly(GlassEdgeEffects.HANDLE_MENU),
+                GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.HANDLE_MENU),
                 host.getResources().getDisplayMetrics().density);
         float radius = Math.max(1f, Math.min(width, height) * 0.5f);
         prismalRenderer.drawGlass(

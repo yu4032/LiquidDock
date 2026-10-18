@@ -433,7 +433,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.setEdgeDecoration(
                     outputMode == OutputMode.FULLSCREEN_REGION
                             ? GlassEdgeEffects.current(GlassEdgeEffects.GBOARD)
-                            : GlassEdgeEffects.strokeOnly(GlassEdgeEffects.GBOARD),
+                            : GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.GBOARD),
                     root.getResources().getDisplayMetrics().density);
             prismalRenderer.drawGlass(
                     currentGeometry.toPrismalGeometry(),

@@ -1393,8 +1393,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     kind, launcherHighlightProfile, largeSurfaceHighlightProfile);
             prismalRenderer.setEdgeDecoration(
                     sink != null && sink.isExternalSessionAuthority()
-                            ? GlassEdgeEffects.strokeOnly(GlassEdgeEffects.DIALOG)
-                            : GlassEdgeEffects.strokeOnly(edgeScope(kind)),
+                            ? GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DIALOG)
+                            : GlassEdgeEffects.withoutNativeShadow(edgeScope(kind)),
                     rootRef.get() != null
                             ? rootRef.get().getResources().getDisplayMetrics().density : 1f);
             prismalRenderer.drawGlass(
