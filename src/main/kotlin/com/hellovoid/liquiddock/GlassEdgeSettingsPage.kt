@@ -25,6 +25,7 @@ internal fun GlassEdgeSettingsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     scope: String,
+    open: (Page) -> Unit = {},
 ) {
     val global = scope == GlassEdgeEffects.GLOBAL
     val active = masterEnabled && prefs.getBoolean(
@@ -90,6 +91,9 @@ internal fun GlassEdgeSettingsPage(
         GlassEdgeEffects.POPUP -> "快捷菜单"
         GlassEdgeEffects.HANDLE_MENU -> "顶部菜单"
         GlassEdgeEffects.DIALOG -> "对话弹窗"
+        GlassEdgeEffects.GBOARD -> "Gboard 浮层"
+        GlassEdgeEffects.SEARCHBOX -> "搜索框"
+        GlassEdgeEffects.SECURITY_CENTER -> "安全中心"
         else -> scope
     }
 
@@ -100,30 +104,92 @@ internal fun GlassEdgeSettingsPage(
                 (if (global) "其他组件可继承此配置。" else "未覆盖时继承全局默认。"))
         }
         item(key = "shadow-label") { SmallTitle("外阴影") }
-        item(key = "shadow-controls") {
+        item(key = "shadow-switch") {
             SettingsCard {
                 toggle(ConfigSchema.Glass.OUTER_SHADOW_ENABLED, "启用外阴影",
                     "独立于玻璃内部阴影")
+            }
+        }
+        item(key = "shadow-geometry") {
+            SettingsCard {
                 number(ConfigSchema.Glass.OUTER_SHADOW_RADIUS, "柔和半径", "dp")
                 number(ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y, "垂直偏移", "dp")
-                number(ConfigSchema.Glass.OUTER_SHADOW_ALPHA, "阴影不透明度")
-                number(ConfigSchema.Glass.OUTER_SHADOW_RED, "阴影红")
-                number(ConfigSchema.Glass.OUTER_SHADOW_GREEN, "阴影绿")
-                number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝")
                 number(ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW, "光照方向跟随", "%")
             }
         }
+        item(key = "shadow-color") {
+            SettingsCard {
+                number(ConfigSchema.Glass.OUTER_SHADOW_ALPHA, "阴影不透明度")
+                number(ConfigSchema.Glass.OUTER_SHADOW_RED, "阴影红")
+                number(ConfigSchema.Glass.OUTER_SHADOW_GREEN, "阴影绿")
+            }
+        }
+        item(key = "shadow-color-blue") {
+            SettingsCard {
+                number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝")
+            }
+        }
         item(key = "stroke-label") { SmallTitle("描边") }
-        item(key = "stroke-controls") {
+        item(key = "stroke-switch") {
             SettingsCard {
                 toggle(ConfigSchema.Glass.OUTER_STROKE_ENABLED, "启用独立描边",
                     "叠加于 Prismal 的自然光学边缘")
+            }
+        }
+        item(key = "stroke-geometry") {
+            SettingsCard {
                 number(ConfigSchema.Glass.OUTER_STROKE_WIDTH, "描边宽度", "dp")
                 number(ConfigSchema.Glass.OUTER_STROKE_ALPHA, "描边不透明度")
+                number(ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE, "描边光照响应", "%")
+            }
+        }
+        item(key = "stroke-color") {
+            SettingsCard {
                 number(ConfigSchema.Glass.OUTER_STROKE_RED, "描边红")
                 number(ConfigSchema.Glass.OUTER_STROKE_GREEN, "描边绿")
                 number(ConfigSchema.Glass.OUTER_STROKE_BLUE, "描边蓝")
-                number(ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE, "描边光照响应", "%")
+            }
+        }
+        if (global) {
+            item(key = "scope-title") { SmallTitle("组件独立设置") }
+            item(key = "scope-launcher") {
+                SettingsCard {
+                    ArrowPreference(
+                        "桌面图标", "图标与多任务胶囊",
+                        enabled = active, onClick = { open(Page.IconEdge) })
+                    ArrowPreference(
+                        "小组件", "独立边缘效果",
+                        enabled = active, onClick = { open(Page.WidgetEdge) })
+                    ArrowPreference(
+                        "文件夹", "大小文件夹和展开文件夹",
+                        enabled = active, onClick = { open(Page.FolderEdge) })
+                }
+            }
+            item(key = "scope-menu") {
+                SettingsCard {
+                    ArrowPreference(
+                        "快捷菜单", "长按应用菜单",
+                        enabled = active, onClick = { open(Page.PopupEdge) })
+                    ArrowPreference(
+                        "顶部菜单", "保留系统窗口原生投影",
+                        enabled = active, onClick = { open(Page.HandleMenuEdge) })
+                    ArrowPreference(
+                        "对话弹窗", "保留原生窗口投影",
+                        enabled = active, onClick = { open(Page.DialogEdge) })
+                }
+            }
+            item(key = "scope-app") {
+                SettingsCard {
+                    ArrowPreference(
+                        "Gboard", "输入法浮层玻璃",
+                        enabled = active, onClick = { open(Page.GboardEdge) })
+                    ArrowPreference(
+                        "搜索框", "系统搜索框玻璃",
+                        enabled = active, onClick = { open(Page.SearchboxEdge) })
+                    ArrowPreference(
+                        "安全中心", "工具箱与侧边栏玻璃",
+                        enabled = active, onClick = { open(Page.SecurityCenterEdge) })
+                }
             }
         }
         if (!global) item(key = "edge-reset") {

@@ -326,6 +326,7 @@ private fun LiquidDockSettings(
                 Page.LiquidLighting -> LiquidLightingPage(padding, prefs, masterEnabled)
                 Page.GlassEdge -> GlassEdgeSettingsPage(
                     padding, prefs, masterEnabled, GlassEdgeEffects.GLOBAL,
+                    open = ::navigateTo,
                 )
                 Page.IconEdge -> GlassEdgeSettingsPage(
                     padding, prefs, masterEnabled, GlassEdgeEffects.ICON,
@@ -344,6 +345,15 @@ private fun LiquidDockSettings(
                 )
                 Page.DialogEdge -> GlassEdgeSettingsPage(
                     padding, prefs, masterEnabled, GlassEdgeEffects.DIALOG,
+                )
+                Page.GboardEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.GBOARD,
+                )
+                Page.SearchboxEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.SEARCHBOX,
+                )
+                Page.SecurityCenterEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.SECURITY_CENTER,
                 )
                 Page.LiquidShadow -> LiquidSpecPage(
                     padding,
