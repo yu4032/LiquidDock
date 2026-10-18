@@ -295,6 +295,13 @@ Workspace 图标、小组件、文件夹等静态节点共享 Launcher root-wide
 
 静态节点共享 source，但各自维护 geometry、node kind、visibility 与 presentation state。
 
+### 稳态几何采样与缓存（P0 已完成）
+
+- `LauncherGlassSession` 在 UI `OnPreDraw` 内扫描静态节点；只有已经验证且本帧保持稳定的 geometry frame 才能复用。成功捕获的空文件夹使用显式空帧 token，未捕获不视为空帧。
+- `LauncherGlassStaticGeometryCache` 保留**每节点独立**的旧帧 View 指纹；每个 PreDraw 使用共享的 `Frame` 临时采样相同祖先 View 的属性和矩阵，随帧重置，不把共享样本当作跨帧修订号。
+- Widget 的 native span owner、`spanX` 与网格计算的横向宽度补偿仍在每次允许复用的 PreDraw 中校验，变化则重新捕获。原生运动、代理、旋转、解锁和 Recents 时保持完整几何 authority。
+- [#420](https://github.com/yu4032/LiquidDock/pull/420)–[#422](https://github.com/yu4032/LiquidDock/pull/422) 完成上述**稳定 Workspace 静态几何 P0**；见 [2026-10-18 验收记录](docs/perf/workspace-static-geometry-p0-20261018.md)。这不意味着动态分页、PassBlur、GPU 或端到端掉帧已解决。
+
 ### Freshness authority
 
 Workspace freshness 需要区分：
