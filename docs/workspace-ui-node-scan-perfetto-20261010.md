@@ -1,5 +1,7 @@
 # Workspace glass pre-draw scan: Perfetto sampling gate
 
+> **2026-10-18 当前状态更新：Workspace 稳定静态几何重复捕获 P0 已完成并合并。** [PR #420](https://github.com/yu4032/LiquidDock/pull/420)、[#421](https://github.com/yu4032/LiquidDock/pull/421)、[#422](https://github.com/yu4032/LiquidDock/pull/422) 实现了缓存与同帧复用，并完成设备/Perfetto 验收；详见 [P0 收尾记录](perf/workspace-static-geometry-p0-20261018.md) 与根目录 [TODO](../TODO.md)。分页动态全量捕获和端到端 FPS 归因仍为开放任务。**下方 2026-10-10 的状态、设计动机及“尚未采集”表述仅记录当时基线，不是当前状态。**
+
 **Status (2026-10-10): instrumentation on independent PR #321 passed [CI #38044043722](https://github.com/yu4032/LiquidDock/actions/runs/38044043722); device traces are not yet captured. This is not yet a speed-up.** Baseline `main@c25a4c92`; target `LauncherGlassSession.syncSceneOnUiThreadInternal` (Launcher Workspace glass). It does not touch Dock PassBlur producer, EGL output lifecycle, Prismal parameters or background wallpaper generation.
 
 ## Why measurement comes before a dirty-node cache
