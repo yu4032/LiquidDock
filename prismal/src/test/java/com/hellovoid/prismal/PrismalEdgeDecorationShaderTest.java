@@ -22,7 +22,10 @@ public class PrismalEdgeDecorationShaderTest {
 
     @Test public void guardExpandsBothRasterAndScissorOnlyWhenActive() {
         String vertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
-        assertTrue(vertex.contains("u_edgeRasterGuardPx"));
+        assertFalse(vertex.contains("u_edgeRasterGuardPx"));
+        String decoratedVertex =
+                PrismalRasterGuardShader.applyWithEdgeGuard(PrismalShaderSources.VERTEX);
+        assertTrue(decoratedVertex.contains("u_edgeRasterGuardPx"));
         PrismalGeometry geometry = new PrismalGeometry(1000, 800, 500, 300, 100, 80, 16);
         PrismalNodeScissor.Rect baseline = PrismalNodeScissor.compute(geometry, 1000, 800);
         PrismalNodeScissor.Rect expanded = new PrismalNodeScissor.Rect(0, 0, 0, 0);

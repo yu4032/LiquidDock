@@ -124,6 +124,11 @@ public final class PrismalRenderer implements AutoCloseable {
             new PrismalNodeScissor.Rect(0, 0, 0, 0);
     private PrismalEdgeDecoration edgeDecoration = PrismalEdgeDecoration.NONE;
     private float edgeDensity = 1f;
+    // Baseline glass is always compiled first. Optional SDF decoration is lazy,
+    // isolated, and allowed to fail without destroying the original material.
+    private int baselineGlassProgram;
+    private int decoratedGlassProgram;
+    private boolean decorationProgramUnavailable;
     private PrismalEdgeDecoration lastUploadedEdge;
     private float lastUploadedEdgeDensity = Float.NaN;
     private float lastUploadedMinDimension = Float.NaN;
@@ -500,10 +505,12 @@ public final class PrismalRenderer implements AutoCloseable {
                 PrismalComponentGateShader.apply(
                         PrismalOpticalEdgeShader.apply(
                                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
-        glassFragment = PrismalEdgeDecorationShader.apply(glassFragment);
         String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
         if (dualBlurEnabled) glassFragment = PrismalDualBlurShader.apply(glassFragment);
+        // Critical: user-disabled effects cannot change the GL program used for
+        // pre-existing Launcher, Dock, Gboard or SystemUI glass.
         glassProgram = createProgram(glassVertex, glassFragment);
+        baselineGlassProgram = glassProgram;
         glassUniformLocations.clear();
         if (sourceProgram == 0 || blurHProgram == 0 || blurVProgram == 0 || glassProgram == 0) {
             throw new IllegalStateException("Prismal shader program creation failed");
@@ -557,6 +564,56 @@ public final class PrismalRenderer implements AutoCloseable {
         cachedBlurHeight = -1;
         cachedBlurSigma = Float.NaN;
         glassTexturesBound = false;
+    }
+
+    /**
+     * Switch GL programs only if an actual node needs opt-in edges. On Mali/other
+     * ES2 GPUs the larger fragment may be rejected; retain the known-good
+     * baseline program in that case. All session owners share this fail-open path.
+     */
+    private boolean selectGlassProgramForNode() {
+        boolean wantsDecorations = edgeDecoration.hasStroke() || edgeDecoration.hasShadow();
+        if (wantsDecorations && decoratedGlassProgram == 0 && !decorationProgramUnavailable) {
+            try {
+                String fragment = PrismalOs4InvariantShader.apply(
+                        PrismalComponentGateShader.apply(
+                                PrismalOpticalEdgeShader.apply(
+                                        PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
+                fragment = PrismalEdgeDecorationShader.apply(fragment);
+                if (dualBlurEnabled) fragment = PrismalDualBlurShader.apply(fragment);
+                decoratedGlassProgram = createProgram(
+                        PrismalRasterGuardShader.applyWithEdgeGuard(
+                                PrismalShaderSources.VERTEX), fragment);
+            } catch (RuntimeException gpuRejectedShader) {
+                decorationProgramUnavailable = true;
+                android.util.Log.e("LiquidDock-Prismal",
+                        "Optional edge shader failed; keeping original glass", gpuRejectedShader);
+            }
+        }
+        int selected = wantsDecorations && decoratedGlassProgram != 0
+                ? decoratedGlassProgram : baselineGlassProgram;
+        if (glassProgram != selected) {
+            glassProgram = selected;
+            glassPositionLocation = requireAttrib(glassProgram, "a_position");
+            glassUniformLocations.clear();
+            GLES20.glUseProgram(glassProgram);
+            // Sampler bindings and uniform locations belong to each linked program.
+            GLES20.glUniform1i(glassUniformLocation("u_backgroundTexture"), 0);
+            GLES20.glUniform1i(glassUniformLocation("u_blurredTexture"), 1);
+            GLES20.glUniform1i(glassUniformLocation("u_useBlurredTexture"), 1);
+            if (dualBlurEnabled) {
+                GLES20.glUniform1i(glassUniformLocation("u_workspaceBlurredTexture"), 2);
+            }
+            cachedStaticParams = null;
+            cachedHighlightMask = Integer.MIN_VALUE;
+            cachedResolutionWidth = cachedResolutionHeight = -1;
+            glassTexturesBound = false;
+            lastUploadedEdge = null;
+            lastUploadedEdgeDensity = Float.NaN;
+            lastUploadedMinDimension = Float.NaN;
+            lastUploadedGuard = Float.NaN;
+        }
+        return selected == decoratedGlassProgram && selected != 0;
     }
 
     private void ensureTargets(int nextWidth, int nextHeight) {
@@ -675,8 +732,10 @@ public final class PrismalRenderer implements AutoCloseable {
         // The fragment shader renders a full-frame quad per glass node. Restrict its expensive
         // refraction/highlight shading to the SDF silhouette with an AA guard. This preserves
         // native-pixel edge fidelity at reduced backdrop capture density.
+        boolean decoratedProgramActive = selectGlassProgramForNode();
         float minDimension = Math.min(g.glassWidth, g.glassHeight);
-        float edgeGuard = edgeDecoration.extraGuardPx(edgeDensity, minDimension);
+        float edgeGuard = decoratedProgramActive
+                ? edgeDecoration.extraGuardPx(edgeDensity, minDimension) : 0f;
         if (!PrismalNodeScissor.computeInto(
                 g, frameTarget.width, frameTarget.height, nodeScissor, edgeGuard)) return;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
@@ -710,30 +769,32 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform2f("u_glassSize", g.glassWidth, g.glassHeight);
         uniform4f("u_cornerRadii", g.topLeftRadius, g.topRightRadius,
                 g.bottomRightRadius, g.bottomLeftRadius);
-        if (lastUploadedGuard != edgeGuard) {
-            uniform1f("u_edgeRasterGuardPx", edgeGuard);
-            lastUploadedGuard = edgeGuard;
-        }
-        PrismalEdgeDecoration decoration = edgeDecoration;
-        // Cache decoration uniforms; icon-heavy pages must not re-upload ~8 uniforms
-        // per node. Node visibility remains in the existing u_transmittance only once.
-        if (lastUploadedEdge != decoration
-                || lastUploadedEdgeDensity != edgeDensity
-                || lastUploadedMinDimension != minDimension) {
-            uniform1f("u_outerStrokeWidthPx", decoration.strokeWidthDp * edgeDensity);
-            uniform1f("u_strokeLightResponse", decoration.strokeLightResponse);
-            uniform4f("u_outerStrokeColor", decoration.strokeR, decoration.strokeG,
-                    decoration.strokeB, decoration.strokeA);
-            uniform1f("u_dropShadowRadiusPx",
-                    decoration.effectiveShadowRadiusPx(edgeDensity, minDimension));
-            uniform1f("u_dropShadowLightFollow", decoration.shadowLightFollow);
-            uniform1f("u_dropShadowOffsetYPx",
-                    decoration.effectiveShadowOffsetYPx(edgeDensity, minDimension));
-            uniform4f("u_dropShadowColor", decoration.shadowR, decoration.shadowG,
-                    decoration.shadowB, decoration.shadowA);
-            lastUploadedEdge = decoration;
-            lastUploadedEdgeDensity = edgeDensity;
-            lastUploadedMinDimension = minDimension;
+        if (decoratedProgramActive) {
+            if (lastUploadedGuard != edgeGuard) {
+                uniform1f("u_edgeRasterGuardPx", edgeGuard);
+                lastUploadedGuard = edgeGuard;
+            }
+            PrismalEdgeDecoration decoration = edgeDecoration;
+            // Only the optional program owns these uniforms; the baseline shader
+            // retains the exact PR #425 uniform and geometry contract.
+            if (lastUploadedEdge != decoration
+                    || lastUploadedEdgeDensity != edgeDensity
+                    || lastUploadedMinDimension != minDimension) {
+                uniform1f("u_outerStrokeWidthPx", decoration.strokeWidthDp * edgeDensity);
+                uniform1f("u_strokeLightResponse", decoration.strokeLightResponse);
+                uniform4f("u_outerStrokeColor", decoration.strokeR, decoration.strokeG,
+                        decoration.strokeB, decoration.strokeA);
+                uniform1f("u_dropShadowRadiusPx",
+                        decoration.effectiveShadowRadiusPx(edgeDensity, minDimension));
+                uniform1f("u_dropShadowLightFollow", decoration.shadowLightFollow);
+                uniform1f("u_dropShadowOffsetYPx",
+                        decoration.effectiveShadowOffsetYPx(edgeDensity, minDimension));
+                uniform4f("u_dropShadowColor", decoration.shadowR, decoration.shadowG,
+                        decoration.shadowB, decoration.shadowA);
+                lastUploadedEdge = decoration;
+                lastUploadedEdgeDensity = edgeDensity;
+                lastUploadedMinDimension = minDimension;
+            }
         }
 
         if (cachedStaticParams != p) {
@@ -1028,8 +1089,11 @@ public final class PrismalRenderer implements AutoCloseable {
         if (sourceProgram != 0) GLES20.glDeleteProgram(sourceProgram);
         if (blurHProgram != 0) GLES20.glDeleteProgram(blurHProgram);
         if (blurVProgram != 0) GLES20.glDeleteProgram(blurVProgram);
-        if (glassProgram != 0) GLES20.glDeleteProgram(glassProgram);
-        sourceProgram = blurHProgram = blurVProgram = glassProgram = 0;
+        if (baselineGlassProgram != 0) GLES20.glDeleteProgram(baselineGlassProgram);
+        if (decoratedGlassProgram != 0) GLES20.glDeleteProgram(decoratedGlassProgram);
+        baselineGlassProgram = decoratedGlassProgram = glassProgram = 0;
+        decorationProgramUnavailable = false;
+        sourceProgram = blurHProgram = blurVProgram = 0;
         sourcePositionLocation = sourceUvLocation = sourceTextureLocation = -1;
         blurHPositionLocation = blurHTextureLocation = blurHTexelSizeLocation
                 = blurHWeightsLocation = blurHSigmaLocation = -1;
