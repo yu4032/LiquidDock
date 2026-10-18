@@ -811,6 +811,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         int staticGeometryReads = 0;
         int staticCacheHits = 0;
         int staticNullCacheHits = 0;
+        int staticWidgetCacheHits = 0;
         widgetWidthFrame.reset();
         // Native WindowElement/Recents/unlock may animate independently of View properties.
         // Keep their existing per-frame capture authority; only reuse genuinely stable nodes.
@@ -832,10 +833,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 launchProxyActive |= node.isLaunchProxyActive();
                 if (forceStaticCapture) {
                     node.invalidateStaticGeometry();
-                } else if (node.canReuseStaticGeometry(root) && state.frame != null) {
+                } else if (node.canReuseStaticGeometry(root, widgetWidthFrame)
+                        && state.frame != null) {
                     if (tracing) {
                         staticCacheHits++;
                         if (state.frame.geometry == null) staticNullCacheHits++;
+                        if (node.nodeKind() == LauncherGlassNodeKind.WIDGET) {
+                            staticWidgetCacheHits++;
+                        }
                     }
                     continue;
                 }
@@ -884,6 +889,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 Trace.setCounter("LD.Workspace.StaticCacheHits", staticCacheHits);
                 Trace.setCounter("LD.Workspace.StaticNullCacheHits", staticNullCacheHits);
                 if (staticSnapshot.length > 0) {
+                    Trace.setCounter("LD.Workspace.StaticWidgetCacheHits", staticWidgetCacheHits);
                     Trace.setCounter("LD.Workspace.WidgetGridReads", widgetWidthFrame.gridReads);
                     Trace.setCounter("LD.Workspace.WidgetGridHits", widgetWidthFrame.gridHits);
                 }
