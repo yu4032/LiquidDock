@@ -819,7 +819,8 @@ final class LauncherGlassSceneController {
                     || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
             current.setSceneVisible(visible, state.consumeFadeReveal(),
-                    state.requiresImmediateLayerHide(folderCovered, recentsCovered));
+                    state.requiresImmediateLayerHide(folderCovered, recentsCovered),
+                    folderCovered && !recentsCovered && !state.isRotationPresentationPending());
         }
     }
 
