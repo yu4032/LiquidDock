@@ -190,6 +190,8 @@ public final class ConfigSchema {
                 "dock_side_dark_edge_alpha", 70, 70, 70, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> SIDE_DARK_EDGE_WIDTH = integer(
                 "dock_side_dark_edge_width_px", 3, 3, 3, 1, 12, ConfigKey.ExportMode.IF_PRESENT);
+        // Historical preference key retained: value now scales actual OS4
+        // directional irradiance contrast, not a fixed left/right mask.
         public static final ConfigKey<Integer> SIDE_DARK_EDGE_LIGHT_SUPPRESSION = integer(
                 "dock_side_dark_edge_light_suppression", 100, 100, 100, 0, 100,
                 ConfigKey.ExportMode.IF_PRESENT);
@@ -257,6 +259,8 @@ public final class ConfigSchema {
                 "liquid_outer_stroke_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_STROKE_ALPHA = integer(
                 "liquid_outer_stroke_alpha", 66, 66, 66, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+        // Controls conversion from the OS4 main/opposite irradiance delta to
+        // perceptual darkening; the rendering direction comes from the light vector.
         public static final ConfigKey<Integer> OUTER_STROKE_LIGHT_RESPONSE = integer(
                 "liquid_outer_stroke_light_response", 80, 80, 80, 0, 100,
                 ConfigKey.ExportMode.IF_PRESENT);

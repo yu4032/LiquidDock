@@ -72,8 +72,8 @@ internal fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, master
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Dock.SIDE_DARK_EDGE_ENABLED,
-                    "仅在侧边显示暗描边",
-                    "上下由 OS4 高光负责，受光侧黑边淡出；下方 Dock 阴影保持原位",
+                    "光照推导暗边",
+                    "从 OS4 主光和反向补光推导背光轮廓，方向随光源旋转；Dock 下方原生阴影不变",
                     masterEnabled && dockEnabled,
                 ) { sideDarkEdge = it }
             }

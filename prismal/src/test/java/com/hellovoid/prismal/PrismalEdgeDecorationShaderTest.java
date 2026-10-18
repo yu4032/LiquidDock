@@ -15,9 +15,14 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(decorated.contains("dot(edgeN, u_invariantLightXY)"));
         assertTrue(decorated.contains("u_strokeLightResponse"));
         assertTrue(decorated.contains("u_strokeMinCos"));
-        assertTrue(decorated.contains("float strokeWidth = u_outerStrokeWidthPx * sideCoverage;"));
-        assertTrue(decorated.contains("sideT * sideT * (3.0 - 2.0 * sideT)"));
-        assertTrue(decorated.contains("sideCoverage * darkFacing"));
+        assertTrue(decorated.contains("float strokeWidth = u_outerStrokeWidthPx * darkCoverage;"));
+        assertTrue(decorated.contains("coneT * coneT * (3.0 - 2.0 * coneT)"));
+        assertTrue(decorated.contains("darkCoverage * irradianceContrast"));
+        assertTrue(decorated.contains("u_os4DirectionalOppositeIntensity"));
+        assertTrue(decorated.contains("u_os4DirectionalIntensity"));
+        assertTrue(decorated.contains("float unlitFacing = -facing * sign(lightContrast);"));
+        assertFalse(decorated.contains("abs(edgeN.x)"));
+        assertFalse(decorated.contains("sideCoverage"));
         assertTrue(decorated.contains("if (distMask > 0.0)"));
         assertTrue(decorated.contains("vec2 baseOffset = edgeRefractionUv;"));
         assertTrue(decorated.contains("u_os4DirectionalIntensity"));
@@ -71,6 +76,28 @@ public class PrismalEdgeDecorationShaderTest {
         assertEquals(0f, PrismalEdgeDecoration.NONE.extraGuardPx(3f), 0f);
         assertFalse(PrismalEdgeDecoration.NONE.hasShadow());
         assertFalse(PrismalEdgeDecoration.NONE.hasStroke());
+    }
+
+    @Test public void signedLightingOppositeFillAndStrengthControlTheDarkContour() {
+        assertEquals(0f, darkContour(1f, 0.4f, 0.4f, 0.6f), 0f);
+        assertEquals(0f, darkContour(1f, 0f, 0f, 0.6f), 0f);
+        assertEquals(0f, darkContour(1f, 0.6f, 0.1f, 0.6f), 0f);
+        assertTrue(darkContour(-1f, 0.6f, 0.1f, 0.6f) > 0f);
+        assertTrue(darkContour(1f, 0.1f, 0.6f, 0.6f) > 0f);
+        assertTrue(darkContour(-1f, 0.9f, 0.1f, 0.6f)
+                > darkContour(-1f, 0.5f, 0.1f, 0.6f));
+        assertTrue(darkContour(-0.9f, 0.6f, 0.1f, 0.6f)
+                < darkContour(-1f, 0.6f, 0.1f, 0.6f));
+    }
+
+    /** Numeric reference to the GLSL light response: no left/right assumption. */
+    private static float darkContour(float normalDotLight, float main, float opposite,
+                                     float minCos) {
+        float contrast = main - opposite;
+        float unlit = -normalDotLight * Math.signum(contrast);
+        float t = Math.max(0f, Math.min(1f,
+                (unlit - minCos) / Math.max(1f - minCos, 0.001f)));
+        return t * t * (3f - 2f * t) * Math.min(Math.abs(contrast), 1f);
     }
 
     private static int count(String text, String pattern) {

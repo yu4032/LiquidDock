@@ -24,7 +24,7 @@ final class DockDirectionalSideEdgeState {
         float width = clamp(prefs.getInt(
                 ConfigSchema.Dock.SIDE_DARK_EDGE_WIDTH.name(),
                 ConfigSchema.Dock.SIDE_DARK_EDGE_WIDTH.runtimeFallback()), 1, 12);
-        float suppression = clamp(prefs.getInt(
+        float response = clamp(prefs.getInt(
                 ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION.name(),
                 ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION.runtimeFallback()), 0, 100) / 100f;
         float angle = clamp(prefs.getInt(
@@ -33,7 +33,7 @@ final class DockDirectionalSideEdgeState {
         // The RenderNode MiShadow remains the whole-Dock shadow owner.
         style = new PrismalEdgeDecoration(
                 width, 0f, 0f, 0f, alpha, 0f, 0f,
-                0f, 0f, 0f, 0f, 0f, suppression, angle);
+                0f, 0f, 0f, 0f, 0f, response, angle);
     }
 
     static PrismalEdgeDecoration current() {

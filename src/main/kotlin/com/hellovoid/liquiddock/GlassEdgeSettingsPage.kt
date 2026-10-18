@@ -140,15 +140,15 @@ internal fun GlassEdgeSettingsPage(
         item(key = "stroke-switch") {
             SettingsCard {
                 toggle(ConfigSchema.Glass.OUTER_STROKE_ENABLED, "启用独立描边",
-                    "叠加于 Prismal 的自然光学边缘")
+                    "背光侧按主光与反向补光照度差生成，光向改变时自动旋转")
             }
         }
         item(key = "stroke-geometry") {
             SettingsCard {
-                number(ConfigSchema.Glass.OUTER_STROKE_WIDTH, "侧边描边宽度", "dp")
-                number(ConfigSchema.Glass.OUTER_STROKE_ANGLE_RANGE, "侧边描边延伸角度", "°")
+                number(ConfigSchema.Glass.OUTER_STROKE_WIDTH, "背光描边宽度", "dp")
+                number(ConfigSchema.Glass.OUTER_STROKE_ANGLE_RANGE, "背光轮廓角度范围", "°")
                 number(ConfigSchema.Glass.OUTER_STROKE_ALPHA, "描边不透明度")
-                number(ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE, "受光侧黑边抑制", "%")
+                number(ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE, "照度差响应强度", "%")
             }
         }
         item(key = "stroke-color") {

@@ -21,7 +21,9 @@ final class PrismalEdgeDecorationShader {
         requireOnce(shader, BEFORE_DISCARD);
         requireOnce(shader, FINAL);
         if (!shader.contains("vec2 os4SdfGradient = vec2(")
-                || !shader.contains("uniform vec2 u_invariantLightXY;")) {
+                || !shader.contains("uniform vec2 u_invariantLightXY;")
+                || !shader.contains("uniform float u_os4DirectionalIntensity;")
+                || !shader.contains("uniform float u_os4DirectionalOppositeIntensity;")) {
             throw new IllegalStateException("Prismal OS4 edge/light invariants changed");
         }
 
@@ -34,6 +36,8 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_dropShadowRadiusPx;
                 uniform float u_dropShadowOffsetYPx;
                 uniform float u_dropShadowLightFollow;
+                // The same two irradiance controls as Prismal's OS4 highlights.
+                // u_strokeMinCos is the user-tunable shadow-side cone half angle.
                 """)
                 .replace(BEFORE_DISCARD, """
                     // Run after upstream OS4 fwidth/dFdx/dFdy so helper quads can
@@ -42,18 +46,24 @@ final class PrismalEdgeDecorationShader {
                     if (distMask > 0.0) {
                         vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
                         float facing = dot(edgeN, u_invariantLightXY);
-                        // Side aperture is shared by Dock and every other glass.
-                        // At each endpoint the border thickness AND alpha taper to zero.
-                        float sideT = clamp(
-                                (abs(edgeN.x) - u_strokeMinCos)
+                        // Signed directional irradiance difference: negative is unlit.
+                        // No orientation mask: the contour may appear on ANY edge.
+                        // With balanced/disabled directions, no artificial dark border.
+                        float lightContrast = max(u_os4DirectionalIntensity, 0.0)
+                                - max(u_os4DirectionalOppositeIntensity, 0.0);
+                        float unlitFacing = -facing * sign(lightContrast);
+                        // Angular falloff is measured FROM the actual unlit normal.
+                        // Smooth coverage and width both vanish at cone boundaries.
+                        float coneT = clamp(
+                                (unlitFacing - u_strokeMinCos)
                                 / max(1.0 - u_strokeMinCos, 0.001), 0.0, 1.0);
-                        float sideCoverage = sideT * sideT * (3.0 - 2.0 * sideT);
-                        float strokeWidth = u_outerStrokeWidthPx * sideCoverage;
-                        float darkFacing = 1.0 - clamp(
-                                max(facing, 0.0) * u_strokeLightResponse, 0.0, 1.0);
+                        float darkCoverage = coneT * coneT * (3.0 - 2.0 * coneT);
+                        float strokeWidth = u_outerStrokeWidthPx * darkCoverage;
+                        float irradianceContrast = clamp(abs(lightContrast), 0.0, 1.0)
+                                * u_strokeLightResponse;
                         float rim = 0.0;
                         if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
-                            rim = u_outerStrokeColor.a * sideCoverage * darkFacing
+                            rim = u_outerStrokeColor.a * darkCoverage * irradianceContrast
                                     * (1.0 - smoothstep(
                                             0.0, max(strokeWidth, 0.001), distMask));
                         }
@@ -84,17 +94,25 @@ final class PrismalEdgeDecorationShader {
                     if (u_outerStrokeWidthPx > 0.0 && u_outerStrokeColor.a > 0.0) {
                         vec2 edgeN = normalize(os4SdfGradient + vec2(0.00001));
                         float facing = dot(edgeN, u_invariantLightXY);
-                        float sideT = clamp(
-                                (abs(edgeN.x) - u_strokeMinCos)
+                        // Signed directional irradiance difference: negative is unlit.
+                        // No orientation mask: the contour may appear on ANY edge.
+                        // With balanced/disabled directions, no artificial dark border.
+                        float lightContrast = max(u_os4DirectionalIntensity, 0.0)
+                                - max(u_os4DirectionalOppositeIntensity, 0.0);
+                        float unlitFacing = -facing * sign(lightContrast);
+                        // Angular falloff is measured FROM the actual unlit normal.
+                        // Smooth coverage and width both vanish at cone boundaries.
+                        float coneT = clamp(
+                                (unlitFacing - u_strokeMinCos)
                                 / max(1.0 - u_strokeMinCos, 0.001), 0.0, 1.0);
-                        float sideCoverage = sideT * sideT * (3.0 - 2.0 * sideT);
-                        float strokeWidth = u_outerStrokeWidthPx * sideCoverage;
-                        float darkFacing = 1.0 - clamp(
-                                max(facing, 0.0) * u_strokeLightResponse, 0.0, 1.0);
+                        float darkCoverage = coneT * coneT * (3.0 - 2.0 * coneT);
+                        float strokeWidth = u_outerStrokeWidthPx * darkCoverage;
+                        float irradianceContrast = clamp(abs(lightContrast), 0.0, 1.0)
+                                * u_strokeLightResponse;
                         float rim = 1.0 - smoothstep(
                                 0.0, max(strokeWidth, 0.001), -distMask);
                         color = mix(color, u_outerStrokeColor.rgb,
-                                clamp(u_outerStrokeColor.a * sideCoverage * darkFacing * rim, 0.0, 1.0));
+                                clamp(u_outerStrokeColor.a * darkCoverage * irradianceContrast * rim, 0.0, 1.0));
                     }
                     """ + FINAL);
     }

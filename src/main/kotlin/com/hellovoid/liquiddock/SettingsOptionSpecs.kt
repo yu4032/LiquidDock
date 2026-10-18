@@ -407,10 +407,10 @@ internal val strokeSpecs = listOf(
     IntSpec(ConfigSchema.Dock.STANDARD_STROKE_WIDTH, "标准描边宽度", "dp", null, IntSection.StrokeGeometry),
 )
 internal val sideDarkEdgeSpecs = listOf(
-    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_ALPHA, "侧边暗描边强度", "%"),
-    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_WIDTH, "侧边暗描边宽度", "px"),
-    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION, "受光侧黑边抑制", "%"),
-    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_ANGLE_RANGE, "侧边方向光角度范围", "°"),
+    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_ALPHA, "背光暗边强度", "%"),
+    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_WIDTH, "背光暗边线宽", "px"),
+    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_LIGHT_SUPPRESSION, "照度差响应强度", "%"),
+    IntSpec(ConfigSchema.Dock.SIDE_DARK_EDGE_ANGLE_RANGE, "背光轮廓角度范围", "°"),
 )
 internal val shadowSpecs = listOf(
     IntSpec(ConfigSchema.Dock.SHADOW_RADIUS, "Dock 阴影柔化", "dp", "dock_shadow"),
