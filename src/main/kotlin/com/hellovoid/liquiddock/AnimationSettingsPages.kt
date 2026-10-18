@@ -32,6 +32,7 @@ internal fun AnimationWorkspacePage(
         "调整工作区与 Dock 的玻璃过渡动画。",
     ) {
         IntSetting(prefs, animationWorkspaceVisibilitySpec, masterEnabled)
+        IntSetting(prefs, animationFolderOpenGlassFadeSpec, masterEnabled)
         IntSetting(prefs, animationDockIconRevealSpec, masterEnabled)
         IntSetting(
             prefs,
