@@ -23,7 +23,8 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(decorated.contains("vec2 edgeN = normalize(os4SdfGradient"));
         // Upstream gradient sampling legitimately uses shifted SDF calls.
         // The newly inserted exterior branch must not add another one.
-        String exterior = decorated.substring(decorated.indexOf("if (distMask > 0.0)"),
+        String exterior = decorated.substring(
+                decorated.indexOf("// Run after upstream OS4 fwidth/dFdx/dFdy"),
                 decorated.indexOf("if (opacity < 0.001) discard;"));
         assertFalse(exterior.contains("sdRoundBox("));
         assertFalse(exterior.contains("normalize(u_lightDir"));
