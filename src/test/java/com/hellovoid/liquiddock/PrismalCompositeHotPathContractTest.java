@@ -68,7 +68,8 @@ public class PrismalCompositeHotPathContractTest {
         // The first observation must still traverse/capture, including when the
         // guard's own fingerprint has become stable before a frame exists.
         assertTrue(source.contains(
-                "node.canReuseStaticGeometry(root) && state.frame != null"));
+                "node.canReuseStaticGeometry(root, widgetWidthFrame)"));
+        assertTrue(source.contains("&& state.frame != null"));
         // Dynamic proxies and widgets never share the empty-folder cache path.
         assertTrue(source.contains(
                 "node.nodeKind() != LauncherGlassNodeKind.WIDGET"));
