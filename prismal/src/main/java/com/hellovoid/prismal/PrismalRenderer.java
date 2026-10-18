@@ -572,7 +572,7 @@ public final class PrismalRenderer implements AutoCloseable {
      * baseline program in that case. All session owners share this fail-open path.
      */
     private boolean selectGlassProgramForNode() {
-        boolean wantsDecorations = edgeDecoration.hasStroke() || edgeDecoration.hasShadow();
+        boolean wantsDecorations = edgeDecoration.hasBacklit() || edgeDecoration.hasShadow();
         if (wantsDecorations && decoratedGlassProgram == 0 && !decorationProgramUnavailable) {
             // One-time diagnostic distinguishes an absent setting/renderer route
             // from an unsupported Mali shader. No per-frame log or allocation.
@@ -786,17 +786,15 @@ public final class PrismalRenderer implements AutoCloseable {
             if (lastUploadedEdge != decoration
                     || lastUploadedEdgeDensity != edgeDensity
                     || lastUploadedMinDimension != minDimension) {
-                uniform1f("u_outerStrokeWidthPx", decoration.strokeWidthDp * edgeDensity);
-                uniform1f("u_strokeLightResponse", decoration.strokeLightResponse);
-                uniform1f("u_strokeMinCos", decoration.strokeMinCos);
-                uniform4f("u_outerStrokeColor", decoration.strokeR, decoration.strokeG,
-                        decoration.strokeB, decoration.strokeA);
-                uniform1f("u_dropShadowRadiusPx",
+                uniform1f("u_backlitWidthPx", decoration.backlitWidthDp * edgeDensity);
+                uniform1f("u_backlitStrength", decoration.backlitStrength);
+                uniform1f("u_backlitSoftness", decoration.backlitSoftness);
+                uniform1f("u_castShadowRadiusPx",
                         decoration.effectiveShadowRadiusPx(edgeDensity, minDimension));
-                uniform1f("u_dropShadowLightFollow", decoration.shadowLightFollow);
-                uniform1f("u_dropShadowOffsetYPx",
+                uniform1f("u_castShadowLightFollow", decoration.shadowLightFollow);
+                uniform1f("u_castShadowOffsetYPx",
                         decoration.effectiveShadowOffsetYPx(edgeDensity, minDimension));
-                uniform4f("u_dropShadowColor", decoration.shadowR, decoration.shadowG,
+                uniform4f("u_castShadowColor", decoration.shadowR, decoration.shadowG,
                         decoration.shadowB, decoration.shadowA);
                 lastUploadedEdge = decoration;
                 lastUploadedEdgeDensity = edgeDensity;
