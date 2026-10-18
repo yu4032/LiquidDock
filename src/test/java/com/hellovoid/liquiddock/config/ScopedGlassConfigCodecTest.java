@@ -49,7 +49,9 @@ public class ScopedGlassConfigCodecTest {
         assertEquals(145, imported.get(blur + "_tenths"));
         assertEquals(80, imported.get(tint));
         assertEquals(false, imported.get(caustics));
-        assertFalse(imported.containsKey(ConfigSchema.Glass.BLUR.name()));
+        // The standard backup intentionally includes current global defaults too.
+        assertEquals(ConfigSchema.Glass.BLUR.exportDefault(),
+                imported.get(ConfigSchema.Glass.BLUR.name()));
     }
 
     @Test public void invalidValuesAreClampedWithoutCrossScopeWrites() {

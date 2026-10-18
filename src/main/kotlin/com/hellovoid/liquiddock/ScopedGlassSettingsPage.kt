@@ -64,7 +64,7 @@ internal fun ScopedGlassSettingsPage(
                     enabled = enabled,
                     onClick = {
                         val edit = prefs.edit()
-                        for (b in basics) edit.remove(b.key)
+                        for (b in basics) edit.remove(b.key).remove("${b.key}_tenths")
                         for (d in optics) {
                             val key = ScopedGlassOptics.key(scope, d.config)
                             edit.remove(key).remove("${key}_tenths")

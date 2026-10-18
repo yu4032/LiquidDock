@@ -105,12 +105,14 @@ final class LiveGlassConfigState {
                     ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET.name())));
+    private static final Set<String> POPUP_POLICY_KEYS = Collections.unmodifiableSet(
+            new HashSet<>(Arrays.asList(
+                    ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
+                    ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name())));
     private static final Set<String> POPUP_KEYS = popupKeys();
 
     private static Set<String> popupKeys() {
-        Set<String> keys = new HashSet<>(Arrays.asList(
-                ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
-                ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name()));
+        Set<String> keys = new HashSet<>(POPUP_POLICY_KEYS);
         for (com.hellovoid.liquiddock.config.ConfigKey<Integer> config
                 : ScopedGlassOptics.keysForScope(ScopedGlassOptics.POPUP)) {
             keys.add(ScopedGlassOptics.key(ScopedGlassOptics.POPUP, config));
@@ -257,9 +259,15 @@ final class LiveGlassConfigState {
                 }
             }
             if (popupChanged) {
+                // Optical sliders must never reapply vendor text/icon tint on every
+                // frame; only explicit enable/dark-text changes affect popup policy.
+                boolean policyChanged = !project(lastPopup, POPUP_POLICY_KEYS)
+                        .equals(project(popup, POPUP_POLICY_KEYS));
                 lastPopup = popup;
-                MiuixShortcutMenuGlassHook.onLivePreferences(new ConfigReader(all));
-                MainHook.log(TAG + " shortcut popup policy updated");
+                if (policyChanged) {
+                    MiuixShortcutMenuGlassHook.onLivePreferences(new ConfigReader(all));
+                    MainHook.log(TAG + " shortcut popup policy updated");
+                }
             }
             if (recentsChanged) {
                 lastRecents = recents;
