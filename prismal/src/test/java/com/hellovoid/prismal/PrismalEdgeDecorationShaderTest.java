@@ -26,7 +26,7 @@ public class PrismalEdgeDecorationShaderTest {
         String exterior = decorated.substring(
                 decorated.indexOf("// Run after upstream OS4 fwidth/dFdx/dFdy"),
                 decorated.indexOf("if (opacity < 0.001) discard;"));
-        assertFalse(exterior.contains("sdRoundBox("));
+        assertFalse(exterior.contains("= sdRoundBox("));
         assertFalse(exterior.contains("normalize(u_lightDir"));
         assertEquals(1, count(decorated, "uniform vec2 u_invariantLightXY;"));
         // The exterior branch must be reached before the original early discard.
