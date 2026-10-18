@@ -119,8 +119,11 @@ public class PrismalCompositeHotPathContractTest {
         assertTrue(session.contains("if (forceStaticCapture) {"));
         assertTrue(session.contains("node.invalidateStaticGeometry();"));
         assertTrue(node.contains("spanOwner, spanX, widthDelta, staticViewFrame"));
-        assertTrue(session.contains("LD.Workspace.StaticViewReads"));
-        assertTrue(session.contains("LD.Workspace.StaticViewReuseHits"));
+        // Guard sampling must remain frame-scoped without debug timers on the hot path.
+        assertFalse(session.contains("LD.Workspace.StaticGuardNs"));
+        assertFalse(session.contains("LD.Workspace.StaticWidgetGuardNs"));
+        assertFalse(session.contains("LD.Workspace.StaticViewReads"));
+        assertFalse(session.contains("LD.Workspace.StaticViewReuseHits"));
     }
 
     @Test
