@@ -11,13 +11,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * One per-process immutable preference snapshot for exterior SDF decorations.
- *
- * Presence of a scoped setting overrides only that field, including explicit false.
- * Prismal's upstream innerShadow and OS4 optical edge keep their original semantics.
+ * One immutable per-process optical material snapshot, with field-level
+ * inheritance. Updates publish atomically; GL threads never read preferences.
  */
 public final class GlassEdgeEffects {
     public static final String GLOBAL = "global";
+    public static final String DOCK = "dock";
     public static final String ICON = "icon";
     public static final String WIDGET = "widget";
     public static final String FOLDER = "folder";
@@ -29,9 +28,13 @@ public final class GlassEdgeEffects {
     public static final String SECURITY_CENTER = "security_center";
 
     public static final List<String> SCOPES = Collections.unmodifiableList(Arrays.asList(
-            ICON, WIDGET, FOLDER, POPUP, HANDLE_MENU, DIALOG, GBOARD,
+            DOCK, ICON, WIDGET, FOLDER, POPUP, HANDLE_MENU, DIALOG, GBOARD,
             SEARCHBOX, SECURITY_CENTER));
     public static final List<ConfigKey<?>> KEYS = Collections.unmodifiableList(Arrays.asList(
+            ConfigSchema.Glass.BACKLIT_ENABLED,
+            ConfigSchema.Glass.BACKLIT_WIDTH,
+            ConfigSchema.Glass.BACKLIT_STRENGTH,
+            ConfigSchema.Glass.BACKLIT_SOFTNESS,
             ConfigSchema.Glass.OUTER_SHADOW_ENABLED,
             ConfigSchema.Glass.OUTER_SHADOW_RADIUS,
             ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y,
@@ -39,26 +42,18 @@ public final class GlassEdgeEffects {
             ConfigSchema.Glass.OUTER_SHADOW_GREEN,
             ConfigSchema.Glass.OUTER_SHADOW_BLUE,
             ConfigSchema.Glass.OUTER_SHADOW_ALPHA,
-            ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW,
-            ConfigSchema.Glass.OUTER_STROKE_ENABLED,
-            ConfigSchema.Glass.OUTER_STROKE_WIDTH,
-            ConfigSchema.Glass.OUTER_STROKE_ANGLE_RANGE,
-            ConfigSchema.Glass.OUTER_STROKE_RED,
-            ConfigSchema.Glass.OUTER_STROKE_GREEN,
-            ConfigSchema.Glass.OUTER_STROKE_BLUE,
-            ConfigSchema.Glass.OUTER_STROKE_ALPHA,
-            ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE));
+            ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW));
 
     private static volatile Map<String, PrismalEdgeDecoration> current =
             Collections.emptyMap();
-    private static volatile Map<String, PrismalEdgeDecoration> strokesOnly =
+    private static volatile Map<String, PrismalEdgeDecoration> withoutNativeShadows =
             Collections.emptyMap();
 
     private GlassEdgeEffects() {}
 
     public static String key(String scope, ConfigKey<?> config) {
         if (!SCOPES.contains(scope) || !KEYS.contains(config)) {
-            throw new IllegalArgumentException("unsupported glass edge field: " + scope);
+            throw new IllegalArgumentException("unsupported optical material field: " + scope);
         }
         return "liquid_scope_" + scope + "_"
                 + config.name().substring("liquid_".length());
@@ -66,49 +61,47 @@ public final class GlassEdgeEffects {
 
     static PrismalEdgeDecoration resolve(ConfigReader reader, String scope) {
         if (!GLOBAL.equals(scope) && !SCOPES.contains(scope)) {
-            throw new IllegalArgumentException("unsupported glass effect scope: " + scope);
+            throw new IllegalArgumentException("unsupported optical material scope: " + scope);
         }
         if (reader == null) return PrismalEdgeDecoration.NONE;
-        boolean stroke = bool(reader, scope, ConfigSchema.Glass.OUTER_STROKE_ENABLED);
-        boolean shadow = bool(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_ENABLED);
+        boolean backlit = bool(reader, scope, ConfigSchema.Glass.BACKLIT_ENABLED);
+        boolean castShadow = bool(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_ENABLED);
         return new PrismalEdgeDecoration(
-                stroke ? decimal(reader, scope, ConfigSchema.Glass.OUTER_STROKE_WIDTH) : 0f,
-                integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_RED) / 255f,
-                integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_GREEN) / 255f,
-                integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_BLUE) / 255f,
-                stroke ? integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_ALPHA) / 255f : 0f,
-                shadow ? decimal(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_RADIUS) : 0f,
+                backlit ? decimal(reader, scope, ConfigSchema.Glass.BACKLIT_WIDTH) : 0f,
+                backlit ? integer(reader, scope, ConfigSchema.Glass.BACKLIT_STRENGTH) / 100f : 0f,
+                integer(reader, scope, ConfigSchema.Glass.BACKLIT_SOFTNESS) / 100f,
+                castShadow ? decimal(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_RADIUS) : 0f,
                 decimal(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y),
                 integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_RED) / 255f,
                 integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_GREEN) / 255f,
                 integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_BLUE) / 255f,
-                shadow ? integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_ALPHA) / 255f : 0f,
-                integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW) / 100f,
-                integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_LIGHT_RESPONSE) / 100f,
-                integer(reader, scope, ConfigSchema.Glass.OUTER_STROKE_ANGLE_RANGE));
+                castShadow ? integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_ALPHA) / 255f : 0f,
+                integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW) / 100f);
     }
 
     public static synchronized void refresh(ConfigReader reader) {
-        Map<String, PrismalEdgeDecoration> resolved = new HashMap<>();
-        resolved.put(GLOBAL, resolve(reader, GLOBAL));
-        for (String scope : SCOPES) resolved.put(scope, resolve(reader, scope));
-        current = Collections.unmodifiableMap(resolved);
-        Map<String, PrismalEdgeDecoration> withoutNativeShadows = new HashMap<>();
-        for (Map.Entry<String, PrismalEdgeDecoration> entry : resolved.entrySet()) {
-            withoutNativeShadows.put(entry.getKey(), entry.getValue().strokeOnly());
+        Map<String, PrismalEdgeDecoration> active = new HashMap<>();
+        Map<String, PrismalEdgeDecoration> onlyOptics = new HashMap<>();
+        active.put(GLOBAL, resolve(reader, GLOBAL));
+        onlyOptics.put(GLOBAL, active.get(GLOBAL).withoutCastShadow());
+        for (String scope : SCOPES) {
+            PrismalEdgeDecoration material = resolve(reader, scope);
+            active.put(scope, material);
+            onlyOptics.put(scope, material.withoutCastShadow());
         }
-        strokesOnly = Collections.unmodifiableMap(withoutNativeShadows);
+        current = Collections.unmodifiableMap(active);
+        withoutNativeShadows = Collections.unmodifiableMap(onlyOptics);
     }
 
     public static PrismalEdgeDecoration current(String scope) {
-        PrismalEdgeDecoration style = current.get(scope);
-        return style == null ? PrismalEdgeDecoration.NONE : style;
+        PrismalEdgeDecoration material = current.get(scope);
+        return material == null ? PrismalEdgeDecoration.NONE : material;
     }
 
-    /** On surfaces with a native shadow owner, do not draw a second GPU halo. */
-    public static PrismalEdgeDecoration strokeOnly(String scope) {
-        PrismalEdgeDecoration style = strokesOnly.get(scope);
-        return style != null ? style : PrismalEdgeDecoration.NONE;
+    /** Never render a duplicate exterior shadow over an OEM native shadow. */
+    public static PrismalEdgeDecoration withoutNativeShadow(String scope) {
+        PrismalEdgeDecoration material = withoutNativeShadows.get(scope);
+        return material == null ? PrismalEdgeDecoration.NONE : material;
     }
 
     private static String readKey(ConfigReader reader, String scope, ConfigKey<?> config) {
