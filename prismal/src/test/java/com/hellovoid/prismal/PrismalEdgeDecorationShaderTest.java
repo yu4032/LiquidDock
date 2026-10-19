@@ -192,12 +192,31 @@ public class PrismalEdgeDecorationShaderTest {
                 PrismalShaderSources.VERTEX).contains("u_edgeRasterGuardPx"));
     }
 
+    @Test public void materialTintPreservesSourceHueInsteadOfWhiteBlackEndpoints() {
+        String source = PrismalEdgeDecorationShader.apply(upstream());
+        assertTrue(source.contains("float transmission = mix(1.0, 0.12, darkWeight);"));
+        assertTrue(source.contains("vec3 specTint = mix(transmitted, highlight, 0.25);"));
+        assertFalse(source.contains("transmitted * 0.035"));
+        assertFalse(source.contains("max(transmitted, highlight), 0.88"));
+
+        float[] warm = {.70f, .42f, .24f};
+        float[] highlight = {.98f, .992f, 1.008f};
+        float[] bright = new float[3], dark = new float[3];
+        for (int i=0;i<3;i++) {
+            bright[i]=contourColor(warm[i], highlight[i], 0f);
+            dark[i]=contourColor(warm[i], highlight[i], 1f);
+        }
+        assertTrue("bright rim retains red-green chroma", bright[0]-bright[1] > .20f);
+        assertTrue("dark rim remains warm instead of neutral black", dark[0] > dark[1]);
+        assertEquals(warm[0]/warm[2], dark[0]/dark[2], .001f);
+    }
+
     @Test public void refractionDrivesBothBrightAndDarkContourRgb() {
         float brown = .49f, gray = .42f, os4White = .98f;
         assertTrue(contourColor(brown, os4White, 0f) > brown);
         assertTrue(contourColor(gray, os4White, 0f) > gray);
-        assertTrue(contourColor(brown, os4White, 1f) < brown * .04f);
-        assertTrue(contourColor(gray, os4White, 1f) < gray * .04f);
+        assertEquals(brown * .12f, contourColor(brown, os4White, 1f), .0001f);
+        assertEquals(gray * .12f, contourColor(gray, os4White, 1f), .0001f);
         assertNotEquals("dark color is sampled, not constant ink",
                 contourColor(brown, os4White, 1f),
                 contourColor(gray, os4White, 1f), .0001f);
@@ -210,10 +229,11 @@ public class PrismalEdgeDecorationShaderTest {
         }
     }
     private static float contourColor(float transmitted, float highlight, float darkWeight) {
-        float lit = transmitted*.12f + Math.max(transmitted,highlight)*.88f;
-        float dark = transmitted*.035f;
-        float shade = smooth(Math.min(1f, Math.max(0f, darkWeight/.72f)));
-        return lit*(1f-shade) + dark*shade;
+        float transmission = 1f*(1f-darkWeight) + .12f*darkWeight;
+        float lightEnergy = 1f; // representative default profile
+        float specGain = (.10f + .18f*lightEnergy)*(1f-darkWeight);
+        float tint = transmitted*.75f + highlight*.25f;
+        return Math.min(1f, Math.max(0f, transmitted*transmission + tint*specGain));
     }
 }
 

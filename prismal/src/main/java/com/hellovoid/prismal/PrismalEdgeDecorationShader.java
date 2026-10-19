@@ -43,11 +43,20 @@ final class PrismalEdgeDecorationShader {
                 // component gate declares only inside a conditional block.
                 const vec3 OS4_OPTICAL_RIM_COLOR = vec3(0.98, 0.992, 1.008);
 
-                // Optical edge shades actual transmitted RGB and inherited OS4 rim white.
+                // Source hue survives both sides of the rim. Only a small
+                // specular energy term favors OS4's highlight palette, while
+                // the dark side attenuates transmission without turning black.
+                // Rim weights already contain the sole angular smoothstep.
                 vec3 refractedContourColor(vec3 transmitted, vec3 highlight, float darkWeight) {
-                    vec3 lit = mix(transmitted, max(transmitted, highlight), 0.88);
-                    vec3 dark = transmitted * 0.035;
-                    return mix(lit, dark, smoothstep(0.0, 0.72, darkWeight));
+                    float lightEnergy = clamp(
+                            (max(u_os4DirectionalIntensity, 0.0)
+                             + max(u_os4DirectionalOppositeIntensity, 0.0)) * 2.0,
+                            0.0, 1.0);
+                    float transmission = mix(1.0, 0.12, darkWeight);
+                    float specGain = (0.10 + 0.18 * lightEnergy) * (1.0 - darkWeight);
+                    vec3 specTint = mix(transmitted, highlight, 0.25);
+                    return clamp(transmitted * transmission + specTint * specGain,
+                            vec3(0.0), vec3(1.0));
                 }
                 """)
                 .replace(BEFORE_DISCARD, """
