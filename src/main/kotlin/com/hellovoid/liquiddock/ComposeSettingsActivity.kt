@@ -7,17 +7,22 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -30,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -121,6 +127,7 @@ private fun LiquidDockSettings(
         searchQuery = ""
     }
     fun openSearch() {
+        if (!root || searchOpen || showRestartScopes) return
         searchQuery = ""
         searchOpen = true
     }
@@ -165,6 +172,8 @@ private fun LiquidDockSettings(
         if (searchOpen) closeSearch() else navigateBack()
     }
 
+    val searchTransition = updateTransition(searchOpen, label = "settings-search")
+
     ModernSettingsScaffold(
         title = if (searchOpen) "搜索设置" else stringResource(page.titleRes),
         glassEnabled = uiGlassEnabled,
@@ -192,8 +201,22 @@ private fun LiquidDockSettings(
             )
         },
         bottomBar = {
-            if (root && !searchOpen) {
-                ModernBottomNavigation(
+            if (root) {
+                AnimatedVisibility(
+                    visible = !searchOpen,
+                    enter = slideInVertically(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                        initialOffsetY = { it / 3 },
+                    ) + fadeIn(tween(180)),
+                    exit = slideOutVertically(
+                        animationSpec = tween(220),
+                        targetOffsetY = { it / 2 },
+                    ) + fadeOut(tween(160)),
+                ) {
+                    ModernBottomNavigation(
                     labels = listOf(
                         stringResource(R.string.tab_overview),
                         stringResource(R.string.tab_layout),
@@ -203,7 +226,8 @@ private fun LiquidDockSettings(
                     icons = rootIcons,
                     selectedIndex = selectedRootIndex,
                     onSelected = { index -> selectRoot(ROOT_PAGES[index]) },
-                )
+                    )
+                }
             }
         },
         overlay = {
@@ -237,21 +261,51 @@ private fun LiquidDockSettings(
             )
         },
     ) { padding ->
-        if (searchOpen) {
-            SettingsSearchScreen(
-                padding = padding,
-                query = searchQuery,
-                onQueryChange = { searchQuery = it },
-                catalog = searchCatalog,
-                onSelect = { item ->
-                    closeSearch()
-                    navigateTo(item.page)
-                },
-            )
-        } else {
-        AnimatedContent(
+        searchTransition.AnimatedContent(
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                // Pulling down brings search in from the top; closing reverses
+                // the motion. Both screens stay composed until the spring settles.
+                (slideInVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    initialOffsetY = { if (targetState) -it / 5 else it / 10 },
+                ) + fadeIn(tween(210))) togetherWith
+                    (slideOutVertically(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                        targetOffsetY = { if (targetState) it / 10 else -it / 5 },
+                    ) + fadeOut(tween(160)))
+            },
+            label = "settings-search-content",
+        ) { showingSearch ->
+            if (showingSearch) {
+                SettingsSearchScreen(
+                    padding = padding,
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    catalog = searchCatalog,
+                    // Avoid opening the IME halfway through the page transition.
+                    focusOnOpen = searchTransition.currentState && !searchTransition.isRunning,
+                    onSelect = { item ->
+                        closeSearch()
+                        navigateTo(item.page)
+                    },
+                )
+            } else {
+                AnimatedContent(
             targetState = page,
-            modifier = Modifier.fillMaxSize().nestedScroll(rememberSettingsPullDownSearch(::openSearch)),
+            modifier = Modifier.fillMaxSize().then(
+                // Only the four bottom-navigation root pages may reveal search.
+                // Keep nested-scroll entirely off subpages, not merely disabled.
+                if (root && !searchOpen && !showRestartScopes) {
+                    Modifier.nestedScroll(rememberSettingsPullDownSearch(::openSearch))
+                } else Modifier,
+            ),
             transitionSpec = {
                 val duration = prefs.getInt(
                     ConfigSchema.Animation.SETTINGS_PAGE.name(),
@@ -466,7 +520,8 @@ private fun LiquidDockSettings(
                 Page.Data -> DataPage(padding, activity)
                 Page.About -> AboutPage(padding, activity, prefs)
             }
-        }
+                }
+            }
         }
     }
 }
