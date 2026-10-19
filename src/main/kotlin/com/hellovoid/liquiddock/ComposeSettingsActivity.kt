@@ -281,7 +281,6 @@ private fun LiquidDockSettings(
                         targetOffsetY = { if (targetState) it / 10 else -it / 5 },
                     ) + fadeOut(tween(160)))
             },
-            label = "settings-search-content",
         ) { showingSearch ->
             if (showingSearch) {
                 SettingsSearchScreen(
