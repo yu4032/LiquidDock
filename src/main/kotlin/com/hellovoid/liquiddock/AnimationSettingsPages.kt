@@ -48,8 +48,7 @@ internal fun AnimationWorkspacePage(
                 IntSetting(
                     prefs,
                     animationDockResizeSpec,
-                    masterEnabled && dockCustomizationEnabled &&
-                        !systemResizeEnabled && smoothResizeEnabled,
+                    masterEnabled && dockCustomizationEnabled && !systemResizeEnabled && smoothResizeEnabled,
                 )
             }
         }
