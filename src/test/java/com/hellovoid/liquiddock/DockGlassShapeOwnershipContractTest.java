@@ -40,7 +40,10 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(compositor.contains(
                 "PrismalHighlightProfile dockBodyHighlightProfile"));
         assertTrue(compositor.contains(
-                "renderer.drawGlass(dockBody, params, bodyHighlightProfile);"));
+                "renderer.drawGlass(dockBody, params, bodyHighlightProfile.withIos27DockOptics());"));
+        assertTrue(compositor.contains("renderer.drawGlass(new PrismalGeometry("));
+        assertTrue(compositor.contains("params, iconHighlightProfile, item.opacity);"));
+        assertFalse(compositor.contains("params, iconHighlightProfile.withIos27DockOptics()"));
         assertFalse(compositor.contains("renderer.drawGlass(dockBody, params);"));
     }
 
