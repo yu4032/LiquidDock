@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Point;
+import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -27,6 +29,7 @@ final class WorkstationDockGeometryHook {
     private static final WeakHashMap<View, WeakReference<Binding>> bindings = new WeakHashMap<>();
     private static volatile int widthOffsetPx;
     private static volatile boolean dockEnabled;
+    private static volatile boolean taskbarEnabled;
     private static boolean unresolvedChainLogged;
 
     static void applyLiveConfig(LiquidDockConfig.Workstation config) {
@@ -34,10 +37,15 @@ final class WorkstationDockGeometryHook {
         float scale = config.dimensionsDp
                 ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
         int nextWidth = Math.round(config.dockWidthOffset * scale);
-        if (widthOffsetPx == nextWidth && dockEnabled == config.dockEnabled) return;
+        boolean nextTaskbar = config.dockEnabled && config.taskbarMode;
+        if (widthOffsetPx == nextWidth && dockEnabled == config.dockEnabled
+                && taskbarEnabled == nextTaskbar) return;
         widthOffsetPx = nextWidth;
         dockEnabled = config.dockEnabled;
+        taskbarEnabled = nextTaskbar;
         refreshInstalledWidth();
+        Miuix307ZeroCopyRenderer.setWorkstationTaskbarMode(
+                MainHook.isWorkstationMode() && taskbarEnabled);
     }
 
     private static void refreshInstalledWidth() {
@@ -95,6 +103,7 @@ final class WorkstationDockGeometryHook {
             }
         }
         for (Binding binding : snapshot) binding.apply(enabled && dockEnabled);
+        Miuix307ZeroCopyRenderer.setWorkstationTaskbarMode(enabled && taskbarEnabled);
     }
 
     private static void bindFromAnchor(View anchor) {
@@ -150,6 +159,10 @@ final class WorkstationDockGeometryHook {
             View.OnAttachStateChangeListener {
         private final WeakReference<View> containerRef;
         private final WorkstationDockWidthState widthState = new WorkstationDockWidthState();
+        private final int[] screenPosition = new int[2];
+        private final Point screenSize = new Point();
+        private float originalTranslationY = Float.NaN;
+        private float appliedTranslationY = Float.NaN;
 
         Binding(View container) {
             containerRef = new WeakReference<>(container);
@@ -184,15 +197,45 @@ final class WorkstationDockGeometryHook {
             int targetWidth = workstation
                     ? widthState.targetWidth(observedWidth, widthOffsetPx)
                     : widthState.restoreWidth(observedWidth);
-            if (targetWidth <= 0 || targetWidth == observedWidth) return;
+            if (targetWidth > 0 && targetWidth != observedWidth) {
+                ViewGroup.LayoutParams lp = container.getLayoutParams();
+                if (lp != null) {
+                    lp.width = targetWidth;
+                    container.setLayoutParams(lp);
+                    container.requestLayout();
+                    MainHook.log("[DC] workstation Dock width " + observedWidth
+                            + " -> " + targetWidth + " active=" + workstation);
+                }
+            }
+            applyTaskbarPosition(container, workstation && taskbarEnabled);
+        }
 
-            ViewGroup.LayoutParams lp = container.getLayoutParams();
-            if (lp == null) return;
-            lp.width = targetWidth;
-            container.setLayoutParams(lp);
-            container.requestLayout();
-            MainHook.log("[DC] workstation Dock width " + observedWidth + " -> " + targetWidth
-                    + " active=" + workstation + " class=" + container.getClass().getName());
+        private void applyTaskbarPosition(View container, boolean taskbar) {
+            float current = container.getTranslationY();
+            if (!taskbar) {
+                if (!Float.isNaN(originalTranslationY)
+                        && Float.compare(current, appliedTranslationY) == 0) {
+                    container.setTranslationY(originalTranslationY);
+                }
+                originalTranslationY = Float.NaN;
+                appliedTranslationY = Float.NaN;
+                return;
+            }
+            Display display = container.getDisplay();
+            if (display == null || container.getHeight() <= 0) return;
+            display.getRealSize(screenSize);
+            if (screenSize.y <= 0) return;
+            if (Float.isNaN(originalTranslationY)
+                    || (!Float.isNaN(appliedTranslationY)
+                            && Float.compare(current, appliedTranslationY) != 0)) {
+                originalTranslationY = current;
+            }
+            container.getLocationOnScreen(screenPosition);
+            float target = WorkstationTaskbarGeometry.bottomTranslation(
+                    screenSize.y, screenPosition[1] + container.getHeight(), current);
+            if (Math.abs(target - current) < 0.5f) return;
+            container.setTranslationY(target);
+            appliedTranslationY = target;
         }
     }
 }
