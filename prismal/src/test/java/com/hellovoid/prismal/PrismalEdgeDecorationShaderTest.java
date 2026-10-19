@@ -195,6 +195,22 @@ public class PrismalEdgeDecorationShaderTest {
                 PrismalShaderSources.VERTEX).contains("u_edgeRasterGuardPx"));
     }
 
+    @Test public void globalColorHelperDoesNotUseLaterDeclaredUniforms() {
+        // OS4 light uniforms are inserted further down the fragment source,
+        // whereas this shared helper is injected directly after precision.
+        // Referring to those uniforms inside the helper would break some GLSL
+        // ES 1.00 compilers even though a Java unit test assembles the string.
+        String shader = PrismalEdgeDecorationShader.apply(upstream());
+        int helperStart = shader.indexOf("vec3 refractedContourColor(");
+        int helperEnd = shader.indexOf("\n                }", helperStart);
+        assertTrue(helperStart >= 0 && helperEnd > helperStart);
+        String helper = shader.substring(helperStart, helperEnd);
+        assertFalse(helper.contains("u_os4DirectionalIntensity"));
+        assertFalse(helper.contains("u_os4DirectionalOppositeIntensity"));
+        assertTrue(shader.contains("float rimLightEnergy = clamp("));
+        assertTrue(shader.contains("rimDarkWeight, rimLightEnergy);"));
+    }
+
     @Test public void insideAndOutsideContourUseOnePreparedBackdropSignal() {
         String source = PrismalEdgeDecorationShader.apply(upstream());
         assertTrue(source.contains("vec3 edgeTransmission = vec3(0.0);"));

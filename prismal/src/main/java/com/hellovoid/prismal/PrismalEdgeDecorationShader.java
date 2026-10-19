@@ -47,11 +47,8 @@ final class PrismalEdgeDecorationShader {
                 // specular energy term favors OS4's highlight palette, while
                 // the dark side attenuates transmission without turning black.
                 // Rim weights already contain the sole angular smoothstep.
-                vec3 refractedContourColor(vec3 transmitted, vec3 highlight, float darkWeight) {
-                    float lightEnergy = clamp(
-                            (max(u_os4DirectionalIntensity, 0.0)
-                             + max(u_os4DirectionalOppositeIntensity, 0.0)) * 2.0,
-                            0.0, 1.0);
+                vec3 refractedContourColor(vec3 transmitted, vec3 highlight,
+                        float darkWeight, float lightEnergy) {
                     float transmission = mix(1.0, 0.12, darkWeight);
                     float specGain = (0.10 + 0.18 * lightEnergy) * (1.0 - darkWeight);
                     vec3 specTint = mix(transmitted, highlight, 0.25);
@@ -88,14 +85,17 @@ final class PrismalEdgeDecorationShader {
                     // NOT change the Dock shape, corner radii or MiShadow.
                     // Other glass scopes keep a strictly external ink line.
                     float inkDistance = surfaceDistance + u_backlitViewportInsetPx;
+                    // Compute after all OS4 uniforms have been declared in the
+                    // final shader. The globally injected helper above must not
+                    // access uniforms that are declared later in the source.
+                    float rimLightEnergy = clamp(
+                            (max(u_os4DirectionalIntensity, 0.0)
+                             + max(u_os4DirectionalOppositeIntensity, 0.0)) * 2.0,
+                            0.0, 1.0);
                     float rimDarkWeight = 0.0;
                     float exteriorInkAlpha = 0.0;
                     if (inkDistance > 0.0 && u_backlitStrength > 0.0
                             && u_backlitWidthPx > 0.0) {
-                        float keyLight = max(u_os4DirectionalIntensity, 0.0);
-                        float fillLight = max(u_os4DirectionalOppositeIntensity, 0.0);
-                        float lightEnergy = clamp(
-                                (keyLight + fillLight) * 2.0, 0.0, 1.0);
                         {
                             vec2 edgeNormal = normalize(
                                     os4SdfGradient + vec2(0.00001));
@@ -121,7 +121,7 @@ final class PrismalEdgeDecorationShader {
                                     max(lineWidthPx - outsideAa, 0.0),
                                     lineWidthPx + outsideAa, inkDistance);
                             exteriorInkAlpha = clamp(
-                                    u_backlitStrength * mix(0.55, 1.0, lightEnergy)
+                                    u_backlitStrength * mix(0.55, 1.0, rimLightEnergy)
                                     * entry * exit, 0.0, 0.98);
                         }
                     }
@@ -148,7 +148,7 @@ final class PrismalEdgeDecorationShader {
                         if (underlayAlpha < 0.001) discard;
                         vec3 rim = exteriorInkAlpha > 0.001
                                 ? refractedContourColor(edgeTransmission,
-                                        OS4_OPTICAL_RIM_COLOR, rimDarkWeight)
+                                        OS4_OPTICAL_RIM_COLOR, rimDarkWeight, rimLightEnergy)
                                 : vec3(0.0);
                         vec3 underlayRgb = (rim * exteriorInkAlpha
                                 + u_castShadowColor.rgb * exteriorShadowAlpha
@@ -170,7 +170,7 @@ final class PrismalEdgeDecorationShader {
                         vec3 rimBase = mix(edgeTransmission, color,
                                 smoothstep(0.0, 0.45, opacity));
                         vec3 rim = refractedContourColor(
-                                rimBase, OS4_OPTICAL_RIM_COLOR, rimDarkWeight);
+                                rimBase, OS4_OPTICAL_RIM_COLOR, rimDarkWeight, rimLightEnergy);
                         float innerFringe = smoothstep(
                                 -max(u_backlitWidthPx, 0.5), 0.0, surfaceDistance);
                         vec3 contourGlass = mix(
