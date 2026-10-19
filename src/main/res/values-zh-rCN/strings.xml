@@ -31,7 +31,7 @@
     <string name="widget_components_entry">小组件部件管理</string>
     <string name="widget_components_entry_summary">手动载入小组件，可隐藏内部部件或选择文字与图像白化</string>
     <string name="page_stroke">描边</string>
-    <string name="page_shadow">阴影</string>
+    <string name="page_shadow">原生阴影</string>
     <string name="page_animation">动画与过渡</string>
     <string name="page_data">预设</string>
     <string name="page_about">许可</string>
@@ -100,7 +100,7 @@
     <string name="page_glass_widgets">小组件</string>
     <string name="page_glass_folders">文件夹</string>
     <string name="page_glass_menus">菜单与弹窗</string>
-    <string name="page_glass_edge">玻璃光照与投影</string>
+    <string name="page_glass_edge">阴影</string>
     <string name="page_shortcut_popup">快捷菜单自定义</string>
     <string name="page_handle_menu">顶部菜单自定义</string>
     <string name="page_liquid_material">材质基础</string>

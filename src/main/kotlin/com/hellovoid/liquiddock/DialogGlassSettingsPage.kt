@@ -251,8 +251,8 @@ internal fun DialogGlassSettingsPage(
         item(key = "dialog-edge-effects") {
             SettingsCard {
                 ArrowPreference(
-                    title = "玻璃光照与投影",
-                    summary = "保留原生弹窗投影，仅按光照调节边缘透射",
+                    title = "阴影",
+                    summary = "独立调节 Prismal 外阴影与边缘描边，仅液态玻璃开启时生效",
                     enabled = controlsEnabled,
                     onClick = onOpenEdge,
                 )

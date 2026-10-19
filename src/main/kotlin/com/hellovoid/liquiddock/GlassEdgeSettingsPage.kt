@@ -112,13 +112,11 @@ internal fun GlassEdgeSettingsPage(
     ) {
         item(key = "material-intro") {
             PageHeader(
-                "玻璃边缘光照与投影",
-                "$scopeLabel · Prismal OS4 的高光、反射与折射保持不变。" +
-                    "描边与折射背景共同取色：背光侧变暗，受光侧过渡为 OS4 反射高光色。" +
-                    (if (global) "以下参数可由各个玻璃组件继承。"
-                     else if (scope == GlassEdgeEffects.DOCK)
-                         "Dock 已使用独立 Prismal GPU 阴影；仅在液态玻璃开启时生效。"
-                     else "本页缺省参数继承全局默认；阴影仅在液态玻璃开启时生效。")
+                "阴影",
+                "$scopeLabel · 设置液态玻璃的 Prismal 外阴影，以及沿玻璃轮廓的折射描边。" +
+                    "仅在对应组件启用液态玻璃时生效。" +
+                    (if (global) "各组件可继承全局参数或独立调整。"
+                     else "本页未单独设置的参数继承全局默认。")
             )
         }
         item(key = "backlight-header") { SmallTitle("玻璃边缘光照") }

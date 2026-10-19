@@ -177,8 +177,8 @@ private fun ScopedMenuGlassSettingsPage(
         item(key = "shortcut-edge") {
             SettingsCard {
                 ArrowPreference(
-                    title = "玻璃光照与投影",
-                    summary = "保留 Prismal OS4 高光；背光微暗与整体外阴影分别调节",
+                    title = "阴影",
+                    summary = "Prismal 外阴影与光学描边可独立调节",
                     enabled = controlsEnabled,
                     onClick = onOpenEdge,
                 )
