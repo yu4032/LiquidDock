@@ -29,11 +29,13 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> WORKSPACE_VISIBILITY = integer(
                 "animation_workspace_visibility_ms", 450, 450, 450, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
+        // Unlock fly-in uses its own motion fade. The ordinary Workspace
+        // visibility preset is intentionally 0ms and must not disable unlock.
+        public static final ConfigKey<Integer> UNLOCK_GLASS_FADE = integer(
+                "animation_unlock_glass_fade_ms", 450, 450, 450, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> FOLDER_OPEN_GLASS_FADE = integer(
                 "animation_folder_open_glass_fade_ms", 180, 180, 180, 0, 2000,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> DOCK_ICON_REVEAL = integer(
-                "animation_dock_icon_reveal_ms", 450, 450, 450, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRESS_IN = integer(
                 "animation_press_in_ms", 90, 90, 90, 0, 2000,
@@ -590,8 +592,8 @@ public final class ConfigSchema {
     private static List<ConfigKey<?>> createAll() {
         List<ConfigKey<?>> keys = new ArrayList<>();
         add(keys, Core.ENABLED);
-        add(keys, Animation.WORKSPACE_VISIBILITY, Animation.FOLDER_OPEN_GLASS_FADE,
-                Animation.DOCK_ICON_REVEAL,
+        add(keys, Animation.WORKSPACE_VISIBILITY, Animation.UNLOCK_GLASS_FADE,
+                Animation.FOLDER_OPEN_GLASS_FADE,
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,
                 Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,

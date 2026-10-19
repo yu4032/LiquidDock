@@ -2,85 +2,88 @@ package com.hellovoid.liquiddock;
 
 import java.util.WeakHashMap;
 
-/** Per-icon Dock glass ownership while MIUI's launch animation owns the icon visual. */
+/**
+ * Dock icon glass follows the same CLOSE_TO_HOME progress-owned opacity as Workspace.
+ * Native ShortcutIcon visibility and FloatingIcon proxy geometry remain separate owners.
+ */
 final class DockIconAnimationState {
-    private static final long HIDDEN = Long.MAX_VALUE;
-    private static final long COMPLETE = Long.MIN_VALUE;
-    private static final float RESTORE_PROGRESS = 0.90f;
-
     static final class Sample {
         final float opacity;
-        final boolean fading;
         final boolean proxyActive;
         final float[] proxyRect;
 
-        Sample(float opacity, boolean fading, boolean proxyActive, float[] proxyRect) {
+        Sample(float opacity, boolean proxyActive, float[] proxyRect) {
             this.opacity = opacity;
-            this.fading = fading;
             this.proxyActive = proxyActive;
-            // sample() obtains proxyRect from copyLaunchProxyRect(), which already returns an
-            // isolated snapshot. Take ownership here instead of cloning the same 4 floats twice.
             this.proxyRect = proxyRect;
         }
     }
 
-    private static final Sample VISIBLE_SAMPLE = new Sample(1f, false, false, null);
+    private static final Sample VISIBLE_SAMPLE = new Sample(1f, false, null);
 
     private static final class Record {
-        long fadeStartedMs = HIDDEN;
-        boolean ended;
-        boolean fadeOwned;
+        float returnAlpha = 1f;
+        boolean returnActive;
+        boolean sourceRestored;
         final LauncherGlassVisualOwnerState visualOwner = new LauncherGlassVisualOwnerState();
     }
 
-    private final long fadeDurationMs;
     private final WeakHashMap<Object, Record> states = new WeakHashMap<>();
 
-    DockIconAnimationState(long fadeDurationMs) {
-        this.fadeDurationMs = Math.max(0L, fadeDurationMs);
-    }
-
-    synchronized void begin(Object icon) {
-        if (icon == null) return;
-        Record record = new Record();
-        record.fadeOwned = true;
-        states.put(icon, record);
-    }
-
-    synchronized boolean observeProxyFrame(Object icon, float progress, long nowMs) {
-        if (icon == null) return false;
+    private Record getOrCreate(Object icon) {
         Record record = states.get(icon);
         if (record == null) {
             record = new Record();
             states.put(icon, record);
         }
-        record.fadeOwned = true;
-        if (record.fadeStartedMs == HIDDEN && Float.isFinite(progress)
-                && progress >= RESTORE_PROGRESS) {
-            record.fadeStartedMs = nowMs;
-            return true;
-        }
-        return false;
+        return record;
+    }
+
+    /** Actual OEM source concealment, idempotent across repeated hide callbacks. */
+    synchronized boolean onNativeHidden(Object icon) {
+        if (icon == null) return false;
+        Record record = getOrCreate(icon);
+        if (record.returnActive && !record.sourceRestored) return false;
+        record.returnActive = true;
+        record.sourceRestored = false;
+        record.returnAlpha = 0f;
+        return true;
+    }
+
+    /** Native CLOSE_TO_HOME retargeted into launch: drop the partial return glow. */
+    synchronized boolean cancelHomeReturn(Object icon) {
+        if (icon == null) return false;
+        Record record = getOrCreate(icon);
+        boolean changed = !record.returnActive || record.returnAlpha != 0f;
+        record.returnActive = true;
+        record.sourceRestored = false;
+        record.returnAlpha = 0f;
+        return changed;
+    }
+
+    /**
+     * The Workspace and Dock glass curves are the same shared native-progress curve.
+     * No post-animation clock or independent fade runner may delay the handoff.
+     */
+    synchronized boolean observeHomeReturnProgress(Object icon, float progress) {
+        if (icon == null || !Float.isFinite(progress)) return false;
+        Record record = getOrCreate(icon);
+        if (record.sourceRestored) return false;
+        float alpha = LauncherGlassReturnFade.alpha(progress);
+        if (record.returnActive && record.returnAlpha == alpha) return false;
+        record.returnActive = true;
+        record.returnAlpha = alpha;
+        return true;
     }
 
     synchronized boolean holdProxyHidden(Object icon) {
         if (icon == null) return false;
-        Record record = states.get(icon);
-        if (record == null) {
-            record = new Record();
-            states.put(icon, record);
-        }
-        return record.visualOwner.holdLaunchProxyHidden();
+        return getOrCreate(icon).visualOwner.holdLaunchProxyHidden();
     }
 
     synchronized boolean updateProxyGeometry(Object icon, float[] rect) {
         if (icon == null) return false;
-        Record record = states.get(icon);
-        if (record == null) {
-            record = new Record();
-            states.put(icon, record);
-        }
-        return record.visualOwner.updateLaunchProxyRect(rect);
+        return getOrCreate(icon).visualOwner.updateLaunchProxyRect(rect);
     }
 
     synchronized boolean endProxyGeometry(Object icon) {
@@ -92,56 +95,25 @@ final class DockIconAnimationState {
         return changed;
     }
 
-    synchronized void end(Object icon, long nowMs) {
-        if (icon == null) return;
+    /** Native source becomes visible at the formal end, just like Workspace endLaunchProxy. */
+    synchronized boolean end(Object icon) {
+        if (icon == null) return false;
         Record record = states.get(icon);
-        if (record == null || !record.fadeOwned) return;
-        record.ended = true;
-        if (record.fadeStartedMs == HIDDEN) record.fadeStartedMs = nowMs;
-        if (record.fadeStartedMs == COMPLETE) {
-            record.fadeOwned = false;
-            maybeRemoveStableRecord(icon, record);
-        }
+        if (record == null) return false;
+        boolean changed = record.returnActive && record.returnAlpha != 1f;
+        record.returnActive = false;
+        record.sourceRestored = true;
+        record.returnAlpha = 1f;
+        maybeRemoveStableRecord(icon, record);
+        return changed;
     }
 
-    synchronized Sample sample(Object icon, long nowMs) {
+    synchronized Sample sample(Object icon) {
         Record record = icon != null ? states.get(icon) : null;
         if (record == null) return VISIBLE_SAMPLE;
-
-        boolean proxyActive = record.visualOwner.isLaunchProxyActive();
-        float[] proxyRect = record.visualOwner.copyLaunchProxyRect();
-        if (!record.fadeOwned) {
-            return new Sample(1f, false, proxyActive, proxyRect);
-        }
-        if (record.fadeStartedMs == COMPLETE) {
-            return new Sample(1f, false, proxyActive, proxyRect);
-        }
-        if (record.fadeStartedMs == HIDDEN) {
-            return new Sample(0f, false, proxyActive, proxyRect);
-        }
-        if (fadeDurationMs == 0L) {
-            finishFade(icon, record);
-            return new Sample(1f, false, proxyActive, proxyRect);
-        }
-        float progress = Math.max(0f, Math.min(1f,
-                (nowMs - record.fadeStartedMs) / (float) fadeDurationMs));
-        if (progress >= 1f) {
-            finishFade(icon, record);
-            return new Sample(1f, false, proxyActive, proxyRect);
-        }
-        float remaining = 1f - progress;
-        return new Sample(1f - remaining * remaining, true, proxyActive, proxyRect);
-    }
-
-    synchronized float opacity(Object icon, long nowMs) {
-        return sample(icon, nowMs).opacity;
-    }
-
-    synchronized boolean isFading(Object icon) {
-        Record record = icon != null ? states.get(icon) : null;
-        return record != null && record.fadeOwned
-                && record.fadeStartedMs != HIDDEN
-                && record.fadeStartedMs != COMPLETE;
+        return new Sample(record.returnActive ? record.returnAlpha : 1f,
+                record.visualOwner.isLaunchProxyActive(),
+                record.visualOwner.copyLaunchProxyRect());
     }
 
     synchronized void remove(Object icon) {
@@ -152,19 +124,11 @@ final class DockIconAnimationState {
         states.clear();
     }
 
-    private void finishFade(Object icon, Record record) {
-        if (record.ended) {
-            record.fadeOwned = false;
-            record.fadeStartedMs = COMPLETE;
-            record.ended = false;
-            maybeRemoveStableRecord(icon, record);
-        } else {
-            record.fadeStartedMs = COMPLETE;
-        }
-    }
-
     private void maybeRemoveStableRecord(Object icon, Record record) {
-        if (!record.fadeOwned && !record.visualOwner.isLaunchProxyActive()) {
+        // Retain a terminal marker until the next native hide or unregistration:
+        // late proxy update() callbacks must not reopen a completed return fade.
+        if (!record.returnActive && !record.sourceRestored
+                && !record.visualOwner.isLaunchProxyActive()) {
             states.remove(icon);
         }
     }

@@ -16,14 +16,8 @@ final class DockGlassItemNode {
         this.style = style;
     }
     View view() { return viewRef.get(); }
-    DockIconAnimationState.Sample animationSample(long nowMs) {
-        return DockGlassItemRegistry.animationSample(viewRef.get(), nowMs);
-    }
-    float animationOpacity(long nowMs) {
-        return DockGlassItemRegistry.animationOpacity(viewRef.get(), nowMs);
-    }
-    boolean isFading() {
-        return DockGlassItemRegistry.isFading(viewRef.get());
+    DockIconAnimationState.Sample animationSample() {
+        return DockGlassItemRegistry.animationSample(viewRef.get());
     }
     boolean belongsTo(View dockRoot) {
         View cursor = viewRef.get();
@@ -71,14 +65,21 @@ final class DockGlassItemNode {
         if (!Float.isFinite(proxyWidth) || !Float.isFinite(proxyHeight)
                 || proxyWidth <= 0f || proxyHeight <= 0f) return null;
 
-        // FloatingIconView2/FloatingIconLayer2 publish their icon rectangle in Launcher-root space.
-        // Convert that exact vendor rectangle into this TextureView's output-local coordinates.
+        // Proxy rectangles are in screen space. The icon can belong to a separate floating
+        // Dock window, so its root cannot stand in for the Launcher animation's root.
         float[] points = new float[]{
                 proxyRect[0], proxyRect[1], proxyRect[2], proxyRect[1],
                 proxyRect[0], proxyRect[3], proxyRect[2], proxyRect[3]};
         Matrix rootToGlobal = new Matrix();
         view.getRootView().transformMatrixToGlobal(rootToGlobal);
-        rootToGlobal.mapPoints(points);
+        float[] rootOrigin = new float[]{0f, 0f};
+        rootToGlobal.mapPoints(rootOrigin);
+        int[] rootScreen = new int[2];
+        view.getRootView().getLocationOnScreen(rootScreen);
+        for (int i = 0; i < points.length; i += 2) {
+            points[i] = DockGlassProxySpace.windowCoordinate(points[i], rootScreen[0], rootOrigin[0]);
+            points[i + 1] = DockGlassProxySpace.windowCoordinate(points[i + 1], rootScreen[1], rootOrigin[1]);
+        }
         outputInverse.mapPoints(points);
 
         float left = min4(points[0], points[2], points[4], points[6]);

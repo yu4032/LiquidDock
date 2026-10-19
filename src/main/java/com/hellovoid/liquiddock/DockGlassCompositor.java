@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Matrix;
-import android.os.SystemClock;
 import android.view.View;
 import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalHighlightProfile;
@@ -129,7 +128,6 @@ final class DockGlassCompositor {
             lastFingerprint = Long.MIN_VALUE;
         }
 
-        long nowMs = SystemClock.uptimeMillis();
         long fingerprint = HASH_SEED;
         long outputFingerprint = mixOutputRoot(HASH_SEED, outputRoot);
         ensureScratchCapacity(cached.size());
@@ -140,7 +138,7 @@ final class DockGlassCompositor {
             CachedItem cachedItem = cached.get(i);
             DockGlassItemNode item = cachedItem.node;
             long uiFingerprint = item.uiFingerprint(ownershipRoot);
-            DockIconAnimationState.Sample animationSample = item.animationSample(nowMs);
+            DockIconAnimationState.Sample animationSample = item.animationSample();
             long proxyFingerprint = proxyFingerprint(animationSample);
             uiFingerprints[i] = uiFingerprint;
             proxyFingerprints[i] = proxyFingerprint;

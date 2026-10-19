@@ -38,8 +38,12 @@ public class AnimationSettingsContractTest {
 
         assertTrue(specs.contains("ConfigSchema.Animation.WORKSPACE_VISIBILITY"));
         assertTrue(specs.contains("ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE"));
+        assertTrue(specs.contains("ConfigSchema.Animation.UNLOCK_GLASS_FADE"));
+        assertTrue(pages.contains("IntSetting(prefs, animationUnlockGlassFadeSpec, masterEnabled)"));
         assertTrue(pages.contains("IntSetting(prefs, animationFolderOpenGlassFadeSpec, masterEnabled)"));
-        assertTrue(specs.contains("ConfigSchema.Animation.DOCK_ICON_REVEAL"));
+        assertFalse(specs.contains("ConfigSchema.Animation.DOCK_ICON_REVEAL"));
+        assertTrue(Files.readString(JAVA.resolve("DockIconAnimationState.java"))
+                .contains("LauncherGlassReturnFade.alpha(progress)"));
         assertTrue(specs.contains("ConfigSchema.Animation.PRESS_IN"));
         assertTrue(specs.contains("ConfigSchema.Animation.PRESS_OUT"));
         assertTrue(specs.contains("ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE"));
