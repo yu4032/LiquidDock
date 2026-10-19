@@ -154,6 +154,7 @@ public final class ModuleMain extends XposedModule {
                 // because an optional 4.50 geometry method is unavailable.
                 LauncherLargeFolderPickerHook.install(classLoader);
                 LauncherLargeFolderNativeSpanHook.install(classLoader);
+                LauncherMingouCompatHook.install(classLoader);
                 LauncherNativeFourFolderHook.install(classLoader);
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
