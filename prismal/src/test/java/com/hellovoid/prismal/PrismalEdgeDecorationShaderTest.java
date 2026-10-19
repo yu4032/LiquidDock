@@ -47,8 +47,10 @@ public class PrismalEdgeDecorationShaderTest {
 
     @Test public void externalStrokeUsesOneSdfAndLightDependentWidthAndFade() {
         String source = PrismalEdgeDecorationShader.apply(upstream());
-        String ink = source.substring(source.indexOf("float exteriorInkAlpha = 0.0;"),
-                source.indexOf("// The rim uses one identically displaced prepared backdrop"));
+        int inkStart = source.indexOf("float exteriorInkAlpha = 0.0;");
+        int inkEnd = source.indexOf("vec3 edgeTransmission = vec3(0.0);");
+        assertTrue(inkStart >= 0 && inkEnd > inkStart);
+        String ink = source.substring(inkStart, inkEnd);
         assertTrue(ink.contains("dot(edgeNormal, u_invariantLightXY)"));
         assertTrue(ink.contains("float lineWidthPx = u_backlitWidthPx;"));
         assertTrue(ink.contains("rimDarkWeight = smoothstep("));
