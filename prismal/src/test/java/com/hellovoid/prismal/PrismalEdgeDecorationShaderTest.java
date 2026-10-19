@@ -202,7 +202,7 @@ public class PrismalEdgeDecorationShaderTest {
         // ES 1.00 compilers even though a Java unit test assembles the string.
         String shader = PrismalEdgeDecorationShader.apply(upstream());
         int helperStart = shader.indexOf("vec3 refractedContourColor(");
-        int helperEnd = shader.indexOf("\n                }", helperStart);
+        int helperEnd = shader.indexOf("return clamp(transmitted * transmission", helperStart);
         assertTrue(helperStart >= 0 && helperEnd > helperStart);
         String helper = shader.substring(helperStart, helperEnd);
         assertFalse(helper.contains("u_os4DirectionalIntensity"));
