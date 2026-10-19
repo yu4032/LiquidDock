@@ -15,7 +15,6 @@ public final class PrismalHighlightProfile {
     public final boolean caustics;
     public final boolean pressGlow;
     public final boolean os4Edge;
-    public final boolean ios27Dock;
     private volatile PrismalHighlightProfile os4Replacement;
 
     public PrismalHighlightProfile(
@@ -29,7 +28,7 @@ public final class PrismalHighlightProfile {
             boolean caustics,
             boolean pressGlow) {
         this(skyHaze, specular, litRim, oppositeRim, cornerRim, faceSheen,
-                plainHighlight, caustics, pressGlow, false, false);
+                plainHighlight, caustics, pressGlow, false);
     }
 
     private PrismalHighlightProfile(
@@ -42,8 +41,7 @@ public final class PrismalHighlightProfile {
             boolean plainHighlight,
             boolean caustics,
             boolean pressGlow,
-            boolean os4Edge,
-            boolean ios27Dock) {
+            boolean os4Edge) {
         this.skyHaze = skyHaze;
         this.specular = specular;
         this.litRim = litRim;
@@ -54,15 +52,6 @@ public final class PrismalHighlightProfile {
         this.caustics = caustics;
         this.pressGlow = pressGlow;
         this.os4Edge = os4Edge;
-        this.ios27Dock = ios27Dock;
-    }
-
-    /** Dock-body-only preset; remains selected when legacy rim is replaced by OS4. */
-    public PrismalHighlightProfile withIos27DockOptics() {
-        if (ios27Dock) return this;
-        return new PrismalHighlightProfile(
-                skyHaze, specular, litRim, oppositeRim, cornerRim,
-                faceSheen, plainHighlight, caustics, pressGlow, os4Edge, true);
     }
 
     /** Replace both parameter-driven legacy edge families with one OS4 optical edge. */
@@ -83,8 +72,7 @@ public final class PrismalHighlightProfile {
                 false,
                 caustics,
                 pressGlow,
-                true,
-                ios27Dock);
+                true);
         os4Replacement = created;
         return created;
     }

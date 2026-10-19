@@ -40,10 +40,11 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(compositor.contains(
                 "PrismalHighlightProfile dockBodyHighlightProfile"));
         assertTrue(compositor.contains(
-                "renderer.drawGlass(dockBody, params, bodyHighlightProfile.withIos27DockOptics());"));
+                "renderer.drawGlass(dockBody, params, bodyHighlightProfile);"));
         assertTrue(compositor.contains("renderer.drawGlass(new PrismalGeometry("));
         assertTrue(compositor.contains("params, iconHighlightProfile, item.opacity);"));
-        assertFalse(compositor.contains("params, iconHighlightProfile.withIos27DockOptics()"));
+        // Shared optics are attached by PrismalRenderer, never by per-client profile overrides.
+        assertFalse(compositor.contains("withIos27DockOptics()"));
         assertFalse(compositor.contains("renderer.drawGlass(dockBody, params);"));
     }
 
