@@ -108,6 +108,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         final float dockUvBottom;
         final float dockUvWidth;
         final float dockUvHeight;
+        // Crop the COMPLETE enlarged TextureView output, including exterior
+        // Prismal shadows. Dock UVs above still locate only the native body.
+        final float outputUvLeft, outputUvBottom, outputUvWidth, outputUvHeight;
         final Miuix307BackdropMapping.Coverage coverage;
 
         BackdropSnapshot(
@@ -123,6 +126,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 float validDockLeft, float validDockBottom,
                 float validDockRight, float validDockTop,
                 float dockUvLeft, float dockUvBottom, float dockUvWidth, float dockUvHeight,
+                float outputUvLeft, float outputUvBottom,
+                float outputUvWidth, float outputUvHeight,
                 Miuix307BackdropMapping.Coverage coverage) {
             this.visibleWidth = visibleWidth;
             this.visibleHeight = visibleHeight;
@@ -150,6 +155,10 @@ final class Miuix307PassBlurTextureView extends TextureView
             this.dockUvBottom = dockUvBottom;
             this.dockUvWidth = dockUvWidth;
             this.dockUvHeight = dockUvHeight;
+            this.outputUvLeft = outputUvLeft;
+            this.outputUvBottom = outputUvBottom;
+            this.outputUvWidth = outputUvWidth;
+            this.outputUvHeight = outputUvHeight;
             this.coverage = coverage;
         }
     }
@@ -197,6 +206,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final float[] textureMatrix = new float[16];
     private final Rect winFrameScratch = new Rect();
     private final int[] viewScreenScratch = new int[2];
+    private final int[] nativeDockScreenScratch = new int[2];
     // UI-thread pre-draw sampling cache. The GL lifecycle path uses its own local result.
     private final SamplingInsets uiSamplingInsetsCache = new SamplingInsets();
     private final int[] uiInsetPairScratch = new int[2];
@@ -1180,7 +1190,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalTexture);
         GLES20.glUniform4f(compositeCropRectLocation,
-                mapping.dockUvLeft, mapping.dockUvBottom, mapping.dockUvWidth, mapping.dockUvHeight);
+                mapping.outputUvLeft, mapping.outputUvBottom,
+                mapping.outputUvWidth, mapping.outputUvHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glDisable(GLES20.GL_BLEND);
@@ -1328,6 +1339,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
         if (observer == null || !observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
+            Miuix307ZeroCopyRenderer.refreshDockShadowViewport();
             refreshProducerGeometryInPlace();
             updateBackdropMapping();
             return true;
@@ -1501,6 +1513,15 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (winFrame == null || winFrame.width() <= 0 || winFrame.height() <= 0) return;
         int[] viewScreen = viewScreenScratch;
         getLocationOnScreen(viewScreen);
+        View nativeDock = materialHostRef.get();
+        if (nativeDock == null || nativeDock.getWidth() <= 0
+                || nativeDock.getHeight() <= 0) return;
+        int[] dockScreen = nativeDockScreenScratch;
+        nativeDock.getLocationOnScreen(dockScreen);
+        int dockLocalLeft = dockScreen[0] - viewScreen[0];
+        int dockLocalTop = dockScreen[1] - viewScreen[1];
+        int dockNativeWidth = nativeDock.getWidth();
+        int dockNativeHeight = nativeDock.getHeight();
 
         PrismalParams frameParams = portablePrismalParams;
         if (frameParams == null) return;
@@ -1516,10 +1537,24 @@ final class Miuix307PassBlurTextureView extends TextureView
                 viewScreen[0], viewScreen[1], visibleWidth, visibleHeight,
                 winFrame.left, winFrame.top, winFrame.width(), winFrame.height());
 
-        float nextDockUvLeft = insets.left / (float) sampleWidth;
-        float nextDockUvBottom = insets.bottom / (float) sampleHeight;
-        float nextDockUvWidth = visibleWidth / (float) sampleWidth;
-        float nextDockUvHeight = visibleHeight / (float) sampleHeight;
+        // Expanded TextureView pixels are not the Dock body. Keep the
+        // original native geometry in the correct place inside the larger
+        // output and composite the FULL output (not just the glass crop).
+        float nextDockUvLeft = DockPrismalShadowViewportPolicy.normalizedBodyX(
+                insets.left, dockLocalLeft, sampleWidth);
+        float nextDockUvBottom = DockPrismalShadowViewportPolicy.normalizedBodyBottom(
+                insets.bottom, visibleHeight, dockLocalTop,
+                dockNativeHeight, sampleHeight);
+        float nextDockUvWidth = dockNativeWidth / (float) sampleWidth;
+        float nextDockUvHeight = dockNativeHeight / (float) sampleHeight;
+        float nextOutputUvLeft = DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
+                insets.left, sampleWidth);
+        float nextOutputUvBottom = DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
+                insets.bottom, sampleHeight);
+        float nextOutputUvWidth = DockPrismalShadowViewportPolicy.normalizedOutputExtent(
+                visibleWidth, sampleWidth);
+        float nextOutputUvHeight = DockPrismalShadowViewportPolicy.normalizedOutputExtent(
+                visibleHeight, sampleHeight);
         boolean dockSceneChanged = dockCompositor.refreshUiSceneIfNeeded(
                 sampleWidth, sampleHeight, insets.left, insets.top, 1f, 1f);
 
@@ -1551,6 +1586,10 @@ final class Miuix307PassBlurTextureView extends TextureView
                 && Float.compare(dockUvBottom, nextDockUvBottom) == 0
                 && Float.compare(dockUvWidth, nextDockUvWidth) == 0
                 && Float.compare(dockUvHeight, nextDockUvHeight) == 0
+                && Float.compare(currentSnapshot.outputUvLeft, nextOutputUvLeft) == 0
+                && Float.compare(currentSnapshot.outputUvBottom, nextOutputUvBottom) == 0
+                && Float.compare(currentSnapshot.outputUvWidth, nextOutputUvWidth) == 0
+                && Float.compare(currentSnapshot.outputUvHeight, nextOutputUvHeight) == 0
                 && producerCoverage == dock.coverage;
         if (unchanged) {
             // Dock icon membership/geometry is independent from the PassBlur crop. A hotseat
@@ -1594,6 +1633,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 sample.validLeft, sample.validBottom, sample.validRight, sample.validTop,
                 dock.validLeft, dock.validBottom, dock.validRight, dock.validTop,
                 nextDockUvLeft, nextDockUvBottom, nextDockUvWidth, nextDockUvHeight,
+                nextOutputUvLeft, nextOutputUvBottom,
+                nextOutputUvWidth, nextOutputUvHeight,
                 dock.coverage);
         // Mapping changes are a normal per-frame part of Dock motion. Do not re-arm the
         // heavyweight Stage-B/Prismal diagnostics here: MainHook.log() also appends to disk,

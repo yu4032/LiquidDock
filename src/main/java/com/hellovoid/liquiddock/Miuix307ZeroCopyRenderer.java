@@ -4,6 +4,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import com.hellovoid.prismal.PrismalEdgeDecoration;
+
 import java.lang.ref.WeakReference;
 
 /** Builds the feedback-safe HyperOS 307 PassBlur -> OES -> TextureView material composition. */
@@ -22,6 +24,27 @@ final class Miuix307ZeroCopyRenderer {
     private static boolean producerUpdatesPolicyEnabled = true;
     private static boolean homeProducerOverride;
     private static long homeFreshnessSerial;
+    private static ClipOwner materialClipOwner;
+    private static ClipOwner parentClipOwner;
+
+    private static final class ClipOwner {
+        final ViewGroup view;
+        final boolean clipChildren;
+        final boolean clipPadding;
+
+        ClipOwner(ViewGroup view) {
+            this.view = view;
+            clipChildren = view.getClipChildren();
+            clipPadding = view.getClipToPadding();
+            view.setClipChildren(false);
+            view.setClipToPadding(false);
+        }
+
+        void restore() {
+            view.setClipChildren(clipChildren);
+            view.setClipToPadding(clipPadding);
+        }
+    }
 
     private Miuix307ZeroCopyRenderer() {}
 
@@ -62,6 +85,9 @@ final class Miuix307ZeroCopyRenderer {
         host.removeAllViews();
         host.addView(gpuBackdrop, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // The original Dock host keeps its exact bounds. Only the texture
+        // child expands into negative margins to expose external SDF shadows.
+        // A geometry observer will re-evaluate these margins after layout.
 
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
         hostRef = new WeakReference<>(host);
@@ -73,6 +99,7 @@ final class Miuix307ZeroCopyRenderer {
         HOME_FRESHNESS.reset();
         // Do not toggle native producer updates on folder re-parenting.
         // Its original vendor snapshot policy still owns the SF producer.
+        refreshDockShadowViewport();
         MainHook.log(TAG + " PassBlur TextureView EGL Prismal material installed; awaiting first GPU frame"
                 + " requestedBlur=" + blurRadiusPx
                 + " source=" + materialHost.getClass().getSimpleName());
@@ -108,12 +135,60 @@ final class Miuix307ZeroCopyRenderer {
         if (gpuBackdrop != null) gpuBackdrop.setNativeOpticsRadiusPx(radiusPx);
     }
 
+    /**
+     * Runs on the Launcher UI thread, only updates layout if the effective
+     * shadow guard changed. Does NOT rebind SurfaceFlinger/PassBlur.
+     */
+    static void refreshDockShadowViewport() {
+        Miuix307PassBlurTextureView output = gpuBackdropRef.get();
+        DockLiquidGlassHostView host = hostRef.get();
+        View material = materialHostRef.get();
+        if (output == null || host == null || material == null
+                || output.getParent() != host) return;
+        PrismalEdgeDecoration style = GlassEdgeEffects.current(GlassEdgeEffects.DOCK);
+        float density = host.getResources().getDisplayMetrics().density;
+        int shortSide = Math.min(host.getWidth(), host.getHeight());
+        int margin = DockPrismalShadowViewportPolicy.marginPx(style, density, shortSide);
+        if (!(output.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) output.getLayoutParams();
+        if (lp.leftMargin == -margin && lp.topMargin == -margin
+                && lp.rightMargin == -margin && lp.bottomMargin == -margin) return;
+
+        if (margin > 0) {
+            if (material instanceof ViewGroup && materialClipOwner == null) {
+                materialClipOwner = new ClipOwner((ViewGroup) material);
+            }
+            if (material.getParent() instanceof ViewGroup && parentClipOwner == null) {
+                parentClipOwner = new ClipOwner((ViewGroup) material.getParent());
+            }
+        } else {
+            restoreShadowClips();
+        }
+
+        lp.setMargins(-margin, -margin, -margin, -margin);
+        output.setLayoutParams(lp);
+        MainHook.log(TAG + " Prismal Dock shadow output margin=" + margin
+                + "px native=" + host.getWidth() + "x" + host.getHeight());
+    }
+
+    private static void restoreShadowClips() {
+        if (parentClipOwner != null) {
+            parentClipOwner.restore();
+            parentClipOwner = null;
+        }
+        if (materialClipOwner != null) {
+            materialClipOwner.restore();
+            materialClipOwner = null;
+        }
+    }
+
     static void sync(LiquidDockConfig.Glass glassConfig, int blurRadiusPx) {
         LiquidDockConfig.Glass live = LiveGlassConfigState.currentGlass();
         if (live != null) glassConfig = live;
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null && glassConfig != null) {
             gpuBackdrop.setGlassConfig(glassConfig);
+            refreshDockShadowViewport();
         }
     }
 
@@ -224,6 +299,7 @@ final class Miuix307ZeroCopyRenderer {
     }
 
     static void requestDockSceneRefresh() {
+        refreshDockShadowViewport();
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null) {
             gpuBackdrop.requestDockSceneRefresh();
@@ -245,6 +321,7 @@ final class Miuix307ZeroCopyRenderer {
     }
 
     static void clear() {
+        restoreShadowClips();
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         gpuBackdropRef = new WeakReference<>(null);
         hostRef = new WeakReference<>(null);
