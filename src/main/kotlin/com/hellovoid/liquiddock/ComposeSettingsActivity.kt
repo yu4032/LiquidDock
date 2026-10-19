@@ -172,6 +172,9 @@ private fun LiquidDockSettings(
         if (searchOpen) closeSearch() else navigateBack()
     }
 
+    // One Transition owns search content AND bottom navigation. Android Compose
+    // advances its child animations from the display-synchronized frame clock;
+    // do not create separate timers, fixed-FPS loops or independent transitions.
     val searchTransition = updateTransition(searchOpen, label = "settings-search")
 
     ModernSettingsScaffold(
@@ -202,19 +205,32 @@ private fun LiquidDockSettings(
         },
         bottomBar = {
             if (root) {
-                AnimatedVisibility(
-                    visible = !searchOpen,
+                searchTransition.AnimatedVisibility(
+                    visible = { !it },
                     enter = slideInVertically(
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioNoBouncy,
                             stiffness = Spring.StiffnessMediumLow,
                         ),
                         initialOffsetY = { it / 3 },
-                    ) + fadeIn(tween(180)),
+                    ) + fadeIn(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                    ),
                     exit = slideOutVertically(
-                        animationSpec = tween(220),
-                        targetOffsetY = { it / 2 },
-                    ) + fadeOut(tween(160)),
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                        targetOffsetY = { it / 3 },
+                    ) + fadeOut(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                    ),
                 ) {
                     ModernBottomNavigation(
                     labels = listOf(
@@ -264,22 +280,32 @@ private fun LiquidDockSettings(
         searchTransition.AnimatedContent(
             modifier = Modifier.fillMaxSize(),
             transitionSpec = {
-                // Pulling down brings search in from the top; closing reverses
-                // the motion. Both screens stay composed until the spring settles.
+                // Search content and bottom tabs use the same parent Transition,
+                // frame clock, spring and settle signal at any display refresh rate.
                 (slideInVertically(
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioNoBouncy,
                         stiffness = Spring.StiffnessMediumLow,
                     ),
                     initialOffsetY = { if (targetState) -it / 5 else it / 10 },
-                ) + fadeIn(tween(210))) togetherWith
+                ) + fadeIn(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                )) togetherWith
                     (slideOutVertically(
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioNoBouncy,
                             stiffness = Spring.StiffnessMediumLow,
                         ),
                         targetOffsetY = { if (targetState) it / 10 else -it / 5 },
-                    ) + fadeOut(tween(160)))
+                    ) + fadeOut(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                    ))
             },
         ) { showingSearch ->
             if (showingSearch) {
