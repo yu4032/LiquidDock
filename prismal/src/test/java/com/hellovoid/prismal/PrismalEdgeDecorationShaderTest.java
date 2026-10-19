@@ -128,7 +128,8 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(decorated.contains("lineOpacity"));
         assertFalse(decorated.contains("float edgeBand = os4EdgeBand("));
         assertFalse(decorated.contains("color *= 1.0 - darken;"));
-        assertTrue(decorated.contains("u_os4EdgeEnabled > 0.5"));
+        // The optical ink toggle is independent of the OS4 reflection enable.
+        assertFalse(decorated.contains("u_os4EdgeEnabled > 0.5"));
         PrismalEdgeDecoration optical = new PrismalEdgeDecoration(
                 1f, .85f, .6f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
         assertTrue(optical.hasBacklit());
