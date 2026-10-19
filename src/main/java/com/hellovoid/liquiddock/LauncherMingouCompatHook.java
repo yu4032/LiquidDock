@@ -68,14 +68,14 @@ final class LauncherMingouCompatHook {
                     Context context = (Context) contextArg;
 
                     int type = HookUtil.getIntField(info, "itemType");
-                    if (!LargeFolderFootprintPolicy.supportsType(type)
-                            || !LauncherLargeFolderPickerHook.isMarked(context, info)) {
-                        return result;
-                    }
-
+                    if (!LargeFolderFootprintPolicy.supportsType(type)) return result;
+                    boolean marked = LauncherLargeFolderPickerHook.isMarked(context, info);
                     int spanX = HookUtil.getIntField(info, "spanX");
                     int spanY = HookUtil.getIntField(info, "spanY");
-                    if (spanX == 2 && spanY == 2) return result;
+                    if (!LargeFolderFootprintPolicy.shouldRestoreLoadedTwoByTwo(
+                            enabled, type, marked, dbSpanX, dbSpanY, spanX, spanY)) {
+                        return result;
+                    }
 
                     HookUtil.setIntField(info, "spanX", 2);
                     HookUtil.setIntField(info, "spanY", 2);
