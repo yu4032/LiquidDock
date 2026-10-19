@@ -16,6 +16,7 @@ LiquidDock 当前使用或编译依赖：
 ## Bundled / adapted renderer reference
 
 - **Prismal** — MIT License — <https://github.com/styropyr0/Prismal>
+- **liquid-glass-react-native** — MIT License, Copyright (c) 2026 liquid-glass contributors — <https://github.com/medfa12/liquid-glass-react-native>. Adapted its QuartzCore reconstruction's lens-arc, opposing key/fill, complementary-erfc ring and holding-tone, and post-coverage exponential glint formulas inside the existing Prismal shader. No React Native, Apple proprietary shader binaries, GLSurfaceView, Bitmap capture, or additional rendering passes are incorporated. Upstream license: `docs/licenses/LiquidGlassReactNative-MIT.txt`.
 - **PrismalAGSL v1.0.4** — MIT License, Copyright (c) 2026 Saurav Sajeev — <https://github.com/styropyr0/PrismalAGSL>. GUI 阴影节点从上游 `PrismalDepthShadowModifier.kt` 和 `internal/Paint.kt` 改写为单独 Modifier，不包含完整玻璃采样。许可证原文：`docs/licenses/PrismalAGSL-MIT.txt`。
 
 LiquidDock 仓库包含独立 `prismal` 模块，并基于 Prismal 的光学/Shader/参数设计进行适配。具体许可证与上游归属以仓库内对应声明为准。

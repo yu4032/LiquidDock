@@ -71,6 +71,22 @@ final class PrismalEdgeDecorationShader {
                             0.0, 1.0);
                 }
 
+                // Degree-seven odd polynomial approximation of erfc(x)/2,
+                // adapted from the QuartzCore reconstruction in
+                // medfa12/liquid-glass-react-native (MIT). The difference
+                // between two soft steps is a narrow analytic shadow band:
+                // no blur pass, mip chain or texture allocation required.
+                float opticalErfcHalf(float distance) {
+                    float u = clamp(0.25 * distance + 0.5, 0.0, 1.0);
+                    float x = 4.0 * u - 2.0;
+                    float x2 = x * x;
+                    float p = 0.002954;
+                    p = p * x2 - 0.034460;
+                    p = p * x2 + 0.168210;
+                    p = p * x2 - 0.560550;
+                    return clamp(p * x + 0.5, 0.0, 1.0);
+                }
+
                 vec3 shadeOpticalMeniscus(vec3 transmitted, float darkWeight,
                         float specEnergy) {
                     float y = dot(transmitted, vec3(0.2126, 0.7152, 0.0722));
@@ -228,16 +244,57 @@ final class PrismalEdgeDecorationShader {
                     }
                     """)
                 .replace(FINAL, """
-                    // Preserve Prismal's native optical highlight in 'color'.
-                    // Source-over order: glass -> independent INNER glint ->
-                    // OUTER refracted contour -> underlying cast shadow.
-                    // The glint's alpha does not depend on the outline's alpha.
+                    // macOS27-inspired analytic ring shadow and holding tone
+                    // live INSIDE the SDF. They never create a second external
+                    // Dock cast shadow (MiShadow remains the only native owner).
+                    // Apply to the original glass color before its independent
+                    // inner mirror highlight; the highlight is not attenuated.
+                    vec3 ringShadedGlass = color;
+                    float ringDepth = max(-surfaceDistance, 0.0);
+                    float ringRangePx = min(12.0,
+                            max(3.0, u_backlitWidthPx * 3.0 + edgeAa));
+                    if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0
+                            && u_backlitSideStart < 1.0
+                            && surfaceDistance < 0.0
+                            && ringDepth < ringRangePx) {
+                        float ringRadiusPx = clamp(
+                                u_backlitWidthPx * 0.85 + edgeAa * 0.8,
+                                1.0, 5.0);
+                        float ringStrokePx = clamp(
+                                u_backlitWidthPx * 0.70, 0.75, 4.0);
+                        float invRing = 0.70710678 / ringRadiusPx;
+                        float ringInner = opticalErfcHalf(ringDepth * invRing);
+                        float ringOuter = opticalErfcHalf(
+                                (ringDepth + ringStrokePx) * invRing);
+                        float ringAmount = clamp(
+                                (ringInner - ringOuter) * 0.58
+                                * u_backlitStrength * opticalDark,
+                                0.0, 0.24);
+                        ringShadedGlass *= 1.0 - ringAmount;
+
+                        // The reference macOS27 holding-tone curve desaturates
+                        // a shallow near-edge region using the same erfc family.
+                        // Reuse already computed RGB rather than a new backdrop
+                        // read; the body blur and per-scope tint are unchanged.
+                        float hold = opticalErfcHalf(
+                                (ringDepth - ringStrokePx * 1.5) * invRing);
+                        float luma = dot(ringShadedGlass,
+                                vec3(0.212646, 0.715332, 0.072205));
+                        ringShadedGlass = mix(ringShadedGlass, vec3(luma),
+                                clamp(hold * 0.14 * u_backlitStrength
+                                        * opticalDark, 0.0, 0.14));
+                    }
+
+                    // Preserve the native OS4 highlight. Source-over order:
+                    // glass/ring -> independent INNER glint -> OUTER contour ->
+                    // underlying cast shadow. Neither optical layer is a
+                    // different RGB choice for the other layer's alpha.
                     float glassAlpha = opacity * u_transmittance;
                     float glassAndGlintAlpha = innerHighlightAlpha
                             + glassAlpha * (1.0 - innerHighlightAlpha);
                     vec3 glassAndGlintPremul =
                             OPTICAL_SPECULAR_RGB * innerHighlightAlpha
-                            + color * glassAlpha * (1.0 - innerHighlightAlpha);
+                            + ringShadedGlass * glassAlpha * (1.0 - innerHighlightAlpha);
 
                     vec3 outlineRgb = shadeOpticalMeniscus(
                             edgeTransmission, opticalDark, opticalSpec);
@@ -251,8 +308,25 @@ final class PrismalEdgeDecorationShader {
                     vec3 finalPremul = glassWithOutlinePremul
                             + u_castShadowColor.rgb * exteriorShadowAlpha
                             * (1.0 - glassWithOutlineAlpha);
-                    gl_FragColor = vec4(
-                            finalPremul / max(finalAlpha, 0.0001), finalAlpha);
+                    // macOS26 measured post-coverage rim glint: a narrow
+                    // exponential reflection is evaluated AFTER coverage so
+                    // translucent silhouette pixels do not swallow the glint.
+                    // Only the inner surface may emit it; never overwrite the
+                    // exterior refracted contour or the separate OS4 highlight.
+                    vec3 finalRgb = finalPremul / max(finalAlpha, 0.0001);
+                    if (u_backlitStrength > 0.0
+                            && innerHighlightAlpha > 0.001
+                            && surfaceDistance < 0.0) {
+                        float glintTauPx = clamp(
+                                u_backlitWidthPx * 0.55 + 0.65, 0.85, 2.0);
+                        float rimGlint = exp(-abs(surfaceDistance) / glintTauPx);
+                        float rimGlintGain = clamp(
+                                0.10 * u_backlitStrength * rimGlint
+                                * (1.0 - opticalDark) * (1.0 - outlineAlpha)
+                                / max(finalAlpha, 0.25), 0.0, 0.20);
+                        finalRgb = min(vec3(1.0), finalRgb + vec3(rimGlintGain));
+                    }
+                    gl_FragColor = vec4(finalRgb, finalAlpha);
                     """);
     }
 

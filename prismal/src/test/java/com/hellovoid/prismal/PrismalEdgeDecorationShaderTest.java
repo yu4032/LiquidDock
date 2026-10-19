@@ -132,7 +132,8 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(shader.contains("float glassAndGlintAlpha = innerHighlightAlpha"));
         assertTrue(shader.contains("vec3 glassAndGlintPremul ="));
         assertTrue(shader.contains("OPTICAL_SPECULAR_RGB * innerHighlightAlpha"));
-        assertTrue(shader.contains("color * glassAlpha * (1.0 - innerHighlightAlpha)"));
+        assertTrue(shader.contains("ringShadedGlass * glassAlpha * (1.0 - innerHighlightAlpha)"));
+        assertTrue(shader.contains("ringShadedGlass *= 1.0 - ringAmount;"));
         assertTrue(shader.contains("vec3 glassWithOutlinePremul = outlineRgb * outlineAlpha"));
         assertTrue(shader.contains("glassAndGlintPremul * (1.0 - outlineAlpha)"));
         assertFalse(shader.contains("highlightAlpha *= (1.0 - outlineAlpha)"));
@@ -251,6 +252,82 @@ public class PrismalEdgeDecorationShaderTest {
         return rgb*trans*(1f-reflection)+spec*reflection;
     }
 
+
+    @Test public void macOs27ErfcRingDifferenceProducesBoundedSoftDarkBand() {
+        String fragment=decorated();
+        assertTrue(fragment.contains("float opticalErfcHalf(float distance)"));
+        assertTrue(fragment.contains("p = p * x2 - 0.560550;"));
+        assertTrue(fragment.contains("float ringInner = opticalErfcHalf("));
+        assertTrue(fragment.contains("float ringOuter = opticalErfcHalf("));
+        assertTrue(fragment.contains("(ringInner - ringOuter) * 0.58"));
+        assertTrue(fragment.contains("ringShadedGlass *= 1.0 - ringAmount;"));
+        assertTrue(fragment.contains("float invRing = 0.70710678 / ringRadiusPx;"));
+        assertTrue(fragment.contains("ringDepth < ringRangePx"));
+        assertEquals(.5f,erfcHalf(0f),.00001f);
+        assertTrue(erfcHalf(-1f)>.5f);
+        assertTrue(erfcHalf(1f)<.5f);
+        assertEquals(1f,erfcHalf(-20f),.002f);
+        assertEquals(0f,erfcHalf(20f),.002f);
+        float previous=Float.POSITIVE_INFINITY;
+        for (int d=0;d<=8;d++) {
+            float r=ring(d,2f,1.5f);
+            assertTrue("ring>=0",r>=0f);
+            assertTrue("ring<=1",r<=1f);
+            assertTrue("ring fades inward",r<=previous+.002f);
+            previous=r;
+        }
+        assertTrue(ring(0f,2f,1.5f)>.10f);
+        assertTrue(ring(8f,2f,1.5f)<.01f);
+    }
+
+    private static float erfcHalf(float distance) {
+        float u=Math.max(0f,Math.min(1f,.25f*distance+.5f));
+        float x=4f*u-2f,x2=x*x,p=.002954f;
+        p=p*x2-.034460f;
+        p=p*x2+.168210f;
+        p=p*x2-.560550f;
+        return Math.max(0f,Math.min(1f,p*x+.5f));
+    }
+
+    private static float ring(float depth,float radius,float stroke) {
+        return Math.max(0f,Math.min(1f,
+                erfcHalf(depth*.70710678f/radius)
+                        -erfcHalf((depth+stroke)*.70710678f/radius)));
+    }
+
+    @Test public void macOs27HoldingToneAndRingAreScopedToInsideGlass() {
+        String shader=decorated();
+        int begin=shader.indexOf("vec3 ringShadedGlass = color;");
+        int end=shader.indexOf("float glassAlpha = opacity * u_transmittance;",begin);
+        assertTrue(begin>=0&&end>begin);
+        String ring=shader.substring(begin,end);
+        assertTrue(ring.contains("surfaceDistance < 0.0"));
+        assertTrue(ring.contains("float hold = opticalErfcHalf("));
+        assertTrue(ring.contains("ringDepth - ringStrokePx * 1.5"));
+        assertTrue(ring.contains("vec3(0.212646, 0.715332, 0.072205)"));
+        assertTrue(ring.contains("ringShadedGlass = mix(ringShadedGlass, vec3(luma),"));
+        assertFalse("no extra texture read for ring or hold",ring.contains("texture2D("));
+        assertTrue(shader.contains("u_backlitSideStart < 1.0"));
+    }
+
+    @Test public void postCoverageGlintUsesExponentialWithoutPaintingExterior() {
+        String shader=decorated();
+        int blend=shader.indexOf("float finalAlpha = glassWithOutlineAlpha");
+        int glint=shader.indexOf("float rimGlint = exp(-abs(surfaceDistance)");
+        int output=shader.indexOf("gl_FragColor = vec4(finalRgb, finalAlpha);",glint);
+        assertTrue(blend>0&&glint>blend&&output>glint);
+        assertTrue(shader.contains("0.10 * u_backlitStrength * rimGlint"));
+        assertTrue(shader.contains("* (1.0 - opticalDark) * (1.0 - outlineAlpha)"));
+        assertTrue(shader.contains("/ max(finalAlpha, 0.25)"));
+        assertTrue(shader.contains("innerHighlightAlpha > 0.001"));
+        assertTrue(shader.contains("surfaceDistance < 0.0"));
+        double near=Math.exp(-.3/1.5),far=Math.exp(-3/1.5);
+        assertTrue(near>far*3.0);
+        // Original blurred body and one rim sharp tap remain unchanged.
+        assertEquals(1,occurrences(shader,"texture2D(u_backgroundTexture, rimUv).rgb;"));
+        assertTrue(shader.contains("texture2D(u_blurredTexture, uvCenter)"));
+    }
+
     @Test public void shadowOnlyBranchKeepsBaseGlassUnpainted() {
         PrismalEdgeDecoration shadow=new PrismalEdgeDecoration(
                 0f,0f,.6f,15f,4f,0f,0f,0f,.2f,.5f);
@@ -274,7 +351,8 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(glass>0&&highlight>glass&&outline>highlight&&shadow>outline);
         assertTrue(shader.contains("float finalAlpha = glassWithOutlineAlpha"));
         assertTrue(shader.contains("vec3 finalPremul = glassWithOutlinePremul"));
-        assertTrue(shader.contains("finalPremul / max(finalAlpha, 0.0001)"));
+        assertTrue(shader.contains("vec3 finalRgb = finalPremul / max(finalAlpha, 0.0001);"));
+        assertTrue(shader.contains("gl_FragColor = vec4(finalRgb, finalAlpha);"));
     }
 
     @Test public void fragmentUsesNoLaterOs4LocalBeforeEarlyDiscard() {
