@@ -84,9 +84,11 @@ internal fun RestartScopesDialog(
         val listMaxHeight = (maxHeight - 240.dp).coerceAtLeast(120.dp)
         ModernSurface(
             modifier = Modifier
+                // Include the optical gutter in the transformed layer bounds:
+                // Prismal's native depth shadow draws outside the card outline.
+                .graphicsLayer { scaleX = panelScale; scaleY = panelScale }
                 .padding(horizontal = 20.dp, vertical = 28.dp)
                 .widthIn(max = 520.dp)
-                .graphicsLayer { scaleX = panelScale; scaleY = panelScale }
                 // Consume taps on the dialog panel without installing an
                 // interactive Prismal surface over its child switches/buttons.
                 .clickable(onClick = {}),
