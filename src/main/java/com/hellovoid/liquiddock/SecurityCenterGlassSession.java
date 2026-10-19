@@ -473,7 +473,7 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 sourceBackend.makePbufferCurrent();
                 prismalRenderer.beginGlassFrame();
                 prismalRenderer.setEdgeDecoration(
-                        GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.SECURITY_CENTER), 1f);
+                        GlassEdgeEffects.current(GlassEdgeEffects.SECURITY_CENTER), 1f);
                 prismalRenderer.drawGlass(
                         geometry.toPrismalGeometry(), prismalParams, highlightProfile);
                 if (submission.awaitPresentationAck) {

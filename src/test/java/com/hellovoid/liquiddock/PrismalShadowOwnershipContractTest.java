@@ -19,6 +19,7 @@ public final class PrismalShadowOwnershipContractTest {
         String session=read("LauncherGlassSession.java");
         assertFalse(effects.contains("withoutNativeShadows"));
         assertFalse(effects.contains("withoutNativeShadow(String scope)"));
+        assertFalse(session.contains("GlassEdgeEffects.withoutNativeShadow("));
         assertTrue(compositor.contains(
                 "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK)"));
         assertTrue(session.contains("GlassEdgeEffects.current(GlassEdgeEffects.ICON)"));
