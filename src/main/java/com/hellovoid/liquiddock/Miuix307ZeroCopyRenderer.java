@@ -20,7 +20,6 @@ final class Miuix307ZeroCopyRenderer {
     private static WeakReference<View> materialHostRef = new WeakReference<>(null);
     private static final DockHomeBackdropFreshnessState HOME_FRESHNESS =
             new DockHomeBackdropFreshnessState();
-    private static boolean dockAnimationFrameScheduled;
     private static boolean producerUpdatesPolicyEnabled = true;
     private static boolean homeProducerOverride;
     private static long homeFreshnessSerial;
@@ -92,7 +91,6 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdropRef = new WeakReference<>(gpuBackdrop);
         hostRef = new WeakReference<>(host);
         materialHostRef = new WeakReference<>(materialHost);
-        dockAnimationFrameScheduled = false;
         producerUpdatesPolicyEnabled = true;
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;
@@ -306,18 +304,9 @@ final class Miuix307ZeroCopyRenderer {
         }
     }
 
-    static void requestDockAnimationFrames() {
+    static void requestDockProgressRefresh() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
-        if (gpuBackdrop == null || dockAnimationFrameScheduled) return;
-        dockAnimationFrameScheduled = true;
-        gpuBackdrop.requestDockSceneRefresh();
-        gpuBackdrop.postOnAnimation(() -> {
-            if (gpuBackdropRef.get() != gpuBackdrop) return;
-            dockAnimationFrameScheduled = false;
-            if (DockGlassItemRegistry.hasActiveAnimation()) {
-                requestDockAnimationFrames();
-            }
-        });
+        if (gpuBackdrop != null) gpuBackdrop.requestDockProgressRefresh();
     }
 
     static void clear() {
@@ -326,7 +315,6 @@ final class Miuix307ZeroCopyRenderer {
         gpuBackdropRef = new WeakReference<>(null);
         hostRef = new WeakReference<>(null);
         materialHostRef = new WeakReference<>(null);
-        dockAnimationFrameScheduled = false;
         producerUpdatesPolicyEnabled = true;
         homeProducerOverride = false;
         homeFreshnessSerial = 0L;

@@ -429,6 +429,22 @@ final class Miuix307PassBlurTextureView extends TextureView
         });
     }
 
+    /** Native progress changes opacity, not geometry or the prepared OES backdrop. */
+    private boolean dockProgressRefreshPending;
+
+    void requestDockProgressRefresh() {
+        if (shuttingDown || dockProgressRefreshPending) return;
+        dockProgressRefreshPending = true;
+        postOnAnimation(() -> {
+            dockProgressRefreshPending = false;
+            if (shuttingDown) return;
+            // updateBackdropMapping publishes a scene-only frame iff opacity changed.
+            // Do not redundantly force another GL swap or invalidate cached geometry.
+            updateBackdropMapping();
+            postInvalidateOnAnimation();
+        });
+    }
+
     /**
      * Reconnect SurfaceFlinger's PassBlur producer without rebuilding the attached TextureView.
      * The framework Binding can remain stale-true after its BufferQueue has disconnected.

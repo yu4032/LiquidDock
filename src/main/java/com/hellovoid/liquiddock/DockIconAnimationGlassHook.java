@@ -62,9 +62,14 @@ final class DockIconAnimationGlassHook {
 
                         if (host != null && visibility != null
                                 && LauncherGlassHierarchy.isDock(host)
-                                && visibility == View.VISIBLE
                                 && GlassRuntimeState.isAnyIconEnabled()) {
-                            DockGlassItemRegistry.endLaunchAnimation(host);
+                            if (visibility == View.VISIBLE) {
+                                DockGlassItemRegistry.endLaunchAnimation(host);
+                            } else {
+                                // The OEM source hidden boundary owns glass concealment,
+                                // even when the FloatingIcon proxy omits update frames.
+                                DockGlassItemRegistry.beginLaunchAnimation(host);
+                            }
                         }
                         return result;
                     }, int.class);
@@ -189,18 +194,40 @@ final class DockIconAnimationGlassHook {
                                     DockGlassItemRegistry.holdProxyHidden(dockTarget);
                                 } else {
                                     RectF proxyRect = (RectF) args[useRotationRect ? 1 : 0];
-                                    DockGlassItemRegistry.updateProxyGeometry(
-                                            dockTarget, proxyRect.left, proxyRect.top,
-                                            proxyRect.right, proxyRect.bottom);
+                                    View animationRoot = proxy != null ? proxy.getRootView() : null;
+                                    if (animationRoot == null
+                                            && dockTarget.getContext() instanceof android.app.Activity) {
+                                        animationRoot = ((android.app.Activity) dockTarget.getContext())
+                                                .getWindow().getDecorView().getRootView();
+                                    }
+                                    if (animationRoot != null) {
+                                        android.graphics.Matrix toScreen = new android.graphics.Matrix();
+                                        animationRoot.transformMatrixToGlobal(toScreen);
+                                        float[] origin = new float[]{0f, 0f};
+                                        toScreen.mapPoints(origin);
+                                        int[] screen = new int[2];
+                                        animationRoot.getLocationOnScreen(screen);
+                                        toScreen.postTranslate(screen[0] - origin[0], screen[1] - origin[1]);
+                                        RectF screenRect = new RectF(proxyRect);
+                                        toScreen.mapRect(screenRect);
+                                        DockGlassItemRegistry.updateProxyGeometry(
+                                                dockTarget, screenRect.left, screenRect.top,
+                                                screenRect.right, screenRect.bottom);
+                                    }
                                 }
 
                                 if (closeToHome && proxy != null
                                         && proxyAlpha <= 0.1f && proxy.getAlpha() < 1.0f) {
                                     proxy.setAlpha(1.0f);
                                 }
-                                if (closeToHome && GlassRuntimeState.isAnyIconEnabled()) {
-                                    DockGlassItemRegistry.observeLaunchAnimationFrame(
-                                            dockTarget, progress);
+                                if (GlassRuntimeState.isAnyIconEnabled()) {
+                                    if (closeToHome) {
+                                        DockGlassItemRegistry.observeHomeReturnProgress(
+                                                dockTarget, progress);
+                                    } else {
+                                        // Same retarget boundary as Workspace (#434).
+                                        DockGlassItemRegistry.cancelHomeReturn(dockTarget);
+                                    }
                                 }
                             }
                         }
