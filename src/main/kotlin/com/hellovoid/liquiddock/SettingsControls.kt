@@ -171,6 +171,7 @@ internal fun IntSetting(
     var value by remember(spec.key, maxValue) {
         val initial = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
             prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
+        else if (decimalDp && !prefs.contains(spec.key)) resetValue
         else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
             .coerceIn(spec.min.toFloat(), maxValue.toFloat())
         mutableStateOf(initial)
@@ -180,7 +181,8 @@ internal fun IntSetting(
         if (storedRevision > 0) {
             value = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
                 prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
-            else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
+            else if (decimalDp && !prefs.contains(spec.key)) resetValue
+        else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
                 .coerceIn(spec.min.toFloat(), maxValue.toFloat())
         }
     }

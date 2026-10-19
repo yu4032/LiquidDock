@@ -29,7 +29,7 @@ internal data class IntSpec(
         if (!key.startsWith("liquid_")) return default.toFloat()
         val preset = PresetManager.defaultValues()
         val raw = if (isDecimal) preset["${key}_tenths"] else preset[key]
-        return if (raw is Number) raw.toFloat() / if (isDecimal) 10f else 1f else default.toFloat()
+        return if (raw is Number) raw.toFloat() / if (isDecimal) 10f else 1f else if (isDecimal) config.uiDefaultDp() else default.toFloat()
     }
 }
 

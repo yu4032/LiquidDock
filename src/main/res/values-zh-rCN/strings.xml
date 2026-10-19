@@ -30,8 +30,8 @@
     <string name="page_widget_component_detail">小组件组件详情</string>
     <string name="widget_components_entry">小组件部件管理</string>
     <string name="widget_components_entry_summary">手动载入小组件，可隐藏内部部件或选择文字与图像白化</string>
-    <string name="page_stroke">描边</string>
-    <string name="page_shadow">原生阴影</string>
+    <string name="page_stroke">Dock描边</string>
+    <string name="page_shadow">原生Dock阴影</string>
     <string name="page_animation">动画与过渡</string>
     <string name="page_data">预设</string>
     <string name="page_about">许可</string>

@@ -30,8 +30,8 @@
     <string name="page_widget_component_detail">Widget component detail</string>
     <string name="widget_components_entry">Widget component styling</string>
     <string name="widget_components_entry_summary">Load widgets to hide components or turn selected text/icons white</string>
-    <string name="page_stroke">Stroke</string>
-    <string name="page_shadow">Native shadow</string>
+    <string name="page_stroke">Dock stroke</string>
+    <string name="page_shadow">Native Dock shadow</string>
     <string name="page_animation">Animations &amp; transitions</string>
     <string name="page_data">Presets</string>
     <string name="page_about">Licenses</string>

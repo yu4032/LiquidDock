@@ -357,14 +357,17 @@ internal fun ScopedGlassSlider(
         val global = fallback.name()
         return if (fallback.storageMode() == ConfigKey.StorageMode.DP_TENTHS
             && prefs.contains("${global}_tenths")) {
-            prefs.getInt("${global}_tenths", fallback.uiDefault() * 10) / 10f
+            prefs.getInt("${global}_tenths", (fallback.uiDefaultDp() * 10f).toInt()) / 10f
+        } else if (fallback.storageMode() == ConfigKey.StorageMode.DP_TENTHS
+            && !prefs.contains(global)) {
+            fallback.uiDefaultDp()
         } else {
             prefs.getInt(global, fallback.uiDefault()).toFloat()
         }
     }
 
     fun read(): Float = if (decimal && prefs.contains("${key}_tenths")) {
-        prefs.getInt("${key}_tenths", fallback.uiDefault() * 10) / 10f
+        prefs.getInt("${key}_tenths", (fallback.uiDefaultDp() * 10f).toInt()) / 10f
     } else if (prefs.contains(key)) {
         prefs.getInt(key, fallback.uiDefault()).toFloat()
     } else inherited()

@@ -217,9 +217,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> OUTER_SHADOW_ENABLED = bool(
                 "liquid_outer_shadow_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_RADIUS = dp(
-                "liquid_outer_shadow_radius", 16, 16, 16, 0, 24, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_outer_shadow_radius", 5, 5, 5, 0, 24, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_OFFSET_Y = dp(
-                "liquid_outer_shadow_offset_y", 3, 3, 3, -16, 16, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_outer_shadow_offset_y", 0, 0, 0, -16, 16, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_RED = integer(
                 "liquid_outer_shadow_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_GREEN = integer(
@@ -227,7 +227,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> OUTER_SHADOW_BLUE = integer(
                 "liquid_outer_shadow_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_ALPHA = integer(
-                "liquid_outer_shadow_alpha", 36, 36, 36, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_outer_shadow_alpha", 8, 8, 8, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_LIGHT_FOLLOW = integer(
                 "liquid_outer_shadow_light_follow", 65, 65, 65, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         // Light-derived high-contrast narrow contour; independent of whole shadow.
@@ -235,14 +235,15 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> BACKLIT_ENABLED = bool(
                 "liquid_backlit_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> BACKLIT_WIDTH = dp(
-                "liquid_backlit_width", 1, 1, 1, 0, 5, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_backlit_width", 0, 0, 0, 0, 5, ConfigKey.ExportMode.IF_PRESENT)
+                .withDefaultDpTenths(4);
         public static final ConfigKey<Integer> BACKLIT_STRENGTH = integer(
-                "liquid_backlit_strength", 85, 85, 85, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_backlit_strength", 20, 20, 20, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> BACKLIT_SOFTNESS = integer(
-                "liquid_backlit_softness", 60, 60, 60, 5, 200, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_backlit_softness", 68, 68, 68, 5, 200, ConfigKey.ExportMode.IF_PRESENT);
         /** Angular reach of visible dark contour, not its width or opacity. */
         public static final ConfigKey<Integer> BACKLIT_EXTENT = integer(
-                "liquid_backlit_extent", 55, 55, 55, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_backlit_extent", 100, 100, 100, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(

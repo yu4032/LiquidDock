@@ -18,7 +18,7 @@ internal fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, master
     var dockStroke by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_ENABLED.name(), ConfigSchema.Dock.STROKE_ENABLED.uiDefault())) }
     var squircle by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SQUIRCLE.name(), ConfigSchema.Dock.SQUIRCLE.uiDefault())) }
     var fillDiff by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.FILL_DIFF.name(), ConfigSchema.Dock.FILL_DIFF.uiDefault())) }
-    DenseSettingsList(padding, "描边") {
+    DenseSettingsList(padding, "Dock描边") {
         item(key = "stroke-enabled") {
             SettingsCard {
                 BooleanSetting(prefs, ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边", "控制 Dock 边框与灯光", masterEnabled) { dockStroke = it }
@@ -69,7 +69,7 @@ internal fun ShadowPage(
     var strokeShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_SHADOW.name(), ConfigSchema.Dock.STROKE_SHADOW.uiDefault())) }
     DenseSettingsList(
         padding,
-        "原生阴影",
+        "原生Dock阴影",
         "仅开启 Dock 自定义且关闭液态玻璃时生效。启用液态玻璃后，Dock 阴影改由 Prismal 渲染。",
     ) {
         item(key = "dock-shadow-enabled") {
