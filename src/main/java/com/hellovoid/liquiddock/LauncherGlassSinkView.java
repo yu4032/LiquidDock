@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.view.Surface;
@@ -12,6 +13,7 @@ import android.view.ViewParent;
 import android.view.animation.DecelerateInterpolator;
 
 import com.hellovoid.prismal.PrismalInteractionState;
+import com.hellovoid.prismal.PrismalEdgeDecoration;
 
 import java.lang.ref.WeakReference;
 import java.util.Collections;
@@ -41,6 +43,15 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private final LauncherGlassSuppressionState suppressionState =
             new LauncherGlassSuppressionState();
     private volatile LauncherGlassNodeKind nodeKind = LauncherGlassNodeKind.LARGE_FOLDER;
+    private volatile boolean dialogOpticalScope;
+    private volatile int presentationPaddingPx;
+    // Reused on the UI frame thread. Global-visible rectangles are clipped by
+    // window edges, which would incorrectly shift the glass when dragging near
+    // the screen border; use the actual un-clipped transform instead.
+    private final Matrix sinkToGlobal = new Matrix();
+    private final Matrix rootToGlobal = new Matrix();
+    private final Matrix globalToRoot = new Matrix();
+    private final float[] opticalCorners = new float[8];
     private final LauncherGlassPressState pressState = new LauncherGlassPressState();
     private ValueAnimator pressAnimator;
     private boolean parentRecoveryPosted;
@@ -148,10 +159,29 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
 
     LauncherGlassNodeKind nodeKind() { return nodeKind; }
 
-    boolean isExternalSessionAuthority() { return externalSessionAuthority; }
-
     void setNodeKind(LauncherGlassNodeKind value) {
         nodeKind = value != null ? value : LauncherGlassNodeKind.LARGE_FOLDER;
+        syncFromMaterial();
+    }
+
+    /** A separate ViewRoot does not imply dialog optics: live drag is external too. */
+    void setDialogOpticalScope() {
+        dialogOpticalScope = true;
+        syncFromMaterial();
+    }
+
+    String opticalScope() {
+        if (dialogOpticalScope) return GlassEdgeEffects.DIALOG;
+        return nodeKind == LauncherGlassNodeKind.ICON ? GlassEdgeEffects.ICON
+                : nodeKind == LauncherGlassNodeKind.WIDGET ? GlassEdgeEffects.WIDGET
+                : GlassEdgeEffects.FOLDER;
+    }
+
+    private int desiredPresentationPaddingPx(float width, float height) {
+        if (!externalSessionAuthority) return 0;
+        PrismalEdgeDecoration edge = GlassEdgeEffects.current(opticalScope());
+        float density = getResources().getDisplayMetrics().density;
+        return (int) Math.ceil(edge.extraGuardPx(density, Math.max(1f, Math.min(width, height))));
     }
 
     void requestLifecycleRefresh() {
@@ -278,17 +308,22 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
                 ? localVisualBottom : Math.max(1f, material.getHeight());
         int width = Math.max(1, Math.round(right - left));
         int height = Math.max(1, Math.round(bottom - top));
+        int padding = desiredPresentationPaddingPx(width, height);
+        if (presentationPaddingPx != padding) {
+            presentationPaddingPx = padding;
+            changed = true;
+        }
         ViewGroup.LayoutParams lp = getLayoutParams();
-        if (lp != null && (lp.width != width || lp.height != height)) {
-            lp.width = width;
-            lp.height = height;
+        if (lp != null && (lp.width != width + 2 * padding || lp.height != height + 2 * padding)) {
+            lp.width = width + 2 * padding;
+            lp.height = height + 2 * padding;
             setLayoutParams(lp);
             changed = true;
         }
-        changed |= setFloatIfChanged(this::getX, this::setX, material.getX() + left);
-        changed |= setFloatIfChanged(this::getY, this::setY, material.getY() + top);
-        float pivotX = material.getPivotX() - left;
-        float pivotY = material.getPivotY() - top;
+        changed |= setFloatIfChanged(this::getX, this::setX, material.getX() + left - padding);
+        changed |= setFloatIfChanged(this::getY, this::setY, material.getY() + top - padding);
+        float pivotX = material.getPivotX() - left + padding;
+        float pivotY = material.getPivotY() - top + padding;
         if (getPivotX() != pivotX) { setPivotX(pivotX); changed = true; }
         if (getPivotY() != pivotY) { setPivotY(pivotY); changed = true; }
         if (getScaleX() != material.getScaleX()) { setScaleX(material.getScaleX()); changed = true; }
@@ -350,20 +385,70 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     LauncherGlassGeometry.Snapshot captureGeometry(View root) {
         if (disposed || root == null || getVisibility() != View.VISIBLE || getAlpha() <= 0f
                 || getWidth() <= 0 || getHeight() <= 0) return null;
-        Rect sinkRect = new Rect();
-        if (!getGlobalVisibleRect(sinkRect)) return null;
-        int[] rootLocation = new int[2];
-        root.getLocationOnScreen(rootLocation);
-        LauncherGlassScreenSpace.Bounds bounds = LauncherGlassScreenSpace.relativeToRoot(
-                rootLocation[0], rootLocation[1],
-                sinkRect.left, sinkRect.top, sinkRect.right, sinkRect.bottom);
-        float scale = Math.min(
-                sinkRect.width() / (float) Math.max(1, getWidth()),
-                sinkRect.height() / (float) Math.max(1, getHeight()));
-        return LauncherGlassGeometry.resolve(
+        float left;
+        float top;
+        float right;
+        float bottom;
+        float scaleX;
+        float scaleY;
+
+        if (presentationPaddingPx == 0) {
+            // Preserve the original lightweight visibility path for ordinary
+            // (non-external) sink nodes.
+            Rect visible = new Rect();
+            if (!getGlobalVisibleRect(visible)) return null;
+            int[] rootLocation = new int[2];
+            root.getLocationOnScreen(rootLocation);
+            left = visible.left - rootLocation[0];
+            top = visible.top - rootLocation[1];
+            right = visible.right - rootLocation[0];
+            bottom = visible.bottom - rootLocation[1];
+            scaleX = visible.width() / (float) Math.max(1, getWidth());
+            scaleY = visible.height() / (float) Math.max(1, getHeight());
+        } else {
+            // Use un-clipped mapped corners: getGlobalVisibleRect() shortens a
+            // shadow when it crosses the display boundary, shrinking the body.
+            opticalCorners[0] = 0f;
+            opticalCorners[1] = 0f;
+            opticalCorners[2] = getWidth();
+            opticalCorners[3] = 0f;
+            opticalCorners[4] = getWidth();
+            opticalCorners[5] = getHeight();
+            opticalCorners[6] = 0f;
+            opticalCorners[7] = getHeight();
+            sinkToGlobal.reset();
+            transformMatrixToGlobal(sinkToGlobal);
+            rootToGlobal.reset();
+            root.transformMatrixToGlobal(rootToGlobal);
+            globalToRoot.reset();
+            if (!rootToGlobal.invert(globalToRoot)) return null;
+            sinkToGlobal.mapPoints(opticalCorners);
+            globalToRoot.mapPoints(opticalCorners);
+            left = right = opticalCorners[0];
+            top = bottom = opticalCorners[1];
+            for (int i = 2; i < opticalCorners.length; i += 2) {
+                left = Math.min(left, opticalCorners[i]);
+                right = Math.max(right, opticalCorners[i]);
+                top = Math.min(top, opticalCorners[i + 1]);
+                bottom = Math.max(bottom, opticalCorners[i + 1]);
+            }
+            scaleX = (right - left) / Math.max(1, getWidth());
+            scaleY = (bottom - top) / Math.max(1, getHeight());
+        }
+        float insetX = presentationPaddingPx * scaleX;
+        float insetY = presentationPaddingPx * scaleY;
+
+        float radius = nativeCornerRadiusPx * Math.max(0.01f, Math.min(scaleX, scaleY));
+        if (presentationPaddingPx == 0) {
+            // Keep the existing clipped geometry policy for ordinary sinks.
+            return LauncherGlassGeometry.resolve(
+                    root.getWidth(), root.getHeight(), left, top, right, bottom, radius);
+        }
+        LauncherGlassGeometry.Snapshot shape = LauncherGlassGeometry.resolveStatic(
                 root.getWidth(), root.getHeight(),
-                bounds.left, bounds.top, bounds.right, bounds.bottom,
-                nativeCornerRadiusPx * Math.max(0.01f, scale));
+                left + insetX, top + insetY, right - insetX, bottom - insetY, radius);
+        return LauncherGlassGeometry.withPresentationCrop(
+                shape, root.getWidth(), root.getHeight(), left, top, right, bottom);
     }
 
     void dispose() {
