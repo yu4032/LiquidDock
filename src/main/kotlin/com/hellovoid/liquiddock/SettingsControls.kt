@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigKey
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -53,6 +54,25 @@ internal fun LazyListScope.groupedIntSettings(
             group.forEachIndexed { index, spec ->
                 if (index > 0) ModernListDivider()
                 IntSetting(prefs, spec, enabled)
+            }
+        }
+    }
+}
+
+/** Organize first by function, then render at most 3 sliders per cell. */
+internal fun LazyListScope.groupedLiquidSettings(
+    groups: List<LiquidSpecGroup>,
+    prefs: SharedPreferences,
+    enabled: Boolean,
+) {
+    groups.forEach { group ->
+        item(key = "optical-title:${group.title}") { SmallTitle(group.title) }
+        item(key = "optical-cell:${group.title}") {
+            SettingsCard {
+                group.specs.forEachIndexed { index, spec ->
+                    if (index > 0) ModernListDivider()
+                    IntSetting(prefs, spec, enabled)
+                }
             }
         }
     }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.hellovoid.liquiddock.config.ConfigSchema
+import top.yukonga.miuix.kmp.basic.SmallTitle
 
 // Leaf pages only. Navigation, page history and Prismal chrome stay in ComposeSettingsActivity.
 // Use the shared IntSetting/SettingsList controls to preserve preference and visual semantics.
@@ -26,19 +27,32 @@ internal fun AnimationWorkspacePage(
         ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(),
         ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.uiDefault(),
     )
-    SettingsList(
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_animation_workspace),
-        "调整工作区与 Dock 的玻璃过渡动画。",
+        "按工作区和 Dock 分别调整玻璃过渡时间。",
     ) {
-        IntSetting(prefs, animationWorkspaceVisibilitySpec, masterEnabled)
-        IntSetting(prefs, animationFolderOpenGlassFadeSpec, masterEnabled)
-        IntSetting(prefs, animationDockIconRevealSpec, masterEnabled)
-        IntSetting(
-            prefs,
-            animationDockResizeSpec,
-            masterEnabled && dockCustomizationEnabled && !systemResizeEnabled && smoothResizeEnabled,
-        )
+        item(key = "animation-workspace-heading") { SmallTitle("工作区与文件夹") }
+        item(key = "animation-workspace") {
+            SettingsCard {
+                IntSetting(prefs, animationWorkspaceVisibilitySpec, masterEnabled)
+                ModernListDivider()
+                IntSetting(prefs, animationFolderOpenGlassFadeSpec, masterEnabled)
+            }
+        }
+        item(key = "animation-dock-heading") { SmallTitle("Dock 与图标") }
+        item(key = "animation-dock") {
+            SettingsCard {
+                IntSetting(prefs, animationDockIconRevealSpec, masterEnabled)
+                ModernListDivider()
+                IntSetting(
+                    prefs,
+                    animationDockResizeSpec,
+                    masterEnabled && dockCustomizationEnabled &&
+                        !systemResizeEnabled && smoothResizeEnabled,
+                )
+            }
+        }
     }
 }
 
@@ -54,6 +68,7 @@ internal fun AnimationInteractionPage(
         "玻璃按下与释放反馈独立调节；0 ms 表示立即完成。",
     ) {
         IntSetting(prefs, animationPressInSpec, masterEnabled)
+        ModernListDivider()
         IntSetting(prefs, animationPressOutSpec, masterEnabled)
     }
 }
@@ -70,6 +85,7 @@ internal fun AnimationPopupsPage(
         "调整快捷菜单与安全中心玻璃的退出渐隐。",
     ) {
         IntSetting(prefs, animationShortcutDismissSpec, masterEnabled)
+        ModernListDivider()
         IntSetting(prefs, animationSecurityCenterExitSpec, masterEnabled)
     }
 }

@@ -100,7 +100,7 @@ internal fun LiquidSpecPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     summary: String,
-    specs: List<IntSpec>,
+    groups: List<LiquidSpecGroup>,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -111,7 +111,7 @@ internal fun LiquidSpecPage(
         title = "",
         summary = summary,
     ) {
-        groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)
+        groupedLiquidSettings(groups, prefs, masterEnabled && liquidEnabled)
     }
 }
 
@@ -132,14 +132,7 @@ internal fun LiquidLightingPage(
         title = stringResource(R.string.page_liquid_lighting),
         summary = "调节焦散、菲涅尔反射与光源方向，并集中调整 OS4 边缘反射和方向光。",
     ) {
-        item(key = "lighting-basic-heading") {
-            SmallTitle("基础光照与焦散")
-        }
-        groupedIntSettings(liquidLightingSpecs, prefs, enabled)
-        item(key = "lighting-os4-heading") {
-            SmallTitle("OS4 反射与方向光")
-        }
-        groupedIntSettings(liquidOs4Specs, prefs, enabled)
+        groupedLiquidSettings(liquidLightingGroups + liquidOs4Groups, prefs, enabled)
     }
 }
 
@@ -158,11 +151,8 @@ internal fun LiquidSamplingPage(
         stringResource(R.string.page_liquid_sampling),
         "调整背景缩放、PassBlur 渲染分辨率与实时刷新上限。采样保护区由渲染器自动计算。",
     ) {
-        items(liquidSamplingSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && liquidEnabled)
-            }
-        }
+        groupedLiquidSettings(liquidSamplingGroups, prefs, masterEnabled && liquidEnabled)
+        item(key = "sampling-performance-title") { SmallTitle("实时背景采样与帧同步") }
         item(key = passBlurCaptureScaleSpec.key) {
             SettingsCard {
                 IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
@@ -184,6 +174,7 @@ internal fun LiquidSamplingPage(
                 )
             }
         }
+        item(key = "sampling-debug-title") { SmallTitle("调试显示") }
         item(key = ConfigSchema.Glass.PRISMAL_SHOW_NORMALS.name()) {
             SettingsCard {
                 BooleanSetting(
@@ -246,6 +237,7 @@ internal fun GlassIconsPage(
         stringResource(R.string.page_glass_icons),
         "调整桌面图标、Dock 功能图标与多任务胶囊玻璃。",
     ) {
+        item(key = "icons-glass-title") { SmallTitle("图标玻璃开关") }
         item(key = "icons-glass-toggles") {
             SettingsCard {
                 BooleanSetting(
@@ -273,6 +265,7 @@ internal fun GlassIconsPage(
                 )
             }
         }
+        item(key = "icons-geometry-title") { SmallTitle("尺寸与圆角") }
         item(key = "icons-glass-geometry") {
             SettingsCard {
                 IntSetting(
@@ -288,6 +281,7 @@ internal fun GlassIconsPage(
                 )
             }
         }
+        item(key = "icons-appearance-title") { SmallTitle("独立外观") }
         item(key = "icons-glass-highlights") {
             SettingsCard {
                 ArrowPreference(
@@ -330,39 +324,59 @@ internal fun GlassWidgetsPage(
             ),
         )
     }
-    SettingsList(
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_glass_widgets),
-        "小组件材质与内部组件隐藏分开管理。",
+        "小组件玻璃、内容适配与独立外观分开调整。",
     ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.WIDGET_GLASS,
-            "小部件玻璃",
-            "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容",
-            masterEnabled && liquidEnabled,
-        ) { widgetGlass = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.WIDGET_DARK_CONTENT,
-            "小组件深色内容适配",
-            "将深色中性文字适配为浅色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
-            masterEnabled && liquidEnabled && widgetGlass,
-        )
-        IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
-        IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
-        ArrowPreference(
-            title = "阴影",
-            summary = "Prismal 外阴影与描边可独立设置，未调整时继承全局",
-            enabled = masterEnabled && liquidEnabled && widgetGlass,
-            onClick = { open(Page.WidgetEdge) },
-        )
-        ArrowPreference(
-            stringResource(R.string.widget_components_entry),
-            summary = stringResource(R.string.widget_components_entry_summary),
-            enabled = masterEnabled && liquidEnabled && widgetGlass,
-            onClick = { open(Page.WidgetComponents) },
-        )
+        item(key = "widget-function-heading") { SmallTitle("玻璃与内容适配") }
+        item(key = "widget-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃",
+                    "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容",
+                    masterEnabled && liquidEnabled,
+                ) { widgetGlass = it }
+            }
+        }
+        item(key = "widget-dark-content") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配",
+                    "将深色中性文字适配为浅色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
+                    masterEnabled && liquidEnabled && widgetGlass,
+                )
+            }
+        }
+        item(key = "widget-geometry-heading") { SmallTitle("尺寸与圆角") }
+        item(key = "widget-geometry") {
+            SettingsCard {
+                IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
+                ModernListDivider()
+                IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
+            }
+        }
+        item(key = "widget-related-heading") { SmallTitle("独立外观与组件管理") }
+        item(key = "widget-edge") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "阴影",
+                    summary = "Prismal 外阴影与描边可独立设置，未调整时继承全局",
+                    enabled = masterEnabled && liquidEnabled && widgetGlass,
+                    onClick = { open(Page.WidgetEdge) },
+                )
+            }
+        }
+        item(key = "widget-components") {
+            SettingsCard {
+                ArrowPreference(
+                    stringResource(R.string.widget_components_entry),
+                    summary = stringResource(R.string.widget_components_entry_summary),
+                    enabled = masterEnabled && liquidEnabled && widgetGlass,
+                    onClick = { open(Page.WidgetComponents) },
+                )
+            }
+        }
     }
 }
 
@@ -401,58 +415,100 @@ internal fun GlassFoldersPage(
             ),
         )
     }
-    SettingsList(
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_glass_folders),
-        "小文件夹与大文件夹保留独立开关和几何参数。",
+        "小文件夹、大文件夹和展开文件夹分别调整，不混用背景与几何参数。",
     ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.SMALL_FOLDER_GLASS,
-            "小文件夹玻璃",
-            "保留 1x1 文件夹缩略预览",
-            masterEnabled && liquidEnabled,
-        ) { smallFolderGlass = it }
-        IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidEnabled && smallFolderGlass)
-        IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidEnabled && smallFolderGlass)
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.LARGE_FOLDER_GLASS,
-            "大文件夹玻璃",
-            "独立控制大文件夹材质",
-            masterEnabled && liquidEnabled,
-        ) { largeFolderGlass = it }
-        IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
-        IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
-        IntSetting(prefs, largeFolderPreviewIconScaleSpec, masterEnabled)
-        // Opened FolderCling background is independent from the desktop
-        // small/large folder icon glass. Native Hooks are installed once
-        // when Launcher starts, so this switch requires a Launcher restart.
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.OPEN_FOLDER_GLASS,
-            "展开文件夹玻璃背景",
-            "替换文件夹展开后的原生背景；关闭后恢复系统样式，修改后需重启桌面",
-            masterEnabled && liquidEnabled,
-        ) { openFolderGlass = it }
-        IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
-        IntSetting(prefs, openFolderNativeBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
-        IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled && openFolderGlass)
-        IntSetting(prefs, openFolderThicknessSpec, masterEnabled && liquidEnabled && openFolderGlass)
-        IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
-        ArrowPreference(
-            title = "阴影",
-            summary = "桌面与展开文件夹的 Prismal 阴影独立设置",
-            enabled = masterEnabled && liquidEnabled,
-            onClick = { open(Page.FolderEdge) },
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,
-            "显示原生大文件夹描边",
-            "关闭后移除系统默认灰黑色圆角描边，保留玻璃与背景效果",
-            masterEnabled,
-        )
+        item(key = "folder-small-heading") { SmallTitle("小文件夹") }
+        item(key = "folder-small-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS,
+                    "小文件夹玻璃", "保留 1x1 文件夹缩略预览",
+                    masterEnabled && liquidEnabled,
+                ) { smallFolderGlass = it }
+            }
+        }
+        item(key = "folder-small-geometry") {
+            SettingsCard {
+                IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidEnabled && smallFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidEnabled && smallFolderGlass)
+            }
+        }
+        item(key = "folder-large-heading") { SmallTitle("大文件夹") }
+        item(key = "folder-large-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.LARGE_FOLDER_GLASS,
+                    "大文件夹玻璃", "独立控制大文件夹材质",
+                    masterEnabled && liquidEnabled,
+                ) { largeFolderGlass = it }
+            }
+        }
+        item(key = "folder-large-geometry") {
+            SettingsCard {
+                IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
+            }
+        }
+        item(key = "folder-large-preview") {
+            SettingsCard {
+                IntSetting(prefs, largeFolderPreviewIconScaleSpec, masterEnabled)
+            }
+        }
+        item(key = "folder-large-native-outline") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,
+                    "显示原生大文件夹描边",
+                    "关闭后移除系统默认灰黑色圆角描边，保留玻璃与背景效果",
+                    masterEnabled,
+                )
+            }
+        }
+        item(key = "folder-open-heading") { SmallTitle("展开文件夹") }
+        item(key = "folder-open-enabled") {
+            SettingsCard {
+                // FolderCling background is independent of the desktop preview;
+                // its first Hook installation still requires a Launcher restart.
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.OPEN_FOLDER_GLASS,
+                    "展开文件夹玻璃背景",
+                    "替换文件夹展开后的原生背景；关闭后恢复系统样式，修改后需重启桌面",
+                    masterEnabled && liquidEnabled,
+                ) { openFolderGlass = it }
+            }
+        }
+        item(key = "folder-open-blur") {
+            SettingsCard {
+                IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderNativeBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
+            }
+        }
+        item(key = "folder-open-optics") {
+            SettingsCard {
+                IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderThicknessSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
+            }
+        }
+        item(key = "folder-shadow-heading") { SmallTitle("玻璃阴影") }
+        item(key = "folder-shadow") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "阴影",
+                    summary = "桌面与展开文件夹的 Prismal 阴影独立设置",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.FolderEdge) },
+                )
+            }
+        }
     }
 }
 
@@ -467,36 +523,53 @@ internal fun GlassMenusPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
-    SettingsList(
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_glass_menus),
-        "系统菜单、快捷菜单与弹窗材质集中在单独页面。",
+        "菜单与弹窗按组件设置，系统级壁纸修复独立放置。",
     ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
-            "壁纸闪烁修复",
-            "仅在壁纸闪烁时开启；需要为 LiquidDock 启用 System Framework（system）作用域并重启设备",
-            masterEnabled && liquidEnabled,
-        )
-        ArrowPreference(
-            title = stringResource(R.string.page_handle_menu),
-            summary = "应用顶部控制器的菜单玻璃、颜色、模糊与独立光学参数",
-            enabled = masterEnabled && liquidEnabled,
-            onClick = { open(Page.HandleMenuCustomization) },
-        )
-        ArrowPreference(
-            title = stringResource(R.string.page_shortcut_popup),
-            summary = "长按快捷菜单的玻璃、深色模式、模糊、颜色及独立光学参数",
-            enabled = masterEnabled && liquidEnabled,
-            onClick = { open(Page.ShortcutPopupCustomization) },
-        )
-        ArrowPreference(
-            title = stringResource(R.string.page_dialog_customization),
-            summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
-            enabled = masterEnabled && liquidEnabled,
-            onClick = { open(Page.DialogCustomization) },
-        )
+        item(key = "menus-heading") { SmallTitle("菜单与弹窗") }
+        item(key = "menus-handle") {
+            SettingsCard {
+                ArrowPreference(
+                    title = stringResource(R.string.page_handle_menu),
+                    summary = "应用顶部控制器的菜单玻璃、颜色、模糊与独立光学参数",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.HandleMenuCustomization) },
+                )
+            }
+        }
+        item(key = "menus-shortcut") {
+            SettingsCard {
+                ArrowPreference(
+                    title = stringResource(R.string.page_shortcut_popup),
+                    summary = "长按快捷菜单的玻璃、深色模式、模糊、颜色及独立光学参数",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.ShortcutPopupCustomization) },
+                )
+            }
+        }
+        item(key = "menus-dialog") {
+            SettingsCard {
+                ArrowPreference(
+                    title = stringResource(R.string.page_dialog_customization),
+                    summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.DialogCustomization) },
+                )
+            }
+        }
+        item(key = "menus-flicker-heading") { SmallTitle("系统兼容性") }
+        item(key = "menus-flicker") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
+                    "壁纸闪烁修复",
+                    "仅在壁纸闪烁时开启；需要为 LiquidDock 启用 System Framework（system）作用域并重启设备",
+                    masterEnabled && liquidEnabled,
+                )
+            }
+        }
     }
 }
 

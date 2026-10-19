@@ -394,6 +394,84 @@ internal val liquidOs4Specs = liquidSpecsFor(
     ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
 )
 
+
+/**
+ * Explicit semantic groups replace arbitrary chunked(3) boundaries on Prismal
+ * pages. Each group contains at most 3 controls, avoiding the old large
+ * offscreen glass card while keeping related parameters contiguous.
+ */
+internal data class LiquidSpecGroup(val title: String, val specs: List<IntSpec>) {
+    init { require(specs.isNotEmpty() && specs.size <= 3) }
+}
+
+private fun liquidGroup(title: String, vararg configs: ConfigKey<Int>): LiquidSpecGroup =
+    LiquidSpecGroup(title, configs.map { config ->
+        liquidSpecs.single { it.config == config }
+    })
+
+internal val liquidMaterialGroups = listOf(
+    liquidGroup("玻璃主体", ConfigSchema.Glass.BLUR,
+        ConfigSchema.Glass.THICKNESS, ConfigSchema.Glass.PRISMAL_TRANSMITTANCE),
+    liquidGroup("亮度", ConfigSchema.Glass.BRIGHTNESS),
+)
+internal val liquidRefractionGroups = listOf(
+    liquidGroup("透镜几何", ConfigSchema.Glass.IOR,
+        ConfigSchema.Glass.DOME, ConfigSchema.Glass.LENS_REFRACTION),
+    liquidGroup("法线与位移", ConfigSchema.Glass.NORMAL_STRENGTH,
+        ConfigSchema.Glass.DEPTH_EFFECT, ConfigSchema.Glass.PRISMAL_DISPLACEMENT_SCALE),
+    liquidGroup("边缘折射", ConfigSchema.Glass.PRISMAL_REFRACTION_INSET,
+        ConfigSchema.Glass.PRISMAL_EDGE_REFRACTION_FALLOFF),
+    liquidGroup("边缘过渡与圆角", ConfigSchema.Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH,
+        ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING),
+)
+internal val liquidColorGroups = listOf(
+    liquidGroup("玻璃底色", ConfigSchema.Glass.TINT_RED,
+        ConfigSchema.Glass.TINT_GREEN, ConfigSchema.Glass.TINT_BLUE),
+    liquidGroup("透明度与色彩表现", ConfigSchema.Glass.TINT_ALPHA,
+        ConfigSchema.Glass.PRISMAL_VIBRANCY),
+    liquidGroup("色散", ConfigSchema.Glass.CHROMATIC,
+        ConfigSchema.Glass.PRISMAL_DISPERSION_R, ConfigSchema.Glass.PRISMAL_DISPERSION_B),
+)
+internal val liquidLightingGroups = listOf(
+    liquidGroup("高光、焦散与反射", ConfigSchema.Glass.HIGHLIGHT_WIDTH,
+        ConfigSchema.Glass.CAUSTICS, ConfigSchema.Glass.PRISMAL_FRESNEL_REFLECT),
+    liquidGroup("光源方向", ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X,
+        ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y),
+)
+internal val liquidOs4Groups = listOf(
+    liquidGroup("OS4 反射几何", ConfigSchema.Glass.OS4_EDGE_WIDTH_PX,
+        ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX),
+    liquidGroup("OS4 反射亮度", ConfigSchema.Glass.OS4_REFLECTION_STRENGTH,
+        ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN),
+    liquidGroup("OS4 方向光", ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE,
+        ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY,
+        ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY),
+)
+internal val liquidShadowGroups = listOf(
+    liquidGroup("内阴影颜色", ConfigSchema.Glass.PRISMAL_SHADOW_RED,
+        ConfigSchema.Glass.PRISMAL_SHADOW_GREEN, ConfigSchema.Glass.PRISMAL_SHADOW_BLUE),
+    liquidGroup("内阴影透明度与柔和度", ConfigSchema.Glass.PRISMAL_SHADOW_ALPHA,
+        ConfigSchema.Glass.PRISMAL_SHADOW_SOFTNESS),
+)
+internal val liquidSamplingGroups = listOf(
+    liquidGroup("背景缩放与视差", ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_X,
+        ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y,
+        ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE),
+)
+
+/** Shared ordering for the global pages and all per-component "全部参数" pages. */
+internal val liquidAllGroups: List<LiquidSpecGroup> by lazy {
+    (liquidMaterialGroups + liquidRefractionGroups + liquidColorGroups +
+        liquidLightingGroups + liquidOs4Groups + liquidShadowGroups +
+        liquidSamplingGroups).also { groups ->
+        val keys = groups.flatMap { group -> group.specs.map(IntSpec::key) }
+        require(keys.size == keys.toSet().size) { "Duplicate optical settings group entries" }
+        require(keys.toSet() == liquidSpecs.map(IntSpec::key).toSet()) {
+            "Every global optical setting must belong to exactly one group"
+        }
+    }
+}
+
 internal val strokeSpecs = listOf(
     IntSpec(ConfigSchema.Dock.CORNER_OFFSET, "描边圆角偏移", "dp", null, IntSection.StrokeGeometry),
     IntSpec(ConfigSchema.Dock.STROKE_RED, "描边底色 · 红", "", "dock_stroke", IntSection.StrokeBackground),
