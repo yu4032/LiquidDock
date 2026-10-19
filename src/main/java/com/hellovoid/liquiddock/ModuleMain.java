@@ -144,6 +144,9 @@ public final class ModuleMain extends XposedModule {
             ConfigReader configReader = ConfigReader.load();
             GlassEdgeEffects.refresh(configReader);
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+            // Independent opt-in compatibility: its own preference is the sole
+            // activation switch, not the global glass/feature master toggle.
+            LauncherMingouCompatHook.install(classLoader);
             if (runtimeConfig.enabled) {
                 // Folder picker/model hooks are independent of the glass renderers.
                 // Establish the OEM background's stroke state before any
@@ -154,7 +157,6 @@ public final class ModuleMain extends XposedModule {
                 // because an optional 4.50 geometry method is unavailable.
                 LauncherLargeFolderPickerHook.install(classLoader);
                 LauncherLargeFolderNativeSpanHook.install(classLoader);
-                LauncherMingouCompatHook.install(classLoader);
                 LauncherNativeFourFolderHook.install(classLoader);
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
