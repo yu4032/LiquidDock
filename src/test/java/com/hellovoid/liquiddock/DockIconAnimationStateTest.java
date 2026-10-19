@@ -1,186 +1,134 @@
 package com.hellovoid.liquiddock;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-
 import org.junit.Test;
 
+import static org.junit.Assert.*;
+
+/** Native CLOSE_TO_HOME progress is the sole Dock icon glass reveal clock. */
 public class DockIconAnimationStateTest {
-    @Test public void zeroDurationRevealCompletesImmediately() {
-        DockIconAnimationState state = new DockIconAnimationState(0L);
-        Object icon = new Object();
-        state.begin(icon);
-        state.end(icon, 100L);
-        assertEquals(1f, state.opacity(icon, 100L), 0f);
+    @Test public void stableIconIsVisibleAndNoClockIsRequired() {
+        DockIconAnimationState state = new DockIconAnimationState();
+        assertEquals(1f, state.sample(new Object()).opacity, 0f);
     }
 
-    @Test
-    public void launchAnimationHidesGlassUntilFadeBegins() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
+    @Test public void nativeProgressUsesExactlyTheWorkspaceReturnCurve() {
+        DockIconAnimationState state = new DockIconAnimationState();
         Object icon = new Object();
-        state.begin(icon);
-        assertEquals(0f, state.opacity(icon, 5_000L), 0f);
+        assertTrue(state.onNativeHidden(icon));
+        assertEquals(0f, state.sample(icon).opacity, 0f);
+        for (float progress : new float[]{0f, .5f, .89f, .9f, .925f, .95f, .975f, 1f}) {
+            state.observeHomeReturnProgress(icon, progress);
+            assertEquals(LauncherGlassReturnFade.alpha(progress),
+                    state.sample(icon).opacity, .00001f);
+        }
     }
 
-    @Test
-    public void animationEndRestoresGlassWithDeceleratingFade() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
+    @Test public void nativeProgressReversalReversesOpacityWithoutRestartingClock() {
+        DockIconAnimationState state = new DockIconAnimationState();
         Object icon = new Object();
-        state.begin(icon);
-        state.end(icon, 1_000L);
-        assertEquals(0f, state.opacity(icon, 1_000L), 0f);
-        assertEquals(0.75f, state.opacity(icon, 1_090L), 0.0001f);
-        assertEquals(1f, state.opacity(icon, 1_180L), 0f);
-        assertEquals(1f, state.opacity(icon, 9_000L), 0f);
+        state.onNativeHidden(icon);
+        assertTrue(state.observeHomeReturnProgress(icon, .98f));
+        float peak = state.sample(icon).opacity;
+        assertTrue(peak > .8f);
+        assertTrue(state.observeHomeReturnProgress(icon, .93f));
+        assertTrue(state.sample(icon).opacity < peak);
+        assertTrue(state.observeHomeReturnProgress(icon, .9f));
+        assertEquals(0f, state.sample(icon).opacity, 0f);
     }
 
-    @Test
-    public void repeatedAnimationDuringFadeHidesGlassAgain() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
+    @Test public void retargetFromHomeReturnToLaunchImmediatelyHidesPartialGlass() {
+        DockIconAnimationState state = new DockIconAnimationState();
         Object icon = new Object();
-        state.begin(icon);
-        state.end(icon, 1_000L);
-        assertEquals(0.75f, state.opacity(icon, 1_090L), 0.0001f);
-        state.begin(icon);
-        assertEquals(0f, state.opacity(icon, 1_100L), 0f);
+        state.onNativeHidden(icon);
+        state.observeHomeReturnProgress(icon, .98f);
+        assertTrue(state.sample(icon).opacity > .8f);
+        assertTrue(state.cancelHomeReturn(icon));
+        assertEquals(0f, state.sample(icon).opacity, 0f);
+        assertFalse(state.cancelHomeReturn(icon));
+        state.observeHomeReturnProgress(icon, .95f);
+        assertEquals(.5f, state.sample(icon).opacity, .00001f);
     }
 
-    @Test
-    public void unmatchedEndDoesNotFadeAStableIcon() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
+    @Test public void repeatedNativeHideDoesNotEraseProgress() {
+        DockIconAnimationState state = new DockIconAnimationState();
         Object icon = new Object();
-        state.end(icon, 1_000L);
-        assertEquals(1f, state.opacity(icon, 1_000L), 0f);
+        state.onNativeHidden(icon);
+        state.observeHomeReturnProgress(icon, .95f);
+        assertFalse(state.onNativeHidden(icon));
+        assertEquals(.5f, state.sample(icon).opacity, .00001f);
+        assertFalse(state.observeHomeReturnProgress(icon, .95f));
     }
 
-    @Test
-    public void onlyTheRestorePhaseRequestsAnimationFrames() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
+    @Test public void visibleHandoffRestoresImmediatelyWithoutPostAnimationFade() {
+        DockIconAnimationState state = new DockIconAnimationState();
         Object icon = new Object();
-        state.begin(icon);
-        assertFalse(state.isFading(icon));
-        state.end(icon, 1_000L);
-        assertTrue(state.isFading(icon));
-        state.opacity(icon, 1_180L);
-        assertFalse(state.isFading(icon));
+        state.onNativeHidden(icon);
+        state.observeHomeReturnProgress(icon, .95f);
+        assertTrue(state.end(icon));
+        assertEquals(1f, state.sample(icon).opacity, 0f);
+        assertFalse(state.end(icon));
+        state.onNativeHidden(icon);
+        assertEquals(0f, state.sample(icon).opacity, 0f);
     }
 
-    @Test
-    public void curveTailStartsRestoreAtNinetyPercentProgress() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
+    @Test public void nativeCompletionIsSafeWithoutAnyProxyFrames() {
+        DockIconAnimationState state = new DockIconAnimationState();
         Object icon = new Object();
-        state.observeProxyFrame(icon, 0.89f, 1_000L);
-        assertEquals(0f, state.opacity(icon, 1_050L), 0f);
-        state.observeProxyFrame(icon, 0.90f, 1_100L);
-        assertTrue(state.isFading(icon));
-        assertEquals(0.75f, state.opacity(icon, 1_190L), 0.0001f);
+        state.onNativeHidden(icon);
+        assertEquals(0f, state.sample(icon).opacity, 0f);
+        assertTrue(state.end(icon));
+        assertEquals(1f, state.sample(icon).opacity, 0f);
+        assertFalse(state.observeHomeReturnProgress(icon, Float.NaN));
     }
 
-    @Test
-    public void proxyFrameReportsOnlyRealAnimationStateChanges() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
+    @Test public void latestReturnDoesNotDamageProxyGeometry() {
+        DockIconAnimationState state = new DockIconAnimationState();
         Object icon = new Object();
-        assertFalse(state.observeProxyFrame(icon, 0.20f, 1_000L));
-        assertFalse(state.observeProxyFrame(icon, 0.89f, 1_050L));
-        assertTrue(state.observeProxyFrame(icon, 0.90f, 1_100L));
-        assertFalse(state.observeProxyFrame(icon, 0.95f, 1_120L));
-    }
-
-    @Test
-    public void oneAnimationSampleCarriesOpacityAndFadeState() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
-        Object icon = new Object();
-        state.begin(icon);
-        state.end(icon, 1_000L);
-
-        DockIconAnimationState.Sample sample = state.sample(icon, 1_090L);
-        assertNotNull(sample);
-        assertEquals(0.75f, sample.opacity, 0.0001f);
-        assertTrue(sample.fading);
-
-        sample = state.sample(icon, 1_180L);
-        assertNotNull(sample);
-        assertEquals(1f, sample.opacity, 0f);
-        assertFalse(sample.fading);
-    }
-
-    @Test
-    public void visibleCallbackDoesNotRestartAnEarlyFade() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
-        Object icon = new Object();
-        state.observeProxyFrame(icon, 0.89f, 1_000L);
-        state.observeProxyFrame(icon, 0.90f, 1_020L);
-        assertEquals(0.75f, state.opacity(icon, 1_110L), 0.0001f);
-        state.end(icon, 1_110L);
-        assertEquals(0.75f, state.opacity(icon, 1_110L), 0.0001f);
-    }
-
-    @Test
-    public void completedEarlyFadeStaysVisibleUntilAnimationEnd() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
-        Object icon = new Object();
-        state.observeProxyFrame(icon, 0.89f, 1_000L);
-        state.observeProxyFrame(icon, 0.90f, 1_020L);
-        assertEquals(1f, state.opacity(icon, 1_200L), 0f);
-        state.observeProxyFrame(icon, 0.95f, 1_210L);
-        assertEquals(1f, state.opacity(icon, 1_210L), 0f);
-        state.end(icon, 1_220L);
-        assertEquals(1f, state.opacity(icon, 1_220L), 0f);
-    }
-
-    @Test
-    public void progressReversalBeforeTailDoesNotStartRestore() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
-        Object icon = new Object();
-        state.observeProxyFrame(icon, 0.6f, 1_000L);
-        state.observeProxyFrame(icon, 0.4f, 1_020L);
-        assertFalse(state.isFading(icon));
-        assertEquals(0f, state.opacity(icon, 1_020L), 0f);
-    }
-
-    @Test
-    public void proxyGeometryIsIndependentFromRevealOpacity() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
-        Object icon = new Object();
-        float[] first = {10f, 20f, 50f, 80f};
-
-        assertTrue(state.updateProxyGeometry(icon, first));
-        DockIconAnimationState.Sample sample = state.sample(icon, 1_000L);
-        assertEquals(1f, sample.opacity, 0f);
+        float[] bounds = {10f, 20f, 40f, 50f};
+        assertTrue(state.updateProxyGeometry(icon, bounds));
+        assertTrue(state.onNativeHidden(icon));
+        state.observeHomeReturnProgress(icon, .95f);
+        DockIconAnimationState.Sample sample = state.sample(icon);
         assertTrue(sample.proxyActive);
-        assertArrayEquals(first, sample.proxyRect, 0f);
-
-        // Sample owns an isolated copy; mutating it must not alter the stored proxy geometry.
-        sample.proxyRect[0] = 999f;
-        DockIconAnimationState.Sample fresh = state.sample(icon, 1_001L);
-        assertArrayEquals(first, fresh.proxyRect, 0f);
-
-        assertFalse(state.updateProxyGeometry(icon, first.clone()));
-        assertTrue(state.updateProxyGeometry(icon, new float[]{12f, 22f, 60f, 90f}));
+        assertArrayEquals(bounds, sample.proxyRect, 0f);
+        assertEquals(.5f, sample.opacity, .00001f);
+        sample.proxyRect[0] = 900f;
+        assertArrayEquals(bounds, state.sample(icon).proxyRect, 0f);
         assertTrue(state.endProxyGeometry(icon));
-        sample = state.sample(icon, 1_010L);
-        assertFalse(sample.proxyActive);
-        assertNull(sample.proxyRect);
-        assertEquals(1f, sample.opacity, 0f);
+        assertFalse(state.sample(icon).proxyActive);
     }
 
-    @Test
-    public void hiddenProxyOwnsGeometrySlotWithoutPublishingTaskRect() {
-        DockIconAnimationState state = new DockIconAnimationState(180L);
+    @Test public void finalNativeCommitCannotBeOverwrittenByLateProxyFrame() {
+        DockIconAnimationState state = new DockIconAnimationState();
         Object icon = new Object();
+        state.updateProxyGeometry(icon, new float[]{1f, 2f, 21f, 22f});
+        state.onNativeHidden(icon);
+        state.observeHomeReturnProgress(icon, .95f);
+        assertTrue(state.end(icon));
+        assertFalse(state.observeHomeReturnProgress(icon, .96f));
+        assertEquals(1f, state.sample(icon).opacity, 0f);
+        assertTrue(state.endProxyGeometry(icon));
+    }
 
+    @Test public void proxyWithoutRectangleOwnsGeometryButDoesNotCreateGhost() {
+        DockIconAnimationState state = new DockIconAnimationState();
+        Object icon = new Object();
         assertTrue(state.holdProxyHidden(icon));
-        DockIconAnimationState.Sample sample = state.sample(icon, 2_000L);
+        state.onNativeHidden(icon);
+        DockIconAnimationState.Sample sample = state.sample(icon);
         assertTrue(sample.proxyActive);
         assertNull(sample.proxyRect);
-        assertEquals(1f, sample.opacity, 0f);
+        assertEquals(0f, sample.opacity, 0f);
+        assertTrue(state.updateProxyGeometry(icon, new float[]{1f, 2f, 11f, 12f}));
+        assertArrayEquals(new float[]{1f, 2f, 11f, 12f}, state.sample(icon).proxyRect, 0f);
+    }
 
-        assertTrue(state.updateProxyGeometry(icon, new float[]{1f, 2f, 21f, 22f}));
-        sample = state.sample(icon, 2_010L);
-        assertArrayEquals(new float[]{1f, 2f, 21f, 22f}, sample.proxyRect, 0f);
+    @Test public void invalidProgressIsIgnored() {
+        DockIconAnimationState state = new DockIconAnimationState();
+        Object icon = new Object();
+        state.onNativeHidden(icon);
+        assertFalse(state.observeHomeReturnProgress(icon, Float.NaN));
+        assertFalse(state.observeHomeReturnProgress(icon, Float.POSITIVE_INFINITY));
+        assertEquals(0f, state.sample(icon).opacity, 0f);
     }
 }

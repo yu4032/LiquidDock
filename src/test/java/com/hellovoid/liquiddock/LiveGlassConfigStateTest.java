@@ -44,6 +44,8 @@ public class LiveGlassConfigStateTest {
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name()));
         assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.UNLOCK_GLASS_FADE.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Animation.PRESS_IN.name()));
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Animation.PRESS_OUT.name()));
@@ -54,10 +56,14 @@ public class LiveGlassConfigStateTest {
 
         Map<String, Object> values = new HashMap<>();
         values.put(ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name(), 780);
+        values.put(ConfigSchema.Animation.WORKSPACE_VISIBILITY.name(), 0);
+        values.put(ConfigSchema.Animation.UNLOCK_GLASS_FADE.name(), 600);
         values.put(ConfigSchema.Animation.PRESS_IN.name(), 125);
         values.put(ConfigSchema.Animation.PRESS_OUT.name(), 210);
         AnimationRuntimeState.configure(LiquidDockConfig.from(new ConfigReader(values)).animation);
         assertEquals(780, AnimationRuntimeState.folderOpenGlassFadeDurationMs());
+        assertEquals(0, AnimationRuntimeState.workspaceVisibilityDurationMs());
+        assertEquals(600, AnimationRuntimeState.unlockGlassFadeDurationMs());
         assertEquals(125, AnimationRuntimeState.pressInDurationMs());
         assertEquals(210, AnimationRuntimeState.pressOutDurationMs());
     }

@@ -96,8 +96,9 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
     ).forEach { number(Page.GlassFolders, it) }
     listOf(
         Page.AnimationWorkspace to listOf(
-            animationWorkspaceVisibilitySpec, animationFolderOpenGlassFadeSpec,
-            animationDockIconRevealSpec, animationDockResizeSpec,
+            animationWorkspaceVisibilitySpec, animationUnlockGlassFadeSpec,
+            animationFolderOpenGlassFadeSpec,
+            animationDockResizeSpec,
         ),
         Page.AnimationInteraction to listOf(animationPressInSpec, animationPressOutSpec),
         Page.AnimationPopups to listOf(animationShortcutDismissSpec, animationSecurityCenterExitSpec),

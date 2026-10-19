@@ -95,7 +95,11 @@ public class RestartBoundSettingsContractTest {
         String popupPage = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/ShortcutPopupGlassSettingsPage.kt"));
         assertTrue(specs.contains("工作区玻璃淡入淡出时长；已加载的桌面 Hook 即时生效"));
-        assertTrue(specs.contains("Dock 图标玻璃恢复；已加载的桌面 Hook 即时生效"));
+        // PR #434 native-progress fade has no meaningful millisecond delay control.
+        assertFalse(specs.contains("animationDockIconRevealSpec"));
+        String dockProgressState = Files.readString(Path.of(
+                "src/main/java/com/hellovoid/liquiddock/DockIconAnimationState.java"));
+        assertTrue(dockProgressState.contains("LauncherGlassReturnFade.alpha(progress)"));
         assertTrue(specs.contains("玻璃按下反馈速度；已加载的桌面 Hook 即时生效"));
         assertTrue(specs.contains("玻璃松手恢复速度；已加载的桌面 Hook 即时生效"));
         assertTrue(specs.contains("玻璃的快速淡出；已加载的桌面 Hook 即时生效"));

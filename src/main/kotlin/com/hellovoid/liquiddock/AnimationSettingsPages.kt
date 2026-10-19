@@ -37,14 +37,14 @@ internal fun AnimationWorkspacePage(
             SettingsCard {
                 IntSetting(prefs, animationWorkspaceVisibilitySpec, masterEnabled)
                 ModernListDivider()
+                IntSetting(prefs, animationUnlockGlassFadeSpec, masterEnabled)
+                ModernListDivider()
                 IntSetting(prefs, animationFolderOpenGlassFadeSpec, masterEnabled)
             }
         }
         item(key = "animation-dock-heading") { SmallTitle("Dock 与图标") }
         item(key = "animation-dock") {
             SettingsCard {
-                IntSetting(prefs, animationDockIconRevealSpec, masterEnabled)
-                ModernListDivider()
                 IntSetting(
                     prefs,
                     animationDockResizeSpec,
