@@ -173,7 +173,44 @@ internal fun filterSettingsSearch(
             title.contains(query) -> 2
             else -> 3
         }
-    }.thenBy { it.title.length }).take(80).toList()
+    }.thenBy { it.title.length }).toList()
+}
+
+/** Search is indexed by option but presented once per target page. */
+internal data class SettingsSearchPageResult(
+    val page: Page,
+    val title: String,
+    val description: String,
+    val matchedOptions: List<String>,
+)
+
+internal fun searchSettingsPages(
+    catalog: List<SettingsSearchItem>,
+    query: String,
+): List<SettingsSearchPageResult> {
+    val routes = catalog.groupBy(SettingsSearchItem::page).mapValues { it.value.first() }
+    return filterSettingsSearch(catalog, query)
+        .groupBy(SettingsSearchItem::page)
+        .map { (page, matches) ->
+            val route = requireNotNull(routes[page])
+            val labels = matches.filter { it !== route }
+                .map(SettingsSearchItem::title).distinct()
+            val detail = if (labels.isEmpty()) route.description
+                else "匹配：" + labels.take(3).joinToString("、") +
+                    (if (labels.size > 3) " 等 ${labels.size} 项" else "")
+            SettingsSearchPageResult(page, route.title, detail, labels)
+        }
+        .sortedWith(compareBy<SettingsSearchPageResult> { result ->
+            val needle = query.trim().lowercase(Locale.ROOT)
+            val title = result.title.lowercase(Locale.ROOT)
+            when {
+                title == needle -> 0
+                title.startsWith(needle) -> 1
+                title.contains(needle) -> 2
+                result.matchedOptions.any { it.equals(needle, true) } -> 3
+                else -> 4
+            }
+        }.thenBy { it.title }).take(40)
 }
 
 @Composable
@@ -190,7 +227,7 @@ internal fun SettingsSearchScreen(
         focus.requestFocus()
         keyboard?.show()
     }
-    val results = remember(query, catalog) { filterSettingsSearch(catalog, query) }
+    val results = remember(query, catalog) { searchSettingsPages(catalog, query) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -200,35 +237,9 @@ internal fun SettingsSearchScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item(key = "settings-search-input") {
-            SettingsCard {
-                BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    singleLine = true,
-                    textStyle = TextStyle(
-                        fontSize = 17.sp,
-                        color = MiuixTheme.colorScheme.onSurface,
-                    ),
-                    cursorBrush = SolidColor(MiuixTheme.colorScheme.onSurface),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focus)
-                        .padding(horizontal = 18.dp, vertical = 15.dp),
-                    decorationBox = { inner ->
-                        androidx.compose.foundation.layout.Box {
-                            if (query.isEmpty()) {
-                                Text(
-                                    text = "搜索功能、参数或页面",
-                                    fontSize = 17.sp,
-                                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.48f),
-                                )
-                            }
-                            inner()
-                        }
-                    },
-                )
-            }
+            BakedPrismalSearchField(
+                query = query, onQueryChange = onQueryChange, focus = focus,
+            )
         }
         when {
             query.isBlank() -> item(key = "search-hint") {
@@ -238,15 +249,15 @@ internal fun SettingsSearchScreen(
                 PageHeader("", "没有匹配的设置，请换一个关键词。")
             }
             else -> {
-                item(key = "search-count") { ModernSectionLabel("搜索结果 · " + results.size) }
-                items(results, key = { it.page.name + ":" + it.title + ":" + it.key.orEmpty() }) { result ->
+                item(key = "search-count") { ModernSectionLabel("相关页面 · " + results.size) }
+                items(results, key = { it.page.name }) { result ->
                     ModernFeatureCard(
                         title = result.title,
                         summary = result.description,
                         modifier = Modifier.padding(horizontal = 14.dp),
                         onClick = {
                             keyboard?.hide()
-                            onSelect(result)
+                            onSelect(catalog.first { it.page == result.page })
                         },
                     )
                 }
