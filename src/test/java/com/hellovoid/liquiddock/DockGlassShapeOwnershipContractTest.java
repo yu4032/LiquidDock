@@ -127,6 +127,24 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(node.contains("view.getPivotX()"));
     }
 
+
+    @Test
+    public void dockBacklitWidthAndDirtyGuardUsePhysicalDisplayDensity() throws Exception {
+        String compositor = Files.readString(DOCK_COMPOSITOR);
+        assertTrue(compositor.contains(
+                "pixelDensity = Math.max(0.1f, outputRoot.getResources().getDisplayMetrics().density);"));
+        assertTrue(compositor.contains(
+                ".extraGuardPx(pixelDensity, Math.min(dockBody.glassWidth, dockBody.glassHeight))"));
+        assertTrue(compositor.contains(
+                ".extraGuardPx(pixelDensity, Math.min(geometry.width, geometry.height))"));
+        assertTrue(compositor.contains(
+                "renderer.setEdgeDecoration(GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK), pixelDensity);"));
+        assertTrue(compositor.contains(
+                "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), pixelDensity);"));
+        assertFalse(compositor.contains(
+                "renderer.setEdgeDecoration(GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK), 1f);"));
+    }
+
     @Test
     public void dockHostDoesNotClipThePrismalSdfEdgeASecondTime() throws Exception {
         String host = Files.readString(DOCK_HOST);

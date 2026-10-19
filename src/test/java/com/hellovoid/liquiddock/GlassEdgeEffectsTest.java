@@ -27,7 +27,7 @@ public class GlassEdgeEffectsTest {
                 GlassEdgeEffects.DOCK);
         assertTrue(dock.hasBacklit());
         assertFalse(dock.hasShadow());
-        assertEquals(1.5f, dock.inkViewportInsetPx, 0.0001f);
+        assertEquals(1f, dock.inkViewportInsetPx, 0.0001f);
         assertEquals(0f, GlassEdgeEffects.current(GlassEdgeEffects.ICON)
                 .inkViewportInsetPx, 0.0001f);
         assertTrue(GlassEdgeEffects.current(GlassEdgeEffects.ICON).hasShadow());

@@ -30,6 +30,8 @@ final class DockGlassCompositor {
 
     private final WeakReference<View> ownershipRootRef;
     private final WeakReference<View> outputRootRef;
+    /** Prismal geometry is in physical framebuffer pixels, while optical widths are dp. */
+    private final float pixelDensity;
     private final ArrayList<CachedItem> cached = new ArrayList<>();
     private long[] uiFingerprintScratch = new long[0];
     private long[] proxyFingerprintScratch = new long[0];
@@ -59,6 +61,7 @@ final class DockGlassCompositor {
     DockGlassCompositor(View ownershipRoot, View outputRoot) {
         ownershipRootRef = new WeakReference<>(ownershipRoot);
         outputRootRef = new WeakReference<>(outputRoot);
+        pixelDensity = Math.max(0.1f, outputRoot.getResources().getDisplayMetrics().density);
     }
 
     void setIconStyle(GlassComponentStyle style, PrismalHighlightProfile highlightProfile) {
@@ -242,7 +245,7 @@ final class DockGlassCompositor {
         // The dirty-region guard must also enclose optional exterior paint.
         // Keep the previous-frame union below to prevent trails during movement.
         float bodyFringe = RASTER_GUARD_PX + GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK)
-                .extraGuardPx(1f, Math.min(dockBody.glassWidth, dockBody.glassHeight));
+                .extraGuardPx(pixelDensity, Math.min(dockBody.glassWidth, dockBody.glassHeight));
         float currentLeft = dockBody.left() - bodyFringe;
         float currentTop = dockBody.top() - bodyFringe;
         float currentRight = dockBody.right() + bodyFringe;
@@ -251,7 +254,7 @@ final class DockGlassCompositor {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
             float iconFringe = RASTER_GUARD_PX + GlassEdgeEffects.current(GlassEdgeEffects.ICON)
-                    .extraGuardPx(1f, Math.min(geometry.width, geometry.height));
+                    .extraGuardPx(pixelDensity, Math.min(geometry.width, geometry.height));
             currentLeft = Math.min(
                     currentLeft, geometry.centerX - geometry.width * 0.5f - iconFringe);
             currentTop = Math.min(
@@ -278,9 +281,9 @@ final class DockGlassCompositor {
         // One Prismal draw per node. Dock's whole-body cast shadow remains OEM
         // MiShadow; its optical backlight response and all other glass rims use the
         // identical light-aware SDF shader with distinct immutable recipes.
-        renderer.setEdgeDecoration(GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK), 1f);
+        renderer.setEdgeDecoration(GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK), pixelDensity);
         renderer.drawGlass(dockBody, params, bodyHighlightProfile);
-        renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), 1f);
+        renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), pixelDensity);
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
@@ -289,7 +292,7 @@ final class DockGlassCompositor {
                     geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
         }
 
-        renderer.setEdgeDecoration(null, 1f);
+        renderer.setEdgeDecoration(null, pixelDensity);
         lastDirtyValid = true;
         lastDirtyFramebufferWidth = framebufferWidth;
         lastDirtyFramebufferHeight = framebufferHeight;

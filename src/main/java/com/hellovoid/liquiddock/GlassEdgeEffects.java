@@ -93,8 +93,9 @@ public final class GlassEdgeEffects {
             if (DOCK.equals(scope)) {
                 // Dock's native foreground and MiShadow use the full Host
                 // geometry. Do not shrink its glass; fit only the ink into the
-                // final TextureView antialiased boundary.
-                optics = optics.fitInkToNativeViewport(1.5f);
+                // first visible TextureView AA pixel. The wider old 1.5px
+                // shift placed subpixel ink outside the sampled coverage.
+                optics = optics.fitInkToNativeViewport(1f);
             }
             onlyOptics.put(scope, optics);
         }
