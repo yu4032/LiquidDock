@@ -199,9 +199,11 @@ final class PrismalEdgeDecorationShader {
                                     * horizontalWeight * mix(0.26, 0.46, opposingFill),
                                     0.0, 0.52);
 
-                            // Only the outside contour requires a sharp backdrop
-                            // tap. No extra read for an inner highlight or shadow.
-                            if (outlineAlpha > 0.001) {
+                            // The outer contour and inner edge-bleed share one
+                            // displaced unblurred source tap per edge fragment.
+                            // Body/shadow-only fragments remain tap-free.
+                            if (outlineAlpha > 0.001
+                                    || innerHighlightAlpha > 0.001) {
                                 float rimReflectPx = u_os4ReflectOffsetPx > 0.0
                                         ? u_os4ReflectOffsetPx
                                         : clamp(u_glassThickness * 0.38, 4.0, 14.0);
@@ -267,6 +269,24 @@ final class PrismalEdgeDecorationShader {
                     // Apply to the original glass color before its independent
                     // inner mirror highlight; the highlight is not attenuated.
                     vec3 ringShadedGlass = color;
+                    // Adapt macOS27's edge-bleed ramp without a second blur
+                    // texture. The prepared unblurred refracted edge sample
+                    // transitions to the already-computed full Prismal blur,
+                    // restricted to the physical inner meniscus. This band
+                    // remains underneath the independent inner glint.
+                    if (innerHighlightAlpha > 0.001 && surfaceDistance < 0.0) {
+                        float bleedDepth = max(-surfaceDistance, 0.0);
+                        float bleedRangePx = clamp(
+                                u_backlitWidthPx * 2.0 + edgeAa, 2.0, 5.0);
+                        float bleedBand = 1.0 - smoothstep(
+                                0.0, bleedRangePx, bleedDepth);
+                        vec3 bleedTint = mix(edgeTransmission,
+                                OPTICAL_SPECULAR_RGB, opticalSpec * 0.40);
+                        bleedTint *= mix(0.84, 1.0, opticalSpec);
+                        ringShadedGlass = mix(ringShadedGlass, bleedTint,
+                                bleedBand * 0.18 * u_backlitStrength);
+                    }
+
                     float ringDepth = max(-surfaceDistance, 0.0);
                     float ringRangePx = min(12.0,
                             max(3.0, u_backlitWidthPx * 3.0 + edgeAa));

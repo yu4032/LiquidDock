@@ -283,13 +283,38 @@ public class PrismalEdgeDecorationShaderTest {
         String shader=decorated();
         assertEquals(1,occurrences(shader,"texture2D(u_backgroundTexture, rimUv).rgb;"));
         assertEquals(0,occurrences(shader,"texture2D(u_blurredTexture, rimUv)"));
-        assertTrue(shader.contains("if (outlineAlpha > 0.001) {"));
+        assertTrue(shader.contains("if (outlineAlpha > 0.001"));
+        assertTrue(shader.contains("|| innerHighlightAlpha > 0.001) {"));
         assertTrue(shader.contains("float opticalMeniscusProfile = 1.0 - smoothstep("));
         assertTrue(shader.contains("0.0, meniscusWidthPx, abs(surfaceDistance)"));
         assertTrue(shader.contains("min(u_glassSize.x, u_glassSize.y) * 0.025"));
         assertTrue(shader.contains("texture2D(u_blurredTexture, uvCenter)"));
         // Never replace original OS4-highlighted body 'color'.
         assertFalse(shader.contains("innerGlassRgb *= "));
+    }
+
+    @Test public void macOs27EdgeBleedRampsIntoExistingGaussianBody() {
+        String shader=decorated();
+        int begin=shader.indexOf("vec3 ringShadedGlass = color;");
+        int ring=shader.indexOf("float ringDepth = max(-surfaceDistance",begin);
+        assertTrue(begin>=0 && ring>begin);
+        String bleed=shader.substring(begin,ring);
+        assertTrue(bleed.contains("if (innerHighlightAlpha > 0.001 && surfaceDistance < 0.0)"));
+        assertTrue(bleed.contains("float bleedRangePx = clamp("));
+        assertTrue(bleed.contains("float bleedBand = 1.0 - smoothstep("));
+        assertTrue(bleed.contains("vec3 bleedTint = mix(edgeTransmission,"));
+        assertTrue(bleed.contains("bleedBand * 0.18 * u_backlitStrength"));
+        assertFalse("edge bleed reuses the one contour source texture",
+                bleed.contains("texture2D("));
+        assertEquals(1,occurrences(shader,
+                "texture2D(u_backgroundTexture, rimUv).rgb;"));
+        assertTrue(shader.contains("texture2D(u_blurredTexture, uvCenter)"));
+        for (int i=0;i<=100;i++) {
+            float x=i/100f*5f;
+            float band=1f-smooth(x/5f);
+            assertTrue(band>=0f && band<=1f);
+            if(i>0)assertTrue(band<=1f-smooth((i-1)/100f)+.0001f);
+        }
     }
 
     @Test public void darkOutlineKeepsSourceHueAndHorizontalSurfaceReflects() {
