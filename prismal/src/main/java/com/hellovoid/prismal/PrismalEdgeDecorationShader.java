@@ -134,14 +134,16 @@ final class PrismalEdgeDecorationShader {
                             float rimReflectPx = u_os4ReflectOffsetPx > 0.0
                                     ? u_os4ReflectOffsetPx
                                     : clamp(u_glassThickness * 0.38, 4.0, 14.0);
-                            float minDim = min(u_glassSize.x, u_glassSize.y);
-                            float sizeCapPx = clamp(minDim * 0.025, 3.0, 9.0);
+                            float sizeCapPx = clamp(
+                                    min(u_glassSize.x, u_glassSize.y) * 0.025,
+                                    3.0, 9.0);
                             float bendPeakPx = min(sizeCapPx,
                                     max(u_lensRefractionPx, 0.0) * 0.14
                                     + rimReflectPx * 0.35);
-                            float meniscus = 1.0 - smoothstep(
+                            float opticalMeniscusProfile = 1.0 - smoothstep(
                                     0.0, meniscusWidthPx, abs(surfaceDistance));
-                            float bendPx = bendPeakPx * mix(0.35, 1.0, meniscus);
+                            float bendPx = bendPeakPx
+                                    * mix(0.35, 1.0, opticalMeniscusProfile);
                             vec2 rimUv = backdropUv(v_screenTexCoord,
                                     -normal * bendPx / u_resolution, 0.0);
                             edgeTransmission = texture2D(u_backgroundTexture, rimUv).rgb;

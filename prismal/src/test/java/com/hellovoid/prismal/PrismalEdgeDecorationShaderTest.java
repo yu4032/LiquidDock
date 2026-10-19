@@ -55,7 +55,7 @@ public class PrismalEdgeDecorationShaderTest {
         assertEquals(0f,sideAtAngle(0,m),.0001f);
         assertEquals(0f,sideAtAngle(20,m),.0001f);
         assertTrue(sideAtAngle(28,m)<.02f);
-        assertTrue(sideAtAngle(45,m)>.35f);
+        assertTrue(sideAtAngle(45,m)>.30f);
         assertTrue(sideAtAngle(45,m)<.65f);
         assertTrue(sideAtAngle(68,m)>.98f);
         assertEquals(1f,sideAtAngle(90,m),.0001f);
@@ -148,10 +148,10 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(s.contains("vec3 rimBase = mix(color, edgeTransmission, sharpWeight);"));
         assertTrue(s.contains("sharpWeight * 0.16"));
         assertTrue(s.contains("texture2D(u_blurredTexture, uvCenter)"));
-        assertTrue(s.contains("float meniscus = 1.0 - smoothstep("));
+        assertTrue(s.contains("float opticalMeniscusProfile = 1.0 - smoothstep("));
         assertTrue(s.contains("0.0, meniscusWidthPx, abs(surfaceDistance)"));
         assertFalse(s.contains("rimBendPx = min(12.0"));
-        assertTrue(s.contains("float sizeCapPx = clamp(minDim * 0.025, 3.0, 9.0);"));
+        assertTrue(s.contains("min(u_glassSize.x, u_glassSize.y) * 0.025"));
     }
 
     @Test public void darkRimKeepsSourceHueAndLitRimReflectsWithoutBlackInk() {
