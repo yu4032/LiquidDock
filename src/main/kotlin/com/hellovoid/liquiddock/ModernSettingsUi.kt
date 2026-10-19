@@ -83,7 +83,7 @@ internal val LocalPrismalSurfaceBackdrop = staticCompositionLocalOf<PrismalBackd
 internal val LocalPrismalOverlayBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 internal val LocalTouchPrismalBackdrop = staticCompositionLocalOf<PrismalBackdrop?> { null }
 // Fixed body cards use shared, precomposed native glass drawables.
-private val LocalStaticGlassChrome = staticCompositionLocalOf { false }
+internal val LocalStaticGlassChrome = staticCompositionLocalOf { false }
 
 @Composable
 internal fun ModernSettingsScaffold(

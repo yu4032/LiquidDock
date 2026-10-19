@@ -158,6 +158,12 @@ Folder open/close、drag、press、preview/content geometry 与 vendor backgroun
 
 关闭某一 folder type 时只释放该类型 visual ownership。
 
+`LauncherMingouCompatHook` 为独立、默认关闭的第三方 Launcher 大文件夹兼容入口。
+它不检测桌面包版本；仅在 `mingou_large_folder_compat` 开启后，对
+`FolderInfo.load(Context, Cursor)` 完成加载、且拥有 LiquidDock 标记及数据库
+`spanX/spanY=2×2` 的原生大文件夹类型恢复模型占格。关闭时直接执行原生方法，
+与玻璃开关、LiquidDock 全局主开关无关。已载入的文件夹需要重启桌面重新加载。
+
 ---
 
 ## 9. Live drag hooks

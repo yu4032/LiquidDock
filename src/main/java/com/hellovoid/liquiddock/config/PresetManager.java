@@ -236,6 +236,7 @@ public final class PresetManager {
         source.put("liquid_small_folder_corner_radius", 0);
         source.put("liquid_large_folder_glass", Boolean.TRUE);
         source.put("large_folder_native_outline", Boolean.TRUE);
+        source.put(ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT.name(), Boolean.FALSE);
         source.put("large_folder_preview_icon_percent", 100);
         source.put(ConfigSchema.Glass.OPEN_FOLDER_GLASS.name(), Boolean.TRUE);
         source.put(ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT.name(), 22);

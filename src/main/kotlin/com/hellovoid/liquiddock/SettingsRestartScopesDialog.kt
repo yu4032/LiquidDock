@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.styropyr0.prismal.PrismalBackdrop
+import com.styropyr0.prismal.depth.PrismalDepthShadow
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -81,12 +82,20 @@ internal fun RestartScopesDialog(
             .clickable(onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
+        // The modal's scaled layer must include the full Prismal halo,
+        // otherwise its rectangular offscreen layer chops off the shadow.
+        val opticalGutter = PrismalDepthShadow.Default.radius * 2f
+        val staticChrome = LocalStaticGlassChrome.current
+        val horizontalGutter = if (staticChrome) opticalGutter else 20.dp
+        val verticalGutter = if (staticChrome) opticalGutter else 28.dp
         val listMaxHeight = (maxHeight - 240.dp).coerceAtLeast(120.dp)
         ModernSurface(
             modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 28.dp)
-                .widthIn(max = 520.dp)
+                // Include the optical gutter in the transformed layer bounds:
+                // Prismal's native depth shadow draws outside the card outline.
                 .graphicsLayer { scaleX = panelScale; scaleY = panelScale }
+                .padding(horizontal = horizontalGutter, vertical = verticalGutter)
+                .widthIn(max = 520.dp)
                 // Consume taps on the dialog panel without installing an
                 // interactive Prismal surface over its child switches/buttons.
                 .clickable(onClick = {}),

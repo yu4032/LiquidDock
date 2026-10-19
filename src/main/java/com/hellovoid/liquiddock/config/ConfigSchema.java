@@ -333,6 +333,10 @@ public final class ConfigSchema {
                 "open_folder_glass_tint_alpha", 35, 35, 35, 0, 160, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> LARGE_FOLDER_NATIVE_OUTLINE = bool(
                 "large_folder_native_outline", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        // Opt-in only: repair marked, database-backed 2x2 folders on custom
+        // Launchers that overwrite spans when FolderInfo.load() runs.
+        public static final ConfigKey<Boolean> MINGOU_LARGE_FOLDER_COMPAT = bool(
+                "mingou_large_folder_compat", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LARGE_FOLDER_PREVIEW_ICON_PERCENT = integer(
                 "large_folder_preview_icon_percent", 100, 100, 100, 60, 110,
                 ConfigKey.ExportMode.ALWAYS);
@@ -634,6 +638,7 @@ public final class ConfigSchema {
                 Glass.SMALL_FOLDER_GLASS, Glass.SMALL_FOLDER_SIZE_OFFSET,
                 Glass.SMALL_FOLDER_CORNER_RADIUS, Glass.LARGE_FOLDER_GLASS,
                 Glass.LARGE_FOLDER_NATIVE_OUTLINE,
+                Glass.MINGOU_LARGE_FOLDER_COMPAT,
                 Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
                 Glass.OPEN_FOLDER_GLASS, Glass.OPEN_FOLDER_BLUR, Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT,
                 Glass.OPEN_FOLDER_IOR, Glass.OPEN_FOLDER_THICKNESS, Glass.OPEN_FOLDER_TINT_ALPHA,

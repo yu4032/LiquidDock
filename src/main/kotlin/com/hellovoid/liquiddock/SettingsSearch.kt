@@ -114,7 +114,7 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
     options(Page.LiquidSampling, "OS4 法线与方向光可视化")
     options(Page.GlassIcons, "图标玻璃", "仅 Dock 功能图标玻璃", "多任务操作按钮玻璃")
     options(Page.GlassWidgets, "小部件玻璃", "小组件深色内容适配", "切换部件白化")
-    options(Page.GlassFolders, "小文件夹玻璃", "大文件夹玻璃", "展开文件夹玻璃背景", "显示原生大文件夹描边", "壁纸闪烁修复")
+    options(Page.GlassFolders, "小文件夹玻璃", "大文件夹玻璃", "展开文件夹玻璃背景", "显示原生大文件夹描边", "绵狗修改版桌面适配", "壁纸闪烁修复")
     options(Page.Stroke, "显示完整描边", "方圆形连续曲线", "Fill-Diff 描边")
     options(Page.Shadow, "Dock 原生阴影", "原生描边阴影")
     options(Page.Gboard, "Gboard 玻璃", "实时背景采样")

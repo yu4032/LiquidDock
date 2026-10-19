@@ -180,7 +180,11 @@ final class LauncherDialogGlassCoordinator {
         binding.panelRef = new WeakReference<>(panel);
         binding.sink = sink;
         binding.bound = true;
-        sink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
+        // The dialog replacement is a sibling of the original panel. Its
+        // exterior optical pixels must pass through the panel's ancestor
+        // clipping chain, not merely through a larger TextureView.
+        binding.overflowClip = DialogOverflowClip.acquire(panel, decor);
+        sink.setDialogOpticalScope();
         sink.runWhenOutputLost(() -> releaseObserved(binding));
 
         // Suppress MIUIX in the same layout pass that creates the replacement output. Any later
@@ -372,6 +376,10 @@ final class LauncherDialogGlassCoordinator {
         LauncherGlassSinkView sink = binding.sink;
         binding.sink = null;
         if (sink != null) sink.dispose();
+        if (binding.overflowClip != null) {
+            binding.overflowClip.release();
+            binding.overflowClip = null;
+        }
 
         LauncherGlassSession authority = binding.dialogSession;
         binding.dialogSession = null;
@@ -604,6 +612,45 @@ final class LauncherDialogGlassCoordinator {
         return value != null ? value.getClass().getName() : "<null>";
     }
 
+    /**
+     * Temporarily relax only the dialog-panel ancestor path; restore every
+     * original flag when the dialog is released. Never change the window/decor
+     * clipping contract or other Launcher view trees.
+     */
+    private static final class DialogOverflowClip {
+        final ArrayList<WeakReference<ViewGroup>> parents = new ArrayList<>();
+        final ArrayList<Boolean> children = new ArrayList<>();
+        final ArrayList<Boolean> padding = new ArrayList<>();
+
+        static DialogOverflowClip acquire(View panel, View decor) {
+            DialogOverflowClip lease = new DialogOverflowClip();
+            android.view.ViewParent parent = panel.getParent();
+            while (parent instanceof ViewGroup && parent != decor) {
+                ViewGroup group = (ViewGroup) parent;
+                lease.parents.add(new WeakReference<>(group));
+                lease.children.add(group.getClipChildren());
+                lease.padding.add(group.getClipToPadding());
+                group.setClipChildren(false);
+                group.setClipToPadding(false);
+                parent = group.getParent();
+            }
+            return lease;
+        }
+
+        void release() {
+            for (int i = parents.size() - 1; i >= 0; i--) {
+                ViewGroup group = parents.get(i).get();
+                if (group != null) {
+                    group.setClipChildren(children.get(i));
+                    group.setClipToPadding(padding.get(i));
+                }
+            }
+            parents.clear();
+            children.clear();
+            padding.clear();
+        }
+    }
+
     private static final class Binding {
         final WeakReference<Dialog> dialogRef;
         final WeakReference<View> decorRef;
@@ -614,6 +661,7 @@ final class LauncherDialogGlassCoordinator {
         final String source;
         LauncherGlassSession dialogSession;
         LauncherGlassSinkView sink;
+        DialogOverflowClip overflowClip;
         View.OnAttachStateChangeListener attachListener;
         ViewTreeObserver layoutObserver;
         ViewTreeObserver.OnGlobalLayoutListener layoutListener;

@@ -13,4 +13,13 @@ final class LargeFolderFootprintPolicy {
     static boolean hasRealTwoByTwoFootprint(int itemType, int spanX, int spanY) {
         return supportsType(itemType) && spanX == 2 && spanY == 2;
     }
+
+    /** The opt-in load repair must never grow an uncommitted folder footprint. */
+    static boolean shouldRestoreLoadedTwoByTwo(
+            boolean enabled, int itemType, boolean marked,
+            int persistedX, int persistedY, int loadedX, int loadedY) {
+        return enabled && marked && supportsType(itemType)
+                && persistedX == 2 && persistedY == 2
+                && (loadedX != 2 || loadedY != 2);
+    }
 }
