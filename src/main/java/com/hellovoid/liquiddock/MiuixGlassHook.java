@@ -237,7 +237,9 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
 
         DockLiquidGlassHostView host = new DockLiquidGlassHostView(dockBg.getContext());
         host.setId(View.generateViewId());
-        host.setGeometry(nativeRadius, false, SQUIRCLE_CP);
+        host.setGeometry(WorkstationRuntimeState.isActive()
+                && config.workstation.dockEnabled && config.workstation.taskbarMode
+                ? 0f : nativeRadius, false, SQUIRCLE_CP);
 
         boolean zeroCopyCandidate = Miuix307ZeroCopyRenderer.install(
                 materialHost, host, config.glass, config.workstation,
