@@ -58,7 +58,8 @@ public final class PrismalEdgeDecoration {
 
     /**
      * A single dark-color lobe fitted to the reference rounded corner.
-     * 55% extent starts near 75 degrees from the lit straight edge.
+     * 55% extent starts near 75 degrees from the light direction.
+     * Default softness carries the fade through roughly 100 degrees.
      * This runs on immutable material changes, not per shader fragment.
      */
     public float backlitGrazingStart() {
@@ -67,7 +68,7 @@ public final class PrismalEdgeDecoration {
 
     /** Softness affects transition length only, never its starting angle. */
     public float backlitGrazingSpan() {
-        return 0.045f + 0.105f * Math.min(1f, backlitSoftness * 0.5f);
+        return 0.22f + 0.70f * Math.min(1f, backlitSoftness * 0.5f);
     }
 
     public boolean hasBacklit() {

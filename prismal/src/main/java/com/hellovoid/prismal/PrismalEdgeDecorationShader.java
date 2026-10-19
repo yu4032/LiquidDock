@@ -43,17 +43,16 @@ final class PrismalEdgeDecorationShader {
                 // component gate declares only inside a conditional block.
                 const vec3 OS4_OPTICAL_RIM_COLOR = vec3(0.98, 0.992, 1.008);
 
-                // Source hue survives both sides of the rim. Only a small
-                // specular energy term favors OS4's highlight palette, while
-                // the dark side attenuates transmission without turning black.
-                // Rim weights already contain the sole angular smoothstep.
+                // A glancing surface reflects the light rather than just
+                // showing a translucent copy of the wallpaper. Retain
+                // refracted hue and avoid fixed black/white ink endpoints.
                 vec3 refractedContourColor(vec3 transmitted, vec3 highlight,
                         float darkWeight, float lightEnergy) {
-                    float transmission = mix(1.0, 0.12, darkWeight);
-                    float specGain = (0.10 + 0.18 * lightEnergy) * (1.0 - darkWeight);
-                    vec3 specTint = mix(transmitted, highlight, 0.25);
-                    return clamp(transmitted * transmission + specTint * specGain,
-                            vec3(0.0), vec3(1.0));
+                    float transmission = mix(1.0, 0.50, darkWeight);
+                    float reflectance = (0.06 + 0.60 * lightEnergy)
+                            * (1.0 - darkWeight);
+                    return clamp(mix(transmitted * transmission, highlight,
+                            reflectance), vec3(0.0), vec3(1.0));
                 }
                 """)
                 .replace(BEFORE_DISCARD, """
@@ -85,44 +84,54 @@ final class PrismalEdgeDecorationShader {
                     // NOT change the Dock shape, corner radii or MiShadow.
                     // Other glass scopes keep a strictly external ink line.
                     float inkDistance = surfaceDistance + u_backlitViewportInsetPx;
-                    // Compute after all OS4 uniforms have been declared in the
-                    // final shader. The globally injected helper above must not
-                    // access uniforms that are declared later in the source.
-                    float rimLightEnergy = clamp(
-                            (max(u_os4DirectionalIntensity, 0.0)
-                             + max(u_os4DirectionalOppositeIntensity, 0.0)) * 2.0,
-                            0.0, 1.0);
+                    // Share one signed SDF normal for the outer rim and
+                    // a thin inner glint. abs(dot) mirrored the dark lobe
+                    // onto the lit side and made corners switch abruptly.
+                    float rimLightEnergy = 0.0;
                     float rimDarkWeight = 0.0;
                     float exteriorInkAlpha = 0.0;
-                    if (inkDistance > 0.0 && u_backlitStrength > 0.0
-                            && u_backlitWidthPx > 0.0) {
-                        {
-                            vec2 edgeNormal = normalize(
-                                    os4SdfGradient + vec2(0.00001));
-                            float angularIncidence = abs(
-                                    dot(edgeNormal, u_invariantLightXY));
-                            // Reach controls the dark COLOR domain along the
-                            // curved SDF normal, not whether the stroke exists.
-                            // At 0% the config disables the rim entirely.
-                            float grazing = clamp(1.0 - angularIncidence, 0.0, 1.0);
-                            // Delay the darkening until the tangent is close to
-                            // the unlit straight edge. A single smoothstep avoids
-                            // the previous double-knee and near-instant black arc.
-                            // Threshold/span are computed once per material on CPU.
-                            rimDarkWeight = smoothstep(
-                                    u_backlitGrazingStart,
-                                    u_backlitGrazingStart + u_backlitGrazingSpan,
-                                    grazing);
-                            float lineWidthPx = u_backlitWidthPx;
+                    float innerGlint = 0.0;
+                    float innerGlintWidthPx = max(edgeAa * 1.75, 1.5);
+                    // Extent 0 must disable the rim even for shadow-only nodes.
+                    if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0
+                            && u_backlitGrazingStart < 0.99999
+                            && inkDistance > -innerGlintWidthPx
+                            && inkDistance < u_backlitWidthPx + edgeAa) {
+                        vec2 edgeNormal = normalize(
+                                os4SdfGradient + vec2(0.00001));
+                        float signedFacing = dot(edgeNormal, u_invariantLightXY);
+                        rimLightEnergy = clamp(
+                                max(u_os4DirectionalIntensity, 0.0) * 1.9
+                                    * smoothstep(-0.20, 0.75, signedFacing)
+                                + max(u_os4DirectionalOppositeIntensity, 0.0) * 0.65
+                                    * smoothstep(-0.20, 0.75, -signedFacing),
+                                0.0, 1.0);
+                        // Softness spans the tangent onto the unlit side,
+                        // instead of switching in a five-degree corner arc.
+                        float grazing = clamp(1.0 - signedFacing, 0.0, 2.0);
+                        rimDarkWeight = smoothstep(
+                                u_backlitGrazingStart,
+                                u_backlitGrazingStart + u_backlitGrazingSpan,
+                                grazing);
+                        if (inkDistance > 0.0) {
                             float outsideAa = max(edgeAa * 0.5, 0.25);
-                            float entry = smoothstep(0.0, outsideAa,
+                            // Center the leading AA ramp on the silhouette.
+                            // A 0..AA ramp left a translucent notch at the top.
+                            float entry = smoothstep(-outsideAa, outsideAa,
                                     inkDistance);
                             float exit = 1.0 - smoothstep(
-                                    max(lineWidthPx - outsideAa, 0.0),
-                                    lineWidthPx + outsideAa, inkDistance);
+                                    max(u_backlitWidthPx - outsideAa, 0.0),
+                                    u_backlitWidthPx + outsideAa, inkDistance);
                             exteriorInkAlpha = clamp(
-                                    u_backlitStrength * mix(0.55, 1.0, rimLightEnergy)
-                                    * entry * exit, 0.0, 0.98);
+                                    u_backlitStrength * entry * exit, 0.0, 0.98);
+                        } else if (surfaceDistance <= 0.0) {
+                            // Inner glint uses original glass coverage:
+                            // no extra texture tap, pass or geometry.
+                            innerGlint = clamp(u_backlitStrength * rimLightEnergy
+                                    * smoothstep(-innerGlintWidthPx, -edgeAa * 0.5,
+                                            inkDistance)
+                                    * (1.0 - smoothstep(-edgeAa * 0.5, 0.0,
+                                            inkDistance)) * 0.30, 0.0, 0.30);
                         }
                     }
                     // The SDF is already native resolution, but the Gaussian
@@ -169,6 +178,11 @@ final class PrismalEdgeDecorationShader {
                 .replace(FINAL, """
                     // Prismal's 'color' includes full lens refraction,
                     // chromatic dispersion, reflected backdrop and OS4 light.
+                    // Inner glint uses glass coverage, not the translucent
+                    // exterior underlay, so the top rim reads as reflection.
+                    if (innerGlint > 0.001) {
+                        color = mix(color, OS4_OPTICAL_RIM_COLOR, innerGlint);
+                    }
                     // Blend from the common edge sample into that shading
                     // with the original silhouette alpha.
                     if (underlayAlpha > 0.001) {

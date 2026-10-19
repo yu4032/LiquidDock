@@ -32,7 +32,7 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(source.contains("vec3 edgeTransmission = vec3(0.0);"));
         assertTrue(source.contains("smoothstep(0.55, 1.0, opacity)"));
         assertFalse(source.contains("vec3(0.015)"));
-        assertTrue(source.contains("if (inkDistance > 0.0 && u_backlitStrength > 0.0"));
+        assertTrue(source.contains("if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0"));
         assertTrue(source.contains("if (surfaceDistance > 0.0 && u_castShadowRadiusPx > 0.0"));
         // The Dock-specific inset moves only ink sampling, not the whole
         // body geometry nor the cast shadow boundary.
@@ -52,12 +52,12 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(inkStart >= 0 && inkEnd > inkStart);
         String ink = source.substring(inkStart, inkEnd);
         assertTrue(ink.contains("dot(edgeNormal, u_invariantLightXY)"));
-        assertTrue(ink.contains("float lineWidthPx = u_backlitWidthPx;"));
+        assertTrue(ink.contains("float innerGlintWidthPx = max(edgeAa * 1.75, 1.5);"));
         assertTrue(ink.contains("rimDarkWeight = smoothstep("));
         assertFalse(ink.contains("u_backlitStrength * lightEnergy * taper"));
         assertTrue(ink.contains("if (inkDistance > 0.0"));
-        assertTrue(ink.contains("lineWidthPx + outsideAa, inkDistance)"));
-        assertTrue(ink.contains("float entry = smoothstep(0.0, outsideAa,"));
+        assertTrue(ink.contains("u_backlitWidthPx + outsideAa, inkDistance)"));
+        assertTrue(ink.contains("float entry = smoothstep(-outsideAa, outsideAa,"));
         assertTrue(ink.contains("float exit = 1.0 - smoothstep("));
         assertFalse(ink.contains("sdRoundBox("));
         assertFalse(ink.contains("texture2D("));
@@ -71,7 +71,9 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(ink.contains("float transitionWidth = mix("));
         assertTrue(source.contains("uniform float u_backlitGrazingStart;"));
         assertTrue(source.contains("uniform float u_backlitGrazingSpan;"));
-        assertTrue(ink.contains("float grazing = clamp(1.0 - angularIncidence"));
+        assertTrue(ink.contains("float grazing = clamp(1.0 - signedFacing, 0.0, 2.0);"));
+        assertFalse(ink.contains("abs(dot(edgeNormal, u_invariantLightXY))"));
+        assertTrue(ink.contains("u_backlitGrazingStart < 0.99999"));
         assertFalse(ink.contains("fadeStart"));
         assertFalse(ink.contains("fadeEnd"));
     }
@@ -87,17 +89,21 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(shadow.hasShadow());
     }
 
-    @Test public void measuredReferenceCornerDelaysDarkTransitionToSeventyFiveDegrees() {
+    @Test public void defaultCornerDarkeningIsContinuousAcrossTangent() {
         PrismalEdgeDecoration material = new PrismalEdgeDecoration(
                 1f, .85f, .6f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, .55f);
         float start = material.backlitGrazingStart();
         float span = material.backlitGrazingSpan();
         assertEquals(.739f, start, .005f);
-        assertEquals(.0765f, span, .0001f);
+        assertEquals(.43f, span, .0001f);
         assertTrue(weightAtDegrees(70, material) < .05f);
-        assertTrue(weightAtDegrees(75, material) < .10f);
-        assertTrue(weightAtDegrees(78, material) > .15f);
-        assertTrue(weightAtDegrees(80, material) > .90f);
+        assertTrue(weightAtDegrees(75, material) < .05f);
+        assertTrue(weightAtDegrees(80, material) > .05f);
+        assertTrue(weightAtDegrees(80, material) < .20f);
+        assertTrue(weightAtDegrees(90, material) > .55f);
+        assertTrue(weightAtDegrees(90, material) < .75f);
+        assertTrue(weightAtDegrees(100, material) > .99f);
+        assertTrue(weightAtDegrees(120, material) >= weightAtDegrees(100, material));
     }
 
     @Test public void extentChangesDarkStartAndSoftnessOnlyChangesTransitionSpan() {
@@ -204,12 +210,13 @@ public class PrismalEdgeDecorationShaderTest {
         // ES 1.00 compilers even though a Java unit test assembles the string.
         String shader = PrismalEdgeDecorationShader.apply(upstream());
         int helperStart = shader.indexOf("vec3 refractedContourColor(");
-        int helperEnd = shader.indexOf("return clamp(transmitted * transmission", helperStart);
+        int helperEnd = shader.indexOf("return clamp(mix(transmitted * transmission", helperStart);
         assertTrue(helperStart >= 0 && helperEnd > helperStart);
         String helper = shader.substring(helperStart, helperEnd);
         assertFalse(helper.contains("u_os4DirectionalIntensity"));
         assertFalse(helper.contains("u_os4DirectionalOppositeIntensity"));
-        assertTrue(shader.contains("float rimLightEnergy = clamp("));
+        assertTrue(shader.contains("float rimLightEnergy = 0.0;"));
+        assertTrue(shader.contains("rimLightEnergy = clamp("));
         assertTrue(shader.contains("rimDarkWeight, rimLightEnergy);"));
     }
 
@@ -267,8 +274,9 @@ public class PrismalEdgeDecorationShaderTest {
 
     @Test public void materialTintPreservesSourceHueInsteadOfWhiteBlackEndpoints() {
         String source = PrismalEdgeDecorationShader.apply(upstream());
-        assertTrue(source.contains("float transmission = mix(1.0, 0.12, darkWeight);"));
-        assertTrue(source.contains("vec3 specTint = mix(transmitted, highlight, 0.25);"));
+        assertTrue(source.contains("float transmission = mix(1.0, 0.50, darkWeight);"));
+        assertTrue(source.contains("float reflectance = (0.06 + 0.60 * lightEnergy)"));
+        assertTrue(source.contains("return clamp(mix(transmitted * transmission, highlight,"));
         assertFalse(source.contains("transmitted * 0.035"));
         assertFalse(source.contains("max(transmitted, highlight), 0.88"));
 
@@ -279,7 +287,8 @@ public class PrismalEdgeDecorationShaderTest {
             bright[i]=contourColor(warm[i], highlight[i], 0f);
             dark[i]=contourColor(warm[i], highlight[i], 1f);
         }
-        assertTrue("bright rim retains red-green chroma", bright[0]-bright[1] > .20f);
+        assertTrue("bright rim still retains red-green chroma", bright[0]-bright[1] > .10f);
+        assertTrue("light-facing rim must visibly reflect white", bright[0] > warm[0] + .10f);
         assertTrue("dark rim remains warm instead of neutral black", dark[0] > dark[1]);
         assertEquals(warm[0]/warm[2], dark[0]/dark[2], .001f);
     }
@@ -288,8 +297,8 @@ public class PrismalEdgeDecorationShaderTest {
         float brown = .49f, gray = .42f, os4White = .98f;
         assertTrue(contourColor(brown, os4White, 0f) > brown);
         assertTrue(contourColor(gray, os4White, 0f) > gray);
-        assertEquals(brown * .12f, contourColor(brown, os4White, 1f), .0001f);
-        assertEquals(gray * .12f, contourColor(gray, os4White, 1f), .0001f);
+        assertEquals(brown * .50f, contourColor(brown, os4White, 1f), .0001f);
+        assertEquals(gray * .50f, contourColor(gray, os4White, 1f), .0001f);
         assertNotEquals("dark color is sampled, not constant ink",
                 contourColor(brown, os4White, 1f),
                 contourColor(gray, os4White, 1f), .0001f);
@@ -301,12 +310,38 @@ public class PrismalEdgeDecorationShaderTest {
             previous = value;
         }
     }
+    @Test public void innerGlintCoversTheTopSeamWithoutChangingSdfOrBlur() {
+        String source = PrismalEdgeDecorationShader.apply(upstream());
+        assertTrue(source.contains("u_backlitGrazingStart < 0.99999"));
+        assertTrue(source.contains("float innerGlint = 0.0;"));
+        assertTrue(source.contains("innerGlint = clamp(u_backlitStrength * rimLightEnergy"));
+        assertTrue(source.contains("color = mix(color, OS4_OPTICAL_RIM_COLOR, innerGlint);"));
+        assertTrue(source.contains("smoothstep(-innerGlintWidthPx, -edgeAa * 0.5,"));
+        assertTrue(source.contains("1.0 - smoothstep(-edgeAa * 0.5, 0.0,"));
+        // The interior glint tapers to zero exactly at the silhouette;
+        // exterior AA begins at half coverage there. No abrupt on/off seam.
+        assertEquals(0f, innerGlintProfile(0f, .75f), .000001f);
+        assertTrue(innerGlintProfile(-.375f, .75f) > .99f);
+        assertEquals(0f, innerGlintProfile(-1.5f, .75f), .000001f);
+        assertTrue(source.contains("float entry = smoothstep(-outsideAa, outsideAa,"));
+        assertTrue(source.contains("float signedFacing = dot(edgeNormal, u_invariantLightXY);"));
+        assertFalse(source.contains("abs(dot(edgeNormal, u_invariantLightXY))"));
+        assertTrue(source.contains("float surfaceDistance = distMask + insetShiftPx;"));
+        assertTrue(source.contains("texture2D(u_blurredTexture, uvCenter)"));
+    }
+
+    private static float innerGlintProfile(float distance, float aa) {
+        float innerWidth = Math.max(aa * 1.75f, 1.5f);
+        return smooth((distance + innerWidth) / (innerWidth - aa * .5f))
+                * (1f - smooth((distance + aa * .5f) / (aa * .5f)));
+    }
+
     private static float contourColor(float transmitted, float highlight, float darkWeight) {
-        float transmission = 1f*(1f-darkWeight) + .12f*darkWeight;
-        float lightEnergy = 1f; // representative default profile
-        float specGain = (.10f + .18f*lightEnergy)*(1f-darkWeight);
-        float tint = transmitted*.75f + highlight*.25f;
-        return Math.min(1f, Math.max(0f, transmitted*transmission + tint*specGain));
+        float transmission = 1f - .50f * darkWeight;
+        float lightEnergy = .8f; // default main-light energy near the lit edge
+        float reflectance = (.06f + .60f * lightEnergy) * (1f - darkWeight);
+        return Math.min(1f, Math.max(0f,
+                transmitted * transmission * (1f - reflectance) + highlight * reflectance));
     }
 }
 
