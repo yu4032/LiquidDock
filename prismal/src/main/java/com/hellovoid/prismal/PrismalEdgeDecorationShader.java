@@ -32,6 +32,9 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_backlitStrength;
                 uniform float u_backlitSideStart;
                 uniform float u_backlitSideSpan;
+                // Dock optical rim is adapted to the native output viewport,
+                // without moving or shrinking the original glass silhouette.
+                uniform float u_backlitViewportInsetPx;
                 uniform vec4 u_castShadowColor;
                 uniform float u_castShadowRadiusPx;
                 uniform float u_castShadowOffsetYPx;
@@ -92,11 +95,20 @@ final class PrismalEdgeDecorationShader {
                     float y = dot(transmitted, vec3(0.2126, 0.7152, 0.0722));
                     float darkFloor = mix(0.46, 0.28,
                             smoothstep(0.18, 0.72, y));
-                    float transmission = mix(1.0, darkFloor, darkWeight);
-                    float reflection = (0.10 + 0.70 * specEnergy)
-                            * (1.0 - darkWeight);
-                    return clamp(transmitted * transmission * (1.0 - reflection)
-                            + OPTICAL_SPECULAR_RGB * reflection,
+                    // The physical outline is continuous: only its COLOR
+                    // changes from dark refracted hue to bright specular
+                    // reflection. Never let the dark-lobe fade kill coverage.
+                    float transition = opticalSmoother01(
+                            1.0 - clamp(darkWeight, 0.0, 1.0));
+                    vec3 darkRim = transmitted * darkFloor;
+                    vec3 brightRim = mix(transmitted, OPTICAL_SPECULAR_RGB,
+                            clamp(0.68 + 0.23 * specEnergy, 0.0, 0.94));
+                    vec3 contour = mix(darkRim, brightRim, transition);
+                    // Reconstructed edge-bleed principle: retain a thin
+                    // reflection response through the midtone crossing,
+                    // where a simple dark-to-light lerp can match wallpaper.
+                    float midGlint = 0.15 * 4.0 * transition * (1.0 - transition);
+                    return clamp(mix(contour, OPTICAL_SPECULAR_RGB, midGlint),
                             vec3(0.0), vec3(1.0));
                 }
                 """)
@@ -133,14 +145,19 @@ final class PrismalEdgeDecorationShader {
                             && u_backlitSideStart < 1.0) {
                         float aa = max(edgeAa, 0.75);
                         float outlineWidthPx = max(u_backlitWidthPx, 0.5);
+                        // Shift only the outer contour's coverage inward on
+                        // clipped native Dock output. The SDF, glass body,
+                        // original Fresnel, inner glint and shadows stay put.
+                        float outlineDistance = surfaceDistance
+                                + u_backlitViewportInsetPx;
                         // The outer contour starts just inside the AA footprint
                         // so there is no transparent gap at the native silhouette.
                         // The peak and majority of its coverage remain OUTSIDE.
                         float outlineEntry = smoothstep(
-                                -aa * 0.70, aa * 0.20, surfaceDistance);
+                                -aa * 0.70, aa * 0.20, outlineDistance);
                         float outlineExit = 1.0 - smoothstep(
                                 max(outlineWidthPx - aa * 0.5, aa * 0.5),
-                                outlineWidthPx + aa * 0.5, surfaceDistance);
+                                outlineWidthPx + aa * 0.5, outlineDistance);
                         outlineAlpha = clamp(
                                 u_backlitStrength * outlineEntry * outlineExit,
                                 0.0, 0.98);

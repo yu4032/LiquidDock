@@ -104,12 +104,13 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(shader.contains("float outlineAlpha = 0.0;"));
         assertTrue(shader.contains("float innerHighlightAlpha = 0.0;"));
         assertTrue(shader.contains("float outlineEntry = smoothstep("));
-        assertTrue(shader.contains("-aa * 0.70, aa * 0.20, surfaceDistance"));
+        assertTrue(shader.contains("-aa * 0.70, aa * 0.20, outlineDistance"));
         assertTrue(shader.contains("float outlineExit = 1.0 - smoothstep("));
         assertTrue(shader.contains("float innerBand = smoothstep("));
         assertTrue(shader.contains("u_backlitStrength * innerBand"));
         assertFalse(shader.contains("float inkDistance ="));
-        assertFalse(shader.contains("u_backlitViewportInsetPx"));
+        assertTrue(shader.contains("float outlineDistance = surfaceDistance"));
+        assertTrue(shader.contains("+ u_backlitViewportInsetPx;"));
         assertFalse(shader.contains("float opticalAlpha ="));
         assertFalse(shader.contains("float coreCoverage ="));
 
@@ -125,6 +126,69 @@ public class PrismalEdgeDecorationShaderTest {
         float glint=smooth((inside+highlightWidth+aa*.6f)/(aa*.9f))
                 *(1f-smooth((inside+aa*.10f)/(aa*.85f)));
         assertTrue("inner glint is present separately",glint>.99f);
+    }
+
+    @Test public void aDarkContourChangesColorButNeverEndsWhenItBecomesLight() {
+        String shader=decorated();
+        int begin=shader.indexOf("float outlineAlpha = 0.0;");
+        int end=shader.indexOf("// Outside the original silhouette",begin);
+        assertTrue(begin>=0 && end>begin);
+        String contour=shader.substring(begin,end);
+        assertTrue(contour.contains("u_backlitStrength * outlineEntry * outlineExit"));
+        assertFalse(contour.contains("outlineAlpha *= sideWeight"));
+        assertFalse(contour.contains("outlineAlpha *= opticalDark"));
+        assertFalse(contour.contains("outlineAlpha *= opticalSpec"));
+        assertTrue(shader.contains("vec3 contour = mix(darkRim, brightRim, transition);"));
+        assertTrue(shader.contains("float midGlint = 0.15 * 4.0 * transition"));
+        assertTrue(shader.contains("return clamp(mix(contour, OPTICAL_SPECULAR_RGB, midGlint)"));
+
+        float input=.44f,spec=.99f;
+        float previous=Float.NEGATIVE_INFINITY;
+        for(int i=0;i<=100;i++) {
+            float dark=i/100f;
+            float color=shade(input,spec,dark,.85f,input);
+            assertTrue("continuous gradient is finite",Float.isFinite(color));
+            assertTrue("every angle has valid RGB",color>=0f && color<=1f);
+            if(i>0)assertTrue("black slowly changes to bright",color<=previous+.02f);
+            previous=color;
+        }
+        float mid=shade(input,spec,.5f,.55f,input);
+        assertTrue("transition retains optical visibility",Math.abs(mid-input)>.025f);
+        // Coverage depends on SDF alone, never on the normal direction.
+        float aa=.75f,distance=0f,width=3f;
+        float alpha=.85f*outlineCoverage(distance,0f,width,aa);
+        assertTrue(alpha>.7f);
+    }
+
+    @Test public void dockViewportRimSurvivesNativeSideClippingWithoutMovingGlass() {
+        PrismalEdgeDecoration glass=material(.55f,.6f);
+        PrismalEdgeDecoration dock=glass.fitInkToNativeViewport(1f);
+        assertEquals(1f,dock.inkViewportInsetPx,.00001f);
+        assertEquals(0f,glass.inkViewportInsetPx,.00001f);
+        assertEquals(glass.backlitWidthDp,dock.backlitWidthDp,.00001f);
+        String shader=decorated();
+        assertTrue(shader.contains("float outlineDistance = surfaceDistance"));
+        assertTrue(shader.contains("+ u_backlitViewportInsetPx;"));
+        assertTrue(shader.contains("outlineWidthPx + aa * 0.5, outlineDistance"));
+        assertTrue(shader.contains("-aa * 0.70, aa * 0.20, outlineDistance"));
+        assertTrue(shader.contains("float surfaceDistance = distMask + insetShiftPx;"));
+        assertFalse(shader.contains("surfaceDistance += u_backlitViewportInsetPx"));
+        // The render target may clip all exterior pixels on a straight edge.
+        // At 0.8px INSIDE the native viewport an unshifted outside rim
+        // is invisible; Dock's 1px fit keeps the same contour visible.
+        float d=-.8f,w=3f,aa=.75f;
+        float unshifted=outlineCoverage(d,0f,w,aa);
+        float fitted=outlineCoverage(d,1f,w,aa);
+        assertTrue(unshifted<.01f);
+        assertTrue("no loss of the straight vertical Dock rim",fitted>.90f);
+    }
+
+    private static float outlineCoverage(float d,float inset,float width,float aa) {
+        float x=d+inset;
+        float entry=smooth((x+aa*.70f)/(aa*.90f));
+        float exit=1f-smooth((x-Math.max(width-aa*.5f,aa*.5f))
+                            / (aa));
+        return entry*exit;
     }
 
     @Test public void innerHighlightCannotBeReplacedByOutlineColorOrAlpha() {
@@ -231,7 +295,9 @@ public class PrismalEdgeDecorationShaderTest {
     @Test public void darkOutlineKeepsSourceHueAndHorizontalSurfaceReflects() {
         String shader=decorated();
         assertTrue(shader.contains("float darkFloor = mix(0.46, 0.28,"));
-        assertTrue(shader.contains("float reflection = (0.10 + 0.70 * specEnergy)"));
+        assertTrue(shader.contains("vec3 darkRim = transmitted * darkFloor;"));
+        assertTrue(shader.contains("vec3 brightRim = mix(transmitted, OPTICAL_SPECULAR_RGB,"));
+        assertTrue(shader.contains("float midGlint = 0.15 * 4.0 * transition"));
         assertFalse(shader.contains("vec3(0.015)"));
         float[] brown={.65f,.38f,.20f};
         float[] bright=new float[3],dark=new float[3];
@@ -247,9 +313,12 @@ public class PrismalEdgeDecorationShaderTest {
 
     private static float shade(float rgb,float spec,float dark,float energy,float y) {
         float floor=.46f+(.28f-.46f)*smooth((y-.18f)/(.72f-.18f));
-        float trans=1f+(floor-1f)*dark;
-        float reflection=(.10f+.70f*energy)*(1f-dark);
-        return rgb*trans*(1f-reflection)+spec*reflection;
+        float u=smoother(1f-Math.max(0f,Math.min(1f,dark)));
+        float darkColor=rgb*floor;
+        float brightColor=rgb+(spec-rgb)*Math.max(0f,Math.min(.94f,.68f+.23f*energy));
+        float contour=darkColor+(brightColor-darkColor)*u;
+        float midGlint=.15f*4f*u*(1f-u);
+        return contour+(spec-contour)*midGlint;
     }
 
 
@@ -378,7 +447,7 @@ public class PrismalEdgeDecorationShaderTest {
         PrismalEdgeDecoration dock=m.fitInkToNativeViewport(1f);
         assertEquals(1f,dock.inkViewportInsetPx,.00001f);
         assertEquals(m.backlitWidthDp,dock.backlitWidthDp,.00001f);
-        assertFalse(decorated().contains("u_backlitViewportInsetPx"));
+        assertTrue(decorated().contains("u_backlitViewportInsetPx"));
         assertSame(PrismalEdgeDecoration.NONE,
                 PrismalEdgeDecoration.NONE.fitInkToNativeViewport(1.5f));
         String vertex=PrismalRasterGuardShader.applyWithEdgeGuard(
