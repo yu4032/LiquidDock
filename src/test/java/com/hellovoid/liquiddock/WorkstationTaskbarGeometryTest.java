@@ -17,6 +17,20 @@ public class WorkstationTaskbarGeometryTest {
         assertEquals(100f, WorkstationTaskbarGeometry.bottomTranslation(1100, 1100, 100f), 0.001f);
     }
 
+    @Test public void visibleHeightIsNativeHeightEvenWhenOpticsBleedPastScreen() {
+        assertEquals(960f, WorkstationTaskbarGeometry.visibleTop(1080, 120), 0.001f);
+        assertEquals(1020f, WorkstationTaskbarGeometry.visibleCenter(1080, 120), 0.001f);
+        // A 40px extruded bottom edge affects sampling, never the visible taskbar center.
+        assertEquals(1020f, WorkstationTaskbarGeometry.visibleCenter(1080, 120), 0.001f);
+        assertEquals(950f, WorkstationTaskbarGeometry.visibleTop(1080, 130), 0.001f);
+    }
+
+    @Test public void iconRowCorrectionIsGeometricAndStable() {
+        assertEquals(21f, WorkstationTaskbarGeometry.iconCenterCorrection(1020f, 999f), 0.001f);
+        assertEquals(0f, WorkstationTaskbarGeometry.iconCenterCorrection(1020f, 1020f), 0.001f);
+        assertEquals(-7f, WorkstationTaskbarGeometry.iconCenterCorrection(1020f, 1027f), 0.001f);
+    }
+
     @Test public void taskbarBodyUsesAbsoluteScreenCoordinates() {
         assertEquals(0f, WorkstationTaskbarGeometry.bodyUvLeft(80, -80, 0, 2200), 0.001f);
         assertEquals(0f, WorkstationTaskbarGeometry.bodyUvBottom(80, 1180, 1260, 500), 0.001f);
