@@ -408,7 +408,6 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile float nativeOpticsRadiusPx = Float.NaN;
     private volatile boolean taskbarMode;
     private final android.graphics.Point taskbarScreenSize = new android.graphics.Point();
-    private final int[] taskbarHostPosition = new int[2];
 
     void setTaskbarMode(boolean enabled) {
         if (taskbarMode == enabled) return;
@@ -1580,14 +1579,17 @@ final class Miuix307PassBlurTextureView extends TextureView
         boolean renderTaskbar = taskbarMode && getDisplay() != null;
         if (renderTaskbar) {
             getDisplay().getRealSize(taskbarScreenSize);
-            nativeDock.getLocationOnScreen(taskbarHostPosition);
             int bleed = WorkstationTaskbarGeometry.bleedPx(
                     getResources().getDisplayMetrics().density);
             float screenLeft = -bleed;
             float screenRight = taskbarScreenSize.x + bleed;
-            float screenTop = taskbarHostPosition[1];
+            // The former host-top anchor enlarged the visible body by the remaining
+            // bottom gap. Pin the VISIBLE bar to one native Dock height instead.
+            float screenTop = WorkstationTaskbarGeometry.visibleTop(
+                    taskbarScreenSize.y, dockNativeHeight);
             float screenBottom = taskbarScreenSize.y + bleed;
-            if (taskbarScreenSize.x > 0 && screenBottom > screenTop) {
+            if (taskbarScreenSize.x > 0 && screenTop >= 0f
+                    && screenBottom > screenTop) {
                 nextDockUvLeft = WorkstationTaskbarGeometry.bodyUvLeft(
                         insets.left, (int) screenLeft, viewScreen[0], sampleWidth);
                 nextDockUvBottom = WorkstationTaskbarGeometry.bodyUvBottom(
