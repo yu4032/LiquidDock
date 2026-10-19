@@ -160,6 +160,20 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
+    public void searchPullGestureBelongsOnlyToRootPagesAndUsesAnimatedTransitions() throws Exception {
+        String source = Files.readString(UI);
+        String search = Files.readString(Path.of(
+                "src/main/kotlin/com/hellovoid/liquiddock/SettingsSearch.kt"));
+        assertTrue(source.contains("if (root && !searchOpen && !showRestartScopes)"));
+        assertTrue(source.contains("Modifier.nestedScroll(rememberSettingsPullDownSearch(::openSearch))"));
+        assertTrue(source.contains("searchTransition.AnimatedContent("));
+        assertTrue(source.contains("slideInVertically("));
+        assertTrue(source.contains("slideOutVertically("));
+        assertTrue(source.contains("focusOnOpen = searchTransition.currentState && !searchTransition.isRunning"));
+        assertTrue(search.contains("LaunchedEffect(focusOnOpen)"));
+    }
+
+    @Test
     public void rootNavigationUsesFourLightweightDomainsAndRealBackStack() throws Exception {
         String source = Files.readString(UI);
         String routes = Files.readString(NAVIGATION_MODEL);
