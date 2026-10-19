@@ -586,10 +586,26 @@ public final class PrismalRenderer implements AutoCloseable {
                                         PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
                 fragment = PrismalEdgeDecorationShader.apply(fragment);
                 if (dualBlurEnabled) fragment = PrismalDualBlurShader.apply(fragment);
-                decoratedGlassProgram = createProgram(
-                        PrismalRasterGuardShader.applyWithEdgeGuard(
-                                PrismalShaderSources.VERTEX), fragment);
-                android.util.Log.i("LiquidDock-Prismal", "In-pass SDF edge shader ready");
+                String vertex = PrismalRasterGuardShader.applyWithEdgeGuard(
+                        PrismalShaderSources.VERTEX);
+                // The full reconstruction is intentionally more expensive.
+                // If a Mali GLES2 compiler rejects it, fall back to the
+                // known smaller OPTICAL shader rather than losing BOTH the
+                // rim and cast shadow or dropping straight to plain glass.
+                try {
+                    String full27 = PrismalReconstructed27Shader.apply(fragment);
+                    decoratedGlassProgram = createProgram(vertex, full27);
+                    android.util.Log.i("LiquidDock-Prismal",
+                            "Full reconstructed-27 optical stages ready");
+                } catch (RuntimeException reconstructed27Rejected) {
+                    android.util.Log.w("LiquidDock-Prismal",
+                            "Experimental reconstructed-27 shader unavailable; "
+                                    + "retaining previous dual-band optics",
+                            reconstructed27Rejected);
+                    decoratedGlassProgram = createProgram(vertex, fragment);
+                    android.util.Log.i("LiquidDock-Prismal",
+                            "In-pass SDF edge shader ready (compatibility fallback)");
+                }
             } catch (RuntimeException gpuRejectedShader) {
                 decorationProgramUnavailable = true;
                 android.util.Log.e("LiquidDock-Prismal",
