@@ -213,6 +213,20 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(shader.contains("rimDarkWeight, rimLightEnergy);"));
     }
 
+    @Test public void defaultRimRefractionUsesOs4FallbackInsteadOfHalfPixel() {
+        String source = PrismalEdgeDecorationShader.apply(upstream());
+        assertTrue(source.contains("float rimReflectPx = u_os4ReflectOffsetPx > 0.0"));
+        assertTrue(source.contains("clamp(u_glassThickness * 0.38, 4.0, 14.0);"));
+        assertTrue(source.contains("u_lensRefractionPx * 0.22 + rimReflectPx * 0.45"));
+        assertTrue(source.contains("-n * rimBendPx / u_resolution"));
+        assertFalse(source.contains("-n * max(u_os4ReflectOffsetPx, 1.0)"));
+        float reflectPx = Math.max(4f, Math.min(14f, 15f * 0.38f));
+        float bendPx = Math.min(12f, 16f * 0.22f + reflectPx * 0.45f);
+        assertEquals(5.7f, reflectPx, 0.001f);
+        assertTrue("default rim bend must be visible, not 0.5px", bendPx > 5f);
+        assertTrue("limit edge distortion to a narrow strip", bendPx <= 12f);
+    }
+
     @Test public void insideAndOutsideContourUseOnePreparedBackdropSignal() {
         String source = PrismalEdgeDecorationShader.apply(upstream());
         assertTrue(source.contains("vec3 edgeTransmission = vec3(0.0);"));

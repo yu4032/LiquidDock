@@ -134,9 +134,18 @@ final class PrismalEdgeDecorationShader {
                     vec3 edgeTransmission = vec3(0.0);
                     if (exteriorInkAlpha > 0.001) {
                         vec2 n = normalize(os4SdfGradient + vec2(0.00001));
+                        // Mirror OS4's default reflect offset instead of
+                        // treating the unset 0px override as a 1px request.
+                        // The transmitted rim bends toward the lens interior;
+                        // reflection in OS4 bends in the opposite direction.
+                        // Keep the displacement bounded on tiny icon glass.
+                        float rimReflectPx = u_os4ReflectOffsetPx > 0.0
+                                ? u_os4ReflectOffsetPx
+                                : clamp(u_glassThickness * 0.38, 4.0, 14.0);
+                        float rimBendPx = min(12.0,
+                                u_lensRefractionPx * 0.22 + rimReflectPx * 0.45);
                         vec2 rimUv = backdropUv(v_screenTexCoord,
-                                -n * max(u_os4ReflectOffsetPx, 1.0)
-                                * 0.5 / u_resolution, 0.0);
+                                -n * rimBendPx / u_resolution, 0.0);
                         edgeTransmission = texture2D(u_backgroundTexture, rimUv).rgb;
                     }
 
