@@ -144,6 +144,15 @@ final class Miuix307ZeroCopyRenderer {
         return workstationTaskbarMode;
     }
 
+    /** Only center icon rows inside the same native Dock window as the active GPU body. */
+    static int taskbarNativeHeightFor(View recycler) {
+        View material = materialHostRef.get();
+        if (!workstationTaskbarMode || material == null || recycler == null
+                || !material.isAttachedToWindow() || !recycler.isAttachedToWindow()
+                || material.getRootView() != recycler.getRootView()) return 0;
+        return Math.max(0, material.getHeight());
+    }
+
     static void setWorkstationTaskbarMode(boolean enabled) {
         if (workstationTaskbarMode == enabled) return;
         workstationTaskbarMode = enabled;
