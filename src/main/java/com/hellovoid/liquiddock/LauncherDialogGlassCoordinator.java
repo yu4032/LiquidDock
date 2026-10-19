@@ -180,7 +180,7 @@ final class LauncherDialogGlassCoordinator {
         binding.panelRef = new WeakReference<>(panel);
         binding.sink = sink;
         binding.bound = true;
-        sink.setNodeKind(LauncherGlassNodeKind.LARGE_FOLDER);
+        sink.setDialogOpticalScope();
         sink.runWhenOutputLost(() -> releaseObserved(binding));
 
         // Suppress MIUIX in the same layout pass that creates the replacement output. Any later
