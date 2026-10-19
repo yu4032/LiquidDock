@@ -30,6 +30,19 @@ final class WorkstationTaskbarGeometry {
                 Math.max(0, screenHeight - dockY - dockHeight + bleed));
     }
 
+    /** Visible taskbar retains the native Dock body height; optical bleed is outside the screen. */
+    static float visibleTop(int screenHeight, int nativeDockHeight) {
+        return screenHeight - nativeDockHeight;
+    }
+
+    static float visibleCenter(int screenHeight, int nativeDockHeight) {
+        return visibleTop(screenHeight, nativeDockHeight) + nativeDockHeight * 0.5f;
+    }
+
+    static float iconCenterCorrection(float taskbarCenter, float iconCenter) {
+        return taskbarCenter - iconCenter;
+    }
+
     static float bottomTranslation(int screenHeight, int dockScreenBottom, float translationY) {
         return translationY + (screenHeight - dockScreenBottom);
     }
