@@ -22,6 +22,20 @@ public class PrismalOpticalEdgeShaderTest {
     }
 
     @Test
+    public void meniscusReflectionUsesSharpSourceAndSkipsInvisiblePixels() {
+        String patched = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
+        assertTrue(patched.contains("if (os4ReflectionWeight > 0.001) {"));
+        assertTrue(patched.contains(
+                "texture2D(u_backgroundTexture, os4ReflectUv).rgb;"));
+        assertFalse(patched.contains(
+                "texture2D(u_blurredTexture, os4ReflectUv)"));
+        assertTrue(patched.indexOf("float os4ReflectionWeight =")
+                < patched.indexOf("if (os4ReflectionWeight > 0.001)"));
+        // Gaussian body blur and its user-configurable quality remain intact.
+        assertTrue(patched.contains("texture2D(u_blurredTexture, uvCenter)"));
+    }
+
+    @Test
     public void shadowSoftnessIsMonotonicAndKeepsTheShippedDefault() {
         String patched = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
         assertTrue(patched.contains("clamp(u_shadowSoftness / 20.0, 0.0, 1.0)"));

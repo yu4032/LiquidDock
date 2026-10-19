@@ -24,6 +24,7 @@ internal fun DialogGlassSettingsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     onOpenAll: () -> Unit = {},
+    onOpenEdge: () -> Unit = {},
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -244,6 +245,16 @@ internal fun DialogGlassSettingsPage(
                     summary = "删除对话弹窗的颜色与模糊度覆盖，重新跟随全局液态玻璃参数",
                     enabled = controlsEnabled && hasAppearanceOverride,
                     onClick = { clearAppearanceOverrides() },
+                )
+            }
+        }
+        item(key = "dialog-edge-effects") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "玻璃光照与投影",
+                    summary = "保留原生弹窗投影，仅按光照调节边缘透射",
+                    enabled = controlsEnabled,
+                    onClick = onOpenEdge,
                 )
             }
         }

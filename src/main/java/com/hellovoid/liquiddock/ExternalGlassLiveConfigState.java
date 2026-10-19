@@ -54,6 +54,7 @@ final class ExternalGlassLiveConfigState {
         if (target == null) return;
         try {
             ConfigReader reader = ConfigReader.load();
+            GlassEdgeEffects.refresh(reader);
             LiquidDockConfig config = LiquidDockConfig.from(reader);
             if ("com.google.android.inputmethod.latin".equals(target)) {
                 GboardFloatingGlassCoordinator.onLiveConfigChanged(reader, config);

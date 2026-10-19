@@ -36,6 +36,17 @@ final class DockHomeBackdropFreshnessState {
     private long producerFrameSerial;
     private long requiredFrameSerial = -1L;
 
+    /**
+     * HOME cannot be satisfied by the output TextureView timestamp: geometry
+     * and icon-scene redraws advance it without consuming new OES content.
+     * Require a producer callback after HOME was armed AND successful presentation.
+     */
+    static boolean isNewProducerFramePresented(
+            long callbackGenerationAtRequest, long presentedProducerGeneration) {
+        return callbackGenerationAtRequest >= 0L
+                && presentedProducerGeneration > callbackGenerationAtRequest;
+    }
+
     synchronized Decision onHomeStarted(long serial) {
         if (serial <= 0L) return Decision.none();
         activeHomeSerial = serial;

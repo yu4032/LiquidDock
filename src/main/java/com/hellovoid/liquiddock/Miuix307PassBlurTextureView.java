@@ -108,6 +108,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         final float dockUvBottom;
         final float dockUvWidth;
         final float dockUvHeight;
+        // Crop the COMPLETE enlarged TextureView output, including exterior
+        // Prismal shadows. Dock UVs above still locate only the native body.
+        final float outputUvLeft, outputUvBottom, outputUvWidth, outputUvHeight;
         final Miuix307BackdropMapping.Coverage coverage;
 
         BackdropSnapshot(
@@ -123,6 +126,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 float validDockLeft, float validDockBottom,
                 float validDockRight, float validDockTop,
                 float dockUvLeft, float dockUvBottom, float dockUvWidth, float dockUvHeight,
+                float outputUvLeft, float outputUvBottom,
+                float outputUvWidth, float outputUvHeight,
                 Miuix307BackdropMapping.Coverage coverage) {
             this.visibleWidth = visibleWidth;
             this.visibleHeight = visibleHeight;
@@ -150,6 +155,10 @@ final class Miuix307PassBlurTextureView extends TextureView
             this.dockUvBottom = dockUvBottom;
             this.dockUvWidth = dockUvWidth;
             this.dockUvHeight = dockUvHeight;
+            this.outputUvLeft = outputUvLeft;
+            this.outputUvBottom = outputUvBottom;
+            this.outputUvWidth = outputUvWidth;
+            this.outputUvHeight = outputUvHeight;
             this.coverage = coverage;
         }
     }
@@ -224,6 +233,14 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile boolean shuttingDown;
     private volatile boolean gpuBackdropActive;
     private volatile boolean hasPresentedFrame;
+    /**
+     * Monotonic input callback/presentation generations. A TextureView swap can
+     * be a scene-only redraw, so its timestamp cannot prove the PassBlur producer
+     * supplied a new background. Never reset these generations in power stats.
+     */
+    private volatile long producerCallbackGeneration;
+    private long latchedProducerGeneration; // GL thread only
+    private volatile long presentedProducerGeneration;
     private volatile boolean producerUpdatesEnabled = true;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
@@ -360,6 +377,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         return gpuBackdropActive;
     }
 
+    long producerCallbackGeneration() {
+        return producerCallbackGeneration;
+    }
+
+    long presentedProducerGeneration() {
+        return presentedProducerGeneration;
+    }
+
     boolean isActivationExhausted() {
         return producerRecovery.isActivationExhausted();
     }
@@ -457,6 +482,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         try {
             makeCurrent();
             invalidatePreparedBackdrop();
+            latchedProducerGeneration = presentedProducerGeneration;
             inputProducerSurface = null;
             inputSurfaceTexture = null;
 
@@ -793,6 +819,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
             producerFrameCount++;
+            producerCallbackGeneration++;
             frameAvailable.set(true);
             Miuix307PassBlurBridge.renewForceRefresh(binding);
             scheduleRender(true);
@@ -911,6 +938,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 producerRecovery.onFreshFrameConsumed();
+                latchedProducerGeneration = producerCallbackGeneration;
                 // The OES source is now newer than the prepared blur even if this draw later exits
                 // on a mapping-generation mismatch. Force the next render to rebuild from the
                 // already-latched latest producer texture rather than reusing stale backdrop data.
@@ -974,6 +1002,12 @@ final class Miuix307PassBlurTextureView extends TextureView
                         + Integer.toHexString(EGL14.eglGetError()));
             }
             hasPresentedFrame = true;
+            // Commit the producer generation only AFTER a successful EGL swap.
+            // On mapping churn, a latched frame can wait for a later scene redraw;
+            // scene-only swaps cannot advance this generation on their own.
+            if (latchedProducerGeneration > presentedProducerGeneration) {
+                presentedProducerGeneration = latchedProducerGeneration;
+            }
             renderedFrameCount++;
             maybeLogPowerStats();
 
@@ -1109,6 +1143,9 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (!Float.isNaN(nativeRadius) && !Float.isInfinite(nativeRadius) && nativeRadius > 0f) {
             cornerRadiusPx = nativeRadius;
         }
+        // Keep the vendor Dock shape, foreground border and MiShadow exactly
+        // aligned. The optical ink's AA placement is resolved by the shared
+        // shader; shrinking the whole rectangle would misalign all three.
         return new PrismalGeometry(
                 mapping.sampleWidth, mapping.sampleHeight,
                 centerX, centerYTop,
@@ -1152,7 +1189,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalTexture);
         GLES20.glUniform4f(compositeCropRectLocation,
-                mapping.dockUvLeft, mapping.dockUvBottom, mapping.dockUvWidth, mapping.dockUvHeight);
+                mapping.outputUvLeft, mapping.outputUvBottom,
+                mapping.outputUvWidth, mapping.outputUvHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glDisable(GLES20.GL_BLEND);
@@ -1300,6 +1338,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
         if (observer == null || !observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
+            Miuix307ZeroCopyRenderer.refreshDockShadowViewport();
             refreshProducerGeometryInPlace();
             updateBackdropMapping();
             return true;
@@ -1473,6 +1512,17 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (winFrame == null || winFrame.width() <= 0 || winFrame.height() <= 0) return;
         int[] viewScreen = viewScreenScratch;
         getLocationOnScreen(viewScreen);
+        // The TextureView is a direct child of DockLiquidGlassHostView.
+        // Use LOCAL layout offsets so Launcher parent scale/translation
+        // animations cannot multiply the shadow margin and shift the glass.
+        View nativeDock = getParent() instanceof View
+                ? (View) getParent() : materialHostRef.get();
+        if (nativeDock == null || nativeDock.getWidth() <= 0
+                || nativeDock.getHeight() <= 0) return;
+        int dockLocalLeft = -getLeft();
+        int dockLocalTop = -getTop();
+        int dockNativeWidth = nativeDock.getWidth();
+        int dockNativeHeight = nativeDock.getHeight();
 
         PrismalParams frameParams = portablePrismalParams;
         if (frameParams == null) return;
@@ -1488,10 +1538,24 @@ final class Miuix307PassBlurTextureView extends TextureView
                 viewScreen[0], viewScreen[1], visibleWidth, visibleHeight,
                 winFrame.left, winFrame.top, winFrame.width(), winFrame.height());
 
-        float nextDockUvLeft = insets.left / (float) sampleWidth;
-        float nextDockUvBottom = insets.bottom / (float) sampleHeight;
-        float nextDockUvWidth = visibleWidth / (float) sampleWidth;
-        float nextDockUvHeight = visibleHeight / (float) sampleHeight;
+        // Expanded TextureView pixels are not the Dock body. Keep the
+        // original native geometry in the correct place inside the larger
+        // output and composite the FULL output (not just the glass crop).
+        float nextDockUvLeft = DockPrismalShadowViewportPolicy.normalizedBodyX(
+                insets.left, dockLocalLeft, sampleWidth);
+        float nextDockUvBottom = DockPrismalShadowViewportPolicy.normalizedBodyBottom(
+                insets.bottom, visibleHeight, dockLocalTop,
+                dockNativeHeight, sampleHeight);
+        float nextDockUvWidth = dockNativeWidth / (float) sampleWidth;
+        float nextDockUvHeight = dockNativeHeight / (float) sampleHeight;
+        float nextOutputUvLeft = DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
+                insets.left, sampleWidth);
+        float nextOutputUvBottom = DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
+                insets.bottom, sampleHeight);
+        float nextOutputUvWidth = DockPrismalShadowViewportPolicy.normalizedOutputExtent(
+                visibleWidth, sampleWidth);
+        float nextOutputUvHeight = DockPrismalShadowViewportPolicy.normalizedOutputExtent(
+                visibleHeight, sampleHeight);
         boolean dockSceneChanged = dockCompositor.refreshUiSceneIfNeeded(
                 sampleWidth, sampleHeight, insets.left, insets.top, 1f, 1f);
 
@@ -1523,6 +1587,10 @@ final class Miuix307PassBlurTextureView extends TextureView
                 && Float.compare(dockUvBottom, nextDockUvBottom) == 0
                 && Float.compare(dockUvWidth, nextDockUvWidth) == 0
                 && Float.compare(dockUvHeight, nextDockUvHeight) == 0
+                && Float.compare(currentSnapshot.outputUvLeft, nextOutputUvLeft) == 0
+                && Float.compare(currentSnapshot.outputUvBottom, nextOutputUvBottom) == 0
+                && Float.compare(currentSnapshot.outputUvWidth, nextOutputUvWidth) == 0
+                && Float.compare(currentSnapshot.outputUvHeight, nextOutputUvHeight) == 0
                 && producerCoverage == dock.coverage;
         if (unchanged) {
             // Dock icon membership/geometry is independent from the PassBlur crop. A hotseat
@@ -1566,6 +1634,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 sample.validLeft, sample.validBottom, sample.validRight, sample.validTop,
                 dock.validLeft, dock.validBottom, dock.validRight, dock.validTop,
                 nextDockUvLeft, nextDockUvBottom, nextDockUvWidth, nextDockUvHeight,
+                nextOutputUvLeft, nextOutputUvBottom,
+                nextOutputUvWidth, nextOutputUvHeight,
                 dock.coverage);
         // Mapping changes are a normal per-frame part of Dock motion. Do not re-arm the
         // heavyweight Stage-B/Prismal diagnostics here: MainHook.log() also appends to disk,

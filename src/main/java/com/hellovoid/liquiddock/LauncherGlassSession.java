@@ -12,6 +12,7 @@ import android.view.Surface;
 import android.view.View;
 import android.view.ViewTreeObserver;
 
+import com.hellovoid.prismal.PrismalEdgeDecoration;
 import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalHighlightProfile;
 import com.hellovoid.prismal.PrismalInteractionState;
@@ -1320,19 +1321,36 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.makeCurrent(output.eglSurface);
         prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
         StaticNodeState[] snapshot = staticNodeStateSnapshot;
+        // Scope snapshots and display density are frame constants; resolving
+        // them once avoids N repeated resources/Map lookups per draw cycle.
+        View root = rootRef.get();
+        float density = root != null
+                ? root.getResources().getDisplayMetrics().density : 1f;
+        PrismalEdgeDecoration iconShadow = GlassEdgeEffects.current(GlassEdgeEffects.ICON);
+        PrismalEdgeDecoration widgetShadow = GlassEdgeEffects.current(GlassEdgeEffects.WIDGET);
+        PrismalEdgeDecoration folderShadow = GlassEdgeEffects.current(GlassEdgeEffects.FOLDER);
         for (StaticNodeState state : snapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             StaticGeometryFrame frame = state.frame;
             LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
             if (node == null || geometry == null) continue;
+            // Invisible nodes must not consume an expensive GLES2 shader draw.
+            // Their previous output is already removed by the scene clear.
+            float visibleAlpha = node.visibilityAlpha();
+            if (visibleAlpha <= 0f) continue;
             float projectedCenterX = workspaceScrollProjection.projectCenterX(
                     geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
             PrismalGeometry prismalGeometry = resolveStaticPrismalGeometry(
                     state, frame, geometry, projectedCenterX);
             PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
                     node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile);
+            LauncherGlassNodeKind kind = node.nodeKind();
+            PrismalEdgeDecoration material = kind == LauncherGlassNodeKind.ICON
+                    ? iconShadow : kind == LauncherGlassNodeKind.WIDGET
+                    ? widgetShadow : folderShadow;
+            prismalRenderer.setEdgeDecoration(material, density);
             prismalRenderer.drawGlass(
-                    prismalGeometry, params, highlights, state.interaction, node.visibilityAlpha());
+                    prismalGeometry, params, highlights, state.interaction, visibleAlpha);
         }
         sourceBackend.swapBuffers(output.eglSurface);
     }
@@ -1363,6 +1381,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         return created;
     }
 
+    private static String edgeScope(LauncherGlassNodeKind kind) {
+        return kind == LauncherGlassNodeKind.ICON
+                ? GlassEdgeEffects.ICON
+                : kind == LauncherGlassNodeKind.WIDGET
+                ? GlassEdgeEffects.WIDGET : GlassEdgeEffects.FOLDER;
+    }
+
     private void renderDragOutputs(PrismalParams params) {
         for (Map.Entry<LauncherGlassSinkView, OutputState> entry : outputs.entrySet()) {
             NodeState node = nodes.get(entry.getKey());
@@ -1380,6 +1405,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     ? sink.nodeKind() : LauncherGlassNodeKind.LARGE_FOLDER;
             PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
                     kind, launcherHighlightProfile, largeSurfaceHighlightProfile);
+            prismalRenderer.setEdgeDecoration(
+                    sink != null && sink.isExternalSessionAuthority()
+                            ? GlassEdgeEffects.current(GlassEdgeEffects.DIALOG)
+                            : GlassEdgeEffects.current(edgeScope(kind)),
+                    rootRef.get() != null
+                            ? rootRef.get().getResources().getDisplayMetrics().density : 1f);
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, node.interaction);
             present(prismalRenderer.outputTexture(), geometry, entry.getValue());

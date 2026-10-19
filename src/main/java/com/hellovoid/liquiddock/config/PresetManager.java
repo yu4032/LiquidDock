@@ -35,6 +35,13 @@ public final class PresetManager {
         editor.remove(profile + "tint_b");
         editor.remove(profile + "tint_alpha");
 
+        // Reset all per-component presentation overrides as well as global effect switches.
+        for (String scope : com.hellovoid.liquiddock.GlassEdgeEffects.SCOPES) {
+            for (ConfigKey<?> field : com.hellovoid.liquiddock.GlassEdgeEffects.KEYS) {
+                String scoped = com.hellovoid.liquiddock.GlassEdgeEffects.key(scope, field);
+                editor.remove(scoped).remove(scoped + "_tenths");
+            }
+        }
         for (Map.Entry<String, Object> entry : DEFAULT_VALUES.entrySet()) {
             Object value = entry.getValue();
             if (value instanceof Boolean) {

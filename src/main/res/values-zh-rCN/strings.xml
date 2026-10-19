@@ -100,6 +100,7 @@
     <string name="page_glass_widgets">小组件</string>
     <string name="page_glass_folders">文件夹</string>
     <string name="page_glass_menus">菜单与弹窗</string>
+    <string name="page_glass_edge">玻璃光照与投影</string>
     <string name="page_shortcut_popup">快捷菜单自定义</string>
     <string name="page_handle_menu">顶部菜单自定义</string>
     <string name="page_liquid_material">材质基础</string>

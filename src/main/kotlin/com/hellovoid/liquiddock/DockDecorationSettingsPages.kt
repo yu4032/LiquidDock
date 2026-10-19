@@ -56,7 +56,12 @@ internal fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, master
 }
 
 @Composable
-internal fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
+internal fun ShadowPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
     val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
     var dockShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SHADOW_ENABLED.name(), ConfigSchema.Dock.SHADOW_ENABLED.uiDefault())) }
     var strokeShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_SHADOW.name(), ConfigSchema.Dock.STROKE_SHADOW.uiDefault())) }
@@ -64,6 +69,16 @@ internal fun ShadowPage(padding: PaddingValues, prefs: SharedPreferences, master
         item(key = "dock-shadow-enabled") {
             SettingsCard {
                 BooleanSetting(prefs, ConfigSchema.Dock.SHADOW_ENABLED, "整个 Dock 下方阴影", "跟随 Dock 长宽、高度和圆角", masterEnabled && dockEnabled) { dockShadow = it }
+            }
+        }
+        item(key = "dock-optical-response") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "玻璃边缘光照",
+                    summary = "使用 OS4 高光与背光透射微暗；保留整个 Dock 下方原生投影",
+                    enabled = masterEnabled && dockEnabled,
+                    onClick = { open(Page.DockEdge) },
+                )
             }
         }
         item(key = "stroke-shadow-enabled") {

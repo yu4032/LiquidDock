@@ -30,6 +30,8 @@ final class DockGlassCompositor {
 
     private final WeakReference<View> ownershipRootRef;
     private final WeakReference<View> outputRootRef;
+    /** Prismal geometry is in physical framebuffer pixels, while optical widths are dp. */
+    private final float pixelDensity;
     private final ArrayList<CachedItem> cached = new ArrayList<>();
     private long[] uiFingerprintScratch = new long[0];
     private long[] proxyFingerprintScratch = new long[0];
@@ -59,6 +61,7 @@ final class DockGlassCompositor {
     DockGlassCompositor(View ownershipRoot, View outputRoot) {
         ownershipRootRef = new WeakReference<>(ownershipRoot);
         outputRootRef = new WeakReference<>(outputRoot);
+        pixelDensity = Math.max(0.1f, outputRoot.getResources().getDisplayMetrics().density);
     }
 
     void setIconStyle(GlassComponentStyle style, PrismalHighlightProfile highlightProfile) {
@@ -239,21 +242,27 @@ final class DockGlassCompositor {
                 ? dockBodyHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
         DockGlassSceneSnapshot stable = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
 
-        float currentLeft = dockBody.left() - RASTER_GUARD_PX;
-        float currentTop = dockBody.top() - RASTER_GUARD_PX;
-        float currentRight = dockBody.right() + RASTER_GUARD_PX;
-        float currentBottom = dockBody.bottom() + RASTER_GUARD_PX;
+        // The dirty-region guard must also enclose optional exterior paint.
+        // Keep the previous-frame union below to prevent trails during movement.
+        float bodyFringe = RASTER_GUARD_PX + GlassEdgeEffects.current(GlassEdgeEffects.DOCK)
+                .extraGuardPx(pixelDensity, Math.min(dockBody.glassWidth, dockBody.glassHeight));
+        float currentLeft = dockBody.left() - bodyFringe;
+        float currentTop = dockBody.top() - bodyFringe;
+        float currentRight = dockBody.right() + bodyFringe;
+        float currentBottom = dockBody.bottom() + bodyFringe;
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
+            float iconFringe = RASTER_GUARD_PX + GlassEdgeEffects.current(GlassEdgeEffects.ICON)
+                    .extraGuardPx(pixelDensity, Math.min(geometry.width, geometry.height));
             currentLeft = Math.min(
-                    currentLeft, geometry.centerX - geometry.width * 0.5f - RASTER_GUARD_PX);
+                    currentLeft, geometry.centerX - geometry.width * 0.5f - iconFringe);
             currentTop = Math.min(
-                    currentTop, geometry.centerY - geometry.height * 0.5f - RASTER_GUARD_PX);
+                    currentTop, geometry.centerY - geometry.height * 0.5f - iconFringe);
             currentRight = Math.max(
-                    currentRight, geometry.centerX + geometry.width * 0.5f + RASTER_GUARD_PX);
+                    currentRight, geometry.centerX + geometry.width * 0.5f + iconFringe);
             currentBottom = Math.max(
-                    currentBottom, geometry.centerY + geometry.height * 0.5f + RASTER_GUARD_PX);
+                    currentBottom, geometry.centerY + geometry.height * 0.5f + iconFringe);
         }
 
         boolean sameFramebuffer = lastDirtyValid
@@ -269,7 +278,11 @@ final class DockGlassCompositor {
             renderer.beginGlassFrame();
         }
 
+        // Dock body and icons use the same configurable in-pass Prismal
+        // cast-shadow pipeline as all other liquid-glass components.
+        renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK), pixelDensity);
         renderer.drawGlass(dockBody, params, bodyHighlightProfile);
+        renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), pixelDensity);
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
@@ -278,6 +291,7 @@ final class DockGlassCompositor {
                     geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
         }
 
+        renderer.setEdgeDecoration(null, pixelDensity);
         lastDirtyValid = true;
         lastDirtyFramebufferWidth = framebufferWidth;
         lastDirtyFramebufferHeight = framebufferHeight;

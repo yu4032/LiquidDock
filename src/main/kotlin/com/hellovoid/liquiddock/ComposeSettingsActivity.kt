@@ -324,6 +324,40 @@ private fun LiquidDockSettings(
                     liquidColorSpecs,
                 )
                 Page.LiquidLighting -> LiquidLightingPage(padding, prefs, masterEnabled)
+                Page.GlassEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.GLOBAL,
+                    open = ::navigateTo,
+                )
+                Page.DockEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.DOCK,
+                )
+                Page.IconEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.ICON,
+                )
+                Page.WidgetEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.WIDGET,
+                )
+                Page.FolderEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.FOLDER,
+                )
+                Page.PopupEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.POPUP,
+                )
+                Page.HandleMenuEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.HANDLE_MENU,
+                )
+                Page.DialogEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.DIALOG,
+                )
+                Page.GboardEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.GBOARD,
+                )
+                Page.SearchboxEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.SEARCHBOX,
+                )
+                Page.SecurityCenterEdge -> GlassEdgeSettingsPage(
+                    padding, prefs, masterEnabled, GlassEdgeEffects.SECURITY_CENTER,
+                )
                 Page.LiquidShadow -> LiquidSpecPage(
                     padding,
                     prefs,
@@ -336,11 +370,12 @@ private fun LiquidDockSettings(
                 Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
                 Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled)
+                Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
                 Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage(
                     padding, prefs, masterEnabled,
                     onOpenAll = { navigateTo(Page.HandleMenuAll) },
+                    onOpenEdge = { navigateTo(Page.HandleMenuEdge) },
                 )
                 Page.HandleMenuAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.HANDLE_MENU, "应用顶部菜单",
@@ -348,12 +383,15 @@ private fun LiquidDockSettings(
                 Page.ShortcutPopupCustomization -> ShortcutPopupGlassSettingsPage(
                     padding, prefs, masterEnabled,
                     onOpenAll = { navigateTo(Page.ShortcutPopupAll) },
+                    onOpenEdge = { navigateTo(Page.PopupEdge) },
                 )
                 Page.ShortcutPopupAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
                 )
                 Page.DialogCustomization -> DialogGlassSettingsPage(
-                padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.DialogAll) },
+                padding, prefs, masterEnabled,
+                onOpenAll = { navigateTo(Page.DialogAll) },
+                onOpenEdge = { navigateTo(Page.DialogEdge) },
             )
             Page.DialogAll -> ScopedGlassSettingsPage(
                 padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
@@ -379,7 +417,7 @@ private fun LiquidDockSettings(
                     padding, prefs, masterEnabled, compact = false,
                 )
                 Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
-                Page.Shadow -> ShadowPage(padding, prefs, masterEnabled)
+                Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo)
 
                 Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
                     padding = padding,

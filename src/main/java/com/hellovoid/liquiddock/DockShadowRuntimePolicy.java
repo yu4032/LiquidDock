@@ -18,6 +18,12 @@ final class DockShadowRuntimePolicy {
         return !workstationMode && dockCustomizationEnabled && hasConfig;
     }
 
+    /** Native shadow is replaced only while a real GPU Dock glass host is active. */
+    static boolean shouldSuppressNativeForPrismal(
+            boolean glassEnabled, boolean hostBound, boolean zeroCopyActive) {
+        return glassEnabled && hostBound && zeroCopyActive;
+    }
+
     static boolean shouldRefreshVendorShadow(boolean workstationMode,
                                              boolean dockCustomizationEnabled) {
         return !workstationMode && dockCustomizationEnabled;

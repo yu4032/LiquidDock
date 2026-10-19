@@ -184,7 +184,6 @@ public final class ConfigSchema {
                 "dock_shadow_alpha", 140, 140, 140, 0, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> SHADOW_Y = dp(
                 "dock_shadow_y", 4, 12, 12, -24, 24, ConfigKey.ExportMode.ALWAYS);
-
         private Dock() {}
     }
 
@@ -212,6 +211,38 @@ public final class ConfigSchema {
     }
 
     public static final class Glass {
+        // Whole-silhouette cast shadow and optically lit SDF contour are distinct
+        // from Prismal's interior optical shading and OS4 light-facing highlights.
+        // Both are opt-in to preserve rendering with older presets and OEM native shadows.
+        public static final ConfigKey<Boolean> OUTER_SHADOW_ENABLED = bool(
+                "liquid_outer_shadow_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> OUTER_SHADOW_RADIUS = dp(
+                "liquid_outer_shadow_radius", 16, 16, 16, 0, 24, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> OUTER_SHADOW_OFFSET_Y = dp(
+                "liquid_outer_shadow_offset_y", 3, 3, 3, -16, 16, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> OUTER_SHADOW_RED = integer(
+                "liquid_outer_shadow_r", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> OUTER_SHADOW_GREEN = integer(
+                "liquid_outer_shadow_g", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> OUTER_SHADOW_BLUE = integer(
+                "liquid_outer_shadow_b", 0, 0, 0, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> OUTER_SHADOW_ALPHA = integer(
+                "liquid_outer_shadow_alpha", 36, 36, 36, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> OUTER_SHADOW_LIGHT_FOLLOW = integer(
+                "liquid_outer_shadow_light_follow", 65, 65, 65, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+        // Light-derived high-contrast narrow contour; independent of whole shadow.
+        // Defaults off and preserves the existing Prismal OS4 light-facing rim.
+        public static final ConfigKey<Boolean> BACKLIT_ENABLED = bool(
+                "liquid_backlit_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> BACKLIT_WIDTH = dp(
+                "liquid_backlit_width", 1, 1, 1, 0, 5, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> BACKLIT_STRENGTH = integer(
+                "liquid_backlit_strength", 85, 85, 85, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> BACKLIT_SOFTNESS = integer(
+                "liquid_backlit_softness", 60, 60, 60, 5, 200, ConfigKey.ExportMode.IF_PRESENT);
+        /** Angular reach of visible dark contour, not its width or opacity. */
+        public static final ConfigKey<Integer> BACKLIT_EXTENT = integer(
+                "liquid_backlit_extent", 55, 55, 55, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
@@ -582,6 +613,12 @@ public final class ConfigSchema {
                 Dock.SHADOW_RADIUS, Dock.SHADOW_SIZE, Dock.SHADOW_ALPHA, Dock.SHADOW_Y);
         add(keys, Divider.ENABLED, Divider.WIDTH_DP, Divider.HEIGHT_SCALE, Divider.Y_OFFSET_DP,
                 Divider.COLOR_RED, Divider.COLOR_GREEN, Divider.COLOR_BLUE, Divider.ALPHA);
+        add(keys, Glass.OUTER_SHADOW_ENABLED, Glass.OUTER_SHADOW_RADIUS,
+                Glass.OUTER_SHADOW_OFFSET_Y, Glass.OUTER_SHADOW_RED, Glass.OUTER_SHADOW_GREEN,
+                Glass.OUTER_SHADOW_BLUE, Glass.OUTER_SHADOW_ALPHA, Glass.OUTER_SHADOW_LIGHT_FOLLOW,
+                Glass.BACKLIT_ENABLED, Glass.BACKLIT_WIDTH,
+                Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS,
+                Glass.BACKLIT_EXTENT);
         add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
