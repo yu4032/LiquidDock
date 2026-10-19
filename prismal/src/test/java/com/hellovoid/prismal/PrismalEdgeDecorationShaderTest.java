@@ -27,7 +27,7 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(source.contains("vec3 refractedContourColor(vec3 transmitted"));
         assertTrue(source.contains("vec2 rimUv = backdropUv(v_screenTexCoord"));
         assertTrue(source.contains("vec3 contourGlass = mix("));
-        assertTrue(source.contains("vec3 rim = refractedContourColor(color, hiSoft, rimDarkWeight);"));
+        assertTrue(source.contains("vec3 rim = refractedContourColor(color, OS4_OPTICAL_RIM_COLOR, rimDarkWeight);"));
         assertFalse(source.contains("vec3(0.015)"));
         assertTrue(source.contains("if (inkDistance > 0.0 && u_backlitStrength > 0.0"));
         assertTrue(source.contains("if (surfaceDistance > 0.0 && u_castShadowRadiusPx > 0.0"));
@@ -148,6 +148,25 @@ public class PrismalEdgeDecorationShaderTest {
         assertEquals(1.5f, dock.withoutCastShadow().inkViewportInsetPx, .00001f);
         assertSame(PrismalEdgeDecoration.NONE,
                 PrismalEdgeDecoration.NONE.fitInkToNativeViewport(1.5f));
+    }
+
+
+    @Test public void optionalOpticsCannotReferenceBlockScopedLegacyRimColor() {
+        // PrismalComponentGateShader wraps the legacy highlight family
+        // (including hiSoft) in a conditional block. Both shadow-only and
+        // contour-enabled optical shaders must remain valid even when those
+        // legacy highlights are disabled by the OS4 profile.
+        String source = PrismalEdgeDecorationShader.apply(upstream());
+        assertTrue(source.contains(
+                "const vec3 OS4_OPTICAL_RIM_COLOR = vec3(0.98, 0.992, 1.008);"));
+        int legacyDefinition = source.indexOf("vec3 hiSoft =");
+        int opticalFinal = source.lastIndexOf(
+                "vec3 rim = refractedContourColor(color,");
+        assertTrue("legacy highlight stays before the optical output",
+                legacyDefinition > 0 && opticalFinal > legacyDefinition);
+        assertFalse("no out-of-scope hiSoft reference in optional material",
+                source.substring(opticalFinal).contains("hiSoft"));
+        assertTrue(source.substring(opticalFinal).contains("OS4_OPTICAL_RIM_COLOR"));
     }
 
     @Test public void baselineRemainsUnmodifiedAndShadowOnlyStillWorks() {

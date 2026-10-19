@@ -39,6 +39,10 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_castShadowOffsetYPx;
                 uniform float u_castShadowLightFollow;
 
+                // Independent of the legacy hiSoft variable, which the
+                // component gate declares only inside a conditional block.
+                const vec3 OS4_OPTICAL_RIM_COLOR = vec3(0.98, 0.992, 1.008);
+
                 // Optical edge shades actual transmitted RGB and inherited OS4 rim white.
                 vec3 refractedContourColor(vec3 transmitted, vec3 highlight, float darkWeight) {
                     vec3 lit = mix(transmitted, max(transmitted, highlight), 0.88);
@@ -136,7 +140,7 @@ final class PrismalEdgeDecorationShader {
                                     ? texture2D(u_blurredTexture, rimUv).rgb
                                     : texture2D(u_backgroundTexture, rimUv).rgb;
                             rim = refractedContourColor(refracted,
-                                    vec3(0.98, 0.992, 1.008), rimDarkWeight);
+                                    OS4_OPTICAL_RIM_COLOR, rimDarkWeight);
                         }
                         vec3 underlayRgb = (rim * exteriorInkAlpha
                                 + u_castShadowColor.rgb * exteriorShadowAlpha
@@ -152,7 +156,7 @@ final class PrismalEdgeDecorationShader {
                     // Reuse it at the SDF fringe instead of drawing an opaque
                     // fixed-black stroke on top of a light-facing highlight.
                     if (underlayAlpha > 0.001) {
-                        vec3 rim = refractedContourColor(color, hiSoft, rimDarkWeight);
+                        vec3 rim = refractedContourColor(color, OS4_OPTICAL_RIM_COLOR, rimDarkWeight);
                         float innerFringe = smoothstep(
                                 -max(u_backlitWidthPx, 0.5), 0.0, surfaceDistance);
                         vec3 contourGlass = mix(
