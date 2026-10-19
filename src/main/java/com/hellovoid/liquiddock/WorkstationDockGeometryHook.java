@@ -46,6 +46,7 @@ final class WorkstationDockGeometryHook {
         refreshInstalledWidth();
         Miuix307ZeroCopyRenderer.setWorkstationTaskbarMode(
                 MainHook.isWorkstationMode() && taskbarEnabled);
+        WorkstationDockCustomizationHook.refreshTaskbarIconCentering();
     }
 
     private static void refreshInstalledWidth() {
@@ -104,6 +105,7 @@ final class WorkstationDockGeometryHook {
         }
         for (Binding binding : snapshot) binding.apply(enabled && dockEnabled);
         Miuix307ZeroCopyRenderer.setWorkstationTaskbarMode(enabled && taskbarEnabled);
+        WorkstationDockCustomizationHook.refreshTaskbarIconCentering();
     }
 
     private static void bindFromAnchor(View anchor) {
@@ -219,6 +221,7 @@ final class WorkstationDockGeometryHook {
                 }
                 originalTranslationY = Float.NaN;
                 appliedTranslationY = Float.NaN;
+                WorkstationDockCustomizationHook.refreshTaskbarIconCentering();
                 return;
             }
             Display display = container.getDisplay();
@@ -236,6 +239,7 @@ final class WorkstationDockGeometryHook {
             if (Math.abs(target - current) < 0.5f) return;
             container.setTranslationY(target);
             appliedTranslationY = target;
+            WorkstationDockCustomizationHook.refreshTaskbarIconCentering();
         }
     }
 }
