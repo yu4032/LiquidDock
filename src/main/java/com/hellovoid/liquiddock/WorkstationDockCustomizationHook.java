@@ -29,11 +29,11 @@ final class WorkstationDockCustomizationHook {
 
                 @Override public void onViewDetachedFromWindow(View view) {
                     synchronized (OBSERVED_RECYCLERS) {
-                        RowAlignment row = OBSERVED_RECYCLERS.remove(view);
+                        RowAlignment row = OBSERVED_RECYCLERS.get(view);
                         if (row != null) row.restore(view);
                     }
-                    view.removeOnLayoutChangeListener(ROW_LAYOUT_LISTENER);
-                    view.removeOnAttachStateChangeListener(this);
+                    // Keep the weakly tracked owner across Launcher detach/reattach so the
+                    // same RecyclerView re-centers even when no item decoration is rebound.
                 }
             };
 
