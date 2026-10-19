@@ -30,6 +30,33 @@ class SettingsSearchTest {
     }
 
     @Test
+    fun multipleMatchingOptionsAppearUnderOnePage() {
+        val items = listOf(
+            SettingsSearchItem(Page.LiquidColor, "玻璃颜色", "色散与底色"),
+            SettingsSearchItem(Page.LiquidColor, "色散强度", "玻璃材质"),
+            SettingsSearchItem(Page.LiquidColor, "色散蓝", "玻璃材质"),
+            SettingsSearchItem(Page.LiquidRefraction, "玻璃折射", "几何设置"),
+        )
+        val results = searchSettingsPages(items, "色散")
+        assertEquals(1, results.size)
+        assertEquals("玻璃颜色", results.single().title)
+        assertEquals(Page.LiquidColor, results.single().page)
+        assertEquals(listOf("色散强度", "色散蓝"), results.single().matchedOptions)
+    }
+
+    @Test
+    fun resultNamesArePagesNotRawOptions() {
+        val items = listOf(
+            SettingsSearchItem(Page.DockGeometry, "Dock 尺寸与位置", "功能页面"),
+            SettingsSearchItem(Page.DockGeometry, "Dock 图标间距", "图标间距"),
+        )
+        val results = searchSettingsPages(items, "间距")
+        assertEquals(1, results.size)
+        assertEquals("Dock 尺寸与位置", results.single().title)
+        assertTrue(results.single().description.contains("Dock 图标间距"))
+    }
+
+    @Test
     fun titleMatchPrecedesSummaryMatch() {
         val result = filterSettingsSearch(catalog, "色散")
         assertEquals("色散强度", result.first().title)
