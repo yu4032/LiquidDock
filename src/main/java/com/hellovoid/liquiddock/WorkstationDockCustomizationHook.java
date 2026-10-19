@@ -75,6 +75,18 @@ final class WorkstationDockCustomizationHook {
         }
     }
 
+    /** Reset the row when exiting Workstation even if the settings keys did not change. */
+    static void onWorkstationModeChanged(boolean active) {
+        if (active) return;
+        synchronized (OBSERVED_RECYCLERS) {
+            for (java.util.Map.Entry<View, RowAlignment> entry : OBSERVED_RECYCLERS.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    entry.getValue().restore(entry.getKey());
+                }
+            }
+        }
+    }
+
     /**
      * Called by the existing Dock GPU host pre-draw observer after the native Dock position is
      * reconciled. No posts, timers or extra layout passes; correct only if geometry differs.
