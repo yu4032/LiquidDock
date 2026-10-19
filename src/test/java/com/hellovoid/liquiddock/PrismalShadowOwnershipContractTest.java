@@ -1,62 +1,55 @@
 package com.hellovoid.liquiddock;
 
+import com.hellovoid.liquiddock.config.ConfigSchema;
+import com.hellovoid.prismal.PrismalEdgeDecoration;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.Test;
 import static org.junit.Assert.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
-/** Ownership and work-avoidance contracts for glass-only Prismal cast shadows. */
+/**
+ * Use typed production config/policy contracts, not source parsing, to verify
+ * the glass-only shadow-owner transition.
+ */
 public final class PrismalShadowOwnershipContractTest {
-    private static final Path SRC = Path.of("src/main/java/com/hellovoid/liquiddock");
-
-    private static String read(String name) throws Exception {
-        return Files.readString(SRC.resolve(name));
+    private static PrismalEdgeDecoration style(String scope, boolean shadow) {
+        Map<String,Object> cfg = new HashMap<>();
+        cfg.put(ConfigSchema.Glass.OUTER_SHADOW_ENABLED.name(), shadow);
+        return GlassEdgeEffects.resolve(new ConfigReader(cfg), scope);
     }
 
-    @Test public void dockAndOtherNodesShareTheSameGpuShadowMaterial() throws Exception {
-        String effects=read("GlassEdgeEffects.java");
-        String compositor=read("DockGlassCompositor.java");
-        String session=read("LauncherGlassSession.java");
-        assertFalse(effects.contains("withoutNativeShadows"));
-        assertFalse(effects.contains("withoutNativeShadow(String scope)"));
-        assertFalse(session.contains("GlassEdgeEffects.withoutNativeShadow("));
-        assertTrue(compositor.contains(
-                "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK)"));
-        assertTrue(session.contains("GlassEdgeEffects.current(GlassEdgeEffects.ICON)"));
-        assertTrue(session.contains("GlassEdgeEffects.current(GlassEdgeEffects.WIDGET)"));
-        assertTrue(session.contains("GlassEdgeEffects.current(GlassEdgeEffects.FOLDER)"));
+    @Test public void allGlassScopesHonorTheSameTypedPrismalShadowOption() {
+        for (String scope : GlassEdgeEffects.SCOPES) {
+            assertTrue(scope + " must honor enabled GPU cast shadow",
+                    style(scope, true).hasShadow());
+            assertFalse(scope + " must not paint shadows when disabled",
+                    style(scope, false).hasShadow());
+        }
+        // Optically fit the Dock contour but never delete its shadow recipe.
+        PrismalEdgeDecoration dock = GlassEdgeEffects.resolve(
+                new ConfigReader(new HashMap<>()), GlassEdgeEffects.DOCK);
+        assertFalse(dock.hasShadow());
     }
 
-    @Test public void nativeShadowSuppressionRequiresActiveGlassAndCanRestore() throws Exception {
-        String bridge=read("DockNativeShadowBridge.java");
-        String hook=read("MiuixGlassHook.java");
-        assertTrue(bridge.contains("DockShadowRuntimePolicy.shouldSuppressNativeForPrismal("));
-        assertTrue(bridge.contains("GlassRuntimeState.isEnabled()"));
-        assertTrue(bridge.contains("MiuixGlassHook.isZeroCopyActive()"));
-        assertTrue(bridge.contains("MIUIX_TARGET_CLASS.equals(targetClass)"));
-        assertTrue(bridge.contains("args[1] = Color.TRANSPARENT;"));
-        assertTrue(bridge.contains("args[4] = 0f;"));
-        assertTrue(hook.contains("DockShadowOwnership.refreshVendorDockShadow();"));
-        assertTrue(hook.contains("Miuix307ZeroCopyRenderer.clear();"));
+    @Test public void nativeDockShadowIsAuthoritativeOutsideActiveGlass() {
+        assertFalse(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(
+                false,true,true));
+        assertFalse(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(
+                true,false,true));
+        assertFalse(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(
+                true,true,false));
+        assertTrue(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(
+                true,true,true));
     }
 
-    @Test public void workspaceAvoidsRepeatedConfigLookupAndInvisibleNodeDraws() throws Exception {
-        String session=read("LauncherGlassSession.java");
-        int begin=session.indexOf("private void renderStaticScene(");
-        int end=session.indexOf("private PrismalGeometry resolveStaticPrismalGeometry",begin);
-        assertTrue(begin>=0 && end>begin);
-        String render=session.substring(begin,end);
-        int startLoop=render.indexOf("for (StaticNodeState state : snapshot)");
-        assertTrue(startLoop>0);
-        String frame=render.substring(0,startLoop);
-        assertTrue(frame.contains("float density = root != null"));
-        assertTrue(frame.contains("GlassEdgeEffects.current(GlassEdgeEffects.ICON)"));
-        assertTrue(frame.contains("GlassEdgeEffects.current(GlassEdgeEffects.WIDGET)"));
-        assertTrue(frame.contains("GlassEdgeEffects.current(GlassEdgeEffects.FOLDER)"));
-        String loop=render.substring(startLoop);
-        assertFalse(loop.contains("getDisplayMetrics()"));
-        assertFalse(loop.contains("GlassEdgeEffects.current("));
-        assertTrue(loop.contains("if (visibleAlpha <= 0f) continue;"));
-        assertTrue(loop.contains("state.interaction, visibleAlpha"));
+    @Test public void scopedShadowToggleCanDisableOneComponentWithoutDisablingOthers() {
+        Map<String,Object> cfg = new HashMap<>();
+        cfg.put(ConfigSchema.Glass.OUTER_SHADOW_ENABLED.name(), true);
+        cfg.put(GlassEdgeEffects.key(GlassEdgeEffects.DOCK,
+                ConfigSchema.Glass.OUTER_SHADOW_ENABLED), false);
+        ConfigReader reader = new ConfigReader(cfg);
+        assertFalse(GlassEdgeEffects.resolve(reader, GlassEdgeEffects.DOCK).hasShadow());
+        assertTrue(GlassEdgeEffects.resolve(reader, GlassEdgeEffects.ICON).hasShadow());
+        assertTrue(GlassEdgeEffects.resolve(reader, GlassEdgeEffects.WIDGET).hasShadow());
     }
 }

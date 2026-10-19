@@ -138,11 +138,11 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(compositor.contains(
                 ".extraGuardPx(pixelDensity, Math.min(geometry.width, geometry.height))"));
         assertTrue(compositor.contains(
-                "renderer.setEdgeDecoration(GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK), pixelDensity);"));
+                "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK), pixelDensity);"));
         assertTrue(compositor.contains(
                 "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), pixelDensity);"));
         assertFalse(compositor.contains(
-                "renderer.setEdgeDecoration(GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK), 1f);"));
+                "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK), 1f);"));
     }
 
     @Test
