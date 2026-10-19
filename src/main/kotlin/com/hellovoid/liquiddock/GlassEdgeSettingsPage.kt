@@ -129,7 +129,8 @@ internal fun GlassEdgeSettingsPage(
             SettingsCard {
                 number(ConfigSchema.Glass.BACKLIT_STRENGTH, "暗边线条不透明度", "%")
                 number(ConfigSchema.Glass.BACKLIT_WIDTH, "最大细线宽度", "dp")
-                number(ConfigSchema.Glass.BACKLIT_SOFTNESS, "受光淡出范围", "%")
+                number(ConfigSchema.Glass.BACKLIT_EXTENT, "暗边延伸范围", "%")
+                number(ConfigSchema.Glass.BACKLIT_SOFTNESS, "端点过渡柔和度", "%")
             }
         }
         if (!nativeShadowOwner) {

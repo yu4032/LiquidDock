@@ -15,6 +15,9 @@ public class GlassEdgeConfigCodecTest {
                 GlassEdgeEffects.DOCK, ConfigSchema.Glass.BACKLIT_ENABLED);
         String shadow = GlassEdgeEffects.key(
                 GlassEdgeEffects.FOLDER, ConfigSchema.Glass.OUTER_SHADOW_ENABLED);
+        String extent = GlassEdgeEffects.key(
+                GlassEdgeEffects.DOCK, ConfigSchema.Glass.BACKLIT_EXTENT);
+        prefs.put(extent, 72);
         prefs.put(width, 1);
         prefs.put(width + "_tenths", 14);
         prefs.put(light, true);
@@ -23,10 +26,19 @@ public class GlassEdgeConfigCodecTest {
         assertEquals(1.4d, ((Number) exported.get(width)).doubleValue(), .0001d);
         assertEquals(true, exported.get(light));
         assertEquals(false, exported.get(shadow));
+        assertEquals(72, exported.get(extent));
         Map<String,Object> imported = ConfigCodec.importValues(exported);
         assertEquals(14, imported.get(width + "_tenths"));
         assertEquals(true, imported.get(light));
         assertEquals(false, imported.get(shadow));
+        assertEquals(72, imported.get(extent));
+    }
+
+    @Test public void importedExtentIsClampedToValidReach() {
+        String reach = GlassEdgeEffects.key(
+                GlassEdgeEffects.WIDGET, ConfigSchema.Glass.BACKLIT_EXTENT);
+        assertEquals(100, ConfigCodec.importValues(Map.of(reach, 999)).get(reach));
+        assertEquals(0, ConfigCodec.importValues(Map.of(reach, -5)).get(reach));
     }
 
     @Test public void importedMaterialValuesAreClamped() {

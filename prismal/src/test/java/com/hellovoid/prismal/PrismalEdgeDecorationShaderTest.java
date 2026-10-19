@@ -45,38 +45,54 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(ink.contains("abs(edgeNormal.x)"));
         assertFalse(ink.contains("gl_FragColor"));
         assertFalse(ink.contains("u_os4EdgeEnabled > 0.5"));
-        assertTrue(ink.contains("float taper = mix(0.08, 1.0, angularResponse);"));
+        assertTrue(ink.contains("float taper = mix(0.04, 1.0, angularResponse);"));
+        assertTrue(ink.contains("float reachStart = mix(0.38, -0.36, u_backlitExtent);"));
+        assertTrue(ink.contains("float transitionWidth = mix(0.12, 0.36, u_backlitSoftness);"));
+        assertTrue(source.contains("uniform float u_backlitExtent;"));
         assertTrue(ink.contains("float grazing = clamp(1.0 - angularIncidence"));
         assertFalse(ink.contains("fadeStart"));
         assertFalse(ink.contains("fadeEnd"));
     }
 
-    @Test public void continuousPerimeterDoesNotHaveArbitraryAngularEndpoints() {
-        float side = rimWeight(.53f, .6f);
-        float corner = rimWeight(.69f, .6f);
-        float top = rimWeight(.85f, .6f);
-        assertTrue("grazing side darkens more", side > corner);
-        assertTrue("the corner remains connected", corner > top);
-        assertTrue("even the lit edge retains a faint seam", top > 0.08f);
-        assertEquals(0.08f, rimWeight(1f, .6f), 0.0001f);
-        assertEquals(1f, rimWeight(0f, .6f), 0.0001f);
-        // As orientation traverses a complete round corner, the response is
-        // continuous and never jumps to a hard zero at a chosen angle.
-        float previous = rimWeight(0f, .6f);
-        for (int i = 1; i <= 1000; i++) {
-            float current = rimWeight(i / 1000f, .6f);
-            assertTrue(current <= previous + 0.0001f);
-            assertTrue(previous - current < .004f);
-            previous = current;
+    @Test public void extentChangesLengthWithoutChangingMaximumWidthOrAlpha() {
+        // Grazing edges stay strong. The reach control changes where the
+        // contour begins to taper; the softness controls its slope.
+        float sideShort = rimWeight(0.53f, .6f, 0f);
+        float sideLong = rimWeight(0.53f, .6f, 1f);
+        float cornerShort = rimWeight(0.69f, .6f, 0f);
+        float cornerLong = rimWeight(0.69f, .6f, 1f);
+        assertTrue(sideLong > sideShort);
+        assertTrue(cornerLong > cornerShort);
+        assertTrue(cornerLong >= sideLong - 0.0001f);
+        assertTrue(rimWeight(0.0f, .6f, 0f) > .5f);
+        assertEquals(1f, rimWeight(0f, .6f, 1f), .00001f);
+        assertEquals(1f, rimWeight(1f, .6f, 1f), .00001f);
+        assertEquals(.04f, rimWeight(1f, .6f, 0f), .00001f);
+    }
+
+    @Test public void rangeAndSoftnessAreIndependentAndContinuousAtCorner() {
+        float shortHard = rimWeight(.69f, .05f, 0.25f);
+        float shortSoft = rimWeight(.69f, 1f, 0.25f);
+        assertTrue("softness must affect a contour at fixed reach",
+                Math.abs(shortHard - shortSoft) > .01f);
+        for (float extent : new float[] { 0f, .25f, .55f, .75f, 1f }) {
+            float previous = rimWeight(0f, .6f, extent);
+            for (int i = 1; i <= 1000; i++) {
+                float current = rimWeight(i / 1000f, .6f, extent);
+                assertTrue("reach must not create a hard segment", current <= previous+.00001f);
+                assertTrue("round-corner taper must be smooth", previous-current < .013f);
+                previous = current;
+            }
         }
     }
 
-    private static float rimWeight(float incidence, float softness) {
+    private static float rimWeight(float incidence, float softness, float extent) {
         float grazing = Math.max(0f, Math.min(1f, 1f - incidence));
-        float spread = .45f + .60f * softness;
-        float t = Math.max(0f, Math.min(1f, grazing / spread));
+        float start = .38f - .74f * extent;
+        float transition = .12f + .24f * softness;
+        float t = Math.max(0f, Math.min(1f, (grazing - start) / transition));
         float response = t*t*(3f-2f*t);
-        return .08f + .92f * response;
+        return .04f + .96f*response;
     }
 
     @Test public void baselineRemainsUnmodifiedAndShadowOnlyStillWorks() {

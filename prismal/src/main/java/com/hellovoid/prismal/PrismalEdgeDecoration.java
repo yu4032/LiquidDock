@@ -11,7 +11,7 @@ public final class PrismalEdgeDecoration {
             new PrismalEdgeDecoration(0f, 0f, 0f, 0f, 0f,
                     0f, 0f, 0f, 0f, 0f);
 
-    public final float backlitWidthDp, backlitStrength, backlitSoftness;
+    public final float backlitWidthDp, backlitStrength, backlitSoftness, backlitExtent;
     public final float shadowRadiusDp, shadowOffsetYDp;
     public final float shadowR, shadowG, shadowB, shadowA, shadowLightFollow;
 
@@ -20,9 +20,20 @@ public final class PrismalEdgeDecoration {
                                  float shadowOffsetYDp, float shadowR,
                                  float shadowG, float shadowB, float shadowA,
                                  float shadowLightFollow) {
+        this(backlitWidthDp, backlitStrength, backlitSoftness, shadowRadiusDp,
+                shadowOffsetYDp, shadowR, shadowG, shadowB, shadowA,
+                shadowLightFollow, 0.55f);
+    }
+
+    public PrismalEdgeDecoration(float backlitWidthDp, float backlitStrength,
+                                 float backlitSoftness, float shadowRadiusDp,
+                                 float shadowOffsetYDp, float shadowR,
+                                 float shadowG, float shadowB, float shadowA,
+                                 float shadowLightFollow, float backlitExtent) {
         this.backlitWidthDp = bounded(backlitWidthDp, 0f, 24f);
         this.backlitStrength = bounded(backlitStrength, 0f, 1f);
         this.backlitSoftness = bounded(backlitSoftness, 0.05f, 1f);
+        this.backlitExtent = bounded(backlitExtent, 0f, 1f);
         this.shadowRadiusDp = bounded(shadowRadiusDp, 0f, 24f);
         this.shadowOffsetYDp = bounded(shadowOffsetYDp, -16f, 16f);
         this.shadowR = bounded(shadowR, 0f, 1f);
@@ -39,7 +50,8 @@ public final class PrismalEdgeDecoration {
     public PrismalEdgeDecoration withoutCastShadow() {
         if (!hasShadow()) return this;
         return new PrismalEdgeDecoration(backlitWidthDp, backlitStrength,
-                backlitSoftness, 0f, 0f, shadowR, shadowG, shadowB, 0f, 0f);
+                backlitSoftness, 0f, 0f, shadowR, shadowG, shadowB, 0f, 0f,
+                backlitExtent);
     }
 
     public float effectiveShadowRadiusPx(float density, float minDimensionPx) {

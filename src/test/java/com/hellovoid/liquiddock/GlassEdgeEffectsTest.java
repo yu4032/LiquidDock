@@ -44,6 +44,24 @@ public class GlassEdgeEffectsTest {
         assertTrue(widget.hasBacklit());
     }
 
+    @Test public void scopedExtentInheritsAndCanOverrideSeparately() {
+        Map<String,Object> values = new HashMap<>();
+        values.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(), true);
+        values.put(ConfigSchema.Glass.BACKLIT_EXTENT.name(), 65);
+        String dockExtent = GlassEdgeEffects.key(
+                GlassEdgeEffects.DOCK, ConfigSchema.Glass.BACKLIT_EXTENT);
+        values.put(dockExtent, 15);
+        ConfigReader reader = new ConfigReader(values);
+        assertEquals(.15f, GlassEdgeEffects.resolve(
+                reader, GlassEdgeEffects.DOCK).backlitExtent, .0001f);
+        assertEquals(.65f, GlassEdgeEffects.resolve(
+                reader, GlassEdgeEffects.FOLDER).backlitExtent, .0001f);
+        assertEquals(.65f, GlassEdgeEffects.resolve(
+                reader, GlassEdgeEffects.GLOBAL).backlitExtent, .0001f);
+        PrismalEdgeDecoration dock = GlassEdgeEffects.resolve(reader, GlassEdgeEffects.DOCK);
+        assertEquals(.60f, dock.backlitSoftness, .0001f);
+    }
+
     @Test public void scopedFractionalDpAndMaterialSoftnessAreIndependent() {
         Map<String,Object> map = new HashMap<>();
         map.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(), true);
@@ -55,5 +73,6 @@ public class GlassEdgeEffectsTest {
                 new ConfigReader(map), GlassEdgeEffects.WIDGET);
         assertEquals(1.4f, widget.backlitWidthDp, 0.0001f);
         assertTrue(widget.backlitSoftness > 0f);
+        assertEquals(.55f, widget.backlitExtent, 0.0001f);
     }
 }

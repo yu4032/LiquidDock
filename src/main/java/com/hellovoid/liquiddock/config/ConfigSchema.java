@@ -240,6 +240,9 @@ public final class ConfigSchema {
                 "liquid_backlit_strength", 85, 85, 85, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> BACKLIT_SOFTNESS = integer(
                 "liquid_backlit_softness", 60, 60, 60, 5, 100, ConfigKey.ExportMode.IF_PRESENT);
+        /** Angular reach of visible dark contour, not its width or opacity. */
+        public static final ConfigKey<Integer> BACKLIT_EXTENT = integer(
+                "liquid_backlit_extent", 55, 55, 55, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
@@ -614,7 +617,8 @@ public final class ConfigSchema {
                 Glass.OUTER_SHADOW_OFFSET_Y, Glass.OUTER_SHADOW_RED, Glass.OUTER_SHADOW_GREEN,
                 Glass.OUTER_SHADOW_BLUE, Glass.OUTER_SHADOW_ALPHA, Glass.OUTER_SHADOW_LIGHT_FOLLOW,
                 Glass.BACKLIT_ENABLED, Glass.BACKLIT_WIDTH,
-                Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS);
+                Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS,
+                Glass.BACKLIT_EXTENT);
         add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,

@@ -31,6 +31,7 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_backlitWidthPx;
                 uniform float u_backlitStrength;
                 uniform float u_backlitSoftness;
+                uniform float u_backlitExtent;
                 uniform vec4 u_castShadowColor;
                 uniform float u_castShadowRadiusPx;
                 uniform float u_castShadowOffsetYPx;
@@ -72,18 +73,18 @@ final class PrismalEdgeDecorationShader {
                                     os4SdfGradient + vec2(0.00001));
                             float angularIncidence = abs(
                                     dot(edgeNormal, u_invariantLightXY));
-                            // The iOS 27 reference has a continuous fine rim:
-                            // its contrast varies around the FULL perimeter,
-                            // rather than an angular segment with endpoints.
-                            // Grazing edge normals get a darker, thicker line;
-                            // light-facing normals keep only a faint seam beneath
-                            // the unchanged OS4 specular highlight.
+                            // Extent decides HOW FAR the dark line reaches
+                            // around the rounded contour. Softness independently
+                            // controls HOW GRADUALLY it thins at each endpoint.
+                            // At 100% extent even the far-lit side stays connected.
+                            // A subtle baseline line remains at shorter extents
+                            // to avoid abrupt angular cutoffs.
                             float grazing = clamp(1.0 - angularIncidence, 0.0, 1.0);
-                            float lightSpread = mix(0.45, 1.05,
-                                    u_backlitSoftness);
+                            float reachStart = mix(0.38, -0.36, u_backlitExtent);
+                            float transitionWidth = mix(0.12, 0.36, u_backlitSoftness);
                             float angularResponse = smoothstep(
-                                    0.0, lightSpread, grazing);
-                            float taper = mix(0.08, 1.0, angularResponse);
+                                    reachStart, reachStart + transitionWidth, grazing);
+                            float taper = mix(0.04, 1.0, angularResponse);
                             float lineWidthPx = u_backlitWidthPx * taper;
                             float outsideAa = max(edgeAa * 0.5, 0.25);
                             float entry = smoothstep(0.0, outsideAa,

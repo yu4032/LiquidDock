@@ -35,6 +35,7 @@ public final class GlassEdgeEffects {
             ConfigSchema.Glass.BACKLIT_WIDTH,
             ConfigSchema.Glass.BACKLIT_STRENGTH,
             ConfigSchema.Glass.BACKLIT_SOFTNESS,
+            ConfigSchema.Glass.BACKLIT_EXTENT,
             ConfigSchema.Glass.OUTER_SHADOW_ENABLED,
             ConfigSchema.Glass.OUTER_SHADOW_RADIUS,
             ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y,
@@ -76,7 +77,8 @@ public final class GlassEdgeEffects {
                 integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_GREEN) / 255f,
                 integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_BLUE) / 255f,
                 castShadow ? integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_ALPHA) / 255f : 0f,
-                integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW) / 100f);
+                integer(reader, scope, ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW) / 100f,
+                integer(reader, scope, ConfigSchema.Glass.BACKLIT_EXTENT) / 100f);
     }
 
     public static synchronized void refresh(ConfigReader reader) {
