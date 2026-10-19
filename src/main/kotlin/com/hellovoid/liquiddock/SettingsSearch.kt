@@ -211,12 +211,15 @@ internal fun SettingsSearchScreen(
     onQueryChange: (String) -> Unit,
     catalog: List<SettingsSearchItem>,
     onSelect: (SettingsSearchItem) -> Unit,
+    focusOnOpen: Boolean = true,
 ) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(Unit) {
-        focus.requestFocus()
-        keyboard?.show()
+    LaunchedEffect(focusOnOpen) {
+        if (focusOnOpen) {
+            focus.requestFocus()
+            keyboard?.show()
+        }
     }
     val results = remember(query, catalog) { searchSettingsPages(catalog, query) }
     LazyColumn(
