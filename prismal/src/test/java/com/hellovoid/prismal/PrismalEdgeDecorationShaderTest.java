@@ -20,7 +20,11 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(result.contains("float aa = max(edgeAa * 0.5, 0.25);"));
         assertTrue(result.contains("float lineWidthPx = u_backlitWidthPx * taper;"));
         assertTrue(result.contains("float innerBand = smoothstep(-aa, aa, insideDistance)"));
-        assertTrue(result.contains("color = mix(color, vec3(0.015), lineOpacity);"));
+        assertTrue(result.contains("rimLineCoverage = lineOpacity;"));
+        assertTrue(result.contains("float lineAlpha = opacity * rimLineCoverage;"));
+        assertTrue(result.contains("float combinedAlpha = lineAlpha"));
+        assertTrue(result.contains("gl_FragColor = vec4(combinedColor, combinedAlpha);"));
+        assertTrue(result.contains("gl_FragColor = vec4(color, opacity * u_transmittance);"));
         assertFalse(result.contains("color *= 1.0 - darken;"));
         assertTrue(result.contains("smoothstep("));
         assertTrue(result.contains("float taper = darkness * darkness"));
@@ -60,6 +64,20 @@ public class PrismalEdgeDecorationShaderTest {
         assertEquals(original.height + 44, expanded.height);
     }
 
+    @Test public void contourOpacityIsIndependentFromBodyTransmittance() {
+        // Same-fragment straight-alpha source-over. At low glass translucency,
+        // a strong physically narrow line still remains dark and visible.
+        float bodyA = 0.18f;
+        float lineA = 0.90f;
+        float combinedA = lineA + bodyA * (1f - lineA);
+        float combinedRgb = (0.015f * lineA + 0.9f * bodyA * (1f - lineA))
+                / combinedA;
+        assertTrue(combinedA > 0.9f);
+        assertTrue(combinedRgb < 0.05f);
+        // When disabled, the original Prismal color and alpha are unchanged.
+        assertEquals(bodyA, 0f + bodyA*(1f-0f), 0.0001f);
+    }
+
     @Test public void noExtraPixelsOrGpuProgramWhenEffectsOff() {
         assertFalse(PrismalEdgeDecoration.NONE.hasBacklit());
         assertFalse(PrismalEdgeDecoration.NONE.hasShadow());
@@ -89,6 +107,8 @@ public class PrismalEdgeDecorationShaderTest {
         String decorated = PrismalEdgeDecorationShader.apply(upstream());
         assertTrue(decorated.contains("insideDistance = edgeDist - insetShiftPx"));
         assertTrue(decorated.contains("lineOpacity"));
+        assertFalse(decorated.contains("float edgeBand = os4EdgeBand("));
+        assertFalse(decorated.contains("color *= 1.0 - darken;"));
         assertTrue(decorated.contains("u_os4EdgeEnabled > 0.5"));
         PrismalEdgeDecoration optical = new PrismalEdgeDecoration(
                 1f, .85f, .6f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);

@@ -2,8 +2,9 @@ package com.hellovoid.prismal;
 
 /**
  * Immutable per-component optical response, in the original glass draw.
- * Light-facing reflection is supplied by Prismal OS4; only the underlit rim
- * is attenuated here. The cast shadow uses the same overall silhouette.
+ * Light-facing reflection is supplied by Prismal OS4; the unlit silhouette
+ * receives a real narrow, antialiased dark contour with its own source-over
+ * coverage in the same fragment. Cast shadow uses the same overall silhouette.
  */
 public final class PrismalEdgeDecoration {
     public static final PrismalEdgeDecoration NONE =

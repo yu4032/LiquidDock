@@ -64,6 +64,9 @@ final class PrismalEdgeDecorationShader {
                 .replace(FINAL, """
                     // The narrow, high-contrast absorption line is a real
                     // SDF contour, not broad backlight color attenuation.
+                    // Keep separate alpha until the final, same-fragment blend:
+                    // a translucent glass surface must NOT wash out the line.
+                    float rimLineCoverage = 0.0;
                     // OS4 has already evaluated both primary/secondary
                     // directionality and angular falloff as os4Directional.
                     if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0
@@ -93,11 +96,26 @@ final class PrismalEdgeDecorationShader {
                             float lineOpacity = clamp(
                                     u_backlitStrength * taper * innerBand,
                                     0.0, 0.98);
-                            // A visible dark physical contour (near-black),
-                            // whose position, thickness and opacity all follow
-                            // local light; never changes the silhouette alpha.
-                            color = mix(color, vec3(0.015), lineOpacity);
+                            // Real pigment-like line: unlike mere color
+                            // darkening, its coverage can remain visible when
+                            // the glass body is highly transmissive.
+                            rimLineCoverage = lineOpacity;
                         }
+                    }
+                    if (rimLineCoverage > 0.001) {
+                        // Straight-alpha "line over glass" at the SAME output
+                        // fragment. The line still fades with the glass SDF's
+                        // silhouette opacity, so no outside halo is created.
+                        float glassAlpha = opacity * u_transmittance;
+                        float lineAlpha = opacity * rimLineCoverage;
+                        float combinedAlpha = lineAlpha
+                                + glassAlpha * (1.0 - lineAlpha);
+                        vec3 combinedColor = (
+                                vec3(0.015) * lineAlpha
+                                + color * glassAlpha * (1.0 - lineAlpha))
+                                / max(combinedAlpha, 0.0001);
+                        gl_FragColor = vec4(combinedColor, combinedAlpha);
+                        return;
                     }
                     """ + FINAL);
     }
