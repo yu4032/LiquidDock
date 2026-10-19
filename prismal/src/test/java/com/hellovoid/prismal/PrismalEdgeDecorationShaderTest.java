@@ -27,7 +27,10 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(source.contains("vec3 refractedContourColor(vec3 transmitted"));
         assertTrue(source.contains("vec2 rimUv = backdropUv(v_screenTexCoord"));
         assertTrue(source.contains("vec3 contourGlass = mix("));
-        assertTrue(source.contains("vec3 rim = refractedContourColor(color, OS4_OPTICAL_RIM_COLOR, rimDarkWeight);"));
+        assertTrue(source.contains("vec3 rimBase = mix(edgeTransmission, color,"));
+        assertTrue(source.contains("vec3 rim = refractedContourColor("));
+        assertTrue(source.contains("vec3 edgeTransmission = vec3(0.0);"));
+        assertTrue(source.contains("smoothstep(0.0, 0.45, opacity)"));
         assertFalse(source.contains("vec3(0.015)"));
         assertTrue(source.contains("if (inkDistance > 0.0 && u_backlitStrength > 0.0"));
         assertTrue(source.contains("if (surfaceDistance > 0.0 && u_castShadowRadiusPx > 0.0"));
@@ -190,6 +193,28 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(vertex.contains("u_edgeRasterGuardPx"));
         assertFalse(PrismalRasterGuardShader.apply(
                 PrismalShaderSources.VERTEX).contains("u_edgeRasterGuardPx"));
+    }
+
+    @Test public void insideAndOutsideContourUseOnePreparedBackdropSignal() {
+        String source = PrismalEdgeDecorationShader.apply(upstream());
+        assertTrue(source.contains("vec3 edgeTransmission = vec3(0.0);"));
+        assertTrue(source.contains("edgeTransmission = u_useBlurredTexture == 1"));
+        assertTrue(source.contains("refractedContourColor(edgeTransmission,"));
+        assertTrue(source.contains("vec3 rimBase = mix(edgeTransmission, color,"));
+        assertTrue(source.contains("smoothstep(0.0, 0.45, opacity)"));
+        assertEquals("edge sample must be shared between both branches",
+                1, occurrences(source, "vec2 rimUv = backdropUv("));
+        assertEquals("only one extra blurred-texture tap in optical rim",
+                1, occurrences(source, "texture2D(u_blurredTexture, rimUv)"));
+        assertTrue(source.indexOf("vec3 edgeTransmission = vec3(0.0);")
+                < source.indexOf("if (opacity < 0.001) {"));
+    }
+
+    private static int occurrences(String s, String token) {
+        int count = 0;
+        for (int pos = 0; (pos = s.indexOf(token, pos)) >= 0; pos += token.length())
+            count++;
+        return count;
     }
 
     @Test public void materialTintPreservesSourceHueInsteadOfWhiteBlackEndpoints() {

@@ -125,26 +125,31 @@ final class PrismalEdgeDecorationShader {
                                     * entry * exit, 0.0, 0.98);
                         }
                     }
-                    // Ink is in front of the outer cast shadow, but BOTH are
-                    // behind the illuminated glass surface (one fragment).
-                    // Exterior-only pixels need one refraction sample because
-                    // the upstream glass shading is skipped in that early return.
+                    // The rim uses one identically displaced prepared backdrop
+                    // sample on both sides of the SDF zero-crossing. Interior
+                    // glass then blends smoothly into Prismal's full lens/OS4
+                    // result. Only fragments with visible ink pay this fetch;
+                    // the shadow-only path stays texture-sample free.
+                    vec3 edgeTransmission = vec3(0.0);
+                    if (exteriorInkAlpha > 0.001) {
+                        vec2 n = normalize(os4SdfGradient + vec2(0.00001));
+                        vec2 rimUv = backdropUv(v_screenTexCoord,
+                                -n * max(u_os4ReflectOffsetPx, 1.0)
+                                * 0.5 / u_resolution, 0.0);
+                        edgeTransmission = u_useBlurredTexture == 1
+                                ? texture2D(u_blurredTexture, rimUv).rgb
+                                : texture2D(u_backgroundTexture, rimUv).rgb;
+                    }
+
+                    // Cast shadow remains below the glass and the optical line.
                     float underlayAlpha = exteriorInkAlpha
                             + exteriorShadowAlpha * (1.0 - exteriorInkAlpha);
                     if (opacity < 0.001) {
                         if (underlayAlpha < 0.001) discard;
-                        vec3 rim = vec3(0.0);
-                        if (exteriorInkAlpha > 0.001) {
-                            vec2 n = normalize(os4SdfGradient + vec2(0.00001));
-                            vec2 rimUv = backdropUv(v_screenTexCoord,
-                                    -n * max(u_os4ReflectOffsetPx, 1.0)
-                                    * 0.5 / u_resolution, 0.0);
-                            vec3 refracted = u_useBlurredTexture == 1
-                                    ? texture2D(u_blurredTexture, rimUv).rgb
-                                    : texture2D(u_backgroundTexture, rimUv).rgb;
-                            rim = refractedContourColor(refracted,
-                                    OS4_OPTICAL_RIM_COLOR, rimDarkWeight);
-                        }
+                        vec3 rim = exteriorInkAlpha > 0.001
+                                ? refractedContourColor(edgeTransmission,
+                                        OS4_OPTICAL_RIM_COLOR, rimDarkWeight)
+                                : vec3(0.0);
                         vec3 underlayRgb = (rim * exteriorInkAlpha
                                 + u_castShadowColor.rgb * exteriorShadowAlpha
                                 * (1.0 - exteriorInkAlpha))
@@ -154,12 +159,18 @@ final class PrismalEdgeDecorationShader {
                     }
                     """)
                 .replace(FINAL, """
-                    // Prismal's 'color' already includes Snell refraction,
-                    // chromatic dispersion, reflected backdrop and OS4 lighting.
-                    // Reuse it at the SDF fringe instead of drawing an opaque
-                    // fixed-black stroke on top of a light-facing highlight.
+                    // Prismal's 'color' includes full lens refraction,
+                    // chromatic dispersion, reflected backdrop and OS4 light.
+                    // Blend from the common edge sample into that shading
+                    // with the original silhouette alpha.
                     if (underlayAlpha > 0.001) {
-                        vec3 rim = refractedContourColor(color, OS4_OPTICAL_RIM_COLOR, rimDarkWeight);
+                        // Both exterior and interior share edgeTransmission.
+                        // Use glass coverage to hand the edge smoothly to the
+                        // full Prismal result without a color seam at discard.
+                        vec3 rimBase = mix(edgeTransmission, color,
+                                smoothstep(0.0, 0.45, opacity));
+                        vec3 rim = refractedContourColor(
+                                rimBase, OS4_OPTICAL_RIM_COLOR, rimDarkWeight);
                         float innerFringe = smoothstep(
                                 -max(u_backlitWidthPx, 0.5), 0.0, surfaceDistance);
                         vec3 contourGlass = mix(
