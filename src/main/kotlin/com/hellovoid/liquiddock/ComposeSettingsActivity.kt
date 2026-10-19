@@ -127,7 +127,7 @@ private fun LiquidDockSettings(
         searchQuery = ""
     }
     fun openSearch() {
-        if (!root || searchOpen || showRestartScopes) return
+        if (!root || searchOpen) return
         searchQuery = ""
         searchOpen = true
     }
