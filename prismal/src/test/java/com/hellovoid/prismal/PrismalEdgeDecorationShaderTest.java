@@ -24,7 +24,11 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(finalBlend > reflected);
         assertTrue(source.contains("float surfaceDistance = distMask + insetShiftPx;"));
         assertTrue(source.contains("float inkDistance = surfaceDistance + u_backlitViewportInsetPx;"));
-        assertTrue(source.contains("if (surfaceDistance > 0.0 && u_backlitStrength > 0.0"));
+        assertTrue(source.contains("if (inkDistance > 0.0 && u_backlitStrength > 0.0"));
+        assertTrue(source.contains("if (surfaceDistance > 0.0 && u_castShadowRadiusPx > 0.0"));
+        // The Dock-specific inset moves only ink sampling, not the whole
+        // body geometry nor the cast shadow boundary.
+        assertFalse(source.contains("float surfaceDistance = distMask + insetShiftPx +"));
         assertTrue(source.contains("gl_FragColor = vec4(underlayRgb, underlayAlpha);"));
         assertTrue(source.contains("+ underlayRgb * underlayAlpha * (1.0 - glassAlpha)"));
         assertTrue(source.contains("gl_FragColor = vec4(color, opacity * u_transmittance);"));
