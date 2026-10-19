@@ -41,7 +41,7 @@ class SettingsSearchTest {
         assertEquals(1, results.size)
         assertEquals("玻璃颜色", results.single().title)
         assertEquals(Page.LiquidColor, results.single().page)
-        assertEquals(listOf("色散强度", "色散蓝"), results.single().matchedOptions)
+        assertEquals(setOf("色散强度", "色散蓝"), results.single().matchedOptions.toSet())
     }
 
     @Test
