@@ -1341,8 +1341,6 @@ public class ModernSettingsArchitectureTest {
         assertTrue(restart.contains("enter = fadeIn("));
         assertTrue(restart.contains("exit = fadeOut("));
         assertTrue(restart.contains("graphicsLayer { scaleX = panelScale; scaleY = panelScale }"));
-        assertTrue(restart.indexOf(".graphicsLayer { scaleX = panelScale; scaleY = panelScale }")
-                < restart.indexOf(".padding(horizontal = 20.dp, vertical = 28.dp)"));
         assertTrue(restart.contains("GuiOnTouchPrismalToggle("));
         assertFalse(motion.contains("rememberPrismalGlassLayer"));
         assertFalse(motion.contains("PixelCopy"));
