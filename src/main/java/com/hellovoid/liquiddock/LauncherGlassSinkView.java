@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.view.Surface;
@@ -44,6 +45,13 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     private volatile LauncherGlassNodeKind nodeKind = LauncherGlassNodeKind.LARGE_FOLDER;
     private volatile boolean dialogOpticalScope;
     private volatile int presentationPaddingPx;
+    // Reused on the UI frame thread. Global-visible rectangles are clipped by
+    // window edges, which would incorrectly shift the glass when dragging near
+    // the screen border; use the actual un-clipped transform instead.
+    private final Matrix sinkToGlobal = new Matrix();
+    private final Matrix rootToGlobal = new Matrix();
+    private final Matrix globalToRoot = new Matrix();
+    private final float[] opticalCorners = new float[8];
     private final LauncherGlassPressState pressState = new LauncherGlassPressState();
     private ValueAnimator pressAnimator;
     private boolean parentRecoveryPosted;
@@ -379,20 +387,56 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
     LauncherGlassGeometry.Snapshot captureGeometry(View root) {
         if (disposed || root == null || getVisibility() != View.VISIBLE || getAlpha() <= 0f
                 || getWidth() <= 0 || getHeight() <= 0) return null;
-        Rect outer = new Rect();
-        if (!getGlobalVisibleRect(outer)) return null;
-        int[] rootLocation = new int[2];
-        root.getLocationOnScreen(rootLocation);
+        float left;
+        float top;
+        float right;
+        float bottom;
+        float scaleX;
+        float scaleY;
 
-        // The TextureView includes a symmetric exterior optical gutter. Recover
-        // the original shape inside it; only the presentation crop expands.
-        // Keep the zero-overscan path bit-for-bit compatible with existing sinks.
-        float left = outer.left - rootLocation[0];
-        float top = outer.top - rootLocation[1];
-        float right = outer.right - rootLocation[0];
-        float bottom = outer.bottom - rootLocation[1];
-        float scaleX = outer.width() / (float) Math.max(1, getWidth());
-        float scaleY = outer.height() / (float) Math.max(1, getHeight());
+        if (presentationPaddingPx == 0) {
+            // Preserve the original lightweight visibility path for ordinary
+            // (non-external) sink nodes.
+            Rect visible = new Rect();
+            if (!getGlobalVisibleRect(visible)) return null;
+            int[] rootLocation = new int[2];
+            root.getLocationOnScreen(rootLocation);
+            left = visible.left - rootLocation[0];
+            top = visible.top - rootLocation[1];
+            right = visible.right - rootLocation[0];
+            bottom = visible.bottom - rootLocation[1];
+            scaleX = visible.width() / (float) Math.max(1, getWidth());
+            scaleY = visible.height() / (float) Math.max(1, getHeight());
+        } else {
+            // Use un-clipped mapped corners: getGlobalVisibleRect() shortens a
+            // shadow when it crosses the display boundary, shrinking the body.
+            opticalCorners[0] = 0f;
+            opticalCorners[1] = 0f;
+            opticalCorners[2] = getWidth();
+            opticalCorners[3] = 0f;
+            opticalCorners[4] = getWidth();
+            opticalCorners[5] = getHeight();
+            opticalCorners[6] = 0f;
+            opticalCorners[7] = getHeight();
+            sinkToGlobal.reset();
+            transformMatrixToGlobal(sinkToGlobal);
+            rootToGlobal.reset();
+            root.transformMatrixToGlobal(rootToGlobal);
+            globalToRoot.reset();
+            if (!rootToGlobal.invert(globalToRoot)) return null;
+            sinkToGlobal.mapPoints(opticalCorners);
+            globalToRoot.mapPoints(opticalCorners);
+            left = right = opticalCorners[0];
+            top = bottom = opticalCorners[1];
+            for (int i = 2; i < opticalCorners.length; i += 2) {
+                left = Math.min(left, opticalCorners[i]);
+                right = Math.max(right, opticalCorners[i]);
+                top = Math.min(top, opticalCorners[i + 1]);
+                bottom = Math.max(bottom, opticalCorners[i + 1]);
+            }
+            scaleX = (right - left) / Math.max(1, getWidth());
+            scaleY = (bottom - top) / Math.max(1, getHeight());
+        }
         float insetX = presentationPaddingPx * scaleX;
         float insetY = presentationPaddingPx * scaleY;
 
