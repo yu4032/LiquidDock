@@ -112,6 +112,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         // Prismal shadows. Dock UVs above still locate only the native body.
         final float outputUvLeft, outputUvBottom, outputUvWidth, outputUvHeight;
         final Miuix307BackdropMapping.Coverage coverage;
+        final boolean taskbarMode;
 
         BackdropSnapshot(
                 int visibleWidth, int visibleHeight,
@@ -128,7 +129,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 float dockUvLeft, float dockUvBottom, float dockUvWidth, float dockUvHeight,
                 float outputUvLeft, float outputUvBottom,
                 float outputUvWidth, float outputUvHeight,
-                Miuix307BackdropMapping.Coverage coverage) {
+                Miuix307BackdropMapping.Coverage coverage, boolean taskbarMode) {
             this.visibleWidth = visibleWidth;
             this.visibleHeight = visibleHeight;
             this.sampleWidth = sampleWidth;
@@ -160,6 +161,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             this.outputUvWidth = outputUvWidth;
             this.outputUvHeight = outputUvHeight;
             this.coverage = coverage;
+            this.taskbarMode = taskbarMode;
         }
     }
 
@@ -404,6 +406,16 @@ final class Miuix307PassBlurTextureView extends TextureView
 
     private float workstationDockIconCornerRadiusDp;
     private volatile float nativeOpticsRadiusPx = Float.NaN;
+    private volatile boolean taskbarMode;
+    private final android.graphics.Point taskbarScreenSize = new android.graphics.Point();
+    private final int[] taskbarHostPosition = new int[2];
+
+    void setTaskbarMode(boolean enabled) {
+        if (taskbarMode == enabled) return;
+        taskbarMode = enabled;
+        updateBackdropMapping();
+        if (producerRecovery.hasFreshFrame()) scheduleSceneRender();
+    }
 
     void setNativeOpticsRadiusPx(float radiusPx) {
         float next = Float.isFinite(radiusPx) && radiusPx > 0f ? radiusPx : Float.NaN;
@@ -1159,6 +1171,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (!Float.isNaN(nativeRadius) && !Float.isInfinite(nativeRadius) && nativeRadius > 0f) {
             cornerRadiusPx = nativeRadius;
         }
+        if (mapping.taskbarMode) cornerRadiusPx = 0f;
         // Keep the vendor Dock shape, foreground border and MiShadow exactly
         // aligned. The optical ink's AA placement is resolved by the shared
         // shader; shrinking the whole rectangle would misalign all three.
@@ -1564,6 +1577,28 @@ final class Miuix307PassBlurTextureView extends TextureView
                 dockNativeHeight, sampleHeight);
         float nextDockUvWidth = dockNativeWidth / (float) sampleWidth;
         float nextDockUvHeight = dockNativeHeight / (float) sampleHeight;
+        boolean renderTaskbar = taskbarMode && getDisplay() != null;
+        if (renderTaskbar) {
+            getDisplay().getRealSize(taskbarScreenSize);
+            nativeDock.getLocationOnScreen(taskbarHostPosition);
+            int bleed = WorkstationTaskbarGeometry.bleedPx(
+                    getResources().getDisplayMetrics().density);
+            float screenLeft = -bleed;
+            float screenRight = taskbarScreenSize.x + bleed;
+            float screenTop = taskbarHostPosition[1];
+            float screenBottom = taskbarScreenSize.y + bleed;
+            if (taskbarScreenSize.x > 0 && screenBottom > screenTop) {
+                nextDockUvLeft = WorkstationTaskbarGeometry.bodyUvLeft(
+                        insets.left, (int) screenLeft, viewScreen[0], sampleWidth);
+                nextDockUvBottom = WorkstationTaskbarGeometry.bodyUvBottom(
+                        insets.bottom, viewScreen[1] + visibleHeight,
+                        (int) screenBottom, sampleHeight);
+                nextDockUvWidth = (screenRight - screenLeft) / sampleWidth;
+                nextDockUvHeight = (screenBottom - screenTop) / sampleHeight;
+            } else {
+                renderTaskbar = false;
+            }
+        }
         float nextOutputUvLeft = DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
                 insets.left, sampleWidth);
         float nextOutputUvBottom = DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
@@ -1587,6 +1622,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 && currentSnapshot.bufferWidth == boundBufferWidth
                 && currentSnapshot.bufferHeight == boundBufferHeight
                 && currentSnapshot.prismalParams == frameParams
+                && currentSnapshot.taskbarMode == renderTaskbar
                 && Float.compare(backdropX, sample.backdropX) == 0
                 && Float.compare(backdropY, sample.backdropY) == 0
                 && Float.compare(backdropW, sample.backdropW) == 0
@@ -1652,7 +1688,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 nextDockUvLeft, nextDockUvBottom, nextDockUvWidth, nextDockUvHeight,
                 nextOutputUvLeft, nextOutputUvBottom,
                 nextOutputUvWidth, nextOutputUvHeight,
-                dock.coverage);
+                dock.coverage, renderTaskbar);
         // Mapping changes are a normal per-frame part of Dock motion. Do not re-arm the
         // heavyweight Stage-B/Prismal diagnostics here: MainHook.log() also appends to disk,
         // so resetting these flags on every position update turns debug logging into synchronous
