@@ -75,6 +75,7 @@ final class MiuixGlassHook {
         Miuix307ZeroCopyRenderer.clear();
         restoreVendorMaterialBody();
         clearTrackedViews();
+        DockShadowOwnership.refreshVendorDockShadow();
         if (host != null && host.getParent() instanceof ViewGroup) {
             ((ViewGroup) host.getParent()).removeView(host);
         }
@@ -102,6 +103,7 @@ final class MiuixGlassHook {
         Miuix307ZeroCopyRenderer.clear();
         restoreVendorMaterialBody();
         clearTrackedViews();
+        DockShadowOwnership.refreshVendorDockShadow();
     });
 }
 
@@ -293,6 +295,9 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         if (Miuix307ZeroCopyRenderer.isActive()) {
             if (zeroCopyActiveLoggedFor.get() != dockBg) {
                 zeroCopyActiveLoggedFor = new WeakReference<>(dockBg);
+                // Reconcile the already-created OEM RenderNode as soon as
+                // the new Prismal shadow producer becomes truly active.
+                DockShadowOwnership.refreshVendorDockShadow();
                 MainHook.log(ZERO_COPY_TAG + " zero-copy active backend=passblur-gles"
                         + " size=" + Miuix307ZeroCopyRenderer.activeWidth()
                         + "x" + Miuix307ZeroCopyRenderer.activeHeight());

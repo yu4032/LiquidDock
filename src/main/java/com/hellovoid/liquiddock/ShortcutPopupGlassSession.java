@@ -415,6 +415,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 drawParams = materialSteps[index];
             }
             prismalRenderer.beginGlassFrame();
+            prismalRenderer.setEdgeDecoration(
+                    GlassEdgeEffects.current(folderBackdrop
+                            ? GlassEdgeEffects.FOLDER : GlassEdgeEffects.POPUP),
+                    sourceDensity);
             prismalRenderer.drawGlass(
                     new PrismalGeometry(
                             logicalWidth,

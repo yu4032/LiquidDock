@@ -74,6 +74,8 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(Files.exists(PRISMAL_RASTER_GUARD));
         String guard = Files.readString(PRISMAL_RASTER_GUARD);
         assertTrue(guard.contains("vec2 rasterScale = (safeGlassSize + vec2(4.0)) / safeGlassSize;"));
+        assertTrue(guard.contains("static String applyWithEdgeGuard(String upstreamVertex)"));
+        assertTrue(guard.contains("uniform float u_edgeRasterGuardPx;"));
         assertTrue(guard.contains("vec2 rasterPosition = a_position * rasterScale;"));
         assertTrue(guard.contains("v_shapeCoord = rasterPosition;"));
     }
@@ -123,6 +125,24 @@ public class DockGlassShapeOwnershipContractTest {
         assertTrue(node.contains("view.getTranslationX()"));
         assertTrue(node.contains("view.getScaleX()"));
         assertTrue(node.contains("view.getPivotX()"));
+    }
+
+
+    @Test
+    public void dockBacklitWidthAndDirtyGuardUsePhysicalDisplayDensity() throws Exception {
+        String compositor = Files.readString(DOCK_COMPOSITOR);
+        assertTrue(compositor.contains(
+                "pixelDensity = Math.max(0.1f, outputRoot.getResources().getDisplayMetrics().density);"));
+        assertTrue(compositor.contains(
+                ".extraGuardPx(pixelDensity, Math.min(dockBody.glassWidth, dockBody.glassHeight))"));
+        assertTrue(compositor.contains(
+                ".extraGuardPx(pixelDensity, Math.min(geometry.width, geometry.height))"));
+        assertTrue(compositor.contains(
+                "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK), pixelDensity);"));
+        assertTrue(compositor.contains(
+                "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), pixelDensity);"));
+        assertFalse(compositor.contains(
+                "renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK), 1f);"));
     }
 
     @Test

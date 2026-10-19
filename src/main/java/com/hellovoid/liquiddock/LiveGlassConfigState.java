@@ -100,6 +100,19 @@ final class LiveGlassConfigState {
                     ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE.name(),
                     ConfigSchema.LauncherHighlight.LARGE_CAUSTICS.name(),
                     ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW.name())));
+    private static final Set<String> EFFECT_KEYS = effectKeys();
+
+    private static Set<String> effectKeys() {
+        Set<String> keys = new HashSet<>();
+        for (com.hellovoid.liquiddock.config.ConfigKey<?> field : GlassEdgeEffects.KEYS) {
+            keys.add(field.name());
+            for (String scope : GlassEdgeEffects.SCOPES) {
+                keys.add(GlassEdgeEffects.key(scope, field));
+            }
+        }
+        return Collections.unmodifiableSet(keys);
+    }
+
     private static final Set<String> WORKSTATION_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
                     ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
@@ -143,6 +156,7 @@ final class LiveGlassConfigState {
     private static SharedPreferences preferences;
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
     private static Map<String, ?> lastGlass = Collections.emptyMap();
+    private static Map<String, ?> lastEffects = Collections.emptyMap();
     private static Map<String, ?> lastRecents = Collections.emptyMap();
     private static Map<String, ?> lastPopup = Collections.emptyMap();
     private static Map<String, ?> lastWorkstation = Collections.emptyMap();
@@ -163,6 +177,8 @@ final class LiveGlassConfigState {
         generation = 0L;
         FRAME_PENDING.set(false);
         Map<String, ?> all = snapshot(remote);
+        GlassEdgeEffects.refresh(new ConfigReader(all));
+        lastEffects = project(all, EFFECT_KEYS);
         currentPopupGlass = ScopedGlassOptics.resolve(
                 new ConfigReader(all), initial.glass, ScopedGlassOptics.POPUP);
         lastGlass = project(all, GLASS_KEYS);
@@ -195,12 +211,12 @@ final class LiveGlassConfigState {
 
     static boolean isLiveKey(String key) {
         if (key == null) return true; // bulk preference change
-        if (GLASS_KEYS.contains(key) || RECENTS_KEYS.contains(key)
+        if (EFFECT_KEYS.contains(key) || GLASS_KEYS.contains(key) || RECENTS_KEYS.contains(key)
                 || POPUP_KEYS.contains(key) || WORKSTATION_KEYS.contains(key)
                 || ANIMATION_KEYS.contains(key)) return true;
         if (!key.endsWith("_tenths")) return false;
         String stem = key.substring(0, key.length() - "_tenths".length());
-        return GLASS_KEYS.contains(stem) || POPUP_KEYS.contains(stem)
+        return EFFECT_KEYS.contains(stem) || GLASS_KEYS.contains(stem) || POPUP_KEYS.contains(stem)
                 || WORKSTATION_KEYS.contains(stem);
     }
 
@@ -216,19 +232,26 @@ final class LiveGlassConfigState {
         try {
             Map<String, ?> all = snapshot(prefs);
             Map<String, ?> glass = project(all, GLASS_KEYS);
+            Map<String, ?> effects = project(all, EFFECT_KEYS);
             Map<String, ?> recents = project(all, RECENTS_KEYS);
             Map<String, ?> popup = project(all, POPUP_KEYS);
             Map<String, ?> workstation = project(all, WORKSTATION_KEYS);
             Map<String, ?> animation = project(all, ANIMATION_KEYS);
             boolean glassChanged = !glass.equals(lastGlass);
+            boolean effectsChanged = !effects.equals(lastEffects);
             boolean recentsChanged = !recents.equals(lastRecents);
             boolean popupChanged = !popup.equals(lastPopup);
             boolean workstationChanged = !workstation.equals(lastWorkstation);
             boolean animationChanged = !animation.equals(lastAnimation);
-            if (!glassChanged && !recentsChanged && !animationChanged
+            if (!glassChanged && !effectsChanged && !recentsChanged && !animationChanged
                     && !popupChanged && !workstationChanged) return;
 
-            LiquidDockConfig next = LiquidDockConfig.from(new ConfigReader(all));
+            ConfigReader reader = new ConfigReader(all);
+            if (effectsChanged) {
+                GlassEdgeEffects.refresh(reader);
+                lastEffects = effects;
+            }
+            LiquidDockConfig next = LiquidDockConfig.from(reader);
             if (glassChanged) {
                 currentGlass = next.glass;
                 OemFolderBlurStrengthHook.onLiveConfigChanged(next.glass);
@@ -245,13 +268,20 @@ final class LiveGlassConfigState {
                 MainHook.log(TAG + " glass generation=" + generation
                         + " blur=" + next.glass.blur);
             }
+            if (effectsChanged && !glassChanged && GlassRuntimeState.isEnabled()) {
+                // Uniform/geometry-only: do not ask the PassBlur producer for a new frame.
+                LauncherGlassSessionRegistry.requestEffectsRedrawToAll();
+                // Dock shares the optical material but owns its compositor.
+                // Refresh GPU-resident Dock output without a new PassBlur capture.
+                Miuix307ZeroCopyRenderer.requestDockSceneRefresh();
+            }
             if (workstationChanged) {
                 lastWorkstation = workstation;
                 WorkstationDockCustomizationHook.applyLiveConfig(next.workstation);
                 WorkstationDockGeometryHook.applyLiveConfig(next.workstation);
                 MainHook.log(TAG + " workstation Dock geometry updated");
             }
-            if (glassChanged || popupChanged) {
+            if (glassChanged || popupChanged || effectsChanged) {
                 currentPopupGlass = ScopedGlassOptics.resolve(
                         new ConfigReader(all), next.glass, ScopedGlassOptics.POPUP);
                 if (GlassRuntimeState.isEnabled()) {

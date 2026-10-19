@@ -16,6 +16,17 @@ public class DockHomeBackdropFreshnessStateTest {
         assertFalse(start.releaseProducerOverride);
     }
 
+    @Test public void sceneOnlyTextureViewSwapCannotSatisfyHomeProducerFreshness() {
+        // A scene-only redraw can advance the output timestamp but cannot
+        // increment the input callback generation or the presented generation.
+        long baseline=23L;
+        assertFalse(DockHomeBackdropFreshnessState.isNewProducerFramePresented(baseline,22L));
+        assertFalse(DockHomeBackdropFreshnessState.isNewProducerFramePresented(baseline,23L));
+        // A newer callback with no EGL presentation is still not sufficient.
+        assertFalse(DockHomeBackdropFreshnessState.isNewProducerFramePresented(baseline,23L));
+        assertTrue(DockHomeBackdropFreshnessState.isNewProducerFramePresented(baseline,24L));
+    }
+
     @Test public void firstFrameAfterHomeStartReleasesProducerOverrideExactlyOnce() {
         DockHomeBackdropFreshnessState state = new DockHomeBackdropFreshnessState();
         state.onHomeStarted(21L);

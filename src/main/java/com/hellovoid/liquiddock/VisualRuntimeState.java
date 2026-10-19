@@ -49,7 +49,6 @@ final class VisualRuntimeState {
                 : nextPrefs.getBoolean(ConfigSchema.Dock.FRAME_SYNC.name(),
                         ConfigSchema.Dock.FRAME_SYNC.runtimeFallback());
         if (nextPrefs == null) return;
-
         listener = (sharedPreferences, key) -> {
             boolean strokeStyleChanged = key == null || matchesOptionChange(key, ConfigSchema.Dock.SQUIRCLE)
                     || matchesOptionChange(key, ConfigSchema.Dock.FILL_DIFF)

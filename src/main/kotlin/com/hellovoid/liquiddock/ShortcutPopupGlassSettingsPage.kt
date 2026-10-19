@@ -23,8 +23,9 @@ internal fun ShortcutPopupGlassSettingsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
+    onOpenEdge: () -> Unit,
 ) = ScopedMenuGlassSettingsPage(
-    padding, prefs, masterEnabled, onOpenAll,
+    padding, prefs, masterEnabled, onOpenAll, onOpenEdge,
     scope = ScopedGlassOptics.POPUP,
     titleRes = R.string.page_shortcut_popup,
     description = "独立调整桌面长按快捷菜单的玻璃外观；未单独设置的参数继承全局液态玻璃。",
@@ -40,8 +41,9 @@ internal fun HandleMenuGlassSettingsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
+    onOpenEdge: () -> Unit,
 ) = ScopedMenuGlassSettingsPage(
-    padding, prefs, masterEnabled, onOpenAll,
+    padding, prefs, masterEnabled, onOpenAll, onOpenEdge,
     scope = ScopedGlassOptics.HANDLE_MENU,
     titleRes = R.string.page_handle_menu,
     description = "独立调整应用顶部控制器弹出菜单的玻璃；未单独设置的参数继承全局液态玻璃。",
@@ -57,6 +59,7 @@ private fun ScopedMenuGlassSettingsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
+    onOpenEdge: () -> Unit,
     scope: String,
     titleRes: Int,
     description: String,
@@ -168,6 +171,16 @@ private fun ScopedMenuGlassSettingsPage(
                     summary = "只清除当前菜单的颜色与模糊覆盖，不影响独立光学参数",
                     enabled = controlsEnabled && hasAppearanceOverride,
                     onClick = { resetAppearance() },
+                )
+            }
+        }
+        item(key = "shortcut-edge") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "玻璃光照与投影",
+                    summary = "保留 Prismal OS4 高光；背光微暗与整体外阴影分别调节",
+                    enabled = controlsEnabled,
+                    onClick = onOpenEdge,
                 )
             }
         }
