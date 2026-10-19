@@ -131,13 +131,17 @@ internal fun GlassEdgeSettingsPage(
                 )
             }
         }
-        item(key = "backlight-levels") {
-            SettingsCard {
-                number(ConfigSchema.Glass.BACKLIT_STRENGTH, "描边不透明度", "%")
-                number(ConfigSchema.Glass.BACKLIT_WIDTH, "细线宽度", "dp")
-                number(ConfigSchema.Glass.BACKLIT_EXTENT, "暗色区延伸范围", "%")
-                number(ConfigSchema.Glass.BACKLIT_SOFTNESS, "明暗过渡柔和度", "%")
-            }
+        item(key = "backlight-strength") {
+            SettingsCard { number(ConfigSchema.Glass.BACKLIT_STRENGTH, "描边不透明度", "%") }
+        }
+        item(key = "backlight-width") {
+            SettingsCard { number(ConfigSchema.Glass.BACKLIT_WIDTH, "细线宽度", "dp") }
+        }
+        item(key = "backlight-extent") {
+            SettingsCard { number(ConfigSchema.Glass.BACKLIT_EXTENT, "暗色区延伸范围", "%") }
+        }
+        item(key = "backlight-softness") {
+            SettingsCard { number(ConfigSchema.Glass.BACKLIT_SOFTNESS, "明暗过渡柔和度", "%") }
         }
         run {
             item(key = "shadow-header") {
@@ -153,52 +157,86 @@ internal fun GlassEdgeSettingsPage(
                     )
                 }
             }
-            item(key = "shadow-shape") {
-                SettingsCard {
-                    number(ConfigSchema.Glass.OUTER_SHADOW_RADIUS, "阴影柔和半径", "dp")
-                    number(ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y, "基础垂直偏移", "dp")
-                    number(ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW, "方向光响应", "%")
-                }
+            item(key = "shadow-radius") {
+                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_RADIUS, "阴影柔和半径", "dp") }
             }
-            item(key = "shadow-color") {
-                SettingsCard {
-                    number(ConfigSchema.Glass.OUTER_SHADOW_ALPHA, "阴影不透明度")
-                    number(ConfigSchema.Glass.OUTER_SHADOW_RED, "阴影红")
-                    number(ConfigSchema.Glass.OUTER_SHADOW_GREEN, "阴影绿")
-                    number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝")
-                }
+            item(key = "shadow-offset") {
+                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y, "基础垂直偏移", "dp") }
+            }
+            item(key = "shadow-light") {
+                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW, "方向光响应", "%") }
+            }
+            item(key = "shadow-alpha") {
+                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_ALPHA, "阴影不透明度") }
+            }
+            item(key = "shadow-red") {
+                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_RED, "阴影红") }
+            }
+            item(key = "shadow-green") {
+                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_GREEN, "阴影绿") }
+            }
+            item(key = "shadow-blue") {
+                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝") }
             }
         }
         if (global) {
             item(key = "scope-title") { SmallTitle("各玻璃组件的独立设置") }
-            item(key = "scope-launcher") {
+            item(key = "scope-dock") {
                 SettingsCard {
                     ArrowPreference("Dock 本体", "独立调节 Dock 外阴影、颜色与光照",
                         enabled = active, onClick = { open(Page.DockEdge) })
+                }
+            }
+            item(key = "scope-icon") {
+                SettingsCard {
                     ArrowPreference("桌面图标", "图标和多任务胶囊",
                         enabled = active, onClick = { open(Page.IconEdge) })
+                }
+            }
+            item(key = "scope-widget") {
+                SettingsCard {
                     ArrowPreference("小组件", "宽大玻璃表面的柔和光学变化",
                         enabled = active, onClick = { open(Page.WidgetEdge) })
+                }
+            }
+            item(key = "scope-folder") {
+                SettingsCard {
                     ArrowPreference("文件夹", "小文件夹与展开文件夹",
                         enabled = active, onClick = { open(Page.FolderEdge) })
                 }
             }
-            item(key = "scope-menus") {
+            item(key = "scope-popup") {
                 SettingsCard {
                     ArrowPreference("快捷菜单", "长按应用菜单",
                         enabled = active, onClick = { open(Page.PopupEdge) })
+                }
+            }
+            item(key = "scope-handle") {
+                SettingsCard {
                     ArrowPreference("顶部菜单", "独立 Prismal 光照和阴影",
                         enabled = active, onClick = { open(Page.HandleMenuEdge) })
+                }
+            }
+            item(key = "scope-dialog") {
+                SettingsCard {
                     ArrowPreference("对话弹窗", "独立 Prismal 光照和阴影",
                         enabled = active, onClick = { open(Page.DialogEdge) })
                 }
             }
-            item(key = "scope-more") {
+            item(key = "scope-gboard") {
                 SettingsCard {
                     ArrowPreference("Gboard", "浮层玻璃",
                         enabled = active, onClick = { open(Page.GboardEdge) })
+                }
+            }
+            item(key = "scope-searchbox") {
+                SettingsCard {
                     ArrowPreference("搜索框", "系统搜索框",
                         enabled = active, onClick = { open(Page.SearchboxEdge) })
+                }
+            }
+            item(key = "scope-security") {
+                SettingsCard {
                     ArrowPreference("安全中心", "独立 Prismal 光照和阴影",
                         enabled = active, onClick = { open(Page.SecurityCenterEdge) })
                 }
