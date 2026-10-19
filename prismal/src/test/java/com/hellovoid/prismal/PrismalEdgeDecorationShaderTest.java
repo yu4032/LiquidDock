@@ -138,9 +138,12 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(contour.contains("outlineAlpha *= sideWeight"));
         assertFalse(contour.contains("outlineAlpha *= opticalDark"));
         assertFalse(contour.contains("outlineAlpha *= opticalSpec"));
-        assertTrue(shader.contains("vec3 contour = mix(darkRim, brightRim, transition);"));
-        assertTrue(shader.contains("float midGlint = 0.15 * 4.0 * transition"));
-        assertTrue(shader.contains("return clamp(mix(contour, OPTICAL_SPECULAR_RGB, midGlint)"));
+        assertTrue(shader.contains("vec3 baseContour = mix(transmitted * 0.72,"));
+        assertTrue(shader.contains("vec3 darkContour = transmitted * darkFloor;"));
+        assertTrue(shader.contains("float sideDarkening = opticalSmoother01("));
+        assertTrue(shader.contains("float reflectiveLift = opticalSmoother01("));
+        assertTrue(shader.contains("vec3 contour = mix(baseContour, darkContour, sideDarkening);"));
+        assertTrue(shader.contains("return clamp(mix(contour, OPTICAL_SPECULAR_RGB,"));
 
         float input=.44f,spec=.99f;
         float previous=Float.NEGATIVE_INFINITY;
@@ -158,6 +161,39 @@ public class PrismalEdgeDecorationShaderTest {
         float aa=.75f,distance=0f,width=3f;
         float alpha=.85f*outlineCoverage(distance,0f,width,aa);
         assertTrue(alpha>.7f);
+    }
+
+    @Test public void purePastelAndSandBothHaveAContinuousNeutralOutline() {
+        String source=decorated();
+        assertTrue(source.contains("float baseReflectance = 0.09 * (1.0 - smoothstep("));
+        assertTrue(source.contains("float incidence = clamp(darkWeight, 0.0, 1.0);"));
+        assertTrue(source.contains("(incidence - 0.25) / 0.75"));
+        assertTrue(source.contains("(0.62 - incidence) / 0.62"));
+        for(float[] sample:new float[][]{
+                {.88f,.99f,.84f},  // pale lavender wallpaper
+                {.44f,.99f,.42f},  // sand wallpaper
+                {.15f,.99f,.12f}   // dark wallpaper
+        }) {
+            float y=sample[0],spec=sample[1],luma=sample[2];
+            float left=shade(y,spec,1f,.8f,luma);
+            float middle=shade(y,spec,.5f,.8f,luma);
+            float top=shade(y,spec,0f,.8f,luma);
+            assertTrue("lateral edge attenuates source",left<y);
+            assertTrue("neutral contour survives dark-lobe fade",Math.abs(middle-y)>.025f);
+            assertTrue("the middle is between dark and reflected rims",
+                    middle>left && middle<top);
+            assertTrue("internal white glint remains independently brighter",
+                    top<spec);
+        }
+        // Coverage remains unchanged through the entire direction sweep.
+        // This is geometry-driven, not a product of either color lobe.
+        float coverage=outlineCoverage(0f,0f,3f,.75f);
+        assertTrue(coverage>.85f);
+        for(int degree=0;degree<=90;degree++) {
+            float dark=sideAtAngle(degree,material(.55f,.6f));
+            assertEquals(coverage,outlineCoverage(0f,0f,3f,.75f),.000001f);
+            assertTrue(Float.isFinite(shade(.88f,.99f,dark,.8f,.84f)));
+        }
     }
 
     @Test public void dockViewportRimSurvivesNativeSideClippingWithoutMovingGlass() {
@@ -320,9 +356,10 @@ public class PrismalEdgeDecorationShaderTest {
     @Test public void darkOutlineKeepsSourceHueAndHorizontalSurfaceReflects() {
         String shader=decorated();
         assertTrue(shader.contains("float darkFloor = mix(0.46, 0.28,"));
-        assertTrue(shader.contains("vec3 darkRim = transmitted * darkFloor;"));
-        assertTrue(shader.contains("vec3 brightRim = mix(transmitted, OPTICAL_SPECULAR_RGB,"));
-        assertTrue(shader.contains("float midGlint = 0.15 * 4.0 * transition"));
+        assertTrue(shader.contains("vec3 baseContour = mix(transmitted * 0.72,"));
+        assertTrue(shader.contains("vec3 darkContour = transmitted * darkFloor;"));
+        assertTrue(shader.contains("float sideDarkening = opticalSmoother01("));
+        assertTrue(shader.contains("float reflectiveLift = opticalSmoother01("));
         assertFalse(shader.contains("vec3(0.015)"));
         float[] brown={.65f,.38f,.20f};
         float[] bright=new float[3],dark=new float[3];
@@ -330,7 +367,8 @@ public class PrismalEdgeDecorationShaderTest {
             bright[i]=shade(brown[i],.99f,0f,.8f,.43f);
             dark[i]=shade(brown[i],.99f,1f,0f,.43f);
         }
-        assertTrue("horizontal must reflect light",bright[0]>.78f);
+        assertTrue("top/bottom still reflect above the refracted brown",bright[0]>brown[0]+.02f);
+        assertTrue("outside contour must remain distinguishable from the white inner highlight",bright[0]<.90f);
         assertTrue("dark material retains hue",dark[0]>dark[1]&&dark[1]>dark[2]);
         assertTrue("dark material still attenuates",dark[0]<brown[0]*.50f);
         assertTrue("no neutral black paint",Math.abs(dark[0]/dark[2]-brown[0]/brown[2])<.001f);
@@ -338,12 +376,15 @@ public class PrismalEdgeDecorationShaderTest {
 
     private static float shade(float rgb,float spec,float dark,float energy,float y) {
         float floor=.46f+(.28f-.46f)*smooth((y-.18f)/(.72f-.18f));
-        float u=smoother(1f-Math.max(0f,Math.min(1f,dark)));
+        float baseReflect=.09f*(1f-smooth((y-.12f)/(.58f-.12f)));
+        float base=rgb*.72f*(1f-baseReflect)+spec*baseReflect;
         float darkColor=rgb*floor;
-        float brightColor=rgb+(spec-rgb)*Math.max(0f,Math.min(.94f,.68f+.23f*energy));
-        float contour=darkColor+(brightColor-darkColor)*u;
-        float midGlint=.15f*4f*u*(1f-u);
-        return contour+(spec-contour)*midGlint;
+        float incidence=Math.max(0f,Math.min(1f,dark));
+        float sideDark=smoother((incidence-.25f)/.75f);
+        float topLift=smoother((.62f-incidence)/.62f)
+                *(.27f+.18f*Math.max(0f,Math.min(1f,energy)));
+        float contour=base+(darkColor-base)*sideDark;
+        return contour+(spec-contour)*topLift;
     }
 
 

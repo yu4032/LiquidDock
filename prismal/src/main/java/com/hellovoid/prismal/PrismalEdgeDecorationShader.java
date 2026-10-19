@@ -92,24 +92,35 @@ final class PrismalEdgeDecorationShader {
 
                 vec3 shadeOpticalMeniscus(vec3 transmitted, float darkWeight,
                         float specEnergy) {
-                    float y = dot(transmitted, vec3(0.2126, 0.7152, 0.0722));
+                    float backdropLuma = dot(transmitted,
+                            vec3(0.2126, 0.7152, 0.0722));
                     float darkFloor = mix(0.46, 0.28,
-                            smoothstep(0.18, 0.72, y));
-                    // The physical outline is continuous: only its COLOR
-                    // changes from dark refracted hue to bright specular
-                    // reflection. Never let the dark-lobe fade kill coverage.
-                    float transition = opticalSmoother01(
-                            1.0 - clamp(darkWeight, 0.0, 1.0));
-                    vec3 darkRim = transmitted * darkFloor;
-                    vec3 brightRim = mix(transmitted, OPTICAL_SPECULAR_RGB,
-                            clamp(0.68 + 0.23 * specEnergy, 0.0, 0.94));
-                    vec3 contour = mix(darkRim, brightRim, transition);
-                    // Reconstructed edge-bleed principle: retain a thin
-                    // reflection response through the midtone crossing,
-                    // where a simple dark-to-light lerp can match wallpaper.
-                    float midGlint = 0.15 * 4.0 * transition * (1.0 - transition);
-                    return clamp(mix(contour, OPTICAL_SPECULAR_RGB, midGlint),
-                            vec3(0.0), vec3(1.0));
+                            smoothstep(0.18, 0.72, backdropLuma));
+
+                    // Every orientation has its own neutral, refracted contour.
+                    // It deliberately differs from the unmodified backdrop:
+                    // dark surfaces receive a little reflection, light surfaces
+                    // receive colored attenuation. It never disappears when
+                    // the side-facing black component falls to zero.
+                    float baseReflectance = 0.09 * (1.0 - smoothstep(
+                            0.12, 0.58, backdropLuma));
+                    vec3 baseContour = mix(transmitted * 0.72,
+                            OPTICAL_SPECULAR_RGB, baseReflectance);
+                    vec3 darkContour = transmitted * darkFloor;
+
+                    // Treat lateral darkening and top/bottom reflection as two
+                    // independent smooth color lobes around the neutral base.
+                    // Their domain knees keep the curved corner gray instead
+                    // of jumping directly from a black line to a white one.
+                    float incidence = clamp(darkWeight, 0.0, 1.0);
+                    float sideDarkening = opticalSmoother01(
+                            (incidence - 0.25) / 0.75);
+                    float reflectiveLift = opticalSmoother01(
+                            (0.62 - incidence) / 0.62)
+                            * (0.27 + 0.18 * clamp(specEnergy, 0.0, 1.0));
+                    vec3 contour = mix(baseContour, darkContour, sideDarkening);
+                    return clamp(mix(contour, OPTICAL_SPECULAR_RGB,
+                            reflectiveLift), vec3(0.0), vec3(1.0));
                 }
                 """)
                 .replace(BEFORE_DISCARD, """
