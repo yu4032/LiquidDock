@@ -49,11 +49,11 @@ public class GlassEdgeEffectsTest {
         map.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(), true);
         String w = GlassEdgeEffects.key(
                 GlassEdgeEffects.WIDGET, ConfigSchema.Glass.BACKLIT_WIDTH);
-        map.put(w, 7);
-        map.put(w + "_tenths", 74);
+        map.put(w, 1);
+        map.put(w + "_tenths", 14);
         PrismalEdgeDecoration widget = GlassEdgeEffects.resolve(
                 new ConfigReader(map), GlassEdgeEffects.WIDGET);
-        assertEquals(7.4f, widget.backlitWidthDp, 0.0001f);
+        assertEquals(1.4f, widget.backlitWidthDp, 0.0001f);
         assertTrue(widget.backlitSoftness > 0f);
     }
 }
