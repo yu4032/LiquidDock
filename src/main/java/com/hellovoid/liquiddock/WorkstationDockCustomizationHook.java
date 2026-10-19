@@ -1,15 +1,21 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Point;
 import android.graphics.Rect;
-import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.WeakHashMap;
 
-/** Workstation HotSeats spacing and reversible taskbar icon-row centering. */
+/**
+ * Workstation Dock icon spacing and taskbar optical centering.
+ *
+ * Dock background and its icon RecyclerView may belong to separate ViewRoots. Both use
+ * screen-space bounds; a shared root identity is not a valid ownership requirement.
+ * Align during pre-draw AFTER the native layouts/parent transforms settle. Do not depend
+ * on a one-shot postOnAnimation request during the asynchronous rotation handoff.
+ */
 final class WorkstationDockCustomizationHook {
     private static volatile boolean dockEnabled;
     private static volatile boolean taskbarEnabled;
@@ -18,13 +24,12 @@ final class WorkstationDockCustomizationHook {
     private static final WeakHashMap<View, RowAlignment> OBSERVED_RECYCLERS =
             new WeakHashMap<>();
 
-    private static final View.OnLayoutChangeListener ROW_LAYOUT_LISTENER =
-            (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
-                    scheduleRowAlignment(view);
     private static final View.OnAttachStateChangeListener ROW_ATTACH_LISTENER =
             new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View view) {
-                    scheduleRowAlignment(view);
+                    // Workstation and its floating Dock may attach in either order.
+                    view.postOnAnimation(
+                            WorkstationDockCustomizationHook::reconcileTaskbarRowsForFrame);
                 }
 
                 @Override public void onViewDetachedFromWindow(View view) {
@@ -32,8 +37,6 @@ final class WorkstationDockCustomizationHook {
                         RowAlignment row = OBSERVED_RECYCLERS.get(view);
                         if (row != null) row.restore(view);
                     }
-                    // Keep the weakly tracked owner across Launcher detach/reattach so the
-                    // same RecyclerView re-centers even when no item decoration is rebound.
                 }
             };
 
@@ -45,12 +48,12 @@ final class WorkstationDockCustomizationHook {
                 ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
         int top = Math.round(config.iconTopOffset * scale);
         int bottom = Math.round(config.iconBottomOffset * scale);
-        boolean newTaskbar = config.dockEnabled && config.taskbarMode;
-        if (dockEnabled == config.dockEnabled && taskbarEnabled == newTaskbar
+        boolean nextTaskbar = config.dockEnabled && config.taskbarMode;
+        if (dockEnabled == config.dockEnabled && taskbarEnabled == nextTaskbar
                 && iconTopOffset == top && iconBottomOffset == bottom) return;
 
         dockEnabled = config.dockEnabled;
-        taskbarEnabled = newTaskbar;
+        taskbarEnabled = nextTaskbar;
         iconTopOffset = top;
         iconBottomOffset = bottom;
 
@@ -59,100 +62,96 @@ final class WorkstationDockCustomizationHook {
             observed = new ArrayList<>(OBSERVED_RECYCLERS.keySet());
         }
         for (View recycler : observed) {
-            if (recycler == null || !recycler.isAttachedToWindow()) continue;
+            if (recycler == null) continue;
+            if (!nextTaskbar || !dockEnabled) {
+                synchronized (OBSERVED_RECYCLERS) {
+                    RowAlignment row = OBSERVED_RECYCLERS.get(recycler);
+                    if (row != null) row.restore(recycler);
+                }
+            }
+            if (!recycler.isAttachedToWindow()) continue;
             HookUtil.tryInvoke(recycler, "invalidateItemDecorations");
             recycler.requestLayout();
-            scheduleRowAlignment(recycler);
         }
     }
 
-    /** Called after DockContainer's bottom translation or workstation-mode handoff. */
-    static void refreshTaskbarIconCentering() {
+    /**
+     * Called by the existing Dock GPU host pre-draw observer after the native Dock position is
+     * reconciled. No posts, timers or extra layout passes; correct only if geometry differs.
+     */
+    static void reconcileTaskbarRowsForFrame() {
+        if (!dockEnabled || !taskbarEnabled || !WorkstationRuntimeState.isActive()) return;
         ArrayList<View> observed;
         synchronized (OBSERVED_RECYCLERS) {
             observed = new ArrayList<>(OBSERVED_RECYCLERS.keySet());
         }
-        for (View recycler : observed) scheduleRowAlignment(recycler);
+        for (View recycler : observed) {
+            if (recycler == null || !recycler.isAttachedToWindow()) continue;
+            float bodyCenter = Miuix307ZeroCopyRenderer.taskbarVisualCenterFor(recycler);
+            if (!Float.isFinite(bodyCenter)) continue;
+            float iconCenter = iconRowCenterOnScreen(recycler);
+            if (!Float.isFinite(iconCenter)) continue;
+            synchronized (OBSERVED_RECYCLERS) {
+                RowAlignment row = OBSERVED_RECYCLERS.get(recycler);
+                if (row != null) row.align(recycler, bodyCenter, iconCenter);
+            }
+        }
     }
 
     private static void observeRecycler(View recycler) {
         synchronized (OBSERVED_RECYCLERS) {
-            if (!OBSERVED_RECYCLERS.containsKey(recycler)) {
-                OBSERVED_RECYCLERS.put(recycler, new RowAlignment());
-                recycler.addOnLayoutChangeListener(ROW_LAYOUT_LISTENER);
-                recycler.addOnAttachStateChangeListener(ROW_ATTACH_LISTENER);
-            }
+            if (OBSERVED_RECYCLERS.containsKey(recycler)) return;
+            OBSERVED_RECYCLERS.put(recycler, new RowAlignment());
+            recycler.addOnAttachStateChangeListener(ROW_ATTACH_LISTENER);
         }
-        if (taskbarEnabled) scheduleRowAlignment(recycler);
+        // The first item decoration may happen after this window's own pre-draw.
+        recycler.postOnAnimation(WorkstationDockCustomizationHook::reconcileTaskbarRowsForFrame);
     }
 
-    private static void scheduleRowAlignment(View recycler) {
-        if (recycler == null) return;
-        RowAlignment row;
-        synchronized (OBSERVED_RECYCLERS) {
-            row = OBSERVED_RECYCLERS.get(recycler);
-            if (row == null || row.pending) return;
-            row.pending = true;
-        }
-        recycler.postOnAnimation(() -> {
-            synchronized (OBSERVED_RECYCLERS) {
-                row.pending = false;
-                if (OBSERVED_RECYCLERS.get(recycler) != row) return;
-            }
-            if (!recycler.isAttachedToWindow()) return;
-            int nativeHeight = Miuix307ZeroCopyRenderer.taskbarNativeHeightFor(recycler);
-            if (!dockEnabled || !taskbarEnabled || !WorkstationRuntimeState.isActive()
-                    || nativeHeight <= 0) {
-                row.restore(recycler);
-                return;
-            }
-            Display display = recycler.getDisplay();
-            if (display == null) return;
-            Point screen = new Point();
-            display.getRealSize(screen);
-            float iconCenter = iconRowCenterOnScreen(recycler);
-            if (screen.y <= nativeHeight || !Float.isFinite(iconCenter)) return;
-            row.align(recycler, WorkstationTaskbarGeometry.visibleCenter(
-                    screen.y, nativeHeight), iconCenter);
-        });
-    }
-
-    /** Prefer the true icon graphic over the RecyclerView cell (which includes label insets). */
+    /** Median icon graphic center ignores the occasional dragging/animating item. */
     private static float iconRowCenterOnScreen(View recycler) {
         if (!(recycler instanceof ViewGroup)) return Float.NaN;
         ViewGroup group = (ViewGroup) recycler;
+        int childCount = group.getChildCount();
+        if (childCount == 0) return Float.NaN;
+        float[] centers = new float[childCount];
         int count = 0;
-        float sum = 0f;
         int[] position = new int[2];
         float minWidth = 8f * recycler.getResources().getDisplayMetrics().density;
-        for (int i = 0; i < group.getChildCount(); i++) {
+        for (int i = 0; i < childCount; i++) {
             View child = group.getChildAt(i);
-            if (child.getVisibility() != View.VISIBLE || child.getAlpha() <= 0f
-                    || child.getWidth() < minWidth || child.getHeight() <= 0) continue;
+            if (!child.isAttachedToWindow() || child.getVisibility() != View.VISIBLE
+                    || child.getAlpha() <= 0f || child.getWidth() < minWidth
+                    || child.getHeight() <= 0) continue;
             child.getLocationOnScreen(position);
             LauncherGlassIconGeometry.Bounds graphic = LauncherGlassIconGeometry.resolve(child);
-            sum += position[1] + (graphic == null
-                    ? child.getHeight() * 0.5f : (graphic.top + graphic.bottom) * 0.5f);
-            count++;
+            centers[count++] = position[1] + (graphic == null
+                    ? child.getHeight() * 0.5f
+                    : (graphic.top + graphic.bottom) * 0.5f);
         }
-        return count > 0 ? sum / count : Float.NaN;
+        if (count == 0) return Float.NaN;
+        Arrays.sort(centers, 0, count);
+        return (count & 1) == 1
+                ? centers[count / 2]
+                : 0.5f * (centers[count / 2 - 1] + centers[count / 2]);
     }
 
     private static final class RowAlignment {
         private float originalTranslationY = Float.NaN;
         private float appliedTranslationY = Float.NaN;
-        boolean pending;
 
         void align(View recycler, float targetCenter, float observedCenter) {
             float current = recycler.getTranslationY();
-            if (Float.isNaN(originalTranslationY)
+            if (!Float.isFinite(originalTranslationY)
                     || (Float.isFinite(appliedTranslationY)
-                            && Math.abs(current - appliedTranslationY) > 0.5f)) {
+                        && Math.abs(current - appliedTranslationY) > 0.5f)) {
+                // If Launcher takes translation ownership during a rotation/animation,
+                // regard the new vendor value as the baseline, not our previous result.
                 originalTranslationY = current;
             }
             float delta = WorkstationTaskbarGeometry.iconCenterCorrection(
                     targetCenter, observedCenter);
-            if (Math.abs(delta) < 0.5f) return;
+            if (Math.abs(delta) < 1f) return;
             float next = current + delta;
             recycler.setTranslationY(next);
             appliedTranslationY = next;
@@ -185,8 +184,7 @@ final class WorkstationDockCustomizationHook {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         Object recycler = chain.getArg(2);
                         if (recycler instanceof View) observeRecycler((View) recycler);
-                        // Taskbar mode centers the real row after layout; do not stack persisted
-                        // decoration offsets onto the new optical alignment.
+                        // Taskbar auto-centering supersedes the manual icon-decoration offsets.
                         if (dockEnabled && WorkstationRuntimeState.isActive() && !taskbarEnabled) {
                             Rect out = (Rect) chain.getArg(0);
                             out.top += iconTopOffset;
