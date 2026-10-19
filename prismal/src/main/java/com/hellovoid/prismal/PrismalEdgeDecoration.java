@@ -12,7 +12,7 @@ public final class PrismalEdgeDecoration {
                     0f, 0f, 0f, 0f, 0f);
 
     public final float backlitWidthDp, backlitStrength, backlitSoftness, backlitExtent;
-    /** Subpixel optical rim fitting for a view whose native output cannot overscan. */
+    /** Subpixel optical rim fitting on the native Dock body, independent of shadow overscan. */
     public final float inkViewportInsetPx;
     public final float shadowRadiusDp, shadowOffsetYDp;
     public final float shadowR, shadowG, shadowB, shadowA, shadowLightFollow;
@@ -77,17 +77,9 @@ public final class PrismalEdgeDecoration {
     }
     public boolean hasShadow() { return shadowRadiusDp > 0f && shadowA > 0f; }
 
-    /** Preserve a native shadow owner while applying glass-internal optics. */
-    public PrismalEdgeDecoration withoutCastShadow() {
-        if (!hasShadow()) return this;
-        return new PrismalEdgeDecoration(backlitWidthDp, backlitStrength,
-                backlitSoftness, 0f, 0f, shadowR, shadowG, shadowB, 0f, 0f,
-                backlitExtent, inkViewportInsetPx);
-    }
-
     /**
-     * Dock only: keep its full-size OEM shadow/foreground/glass geometry
-     * pixel-exact, and fit just the antialiased ink in the existing output.
+     * Dock only: keep its native foreground and glass geometry pixel-exact.
+     * Fit just the antialiased optical ink independently of exterior shadow.
      * Cached on preference changes, never allocated on a render frame.
      */
     public PrismalEdgeDecoration fitInkToNativeViewport(float insetPx) {
@@ -108,10 +100,6 @@ public final class PrismalEdgeDecoration {
         float radius = effectiveShadowRadiusPx(density, minDimensionPx);
         return radius <= 0f ? 0f : bounded(shadowOffsetYDp * bounded(density, .1f, 5f),
                 -radius * 0.6f, radius * 0.6f);
-    }
-
-    public float extraGuardPx(float density) {
-        return extraGuardPx(density, Float.MAX_VALUE);
     }
 
     public float extraGuardPx(float density, float minDimensionPx) {

@@ -199,8 +199,8 @@ final class PrismalReconstructed27Shader {
                         }
                     }
                     """);
-        // Distinct reconstructed bleed and shadow grading; single background
-        // sampling pipeline and original MiShadow owner are retained.
+        // Keep the reconstructed bleed and GPU-shadow color grades separate;
+        // reuse the existing Prismal sampling and material ownership.
         fragment = fragment.replace(
                 "vec3 bleedTint = mix(edgeTransmission,",
                 "vec3 bleedTint = mix(optical27Grade(edgeTransmission,\n"

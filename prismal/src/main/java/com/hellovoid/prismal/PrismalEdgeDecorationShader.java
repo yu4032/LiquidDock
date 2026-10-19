@@ -275,8 +275,8 @@ final class PrismalEdgeDecorationShader {
                     """)
                 .replace(FINAL, """
                     // macOS27-inspired analytic ring shadow and holding tone
-                    // live INSIDE the SDF. They never create a second external
-                    // Dock cast shadow (MiShadow remains the only native owner).
+                    // live INSIDE the SDF. They do not create another external
+                    // cast shadow; Prismal owns that separate layer for every glass node.
                     // Apply to the original glass color before its independent
                     // inner mirror highlight; the highlight is not attenuated.
                     vec3 ringShadedGlass = color;

@@ -143,42 +143,41 @@ internal fun GlassEdgeSettingsPage(
         item(key = "backlight-softness") {
             SettingsCard { number(ConfigSchema.Glass.BACKLIT_SOFTNESS, "明暗过渡柔和度", "%") }
         }
-        run {
-            item(key = "shadow-header") {
-                SmallTitle(if (scope == GlassEdgeEffects.DOCK)
-                    "Dock 独立 Prismal 阴影" else "整块玻璃的柔和投影")
-            }
-            item(key = "shadow-on") {
-                SettingsCard {
-                    toggle(
-                        ConfigSchema.Glass.OUTER_SHADOW_ENABLED,
-                        "启用整体外阴影",
-                        "与真实窄边线分开，以整个圆角玻璃轮廓产生柔和投影",
-                    )
-                }
-            }
-            item(key = "shadow-radius") {
-                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_RADIUS, "阴影柔和半径", "dp") }
-            }
-            item(key = "shadow-offset") {
-                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y, "基础垂直偏移", "dp") }
-            }
-            item(key = "shadow-light") {
-                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW, "方向光响应", "%") }
-            }
-            item(key = "shadow-alpha") {
-                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_ALPHA, "阴影不透明度") }
-            }
-            item(key = "shadow-red") {
-                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_RED, "阴影红") }
-            }
-            item(key = "shadow-green") {
-                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_GREEN, "阴影绿") }
-            }
-            item(key = "shadow-blue") {
-                SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝") }
+        item(key = "shadow-header") {
+            SmallTitle(if (scope == GlassEdgeEffects.DOCK)
+                "Dock 独立 Prismal 阴影" else "整块玻璃的柔和投影")
+        }
+        item(key = "shadow-on") {
+            SettingsCard {
+                toggle(
+                    ConfigSchema.Glass.OUTER_SHADOW_ENABLED,
+                    "启用整体外阴影",
+                    "与真实窄边线分开，以整个圆角玻璃轮廓产生柔和投影",
+                )
             }
         }
+        item(key = "shadow-radius") {
+            SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_RADIUS, "阴影柔和半径", "dp") }
+        }
+        item(key = "shadow-offset") {
+            SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y, "基础垂直偏移", "dp") }
+        }
+        item(key = "shadow-light") {
+            SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW, "方向光响应", "%") }
+        }
+        item(key = "shadow-alpha") {
+            SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_ALPHA, "阴影不透明度") }
+        }
+        item(key = "shadow-red") {
+            SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_RED, "阴影红") }
+        }
+        item(key = "shadow-green") {
+            SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_GREEN, "阴影绿") }
+        }
+        item(key = "shadow-blue") {
+            SettingsCard { number(ConfigSchema.Glass.OUTER_SHADOW_BLUE, "阴影蓝") }
+        }
+
         if (global) {
             item(key = "scope-title") { SmallTitle("各玻璃组件的独立设置") }
             item(key = "scope-dock") {

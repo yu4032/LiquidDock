@@ -468,8 +468,7 @@ public class PrismalEdgeDecorationShaderTest {
                 0f,0f,.6f,15f,4f,0f,0f,0f,.2f,.5f);
         assertFalse(shadow.hasBacklit());
         assertTrue(shadow.hasShadow());
-        assertTrue(shadow.extraGuardPx(2f)>0f);
-        assertFalse(shadow.withoutCastShadow().hasShadow());
+        assertTrue(shadow.extraGuardPx(2f, 100f)>0f);
         String shader=decorated();
         assertTrue(shader.contains("if (surfaceDistance > 0.0 && u_castShadowRadiusPx > 0.0"));
         assertTrue(shader.contains("if (opacity < 0.001) {"));

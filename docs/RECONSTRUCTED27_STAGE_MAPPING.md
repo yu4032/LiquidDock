@@ -6,13 +6,13 @@ macOS 27 research shader `src/liquid_glass_27.glsl` (MIT, license copied in
 
 **Purpose:** reproduce the order and *classes* of optical operations while
 retaining HyperOS Launcher geometry, native PassBlur zero-copy texture ownership,
-original Prismal body shading, full-resolution output, and Dock OEM MiShadow.
+original Prismal body shading, full-resolution output, and unified GPU cast shadows.
 Not an Apple source-code port and **not** a pixel-fit validation of iOS 27.
 
 | Reconstructed stage | LiquidDock implementation | Constraint / difference |
 | --- | --- | --- |
 | supercircle SDF + normalized derivative | Existing native rounded-box SDF, derivative-corrected normal and `fwidth` | **Do not replace** native Dock geometry with macOS supercircle |
-| shadow then ring | Existing external cast shadow for non-Dock scopes; inner analytic `erfc` ring | Dock continues to use OEM MiShadow; no duplicate external shadow |
+| shadow then ring | One scoped Prismal GPU cast shadow for every enabled glass node; inner analytic `erfc` ring | Native Dock MiShadow is suppressed only while the live Prismal glass host is active; glass OFF restores vendor behavior |
 | inner refraction + blur ramp | Original Prismal lens + two-stage lens arc; optional `optical27BlurRamp` | Four-knot, sharp/Gaussian **two-level** approximation; GLES2 has no `textureLod` |
 | seven-sample chromatic aberration | `optical27SevenTap` replaces three-tap branch in optional program | **Seven taps only inside a physically bounded meniscus** when chromatic aberration is enabled; flat interior uses one central tap. Total channel separation capped at 0.75–2.5 logical pixels based on short-axis size |
 | blur fill: lighten/darken/normal | `optical27BlurFill` with partition-of-unity color mixing | Near the inside edge only; reuses existing Gaussian texture |
@@ -28,7 +28,9 @@ decoration or optional cast shadow. A compile/link failure falls back to the
 smaller, previously tested two-band optical shader; that shader can itself fall
 back to the baseline Prismal program. The main compiled baseline is unchanged.
 
-No new FBO, TextureView, Surface, screenshot, or capture path is introduced.
+No extra GPU draw pass, screenshot or capture path is introduced by the
+reconstructed shader. The Dock's existing TextureView was subsequently given
+bounded external-shadow overscan; see `DOCK_PRISMAL_SHADOW_VIEWPORT.md`.
 Seven chromatic taps and near-edge blur-fill incur extra fragment work when
 their conditions are enabled. Verify device shader logs:
 `LiquidDock-Prismal`: "Full reconstructed-27 optical stages ready" or
