@@ -153,7 +153,7 @@ public class PrismalEdgeDecorationShaderTest {
                 "const vec3 OS4_OPTICAL_RIM_COLOR = vec3(0.98, 0.992, 1.008);"));
         int legacyDefinition = source.indexOf("vec3 hiSoft =");
         int opticalFinal = source.lastIndexOf(
-                "vec3 rim = refractedContourColor(color,");
+                "vec3 rim = refractedContourColor(");
         assertTrue("legacy highlight stays before the optical output",
                 legacyDefinition > 0 && opticalFinal > legacyDefinition);
         assertFalse("no out-of-scope hiSoft reference in optional material",
