@@ -14,9 +14,11 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -111,6 +113,18 @@ private fun LiquidDockSettings(
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var navigationStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     val root = isRootPage(page)
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val searchCatalog = remember(activity) { settingsSearchCatalog(activity) }
+
+    fun closeSearch() {
+        searchOpen = false
+        searchQuery = ""
+    }
+    fun openSearch() {
+        searchQuery = ""
+        searchOpen = true
+    }
     val selectedRootIndex = ROOT_PAGES.indexOf(page).coerceAtLeast(0)
     val rootIcons = listOf(
         MiuixIcons.Home,
@@ -148,16 +162,18 @@ private fun LiquidDockSettings(
         page = target
     }
 
-    BackHandler(enabled = !root) { navigateBack() }
+    BackHandler(enabled = searchOpen || !root) {
+        if (searchOpen) closeSearch() else navigateBack()
+    }
 
     ModernSettingsScaffold(
-        title = stringResource(page.titleRes),
+        title = if (searchOpen) "搜索设置" else stringResource(page.titleRes),
         glassEnabled = uiGlassEnabled,
-        showBack = !root,
+        showBack = searchOpen || !root,
         backLabel = stringResource(R.string.action_back),
-        onBack = { navigateBack() },
+        onBack = { if (searchOpen) closeSearch() else navigateBack() },
         actions = {
-            ModernTopActionButton(
+            if (!searchOpen) ModernTopActionButton(
                 text = stringResource(R.string.action_restart_scopes),
                 onClick = {
                     selectedRestartScopes = when (page) {
@@ -177,7 +193,7 @@ private fun LiquidDockSettings(
             )
         },
         bottomBar = {
-            if (root) {
+            if (root && !searchOpen) {
                 ModernBottomNavigation(
                     labels = listOf(
                         stringResource(R.string.tab_overview),
@@ -222,6 +238,19 @@ private fun LiquidDockSettings(
             )
         },
     ) { padding ->
+        if (searchOpen) {
+            SettingsSearchScreen(
+                padding = padding,
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                catalog = searchCatalog,
+                onSelect = { item ->
+                    closeSearch()
+                    navigateTo(item.page)
+                },
+            )
+        } else {
+        Box(Modifier.fillMaxSize().nestedScroll(rememberSettingsPullDownSearch(::openSearch))) {
         AnimatedContent(
             targetState = page,
             transitionSpec = {
@@ -438,6 +467,8 @@ private fun LiquidDockSettings(
                 Page.Data -> DataPage(padding, activity)
                 Page.About -> AboutPage(padding, activity, prefs)
             }
+        }
+        }
         }
     }
 }
