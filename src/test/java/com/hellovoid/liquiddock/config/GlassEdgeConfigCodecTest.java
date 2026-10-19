@@ -41,6 +41,13 @@ public class GlassEdgeConfigCodecTest {
         assertEquals(0, ConfigCodec.importValues(Map.of(reach, -5)).get(reach));
     }
 
+    @Test public void softnessCanReachTwoHundredPercent() {
+        String softness = GlassEdgeEffects.key(
+                GlassEdgeEffects.DOCK, ConfigSchema.Glass.BACKLIT_SOFTNESS);
+        assertEquals(200, ConfigCodec.importValues(Map.of(softness, 300)).get(softness));
+        assertEquals(180, ConfigCodec.importValues(Map.of(softness, 180)).get(softness));
+    }
+
     @Test public void importedMaterialValuesAreClamped() {
         String width = GlassEdgeEffects.key(
                 GlassEdgeEffects.WIDGET, ConfigSchema.Glass.BACKLIT_WIDTH);

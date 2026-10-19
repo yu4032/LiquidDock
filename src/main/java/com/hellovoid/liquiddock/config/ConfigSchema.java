@@ -239,7 +239,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> BACKLIT_STRENGTH = integer(
                 "liquid_backlit_strength", 85, 85, 85, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> BACKLIT_SOFTNESS = integer(
-                "liquid_backlit_softness", 60, 60, 60, 5, 100, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_backlit_softness", 60, 60, 60, 5, 200, ConfigKey.ExportMode.IF_PRESENT);
         /** Angular reach of visible dark contour, not its width or opacity. */
         public static final ConfigKey<Integer> BACKLIT_EXTENT = integer(
                 "liquid_backlit_extent", 55, 55, 55, 0, 100, ConfigKey.ExportMode.IF_PRESENT);

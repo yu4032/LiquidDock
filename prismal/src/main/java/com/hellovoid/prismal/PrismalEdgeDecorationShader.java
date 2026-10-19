@@ -73,18 +73,24 @@ final class PrismalEdgeDecorationShader {
                                     os4SdfGradient + vec2(0.00001));
                             float angularIncidence = abs(
                                     dot(edgeNormal, u_invariantLightXY));
-                            // Extent decides HOW FAR the dark line reaches
-                            // around the rounded contour. Softness independently
-                            // controls HOW GRADUALLY it thins at each endpoint.
-                            // At 100% extent even the far-lit side stays connected.
-                            // A subtle baseline line remains at shorter extents
-                            // to avoid abrupt angular cutoffs.
+                            // 0% reach is a TRUE zero-length line, not a faint
+                            // all-around baseline. At low reach only nearly
+                            // tangential normals show ink; 100% allows a thin
+                            // continuous seam around the entire glass.
                             float grazing = clamp(1.0 - angularIncidence, 0.0, 1.0);
-                            float reachStart = mix(0.38, -0.36, u_backlitExtent);
-                            float transitionWidth = mix(0.12, 0.36, u_backlitSoftness);
-                            float angularResponse = smoothstep(
-                                    reachStart, reachStart + transitionWidth, grazing);
-                            float taper = mix(0.04, 1.0, angularResponse);
+                            float reachStart = mix(1.0, -0.20, u_backlitExtent);
+                            float progress = clamp((grazing - reachStart)
+                                    / max(1.0 - reachStart, 0.001), 0.0, 1.0);
+                            // Softness only changes the taper curve INSIDE the
+                            // reach interval; it never extends its start point.
+                            // 200% uses the full interval; 5% rises quickly.
+                            float softness = clamp(u_backlitSoftness * 0.5, 0.0, 1.0);
+                            float quick = smoothstep(0.0, 0.08, progress);
+                            float gradual = smoothstep(0.0, 1.0, progress);
+                            float taper = mix(quick, gradual, softness);
+                            float e2 = u_backlitExtent * u_backlitExtent;
+                            float e4 = e2 * e2;
+                            taper = max(taper, 0.18 * e4 * e4);
                             float lineWidthPx = u_backlitWidthPx * taper;
                             float outsideAa = max(edgeAa * 0.5, 0.25);
                             float entry = smoothstep(0.0, outsideAa,

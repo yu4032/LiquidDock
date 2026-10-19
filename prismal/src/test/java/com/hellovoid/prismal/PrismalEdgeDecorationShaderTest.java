@@ -45,54 +45,79 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(ink.contains("abs(edgeNormal.x)"));
         assertFalse(ink.contains("gl_FragColor"));
         assertFalse(ink.contains("u_os4EdgeEnabled > 0.5"));
-        assertTrue(ink.contains("float taper = mix(0.04, 1.0, angularResponse);"));
-        assertTrue(ink.contains("float reachStart = mix(0.38, -0.36, u_backlitExtent);"));
-        assertTrue(ink.contains("float transitionWidth = mix(0.12, 0.36, u_backlitSoftness);"));
+        assertTrue(ink.contains("float reachStart = mix(1.0, -0.20, u_backlitExtent);"));
+        assertTrue(ink.contains("float softness = clamp(u_backlitSoftness * 0.5"));
+        assertTrue(ink.contains("float gradual = smoothstep(0.0, 1.0, progress);"));
+        assertTrue(ink.contains("taper = max(taper, 0.18 * e4 * e4);"));
+        assertFalse(ink.contains("float taper = mix(0.04"));
+        assertFalse(ink.contains("float transitionWidth = mix("));
         assertTrue(source.contains("uniform float u_backlitExtent;"));
         assertTrue(ink.contains("float grazing = clamp(1.0 - angularIncidence"));
         assertFalse(ink.contains("fadeStart"));
         assertFalse(ink.contains("fadeEnd"));
     }
 
-    @Test public void extentChangesLengthWithoutChangingMaximumWidthOrAlpha() {
-        // Grazing edges stay strong. The reach control changes where the
-        // contour begins to taper; the softness controls its slope.
-        float sideShort = rimWeight(0.53f, .6f, 0f);
-        float sideLong = rimWeight(0.53f, .6f, 1f);
-        float cornerShort = rimWeight(0.69f, .6f, 0f);
-        float cornerLong = rimWeight(0.69f, .6f, 1f);
-        assertTrue(sideLong > sideShort);
-        assertTrue(cornerLong > cornerShort);
-        assertTrue(cornerLong >= sideLong - 0.0001f);
-        assertTrue(rimWeight(0.0f, .6f, 0f) > .5f);
-        assertEquals(1f, rimWeight(0f, .6f, 1f), .00001f);
-        assertEquals(1f, rimWeight(1f, .6f, 1f), .00001f);
-        assertEquals(.04f, rimWeight(1f, .6f, 0f), .00001f);
+    @Test public void zeroReachHasNoHiddenFullPerimeterRim() {
+        PrismalEdgeDecoration zero = new PrismalEdgeDecoration(
+                1f, .85f, .60f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+        assertFalse(zero.hasBacklit());
+        assertEquals(0f, zero.extraGuardPx(3f), 0f);
+        for (int i=0;i<=1000;i++)
+            assertEquals(0f, rimWeight(i/1000f, .6f, 0f), 0f);
+        // Near zero, the visible angle is genuinely narrow.
+        assertEquals(0f, rimWeight(.53f, .6f, .08f), 0f);
+        assertEquals(0f, rimWeight(.85f, 2f, .08f), 0f);
+        assertTrue(rimWeight(.001f, .6f, .08f) > 0f);
     }
 
-    @Test public void rangeAndSoftnessAreIndependentAndContinuousAtCorner() {
-        float shortHard = rimWeight(.69f, .05f, 0.25f);
-        float shortSoft = rimWeight(.69f, 1f, 0.25f);
-        assertTrue("softness must affect a contour at fixed reach",
-                Math.abs(shortHard - shortSoft) > .01f);
-        for (float extent : new float[] { 0f, .25f, .55f, .75f, 1f }) {
-            float previous = rimWeight(0f, .6f, extent);
-            for (int i = 1; i <= 1000; i++) {
-                float current = rimWeight(i / 1000f, .6f, extent);
-                assertTrue("reach must not create a hard segment", current <= previous+.00001f);
-                assertTrue("round-corner taper must be smooth", previous-current < .013f);
-                previous = current;
+    @Test public void extentControlsReachIndependentlyFromSoftness() {
+        float shortCorner = rimWeight(.69f, .6f, .1f);
+        float longCorner = rimWeight(.69f, .6f, .8f);
+        assertEquals(0f, shortCorner, .0001f);
+        assertTrue(longCorner > .1f);
+        assertTrue(rimWeight(.53f, .6f, .75f)
+                > rimWeight(.53f, .6f, .25f));
+        // 100% spans full circle, including a faint seam at exact face-light.
+        assertTrue(rimWeight(1f, 2f, 1f) >= .18f - .0001f);
+        assertEquals(1f, rimWeight(0f, .6f, 1f), .0001f);
+    }
+
+    @Test public void twoHundredPercentSoftnessIsMoreGradualButNotLonger() {
+        float normal = .45f, reach = .55f;
+        float sharp = rimWeight(normal, .05f, reach);
+        float soft = rimWeight(normal, 2f, reach);
+        assertTrue(sharp > soft);
+        assertTrue(soft > 0f);
+        assertEquals(0f, rimWeight(.95f, .05f, reach), 0f);
+        assertEquals(0f, rimWeight(.95f, 2f, reach), 0f);
+        for(float extent:new float[]{0f,.1f,.55f,.9f,1f}) {
+            float prev=rimWeight(0f,2f,extent);
+            for(int i=1;i<=1000;i++){
+                float curr=rimWeight(i/1000f,2f,extent);
+                assertTrue(curr <= prev + .00001f);
+                assertTrue(prev - curr < .02f);
+                prev=curr;
             }
         }
     }
 
-    private static float rimWeight(float incidence, float softness, float extent) {
-        float grazing = Math.max(0f, Math.min(1f, 1f - incidence));
-        float start = .38f - .74f * extent;
-        float transition = .12f + .24f * softness;
-        float t = Math.max(0f, Math.min(1f, (grazing - start) / transition));
-        float response = t*t*(3f-2f*t);
-        return .04f + .96f*response;
+    private static float rimWeight(float incidence,float softness,float extent){
+        float grazing = Math.max(0f, Math.min(1f,1f-incidence));
+        float reachStart=1f-1.2f*extent;
+        float progress=Math.max(0f, Math.min(1f,
+                (grazing-reachStart)/Math.max(1f-reachStart,.001f)));
+        float quick=smooth(progress/.08f);
+        float gradual=smooth(progress);
+        float taper=quick*(1f-Math.min(1f,softness*.5f))
+                + gradual*Math.min(1f,softness*.5f);
+        float e2=extent*extent;
+        float e4=e2*e2;
+        return Math.max(taper,.18f*e4*e4);
+    }
+
+    private static float smooth(float t) {
+        t=Math.max(0f,Math.min(1f,t));
+        return t*t*(3f-2f*t);
     }
 
     @Test public void baselineRemainsUnmodifiedAndShadowOnlyStillWorks() {

@@ -32,7 +32,7 @@ public final class PrismalEdgeDecoration {
                                  float shadowLightFollow, float backlitExtent) {
         this.backlitWidthDp = bounded(backlitWidthDp, 0f, 24f);
         this.backlitStrength = bounded(backlitStrength, 0f, 1f);
-        this.backlitSoftness = bounded(backlitSoftness, 0.05f, 1f);
+        this.backlitSoftness = bounded(backlitSoftness, 0.05f, 2f);
         this.backlitExtent = bounded(backlitExtent, 0f, 1f);
         this.shadowRadiusDp = bounded(shadowRadiusDp, 0f, 24f);
         this.shadowOffsetYDp = bounded(shadowOffsetYDp, -16f, 16f);
@@ -43,7 +43,9 @@ public final class PrismalEdgeDecoration {
         this.shadowLightFollow = bounded(shadowLightFollow, 0f, 1f);
     }
 
-    public boolean hasBacklit() { return backlitWidthDp > 0f && backlitStrength > 0f; }
+    public boolean hasBacklit() {
+        return backlitExtent > 0f && backlitWidthDp > 0f && backlitStrength > 0f;
+    }
     public boolean hasShadow() { return shadowRadiusDp > 0f && shadowA > 0f; }
 
     /** Preserve a native shadow owner while applying glass-internal optics. */
