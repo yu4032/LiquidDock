@@ -1,12 +1,11 @@
 package com.hellovoid.prismal;
 
 /**
- * Optical response of one rounded glass volume. The upstream OS4 Fresnel,
- * reflection, directional highlight, AA and rounded SDF remain untouched.
- * In one draw, tint the narrow SDF contour using refracted background RGB and
- * the original OS4 highlight color. Light continuously changes its color from
- * dark material to bright reflected material, rather than hiding a black line.
- * No additional pass/Surface/texture.
+ * Additional optical material for a rounded glass volume. Preserve the
+ * existing upstream OS4 Fresnel and highlight color. A separate inner glint
+ * and an outer refracted contour share the exact native SDF silhouette,
+ * then composite as independent alpha layers in one shader pass.
+ * No additional Surface, texture allocation or capture.
  */
 final class PrismalEdgeDecorationShader {
     private static final String PRECISION = "precision highp float;";
@@ -82,40 +81,43 @@ final class PrismalEdgeDecorationShader {
                                 * u_transmittance;
                     }
 
-                    float opticalAlpha = 0.0;
+                    // Both bands use the exact same SDF zero crossing.
+                    // Outside: refracted contour. Inside: mirror highlight.
+                    // Neither is a displaced or independently fitted outline.
+                    float outlineAlpha = 0.0;
+                    float innerHighlightAlpha = 0.0;
                     float opticalDark = 0.0;
                     float opticalSpec = 0.0;
-                    float sharpWeight = 0.0;
-                    float innerMeniscusShade = 0.0;
                     vec3 edgeTransmission = vec3(0.0);
-                    float insidePx = max(-surfaceDistance, 0.0);
-                    // Extent=0 means no rim even if this optional program
-                    // is selected to draw only its independent cast shadow.
                     if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0
                             && u_backlitSideStart < 1.0) {
                         float aa = max(edgeAa, 0.75);
-                        float coreHalfPx = max(0.55, u_backlitWidthPx * 0.28);
-                        float coreCoverage = 1.0 - smoothstep(
-                                coreHalfPx, coreHalfPx + aa, abs(surfaceDistance));
-                        // High alpha at d=0 removes the transparent seam.
-                        // Strength controls reflected energy independently
-                        // of the underlying silhouette's geometric coverage.
-                        opticalAlpha = coreCoverage
-                                * mix(0.92, 0.99, u_backlitStrength)
-                                * smoothstep(0.0, 0.10, u_backlitStrength);
+                        float outlineWidthPx = max(u_backlitWidthPx, 0.5);
+                        // The outer contour starts just inside the AA footprint
+                        // so there is no transparent gap at the native silhouette.
+                        // The peak and majority of its coverage remain OUTSIDE.
+                        float outlineEntry = smoothstep(
+                                -aa * 0.70, aa * 0.20, surfaceDistance);
+                        float outlineExit = 1.0 - smoothstep(
+                                max(outlineWidthPx - aa * 0.5, aa * 0.5),
+                                outlineWidthPx + aa * 0.5, surfaceDistance);
+                        outlineAlpha = clamp(
+                                u_backlitStrength * outlineEntry * outlineExit,
+                                0.0, 0.98);
 
-                        float sharpEndPx = clamp(aa * 4.0, 2.75, 4.5);
-                        sharpWeight = 1.0 - smoothstep(
-                                1.25, sharpEndPx, insidePx);
-                        float meniscusWidthPx = clamp(
-                                os4EdgeWidthPx * 0.55, 2.5, 5.0);
-                        if (abs(surfaceDistance) < meniscusWidthPx
-                                && surfaceDistance > -sharpEndPx
-                                && (coreCoverage > 0.001 || sharpWeight > 0.001)) {
+                        // The internal glint has its own envelope and alpha.
+                        // It sits immediately INSIDE the contour, preserving
+                        // Prismal's original OS4 reflected light underneath.
+                        float highlightWidthPx = clamp(
+                                outlineWidthPx * 0.70 + aa * 0.65, 1.0, 3.5);
+                        float innerBand = smoothstep(
+                                -highlightWidthPx - aa * 0.6,
+                                -highlightWidthPx + aa * 0.30, surfaceDistance)
+                                * (1.0 - smoothstep(
+                                        -aa * 0.10, aa * 0.75, surfaceDistance));
+
+                        if (outlineAlpha > 0.001 || innerBand > 0.001) {
                             vec2 normal = normalize(os4SdfGradient + vec2(0.00001));
-                            // Material orientation creates the two optical
-                            // lobes: horizontal top/bottom specular and
-                            // vertical left/right refractive darkness.
                             float ax = abs(normal.x);
                             float ay = abs(normal.y);
                             float sideAxis = ax / max(ax + ay, 0.0001);
@@ -126,9 +128,9 @@ final class PrismalEdgeDecorationShader {
                             float signedFacing = dot(normal, u_invariantLightXY);
                             float direction01 = 0.5 + 0.5 * signedFacing;
                             opticalDark = sideWeight * mix(1.0, 0.88, direction01);
-                            // The OS4 soft light local is declared after
-                            // the original early discard. Use only previously
-                            // declared uniforms and local normal incidence here.
+                            // The original OS4 soft-light locals are declared
+                            // after the discard. Only uniform light values
+                            // may be consulted at this earlier stage.
                             float directionalFill = clamp(
                                     max(u_os4DirectionalIntensity, 0.0) * 0.55
                                     + max(u_os4DirectionalOppositeIntensity, 0.0) * 0.25,
@@ -136,75 +138,80 @@ final class PrismalEdgeDecorationShader {
                             opticalSpec = horizontalWeight
                                     * mix(0.82, 1.0, direction01)
                                     * mix(0.72, 1.0, directionalFill);
+                            // A distinct internal highlight, not a different
+                            // RGB choice for the same outer-outline alpha.
+                            innerHighlightAlpha = clamp(
+                                    u_backlitStrength * innerBand
+                                    * horizontalWeight * mix(0.24, 0.46, direction01),
+                                    0.0, 0.52);
 
-                            float rimReflectPx = u_os4ReflectOffsetPx > 0.0
-                                    ? u_os4ReflectOffsetPx
-                                    : clamp(u_glassThickness * 0.38, 4.0, 14.0);
-                            float sizeCapPx = clamp(
-                                    min(u_glassSize.x, u_glassSize.y) * 0.025,
-                                    3.0, 9.0);
-                            float bendPeakPx = min(sizeCapPx,
-                                    max(u_lensRefractionPx, 0.0) * 0.14
-                                    + rimReflectPx * 0.35);
-                            float opticalMeniscusProfile = 1.0 - smoothstep(
-                                    0.0, meniscusWidthPx, abs(surfaceDistance));
-                            float bendPx = bendPeakPx
-                                    * mix(0.35, 1.0, opticalMeniscusProfile);
-                            vec2 rimUv = backdropUv(v_screenTexCoord,
-                                    -normal * bendPx / u_resolution, 0.0);
-                            edgeTransmission = texture2D(u_backgroundTexture, rimUv).rgb;
-
-                            // A shallow, broad side meniscus replaces a
-                            // second dark hairline glued inside the surface.
-                            float innerShade = smoothstep(0.0, 0.65, insidePx)
-                                    * (1.0 - smoothstep(1.5, 3.5, insidePx));
-                            innerMeniscusShade = 0.10 * opticalDark * innerShade;
+                            // Only the outside contour requires a sharp backdrop
+                            // tap. No extra read for an inner highlight or shadow.
+                            if (outlineAlpha > 0.001) {
+                                float rimReflectPx = u_os4ReflectOffsetPx > 0.0
+                                        ? u_os4ReflectOffsetPx
+                                        : clamp(u_glassThickness * 0.38, 4.0, 14.0);
+                                float sizeCapPx = clamp(
+                                        min(u_glassSize.x, u_glassSize.y) * 0.025,
+                                        3.0, 9.0);
+                                float bendPeakPx = min(sizeCapPx,
+                                        max(u_lensRefractionPx, 0.0) * 0.14
+                                        + rimReflectPx * 0.35);
+                                float meniscusWidthPx = clamp(
+                                        os4EdgeWidthPx * 0.55, 2.5, 5.0);
+                                float opticalMeniscusProfile = 1.0 - smoothstep(
+                                        0.0, meniscusWidthPx, abs(surfaceDistance));
+                                float bendPx = bendPeakPx
+                                        * mix(0.35, 1.0, opticalMeniscusProfile);
+                                vec2 rimUv = backdropUv(v_screenTexCoord,
+                                        -normal * bendPx / u_resolution, 0.0);
+                                edgeTransmission =
+                                        texture2D(u_backgroundTexture, rimUv).rgb;
+                            }
                         }
                     }
 
-                    // The optional program can still cast a shadow when all
-                    // rim parameters are disabled. Straight-alpha compositing
-                    // is performed in one fragment, without a new FBO.
+                    // Outside the original silhouette no glass body is shaded.
+                    // Outer refraction still renders over the independent cast
+                    // shadow. The inner highlight never draws in this branch.
                     if (opacity < 0.001) {
-                        float combinedAlpha = opticalAlpha
-                                + exteriorShadowAlpha * (1.0 - opticalAlpha);
+                        float combinedAlpha = outlineAlpha
+                                + exteriorShadowAlpha * (1.0 - outlineAlpha);
                         if (combinedAlpha < 0.001) discard;
-                        vec3 rimRgb = shadeOpticalMeniscus(
+                        vec3 outlineRgb = shadeOpticalMeniscus(
                                 edgeTransmission, opticalDark, opticalSpec);
-                        vec3 premul = rimRgb * opticalAlpha
+                        vec3 premul = outlineRgb * outlineAlpha
                                 + u_castShadowColor.rgb * exteriorShadowAlpha
-                                * (1.0 - opticalAlpha);
+                                * (1.0 - outlineAlpha);
                         gl_FragColor = vec4(
                                 premul / max(combinedAlpha, 0.0001), combinedAlpha);
                         return;
                     }
                     """)
                 .replace(FINAL, """
-                    // Continuous sharp-to-body handoff by PHYSICAL distance,
-                    // not by opacity (which changes with the glass silhouette).
-                    vec3 innerGlassRgb = color;
-                    if (sharpWeight > 0.001) {
-                        innerGlassRgb = mix(innerGlassRgb, edgeTransmission,
-                                sharpWeight * 0.16);
-                    }
-                    innerGlassRgb *= 1.0 - innerMeniscusShade;
-
+                    // Preserve Prismal's native optical highlight in 'color'.
+                    // Source-over order: glass -> independent INNER glint ->
+                    // OUTER refracted contour -> underlying cast shadow.
+                    // The glint's alpha does not depend on the outline's alpha.
                     float glassAlpha = opacity * u_transmittance;
-                    vec3 rimBase = mix(color, edgeTransmission, sharpWeight);
-                    vec3 rimRgb = shadeOpticalMeniscus(
-                            rimBase, opticalDark, opticalSpec);
-                    // One optical core centered at the real SDF zero-crossing:
-                    // the former outer stroke and inner glint no longer meet
-                    // at d=0 with a transparent notch or positional gap.
-                    float coreAndGlassAlpha = opticalAlpha
-                            + glassAlpha * (1.0 - opticalAlpha);
-                    vec3 coreAndGlassPremul = rimRgb * opticalAlpha
-                            + innerGlassRgb * glassAlpha * (1.0 - opticalAlpha);
-                    float finalAlpha = coreAndGlassAlpha
-                            + exteriorShadowAlpha * (1.0 - coreAndGlassAlpha);
-                    vec3 finalPremul = coreAndGlassPremul
+                    float glassAndGlintAlpha = innerHighlightAlpha
+                            + glassAlpha * (1.0 - innerHighlightAlpha);
+                    vec3 glassAndGlintPremul =
+                            OPTICAL_SPECULAR_RGB * innerHighlightAlpha
+                            + color * glassAlpha * (1.0 - innerHighlightAlpha);
+
+                    vec3 outlineRgb = shadeOpticalMeniscus(
+                            edgeTransmission, opticalDark, opticalSpec);
+                    float glassWithOutlineAlpha = outlineAlpha
+                            + glassAndGlintAlpha * (1.0 - outlineAlpha);
+                    vec3 glassWithOutlinePremul = outlineRgb * outlineAlpha
+                            + glassAndGlintPremul * (1.0 - outlineAlpha);
+
+                    float finalAlpha = glassWithOutlineAlpha
+                            + exteriorShadowAlpha * (1.0 - glassWithOutlineAlpha);
+                    vec3 finalPremul = glassWithOutlinePremul
                             + u_castShadowColor.rgb * exteriorShadowAlpha
-                            * (1.0 - coreAndGlassAlpha);
+                            * (1.0 - glassWithOutlineAlpha);
                     gl_FragColor = vec4(
                             finalPremul / max(finalAlpha, 0.0001), finalAlpha);
                     """);
