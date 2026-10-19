@@ -3,10 +3,9 @@ package com.hellovoid.prismal;
 /**
  * Optical response of one rounded glass volume. The upstream OS4 Fresnel,
  * reflection, directional highlight, AA and rounded SDF remain untouched.
- * In the SAME draw, draw a true, narrow SDF-constrained dark absorption line
- * only where the OS4 directional irradiance is weak, and cast a whole-body
- * low-frequency shadow beyond the silhouette. This is not a broad tint/overlay:
- * its subpixel/physical-pixel width is tied to the original alpha contour.
+ * In the SAME draw, draw the narrow light-responsive ink line just OUTSIDE
+ * the glass alpha silhouette; composite it beneath the existing OS4 highlights
+ * and in front of the outer cast shadow. No additional pass/Surface/texture.
  */
 final class PrismalEdgeDecorationShader {
     private static final String PRECISION = "precision highp float;";
@@ -38,43 +37,29 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_castShadowLightFollow;
                 """)
                 .replace(BEFORE_DISCARD, """
-                    // Derivative-dependent OS4 SDF/normal/AA have been evaluated
-                    // before this path. Exterior fragments avoid new captures.
-                    if (distMask > 0.0 && u_castShadowRadiusPx > 0.0
+                    // The shadow and ink line are UNDER the already-lit
+                    // glass. A positive surfaceDistance is *outside* the
+                    // exact alpha silhouette, including the inset shift.
+                    // Computed before early discard, but after derivatives.
+                    float surfaceDistance = distMask + insetShiftPx;
+                    float exteriorShadowAlpha = 0.0;
+                    if (surfaceDistance > 0.0 && u_castShadowRadiusPx > 0.0
                             && u_castShadowColor.a > 0.0) {
                         vec2 n = normalize(os4SdfGradient + vec2(0.00001));
                         float facing = dot(n, u_invariantLightXY);
-                        // First-order signed SDF translation of the full rounded
-                        // silhouette; no second rounded-box SDF or blur pass.
                         float projected = -facing * u_castShadowRadiusPx * 0.42
                                 * u_castShadowLightFollow
                                 - n.y * u_castShadowOffsetYPx;
-                        float distanceToCaster = max(0.0, distMask - projected);
+                        float distanceToCaster = max(0.0, surfaceDistance - projected);
                         float halo = 1.0 - smoothstep(0.0,
                                 max(u_castShadowRadiusPx * 2.0, 0.001),
                                 distanceToCaster);
-                        float shadowAlpha = u_castShadowColor.a * halo * halo;
-                        if (shadowAlpha > 0.002) {
-                            gl_FragColor = vec4(u_castShadowColor.rgb,
-                                    shadowAlpha * u_transmittance);
-                            return;
-                        }
+                        exteriorShadowAlpha = u_castShadowColor.a * halo * halo;
                     }
-                    """ + BEFORE_DISCARD)
-                .replace(FINAL, """
-                    // The narrow, high-contrast absorption line is a real
-                    // SDF contour, not broad backlight color attenuation.
-                    // Keep separate alpha until the final, same-fragment blend:
-                    // a translucent glass surface must NOT wash out the line.
-                    float rimLineCoverage = 0.0;
-                    // OS4's 3D face illumination carries a positive Z term,
-                    // so using os4Directional here makes even grazing side
-                    // contours appear lit and collapses the ink-alpha to zero.
-                    // Measure illumination along the 2D SDF edge normal instead.
-                    // This does not hardcode which sides of the glass are dark.
-                    // Edge absorption is deliberately independent of the
-                    // optional OS4 reflective-highlight visibility mask.
-                    if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0) {
+
+                    float exteriorInkAlpha = 0.0;
+                    if (surfaceDistance > 0.0 && u_backlitStrength > 0.0
+                            && u_backlitWidthPx > 0.0) {
                         float keyLight = max(u_os4DirectionalIntensity, 0.0);
                         float fillLight = max(u_os4DirectionalOppositeIntensity, 0.0);
                         float lightEnergy = clamp(
@@ -84,48 +69,52 @@ final class PrismalEdgeDecorationShader {
                                     os4SdfGradient + vec2(0.00001));
                             float angularIncidence = abs(
                                     dot(edgeNormal, u_invariantLightXY));
-                            // At the stock (-0.50,-0.80) light direction
-                            // side-edge incidence is ~0.53, top/bottom ~0.85.
-                            // A continuous grazing-angle falloff preserves a
-                            // real side line and extinguishes top/bottom rims.
-                            float fadeStart = mix(
-                                    0.30, 0.65, u_backlitSoftness);
+                            float fadeStart = mix(0.30, 0.65, u_backlitSoftness);
                             float fadeEnd = min(fadeStart + 0.30, 0.99);
                             float darkness = 1.0 - smoothstep(
                                     fadeStart, fadeEnd, angularIncidence);
+                            // Both alpha and physical width taper to zero on lit
+                            // edges, using the existing SDF normal and light.
                             float taper = darkness * darkness
                                     * (3.0 - 2.0 * darkness);
                             float lineWidthPx = u_backlitWidthPx * taper;
-                            // Use the SAME shifted silhouette as Prismal's
-                            // glass alpha; positive distance is inside glass.
-                            float insideDistance = edgeDist - insetShiftPx;
-                            float aa = max(edgeAa * 0.5, 0.25);
-                            float innerBand = smoothstep(-aa, aa, insideDistance)
-                                    * (1.0 - smoothstep(
-                                            max(lineWidthPx - aa, 0.0),
-                                            lineWidthPx + aa, insideDistance));
-                            float lineOpacity = clamp(
-                                    u_backlitStrength * lightEnergy * taper * innerBand,
-                                    0.0, 0.98);
-                            // Real pigment-like line: unlike mere color
-                            // darkening, its coverage can remain visible when
-                            // the glass body is highly transmissive.
-                            rimLineCoverage = lineOpacity;
+                            float outsideAa = max(edgeAa * 0.5, 0.25);
+                            float entry = smoothstep(0.0, outsideAa,
+                                    surfaceDistance);
+                            float exit = 1.0 - smoothstep(
+                                    max(lineWidthPx - outsideAa, 0.0),
+                                    lineWidthPx + outsideAa, surfaceDistance);
+                            exteriorInkAlpha = clamp(
+                                    u_backlitStrength * lightEnergy * taper
+                                    * entry * exit, 0.0, 0.98);
                         }
                     }
-                    if (rimLineCoverage > 0.001) {
-                        // Straight-alpha "line over glass" at the SAME output
-                        // fragment. The line still fades with the glass SDF's
-                        // silhouette opacity, so no outside halo is created.
+                    // Ink is in front of the outer cast shadow, but BOTH are
+                    // behind the illuminated glass surface (one fragment).
+                    float underlayAlpha = exteriorInkAlpha
+                            + exteriorShadowAlpha * (1.0 - exteriorInkAlpha);
+                    vec3 underlayRgb = (vec3(0.015) * exteriorInkAlpha
+                            + u_castShadowColor.rgb * exteriorShadowAlpha
+                            * (1.0 - exteriorInkAlpha))
+                            / max(underlayAlpha, 0.0001);
+                    if (opacity < 0.001) {
+                        if (underlayAlpha < 0.001) discard;
+                        gl_FragColor = vec4(underlayRgb, underlayAlpha);
+                        return;
+                    }
+                    """)
+                .replace(FINAL, """
+                    // Keep the original OS4-reflected glass OVER the exterior
+                    // ink and shadow. This avoids removing the bright edge
+                    // while retaining a visible hairline just outside it.
+                    if (underlayAlpha > 0.001) {
                         float glassAlpha = opacity * u_transmittance;
-                        float lineAlpha = opacity * rimLineCoverage;
-                        float combinedAlpha = lineAlpha
-                                + glassAlpha * (1.0 - lineAlpha);
-                        vec3 combinedColor = (
-                                vec3(0.015) * lineAlpha
-                                + color * glassAlpha * (1.0 - lineAlpha))
+                        float combinedAlpha = glassAlpha
+                                + underlayAlpha * (1.0 - glassAlpha);
+                        vec3 combinedRgb = (color * glassAlpha
+                                + underlayRgb * underlayAlpha * (1.0 - glassAlpha))
                                 / max(combinedAlpha, 0.0001);
-                        gl_FragColor = vec4(combinedColor, combinedAlpha);
+                        gl_FragColor = vec4(combinedRgb, combinedAlpha);
                         return;
                     }
                     """ + FINAL);

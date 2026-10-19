@@ -3,8 +3,8 @@ package com.hellovoid.prismal;
 /**
  * Immutable per-component optical response, in the original glass draw.
  * Light-facing reflection is supplied by Prismal OS4; the unlit silhouette
- * receives a real narrow, antialiased dark contour with its own source-over
- * coverage in the same fragment. Cast shadow uses the same overall silhouette.
+ * receives a narrow, antialiased dark contour outside the alpha silhouette.
+ * Original OS4 highlights are composited above that line in the same fragment.
  */
 public final class PrismalEdgeDecoration {
     public static final PrismalEdgeDecoration NONE =
@@ -60,10 +60,18 @@ public final class PrismalEdgeDecoration {
     }
 
     public float extraGuardPx(float density, float minDimensionPx) {
+        float scale = bounded(density, .1f, 5f);
+        // Unlike the previous inner line, an exterior hairline needs actual
+        // extra vertex coverage AND an extended node scissor. Shared guard
+        // also expands the Dock dirty region; no extra render pass is needed.
+        float inkGuard = hasBacklit() ? Math.min(32f,
+                backlitWidthDp * scale + 2f) : 0f;
         float radius = effectiveShadowRadiusPx(density, minDimensionPx);
-        return radius <= 0f ? 0f : Math.min(96f,
+        if (radius <= 0f) return inkGuard;
+        float shadowGuard = Math.min(96f,
                 radius * (2.5f + 0.42f * shadowLightFollow)
                 + Math.abs(effectiveShadowOffsetYPx(density, minDimensionPx)));
+        return Math.max(inkGuard, shadowGuard);
     }
 
     private static float bounded(float value, float min, float max) {
