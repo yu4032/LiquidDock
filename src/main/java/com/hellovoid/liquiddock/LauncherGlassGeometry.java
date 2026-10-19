@@ -72,6 +72,27 @@ final class LauncherGlassGeometry {
                 Math.max(0f, Math.min(cornerRadius, Math.min(width, height) * 0.5f)));
     }
 
+    /**
+     * Separate the physical glass silhouette from the presentation crop.
+     * Optical rim/cast-shadow pixels can live outside the glass footprint;
+     * expanding the shape itself would distort refraction and the corner radius.
+     */
+    static Snapshot withPresentationCrop(Snapshot shape, int rootWidth, int rootHeight,
+                                         float outerLeft, float outerTop,
+                                         float outerRight, float outerBottom) {
+        if (shape == null || rootWidth <= 0 || rootHeight <= 0
+                || !finite(outerLeft) || !finite(outerTop)
+                || !finite(outerRight) || !finite(outerBottom)
+                || outerRight <= outerLeft || outerBottom <= outerTop) {
+            return shape;
+        }
+        return new Snapshot(
+                shape.left, shape.top, shape.width, shape.height,
+                outerLeft / rootWidth, (rootHeight - outerBottom) / rootHeight,
+                (outerRight - outerLeft) / rootWidth, (outerBottom - outerTop) / rootHeight,
+                shape.centerX, shape.centerY, shape.cornerRadius);
+    }
+
     private static boolean finite(float value) {
         return !Float.isNaN(value) && !Float.isInfinite(value);
     }
