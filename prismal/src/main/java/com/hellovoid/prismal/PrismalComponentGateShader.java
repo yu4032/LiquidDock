@@ -105,6 +105,20 @@ final class PrismalComponentGateShader {
                 "color += plusHL * vec3(0.99, 0.995, 1.0);",
                 "u_componentPlainHighlight", "plain highlight");
 
+        // Caustic illumination must not inherit the dome's low, piecewise
+        // nearest-edge medial-axis field in the glass face. Keep original
+        // height/gradient at the rim; crossfade only the caustic response to
+        // the existing smooth slab field in the deep interior. Geometry,
+        // normals, refraction, transparency and OS4 lighting remain untouched.
+        corrected = replaceExactlyOnce(
+                corrected,
+                "float causticDot = dot(normalize(vec3(gradH * u_normalStrength, 0.45)), Lp);\n"
+                        + "        float caust = pow(max(causticDot, 0.0), 7.0) * u_causticIntensity * height;",
+                "vec2 causticGrad = mix(gradH, gradHSig, coreBlend);\n"
+                        + "        float causticDot = dot(normalize(vec3(causticGrad * u_normalStrength, 0.45)), Lp);\n"
+                        + "        float causticHeight = mix(height, hSig, coreBlend);\n"
+                        + "        float caust = pow(max(causticDot, 0.0), 7.0) * u_causticIntensity * causticHeight;",
+                "caustic medial-axis field");
         // These existing blocks already have natural runtime branches; extend the condition so
         // disabled profiles skip their normalize/pow/length work too.
         corrected = replaceExactlyOnce(
