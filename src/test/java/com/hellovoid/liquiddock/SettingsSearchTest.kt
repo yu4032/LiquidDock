@@ -57,6 +57,17 @@ class SettingsSearchTest {
     }
 
     @Test
+    fun pullDownIsAvailableOnlyOnRootTabs() {
+        assertEquals(
+            listOf(Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub),
+            Page.entries.filter(::isRootPage),
+        )
+        assertTrue(!isRootPage(Page.Grid))
+        assertTrue(!isRootPage(Page.LiquidColor))
+        assertTrue(!isRootPage(Page.DockGeometry))
+    }
+
+    @Test
     fun titleMatchPrecedesSummaryMatch() {
         val result = filterSettingsSearch(catalog, "色散")
         assertEquals("色散强度", result.first().title)
