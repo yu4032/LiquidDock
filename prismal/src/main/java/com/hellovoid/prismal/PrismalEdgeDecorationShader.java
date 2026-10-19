@@ -3,8 +3,10 @@ package com.hellovoid.prismal;
 /**
  * Optical response of one rounded glass volume. The upstream OS4 Fresnel,
  * reflection, directional highlight, AA and rounded SDF remain untouched.
- * In the SAME draw, shade the under-illuminated rim and cast a whole-body
- * low-frequency shadow beyond the silhouette. Never paint a black stroke.
+ * In the SAME draw, draw a true, narrow SDF-constrained dark absorption line
+ * only where the OS4 directional irradiance is weak, and cast a whole-body
+ * low-frequency shadow beyond the silhouette. This is not a broad tint/overlay:
+ * its subpixel/physical-pixel width is tied to the original alpha contour.
  */
 final class PrismalEdgeDecorationShader {
     private static final String PRECISION = "precision highp float;";
@@ -60,30 +62,41 @@ final class PrismalEdgeDecorationShader {
                     }
                     """ + BEFORE_DISCARD)
                 .replace(FINAL, """
-                    // Light-facing high gloss is provided by upstream Prismal
-                    // OS4. Only attenuate the other half of the SAME optical
-                    // edge, with continuous irradiance and a soft width falloff.
+                    // The narrow, high-contrast absorption line is a real
+                    // SDF contour, not broad backlight color attenuation.
+                    // OS4 has already evaluated both primary/secondary
+                    // directionality and angular falloff as os4Directional.
                     if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0
                             && u_os4EdgeEnabled > 0.5) {
-                        vec2 n = normalize(os4SdfGradient + vec2(0.00001));
-                        float facing = dot(n, u_invariantLightXY);
-                        float key = max(u_os4DirectionalIntensity, 0.0);
-                        float fill = max(u_os4DirectionalOppositeIntensity, 0.0);
-                        float reference = max(key, fill);
-                        if (reference > 0.001) {
-                            float localLight = key * max(facing, 0.0)
-                                    + fill * max(-facing, 0.0);
-                            float deficit = clamp(
-                                    (reference - localLight) / reference, 0.0, 1.0);
-                            float transition = smoothstep(
-                                    0.0, max(u_backlitSoftness, 0.05), deficit);
-                            float edgeBand = os4EdgeBand(
-                                    edgeDist, u_backlitWidthPx, edgeAa);
-                            float darken = clamp(transition * edgeBand
-                                    * u_backlitStrength
-                                    * clamp(reference, 0.0, 1.0) * 0.34,
-                                    0.0, 0.22);
-                            color *= 1.0 - darken;
+                        float lightReference = max(
+                                max(u_os4DirectionalIntensity,
+                                        u_os4DirectionalOppositeIntensity), 0.0);
+                        if (lightReference > 0.001) {
+                            float relativeLight = clamp(
+                                    os4Directional / lightReference, 0.0, 1.0);
+                            // Smoothly extinguish the line on illuminated
+                            // edges; no fixed left/right mask, sign test or
+                            // two-ended line segment to introduce hard caps.
+                            float darkness = 1.0 - smoothstep(0.0,
+                                    max(u_backlitSoftness, 0.05), relativeLight);
+                            float taper = darkness * darkness
+                                    * (3.0 - 2.0 * darkness);
+                            float lineWidthPx = u_backlitWidthPx * taper;
+                            // Use the SAME shifted silhouette as Prismal's
+                            // glass alpha; positive distance is inside glass.
+                            float insideDistance = edgeDist - insetShiftPx;
+                            float aa = max(edgeAa * 0.5, 0.25);
+                            float innerBand = smoothstep(-aa, aa, insideDistance)
+                                    * (1.0 - smoothstep(
+                                            max(lineWidthPx - aa, 0.0),
+                                            lineWidthPx + aa, insideDistance));
+                            float lineOpacity = clamp(
+                                    u_backlitStrength * taper * innerBand,
+                                    0.0, 0.98);
+                            // A visible dark physical contour (near-black),
+                            // whose position, thickness and opacity all follow
+                            // local light; never changes the silhouette alpha.
+                            color = mix(color, vec3(0.015), lineOpacity);
                         }
                     }
                     """ + FINAL);

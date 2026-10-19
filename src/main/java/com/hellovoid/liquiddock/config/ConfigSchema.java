@@ -211,7 +211,7 @@ public final class ConfigSchema {
     }
 
     public static final class Glass {
-        // Whole-silhouette cast shadow and weak backlight attenuation are distinct
+        // Whole-silhouette cast shadow and optically lit SDF contour are distinct
         // from Prismal's interior optical shading and OS4 light-facing highlights.
         // Both are opt-in to preserve rendering with older presets and OEM native shadows.
         public static final ConfigKey<Boolean> OUTER_SHADOW_ENABLED = bool(
@@ -230,14 +230,14 @@ public final class ConfigSchema {
                 "liquid_outer_shadow_alpha", 36, 36, 36, 0, 255, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> OUTER_SHADOW_LIGHT_FOLLOW = integer(
                 "liquid_outer_shadow_light_follow", 65, 65, 65, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
-        // Optically derived backlight attenuation; independent of whole shadow.
+        // Light-derived high-contrast narrow contour; independent of whole shadow.
         // Defaults off and preserves the existing Prismal OS4 light-facing rim.
         public static final ConfigKey<Boolean> BACKLIT_ENABLED = bool(
                 "liquid_backlit_enabled", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> BACKLIT_WIDTH = dp(
-                "liquid_backlit_width", 8, 8, 8, 1, 24, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_backlit_width", 1, 1, 1, 0, 5, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> BACKLIT_STRENGTH = integer(
-                "liquid_backlit_strength", 65, 65, 65, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+                "liquid_backlit_strength", 85, 85, 85, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> BACKLIT_SOFTNESS = integer(
                 "liquid_backlit_softness", 60, 60, 60, 5, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(

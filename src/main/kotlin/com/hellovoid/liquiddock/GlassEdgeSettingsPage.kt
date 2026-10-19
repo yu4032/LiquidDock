@@ -17,7 +17,8 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 
 /**
  * Unified Prismal/OS4 glass lighting and whole-silhouette projection.
- * Backlight is multiplicative optical attenuation, never a painted dark stroke.
+ * The dark contour is a true narrow antialiased SDF line, whose visible
+ * location and width follow OS4 directional illumination (not a fixed side).
  * Component-local preferences inherit absent values from the global material.
  */
 @Composable
@@ -108,7 +109,7 @@ internal fun GlassEdgeSettingsPage(
             PageHeader(
                 "玻璃边缘光照与投影",
                 "$scopeLabel · Prismal OS4 的高光、反射与折射保持不变。" +
-                    "背光边缘仅轻微减弱透射，不绘制独立黑色描边。" +
+                    "背光侧沿真实玻璃轮廓生成极窄的深色细线，受光侧保留 OS4 高光。" +
                     (if (nativeShadowOwner) "此组件保留原生整体阴影，不叠加 GPU 投影。"
                      else if (global) "以下参数可由各个组件继承。"
                      else "本页缺省参数继承全局默认。")
@@ -119,16 +120,16 @@ internal fun GlassEdgeSettingsPage(
             SettingsCard {
                 toggle(
                     ConfigSchema.Glass.BACKLIT_ENABLED,
-                    "启用背光边缘微暗",
-                    "受光侧继续使用 OS4 高光；背光侧按法线与实际照度平滑压暗",
+                    "启用光照响应暗边",
+                    "紧贴真实玻璃轮廓的深色细线，随 OS4 光照自动变细、淡出",
                 )
             }
         }
         item(key = "backlight-levels") {
             SettingsCard {
-                number(ConfigSchema.Glass.BACKLIT_STRENGTH, "背光微暗强度", "%")
-                number(ConfigSchema.Glass.BACKLIT_WIDTH, "边缘响应宽度", "dp")
-                number(ConfigSchema.Glass.BACKLIT_SOFTNESS, "光照过渡柔和度", "%")
+                number(ConfigSchema.Glass.BACKLIT_STRENGTH, "暗边线条不透明度", "%")
+                number(ConfigSchema.Glass.BACKLIT_WIDTH, "最大细线宽度", "dp")
+                number(ConfigSchema.Glass.BACKLIT_SOFTNESS, "受光淡出范围", "%")
             }
         }
         if (!nativeShadowOwner) {
@@ -138,7 +139,7 @@ internal fun GlassEdgeSettingsPage(
                     toggle(
                         ConfigSchema.Glass.OUTER_SHADOW_ENABLED,
                         "启用整体外阴影",
-                        "以整个圆角玻璃轮廓投影，不模拟黑色轮廓线",
+                        "与真实窄边线分开，以整个圆角玻璃轮廓产生柔和投影",
                     )
                 }
             }

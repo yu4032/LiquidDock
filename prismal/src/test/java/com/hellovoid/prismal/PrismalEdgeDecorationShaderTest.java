@@ -11,15 +11,22 @@ public class PrismalEdgeDecorationShaderTest {
                                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
     }
 
-    @Test public void keepsUpstreamHighlightsAndShadesOnlyTheExistingOpticalBand() {
+    @Test public void retainsOriginalOs4HighlightsAndDrawsARealAntialiasedContour() {
         String result = PrismalEdgeDecorationShader.apply(upstream());
         assertTrue(result.contains("float os4SoftLight"));
         assertTrue(result.contains("u_os4DirectionalIntensity"));
         assertTrue(result.contains("u_os4DirectionalOppositeIntensity"));
-        assertTrue(result.contains("float edgeBand = os4EdgeBand("));
-        assertTrue(result.contains("edgeDist, u_backlitWidthPx, edgeAa);"));
-        assertTrue(result.contains("color *= 1.0 - darken;"));
+        assertTrue(result.contains("float insideDistance = edgeDist - insetShiftPx;"));
+        assertTrue(result.contains("float aa = max(edgeAa * 0.5, 0.25);"));
+        assertTrue(result.contains("float lineWidthPx = u_backlitWidthPx * taper;"));
+        assertTrue(result.contains("float innerBand = smoothstep(-aa, aa, insideDistance)"));
+        assertTrue(result.contains("color = mix(color, vec3(0.015), lineOpacity);"));
+        assertFalse(result.contains("color *= 1.0 - darken;"));
         assertTrue(result.contains("smoothstep("));
+        assertTrue(result.contains("float taper = darkness * darkness"));
+        assertTrue(result.contains("os4Directional / lightReference"));
+        assertFalse(result.contains("abs(n.x)"));
+        assertFalse(result.contains("u_strokeMinCos"));
         assertFalse(result.contains("abs(n.x)"));
         assertFalse(result.contains("u_outerStroke"));
         assertFalse(result.contains("u_strokeMinCos"));
@@ -64,24 +71,43 @@ public class PrismalEdgeDecorationShaderTest {
         assertEquals(0f, nativeOwner.extraGuardPx(3f), 0.00001f);
     }
 
-    @Test public void backlitIrradianceIsSmoothAndRespondsToLight() {
-        // Reference scalar model for the constant-cost GLSL optical response.
-        assertEquals(0f, darkness(1f, 0.6f, 0.2f, 0.7f), 0.00001f);
-        assertTrue(darkness(-1f, 0.6f, 0.2f, 0.7f)
-                > darkness(1f, 0.6f, 0.2f, 0.7f));
-        assertTrue(darkness(-1f, 0.6f, 0.2f, 0.7f)
-                > darkness(0.0f, 0.6f, 0.2f, 0.2f));
-        assertTrue(darkness(1f, 0.2f, 0.6f, 0.7f) > 0f);
-        assertEquals(0f, darkness(-1f, 0f, 0f, 0.7f), 0.00001f);
+    @Test public void physicalLineTapersInBothThicknessAndOpacity() {
+        // This models the OS4 directional irradiance already evaluated per pixel.
+        float full = darkContour(0.0f, 1.5f, 0.85f, .60f);
+        float grazing = darkContour(0.30f, 1.5f, 0.85f, .60f);
+        float lit = darkContour(0.60f, 1.5f, 0.85f, .60f);
+        assertTrue(full > grazing);
+        assertTrue(grazing > lit);
+        assertEquals(0f, lit, 0.0001f);
+        assertEquals(0f, darkContour(0.0f, 0f, .85f, .60f), 0.0001f);
+        // No signed main-minus-fill: two equal lights can still produce
+        // grazing edges, as in the iOS reference screenshots.
+        assertTrue(darkContour(.1f, 1f, .85f, .60f) > 0f);
     }
 
-    private static float darkness(float facing, float main, float fill, float strength) {
-        float max = Math.max(main, fill);
-        if (max <= 0.001f) return 0f;
-        float lit = main * Math.max(facing, 0f) + fill * Math.max(-facing, 0f);
-        float deficit = Math.max(0f, Math.min(1f, (max-lit)/max));
-        float t = Math.min(1f, deficit / .6f);
-        return t*t*(3f-2f*t) * strength * max * .34f;
+    @Test public void strokeIsInsideGlassAndDoesNotExpandRasterWhenShadowOff() {
+        String decorated = PrismalEdgeDecorationShader.apply(upstream());
+        assertTrue(decorated.contains("insideDistance = edgeDist - insetShiftPx"));
+        assertTrue(decorated.contains("lineOpacity"));
+        assertTrue(decorated.contains("u_os4EdgeEnabled > 0.5"));
+        PrismalEdgeDecoration optical = new PrismalEdgeDecoration(
+                1f, .85f, .6f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+        assertTrue(optical.hasBacklit());
+        assertFalse(optical.hasShadow());
+        assertEquals(0f, optical.extraGuardPx(3f), 0f);
+    }
+
+    /** Scalar reference for a light-controlled near-black line of tapered width. */
+    private static float darkContour(float relativeLight, float maxWidth,
+                                     float maxAlpha, float softness) {
+        if (maxWidth <= 0f || maxAlpha <= 0f) return 0f;
+        float z = Math.max(0f, Math.min(1f,
+                relativeLight / Math.max(softness, .05f)));
+        float illuminated = z*z*(3f-2f*z);
+        float darkness = 1f-illuminated;
+        float taper = darkness*darkness*(3f-2f*darkness);
+        float width = maxWidth * taper;
+        return taper * maxAlpha * width;
     }
 
     private static int occurrences(String s, String needle) {
