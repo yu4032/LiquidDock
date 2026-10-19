@@ -618,7 +618,7 @@ final class LauncherDialogGlassCoordinator {
      * clipping contract or other Launcher view trees.
      */
     private static final class DialogOverflowClip {
-        final ArrayList<ViewGroup> parents = new ArrayList<>();
+        final ArrayList<WeakReference<ViewGroup>> parents = new ArrayList<>();
         final ArrayList<Boolean> children = new ArrayList<>();
         final ArrayList<Boolean> padding = new ArrayList<>();
 
@@ -627,7 +627,7 @@ final class LauncherDialogGlassCoordinator {
             android.view.ViewParent parent = panel.getParent();
             while (parent instanceof ViewGroup && parent != decor) {
                 ViewGroup group = (ViewGroup) parent;
-                lease.parents.add(group);
+                lease.parents.add(new WeakReference<>(group));
                 lease.children.add(group.getClipChildren());
                 lease.padding.add(group.getClipToPadding());
                 group.setClipChildren(false);
@@ -639,9 +639,11 @@ final class LauncherDialogGlassCoordinator {
 
         void release() {
             for (int i = parents.size() - 1; i >= 0; i--) {
-                ViewGroup group = parents.get(i);
-                group.setClipChildren(children.get(i));
-                group.setClipToPadding(padding.get(i));
+                ViewGroup group = parents.get(i).get();
+                if (group != null) {
+                    group.setClipChildren(children.get(i));
+                    group.setClipToPadding(padding.get(i));
+                }
             }
             parents.clear();
             children.clear();
