@@ -278,8 +278,10 @@ final class DockGlassCompositor {
 
         // Dock body and icons use the same configurable in-pass Prismal
         // cast-shadow pipeline as all other liquid-glass components.
-        renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK), pixelDensity);
-        renderer.drawGlass(dockBody, params, bodyHighlightProfile);
+        if (!WorkstationTaskbarBackgroundHook.isReplacingDockBody()) {
+            renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK), pixelDensity);
+            renderer.drawGlass(dockBody, params, bodyHighlightProfile);
+        }
         renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), pixelDensity);
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;

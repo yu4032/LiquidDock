@@ -44,7 +44,9 @@ final class LauncherVendorBlurWriteSuppressor {
                 Object receiver = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 if (receiver instanceof View && args.length == 1 && args[0] instanceof Boolean) {
-                    boolean owned = MiuixGlassHook.ownsVendorBlurState((View) receiver);
+                    boolean owned = MiuixGlassHook.ownsVendorBlurState((View) receiver)
+                            || WorkstationTaskbarBackgroundHook.isReplacingNativeMaterial(
+                                    (View) receiver);
                     if (LauncherVendorBlurWritePolicy.shouldSuppressPassWindowWrite(
                             owned, (Boolean) args[0])) {
                         return successfulSuppressionResult(method);
@@ -68,7 +70,9 @@ final class LauncherVendorBlurWriteSuppressor {
                 Object receiver = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 if (receiver instanceof View && args.length == 1 && args[0] instanceof Number) {
-                    boolean owned = MiuixGlassHook.ownsVendorBlurState((View) receiver);
+                    boolean owned = MiuixGlassHook.ownsVendorBlurState((View) receiver)
+                            || WorkstationTaskbarBackgroundHook.isReplacingNativeMaterial(
+                                    (View) receiver);
                     if (LauncherVendorBlurWritePolicy.shouldSuppressPositiveBlurWrite(
                             owned, ((Number) args[0]).intValue())) {
                         return successfulSuppressionResult(method);

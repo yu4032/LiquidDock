@@ -110,6 +110,7 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
     options(Page.GridBasics, "自由主界面网格", "自定义图标大小", "小组件随水平边距拉伸")
     options(Page.DockBehavior, "Dock 自定义", "隐藏手机互联图标", "Dock 尺寸动画", "LiquidDock 顺滑尺寸动画")
     options(Page.Divider, "自定义 Dock 分隔线")
+    options(Page.WorkstationDock, "全宽任务栏背景")
     options(Page.Recents, "禁用壁纸缩放", "取消壁纸压暗")
     options(Page.Liquid, "启用液态玻璃", "Dock 帧同步")
     options(Page.LiquidSampling, "OS4 法线与方向光可视化")

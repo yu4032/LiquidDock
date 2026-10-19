@@ -370,9 +370,8 @@ private fun LiquidDockSettings(
                     Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
                     Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.WorkstationDock -> WorkstationSpecPage(
-                        padding, prefs, masterEnabled, workstationDockSpecs,
-                        "工作台 Dock 图标位置与玻璃圆角参数",
+                    Page.WorkstationDock -> WorkstationDockPage(
+                        padding, prefs, masterEnabled,
                     )
                     Page.WorkstationDesktop -> WorkstationSpecPage(
                         padding, prefs, masterEnabled, workstationDesktopSpecs,

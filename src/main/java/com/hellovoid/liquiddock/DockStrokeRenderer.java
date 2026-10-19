@@ -115,8 +115,9 @@ final class DockStrokeRenderer {
 
     /** Native BlurBackground2 stays dormant while GlassHost owns the visible edge. */
     private static boolean isNativeStrokeSuppressed(View host) {
-        return isNativeHost(host)
-                && (MainHook.isWorkstationMode() || MiuixGlassHook.isBoundTo(host));
+        return WorkstationTaskbarBackgroundHook.isReplacingDockBody()
+                || (isNativeHost(host)
+                    && (MainHook.isWorkstationMode() || MiuixGlassHook.isBoundTo(host)));
     }
 
     /**

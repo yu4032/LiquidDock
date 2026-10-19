@@ -115,6 +115,7 @@ final class LiveGlassConfigState {
 
     private static final Set<String> WORKSTATION_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
+                    ConfigSchema.Workstation.TASKBAR_BACKGROUND.name(),
                     ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET.name())));
@@ -279,6 +280,7 @@ final class LiveGlassConfigState {
                 lastWorkstation = workstation;
                 WorkstationDockCustomizationHook.applyLiveConfig(next.workstation);
                 WorkstationDockGeometryHook.applyLiveConfig(next.workstation);
+                WorkstationTaskbarBackgroundHook.applyLiveConfig(next.workstation);
                 MainHook.log(TAG + " workstation Dock geometry updated");
             }
             if (glassChanged || popupChanged || effectsChanged) {

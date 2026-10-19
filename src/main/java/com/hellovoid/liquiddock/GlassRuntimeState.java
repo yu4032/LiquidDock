@@ -43,6 +43,11 @@ final class GlassRuntimeState {
         largeFolderEnabled = initialLargeFolderEnabled;
         if (nextPrefs == null) return;
         listener = (sharedPreferences, key) -> {
+            if (ConfigSchema.Core.ENABLED.name().equals(key)) {
+                WorkstationTaskbarBackgroundHook.onCoreEnabledChanged(
+                        sharedPreferences.getBoolean(ConfigSchema.Core.ENABLED.name(),
+                                ConfigSchema.Core.ENABLED.runtimeFallback()));
+            }
             if (key != null && !ConfigSchema.Glass.ENABLED.name().equals(key)
                     && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.ICON_GLASS.name().equals(key)
@@ -143,6 +148,7 @@ final class GlassRuntimeState {
 
         GlassRuntimeTransitionPolicy.Transition transition =
                 GlassRuntimeTransitionPolicy.plan(before, snapshot());
+        WorkstationTaskbarBackgroundHook.onModeChanged();
         MainHook.log("[DC][GlassRuntime] enabled=" + enabled
                 + " iconEnabled=" + isIconEnabled()
                 + " functionalDockIconEnabled=" + isFunctionalDockIconEnabled()

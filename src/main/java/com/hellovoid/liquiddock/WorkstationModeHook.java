@@ -111,6 +111,7 @@ final class WorkstationModeHook {
         WorkstationRuntimeState.publish(enabled);
         HomeGridHook.setWorkstationMode(enabled);
         WorkstationDockGeometryHook.onWorkstationModeChanged(enabled);
+        WorkstationTaskbarBackgroundHook.onModeChanged();
         MainHook.log("[DC] Mingou workstation mode changed=" + enabled);
 
         DockShadowOwnership.refreshVendorDockShadow();

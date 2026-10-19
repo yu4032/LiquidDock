@@ -128,6 +128,8 @@ public class LiveGlassConfigStateTest {
                 ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name() + "_tenths"));
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Workstation.TASKBAR_BACKGROUND.name()));
         assertFalse(LiveGlassConfigState.isLiveKey(ConfigSchema.Grid.ROWS.name()));
         assertFalse(LiveGlassConfigState.isLiveKey(ConfigSchema.Grid.COLUMNS.name()));
     }

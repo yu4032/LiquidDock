@@ -245,6 +245,38 @@ internal fun WorkstationPage(
 }
 
 @Composable
+internal fun WorkstationDockPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val geometryEnabled = prefs.getBoolean(
+        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
+        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault(),
+    )
+    DenseSettingsList(
+        padding,
+        stringResource(R.string.page_workstation_dock),
+        "工作台模式下替换 Dock 胶囊或原生背景为全宽半透明任务栏；保留图标与交互。",
+    ) {
+        item(key = "workstation-taskbar-background") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Workstation.TASKBAR_BACKGROUND,
+                    "全宽任务栏背景",
+                    "工作台模式下以原生模糊半透明任务栏覆盖普通 Dock 背景；液态玻璃开关关闭时也生效，切换即时生效",
+                    masterEnabled,
+                )
+            }
+        }
+        items(workstationDockSpecs, key = { it.key }) { spec ->
+            SettingsCard { IntSetting(prefs, spec, masterEnabled && geometryEnabled) }
+        }
+    }
+}
+
+@Composable
 internal fun WorkstationSpecPage(
     padding: PaddingValues,
     prefs: SharedPreferences,

@@ -527,6 +527,9 @@ public final class ConfigSchema {
     public static final class Workstation {
         public static final ConfigKey<Boolean> DOCK_CUSTOMIZATION = bool(
                 "workstation_dock_customization", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> TASKBAR_BACKGROUND = bool(
+                "workstation_taskbar_background", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_WIDTH_OFFSET = dp(
                 "workstation_dock_width_offset", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
@@ -676,7 +679,8 @@ public final class ConfigSchema {
         add(keys, LauncherHighlight.SKY_HAZE, LauncherHighlight.CAUSTICS,
                 LauncherHighlight.PRESS_GLOW, LauncherHighlight.LARGE_SKY_HAZE,
                 LauncherHighlight.LARGE_CAUSTICS, LauncherHighlight.LARGE_PRESS_GLOW);
-        add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.DOCK_WIDTH_OFFSET,
+        add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.TASKBAR_BACKGROUND,
+                Workstation.DOCK_WIDTH_OFFSET,
                 Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
                 Workstation.GRID_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,

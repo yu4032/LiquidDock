@@ -66,6 +66,15 @@ final class DockNativeShadowBridge {
         float vendorRadius = number(args[4]);
         DockStrokeRenderer.rememberNativeHost(target, vendorRadius);
 
+        // The edge-to-edge Workstation bar owns its shadow: suppress the retired
+        // native rounded-plate shadow even when liquid glass is disabled.
+        if (WorkstationTaskbarBackgroundHook.isReplacingNativeMaterial(target)) {
+            args[1] = Color.TRANSPARENT;
+            args[3] = 0f;
+            args[4] = 0f;
+            return;
+        }
+
         // Only the actively presented glass Dock replaces its OEM shadow.
         // When glass is OFF or zero-copy activation failed, native behavior
         // remains intact and no extra Prismal layer is rendered.

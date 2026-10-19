@@ -37,6 +37,7 @@ public class MainHook {
         DockStrokeRenderer.installNativeHook(classLoader, config.dock);
         WorkstationDockCustomizationHook.install(classLoader, config.workstation);
         WorkstationDockGeometryHook.install(classLoader, config.workstation);
+        WorkstationTaskbarBackgroundHook.install(classLoader, config.workstation);
         if (!config.dock.resizeAnimation) {
             DockResizeAnimationHook.install(
                     classLoader,
