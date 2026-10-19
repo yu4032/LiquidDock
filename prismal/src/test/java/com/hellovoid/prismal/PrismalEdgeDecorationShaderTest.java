@@ -507,7 +507,7 @@ public class PrismalEdgeDecorationShaderTest {
     @Test public void baselineAndNativeDockGeometryRemainUnchanged() {
         assertFalse(PrismalEdgeDecoration.NONE.hasBacklit());
         assertFalse(PrismalEdgeDecoration.NONE.hasShadow());
-        assertEquals(0f,PrismalEdgeDecoration.NONE.extraGuardPx(3f),.001f);
+        assertEquals(0f,PrismalEdgeDecoration.NONE.extraGuardPx(3f, 100f),.001f);
         PrismalEdgeDecoration m=material(.55f,.6f);
         PrismalEdgeDecoration dock=m.fitInkToNativeViewport(1f);
         assertEquals(1f,dock.inkViewportInsetPx,.00001f);
