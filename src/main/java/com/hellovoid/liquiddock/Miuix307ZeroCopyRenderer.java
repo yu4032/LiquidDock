@@ -4,11 +4,13 @@ import android.graphics.Point;
 import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import com.hellovoid.prismal.PrismalEdgeDecoration;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 
 /** Builds the feedback-safe HyperOS 307 PassBlur -> OES -> TextureView material composition. */
 final class Miuix307ZeroCopyRenderer {
@@ -27,6 +29,8 @@ final class Miuix307ZeroCopyRenderer {
     private static long homeFreshnessSerial;
     private static ClipOwner materialClipOwner;
     private static ClipOwner parentClipOwner;
+    private static final ArrayList<ClipOwner> taskbarAncestorClips = new ArrayList<>();
+    private static View taskbarClipRoot;
     private static volatile boolean workstationTaskbarMode;
     private static final int[] materialScreenPosition = new int[2];
     private static final Point realScreenSize = new Point();
@@ -186,6 +190,7 @@ final class Miuix307ZeroCopyRenderer {
                         realScreenSize.y, bleed, margin);
             }
         }
+        refreshTaskbarAncestorClips(material);
         if (!(output.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) output.getLayoutParams();
         if (lp.leftMargin == -leftMargin && lp.topMargin == -margin
@@ -209,7 +214,35 @@ final class Miuix307ZeroCopyRenderer {
                 + bottomMargin + "px taskbar=" + workstationTaskbarMode);
     }
 
+    private static void refreshTaskbarAncestorClips(View material) {
+        View root = material.getRootView();
+        if (!workstationTaskbarMode || taskbarClipRoot != root) {
+            restoreTaskbarAncestorClips();
+        }
+        if (!workstationTaskbarMode || !taskbarAncestorClips.isEmpty()) return;
+        taskbarClipRoot = root;
+        // TextureView output may span the screen while the vendor material and native icons
+        // retain their original Dock bounds. Release only ancestor child-clips and restore
+        // every original value when the option is disabled or the host detaches.
+        ViewParent ancestor = material.getParent();
+        if (ancestor instanceof View) ancestor = ((View) ancestor).getParent();
+        while (ancestor instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) ancestor;
+            taskbarAncestorClips.add(new ClipOwner(group));
+            ancestor = group.getParent();
+        }
+    }
+
+    private static void restoreTaskbarAncestorClips() {
+        for (int i = taskbarAncestorClips.size() - 1; i >= 0; i--) {
+            taskbarAncestorClips.get(i).restore();
+        }
+        taskbarAncestorClips.clear();
+        taskbarClipRoot = null;
+    }
+
     private static void restoreShadowClips() {
+        restoreTaskbarAncestorClips();
         if (parentClipOwner != null) {
             parentClipOwner.restore();
             parentClipOwner = null;
