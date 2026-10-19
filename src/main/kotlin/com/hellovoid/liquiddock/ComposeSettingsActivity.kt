@@ -303,29 +303,29 @@ private fun LiquidDockSettings(
                 )
             } else {
                 AnimatedContent(
-                targetState = page,
-                modifier = Modifier.fillMaxSize().then(
-                    // Only the four bottom-navigation root pages may reveal search.
-                    // Keep nested-scroll entirely off subpages, not merely disabled.
-                    if (root && !searchOpen && !showRestartScopes) {
-                        Modifier.nestedScroll(rememberSettingsPullDownSearch(::openSearch))
-                    } else Modifier,
-                ),
-                transitionSpec = {
-                    val duration = prefs.getInt(
-                        ConfigSchema.Animation.SETTINGS_PAGE.name(),
-                        ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
-                    ).coerceIn(0, 700)
-                    if (targetState.ordinal > initialState.ordinal) {
-                        (slideInHorizontally(tween(duration)) { it / 4 } + fadeIn(tween(duration))) togetherWith
-                                (slideOutHorizontally(tween(duration)) { -it / 6 } + fadeOut(tween(duration)))
-                    } else {
-                        (slideInHorizontally(tween(duration)) { -it / 4 } + fadeIn(tween(duration))) togetherWith
-                                (slideOutHorizontally(tween(duration)) { it / 6 } + fadeOut(tween(duration)))
-                    }
-                },
-                label = "settings-page",
-            ) { target ->
+                    targetState = page,
+                    modifier = Modifier.fillMaxSize().then(
+                        // Only the four bottom-navigation root pages may reveal search.
+                        // Keep nested-scroll entirely off subpages, not merely disabled.
+                        if (root && !searchOpen && !showRestartScopes) {
+                            Modifier.nestedScroll(rememberSettingsPullDownSearch(::openSearch))
+                        } else Modifier,
+                    ),
+                    transitionSpec = {
+                        val duration = prefs.getInt(
+                            ConfigSchema.Animation.SETTINGS_PAGE.name(),
+                            ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
+                        ).coerceIn(0, 700)
+                        if (targetState.ordinal > initialState.ordinal) {
+                            (slideInHorizontally(tween(duration)) { it / 4 } + fadeIn(tween(duration))) togetherWith
+                                    (slideOutHorizontally(tween(duration)) { -it / 6 } + fadeOut(tween(duration)))
+                        } else {
+                            (slideInHorizontally(tween(duration)) { -it / 4 } + fadeIn(tween(duration))) togetherWith
+                                    (slideOutHorizontally(tween(duration)) { it / 6 } + fadeOut(tween(duration)))
+                        }
+                    },
+                    label = "settings-page",
+                ) { target ->
                 when (target) {
                     Page.Home -> HomePage(
                         padding,
@@ -525,7 +525,7 @@ private fun LiquidDockSettings(
                     Page.Data -> DataPage(padding, activity)
                     Page.About -> AboutPage(padding, activity, prefs)
                 }
-                    }
+                }
             }
         }
     }
