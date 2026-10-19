@@ -196,6 +196,25 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(s.contains("if (inkDistance > 0.0)"));
     }
 
+    @Test public void preDiscardOpticsNeverReferenceLaterOs4LightingLocal() {
+        // Optional shaders compile on the actual GPU, not in the JVM tests.
+        // The legacy and OS4 light calculations are declared AFTER Prismal's
+        // early discard; reading them inside optical coverage invalidates
+        // GLSL ES 1.00 and makes both rim and GPU shadow disappear together.
+        String source=decorated();
+        int begin=source.indexOf("float surfaceDistance = distMask + insetShiftPx;");
+        int discard=source.indexOf("if (opacity < 0.001) {",begin);
+        int os4Light=source.indexOf("float os4SoftLight =");
+        assertTrue(begin>=0 && discard>begin && os4Light>discard);
+        String beforeDiscard=source.substring(begin,discard);
+        assertFalse("os4SoftLight is out of scope here",
+                beforeDiscard.contains("os4SoftLight"));
+        assertTrue(beforeDiscard.contains("float directionalFill = clamp("));
+        assertTrue(beforeDiscard.contains("float signedFacing = dot(normal, u_invariantLightXY);"));
+        assertTrue(source.contains("float exteriorShadowAlpha = 0.0;"));
+        assertTrue(source.contains("float opticalAlpha = 0.0;"));
+    }
+
     @Test public void legacyHighlightScopeAndProgramFallbackRemainSafe() {
         String s=decorated();
         assertTrue(s.contains("const vec3 OPTICAL_SPECULAR_RGB = vec3("));

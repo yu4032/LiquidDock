@@ -126,10 +126,16 @@ final class PrismalEdgeDecorationShader {
                             float signedFacing = dot(normal, u_invariantLightXY);
                             float direction01 = 0.5 + 0.5 * signedFacing;
                             opticalDark = sideWeight * mix(1.0, 0.88, direction01);
+                            // The OS4 soft light local is declared after
+                            // the original early discard. Use only previously
+                            // declared uniforms and local normal incidence here.
+                            float directionalFill = clamp(
+                                    max(u_os4DirectionalIntensity, 0.0) * 0.55
+                                    + max(u_os4DirectionalOppositeIntensity, 0.0) * 0.25,
+                                    0.0, 1.0);
                             opticalSpec = horizontalWeight
                                     * mix(0.82, 1.0, direction01)
-                                    * mix(0.72, 1.0,
-                                            clamp(os4SoftLight * 1.6, 0.0, 1.0));
+                                    * mix(0.72, 1.0, directionalFill);
 
                             float rimReflectPx = u_os4ReflectOffsetPx > 0.0
                                     ? u_os4ReflectOffsetPx
