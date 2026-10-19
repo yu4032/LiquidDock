@@ -19,7 +19,9 @@ public class MingouCompatContractTest {
         String ui = Files.readString(KOTLIN.resolve("GlassSettingsPages.kt"));
 
         assertTrue(schema.contains("\"mingou_large_folder_compat\", false, false, false"));
-        assertTrue(entry.contains("LauncherMingouCompatHook.install(classLoader)"));
+        int compatInstall = entry.indexOf("LauncherMingouCompatHook.install(classLoader)");
+        int masterGuard = entry.indexOf("if (runtimeConfig.enabled) {", compatInstall);
+        assertTrue(compatInstall >= 0 && masterGuard > compatInstall);
         assertTrue(hook.contains("if (!enabled) return chain.proceed"));
         assertTrue(hook.contains("if (!enabled || dbSpanX != 2 || dbSpanY != 2) return result"));
         assertTrue(hook.contains("LauncherLargeFolderPickerHook.isMarked(context, info)"));
@@ -29,6 +31,7 @@ public class MingouCompatContractTest {
         assertFalse(hook.contains("getPackageInfo("));
         assertFalse(hook.contains("getLongVersionCode("));
         assertTrue(ui.contains("ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT"));
+        assertTrue(ui.contains("enabled = true, // This compatibility repair has its own master switch."));
     }
 
     @Test public void popupContentDoesNotGetSecondAlphaScaleLayer() throws Exception {
