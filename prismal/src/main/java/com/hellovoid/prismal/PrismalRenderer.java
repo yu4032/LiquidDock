@@ -488,6 +488,7 @@ public final class PrismalRenderer implements AutoCloseable {
                 PrismalComponentGateShader.apply(
                         PrismalOpticalEdgeShader.apply(
                                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
+        glassFragment = PrismalIos27DockShader.apply(glassFragment);
         String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
         if (dualBlurEnabled) glassFragment = PrismalDualBlurShader.apply(glassFragment);
         glassProgram = createProgram(glassVertex, glassFragment);
@@ -719,6 +720,9 @@ public final class PrismalRenderer implements AutoCloseable {
             uploadHighlightMask(highlightMask);
             cachedHighlightMask = highlightMask;
         }
+
+        // The Dock body and icon overlays share one renderer; never cache this per-node gate.
+        uniform1f("u_ios27DockEnabled", highlights.ios27Dock ? 1f : 0f);
 
         // prepareBackdrop's blur pass leaves unrelated texture bindings behind. Bind the glass
         // source pair once for the first node of each frame; later nodes share the same backdrop.

@@ -269,7 +269,7 @@ final class DockGlassCompositor {
             renderer.beginGlassFrame();
         }
 
-        renderer.drawGlass(dockBody, params, bodyHighlightProfile);
+        renderer.drawGlass(dockBody, params, bodyHighlightProfile.withIos27DockOptics());
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;

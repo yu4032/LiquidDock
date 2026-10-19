@@ -208,6 +208,14 @@ final class DockStrokeRenderer {
         synchronized (INSTALLED) {
             StrokeDrawable installed = INSTALLED.get(host);
 
+            // A glass Host has one SDF edge owner: the GPU. The foreground
+            // StrokeDrawable uses a second path and creates an optical seam.
+            // Leave native-only stroke rendering and MiShadow ownership alone.
+            if (host instanceof DockLiquidGlassHostView) {
+                releaseInstalledStrokeLocked(host, installed);
+                return;
+            }
+
             if (isNativeStrokeSuppressed(host)) {
                 releaseInstalledStrokeLocked(host, installed);
                 return;
@@ -283,7 +291,7 @@ final class DockStrokeRenderer {
                 View host = entry.getKey();
                 StrokeDrawable installed = entry.getValue();
                 if (host == null || installed == null) continue;
-                if (isNativeStrokeSuppressed(host)) {
+                if (host instanceof DockLiquidGlassHostView || isNativeStrokeSuppressed(host)) {
                     releaseInstalledStrokeLocked(host, installed);
                     continue;
                 }
