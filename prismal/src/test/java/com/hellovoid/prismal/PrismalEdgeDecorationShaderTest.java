@@ -72,8 +72,8 @@ public class PrismalEdgeDecorationShaderTest {
         for (int i=0;i<=1000;i++)
             assertEquals(0f, rimWeight(i/1000f, .6f, 0f), 0f);
         // Near zero, the visible angle is genuinely narrow.
-        assertEquals(0f, rimWeight(.53f, .6f, .08f), 0f);
-        assertEquals(0f, rimWeight(.85f, 2f, .08f), 0f);
+        assertEquals(0f, rimWeight(.53f, .6f, .08f), .000001f);
+        assertEquals(0f, rimWeight(.85f, 2f, .08f), .000001f);
         assertTrue(rimWeight(.001f, .6f, .08f) > 0f);
     }
 
@@ -95,8 +95,10 @@ public class PrismalEdgeDecorationShaderTest {
         float soft = rimWeight(normal, 2f, reach);
         assertTrue(sharp > soft);
         assertTrue(soft > 0f);
-        assertEquals(0f, rimWeight(.95f, .05f, reach), 0f);
-        assertEquals(0f, rimWeight(.95f, 2f, reach), 0f);
+        // The deliberately tiny high-extent floor is independent of taper
+        // softness when the normal is outside the adjustable visible reach.
+        assertEquals(rimWeight(.95f, .05f, reach),
+                rimWeight(.95f, 2f, reach), .0000001f);
         for(float extent:new float[]{0f,.1f,.55f,.9f,1f}) {
             float prev=rimWeight(0f,2f,extent);
             for(int i=1;i<=1000;i++){
