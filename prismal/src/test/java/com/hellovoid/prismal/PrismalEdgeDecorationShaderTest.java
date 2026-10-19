@@ -17,7 +17,7 @@ public class PrismalEdgeDecorationShaderTest {
         int line = source.indexOf("float exteriorInkAlpha = 0.0;");
         int originalDiscard = source.indexOf("if (opacity < 0.001) discard;");
         int reflected = source.indexOf("float os4SoftLight =");
-        int finalBlend = source.indexOf("vec3 combinedRgb = (color * glassAlpha");
+        int finalBlend = source.indexOf("vec3 combinedRgb = (contourGlass * glassAlpha");
         assertTrue(line > 0);
         assertTrue(originalDiscard < 0); // early discard replaced by exterior paint path
         assertTrue(reflected > line);
