@@ -135,10 +135,17 @@ final class LauncherGlassGeometry {
             return close(left, other.left) && close(top, other.top)
                     && close(width, other.width) && close(height, other.height)
                     && close(cornerRadius, other.cornerRadius)
-                    && close(cropLeft, other.cropLeft)
-                    && close(cropBottom, other.cropBottom)
-                    && close(cropWidth, other.cropWidth)
-                    && close(cropHeight, other.cropHeight);
+                    // Crop coordinates are normalized (0..1), unlike the
+                    // shape coordinates in pixels; a 0.25 tolerance here would
+                    // hide even large shadow-gutter changes.
+                    && closeNormalized(cropLeft, other.cropLeft)
+                    && closeNormalized(cropBottom, other.cropBottom)
+                    && closeNormalized(cropWidth, other.cropWidth)
+                    && closeNormalized(cropHeight, other.cropHeight);
+        }
+
+        private static boolean closeNormalized(float a, float b) {
+            return Math.abs(a - b) < 0.00001f;
         }
 
         private static boolean close(float a, float b) {
