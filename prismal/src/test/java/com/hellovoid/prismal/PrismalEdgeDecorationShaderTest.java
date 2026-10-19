@@ -45,6 +45,38 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(ink.contains("abs(edgeNormal.x)"));
         assertFalse(ink.contains("gl_FragColor"));
         assertFalse(ink.contains("u_os4EdgeEnabled > 0.5"));
+        assertTrue(ink.contains("float taper = mix(0.08, 1.0, angularResponse);"));
+        assertTrue(ink.contains("float grazing = clamp(1.0 - angularIncidence"));
+        assertFalse(ink.contains("fadeStart"));
+        assertFalse(ink.contains("fadeEnd"));
+    }
+
+    @Test public void continuousPerimeterDoesNotHaveArbitraryAngularEndpoints() {
+        float side = rimWeight(.53f, .6f);
+        float corner = rimWeight(.69f, .6f);
+        float top = rimWeight(.85f, .6f);
+        assertTrue("grazing side darkens more", side > corner);
+        assertTrue("the corner remains connected", corner > top);
+        assertTrue("even the lit edge retains a faint seam", top > 0.08f);
+        assertEquals(0.08f, rimWeight(1f, .6f), 0.0001f);
+        assertEquals(1f, rimWeight(0f, .6f), 0.0001f);
+        // As orientation traverses a complete round corner, the response is
+        // continuous and never jumps to a hard zero at a chosen angle.
+        float previous = rimWeight(0f, .6f);
+        for (int i = 1; i <= 1000; i++) {
+            float current = rimWeight(i / 1000f, .6f);
+            assertTrue(current <= previous + 0.0001f);
+            assertTrue(previous - current < .004f);
+            previous = current;
+        }
+    }
+
+    private static float rimWeight(float incidence, float softness) {
+        float grazing = Math.max(0f, Math.min(1f, 1f - incidence));
+        float spread = .45f + .60f * softness;
+        float t = Math.max(0f, Math.min(1f, grazing / spread));
+        float response = t*t*(3f-2f*t);
+        return .08f + .92f * response;
     }
 
     @Test public void baselineRemainsUnmodifiedAndShadowOnlyStillWorks() {

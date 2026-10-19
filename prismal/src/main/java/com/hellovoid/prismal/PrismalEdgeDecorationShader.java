@@ -72,14 +72,18 @@ final class PrismalEdgeDecorationShader {
                                     os4SdfGradient + vec2(0.00001));
                             float angularIncidence = abs(
                                     dot(edgeNormal, u_invariantLightXY));
-                            float fadeStart = mix(0.30, 0.65, u_backlitSoftness);
-                            float fadeEnd = min(fadeStart + 0.30, 0.99);
-                            float darkness = 1.0 - smoothstep(
-                                    fadeStart, fadeEnd, angularIncidence);
-                            // Both alpha and physical width taper to zero on lit
-                            // edges, using the existing SDF normal and light.
-                            float taper = darkness * darkness
-                                    * (3.0 - 2.0 * darkness);
+                            // The iOS 27 reference has a continuous fine rim:
+                            // its contrast varies around the FULL perimeter,
+                            // rather than an angular segment with endpoints.
+                            // Grazing edge normals get a darker, thicker line;
+                            // light-facing normals keep only a faint seam beneath
+                            // the unchanged OS4 specular highlight.
+                            float grazing = clamp(1.0 - angularIncidence, 0.0, 1.0);
+                            float lightSpread = mix(0.45, 1.05,
+                                    u_backlitSoftness);
+                            float angularResponse = smoothstep(
+                                    0.0, lightSpread, grazing);
+                            float taper = mix(0.08, 1.0, angularResponse);
                             float lineWidthPx = u_backlitWidthPx * taper;
                             float outsideAa = max(edgeAa * 0.5, 0.25);
                             float entry = smoothstep(0.0, outsideAa,
