@@ -211,8 +211,8 @@ public class ModernSettingsArchitectureTest {
         String navModel = Files.readString(NAVIGATION_MODEL);
         String options = Files.readString(OPTION_SPECS);
         assertTrue(glassPages.contains("internal fun LiquidLightingPage("));
-        assertTrue(glassPages.contains("groupedIntSettings(liquidLightingSpecs, prefs, enabled)"));
-        assertTrue(glassPages.contains("groupedIntSettings(liquidOs4Specs, prefs, enabled)"));
+        assertTrue(glassPages.contains("groupedLiquidSettings(liquidLightingGroups + liquidOs4Groups, prefs, enabled)"));
+        assertTrue(options.contains("internal val liquidOs4Groups = listOf("));
         assertTrue(source.contains("Page.LiquidLighting -> LiquidLightingPage("));
         assertFalse(source.contains("Page.LiquidOs4"));
         assertFalse(navModel.contains("Page.LiquidOs4"));
@@ -576,7 +576,9 @@ public class ModernSettingsArchitectureTest {
         assertTrue(ui.contains("internal fun LazyListScope.groupedIntSettings("));
         assertTrue(ui.contains("items(specs.chunked(3), key = { group ->"));
         assertTrue(ui.contains("group.forEachIndexed { index, spec ->"));
-        assertTrue(Files.readString(GLASS_PAGES).contains("groupedIntSettings(specs, prefs, masterEnabled && liquidEnabled)"));
+        assertTrue(ui.contains("internal fun LazyListScope.groupedLiquidSettings("));
+        assertTrue(Files.readString(GLASS_PAGES).contains(
+                "groupedLiquidSettings(groups, prefs, masterEnabled && liquidEnabled)"));
         assertTrue(Files.readString(DOCK_WORKSTATION_PAGES).contains("groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)"));
         assertTrue(Files.readString(GLASS_PAGES).contains("item(key = \"icons-glass-toggles\")"));
         assertTrue(Files.readString(GLASS_PAGES).contains("item(key = \"icons-glass-geometry\")"));

@@ -92,8 +92,8 @@ internal fun ScopedGlassSettingsPage(
                 )
             }
         }
-        item(key = "basic-heading") { SmallTitle("颜色与模糊") }
-        basics.forEach { b ->
+        item(key = "basic-blur-heading") { SmallTitle("背景模糊") }
+        basics.take(1).forEach { b ->
             item(key = b.key) {
                 SettingsCard {
                     ScopedGlassSlider(
@@ -110,24 +110,50 @@ internal fun ScopedGlassSettingsPage(
                 }
             }
         }
-        item(key = "optical-heading") { SmallTitle("光学、折射、高光及阴影") }
-        optics.forEach { d ->
-            item(key = d.config.name()) {
+        item(key = "basic-color-heading") { SmallTitle("玻璃底色与透明度") }
+        basics.drop(1).forEach { b ->
+            item(key = b.key) {
                 SettingsCard {
-                    val key = ScopedGlassOptics.key(scope, d.config)
                     ScopedGlassSlider(
                         prefs = prefs,
-                        key = key,
-                        fallback = d.config,
-                        title = d.title,
-                        unit = d.unit,
+                        key = b.key,
+                        fallback = b.fallback,
+                        title = b.title,
+                        unit = b.unit,
                         enabled = enabled,
                         generation = resetGeneration,
-                        decimal = d.config.storageMode() == ConfigKey.StorageMode.DP_TENTHS,
+                        decimal = ScopedGlassOptics.isMenuScope(scope) &&
+                            b.fallback.storageMode() == ConfigKey.StorageMode.DP_TENTHS,
                     )
                 }
             }
         }
+        liquidAllGroups.forEach { group ->
+            val section = group.specs.mapNotNull { spec ->
+                optics.firstOrNull { it.config == spec.config }
+            }
+            if (section.isNotEmpty()) {
+                item(key = "optical-heading:${group.title}") { SmallTitle(group.title) }
+                section.forEach { d ->
+                    item(key = d.config.name()) {
+                        SettingsCard {
+                            val key = ScopedGlassOptics.key(scope, d.config)
+                            ScopedGlassSlider(
+                                prefs = prefs,
+                                key = key,
+                                fallback = d.config,
+                                title = d.title,
+                                unit = d.unit,
+                                enabled = enabled,
+                                generation = resetGeneration,
+                                decimal = d.config.storageMode() == ConfigKey.StorageMode.DP_TENTHS,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item(key = "normals-heading") { SmallTitle("光学调试") }
         item(key = "normals") {
             SettingsCard {
                 val inherited = prefs.getBoolean(
@@ -357,14 +383,17 @@ internal fun ScopedGlassSlider(
         val global = fallback.name()
         return if (fallback.storageMode() == ConfigKey.StorageMode.DP_TENTHS
             && prefs.contains("${global}_tenths")) {
-            prefs.getInt("${global}_tenths", fallback.uiDefault() * 10) / 10f
+            prefs.getInt("${global}_tenths", (fallback.uiDefaultDp() * 10f).toInt()) / 10f
+        } else if (fallback.storageMode() == ConfigKey.StorageMode.DP_TENTHS
+            && !prefs.contains(global)) {
+            fallback.uiDefaultDp()
         } else {
             prefs.getInt(global, fallback.uiDefault()).toFloat()
         }
     }
 
     fun read(): Float = if (decimal && prefs.contains("${key}_tenths")) {
-        prefs.getInt("${key}_tenths", fallback.uiDefault() * 10) / 10f
+        prefs.getInt("${key}_tenths", (fallback.uiDefaultDp() * 10f).toInt()) / 10f
     } else if (prefs.contains(key)) {
         prefs.getInt(key, fallback.uiDefault()).toFloat()
     } else inherited()

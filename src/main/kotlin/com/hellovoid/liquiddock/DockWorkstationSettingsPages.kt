@@ -82,7 +82,7 @@ internal fun DockPage(
         item {
             ModernFeatureCard(
                 title = stringResource(R.string.page_shadow),
-                summary = "Dock 与描边阴影",
+                summary = "仅开启 Dock 自定义且关闭液态玻璃时生效",
                 onClick = { open(Page.Shadow) },
                 modifier = Modifier.padding(horizontal = 14.dp),
             )

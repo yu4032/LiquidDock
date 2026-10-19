@@ -307,21 +307,21 @@ private fun LiquidDockSettings(
                     prefs,
                     masterEnabled,
                     "控制玻璃主体的基础材质感",
-                    liquidMaterialSpecs,
+                    liquidMaterialGroups,
                 )
                 Page.LiquidRefraction -> LiquidSpecPage(
                     padding,
                     prefs,
                     masterEnabled,
                     "折射形状、位移、边缘衰减与表面几何",
-                    liquidRefractionSpecs,
+                    liquidRefractionGroups,
                 )
                 Page.LiquidColor -> LiquidSpecPage(
                     padding,
                     prefs,
                     masterEnabled,
                     "底色、色散与背景鲜艳度",
-                    liquidColorSpecs,
+                    liquidColorGroups,
                 )
                 Page.LiquidLighting -> LiquidLightingPage(padding, prefs, masterEnabled)
                 Page.GlassEdge -> GlassEdgeSettingsPage(
@@ -363,7 +363,7 @@ private fun LiquidDockSettings(
                     prefs,
                     masterEnabled,
                     "玻璃内部阴影颜色与柔和程度",
-                    liquidShadowSpecs,
+                    liquidShadowGroups,
                 )
                 Page.LiquidSampling -> LiquidSamplingPage(padding, prefs, masterEnabled)
 

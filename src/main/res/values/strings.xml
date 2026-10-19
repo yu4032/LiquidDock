@@ -30,8 +30,8 @@
     <string name="page_widget_component_detail">Widget component detail</string>
     <string name="widget_components_entry">Widget component styling</string>
     <string name="widget_components_entry_summary">Load widgets to hide components or turn selected text/icons white</string>
-    <string name="page_stroke">Stroke</string>
-    <string name="page_shadow">Shadow</string>
+    <string name="page_stroke">Dock stroke</string>
+    <string name="page_shadow">Native Dock shadow</string>
     <string name="page_animation">Animations &amp; transitions</string>
     <string name="page_data">Presets</string>
     <string name="page_about">Licenses</string>
@@ -102,7 +102,7 @@
     <string name="page_glass_widgets">Widgets</string>
     <string name="page_glass_folders">Folders</string>
     <string name="page_glass_menus">Menus &amp; popups</string>
-    <string name="page_glass_edge">Glass lighting and cast shadow</string>
+    <string name="page_glass_edge">Shadow</string>
     <string name="page_shortcut_popup">Shortcut menu customization</string>
     <string name="page_handle_menu">Top menu customization</string>
     <string name="page_liquid_material">Material basics</string>
