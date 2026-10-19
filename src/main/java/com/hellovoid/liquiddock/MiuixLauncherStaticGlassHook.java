@@ -237,8 +237,7 @@ final class MiuixLauncherStaticGlassHook {
                         // (animType != CLOSE_TO_HOME) as the second boolean in this overload.
                         if (GlassRuntimeState.isIconEnabled()
                                 && args.length == 10 && args[0] instanceof RectF
-                                && args[1] instanceof RectF && args[6] instanceof Boolean
-                                && !((Boolean) args[6])) {
+                                && args[1] instanceof RectF && args[6] instanceof Boolean) {
                             Object owner = chain.getThisObject();
                             HookUtil.InvocationResult<Object> targetResult =
                                     HookUtil.tryInvoke(owner, "getAnimTarget");
@@ -248,6 +247,14 @@ final class MiuixLauncherStaticGlassHook {
                                 LauncherGlassStaticNode node =
                                         LauncherGlassStaticNode.find((View) target);
                                 if (node != null && args[2] instanceof Number) {
+                                    if ((Boolean) args[6]) {
+                                        // A running return can be retargeted into a new launch.
+                                        node.resetHomeReturnFade();
+                                        return chain.proceed(args);
+                                    }
+                                    if (args[3] instanceof Number) {
+                                        node.updateHomeReturnProgress(((Number) args[3]).floatValue());
+                                    }
                                     float proxyAlpha = ((Number) args[2]).floatValue();
                                     boolean drawIcon;
                                     if (useRotationRect) {

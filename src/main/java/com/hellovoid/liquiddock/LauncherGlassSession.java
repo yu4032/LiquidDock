@@ -690,14 +690,24 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private void scheduleOutputRender(boolean staticDirty, boolean dragDirty) {
         if (shuttingDown || folderFrameFrozen) return;
         if (outputRenderState.request(staticDirty, dragDirty)
-                && !postRender(this::drainOutputRenderWork)) {
+                && !postOutputRenderAfterUi()) {
             outputRenderState.onPostRejected();
         }
     }
 
+    private boolean postOutputRenderAfterUi() {
+        // Collect every icon/proxy mutation in the current UI turn before rendering the batch.
+        // Geometry remains uncapped so paging follows the native display cadence.
+        return mainHandler.post(() -> {
+            if (!postRender(this::drainOutputRenderWork)) {
+                outputRenderState.onPostRejected();
+            }
+        });
+    }
+
     private void drainOutputRenderWork() {
         int work = outputRenderState.consumeQueuedRender();
-        boolean trace = MainHook.debugLogging && workspaceSource && work != 0;
+        boolean trace = Trace.isEnabled() && workspaceSource && work != 0;
         if (trace) Trace.beginSection("LD.Workspace.GeometryFrame");
         try {
             if (!folderFrameFrozen && backdropPrepared && work != 0) {
@@ -712,7 +722,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
 
         if (outputRenderState.finishQueuedRender()
-                && !postRender(this::drainOutputRenderWork)) {
+                && !postOutputRenderAfterUi()) {
             outputRenderState.onPostRejected();
         }
     }
@@ -1199,7 +1209,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             return;
         }
-        boolean trace = MainHook.debugLogging && workspaceSource;
+        boolean trace = Trace.isEnabled() && workspaceSource;
         if (trace) Trace.beginSection("LD.Workspace.SourceFrame");
         try {
             boolean perf = MainHook.debugLogging;

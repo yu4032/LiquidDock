@@ -469,7 +469,7 @@ final class RootPassBlurBackend {
 
     void swapBuffers(EGLSurface surface) {
         requireRenderThread();
-        boolean trace = MainHook.debugLogging
+        boolean trace = Trace.isEnabled()
                 && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
         if (trace) Trace.beginSection("LD.Workspace.Swap");
         try {
@@ -652,7 +652,7 @@ final class RootPassBlurBackend {
             latchSourceFrame(input);
             if (generation < 0L || generation != sourceGeneration
                     || generation != state.requestedGeneration()) return;
-            boolean trace = MainHook.debugLogging
+            boolean trace = Trace.isEnabled()
                     && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
             RootPassBlurFrame frame;
             if (trace) Trace.beginSection("LD.Workspace.Normalize");
@@ -671,7 +671,7 @@ final class RootPassBlurBackend {
     }
 
     private void latchSourceFrame(SurfaceTexture input) {
-        boolean trace = MainHook.debugLogging
+        boolean trace = Trace.isEnabled()
                 && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
         if (trace) Trace.beginSection("LD.Workspace.SourceLatch");
         try {

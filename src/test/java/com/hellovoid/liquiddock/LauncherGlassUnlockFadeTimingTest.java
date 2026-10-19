@@ -2,6 +2,11 @@ package com.hellovoid.liquiddock;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class LauncherGlassUnlockFadeTimingTest {
+    @Test public void highLoadRevealUsesOnlyTheNativeAnimationTail() {
+        assertEquals(220, LauncherGlassUnlockFadeTiming.lateFadeDurationMs(1100, 979));
+        assertEquals(80, LauncherGlassUnlockFadeTiming.lateFadeDurationMs(1100, 80));
+        assertEquals(0, LauncherGlassUnlockFadeTiming.lateFadeDurationMs(1100, 0));
+    }
     @Test public void fadeEndsAtNativeDeadline() {
         assertEquals(650, LauncherGlassUnlockFadeTiming.fadeDelayMs(1100, 450));
         assertEquals(450, LauncherGlassUnlockFadeTiming.fadeDurationMs(1100, 450));

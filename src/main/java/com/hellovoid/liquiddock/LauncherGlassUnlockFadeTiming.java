@@ -2,6 +2,9 @@ package com.hellovoid.liquiddock;
 
 /** Predicts the native spring's equilibrium; its real end callback remains authoritative. */
 final class LauncherGlassUnlockFadeTiming {
+    static long lateFadeDurationMs(long remainingMs, long configuredMs) {
+        return Math.max(0L, Math.min(configuredMs, remainingMs / 5L));
+    }
     static long fadeDelayMs(long remainingMs, long fadeMs) {
         return Math.max(0L, remainingMs - Math.max(0L, fadeMs));
     }

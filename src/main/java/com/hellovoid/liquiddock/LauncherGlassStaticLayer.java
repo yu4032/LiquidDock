@@ -164,9 +164,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         cancelMotionAnimation();
         long remaining = Math.max(0L, endAt - SystemClock.uptimeMillis());
         long configured = AnimationRuntimeState.workspaceVisibilityDurationMs();
-        long duration = LauncherGlassUnlockFadeTiming.fadeDurationMs(remaining, configured);
+        long duration = LauncherGlassUnlockFadeTiming.lateFadeDurationMs(remaining, configured);
         long delay = duration > 0
-                ? LauncherGlassUnlockFadeTiming.fadeDelayMs(remaining, configured) : 0L;
+                ? LauncherGlassUnlockFadeTiming.fadeDelayMs(remaining, duration) : 0L;
         boolean animate = layerAlpha.startMotionReveal(duration);
         applyLayerAlpha();
         if (!animate) return;

@@ -32,7 +32,11 @@ final class PassBlurFrameRateLimiter {
                 + wholeSeconds * maxFps
                 + remainderNanos * maxFps / NANOS_PER_SECOND;
         if (scheduledFrames >= allowedFrames) return false;
-        scheduledFrames++;
+        // Missed source slots are dropped, not banked. Otherwise an idle HOME or paused
+        // producer can accumulate seconds of credit and render every incoming frame during
+        // the next unlock/app-return transition, bypassing the configured consumer cap.
+        // Keep the fractional cadence anchored so e.g. a 50 Hz source still averages 30 FPS.
+        scheduledFrames = allowedFrames;
         return true;
     }
 }
