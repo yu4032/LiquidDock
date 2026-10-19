@@ -27,8 +27,11 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(result.contains("gl_FragColor = vec4(color, opacity * u_transmittance);"));
         assertFalse(result.contains("color *= 1.0 - darken;"));
         assertTrue(result.contains("smoothstep("));
+        assertFalse(result.contains("u_os4EdgeEnabled > 0.5"));
+        assertTrue(result.contains("float lightEnergy = clamp("));
+        assertTrue(result.contains("float fadeStart = mix("));
         assertTrue(result.contains("float taper = darkness * darkness"));
-        assertTrue(result.contains("os4Directional / lightReference"));
+        assertTrue(result.contains("dot(edgeNormal, u_invariantLightXY)"));
         assertFalse(result.contains("abs(n.x)"));
         assertFalse(result.contains("u_strokeMinCos"));
         assertFalse(result.contains("abs(n.x)"));
@@ -89,18 +92,34 @@ public class PrismalEdgeDecorationShaderTest {
         assertEquals(0f, nativeOwner.extraGuardPx(3f), 0.00001f);
     }
 
-    @Test public void physicalLineTapersInBothThicknessAndOpacity() {
-        // This models the OS4 directional irradiance already evaluated per pixel.
-        float full = darkContour(0.0f, 1.5f, 0.85f, .60f);
-        float grazing = darkContour(0.30f, 1.5f, 0.85f, .60f);
-        float lit = darkContour(0.60f, 1.5f, 0.85f, .60f);
-        assertTrue(full > grazing);
-        assertTrue(grazing > lit);
-        assertEquals(0f, lit, 0.0001f);
-        assertEquals(0f, darkContour(0.0f, 0f, .85f, .60f), 0.0001f);
-        // No signed main-minus-fill: two equal lights can still produce
-        // grazing edges, as in the iOS reference screenshots.
-        assertTrue(darkContour(.1f, 1f, .85f, .60f) > 0f);
+    @Test public void stockDirectionalLightGivesSideHairlineAndBrightTopBottom() {
+        float lightX = -0.50f, lightY = -0.80f;
+        float length = (float) Math.hypot(lightX, lightY);
+        lightX /= length;
+        lightY /= length;
+        float left = darkContour(-1f, 0f, lightX, lightY, .42f, .14f, 1f, .85f, .60f);
+        float right = darkContour(1f, 0f, lightX, lightY, .42f, .14f, 1f, .85f, .60f);
+        float top = darkContour(0f, 1f, lightX, lightY, .42f, .14f, 1f, .85f, .60f);
+        float bottom = darkContour(0f, -1f, lightX, lightY, .42f, .14f, 1f, .85f, .60f);
+        assertTrue("left side should have a real hairline", left > .7f);
+        assertTrue("right side should have a real hairline", right > .7f);
+        assertEquals("top remains lit", 0f, top, .0001f);
+        assertEquals("bottom remains lit", 0f, bottom, .0001f);
+        assertEquals("balanced lighting does not erase grazing side lines",
+                left, darkContour(-1f, 0f, lightX, lightY,
+                        .42f, .42f, 1f, .85f, .60f), .0001f);
+    }
+
+    @Test public void darkRimTracksRotationAndFadesWithoutFixedSides() {
+        float side = darkContour(1f, 0f, 1f, 0f, .42f, .14f, 1f, .85f, .60f);
+        float top = darkContour(0f, 1f, 1f, 0f, .42f, .14f, 1f, .85f, .60f);
+        assertEquals(0f, side, .0001f);
+        assertTrue(top > .7f);
+        float grazing = darkContour(0f, 1f, .53f, .848f,
+                .42f, .14f, 1f, .85f, .60f);
+        assertTrue(grazing < top);
+        assertEquals(0f, darkContour(1f, 0f, 0f, 1f,
+                0f, 0f, 1f, .85f, .60f), .0001f);
     }
 
     @Test public void strokeIsInsideGlassAndDoesNotExpandRasterWhenShadowOff() {
@@ -117,17 +136,19 @@ public class PrismalEdgeDecorationShaderTest {
         assertEquals(0f, optical.extraGuardPx(3f), 0f);
     }
 
-    /** Scalar reference for a light-controlled near-black line of tapered width. */
-    private static float darkContour(float relativeLight, float maxWidth,
-                                     float maxAlpha, float softness) {
-        if (maxWidth <= 0f || maxAlpha <= 0f) return 0f;
-        float z = Math.max(0f, Math.min(1f,
-                relativeLight / Math.max(softness, .05f)));
-        float illuminated = z*z*(3f-2f*z);
-        float darkness = 1f-illuminated;
+    /** Numeric reference to the GLSL's 2D grazing-angle SDF absorption. */
+    private static float darkContour(float nx, float ny, float lx, float ly,
+                                     float main, float opposite, float width,
+                                     float opacity, float softness) {
+        float lightEnergy = Math.max(0f, Math.min(1f, (main+opposite)*2f));
+        if (lightEnergy <= .001f || width <= 0f || opacity <= 0f) return 0f;
+        float incidence = Math.abs(nx*lx + ny*ly);
+        float start = .30f + .35f*softness;
+        float end = Math.min(start+.30f,.99f);
+        float x = Math.max(0f, Math.min(1f,(incidence-start)/(end-start)));
+        float darkness = 1f - (x*x*(3f-2f*x));
         float taper = darkness*darkness*(3f-2f*darkness);
-        float width = maxWidth * taper;
-        return taper * maxAlpha * width;
+        return width*opacity*lightEnergy*taper*taper;
     }
 
     private static int occurrences(String s, String needle) {

@@ -67,21 +67,32 @@ final class PrismalEdgeDecorationShader {
                     // Keep separate alpha until the final, same-fragment blend:
                     // a translucent glass surface must NOT wash out the line.
                     float rimLineCoverage = 0.0;
-                    // OS4 has already evaluated both primary/secondary
-                    // directionality and angular falloff as os4Directional.
-                    if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0
-                            && u_os4EdgeEnabled > 0.5) {
-                        float lightReference = max(
-                                max(u_os4DirectionalIntensity,
-                                        u_os4DirectionalOppositeIntensity), 0.0);
-                        if (lightReference > 0.001) {
-                            float relativeLight = clamp(
-                                    os4Directional / lightReference, 0.0, 1.0);
-                            // Smoothly extinguish the line on illuminated
-                            // edges; no fixed left/right mask, sign test or
-                            // two-ended line segment to introduce hard caps.
-                            float darkness = 1.0 - smoothstep(0.0,
-                                    max(u_backlitSoftness, 0.05), relativeLight);
+                    // OS4's 3D face illumination carries a positive Z term,
+                    // so using os4Directional here makes even grazing side
+                    // contours appear lit and collapses the ink-alpha to zero.
+                    // Measure illumination along the 2D SDF edge normal instead.
+                    // This does not hardcode which sides of the glass are dark.
+                    // Edge absorption is deliberately independent of the
+                    // optional OS4 reflective-highlight visibility mask.
+                    if (u_backlitStrength > 0.0 && u_backlitWidthPx > 0.0) {
+                        float keyLight = max(u_os4DirectionalIntensity, 0.0);
+                        float fillLight = max(u_os4DirectionalOppositeIntensity, 0.0);
+                        float lightEnergy = clamp(
+                                (keyLight + fillLight) * 2.0, 0.0, 1.0);
+                        if (lightEnergy > 0.001) {
+                            vec2 edgeNormal = normalize(
+                                    os4SdfGradient + vec2(0.00001));
+                            float angularIncidence = abs(
+                                    dot(edgeNormal, u_invariantLightXY));
+                            // At the stock (-0.50,-0.80) light direction
+                            // side-edge incidence is ~0.53, top/bottom ~0.85.
+                            // A continuous grazing-angle falloff preserves a
+                            // real side line and extinguishes top/bottom rims.
+                            float fadeStart = mix(
+                                    0.30, 0.65, u_backlitSoftness);
+                            float fadeEnd = min(fadeStart + 0.30, 0.99);
+                            float darkness = 1.0 - smoothstep(
+                                    fadeStart, fadeEnd, angularIncidence);
                             float taper = darkness * darkness
                                     * (3.0 - 2.0 * darkness);
                             float lineWidthPx = u_backlitWidthPx * taper;
@@ -94,7 +105,7 @@ final class PrismalEdgeDecorationShader {
                                             max(lineWidthPx - aa, 0.0),
                                             lineWidthPx + aa, insideDistance));
                             float lineOpacity = clamp(
-                                    u_backlitStrength * taper * innerBand,
+                                    u_backlitStrength * lightEnergy * taper * innerBand,
                                     0.0, 0.98);
                             // Real pigment-like line: unlike mere color
                             // darkening, its coverage can remain visible when
