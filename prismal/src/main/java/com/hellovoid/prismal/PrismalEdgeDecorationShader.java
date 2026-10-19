@@ -125,20 +125,19 @@ final class PrismalEdgeDecorationShader {
                                     * entry * exit, 0.0, 0.98);
                         }
                     }
-                    // The rim uses one identically displaced prepared backdrop
-                    // sample on both sides of the SDF zero-crossing. Interior
-                    // glass then blends smoothly into Prismal's full lens/OS4
-                    // result. Only fragments with visible ink pay this fetch;
-                    // the shadow-only path stays texture-sample free.
+                    // The SDF is already native resolution, but the Gaussian
+                    // color texture is half the physical capture resolution.
+                    // A hairline must sample the unblurred source instead.
+                    // Both sides reuse the same displaced source sample;
+                    // the glass body still uses its normal blur and OS4 optics.
+                    // Shadow-only pixels incur no additional texture fetch.
                     vec3 edgeTransmission = vec3(0.0);
                     if (exteriorInkAlpha > 0.001) {
                         vec2 n = normalize(os4SdfGradient + vec2(0.00001));
                         vec2 rimUv = backdropUv(v_screenTexCoord,
                                 -n * max(u_os4ReflectOffsetPx, 1.0)
                                 * 0.5 / u_resolution, 0.0);
-                        edgeTransmission = u_useBlurredTexture == 1
-                                ? texture2D(u_blurredTexture, rimUv).rgb
-                                : texture2D(u_backgroundTexture, rimUv).rgb;
+                        edgeTransmission = texture2D(u_backgroundTexture, rimUv).rgb;
                     }
 
                     // Cast shadow remains below the glass and the optical line.
@@ -164,11 +163,12 @@ final class PrismalEdgeDecorationShader {
                     // Blend from the common edge sample into that shading
                     // with the original silhouette alpha.
                     if (underlayAlpha > 0.001) {
-                        // Both exterior and interior share edgeTransmission.
-                        // Use glass coverage to hand the edge smoothly to the
-                        // full Prismal result without a color seam at discard.
+                        // Preserve source detail in the AA band. Hand over
+                        // continuously to Prismal's blurred interior only
+                        // when the glass coverage is nearly opaque; alpha/SDF
+                        // geometry remains unchanged.
                         vec3 rimBase = mix(edgeTransmission, color,
-                                smoothstep(0.0, 0.45, opacity));
+                                smoothstep(0.55, 1.0, opacity));
                         vec3 rim = refractedContourColor(
                                 rimBase, OS4_OPTICAL_RIM_COLOR, rimDarkWeight, rimLightEnergy);
                         float innerFringe = smoothstep(

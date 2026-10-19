@@ -30,7 +30,7 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(source.contains("vec3 rimBase = mix(edgeTransmission, color,"));
         assertTrue(source.contains("vec3 rim = refractedContourColor("));
         assertTrue(source.contains("vec3 edgeTransmission = vec3(0.0);"));
-        assertTrue(source.contains("smoothstep(0.0, 0.45, opacity)"));
+        assertTrue(source.contains("smoothstep(0.55, 1.0, opacity)"));
         assertFalse(source.contains("vec3(0.015)"));
         assertTrue(source.contains("if (inkDistance > 0.0 && u_backlitStrength > 0.0"));
         assertTrue(source.contains("if (surfaceDistance > 0.0 && u_castShadowRadiusPx > 0.0"));
@@ -214,14 +214,17 @@ public class PrismalEdgeDecorationShaderTest {
     @Test public void insideAndOutsideContourUseOnePreparedBackdropSignal() {
         String source = PrismalEdgeDecorationShader.apply(upstream());
         assertTrue(source.contains("vec3 edgeTransmission = vec3(0.0);"));
-        assertTrue(source.contains("edgeTransmission = u_useBlurredTexture == 1"));
+        assertTrue(source.contains(
+                "edgeTransmission = texture2D(u_backgroundTexture, rimUv).rgb;"));
         assertTrue(source.contains("refractedContourColor(edgeTransmission,"));
         assertTrue(source.contains("vec3 rimBase = mix(edgeTransmission, color,"));
-        assertTrue(source.contains("smoothstep(0.0, 0.45, opacity)"));
+        assertTrue(source.contains("smoothstep(0.55, 1.0, opacity)"));
         assertEquals("edge sample must be shared between both branches",
                 1, occurrences(source, "vec2 rimUv = backdropUv("));
-        assertEquals("only one extra blurred-texture tap in optical rim",
-                1, occurrences(source, "texture2D(u_blurredTexture, rimUv)"));
+        assertEquals("one full-detail source sample shared across both edge branches",
+                1, occurrences(source, "texture2D(u_backgroundTexture, rimUv)"));
+        assertEquals("no Gaussian-blurred optical-rim sample",
+                0, occurrences(source, "texture2D(u_blurredTexture, rimUv)"));
         assertTrue(source.indexOf("vec3 edgeTransmission = vec3(0.0);")
                 < source.indexOf("if (opacity < 0.001) {"));
     }
@@ -231,6 +234,19 @@ public class PrismalEdgeDecorationShaderTest {
         for (int pos = 0; (pos = s.indexOf(token, pos)) >= 0; pos += token.length())
             count++;
         return count;
+    }
+
+    @Test public void opticalRimUsesSourcePixelsWhileMainGlassKeepsItsBlur() {
+        String source = PrismalEdgeDecorationShader.apply(upstream());
+        int begin = source.indexOf("// The SDF is already native resolution");
+        int end = source.indexOf("// Cast shadow remains below", begin);
+        assertTrue(begin >= 0 && end > begin);
+        String contour = source.substring(begin, end);
+        assertTrue(contour.contains("texture2D(u_backgroundTexture, rimUv)"));
+        assertFalse(contour.contains("texture2D(u_blurredTexture, rimUv)"));
+        assertFalse(contour.contains("u_useBlurredTexture == 1"));
+        assertTrue(source.contains("smoothstep(0.55, 1.0, opacity)"));
+        assertTrue(source.contains("texture2D(u_blurredTexture, uvCenter)"));
     }
 
     @Test public void materialTintPreservesSourceHueInsteadOfWhiteBlackEndpoints() {
