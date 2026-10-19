@@ -31,8 +31,8 @@ final class PrismalEdgeDecorationShader {
         return shader.replace(PRECISION, PRECISION + """
                 uniform float u_backlitWidthPx;
                 uniform float u_backlitStrength;
-                uniform float u_backlitSoftness;
-                uniform float u_backlitExtent;
+                uniform float u_backlitGrazingStart;
+                uniform float u_backlitGrazingSpan;
                 uniform float u_backlitViewportInsetPx;
                 uniform vec4 u_castShadowColor;
                 uniform float u_castShadowRadiusPx;
@@ -96,20 +96,14 @@ final class PrismalEdgeDecorationShader {
                             // curved SDF normal, not whether the stroke exists.
                             // At 0% the config disables the rim entirely.
                             float grazing = clamp(1.0 - angularIncidence, 0.0, 1.0);
-                            float reachStart = mix(1.0, -0.20, u_backlitExtent);
-                            float progress = clamp((grazing - reachStart)
-                                    / max(1.0 - reachStart, 0.001), 0.0, 1.0);
-                            // Softness only changes the taper curve INSIDE the
-                            // reach interval; it never extends its start point.
-                            // 200% uses the full interval; 5% rises quickly.
-                            float softness = clamp(u_backlitSoftness * 0.5, 0.0, 1.0);
-                            float quick = smoothstep(0.0, 0.08, progress);
-                            float gradual = smoothstep(0.0, 1.0, progress);
-                            float taper = mix(quick, gradual, softness);
-                            float e2 = u_backlitExtent * u_backlitExtent;
-                            float e4 = e2 * e2;
-                            taper = max(taper, 0.18 * e4 * e4);
-                            rimDarkWeight = taper;
+                            // Delay the darkening until the tangent is close to
+                            // the unlit straight edge. A single smoothstep avoids
+                            // the previous double-knee and near-instant black arc.
+                            // Threshold/span are computed once per material on CPU.
+                            rimDarkWeight = smoothstep(
+                                    u_backlitGrazingStart,
+                                    u_backlitGrazingStart + u_backlitGrazingSpan,
+                                    grazing);
                             float lineWidthPx = u_backlitWidthPx;
                             float outsideAa = max(edgeAa * 0.5, 0.25);
                             float entry = smoothstep(0.0, outsideAa,

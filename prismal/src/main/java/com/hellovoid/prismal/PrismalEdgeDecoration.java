@@ -56,6 +56,20 @@ public final class PrismalEdgeDecoration {
         this.shadowLightFollow = bounded(shadowLightFollow, 0f, 1f);
     }
 
+    /**
+     * A single dark-color lobe fitted to the reference rounded corner.
+     * 55% extent starts near 75 degrees from the lit straight edge.
+     * This runs on immutable material changes, not per shader fragment.
+     */
+    public float backlitGrazingStart() {
+        return 1f - (float) Math.pow(backlitExtent, 2.25);
+    }
+
+    /** Softness affects transition length only, never its starting angle. */
+    public float backlitGrazingSpan() {
+        return 0.045f + 0.105f * Math.min(1f, backlitSoftness * 0.5f);
+    }
+
     public boolean hasBacklit() {
         return backlitExtent > 0f && backlitWidthDp > 0f && backlitStrength > 0f;
     }

@@ -48,7 +48,7 @@ public class PrismalEdgeDecorationShaderTest {
                 source.indexOf("// Ink is in front of the outer cast shadow"));
         assertTrue(ink.contains("dot(edgeNormal, u_invariantLightXY)"));
         assertTrue(ink.contains("float lineWidthPx = u_backlitWidthPx;"));
-        assertTrue(ink.contains("rimDarkWeight = taper;"));
+        assertTrue(ink.contains("rimDarkWeight = smoothstep("));
         assertFalse(ink.contains("u_backlitStrength * lightEnergy * taper"));
         assertTrue(ink.contains("if (inkDistance > 0.0"));
         assertTrue(ink.contains("lineWidthPx + outsideAa, inkDistance)"));
@@ -59,80 +59,69 @@ public class PrismalEdgeDecorationShaderTest {
         assertFalse(ink.contains("abs(edgeNormal.x)"));
         assertFalse(ink.contains("gl_FragColor"));
         assertFalse(ink.contains("u_os4EdgeEnabled > 0.5"));
-        assertTrue(ink.contains("float reachStart = mix(1.0, -0.20, u_backlitExtent);"));
-        assertTrue(ink.contains("float softness = clamp(u_backlitSoftness * 0.5"));
-        assertTrue(ink.contains("float gradual = smoothstep(0.0, 1.0, progress);"));
-        assertTrue(ink.contains("taper = max(taper, 0.18 * e4 * e4);"));
-        assertFalse(ink.contains("float taper = mix(0.04"));
+        assertTrue(ink.contains("u_backlitGrazingStart + u_backlitGrazingSpan"));
+        assertFalse(ink.contains("float quick ="));
+        assertFalse(ink.contains("float gradual ="));
+        assertFalse(ink.contains("taper ="));
         assertFalse(ink.contains("float transitionWidth = mix("));
-        assertTrue(source.contains("uniform float u_backlitExtent;"));
+        assertTrue(source.contains("uniform float u_backlitGrazingStart;"));
+        assertTrue(source.contains("uniform float u_backlitGrazingSpan;"));
         assertTrue(ink.contains("float grazing = clamp(1.0 - angularIncidence"));
         assertFalse(ink.contains("fadeStart"));
         assertFalse(ink.contains("fadeEnd"));
     }
 
-    @Test public void zeroReachHasNoHiddenFullPerimeterRim() {
+    @Test public void zeroExtentDisablesTheOptionalRimButShadowStillWorks() {
         PrismalEdgeDecoration zero = new PrismalEdgeDecoration(
-                1f, .85f, .60f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+                1f, .85f, .6f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
         assertFalse(zero.hasBacklit());
         assertEquals(0f, zero.extraGuardPx(3f), 0f);
-        for (int i=0;i<=1000;i++)
-            assertEquals(0f, rimWeight(i/1000f, .6f, 0f), 0f);
-        // Near zero, the visible angle is genuinely narrow.
-        assertEquals(0f, rimWeight(.53f, .6f, .08f), .000001f);
-        assertEquals(0f, rimWeight(.85f, 2f, .08f), .000001f);
-        assertTrue(rimWeight(.001f, .6f, .08f) > 0f);
+        PrismalEdgeDecoration shadow = new PrismalEdgeDecoration(
+                1f, .85f, .6f, 15f, 3f, 0f, 0f, 0f, .25f, .65f, 0f);
+        assertFalse(shadow.hasBacklit());
+        assertTrue(shadow.hasShadow());
     }
 
-    @Test public void extentControlsReachIndependentlyFromSoftness() {
-        float shortCorner = rimWeight(.69f, .6f, .1f);
-        float longCorner = rimWeight(.69f, .6f, .8f);
-        assertEquals(0f, shortCorner, .0001f);
-        assertTrue(longCorner > .1f);
-        assertTrue(rimWeight(.53f, .6f, .75f)
-                > rimWeight(.53f, .6f, .25f));
-        // 100% spans full circle, including a faint seam at exact face-light.
-        assertTrue(rimWeight(1f, 2f, 1f) >= .18f - .0001f);
-        assertEquals(1f, rimWeight(0f, .6f, 1f), .0001f);
+    @Test public void measuredReferenceCornerDelaysDarkTransitionToSeventyFiveDegrees() {
+        PrismalEdgeDecoration material = new PrismalEdgeDecoration(
+                1f, .85f, .6f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, .55f);
+        float start = material.backlitGrazingStart();
+        float span = material.backlitGrazingSpan();
+        assertEquals(.739f, start, .005f);
+        assertEquals(.0765f, span, .0001f);
+        assertTrue(weightAtDegrees(70, material) < .05f);
+        assertTrue(weightAtDegrees(75, material) < .10f);
+        assertTrue(weightAtDegrees(78, material) > .15f);
+        assertTrue(weightAtDegrees(80, material) > .90f);
     }
 
-    @Test public void twoHundredPercentSoftnessIsMoreGradualButNotLonger() {
-        float normal = .45f, reach = .55f;
-        float sharp = rimWeight(normal, .05f, reach);
-        float soft = rimWeight(normal, 2f, reach);
-        assertTrue(sharp > soft);
-        assertTrue(soft > 0f);
-        // The deliberately tiny high-extent floor is independent of taper
-        // softness when the normal is outside the adjustable visible reach.
-        assertEquals(rimWeight(.95f, .05f, reach),
-                rimWeight(.95f, 2f, reach), .0000001f);
-        for(float extent:new float[]{0f,.1f,.55f,.9f,1f}) {
-            float prev=rimWeight(0f,2f,extent);
-            for(int i=1;i<=1000;i++){
-                float curr=rimWeight(i/1000f,2f,extent);
-                assertTrue(curr <= prev + .00001f);
-                assertTrue(prev - curr < .02f);
-                prev=curr;
-            }
+    @Test public void extentChangesDarkStartAndSoftnessOnlyChangesTransitionSpan() {
+        float lastStart = Float.POSITIVE_INFINITY;
+        for (float e : new float[] {.001f, .1f, .25f, .55f, .8f, 1f}) {
+            PrismalEdgeDecoration sharp = new PrismalEdgeDecoration(
+                    1f, .85f, .05f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, e);
+            PrismalEdgeDecoration soft = new PrismalEdgeDecoration(
+                    1f, .85f, 2f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, e);
+            assertTrue(sharp.backlitGrazingStart() <= lastStart);
+            assertEquals(sharp.backlitGrazingStart(), soft.backlitGrazingStart(), .000001f);
+            assertTrue(soft.backlitGrazingSpan() > sharp.backlitGrazingSpan());
+            assertEquals(0f, lobe(sharp.backlitGrazingStart(),
+                    sharp.backlitGrazingStart(), sharp.backlitGrazingSpan()), .00001f);
+            lastStart = sharp.backlitGrazingStart();
         }
     }
 
-    private static float rimWeight(float incidence,float softness,float extent){
-        float grazing = Math.max(0f, Math.min(1f,1f-incidence));
-        float reachStart=1f-1.2f*extent;
-        float progress=Math.max(0f, Math.min(1f,
-                (grazing-reachStart)/Math.max(1f-reachStart,.001f)));
-        float quick=smooth(progress/.08f);
-        float gradual=smooth(progress);
-        float taper=quick*(1f-Math.min(1f,softness*.5f))
-                + gradual*Math.min(1f,softness*.5f);
-        float e2=extent*extent;
-        float e4=e2*e2;
-        return Math.max(taper,.18f*e4*e4);
+    private static float weightAtDegrees(int degrees, PrismalEdgeDecoration material) {
+        float grazing = 1f - (float) Math.cos(Math.toRadians(degrees));
+        return lobe(grazing, material.backlitGrazingStart(), material.backlitGrazingSpan());
+    }
+
+    private static float lobe(float grazing, float start, float span) {
+        return smooth((grazing - start) / span);
     }
 
     private static float smooth(float t) {
-        t=Math.max(0f,Math.min(1f,t));
+        t = Math.max(0f, Math.min(1f, t));
         return t*t*(3f-2f*t);
     }
 
