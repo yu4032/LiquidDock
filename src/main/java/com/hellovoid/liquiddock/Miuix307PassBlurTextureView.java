@@ -206,7 +206,6 @@ final class Miuix307PassBlurTextureView extends TextureView
     private final float[] textureMatrix = new float[16];
     private final Rect winFrameScratch = new Rect();
     private final int[] viewScreenScratch = new int[2];
-    private final int[] nativeDockScreenScratch = new int[2];
     // UI-thread pre-draw sampling cache. The GL lifecycle path uses its own local result.
     private final SamplingInsets uiSamplingInsetsCache = new SamplingInsets();
     private final int[] uiInsetPairScratch = new int[2];
@@ -1513,13 +1512,15 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (winFrame == null || winFrame.width() <= 0 || winFrame.height() <= 0) return;
         int[] viewScreen = viewScreenScratch;
         getLocationOnScreen(viewScreen);
-        View nativeDock = materialHostRef.get();
+        // The TextureView is a direct child of DockLiquidGlassHostView.
+        // Use LOCAL layout offsets so Launcher parent scale/translation
+        // animations cannot multiply the shadow margin and shift the glass.
+        View nativeDock = getParent() instanceof View
+                ? (View) getParent() : materialHostRef.get();
         if (nativeDock == null || nativeDock.getWidth() <= 0
                 || nativeDock.getHeight() <= 0) return;
-        int[] dockScreen = nativeDockScreenScratch;
-        nativeDock.getLocationOnScreen(dockScreen);
-        int dockLocalLeft = dockScreen[0] - viewScreen[0];
-        int dockLocalTop = dockScreen[1] - viewScreen[1];
+        int dockLocalLeft = -getLeft();
+        int dockLocalTop = -getTop();
         int dockNativeWidth = nativeDock.getWidth();
         int dockNativeHeight = nativeDock.getHeight();
 
