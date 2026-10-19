@@ -159,8 +159,6 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
 
     LauncherGlassNodeKind nodeKind() { return nodeKind; }
 
-    boolean isExternalSessionAuthority() { return externalSessionAuthority; }
-
     void setNodeKind(LauncherGlassNodeKind value) {
         nodeKind = value != null ? value : LauncherGlassNodeKind.LARGE_FOLDER;
         syncFromMaterial();
