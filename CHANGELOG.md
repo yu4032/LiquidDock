@@ -6,6 +6,32 @@
 
 （暂无。）
 
+## v2.7.4（2026-10-19）
+
+### 液态玻璃阴影与边缘
+
+- 为 Dock、图标、小组件、文件夹和支持的浮层增加独立可继承的 Prismal 阴影及光学描边参数，改进折射轮廓、内侧高光和柔和投影的连续性。[#428](https://github.com/yu4032/LiquidDock/pull/428)
+- 修复 Dock 外侧投影被输出区域裁切；改善弹窗和拖拽图标、小组件、文件夹时阴影、描边不完整的问题，并修正拖拽材质误继承对话框配置的问题。[#428](https://github.com/yu4032/LiquidDock/pull/428)、[#432](https://github.com/yu4032/LiquidDock/pull/432)
+
+### 菜单与设置
+
+- Launcher 快捷菜单与 SystemUI 顶部菜单各自支持玻璃开关、颜色、模糊及独立光学参数设置。[#425](https://github.com/yu4032/LiquidDock/pull/425)
+- 四个根设置页面支持下拉搜索，结果定位对应页面；搜索与底栏共享动画时间轴。[#431](https://github.com/yu4032/LiquidDock/pull/431)
+- 明确区分原生 Dock 阴影、Dock 描边与液态玻璃阴影；调整未配置用户的部分默认光学参数，重新组织颜色、色散、折射与光照等功能分组。[#430](https://github.com/yu4032/LiquidDock/pull/430)
+- 优化设置弹窗阴影绘制空间和动画层级，避免光学边缘在弹窗内部被裁切。[#432](https://github.com/yu4032/LiquidDock/pull/432)
+
+### 桌面与性能
+
+- 新增文件夹打开时其他玻璃组件的独立渐隐时长，默认 180 ms。[#423](https://github.com/yu4032/LiquidDock/pull/423)
+- 优化 Workspace 静态图标、文件夹和小组件的几何缓存与祖先属性采样，减少稳定画面下的重复计算，不改变拖拽与动画期间的原生几何权威；性能对比来自不同采集会话，不据此承诺 FPS 增益。[#420](https://github.com/yu4032/LiquidDock/pull/420)、[#421](https://github.com/yu4032/LiquidDock/pull/421)、[#422](https://github.com/yu4032/LiquidDock/pull/422)
+- 增加绵狗修改版桌面真实 2×2 大文件夹加载恢复选项，默认关闭，仅由独立开关启用；不会自动探测桌面包或版本。[#432](https://github.com/yu4032/LiquidDock/pull/432)
+
+### 升级提醒
+
+- 主要面向 HyperOS 3 / Launcher 4.50。建议备份桌面布局与配置，新增 Hook 需要重启相应作用域。
+- 新光学默认值不覆盖已有用户配置；第三方修改版桌面兼容功能默认关闭。
+
+
 ## v2.7.3（2026-10-17）
 
 ### 展开文件夹液态玻璃
