@@ -46,7 +46,6 @@ final class WorkstationDockGeometryHook {
         refreshInstalledWidth();
         Miuix307ZeroCopyRenderer.setWorkstationTaskbarMode(
                 MainHook.isWorkstationMode() && taskbarEnabled);
-        WorkstationDockCustomizationHook.refreshTaskbarIconCentering();
     }
 
     private static void refreshInstalledWidth() {
@@ -105,7 +104,24 @@ final class WorkstationDockGeometryHook {
         }
         for (Binding binding : snapshot) binding.apply(enabled && dockEnabled);
         Miuix307ZeroCopyRenderer.setWorkstationTaskbarMode(enabled && taskbarEnabled);
-        WorkstationDockCustomizationHook.refreshTaskbarIconCentering();
+        WorkstationDockCustomizationHook.onWorkstationModeChanged(enabled);
+    }
+
+    /**
+     * Native Dock windows resize and reposition after configuration callbacks, not necessarily
+     * in the same frame. Reconcile their physical bottom anchor before the GPU host samples
+     * screen geometry; only the actual translation delta is written.
+     */
+    static void reconcileTaskbarPlacementForFrame() {
+        if (!MainHook.isWorkstationMode() || !dockEnabled || !taskbarEnabled) return;
+        ArrayList<Binding> snapshot = new ArrayList<>();
+        synchronized (bindings) {
+            for (WeakReference<Binding> ref : bindings.values()) {
+                Binding binding = ref != null ? ref.get() : null;
+                if (binding != null) snapshot.add(binding);
+            }
+        }
+        for (Binding binding : snapshot) binding.reconcileTaskbarPosition();
     }
 
     private static void bindFromAnchor(View anchor) {
@@ -190,6 +206,13 @@ final class WorkstationDockGeometryHook {
             containerRef.clear();
         }
 
+        void reconcileTaskbarPosition() {
+            View container = containerRef.get();
+            if (container != null && container.isAttachedToWindow()) {
+                applyTaskbarPosition(container, true);
+            }
+        }
+
         void apply(boolean workstation) {
             View container = containerRef.get();
             if (container == null) return;
@@ -221,8 +244,7 @@ final class WorkstationDockGeometryHook {
                 }
                 originalTranslationY = Float.NaN;
                 appliedTranslationY = Float.NaN;
-                WorkstationDockCustomizationHook.refreshTaskbarIconCentering();
-                return;
+                        return;
             }
             Display display = container.getDisplay();
             if (display == null || container.getHeight() <= 0) return;
@@ -239,7 +261,6 @@ final class WorkstationDockGeometryHook {
             if (Math.abs(target - current) < 0.5f) return;
             container.setTranslationY(target);
             appliedTranslationY = target;
-            WorkstationDockCustomizationHook.refreshTaskbarIconCentering();
-        }
+            }
     }
 }
