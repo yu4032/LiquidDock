@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock
 
 import android.content.Intent
 import android.content.SharedPreferences
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -30,7 +31,11 @@ internal fun ThirdPartyAppsPage(
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
     val context = LocalContext.current
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = padding,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         item {
             GboardPageHeader(
                 "第三方应用适配",
@@ -169,7 +174,11 @@ internal fun GboardSettingsPage(
         appearanceGeneration++
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = padding,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         item {
             GboardPageHeader(
                 "Gboard",
@@ -189,6 +198,7 @@ internal fun GboardSettingsPage(
                     summary = "关闭后保留 Gboard 原生悬浮键盘材质；已保存的独立外观参数不会丢失",
                     enabled = masterEnabled && liquidEnabled,
                 )
+                ModernListDivider()
                 SwitchPreference(
                     checked = autoResizeAfterHandleDrag,
                     onCheckedChange = {
@@ -201,6 +211,11 @@ internal fun GboardSettingsPage(
                     summary = "关闭后，拖动底部手柄只移动悬浮键盘；仍可通过 Gboard 原生入口手动调整大小",
                     enabled = masterEnabled,
                 )
+            }
+        }
+        item(key = "gboard-sampling-title") { SmallTitle("背景采样") }
+        item(key = "gboard-sampling") {
+            GboardSettingsCard {
                 SwitchPreference(
                     checked = realtimeBackgroundSampling,
                     onCheckedChange = {
@@ -248,6 +263,10 @@ internal fun GboardSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
+            }
+        }
+        item(key = "gboard-color-alpha") {
+            GboardSettingsCard {
                 GboardValueSlider(
                     key = GboardGlassPreferences.TINT_ALPHA_KEY,
                     title = "不透明度",
@@ -272,6 +291,11 @@ internal fun GboardSettingsPage(
                     max = 60,
                     unit = "px",
                 )
+            }
+        }
+        item(key = "gboard-appearance-reset-heading") { SmallTitle("外观恢复") }
+        item(key = "gboard-appearance-reset") {
+            GboardSettingsCard {
                 ArrowPreference(
                     title = "恢复继承全局外观",
                     summary = "删除 Gboard 的颜色与模糊度覆盖，重新跟随全局液态玻璃参数",

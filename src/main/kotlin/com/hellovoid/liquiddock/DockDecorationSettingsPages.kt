@@ -18,7 +18,7 @@ internal fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, master
     var dockStroke by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_ENABLED.name(), ConfigSchema.Dock.STROKE_ENABLED.uiDefault())) }
     var squircle by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SQUIRCLE.name(), ConfigSchema.Dock.SQUIRCLE.uiDefault())) }
     var fillDiff by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.FILL_DIFF.name(), ConfigSchema.Dock.FILL_DIFF.uiDefault())) }
-    DenseSettingsList(padding, "描边") {
+    DenseSettingsList(padding, "Dock描边") {
         item(key = "stroke-enabled") {
             SettingsCard {
                 BooleanSetting(prefs, ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边", "控制 Dock 边框与灯光", masterEnabled) { dockStroke = it }
@@ -63,32 +63,38 @@ internal fun ShadowPage(
     open: (Page) -> Unit,
 ) {
     val dockEnabled = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
+    val glassEnabled = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
+    val nativeShadowEnabled = masterEnabled && dockEnabled && !glassEnabled
     var dockShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.SHADOW_ENABLED.name(), ConfigSchema.Dock.SHADOW_ENABLED.uiDefault())) }
     var strokeShadow by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Dock.STROKE_SHADOW.name(), ConfigSchema.Dock.STROKE_SHADOW.uiDefault())) }
-    DenseSettingsList(padding, "阴影") {
+    DenseSettingsList(
+        padding,
+        "原生Dock阴影",
+        "仅开启 Dock 自定义且关闭液态玻璃时生效。启用液态玻璃后，Dock 阴影改由 Prismal 渲染。",
+    ) {
         item(key = "dock-shadow-enabled") {
             SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Dock.SHADOW_ENABLED, "整个 Dock 下方阴影", "跟随 Dock 长宽、高度和圆角", masterEnabled && dockEnabled) { dockShadow = it }
+                BooleanSetting(prefs, ConfigSchema.Dock.SHADOW_ENABLED, "Dock 原生阴影", "仅 Dock 自定义开启且液态玻璃关闭时生效", nativeShadowEnabled) { dockShadow = it }
             }
         }
         item(key = "dock-optical-response") {
             SettingsCard {
                 ArrowPreference(
-                    title = "玻璃边缘光照",
-                    summary = "使用 OS4 高光与背光透射微暗；保留整个 Dock 下方原生投影",
-                    enabled = masterEnabled && dockEnabled,
+                    title = "液态玻璃阴影",
+                    summary = "独立调整 Prismal 外阴影与边缘描边；仅开启液态玻璃时生效",
+                    enabled = masterEnabled && glassEnabled,
                     onClick = { open(Page.DockEdge) },
                 )
             }
         }
         item(key = "stroke-shadow-enabled") {
             SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Dock.STROKE_SHADOW, "描边阴影", "描边下方的柔和阴影", masterEnabled && dockEnabled) { strokeShadow = it }
+                BooleanSetting(prefs, ConfigSchema.Dock.STROKE_SHADOW, "原生描边阴影", "仅 Dock 自定义开启且液态玻璃关闭时生效", nativeShadowEnabled) { strokeShadow = it }
             }
         }
         items(shadowSpecs, key = { it.key }) { spec ->
             SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && dockEnabled && when (spec.dependency) {
+                IntSetting(prefs, spec, nativeShadowEnabled && when (spec.dependency) {
                     "dock_shadow" -> dockShadow
                     "stroke_shadow" -> strokeShadow
                     else -> true

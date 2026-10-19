@@ -15,6 +15,54 @@ public class GlassEdgeEffectsTest {
         assertFalse(material.hasShadow());
     }
 
+    @Test public void newOpticalDefaultsAreConsistentAcrossScopes() {
+        assertEquals(.4f, ConfigSchema.Glass.BACKLIT_WIDTH.uiDefaultDp(), .0001f);
+        assertEquals(.4f, ConfigSchema.Glass.BACKLIT_WIDTH.runtimeFallbackDp(), .0001f);
+        assertEquals(Integer.valueOf(20), ConfigSchema.Glass.BACKLIT_STRENGTH.uiDefault());
+        assertEquals(Integer.valueOf(100), ConfigSchema.Glass.BACKLIT_EXTENT.uiDefault());
+        assertEquals(Integer.valueOf(68), ConfigSchema.Glass.BACKLIT_SOFTNESS.uiDefault());
+        assertEquals(Integer.valueOf(5), ConfigSchema.Glass.OUTER_SHADOW_RADIUS.uiDefault());
+        assertEquals(Integer.valueOf(0), ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y.uiDefault());
+        assertEquals(Integer.valueOf(65), ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW.uiDefault());
+        assertEquals(Integer.valueOf(8), ConfigSchema.Glass.OUTER_SHADOW_ALPHA.uiDefault());
+        Map<String,Object> opts = new HashMap<>();
+        opts.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(), true);
+        opts.put(ConfigSchema.Glass.OUTER_SHADOW_ENABLED.name(), true);
+        ConfigReader blank = new ConfigReader(opts);
+        for (String scope : new String[] {GlassEdgeEffects.GLOBAL,
+                GlassEdgeEffects.DOCK, GlassEdgeEffects.WIDGET,
+                GlassEdgeEffects.FOLDER}) {
+            PrismalEdgeDecoration d = GlassEdgeEffects.resolve(blank,scope);
+            assertEquals(.4f,d.backlitWidthDp,.0001f);
+            assertEquals(.20f,d.backlitStrength,.0001f);
+            assertEquals(1f,d.backlitExtent,.0001f);
+            assertEquals(.68f,d.backlitSoftness,.0001f);
+            assertEquals(5f,d.shadowRadiusDp,.0001f);
+            assertEquals(0f,d.shadowOffsetYDp,.0001f);
+            assertEquals(.65f,d.shadowLightFollow,.0001f);
+            assertEquals(8f/255f,d.shadowA,.0001f);
+        }
+    }
+
+    @Test public void savedFractionalWidthsOverrideNewDefault() {
+        Map<String,Object> map=new HashMap<>();
+        map.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(),true);
+        map.put(ConfigSchema.Glass.BACKLIT_WIDTH.name(),1);
+        map.put(ConfigSchema.Glass.BACKLIT_WIDTH.name()+"_tenths",12);
+        ConfigReader existing=new ConfigReader(map);
+        assertEquals(1.2f,GlassEdgeEffects.resolve(
+                existing,GlassEdgeEffects.WIDGET).backlitWidthDp,.0001f);
+        String dockWidth=GlassEdgeEffects.key(
+                GlassEdgeEffects.DOCK,ConfigSchema.Glass.BACKLIT_WIDTH);
+        map.put(dockWidth,0);
+        map.put(dockWidth+"_tenths",6);
+        ConfigReader scoped=new ConfigReader(map);
+        assertEquals(.6f,GlassEdgeEffects.resolve(
+                scoped,GlassEdgeEffects.DOCK).backlitWidthDp,.0001f);
+        assertEquals(1.2f,GlassEdgeEffects.resolve(
+                scoped,GlassEdgeEffects.FOLDER).backlitWidthDp,.0001f);
+    }
+
     @Test public void dockUsesSamePrismalShadowMaterialAsWidgetAndIcon() {
         Map<String,Object> map = new HashMap<>();
         map.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(), true);
@@ -73,7 +121,7 @@ public class GlassEdgeEffectsTest {
         assertEquals(.65f, GlassEdgeEffects.resolve(
                 reader, GlassEdgeEffects.GLOBAL).backlitExtent, .0001f);
         PrismalEdgeDecoration dock = GlassEdgeEffects.resolve(reader, GlassEdgeEffects.DOCK);
-        assertEquals(.60f, dock.backlitSoftness, .0001f);
+        assertEquals(.68f, dock.backlitSoftness, .0001f);
     }
 
     @Test public void scopedFractionalDpAndMaterialSoftnessAreIndependent() {
@@ -87,6 +135,6 @@ public class GlassEdgeEffectsTest {
                 new ConfigReader(map), GlassEdgeEffects.WIDGET);
         assertEquals(1.4f, widget.backlitWidthDp, 0.0001f);
         assertTrue(widget.backlitSoftness > 0f);
-        assertEquals(.55f, widget.backlitExtent, 0.0001f);
+        assertEquals(1f, widget.backlitExtent, 0.0001f);
     }
 }

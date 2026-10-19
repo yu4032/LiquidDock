@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import android.content.SharedPreferences
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
@@ -124,7 +126,11 @@ private fun ScopedMenuGlassSettingsPage(
         )
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = padding,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         item(key = "shortcut-header") {
             PageHeader(
                 stringResource(titleRes),
@@ -159,6 +165,10 @@ private fun ScopedMenuGlassSettingsPage(
                 appearance(ConfigSchema.Glass.TINT_RED, "红")
                 appearance(ConfigSchema.Glass.TINT_GREEN, "绿")
                 appearance(ConfigSchema.Glass.TINT_BLUE, "蓝")
+            }
+        }
+        item(key = "shortcut-color-alpha") {
+            SettingsCard {
                 appearance(ConfigSchema.Glass.TINT_ALPHA, "不透明度")
             }
         }
@@ -166,6 +176,11 @@ private fun ScopedMenuGlassSettingsPage(
         item(key = "shortcut-blur") {
             SettingsCard {
                 appearance(ConfigSchema.Glass.BLUR, blurTitle, "px")
+            }
+        }
+        item(key = "shortcut-reset-title") { SmallTitle("外观恢复") }
+        item(key = "shortcut-reset") {
+            SettingsCard {
                 ArrowPreference(
                     title = "恢复继承全局外观",
                     summary = "只清除当前菜单的颜色与模糊覆盖，不影响独立光学参数",
@@ -177,8 +192,8 @@ private fun ScopedMenuGlassSettingsPage(
         item(key = "shortcut-edge") {
             SettingsCard {
                 ArrowPreference(
-                    title = "玻璃光照与投影",
-                    summary = "保留 Prismal OS4 高光；背光微暗与整体外阴影分别调节",
+                    title = "阴影",
+                    summary = "Prismal 外阴影与光学描边可独立调节",
                     enabled = controlsEnabled,
                     onClick = onOpenEdge,
                 )

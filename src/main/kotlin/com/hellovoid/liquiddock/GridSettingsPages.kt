@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigSchema
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Text
 
@@ -263,7 +264,20 @@ internal fun GridLandscapePage(
         stringResource(R.string.page_grid_landscape),
         "调整横屏桌面的间距与页面指示器位置。",
     ) {
-        groupedIntSettings(landscapeSpecs, prefs, masterEnabled && customGrid)
+        val enabled = masterEnabled && customGrid
+        item(key = "landscape-position-title") { SmallTitle("工作区位置") }
+        groupedIntSettings(landscapeSpecs.filterNot {
+            it.key == ConfigSchema.Grid.LANDSCAPE_ROW_GAP.name() ||
+                it.key == ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y.name()
+        }, prefs, enabled)
+        item(key = "landscape-gap-title") { SmallTitle("图标行间距") }
+        groupedIntSettings(landscapeSpecs.filter {
+            it.key == ConfigSchema.Grid.LANDSCAPE_ROW_GAP.name()
+        }, prefs, enabled)
+        item(key = "landscape-indicator-title") { SmallTitle("页面指示器") }
+        groupedIntSettings(landscapeSpecs.filter {
+            it.key == ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y.name()
+        }, prefs, enabled)
     }
 }
 
@@ -285,7 +299,20 @@ internal fun GridPortraitPage(
         stringResource(R.string.page_grid_portrait),
         "调整竖屏桌面的间距与页面指示器位置。",
     ) {
-        groupedIntSettings(portraitSpecs, prefs, masterEnabled && customGrid)
+        val enabled = masterEnabled && customGrid
+        item(key = "portrait-position-title") { SmallTitle("工作区位置") }
+        groupedIntSettings(portraitSpecs.filterNot {
+            it.key == ConfigSchema.Grid.PORTRAIT_ROW_GAP.name() ||
+                it.key == ConfigSchema.Grid.PORTRAIT_INDICATOR_Y.name()
+        }, prefs, enabled)
+        item(key = "portrait-gap-title") { SmallTitle("图标行间距") }
+        groupedIntSettings(portraitSpecs.filter {
+            it.key == ConfigSchema.Grid.PORTRAIT_ROW_GAP.name()
+        }, prefs, enabled)
+        item(key = "portrait-indicator-title") { SmallTitle("页面指示器") }
+        groupedIntSettings(portraitSpecs.filter {
+            it.key == ConfigSchema.Grid.PORTRAIT_INDICATOR_Y.name()
+        }, prefs, enabled)
     }
 }
 

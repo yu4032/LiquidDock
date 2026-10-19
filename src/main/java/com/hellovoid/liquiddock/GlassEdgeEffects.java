@@ -118,6 +118,6 @@ public final class GlassEdgeEffects {
 
     private static float decimal(ConfigReader reader, String scope, ConfigKey<Integer> config) {
         return Math.max(config.minInt(), Math.min(config.maxInt(),
-                reader.f(readKey(reader, scope, config), config.runtimeFallback())));
+                reader.f(readKey(reader, scope, config), config.runtimeFallbackDp())));
     }
 }

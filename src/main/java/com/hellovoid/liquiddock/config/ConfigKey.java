@@ -15,10 +15,13 @@ public final class ConfigKey<T> {
     private final Integer maxInt;
     private final StorageMode storageMode;
     private final ExportMode exportMode;
+    // Fractional default is metadata, not a new persisted storage format.
+    private final Integer defaultDpTenths;
 
     private ConfigKey(String name, Type type, T uiDefault, T runtimeFallback,
                       T exportDefault, Integer minInt, Integer maxInt,
-                      StorageMode storageMode, ExportMode exportMode) {
+                      StorageMode storageMode, ExportMode exportMode,
+                      Integer defaultDpTenths) {
         this.name = name;
         this.type = type;
         this.uiDefault = uiDefault;
@@ -28,6 +31,7 @@ public final class ConfigKey<T> {
         this.maxInt = maxInt;
         this.storageMode = storageMode;
         this.exportMode = exportMode;
+        this.defaultDpTenths = defaultDpTenths;
     }
 
     static <T> ConfigKey<T> register(
@@ -45,7 +49,29 @@ public final class ConfigKey<T> {
             throw new IllegalArgumentException("ConfigKey registration requires ConfigSchema authority");
         }
         return new ConfigKey<>(name, type, uiDefault, runtimeFallback, exportDefault,
-                minInt, maxInt, storageMode, exportMode);
+                minInt, maxInt, storageMode, exportMode, null);
+    }
+
+    /** The UI and runtime share this tenth-dp default when no key was saved. */
+    ConfigKey<T> withDefaultDpTenths(int tenths) {
+        if (storageMode != StorageMode.DP_TENTHS) {
+            throw new IllegalStateException("Fractional dp default requires DP_TENTHS");
+        }
+        if (tenths < minInt * 10 || tenths > maxInt * 10) {
+            throw new IllegalArgumentException("Fractional dp default out of range");
+        }
+        return new ConfigKey<>(name, type, uiDefault, runtimeFallback,
+                exportDefault, minInt, maxInt, storageMode, exportMode, tenths);
+    }
+
+    public float uiDefaultDp() {
+        return defaultDpTenths == null ? ((Number) uiDefault).floatValue()
+                : defaultDpTenths / 10f;
+    }
+
+    public float runtimeFallbackDp() {
+        return defaultDpTenths == null ? ((Number) runtimeFallback).floatValue()
+                : defaultDpTenths / 10f;
     }
 
     public String name() { return name; }

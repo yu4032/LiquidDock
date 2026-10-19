@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import android.content.SharedPreferences
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -153,7 +154,11 @@ internal fun DialogGlassSettingsPage(
         appearanceGeneration++
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = padding,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         item {
             PageHeader(
                 stringResource(R.string.page_dialog_customization),
@@ -170,6 +175,7 @@ internal fun DialogGlassSettingsPage(
                     "替换桌面卸载、移除与二次确认弹窗背景；失败时立即恢复系统原生材质",
                     masterEnabled && liquidEnabled,
                 ) { dialogEnabled = it }
+                ModernListDivider()
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.DIALOG_DISABLE_DIMMING,
@@ -177,6 +183,7 @@ internal fun DialogGlassSettingsPage(
                     "只隐藏压暗效果，仍保留点击对话框外部关闭弹窗的行为",
                     controlsEnabled,
                 )
+                ModernListDivider()
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.DIALOG_DARK_MODE,
@@ -216,6 +223,10 @@ internal fun DialogGlassSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
+            }
+        }
+        item(key = "dialog-color-alpha") {
+            SettingsCard {
                 DialogAppearanceValueSlider(
                     key = ConfigSchema.Glass.DIALOG_TINT_ALPHA.name(),
                     title = "不透明度",
@@ -240,6 +251,11 @@ internal fun DialogGlassSettingsPage(
                     max = 60,
                     unit = "px",
                 )
+            }
+        }
+        item(key = "dialog-reset-heading") { SmallTitle("外观恢复") }
+        item(key = "dialog-reset") {
+            SettingsCard {
                 ArrowPreference(
                     title = "恢复继承全局外观",
                     summary = "删除对话弹窗的颜色与模糊度覆盖，重新跟随全局液态玻璃参数",
@@ -251,8 +267,8 @@ internal fun DialogGlassSettingsPage(
         item(key = "dialog-edge-effects") {
             SettingsCard {
                 ArrowPreference(
-                    title = "玻璃光照与投影",
-                    summary = "保留原生弹窗投影，仅按光照调节边缘透射",
+                    title = "阴影",
+                    summary = "独立调节 Prismal 外阴影与边缘描边，仅液态玻璃开启时生效",
                     enabled = controlsEnabled,
                     onClick = onOpenEdge,
                 )
