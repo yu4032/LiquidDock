@@ -104,15 +104,40 @@ final class PrismalReconstructed27Shader {
         }
         // Replaces the 3-tap path, not an additional 7 taps on top of it.
         fragment = fragment.substring(0, start) + """
-                        float chromaFar = avgDim * 0.5;
-                        float edgeFac = pow(
-                                smoothstep(chromaFar, 0.0, edgeDist), 1.8);
-                        float chromaBase = caAmt * 0.0018 * edgeFac;
-                        vec2 surfaceNormal = normalize(
-                                os4SdfGradient + vec2(0.00001));
-                        vec2 chromaPush = surfaceNormal * chromaBase * pxNorm;
-                        color = optical27SevenTap(baseOffset,
-                                chromaPush, pinchMix);
+                        // Fix the experimental macOS27 port's UV/px mismatch:
+                        // the earlier code treated chromaBase as a UV offset
+                        // (growing with output resolution) rather than a
+                        // physical logical-pixel displacement. Keep the
+                        // chromatic band confined to the actual lens shoulder:
+                        // nearest-side SDF normals are piecewise across the
+                        // interior medial axis and cause diagonal wedges when
+                        // used over most of a large folder or Dock.
+                        float chromaReachPx = min(refractionHeight,
+                                clamp(minDim * 0.12, 4.0, 14.0));
+                        float chromaDepthPx = max(edgeDist, 0.0);
+                        float edgeFac = 1.0 - smoothstep(
+                                0.0, chromaReachPx, chromaDepthPx);
+                        float maxChannelDispersion = max(
+                                1.0, max(abs(u_dispersionR), abs(u_dispersionB)));
+                        float chromaCapPx = clamp(minDim * 0.018, 0.75, 2.5);
+                        float chromaRawPx = caAmt * 0.0018 * minDim * pxNorm;
+                        float chromaPx = min(chromaRawPx,
+                                chromaCapPx / maxChannelDispersion) * edgeFac;
+                        // With an undefined SDF gradient, do not invent a
+                        // diagonal normal by normalizing an epsilon vector.
+                        float normalLength = length(os4SdfGradient);
+                        if (chromaPx > 0.02 && normalLength > 0.05) {
+                            vec2 surfaceNormal =
+                                    os4SdfGradient / normalLength;
+                            vec2 chromaPush = surfaceNormal
+                                    * chromaPx / u_resolution;
+                            color = optical27SevenTap(baseOffset,
+                                    chromaPush, pinchMix);
+                        } else if (u_useBlurredTexture == 1) {
+                            color = texture2D(u_blurredTexture, uvCenter).rgb;
+                        } else {
+                            color = texture2D(u_backgroundTexture, uvCenter).rgb;
+                        }
                 """ + fragment.substring(end);
 
         fragment = fragment.replace(INNER_FACE, """

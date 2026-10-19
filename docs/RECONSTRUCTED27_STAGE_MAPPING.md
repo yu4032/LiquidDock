@@ -14,7 +14,7 @@ Not an Apple source-code port and **not** a pixel-fit validation of iOS 27.
 | supercircle SDF + normalized derivative | Existing native rounded-box SDF, derivative-corrected normal and `fwidth` | **Do not replace** native Dock geometry with macOS supercircle |
 | shadow then ring | Existing external cast shadow for non-Dock scopes; inner analytic `erfc` ring | Dock continues to use OEM MiShadow; no duplicate external shadow |
 | inner refraction + blur ramp | Original Prismal lens + two-stage lens arc; optional `optical27BlurRamp` | Four-knot, sharp/Gaussian **two-level** approximation; GLES2 has no `textureLod` |
-| seven-sample chromatic aberration | `optical27SevenTap` replaces three-tap branch in optional program | **7 samples only when chromatic aberration is enabled**; otherwise original single tap |
+| seven-sample chromatic aberration | `optical27SevenTap` replaces three-tap branch in optional program | **Seven taps only inside a physically bounded meniscus** when chromatic aberration is enabled; flat interior uses one central tap. Total channel separation capped at 0.75–2.5 logical pixels based on short-axis size |
 | blur fill: lighten/darken/normal | `optical27BlurFill` with partition-of-unity color mixing | Near the inside edge only; reuses existing Gaussian texture |
 | outer refraction crossfade | `innerBendPx`, `outerBendPx`, `refractionHandoff` | One prepared-source sample for the optical contour |
 | opposing key/fill highlight | `opticalOpposingFill`, signed normal and masked soft knee | Uses OS4 light uniforms; separate original inner highlight |
@@ -39,3 +39,36 @@ runtime GLSL acceptance. Profile frame time on high refresh-rate devices;
 compare to the solid-lavender iOS reference for a continuous neutral outer
 contour enclosing an inner specular highlight around every corner. The actual
 shader parameters and sRGB gamma response remain platform-specific.
+
+## 2026-10-19 device feedback: triangular distortion and oversaturated dispersion
+
+The experimental full shader **successfully compiled on Mali** (multiple
+`Full reconstructed-27 optical stages ready` messages). A real-device
+folder close-up nevertheless showed large diagonal triangular image seams and
+orange/red-green chromatic halos. Compilation success alone was not visual
+validation.
+
+Root cause in the first full-GLES2 port: its seven-tap replacement **bypassed
+`PrismalSingleEdgeShader.PIXEL_DOMAIN_CHROMA_PUSH`** and treated
+`chromaBase = caAmt * 0.0018 * edgeFac` as a raw normalized UV offset, not a
+logical-pixel displacement divided by `u_resolution`. It also sampled the
+SDF gradient as a direction across the **entire glass interior**:
+nearest-edge gradients have discontinuities along the rounded box's medial
+axis, creating the visible diagonal Voronoi partitions.
+
+Fix: chromatic displacement is defined in logical pixels
+`caAmt * 0.0018 * minDim * pxNorm`, capped to at most
+`clamp(minDim * 0.018, 0.75px, 2.5px)` **including custom red/blue
+dispersion multipliers**, then divided by `u_resolution` per axis. A smooth
+physical lens-only SDF envelope ends by
+`min(refractionHeight, clamp(minDim * .12, 4px, 14px))`. Where the envelope
+is zero or the SDF gradient is ill-defined, the baseline one-tap center
+texture is used, not a fabricated diagonal normal or seven redundant taps.
+This is **independent of backdrop capture downsampling**: all distances are
+in native output logical pixels. It also reduces unnecessary GPU sampling
+in the large flat interior.
+
+This repair preserves the seven-sample algorithm **only where it has a
+physical optical interpretation**; it does not revise the user's saved
+chromatic parameters or default glass geometry. Screenshot comparison and
+frame-time verification remain required after CI.

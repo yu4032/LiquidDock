@@ -90,6 +90,88 @@ public class PrismalReconstructed27ShaderTest {
         assertEquals(1f,b*.5f,.00001f);
     }
 
+    /**
+     * Full 27's first implementation incorrectly passed a raw UV offset
+     * around 0.0018 * user chromatic gain for all interior SDF regions.
+     * The visual result was a large diagonal Voronoi wedge and broad RGB bands.
+     */
+    @Test public void sevenTapUsesBoundedPhysicalPixelsNotScreenUvGain() {
+        String shader=full();
+        int begin=shader.indexOf("// Fix the experimental macOS27 port's UV/px mismatch:");
+        int end=shader.indexOf("color = applyVibrancy(color, u_vibrancy);",begin);
+        assertTrue(begin>0 && end>begin);
+        String chroma=shader.substring(begin,end);
+        assertTrue(chroma.contains("float chromaReachPx = min(refractionHeight,"));
+        assertTrue(chroma.contains("clamp(minDim * 0.12, 4.0, 14.0)"));
+        assertTrue(chroma.contains("float chromaDepthPx = max(edgeDist, 0.0);"));
+        assertTrue(chroma.contains("float edgeFac = 1.0 - smoothstep("));
+        assertTrue(chroma.contains("float chromaRawPx = caAmt * 0.0018 * minDim * pxNorm;"));
+        assertTrue(chroma.contains("float chromaCapPx = clamp(minDim * 0.018, 0.75, 2.5);"));
+        assertTrue(chroma.contains("chromaCapPx / maxChannelDispersion"));
+        assertTrue(chroma.contains("* chromaPx / u_resolution;"));
+        assertTrue(chroma.contains("float normalLength = length(os4SdfGradient);"));
+        assertTrue(chroma.contains("chromaPx > 0.02 && normalLength > 0.05"));
+        assertFalse("never interpret chromaBase as unscaled UV",
+                chroma.contains("surfaceNormal * chromaBase * pxNorm"));
+        assertFalse("do not invent a (1,1) normal in the flat interior",
+                chroma.contains("normalize(os4SdfGradient + vec2(0.00001))"));
+
+        // Same glass physical size and chromatic gain gives identical
+        // logical-pixel reach at either framebuffer resolution.
+        for (float shortHalfSize:new float[]{22f,65f,160f,370f}) {
+            for (float chromatic:new float[]{0f,1f,4f,20f,100f}) {
+                for (float dispersion:new float[]{1f,2f,6f}) {
+                    float px = normalizedChromaPx(shortHalfSize, chromatic,
+                            dispersion, 1.0f, 0f);
+                    float cap = Math.max(.75f,Math.min(2.5f,
+                            shortHalfSize*.018f));
+                    assertTrue("color fringes must be bounded in logical px",
+                            px * dispersion <= cap + .00001f);
+                    assertEquals(px,(px/720f)*720f,.00001f);
+                    assertEquals(px,(px/1440f)*1440f,.00001f);
+                    assertEquals(px,(px/2160f)*2160f,.00001f);
+                }
+            }
+        }
+    }
+
+    @Test public void noInteriorVoronoiSeamsAndSevenTapsStayAtLensEdge() {
+        String shader=full();
+        assertTrue(shader.contains("if (chromaPx > 0.02 && normalLength > 0.05)"));
+        assertTrue(shader.contains("color = texture2D(u_blurredTexture, uvCenter).rgb;"));
+        assertTrue(shader.contains("color = texture2D(u_backgroundTexture, uvCenter).rgb;"));
+        float halfSize=220f, amount=18f, disp=4f, physicalScale=1f;
+        assertTrue(normalizedChromaPx(halfSize, amount, disp,
+                physicalScale, 0f)>0f);
+        float maxReach = Math.min(halfSize*.12f,14f);
+        assertEquals(0f,normalizedChromaPx(halfSize, amount, disp,
+                physicalScale, maxReach),.00001f);
+        assertEquals(0f,normalizedChromaPx(halfSize, amount, disp,
+                physicalScale, maxReach*2f),.00001f);
+        // Smooth lens envelope, no hard cut at the medial axis.
+        float previous=Float.POSITIVE_INFINITY;
+        for (int i=0;i<=100;i++) {
+            float depth = maxReach * i / 100f;
+            float current=normalizedChromaPx(halfSize,amount,disp,
+                    physicalScale,depth);
+            assertTrue("continuous monotone falloff",current<=previous+.00001f);
+            if (i>0)assertTrue("no single-pixel jump",previous-current<.06f);
+            previous=current;
+        }
+    }
+
+    private static float normalizedChromaPx(float halfMin, float amount,
+                                             float dispersion, float pxNorm,
+                                             float depth) {
+        float lensReach=Math.min(22f,
+                Math.max(4f,Math.min(14f,halfMin*.12f)));
+        float fac=1f-smooth(depth/lensReach);
+        float cap=Math.max(.75f,Math.min(2.5f,halfMin*.018f));
+        float maxChannel=Math.max(1f,Math.abs(dispersion));
+        return Math.min(amount*.0018f*halfMin*pxNorm,
+                cap/maxChannel)*fac;
+    }
+
     @Test public void threeModeBlurFillUsesPartitionOfUnity() {
         String shader=full();
         assertTrue(shader.contains("vec3 optical27BlurFill(vec3 face, vec3 fill,"));
