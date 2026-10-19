@@ -3,6 +3,9 @@ package com.hellovoid.liquiddock
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.DpSize
+import com.styropyr0.prismal.depth.PrismalDepthShadow
+import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.window.WindowDialog
 
 /**
@@ -21,10 +24,17 @@ internal fun AnimatedSettingsWindowDialog(
     onDismissRequest: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // MIUIX's squircleSurface clips dialog descendants. Reserve the blur
+    // footprint inside that clip, rather than masking Prismal button shadows.
+    // Keep MIUIX's normal spacing when solid GUI chrome is disabled.
+    val opticalInset = if (LocalStaticGlassChrome.current) {
+        maxOf(DialogDefaults.insideMargin.width, PrismalDepthShadow.Default.radius * 2f)
+    } else DialogDefaults.insideMargin.width
     WindowDialog(
         show = show,
         title = title,
         onDismissRequest = onDismissRequest,
+        insideMargin = DpSize(opticalInset, opticalInset),
     ) {
         Column(content = content)
     }
