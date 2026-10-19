@@ -7,12 +7,18 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +35,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -111,6 +119,19 @@ private fun LiquidDockSettings(
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var navigationStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     val root = isRootPage(page)
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val searchCatalog = remember(activity) { settingsSearchCatalog(activity) }
+
+    fun closeSearch() {
+        searchOpen = false
+        searchQuery = ""
+    }
+    fun openSearch() {
+        if (!root || searchOpen) return
+        searchQuery = ""
+        searchOpen = true
+    }
     val selectedRootIndex = ROOT_PAGES.indexOf(page).coerceAtLeast(0)
     val rootIcons = listOf(
         MiuixIcons.Home,
@@ -148,16 +169,35 @@ private fun LiquidDockSettings(
         page = target
     }
 
-    BackHandler(enabled = !root) { navigateBack() }
+    BackHandler(enabled = searchOpen || !root) {
+        if (searchOpen) closeSearch() else navigateBack()
+    }
+
+    // One Transition owns search content AND bottom navigation. Android Compose
+    // advances its child animations from the display-synchronized frame clock;
+    // do not create separate timers, fixed-FPS loops or independent transitions.
+    val searchTransition = updateTransition(searchOpen, label = "settings-search")
+    val searchSlideSpec = remember {
+        spring<IntOffset>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        )
+    }
+    val searchFadeSpec = remember {
+        spring<Float>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        )
+    }
 
     ModernSettingsScaffold(
-        title = stringResource(page.titleRes),
+        title = if (searchOpen) "搜索设置" else stringResource(page.titleRes),
         glassEnabled = uiGlassEnabled,
-        showBack = !root,
+        showBack = searchOpen || !root,
         backLabel = stringResource(R.string.action_back),
-        onBack = { navigateBack() },
+        onBack = { if (searchOpen) closeSearch() else navigateBack() },
         actions = {
-            ModernTopActionButton(
+            if (!searchOpen) ModernTopActionButton(
                 text = stringResource(R.string.action_restart_scopes),
                 onClick = {
                     selectedRestartScopes = when (page) {
@@ -178,17 +218,29 @@ private fun LiquidDockSettings(
         },
         bottomBar = {
             if (root) {
-                ModernBottomNavigation(
-                    labels = listOf(
-                        stringResource(R.string.tab_overview),
-                        stringResource(R.string.tab_layout),
-                        stringResource(R.string.tab_glass),
-                        stringResource(R.string.tab_more),
-                    ),
-                    icons = rootIcons,
-                    selectedIndex = selectedRootIndex,
-                    onSelected = { index -> selectRoot(ROOT_PAGES[index]) },
-                )
+                searchTransition.AnimatedVisibility(
+                    visible = { !it },
+                    enter = slideInVertically(
+                        animationSpec = searchSlideSpec,
+                        initialOffsetY = { it / 3 },
+                    ) + fadeIn(searchFadeSpec),
+                    exit = slideOutVertically(
+                        animationSpec = searchSlideSpec,
+                        targetOffsetY = { it / 3 },
+                    ) + fadeOut(searchFadeSpec),
+                ) {
+                    ModernBottomNavigation(
+                        labels = listOf(
+                            stringResource(R.string.tab_overview),
+                            stringResource(R.string.tab_layout),
+                            stringResource(R.string.tab_glass),
+                            stringResource(R.string.tab_more),
+                        ),
+                        icons = rootIcons,
+                        selectedIndex = selectedRootIndex,
+                        onSelected = { index -> selectRoot(ROOT_PAGES[index]) },
+                    )
+                }
             }
         },
         overlay = {
@@ -222,221 +274,258 @@ private fun LiquidDockSettings(
             )
         },
     ) { padding ->
-        AnimatedContent(
-            targetState = page,
+        searchTransition.AnimatedContent(
+            modifier = Modifier.fillMaxSize(),
             transitionSpec = {
-                val duration = prefs.getInt(
-                    ConfigSchema.Animation.SETTINGS_PAGE.name(),
-                    ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
-                ).coerceIn(0, 700)
-                if (targetState.ordinal > initialState.ordinal) {
-                    (slideInHorizontally(tween(duration)) { it / 4 } + fadeIn(tween(duration))) togetherWith
-                            (slideOutHorizontally(tween(duration)) { -it / 6 } + fadeOut(tween(duration)))
-                } else {
-                    (slideInHorizontally(tween(duration)) { -it / 4 } + fadeIn(tween(duration))) togetherWith
-                            (slideOutHorizontally(tween(duration)) { it / 6 } + fadeOut(tween(duration)))
-                }
+                // Both layers use one display-driven Transition and shared spring specs.
+                (slideInVertically(
+                    animationSpec = searchSlideSpec,
+                    initialOffsetY = { if (targetState) -it / 5 else it / 10 },
+                ) + fadeIn(searchFadeSpec)) togetherWith
+                    (slideOutVertically(
+                        animationSpec = searchSlideSpec,
+                        targetOffsetY = { if (targetState) it / 10 else -it / 5 },
+                    ) + fadeOut(searchFadeSpec))
             },
-            label = "settings-page",
-        ) { target ->
-            when (target) {
-                Page.Home -> HomePage(
-                    padding,
-                    prefs,
-                    masterEnabled,
-                    { masterEnabled = it },
-                    ::navigateTo,
-                )
-                Page.LayoutHub -> HubPage(
-                    padding,
-                    "主屏幕、Dock、工作台与多任务布局",
-                    layoutEntries,
-                    ::navigateTo,
-                )
-                Page.GlassHub -> HubPage(
-                    padding,
-                    "玻璃材质、组件样式、动画与第三方应用外观",
-                    glassEntries,
-                    ::navigateTo,
-                )
-                Page.MoreHub -> MoreHubPage(
+        ) { showingSearch ->
+            if (showingSearch) {
+                SettingsSearchScreen(
                     padding = padding,
-                    glassEnabled = uiGlassEnabled,
-                    onGlassEnabledChange = { enabled ->
-                        uiGlassEnabled = enabled
-                        uiPrefs.edit()
-                            .putBoolean(SETTINGS_UI_GLASS_ENABLED, enabled)
-                            .apply()
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    catalog = searchCatalog,
+                    // Avoid opening the IME halfway through the page transition.
+                    focusOnOpen = searchTransition.currentState && !searchTransition.isRunning,
+                    onSelect = { item ->
+                        closeSearch()
+                        navigateTo(item.page)
                     },
-                    open = ::navigateTo,
                 )
+            } else {
+                AnimatedContent(
+                    targetState = page,
+                    modifier = Modifier.fillMaxSize().then(
+                        // Only the four bottom-navigation root pages may reveal search.
+                        // Keep nested-scroll entirely off subpages, not merely disabled.
+                        if (root && !searchOpen && !showRestartScopes) {
+                            Modifier.nestedScroll(rememberSettingsPullDownSearch(::openSearch))
+                        } else Modifier,
+                    ),
+                    transitionSpec = {
+                        val duration = prefs.getInt(
+                            ConfigSchema.Animation.SETTINGS_PAGE.name(),
+                            ConfigSchema.Animation.SETTINGS_PAGE.uiDefault(),
+                        ).coerceIn(0, 700)
+                        if (targetState.ordinal > initialState.ordinal) {
+                            (slideInHorizontally(tween(duration)) { it / 4 } + fadeIn(tween(duration))) togetherWith
+                                    (slideOutHorizontally(tween(duration)) { -it / 6 } + fadeOut(tween(duration)))
+                        } else {
+                            (slideInHorizontally(tween(duration)) { -it / 4 } + fadeIn(tween(duration))) togetherWith
+                                    (slideOutHorizontally(tween(duration)) { it / 6 } + fadeOut(tween(duration)))
+                        }
+                    },
+                    label = "settings-page",
+                ) { target ->
+                when (target) {
+                    Page.Home -> HomePage(
+                        padding,
+                        prefs,
+                        masterEnabled,
+                        { masterEnabled = it },
+                        ::navigateTo,
+                    )
+                    Page.LayoutHub -> HubPage(
+                        padding,
+                        "主屏幕、Dock、工作台与多任务布局",
+                        layoutEntries,
+                        ::navigateTo,
+                    )
+                    Page.GlassHub -> HubPage(
+                        padding,
+                        "玻璃材质、组件样式、动画与第三方应用外观",
+                        glassEntries,
+                        ::navigateTo,
+                    )
+                    Page.MoreHub -> MoreHubPage(
+                        padding = padding,
+                        glassEnabled = uiGlassEnabled,
+                        onGlassEnabledChange = { enabled ->
+                            uiGlassEnabled = enabled
+                            uiPrefs.edit()
+                                .putBoolean(SETTINGS_UI_GLASS_ENABLED, enabled)
+                                .apply()
+                        },
+                        open = ::navigateTo,
+                    )
 
-                Page.Grid -> GridPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled)
-                Page.GridLandscape -> GridLandscapePage(padding, prefs, masterEnabled)
-                Page.GridPortrait -> GridPortraitPage(padding, prefs, masterEnabled)
-                Page.GridSplit -> GridSplitPage(padding, prefs, masterEnabled)
+                    Page.Grid -> GridPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled)
+                    Page.GridLandscape -> GridLandscapePage(padding, prefs, masterEnabled)
+                    Page.GridPortrait -> GridPortraitPage(padding, prefs, masterEnabled)
+                    Page.GridSplit -> GridSplitPage(padding, prefs, masterEnabled)
 
-                Page.Dock -> DockPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.DockBehavior -> DockBehaviorPage(padding, prefs, masterEnabled)
-                Page.DockGeometry -> DockGeometryPage(padding, prefs, masterEnabled)
-                Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
-                Page.Divider -> DividerPage(padding, prefs, masterEnabled)
-                Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.WorkstationDock -> WorkstationSpecPage(
-                    padding, prefs, masterEnabled, workstationDockSpecs,
-                    "工作台 Dock 图标位置与玻璃圆角参数",
-                )
-                Page.WorkstationDesktop -> WorkstationSpecPage(
-                    padding, prefs, masterEnabled, workstationDesktopSpecs,
-                    "工作台桌面水平偏移作用于当前实际网格，不限制固定列数",
-                )
-                Page.WorkstationAppsLandscape -> WorkstationSpecPage(
-                    padding, prefs, masterEnabled, workstationAppsLandscapeSpecs,
-                    "所有应用横屏布局参数",
-                )
-                Page.WorkstationAppsPortrait -> WorkstationSpecPage(
-                    padding, prefs, masterEnabled, workstationAppsPortraitSpecs,
-                    "所有应用竖屏布局参数",
-                )
-                Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
+                    Page.Dock -> DockPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.DockBehavior -> DockBehaviorPage(padding, prefs, masterEnabled)
+                    Page.DockGeometry -> DockGeometryPage(padding, prefs, masterEnabled)
+                    Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
+                    Page.Divider -> DividerPage(padding, prefs, masterEnabled)
+                    Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.WorkstationDock -> WorkstationSpecPage(
+                        padding, prefs, masterEnabled, workstationDockSpecs,
+                        "工作台 Dock 图标位置与玻璃圆角参数",
+                    )
+                    Page.WorkstationDesktop -> WorkstationSpecPage(
+                        padding, prefs, masterEnabled, workstationDesktopSpecs,
+                        "工作台桌面水平偏移作用于当前实际网格，不限制固定列数",
+                    )
+                    Page.WorkstationAppsLandscape -> WorkstationSpecPage(
+                        padding, prefs, masterEnabled, workstationAppsLandscapeSpecs,
+                        "所有应用横屏布局参数",
+                    )
+                    Page.WorkstationAppsPortrait -> WorkstationSpecPage(
+                        padding, prefs, masterEnabled, workstationAppsPortraitSpecs,
+                        "所有应用竖屏布局参数",
+                    )
+                    Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
 
-                Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.LiquidMaterial -> LiquidSpecPage(
-                    padding,
-                    prefs,
-                    masterEnabled,
-                    "控制玻璃主体的基础材质感",
-                    liquidMaterialGroups,
-                )
-                Page.LiquidRefraction -> LiquidSpecPage(
-                    padding,
-                    prefs,
-                    masterEnabled,
-                    "折射形状、位移、边缘衰减与表面几何",
-                    liquidRefractionGroups,
-                )
-                Page.LiquidColor -> LiquidSpecPage(
-                    padding,
-                    prefs,
-                    masterEnabled,
-                    "底色、色散与背景鲜艳度",
-                    liquidColorGroups,
-                )
-                Page.LiquidLighting -> LiquidLightingPage(padding, prefs, masterEnabled)
-                Page.GlassEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.GLOBAL,
-                    open = ::navigateTo,
-                )
-                Page.DockEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.DOCK,
-                )
-                Page.IconEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.ICON,
-                )
-                Page.WidgetEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.WIDGET,
-                )
-                Page.FolderEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.FOLDER,
-                )
-                Page.PopupEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.POPUP,
-                )
-                Page.HandleMenuEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.HANDLE_MENU,
-                )
-                Page.DialogEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.DIALOG,
-                )
-                Page.GboardEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.GBOARD,
-                )
-                Page.SearchboxEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.SEARCHBOX,
-                )
-                Page.SecurityCenterEdge -> GlassEdgeSettingsPage(
-                    padding, prefs, masterEnabled, GlassEdgeEffects.SECURITY_CENTER,
-                )
-                Page.LiquidShadow -> LiquidSpecPage(
-                    padding,
-                    prefs,
-                    masterEnabled,
-                    "玻璃内部阴影颜色与柔和程度",
-                    liquidShadowGroups,
-                )
-                Page.LiquidSampling -> LiquidSamplingPage(padding, prefs, masterEnabled)
+                    Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.LiquidMaterial -> LiquidSpecPage(
+                        padding,
+                        prefs,
+                        masterEnabled,
+                        "控制玻璃主体的基础材质感",
+                        liquidMaterialGroups,
+                    )
+                    Page.LiquidRefraction -> LiquidSpecPage(
+                        padding,
+                        prefs,
+                        masterEnabled,
+                        "折射形状、位移、边缘衰减与表面几何",
+                        liquidRefractionGroups,
+                    )
+                    Page.LiquidColor -> LiquidSpecPage(
+                        padding,
+                        prefs,
+                        masterEnabled,
+                        "底色、色散与背景鲜艳度",
+                        liquidColorGroups,
+                    )
+                    Page.LiquidLighting -> LiquidLightingPage(padding, prefs, masterEnabled)
+                    Page.GlassEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.GLOBAL,
+                        open = ::navigateTo,
+                    )
+                    Page.DockEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.DOCK,
+                    )
+                    Page.IconEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.ICON,
+                    )
+                    Page.WidgetEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.WIDGET,
+                    )
+                    Page.FolderEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.FOLDER,
+                    )
+                    Page.PopupEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.POPUP,
+                    )
+                    Page.HandleMenuEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.HANDLE_MENU,
+                    )
+                    Page.DialogEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.DIALOG,
+                    )
+                    Page.GboardEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.GBOARD,
+                    )
+                    Page.SearchboxEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.SEARCHBOX,
+                    )
+                    Page.SecurityCenterEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.SECURITY_CENTER,
+                    )
+                    Page.LiquidShadow -> LiquidSpecPage(
+                        padding,
+                        prefs,
+                        masterEnabled,
+                        "玻璃内部阴影颜色与柔和程度",
+                        liquidShadowGroups,
+                    )
+                    Page.LiquidSampling -> LiquidSamplingPage(padding, prefs, masterEnabled)
 
-                Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
-                Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
-                Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage(
+                    Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
+                    Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage(
+                        padding, prefs, masterEnabled,
+                        onOpenAll = { navigateTo(Page.HandleMenuAll) },
+                        onOpenEdge = { navigateTo(Page.HandleMenuEdge) },
+                    )
+                    Page.HandleMenuAll -> ScopedGlassSettingsPage(
+                        padding, prefs, masterEnabled, ScopedGlassOptics.HANDLE_MENU, "应用顶部菜单",
+                    )
+                    Page.ShortcutPopupCustomization -> ShortcutPopupGlassSettingsPage(
+                        padding, prefs, masterEnabled,
+                        onOpenAll = { navigateTo(Page.ShortcutPopupAll) },
+                        onOpenEdge = { navigateTo(Page.PopupEdge) },
+                    )
+                    Page.ShortcutPopupAll -> ScopedGlassSettingsPage(
+                        padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
+                    )
+                    Page.DialogCustomization -> DialogGlassSettingsPage(
                     padding, prefs, masterEnabled,
-                    onOpenAll = { navigateTo(Page.HandleMenuAll) },
-                    onOpenEdge = { navigateTo(Page.HandleMenuEdge) },
+                    onOpenAll = { navigateTo(Page.DialogAll) },
+                    onOpenEdge = { navigateTo(Page.DialogEdge) },
                 )
-                Page.HandleMenuAll -> ScopedGlassSettingsPage(
-                    padding, prefs, masterEnabled, ScopedGlassOptics.HANDLE_MENU, "应用顶部菜单",
+                Page.DialogAll -> ScopedGlassSettingsPage(
+                    padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
                 )
-                Page.ShortcutPopupCustomization -> ShortcutPopupGlassSettingsPage(
-                    padding, prefs, masterEnabled,
-                    onOpenAll = { navigateTo(Page.ShortcutPopupAll) },
-                    onOpenEdge = { navigateTo(Page.PopupEdge) },
+                    Page.ThirdPartyApps -> ThirdPartyAppsPage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                        openGboard = { navigateTo(Page.Gboard) },
+                    )
+                    Page.Gboard -> GboardSettingsPage(
+                    padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.GboardAll) },
                 )
-                Page.ShortcutPopupAll -> ScopedGlassSettingsPage(
-                    padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
+                Page.GboardAll -> ScopedGlassSettingsPage(
+                    padding, prefs, masterEnabled, ScopedGlassOptics.GBOARD, "Gboard",
                 )
-                Page.DialogCustomization -> DialogGlassSettingsPage(
-                padding, prefs, masterEnabled,
-                onOpenAll = { navigateTo(Page.DialogAll) },
-                onOpenEdge = { navigateTo(Page.DialogEdge) },
-            )
-            Page.DialogAll -> ScopedGlassSettingsPage(
-                padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
-            )
-                Page.ThirdPartyApps -> ThirdPartyAppsPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                    openGboard = { navigateTo(Page.Gboard) },
-                )
-                Page.Gboard -> GboardSettingsPage(
-                padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.GboardAll) },
-            )
-            Page.GboardAll -> ScopedGlassSettingsPage(
-                padding, prefs, masterEnabled, ScopedGlassOptics.GBOARD, "Gboard",
-            )
-                Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
-                Page.LauncherHighlights -> LauncherHighlightsPage(padding, ::navigateTo)
-                Page.LauncherHighlightsCompact -> LauncherHighlightTogglePage(
-                    padding, prefs, masterEnabled, compact = true,
-                )
-                Page.LauncherHighlightsLarge -> LauncherHighlightTogglePage(
-                    padding, prefs, masterEnabled, compact = false,
-                )
-                Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
-                Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
+                    Page.LauncherHighlights -> LauncherHighlightsPage(padding, ::navigateTo)
+                    Page.LauncherHighlightsCompact -> LauncherHighlightTogglePage(
+                        padding, prefs, masterEnabled, compact = true,
+                    )
+                    Page.LauncherHighlightsLarge -> LauncherHighlightTogglePage(
+                        padding, prefs, masterEnabled, compact = false,
+                    )
+                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
+                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo)
 
-                Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
-                    padding = padding,
-                    prefs = prefs,
-                    masterEnabled = masterEnabled,
-                )
-                Page.Animation -> AnimationPage(padding, ::navigateTo)
-                Page.AnimationWorkspace -> AnimationWorkspacePage(padding, prefs, masterEnabled)
-                Page.AnimationInteraction -> AnimationInteractionPage(padding, prefs, masterEnabled)
-                Page.AnimationPopups -> AnimationPopupsPage(padding, prefs, masterEnabled)
-                Page.AnimationSystem -> AnimationSystemPage(padding, prefs, masterEnabled)
-                Page.AnimationGui -> AnimationGuiPage(padding, prefs, masterEnabled)
-                Page.ThemePalette -> SettingsUiPalettePage(
-                    padding = padding,
-                    selected = selectedPalette,
-                    onSelect = onPaletteSelected,
-                )
-                Page.Data -> DataPage(padding, activity)
-                Page.About -> AboutPage(padding, activity, prefs)
+                    Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
+                        padding = padding,
+                        prefs = prefs,
+                        masterEnabled = masterEnabled,
+                    )
+                    Page.Animation -> AnimationPage(padding, ::navigateTo)
+                    Page.AnimationWorkspace -> AnimationWorkspacePage(padding, prefs, masterEnabled)
+                    Page.AnimationInteraction -> AnimationInteractionPage(padding, prefs, masterEnabled)
+                    Page.AnimationPopups -> AnimationPopupsPage(padding, prefs, masterEnabled)
+                    Page.AnimationSystem -> AnimationSystemPage(padding, prefs, masterEnabled)
+                    Page.AnimationGui -> AnimationGuiPage(padding, prefs, masterEnabled)
+                    Page.ThemePalette -> SettingsUiPalettePage(
+                        padding = padding,
+                        selected = selectedPalette,
+                        onSelect = onPaletteSelected,
+                    )
+                    Page.Data -> DataPage(padding, activity)
+                    Page.About -> AboutPage(padding, activity, prefs)
+                }
+                }
             }
         }
     }
