@@ -47,8 +47,6 @@ public final class GlassEdgeEffects {
 
     private static volatile Map<String, PrismalEdgeDecoration> current =
             Collections.emptyMap();
-    private static volatile Map<String, PrismalEdgeDecoration> withoutNativeShadows =
-            Collections.emptyMap();
 
     private GlassEdgeEffects() {}
 
@@ -83,34 +81,21 @@ public final class GlassEdgeEffects {
 
     public static synchronized void refresh(ConfigReader reader) {
         Map<String, PrismalEdgeDecoration> active = new HashMap<>();
-        Map<String, PrismalEdgeDecoration> onlyOptics = new HashMap<>();
         active.put(GLOBAL, resolve(reader, GLOBAL));
-        onlyOptics.put(GLOBAL, active.get(GLOBAL).withoutCastShadow());
         for (String scope : SCOPES) {
             PrismalEdgeDecoration material = resolve(reader, scope);
-            active.put(scope, material);
-            PrismalEdgeDecoration optics = material.withoutCastShadow();
             if (DOCK.equals(scope)) {
-                // Dock's native foreground and MiShadow use the full Host
-                // geometry. Do not shrink its glass; fit only the ink into the
-                // first visible TextureView AA pixel. The wider old 1.5px
-                // shift placed subpixel ink outside the sampled coverage.
-                optics = optics.fitInkToNativeViewport(1f);
+                // Optical line only: keep full native Dock geometry.
+                // Its GPU cast shadow now shares the same Prismal material.
+                material = material.fitInkToNativeViewport(1f);
             }
-            onlyOptics.put(scope, optics);
+            active.put(scope, material);
         }
         current = Collections.unmodifiableMap(active);
-        withoutNativeShadows = Collections.unmodifiableMap(onlyOptics);
     }
 
     public static PrismalEdgeDecoration current(String scope) {
         PrismalEdgeDecoration material = current.get(scope);
-        return material == null ? PrismalEdgeDecoration.NONE : material;
-    }
-
-    /** Never render a duplicate exterior shadow over an OEM native shadow. */
-    public static PrismalEdgeDecoration withoutNativeShadow(String scope) {
-        PrismalEdgeDecoration material = withoutNativeShadows.get(scope);
         return material == null ? PrismalEdgeDecoration.NONE : material;
     }
 

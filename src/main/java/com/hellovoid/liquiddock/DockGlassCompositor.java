@@ -244,7 +244,7 @@ final class DockGlassCompositor {
 
         // The dirty-region guard must also enclose optional exterior paint.
         // Keep the previous-frame union below to prevent trails during movement.
-        float bodyFringe = RASTER_GUARD_PX + GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK)
+        float bodyFringe = RASTER_GUARD_PX + GlassEdgeEffects.current(GlassEdgeEffects.DOCK)
                 .extraGuardPx(pixelDensity, Math.min(dockBody.glassWidth, dockBody.glassHeight));
         float currentLeft = dockBody.left() - bodyFringe;
         float currentTop = dockBody.top() - bodyFringe;
@@ -278,10 +278,9 @@ final class DockGlassCompositor {
             renderer.beginGlassFrame();
         }
 
-        // One Prismal draw per node. Dock's whole-body cast shadow remains OEM
-        // MiShadow; its optical backlight response and all other glass rims use the
-        // identical light-aware SDF shader with distinct immutable recipes.
-        renderer.setEdgeDecoration(GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK), pixelDensity);
+        // Dock body and icons use the same configurable in-pass Prismal
+        // cast-shadow pipeline as all other liquid-glass components.
+        renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.DOCK), pixelDensity);
         renderer.drawGlass(dockBody, params, bodyHighlightProfile);
         renderer.setEdgeDecoration(GlassEdgeEffects.current(GlassEdgeEffects.ICON), pixelDensity);
         for (DockGlassSceneSnapshot.Item item : stable.items) {

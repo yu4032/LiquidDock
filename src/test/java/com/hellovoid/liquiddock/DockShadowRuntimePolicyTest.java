@@ -26,6 +26,15 @@ public class DockShadowRuntimePolicyTest {
     }
 
     @Test
+    public void prismalShadowOnlyOwnsActiveGlassDock() {
+        assertTrue(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(true,true,true));
+        assertFalse(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(false,true,true));
+        assertFalse(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(true,false,true));
+        assertFalse(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(true,true,false));
+        assertFalse(DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(false,false,false));
+    }
+
+    @Test
     public void vendorRefreshRequiresNormalModeAndCustomizationOwnership() {
         assertTrue(DockShadowRuntimePolicy.shouldRefreshVendorShadow(false, true));
         assertFalse(DockShadowRuntimePolicy.shouldRefreshVendorShadow(true, true));

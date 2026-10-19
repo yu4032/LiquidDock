@@ -15,18 +15,18 @@ public class GlassEdgeEffectsTest {
         assertFalse(material.hasShadow());
     }
 
-    @Test public void dockCanKeepNativeShadowAndUseBacklitOptics() {
+    @Test public void dockUsesSamePrismalShadowMaterialAsWidgetAndIcon() {
         Map<String,Object> map = new HashMap<>();
         map.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(), true);
         map.put(ConfigSchema.Glass.OUTER_SHADOW_ENABLED.name(), true);
         String dockCast = GlassEdgeEffects.key(
                 GlassEdgeEffects.DOCK, ConfigSchema.Glass.OUTER_SHADOW_ENABLED);
-        map.put(dockCast, false);
+        map.put(dockCast, true);
         GlassEdgeEffects.refresh(new ConfigReader(map));
-        PrismalEdgeDecoration dock = GlassEdgeEffects.withoutNativeShadow(
+        PrismalEdgeDecoration dock = GlassEdgeEffects.current(
                 GlassEdgeEffects.DOCK);
         assertTrue(dock.hasBacklit());
-        assertFalse(dock.hasShadow());
+        assertTrue(dock.hasShadow());
         assertEquals(1f, dock.inkViewportInsetPx, 0.0001f);
         assertEquals(0f, GlassEdgeEffects.current(GlassEdgeEffects.ICON)
                 .inkViewportInsetPx, 0.0001f);
@@ -52,7 +52,7 @@ public class GlassEdgeEffectsTest {
         values.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(), true);
         values.put(ConfigSchema.Glass.BACKLIT_EXTENT.name(), 0);
         GlassEdgeEffects.refresh(new ConfigReader(values));
-        PrismalEdgeDecoration dock = GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK);
+        PrismalEdgeDecoration dock = GlassEdgeEffects.current(GlassEdgeEffects.DOCK);
         assertFalse(dock.hasBacklit());
         assertEquals(0f, dock.inkViewportInsetPx, 0f);
         assertEquals(0f, dock.extraGuardPx(1f), 0f);

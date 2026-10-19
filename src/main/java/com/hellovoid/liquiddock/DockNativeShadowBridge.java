@@ -16,6 +16,8 @@ import java.util.WeakHashMap;
 final class DockNativeShadowBridge {
     private static final String TARGET_CLASS =
             "com.miui.home.launcher.hotseats.HotSeatsListContentBlurBackground2";
+    private static final String MIUIX_TARGET_CLASS =
+            "com.miui.home.launcher.hotseats.HotSeatsListContentMiuiXBlurBackground";
     private static final String MI_SHADOW_UTILS =
             "com.miui.home.launcher.common.MiShadowUtils";
 
@@ -57,10 +59,25 @@ final class DockNativeShadowBridge {
     private static void rewrite(Object[] args) {
         if (args == null || args.length < 6 || !(args[0] instanceof View)) return;
         View target = (View) args[0];
-        if (!TARGET_CLASS.equals(target.getClass().getName())) return;
+        String targetClass = target.getClass().getName();
+        if (!TARGET_CLASS.equals(targetClass)
+                && !MIUIX_TARGET_CLASS.equals(targetClass)) return;
 
         float vendorRadius = number(args[4]);
         DockStrokeRenderer.rememberNativeHost(target, vendorRadius);
+
+        // Only the actively presented glass Dock replaces its OEM shadow.
+        // When glass is OFF or zero-copy activation failed, native behavior
+        // remains intact and no extra Prismal layer is rendered.
+        if (DockShadowRuntimePolicy.shouldSuppressNativeForPrismal(
+                GlassRuntimeState.isEnabled(),
+                MiuixGlassHook.isBoundTo(target),
+                MiuixGlassHook.isZeroCopyActive())) {
+            args[1] = Color.TRANSPARENT;
+            args[3] = 0f;
+            args[4] = 0f;
+            return;
+        }
 
         if (MainHook.isWorkstationMode()) return;
         LiquidDockConfig.Dock dock = config;
