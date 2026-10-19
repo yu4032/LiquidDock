@@ -89,7 +89,14 @@ public final class GlassEdgeEffects {
         for (String scope : SCOPES) {
             PrismalEdgeDecoration material = resolve(reader, scope);
             active.put(scope, material);
-            onlyOptics.put(scope, material.withoutCastShadow());
+            PrismalEdgeDecoration optics = material.withoutCastShadow();
+            if (DOCK.equals(scope)) {
+                // Dock's native foreground and MiShadow use the full Host
+                // geometry. Do not shrink its glass; fit only the ink into the
+                // final TextureView antialiased boundary.
+                optics = optics.fitInkToNativeViewport(1.5f);
+            }
+            onlyOptics.put(scope, optics);
         }
         current = Collections.unmodifiableMap(active);
         withoutNativeShadows = Collections.unmodifiableMap(onlyOptics);

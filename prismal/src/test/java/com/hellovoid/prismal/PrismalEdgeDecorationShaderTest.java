@@ -23,6 +23,7 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(reflected > line);
         assertTrue(finalBlend > reflected);
         assertTrue(source.contains("float surfaceDistance = distMask + insetShiftPx;"));
+        assertTrue(source.contains("float inkDistance = surfaceDistance + u_backlitViewportInsetPx;"));
         assertTrue(source.contains("if (surfaceDistance > 0.0 && u_backlitStrength > 0.0"));
         assertTrue(source.contains("gl_FragColor = vec4(underlayRgb, underlayAlpha);"));
         assertTrue(source.contains("+ underlayRgb * underlayAlpha * (1.0 - glassAlpha)"));
@@ -38,6 +39,8 @@ public class PrismalEdgeDecorationShaderTest {
                 source.indexOf("// Ink is in front of the outer cast shadow"));
         assertTrue(ink.contains("dot(edgeNormal, u_invariantLightXY)"));
         assertTrue(ink.contains("float lineWidthPx = u_backlitWidthPx * taper;"));
+        assertTrue(ink.contains("if (inkDistance > 0.0"));
+        assertTrue(ink.contains("lineWidthPx + outsideAa, inkDistance)"));
         assertTrue(ink.contains("float entry = smoothstep(0.0, outsideAa,"));
         assertTrue(ink.contains("float exit = 1.0 - smoothstep("));
         assertFalse(ink.contains("sdRoundBox("));
@@ -118,6 +121,20 @@ public class PrismalEdgeDecorationShaderTest {
     private static float smooth(float t) {
         t=Math.max(0f,Math.min(1f,t));
         return t*t*(3f-2f*t);
+    }
+
+    @Test public void dockViewportAdaptationDoesNotDistortBodyGeometry() {
+        PrismalEdgeDecoration style = new PrismalEdgeDecoration(
+                1f, .85f, .6f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+        PrismalEdgeDecoration dock = style.fitInkToNativeViewport(1.5f);
+        assertEquals(1.5f, dock.inkViewportInsetPx, .00001f);
+        assertEquals(0f, style.inkViewportInsetPx, .00001f);
+        assertEquals(style.backlitWidthDp, dock.backlitWidthDp, .00001f);
+        assertEquals(style.backlitExtent, dock.backlitExtent, .00001f);
+        assertFalse(dock.withoutCastShadow().hasShadow());
+        assertEquals(1.5f, dock.withoutCastShadow().inkViewportInsetPx, .00001f);
+        assertSame(PrismalEdgeDecoration.NONE,
+                PrismalEdgeDecoration.NONE.fitInkToNativeViewport(1.5f));
     }
 
     @Test public void baselineRemainsUnmodifiedAndShadowOnlyStillWorks() {

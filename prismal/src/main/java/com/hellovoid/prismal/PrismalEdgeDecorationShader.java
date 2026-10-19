@@ -32,6 +32,7 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_backlitStrength;
                 uniform float u_backlitSoftness;
                 uniform float u_backlitExtent;
+                uniform float u_backlitViewportInsetPx;
                 uniform vec4 u_castShadowColor;
                 uniform float u_castShadowRadiusPx;
                 uniform float u_castShadowOffsetYPx;
@@ -61,8 +62,13 @@ final class PrismalEdgeDecorationShader {
                                 * u_transmittance;
                     }
 
+                    // Dock glass touches the native TextureView bounds. Move
+                    // only the ink's sampling origin into its AA fringe; DO
+                    // NOT change the Dock shape, corner radii or MiShadow.
+                    // Other glass scopes keep a strictly external ink line.
+                    float inkDistance = surfaceDistance + u_backlitViewportInsetPx;
                     float exteriorInkAlpha = 0.0;
-                    if (surfaceDistance > 0.0 && u_backlitStrength > 0.0
+                    if (inkDistance > 0.0 && u_backlitStrength > 0.0
                             && u_backlitWidthPx > 0.0) {
                         float keyLight = max(u_os4DirectionalIntensity, 0.0);
                         float fillLight = max(u_os4DirectionalOppositeIntensity, 0.0);
@@ -94,10 +100,10 @@ final class PrismalEdgeDecorationShader {
                             float lineWidthPx = u_backlitWidthPx * taper;
                             float outsideAa = max(edgeAa * 0.5, 0.25);
                             float entry = smoothstep(0.0, outsideAa,
-                                    surfaceDistance);
+                                    inkDistance);
                             float exit = 1.0 - smoothstep(
                                     max(lineWidthPx - outsideAa, 0.0),
-                                    lineWidthPx + outsideAa, surfaceDistance);
+                                    lineWidthPx + outsideAa, inkDistance);
                             exteriorInkAlpha = clamp(
                                     u_backlitStrength * lightEnergy * taper
                                     * entry * exit, 0.0, 0.98);

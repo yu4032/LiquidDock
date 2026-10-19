@@ -12,6 +12,8 @@ public final class PrismalEdgeDecoration {
                     0f, 0f, 0f, 0f, 0f);
 
     public final float backlitWidthDp, backlitStrength, backlitSoftness, backlitExtent;
+    /** Subpixel optical rim fitting for a view whose native output cannot overscan. */
+    public final float inkViewportInsetPx;
     public final float shadowRadiusDp, shadowOffsetYDp;
     public final float shadowR, shadowG, shadowB, shadowA, shadowLightFollow;
 
@@ -30,6 +32,17 @@ public final class PrismalEdgeDecoration {
                                  float shadowOffsetYDp, float shadowR,
                                  float shadowG, float shadowB, float shadowA,
                                  float shadowLightFollow, float backlitExtent) {
+        this(backlitWidthDp, backlitStrength, backlitSoftness, shadowRadiusDp,
+                shadowOffsetYDp, shadowR, shadowG, shadowB, shadowA,
+                shadowLightFollow, backlitExtent, 0f);
+    }
+
+    private PrismalEdgeDecoration(float backlitWidthDp, float backlitStrength,
+                                  float backlitSoftness, float shadowRadiusDp,
+                                  float shadowOffsetYDp, float shadowR, float shadowG,
+                                  float shadowB, float shadowA, float shadowLightFollow,
+                                  float backlitExtent, float inkViewportInsetPx) {
+        this.inkViewportInsetPx = bounded(inkViewportInsetPx, 0f, 2f);
         this.backlitWidthDp = bounded(backlitWidthDp, 0f, 24f);
         this.backlitStrength = bounded(backlitStrength, 0f, 1f);
         this.backlitSoftness = bounded(backlitSoftness, 0.05f, 2f);
@@ -53,7 +66,19 @@ public final class PrismalEdgeDecoration {
         if (!hasShadow()) return this;
         return new PrismalEdgeDecoration(backlitWidthDp, backlitStrength,
                 backlitSoftness, 0f, 0f, shadowR, shadowG, shadowB, 0f, 0f,
-                backlitExtent);
+                backlitExtent, inkViewportInsetPx);
+    }
+
+    /**
+     * Dock only: keep its full-size OEM shadow/foreground/glass geometry
+     * pixel-exact, and fit just the antialiased ink in the existing output.
+     * Cached on preference changes, never allocated on a render frame.
+     */
+    public PrismalEdgeDecoration fitInkToNativeViewport(float insetPx) {
+        if (!hasBacklit() || insetPx <= 0f) return this;
+        return new PrismalEdgeDecoration(backlitWidthDp, backlitStrength,
+                backlitSoftness, shadowRadiusDp, shadowOffsetYDp, shadowR, shadowG,
+                shadowB, shadowA, shadowLightFollow, backlitExtent, insetPx);
     }
 
     public float effectiveShadowRadiusPx(float density, float minDimensionPx) {

@@ -1109,16 +1109,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         if (!Float.isNaN(nativeRadius) && !Float.isInfinite(nativeRadius) && nativeRadius > 0f) {
             cornerRadiusPx = nativeRadius;
         }
-        // The visible Dock TextureView is exactly the native glass bounds.
-        // The FBO and node scissor may overscan, but the final crop cannot.
-        // Reserve a few physical pixels *inside* that output for the optional
-        // true exterior hairline while keeping the capture/crop unchanged.
-        return DockGlassBodyGeometry.fitOuterHairline(new PrismalGeometry(
+        // Keep the vendor Dock shape, foreground border and MiShadow exactly
+        // aligned. The optical ink's AA placement is resolved by the shared
+        // shader; shrinking the whole rectangle would misalign all three.
+        return new PrismalGeometry(
                 mapping.sampleWidth, mapping.sampleHeight,
                 centerX, centerYTop,
                 glassWidth, glassHeight,
-                cornerRadiusPx),
-                GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK));
+                cornerRadiusPx);
     }
 
     private boolean renderCompositePass(int prismalTexture, BackdropSnapshot mapping) {

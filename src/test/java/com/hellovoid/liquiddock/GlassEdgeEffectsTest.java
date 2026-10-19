@@ -27,6 +27,9 @@ public class GlassEdgeEffectsTest {
                 GlassEdgeEffects.DOCK);
         assertTrue(dock.hasBacklit());
         assertFalse(dock.hasShadow());
+        assertEquals(1.5f, dock.inkViewportInsetPx, 0.0001f);
+        assertEquals(0f, GlassEdgeEffects.current(GlassEdgeEffects.ICON)
+                .inkViewportInsetPx, 0.0001f);
         assertTrue(GlassEdgeEffects.current(GlassEdgeEffects.ICON).hasShadow());
     }
 
@@ -42,6 +45,17 @@ public class GlassEdgeEffectsTest {
         assertFalse(folder.hasBacklit());
         assertTrue(folder.hasShadow());
         assertTrue(widget.hasBacklit());
+    }
+
+    @Test public void zeroExtentNeverInsetsDockOrCompilesOptionalRim() {
+        Map<String,Object> values = new HashMap<>();
+        values.put(ConfigSchema.Glass.BACKLIT_ENABLED.name(), true);
+        values.put(ConfigSchema.Glass.BACKLIT_EXTENT.name(), 0);
+        GlassEdgeEffects.refresh(new ConfigReader(values));
+        PrismalEdgeDecoration dock = GlassEdgeEffects.withoutNativeShadow(GlassEdgeEffects.DOCK);
+        assertFalse(dock.hasBacklit());
+        assertEquals(0f, dock.inkViewportInsetPx, 0f);
+        assertEquals(0f, dock.extraGuardPx(1f), 0f);
     }
 
     @Test public void scopedExtentInheritsAndCanOverrideSeparately() {
