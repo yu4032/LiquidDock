@@ -208,7 +208,9 @@ final class DockStrokeRenderer {
         synchronized (INSTALLED) {
             StrokeDrawable installed = INSTALLED.get(host);
 
-            if (isNativeStrokeSuppressed(host)) {
+            if (isNativeStrokeSuppressed(host)
+                    || (host instanceof DockLiquidGlassHostView
+                            && Miuix307ZeroCopyRenderer.isWorkstationTaskbarMode())) {
                 releaseInstalledStrokeLocked(host, installed);
                 return;
             }
