@@ -42,6 +42,7 @@ final class LauncherGlassStaticNode {
     private ValueAnimator pressAnimator;
     private ValueAnimator visibilityAnimator;
     private volatile float visibilityAlpha;
+    private volatile float homeReturnAlpha = 1f;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
     private LauncherGlassStaticNode(
@@ -67,6 +68,7 @@ final class LauncherGlassStaticNode {
             }
 
             @Override public void onViewDetachedFromWindow(View v) {
+                homeReturnAlpha = 1f;
                 resetPressInteraction(false);
                 hideImmediately();
                 LauncherGlassSession live = session;
@@ -240,7 +242,23 @@ final class LauncherGlassStaticNode {
         animateVisibilityTo(!suppressionState.isSuppressed());
     }
 
-    float visibilityAlpha() { return visibilityAlpha; }
+    float visibilityAlpha() { return visibilityAlpha * homeReturnAlpha; }
+
+    void updateHomeReturnProgress(float progress) {
+        if (disposed) return;
+        float alpha = LauncherGlassReturnFade.alpha(progress);
+        if (homeReturnAlpha == alpha) return;
+        homeReturnAlpha = alpha;
+        LauncherGlassSession live = session;
+        if (live != null) live.requestStaticRedraw();
+    }
+
+    void resetHomeReturnFade() {
+        if (homeReturnAlpha == 1f) return;
+        homeReturnAlpha = 1f;
+        LauncherGlassSession live = session;
+        if (live != null) live.requestStaticRedraw();
+    }
 
     /**
      * UI-only guard. Widgets still read their native span and grid-derived width
@@ -335,6 +353,7 @@ final class LauncherGlassStaticNode {
     }
 
     void endLaunchProxy() {
+        resetHomeReturnFade();
         if (disposed || !visualOwnerState.endLaunchProxy()) return;
         invalidateVisualOwnerGeometry();
         requestLifecycleRefresh();

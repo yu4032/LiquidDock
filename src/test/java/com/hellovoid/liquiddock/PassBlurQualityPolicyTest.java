@@ -68,4 +68,28 @@ public class PassBlurQualityPolicyTest {
         assertTrue(limiter.shouldSchedule(10_000_000L, true));
         assertFalse(limiter.shouldSchedule(20_000_000L, false));
     }
+
+    @Test
+    public void idleTimeDoesNotBankRenderCreditsForTheNextTransition() {
+        PassBlurFrameRateLimiter limiter = new PassBlurFrameRateLimiter(60);
+        assertTrue(limiter.shouldSchedule(0L, false));
+        long resumedAt = 60_000_000_000L;
+        assertTrue(limiter.shouldSchedule(resumedAt, false));
+        assertFalse("a resume frame must consume the idle backlog",
+                limiter.shouldSchedule(resumedAt + 6_060_606L, false));
+        int accepted = 1;
+        for (int i = 2; i < 165; i++) {
+            if (limiter.shouldSchedule(resumedAt + i * 6_060_606L, false)) accepted++;
+        }
+        assertTrue("accepted=" + accepted, accepted >= 59 && accepted <= 61);
+    }
+
+    @Test
+    public void lateSourceFrameDropsMissedSlotsInsteadOfCatchingUp() {
+        PassBlurFrameRateLimiter limiter = new PassBlurFrameRateLimiter(30);
+        assertTrue(limiter.shouldSchedule(0L, false));
+        assertTrue(limiter.shouldSchedule(500_000_000L, false));
+        assertFalse(limiter.shouldSchedule(506_000_000L, false));
+        assertTrue(limiter.shouldSchedule(540_000_000L, false));
+    }
 }
