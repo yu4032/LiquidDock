@@ -102,6 +102,11 @@ public final class PrismalEdgeDecoration {
                 -radius * 0.6f, radius * 0.6f);
     }
 
+    /** Convenience for callers that do not have per-node geometry at hand. */
+    public float extraGuardPx(float density) {
+        return extraGuardPx(density, Float.MAX_VALUE);
+    }
+
     public float extraGuardPx(float density, float minDimensionPx) {
         float scale = bounded(density, .1f, 5f);
         // Unlike the previous inner line, an exterior hairline needs actual
