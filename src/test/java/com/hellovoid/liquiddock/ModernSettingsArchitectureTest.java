@@ -173,7 +173,9 @@ public class ModernSettingsArchitectureTest {
         assertFalse(source.contains("visible = !searchOpen,"));
         assertFalse(source.contains("fadeIn(tween(210)"));
         assertFalse(source.contains("fadeOut(tween(160)"));
-        assertTrue(source.contains("One Transition owns search content AND bottom navigation"));
+        assertTrue(source.contains("animationSpec = searchSlideSpec"));
+        assertTrue(source.contains("fadeIn(searchFadeSpec)"));
+        assertTrue(source.contains("fadeOut(searchFadeSpec)"));
 
         assertTrue(source.contains("slideInVertically("));
         assertTrue(source.contains("slideOutVertically("));
