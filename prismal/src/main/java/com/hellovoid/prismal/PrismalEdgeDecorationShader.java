@@ -54,7 +54,10 @@ final class PrismalEdgeDecorationShader {
                         float halo = 1.0 - smoothstep(0.0,
                                 max(u_castShadowRadiusPx * 2.0, 0.001),
                                 distanceToCaster);
-                        exteriorShadowAlpha = u_castShadowColor.a * halo * halo;
+                        // Preserve the prior exterior-shadow transmittance;
+                        // moving the hairline must not brighten the full cast.
+                        exteriorShadowAlpha = u_castShadowColor.a * halo * halo
+                                * u_transmittance;
                     }
 
                     float exteriorInkAlpha = 0.0;
