@@ -1,6 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.SurfaceTexture;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -172,12 +171,12 @@ final class Miuix307ZeroCopyRenderer {
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
         if (!decision.forceProducerUpdates) return;
 
-        final long outputTimestampBaseline = readOutputTimestamp(gpuBackdrop);
+        final long inputGenerationBaseline = gpuBackdrop.producerCallbackGeneration();
         homeProducerOverride = true;
         applyProducerUpdatesPolicy("home-refresh-start");
-        awaitFreshHomeOutput(gpuBackdrop, serial, outputTimestampBaseline, 0);
+        awaitFreshHomeOutput(gpuBackdrop, serial, inputGenerationBaseline, 0);
         MainHook.log(TAG + " HOME backdrop refresh armed serial=" + serial
-                + " outputTimestampBaseline=" + outputTimestampBaseline);
+                + " inputGenerationBaseline=" + inputGenerationBaseline);
     }
 
     /** HOME FINISH never hides the Dock; refresh was already armed at HOME START. */
@@ -191,22 +190,23 @@ final class Miuix307ZeroCopyRenderer {
     private static void awaitFreshHomeOutput(
             Miuix307PassBlurTextureView gpuBackdrop,
             long serial,
-            long outputTimestampBaseline,
+            long inputGenerationBaseline,
             int attempt) {
         if (gpuBackdropRef.get() != gpuBackdrop || serial != homeFreshnessSerial
                 || !gpuBackdrop.isAttachedToWindow()) {
             return;
         }
 
-        long outputTimestamp = readOutputTimestamp(gpuBackdrop);
-        if (outputTimestamp > 0L && outputTimestamp != outputTimestampBaseline) {
+        long presentedGeneration = gpuBackdrop.presentedProducerGeneration();
+        if (DockHomeBackdropFreshnessState.isNewProducerFramePresented(
+                inputGenerationBaseline, presentedGeneration)) {
             DockHomeBackdropFreshnessState.Decision decision =
                     HOME_FRESHNESS.onProducerFrameAvailable();
             if (decision.releaseProducerOverride) {
                 homeProducerOverride = false;
                 applyProducerUpdatesPolicy("home-refresh-frame-arrived");
                 MainHook.log(TAG + " HOME backdrop refreshed serial=" + serial
-                        + " outputTimestamp=" + outputTimestamp);
+                        + " presentedProducerGeneration=" + presentedGeneration);
             }
             return;
         }
@@ -220,12 +220,7 @@ final class Miuix307ZeroCopyRenderer {
         }
 
         gpuBackdrop.postOnAnimation(() -> awaitFreshHomeOutput(
-                gpuBackdrop, serial, outputTimestampBaseline, attempt + 1));
-    }
-
-    private static long readOutputTimestamp(Miuix307PassBlurTextureView gpuBackdrop) {
-        SurfaceTexture output = gpuBackdrop.getSurfaceTexture();
-        return output != null ? output.getTimestamp() : 0L;
+                gpuBackdrop, serial, inputGenerationBaseline, attempt + 1));
     }
 
     static void requestDockSceneRefresh() {

@@ -54,8 +54,12 @@ public class HookUtilArchitectureContractTest {
         String source = Files.readString(MAIN.resolve("Miuix307ZeroCopyRenderer.java"));
         assertFalse("Miuix307PassBlurTextureView is project-owned; reflected field names break under R8",
                 source.contains("HookUtil.getField(gpuBackdrop, \"inputSurfaceTexture\")"));
-        assertTrue("HOME freshness must use the TextureView output SurfaceTexture through typed API",
-                source.contains("gpuBackdrop.getSurfaceTexture()"));
+        assertTrue("HOME freshness must use the typed input callback generation",
+                source.contains("gpuBackdrop.producerCallbackGeneration()"));
+        assertTrue("HOME freshness must wait for an actual presented producer buffer",
+                source.contains("gpuBackdrop.presentedProducerGeneration()"));
+        assertFalse("a scene-only output timestamp cannot certify fresh PassBlur content",
+                source.contains("readOutputTimestamp("));
         assertTrue("HOME freshness polling must be bounded instead of posting forever on failure",
                 source.contains("MAX_HOME_FRESH_WAIT_FRAMES"));
     }

@@ -224,6 +224,14 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile boolean shuttingDown;
     private volatile boolean gpuBackdropActive;
     private volatile boolean hasPresentedFrame;
+    /**
+     * Monotonic input callback/presentation generations. A TextureView swap can
+     * be a scene-only redraw, so its timestamp cannot prove the PassBlur producer
+     * supplied a new background. Never reset these generations in power stats.
+     */
+    private volatile long producerCallbackGeneration;
+    private long latchedProducerGeneration; // GL thread only
+    private volatile long presentedProducerGeneration;
     private volatile boolean producerUpdatesEnabled = true;
     private volatile int configRotation;
     private volatile SurfaceTexture inputSurfaceTexture;
@@ -360,6 +368,14 @@ final class Miuix307PassBlurTextureView extends TextureView
         return gpuBackdropActive;
     }
 
+    long producerCallbackGeneration() {
+        return producerCallbackGeneration;
+    }
+
+    long presentedProducerGeneration() {
+        return presentedProducerGeneration;
+    }
+
     boolean isActivationExhausted() {
         return producerRecovery.isActivationExhausted();
     }
@@ -457,6 +473,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         try {
             makeCurrent();
             invalidatePreparedBackdrop();
+            latchedProducerGeneration = presentedProducerGeneration;
             inputProducerSurface = null;
             inputSurfaceTexture = null;
 
@@ -793,6 +810,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         input.setOnFrameAvailableListener(texture -> {
             if (shuttingDown || texture != inputSurfaceTexture) return;
             producerFrameCount++;
+            producerCallbackGeneration++;
             frameAvailable.set(true);
             Miuix307PassBlurBridge.renewForceRefresh(binding);
             scheduleRender(true);
@@ -911,6 +929,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 input.updateTexImage();
                 input.getTransformMatrix(textureMatrix);
                 producerRecovery.onFreshFrameConsumed();
+                latchedProducerGeneration = producerCallbackGeneration;
                 // The OES source is now newer than the prepared blur even if this draw later exits
                 // on a mapping-generation mismatch. Force the next render to rebuild from the
                 // already-latched latest producer texture rather than reusing stale backdrop data.
@@ -974,6 +993,12 @@ final class Miuix307PassBlurTextureView extends TextureView
                         + Integer.toHexString(EGL14.eglGetError()));
             }
             hasPresentedFrame = true;
+            // Commit the producer generation only AFTER a successful EGL swap.
+            // On mapping churn, a latched frame can wait for a later scene redraw;
+            // scene-only swaps cannot advance this generation on their own.
+            if (latchedProducerGeneration > presentedProducerGeneration) {
+                presentedProducerGeneration = latchedProducerGeneration;
+            }
             renderedFrameCount++;
             maybeLogPowerStats();
 
