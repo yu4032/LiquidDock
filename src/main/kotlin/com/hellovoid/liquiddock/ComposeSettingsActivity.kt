@@ -14,7 +14,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -250,9 +249,9 @@ private fun LiquidDockSettings(
                 },
             )
         } else {
-        Box(Modifier.fillMaxSize().nestedScroll(rememberSettingsPullDownSearch(::openSearch))) {
         AnimatedContent(
             targetState = page,
+            modifier = Modifier.fillMaxSize().nestedScroll(rememberSettingsPullDownSearch(::openSearch)),
             transitionSpec = {
                 val duration = prefs.getInt(
                     ConfigSchema.Animation.SETTINGS_PAGE.name(),
@@ -467,7 +466,6 @@ private fun LiquidDockSettings(
                 Page.Data -> DataPage(padding, activity)
                 Page.About -> AboutPage(padding, activity, prefs)
             }
-        }
         }
         }
     }
