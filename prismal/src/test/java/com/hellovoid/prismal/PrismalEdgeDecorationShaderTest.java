@@ -24,6 +24,11 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(finalBlend > reflected);
         assertTrue(source.contains("float surfaceDistance = distMask + insetShiftPx;"));
         assertTrue(source.contains("float inkDistance = surfaceDistance + u_backlitViewportInsetPx;"));
+        assertTrue(source.contains("vec3 refractedContourColor(vec3 transmitted"));
+        assertTrue(source.contains("vec2 rimUv = backdropUv(v_screenTexCoord"));
+        assertTrue(source.contains("vec3 contourGlass = mix("));
+        assertTrue(source.contains("vec3 rim = refractedContourColor(color, hiSoft, rimDarkWeight);"));
+        assertFalse(source.contains("vec3(0.015)"));
         assertTrue(source.contains("if (inkDistance > 0.0 && u_backlitStrength > 0.0"));
         assertTrue(source.contains("if (surfaceDistance > 0.0 && u_castShadowRadiusPx > 0.0"));
         // The Dock-specific inset moves only ink sampling, not the whole
@@ -42,7 +47,9 @@ public class PrismalEdgeDecorationShaderTest {
         String ink = source.substring(source.indexOf("float exteriorInkAlpha = 0.0;"),
                 source.indexOf("// Ink is in front of the outer cast shadow"));
         assertTrue(ink.contains("dot(edgeNormal, u_invariantLightXY)"));
-        assertTrue(ink.contains("float lineWidthPx = u_backlitWidthPx * taper;"));
+        assertTrue(ink.contains("float lineWidthPx = u_backlitWidthPx;"));
+        assertTrue(ink.contains("rimDarkWeight = taper;"));
+        assertFalse(ink.contains("u_backlitStrength * lightEnergy * taper"));
         assertTrue(ink.contains("if (inkDistance > 0.0"));
         assertTrue(ink.contains("lineWidthPx + outsideAa, inkDistance)"));
         assertTrue(ink.contains("float entry = smoothstep(0.0, outsideAa,"));
@@ -177,14 +184,28 @@ public class PrismalEdgeDecorationShaderTest {
                 PrismalShaderSources.VERTEX).contains("u_edgeRasterGuardPx"));
     }
 
-    @Test public void glassOverInkPreservesHighlightAndOutsideRemainsDark() {
-        // A bright reflected glass surface stays visually bright where its
-        // alpha is high. Past that surface, the ink supplies the dark outline.
-        float glassA = .95f, glassR = .98f, inkA = .90f, inkR = .015f;
-        float outA = glassA + inkA*(1f-glassA);
-        float result = (glassR*glassA + inkR*inkA*(1f-glassA))/outA;
-        assertTrue("OS4 highlight must survive", result > .9f);
-        assertTrue("exterior ink remains near black", inkR < .02f);
-        assertEquals(inkA, 0f + inkA*(1f-0f), .00001f);
+    @Test public void refractionDrivesBothBrightAndDarkContourRgb() {
+        float brown = .49f, gray = .42f, os4White = .98f;
+        assertTrue(contourColor(brown, os4White, 0f) > brown);
+        assertTrue(contourColor(gray, os4White, 0f) > gray);
+        assertTrue(contourColor(brown, os4White, 1f) < brown * .04f);
+        assertTrue(contourColor(gray, os4White, 1f) < gray * .04f);
+        assertNotEquals("dark color is sampled, not constant ink",
+                contourColor(brown, os4White, 1f),
+                contourColor(gray, os4White, 1f), .0001f);
+        float previous = contourColor(brown, os4White, 0f);
+        for(int i = 1; i <= 1000; i++) {
+            float value = contourColor(brown, os4White, i / 1000f);
+            assertTrue(value <= previous + .00001f);
+            assertTrue(previous - value < .005f);
+            previous = value;
+        }
+    }
+    private static float contourColor(float transmitted, float highlight, float darkWeight) {
+        float lit = transmitted*.12f + Math.max(transmitted,highlight)*.88f;
+        float dark = transmitted*.035f;
+        float shade = smooth(Math.min(1f, Math.max(0f, darkWeight/.72f)));
+        return lit*(1f-shade) + dark*shade;
     }
 }
+

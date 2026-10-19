@@ -2,9 +2,9 @@ package com.hellovoid.prismal;
 
 /**
  * Immutable per-component optical response, in the original glass draw.
- * Light-facing reflection is supplied by Prismal OS4; the unlit silhouette
- * receives a narrow, antialiased dark contour outside the alpha silhouette.
- * Original OS4 highlights are composited above that line in the same fragment.
+ * The narrow contour derives RGB from refracted backdrop pixels and the same
+ * Prismal OS4 highlights. Lighting varies edge color instead of fading out
+ * a fixed-black painted stroke.
  */
 public final class PrismalEdgeDecoration {
     public static final PrismalEdgeDecoration NONE =

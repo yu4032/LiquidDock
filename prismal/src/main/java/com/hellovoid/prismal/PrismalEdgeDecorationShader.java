@@ -3,9 +3,10 @@ package com.hellovoid.prismal;
 /**
  * Optical response of one rounded glass volume. The upstream OS4 Fresnel,
  * reflection, directional highlight, AA and rounded SDF remain untouched.
- * In the SAME draw, draw the narrow light-responsive ink line just OUTSIDE
- * the glass alpha silhouette; composite it beneath the existing OS4 highlights
- * and in front of the outer cast shadow. No additional pass/Surface/texture.
+ * In one draw, tint the narrow SDF contour using refracted background RGB and
+ * the original OS4 highlight color. Light continuously changes its color from
+ * dark material to bright reflected material, rather than hiding a black line.
+ * No additional pass/Surface/texture.
  */
 final class PrismalEdgeDecorationShader {
     private static final String PRECISION = "precision highp float;";
@@ -37,6 +38,13 @@ final class PrismalEdgeDecorationShader {
                 uniform float u_castShadowRadiusPx;
                 uniform float u_castShadowOffsetYPx;
                 uniform float u_castShadowLightFollow;
+
+                // Optical edge shades actual transmitted RGB and inherited OS4 rim white.
+                vec3 refractedContourColor(vec3 transmitted, vec3 highlight, float darkWeight) {
+                    vec3 lit = mix(transmitted, max(transmitted, highlight), 0.88);
+                    vec3 dark = transmitted * 0.035;
+                    return mix(lit, dark, smoothstep(0.0, 0.72, darkWeight));
+                }
                 """)
                 .replace(BEFORE_DISCARD, """
                     // The shadow and ink line are UNDER the already-lit
@@ -67,6 +75,7 @@ final class PrismalEdgeDecorationShader {
                     // NOT change the Dock shape, corner radii or MiShadow.
                     // Other glass scopes keep a strictly external ink line.
                     float inkDistance = surfaceDistance + u_backlitViewportInsetPx;
+                    float rimDarkWeight = 0.0;
                     float exteriorInkAlpha = 0.0;
                     if (inkDistance > 0.0 && u_backlitStrength > 0.0
                             && u_backlitWidthPx > 0.0) {
@@ -74,15 +83,14 @@ final class PrismalEdgeDecorationShader {
                         float fillLight = max(u_os4DirectionalOppositeIntensity, 0.0);
                         float lightEnergy = clamp(
                                 (keyLight + fillLight) * 2.0, 0.0, 1.0);
-                        if (lightEnergy > 0.001) {
+                        {
                             vec2 edgeNormal = normalize(
                                     os4SdfGradient + vec2(0.00001));
                             float angularIncidence = abs(
                                     dot(edgeNormal, u_invariantLightXY));
-                            // 0% reach is a TRUE zero-length line, not a faint
-                            // all-around baseline. At low reach only nearly
-                            // tangential normals show ink; 100% allows a thin
-                            // continuous seam around the entire glass.
+                            // Reach controls the dark COLOR domain along the
+                            // curved SDF normal, not whether the stroke exists.
+                            // At 0% the config disables the rim entirely.
                             float grazing = clamp(1.0 - angularIncidence, 0.0, 1.0);
                             float reachStart = mix(1.0, -0.20, u_backlitExtent);
                             float progress = clamp((grazing - reachStart)
@@ -97,7 +105,8 @@ final class PrismalEdgeDecorationShader {
                             float e2 = u_backlitExtent * u_backlitExtent;
                             float e4 = e2 * e2;
                             taper = max(taper, 0.18 * e4 * e4);
-                            float lineWidthPx = u_backlitWidthPx * taper;
+                            rimDarkWeight = taper;
+                            float lineWidthPx = u_backlitWidthPx;
                             float outsideAa = max(edgeAa * 0.5, 0.25);
                             float entry = smoothstep(0.0, outsideAa,
                                     inkDistance);
@@ -105,33 +114,57 @@ final class PrismalEdgeDecorationShader {
                                     max(lineWidthPx - outsideAa, 0.0),
                                     lineWidthPx + outsideAa, inkDistance);
                             exteriorInkAlpha = clamp(
-                                    u_backlitStrength * lightEnergy * taper
+                                    u_backlitStrength * mix(0.55, 1.0, lightEnergy)
                                     * entry * exit, 0.0, 0.98);
                         }
                     }
                     // Ink is in front of the outer cast shadow, but BOTH are
                     // behind the illuminated glass surface (one fragment).
+                    // Exterior-only pixels need one refraction sample because
+                    // the upstream glass shading is skipped in that early return.
                     float underlayAlpha = exteriorInkAlpha
                             + exteriorShadowAlpha * (1.0 - exteriorInkAlpha);
-                    vec3 underlayRgb = (vec3(0.015) * exteriorInkAlpha
-                            + u_castShadowColor.rgb * exteriorShadowAlpha
-                            * (1.0 - exteriorInkAlpha))
-                            / max(underlayAlpha, 0.0001);
                     if (opacity < 0.001) {
                         if (underlayAlpha < 0.001) discard;
+                        vec3 rim = vec3(0.0);
+                        if (exteriorInkAlpha > 0.001) {
+                            vec2 n = normalize(os4SdfGradient + vec2(0.00001));
+                            vec2 rimUv = backdropUv(v_screenTexCoord,
+                                    -n * max(u_os4ReflectOffsetPx, 1.0)
+                                    * 0.5 / u_resolution, 0.0);
+                            vec3 refracted = u_useBlurredTexture == 1
+                                    ? texture2D(u_blurredTexture, rimUv).rgb
+                                    : texture2D(u_backgroundTexture, rimUv).rgb;
+                            rim = refractedContourColor(refracted,
+                                    vec3(0.98, 0.992, 1.008), rimDarkWeight);
+                        }
+                        vec3 underlayRgb = (rim * exteriorInkAlpha
+                                + u_castShadowColor.rgb * exteriorShadowAlpha
+                                * (1.0 - exteriorInkAlpha))
+                                / max(underlayAlpha, 0.0001);
                         gl_FragColor = vec4(underlayRgb, underlayAlpha);
                         return;
                     }
                     """)
                 .replace(FINAL, """
-                    // Keep the original OS4-reflected glass OVER the exterior
-                    // ink and shadow. This avoids removing the bright edge
-                    // while retaining a visible hairline just outside it.
+                    // Prismal's 'color' already includes Snell refraction,
+                    // chromatic dispersion, reflected backdrop and OS4 lighting.
+                    // Reuse it at the SDF fringe instead of drawing an opaque
+                    // fixed-black stroke on top of a light-facing highlight.
                     if (underlayAlpha > 0.001) {
+                        vec3 rim = refractedContourColor(color, hiSoft, rimDarkWeight);
+                        float innerFringe = smoothstep(
+                                -max(u_backlitWidthPx, 0.5), 0.0, surfaceDistance);
+                        vec3 contourGlass = mix(
+                                color, rim, exteriorInkAlpha * innerFringe);
                         float glassAlpha = opacity * u_transmittance;
                         float combinedAlpha = glassAlpha
                                 + underlayAlpha * (1.0 - glassAlpha);
-                        vec3 combinedRgb = (color * glassAlpha
+                        vec3 underlayRgb = (rim * exteriorInkAlpha
+                                + u_castShadowColor.rgb * exteriorShadowAlpha
+                                * (1.0 - exteriorInkAlpha))
+                                / max(underlayAlpha, 0.0001);
+                        vec3 combinedRgb = (contourGlass * glassAlpha
                                 + underlayRgb * underlayAlpha * (1.0 - glassAlpha))
                                 / max(combinedAlpha, 0.0001);
                         gl_FragColor = vec4(combinedRgb, combinedAlpha);
