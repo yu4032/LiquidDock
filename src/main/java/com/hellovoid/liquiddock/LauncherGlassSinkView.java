@@ -438,10 +438,15 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         float insetX = presentationPaddingPx * scaleX;
         float insetY = presentationPaddingPx * scaleY;
 
+        float radius = nativeCornerRadiusPx * Math.max(0.01f, Math.min(scaleX, scaleY));
+        if (presentationPaddingPx == 0) {
+            // Keep the existing clipped geometry policy for ordinary sinks.
+            return LauncherGlassGeometry.resolve(
+                    root.getWidth(), root.getHeight(), left, top, right, bottom, radius);
+        }
         LauncherGlassGeometry.Snapshot shape = LauncherGlassGeometry.resolveStatic(
                 root.getWidth(), root.getHeight(),
-                left + insetX, top + insetY, right - insetX, bottom - insetY,
-                nativeCornerRadiusPx * Math.max(0.01f, Math.min(scaleX, scaleY)));
+                left + insetX, top + insetY, right - insetX, bottom - insetY, radius);
         return LauncherGlassGeometry.withPresentationCrop(
                 shape, root.getWidth(), root.getHeight(), left, top, right, bottom);
     }
