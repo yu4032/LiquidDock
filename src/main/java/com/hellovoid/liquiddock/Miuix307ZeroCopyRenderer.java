@@ -144,13 +144,25 @@ final class Miuix307ZeroCopyRenderer {
         return workstationTaskbarMode;
     }
 
-    /** Only center icon rows inside the same native Dock window as the active GPU body. */
-    static int taskbarNativeHeightFor(View recycler) {
+    /**
+     * The workstation icon RecyclerView can belong to a different window root than the
+     * material TextureView. Both are in the same display's physical screen coordinate system;
+     * comparing getRootView() identities incorrectly discards valid icon rows.
+     */
+    static float taskbarVisualCenterFor(View recycler) {
         View material = materialHostRef.get();
-        if (!workstationTaskbarMode || material == null || recycler == null
+        if (!workstationTaskbarMode || !WorkstationRuntimeState.isActive()
+                || recycler == null || material == null
                 || !material.isAttachedToWindow() || !recycler.isAttachedToWindow()
-                || material.getRootView() != recycler.getRootView()) return 0;
-        return Math.max(0, material.getHeight());
+                || material.getHeight() <= 0) return Float.NaN;
+        Display materialDisplay = material.getDisplay();
+        Display rowDisplay = recycler.getDisplay();
+        if (materialDisplay == null || rowDisplay == null
+                || materialDisplay.getDisplayId() != rowDisplay.getDisplayId()) return Float.NaN;
+        materialDisplay.getRealSize(realScreenSize);
+        if (realScreenSize.y <= material.getHeight()) return Float.NaN;
+        return WorkstationTaskbarGeometry.visibleCenter(
+                realScreenSize.y, material.getHeight());
     }
 
     static void setWorkstationTaskbarMode(boolean enabled) {
