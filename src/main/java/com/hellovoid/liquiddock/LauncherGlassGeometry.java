@@ -134,7 +134,11 @@ final class LauncherGlassGeometry {
             if (other == null) return false;
             return close(left, other.left) && close(top, other.top)
                     && close(width, other.width) && close(height, other.height)
-                    && close(cornerRadius, other.cornerRadius);
+                    && close(cornerRadius, other.cornerRadius)
+                    && close(cropLeft, other.cropLeft)
+                    && close(cropBottom, other.cropBottom)
+                    && close(cropWidth, other.cropWidth)
+                    && close(cropHeight, other.cropHeight);
         }
 
         private static boolean close(float a, float b) {
