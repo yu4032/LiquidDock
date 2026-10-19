@@ -1318,7 +1318,7 @@ public class ModernSettingsArchitectureTest {
     }
 
     @Test
-    public void glassSettingsDialogsUseMeasuredSpringMotionWithoutExtraSampling() throws Exception {
+    public void glassSettingsDialogsUseNativeWindowMotionWithoutClippedChildLayers() throws Exception {
         String motion = Files.readString(Path.of(
                 "src/main/kotlin/com/hellovoid/liquiddock/SettingsDialogMotion.kt"));
         String reset = Files.readString(UTILITY_PAGES);
@@ -1331,14 +1331,18 @@ public class ModernSettingsArchitectureTest {
         assertTrue(grid.contains("AnimatedSettingsWindowDialog("));
         assertTrue(numeric.contains("AnimatedSettingsWindowDialog("));
         assertTrue(motion.contains("WindowDialog("));
-        assertTrue(motion.contains("show || transition.currentState || transition.isRunning"));
-        assertTrue(motion.contains("Spring.DampingRatioNoBouncy"));
-        assertTrue(motion.contains("scaleX = panelScale"));
-        assertTrue(motion.contains("translationY = panelOffset"));
+        // Upstream MIUIX WindowDialog already owns entry/exit spring and window
+        // retention. A second fading/scaling child layer clips Prismal rims.
+        assertTrue(motion.contains("show = show,"));
+        assertTrue(motion.contains("Column(content = content)"));
+        assertFalse(motion.contains("Modifier.graphicsLayer"));
+        assertFalse(motion.contains("updateTransition("));
         assertTrue(restart.contains("AnimatedVisibility("));
         assertTrue(restart.contains("enter = fadeIn("));
         assertTrue(restart.contains("exit = fadeOut("));
         assertTrue(restart.contains("graphicsLayer { scaleX = panelScale; scaleY = panelScale }"));
+        assertTrue(restart.indexOf(".graphicsLayer { scaleX = panelScale; scaleY = panelScale }")
+                < restart.indexOf(".padding(horizontal = 20.dp, vertical = 28.dp)"));
         assertTrue(restart.contains("GuiOnTouchPrismalToggle("));
         assertFalse(motion.contains("rememberPrismalGlassLayer"));
         assertFalse(motion.contains("PixelCopy"));
