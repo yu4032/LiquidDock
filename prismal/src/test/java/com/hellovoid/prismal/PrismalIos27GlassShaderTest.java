@@ -36,7 +36,7 @@ public class PrismalIos27GlassShaderTest {
 
     @Test public void rendererAppliesSharedMaterialAtShaderBuildNotPerProfile() throws Exception {
         String r = java.nio.file.Files.readString(java.nio.file.Path.of(
-                "prismal/src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
+                "src/main/java/com/hellovoid/prismal/PrismalRenderer.java"));
         assertTrue(r.contains("PrismalIos27GlassShader.apply(glassFragment)"));
         assertFalse(r.contains("u_ios27DockEnabled"));
         assertFalse(r.contains("withIos27DockOptics"));
