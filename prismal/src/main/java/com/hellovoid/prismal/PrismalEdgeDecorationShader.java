@@ -47,6 +47,30 @@ final class PrismalEdgeDecorationShader {
                     return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
                 }
 
+                // Two-stage refractive lobe and counter-light response follow
+                // the independently documented macOS 27 glass math in the
+                // MIT-licensed medfa12/liquid-glass-react-native reference.
+                // This version deliberately reuses Prismal's existing texture,
+                // SDF, uniform layout, and zero-copy PassBlur source.
+                float opticalLensArc(float t) {
+                    t = clamp(t, 0.0, 1.0);
+                    return sqrt(max((2.0 - t) * t, 0.0));
+                }
+
+                float opticalOpposingFill(float facing, float keyIntensity,
+                        float fillIntensity) {
+                    float key = opticalSmoother01((facing - 0.06) / 0.94);
+                    float fill = opticalSmoother01((-facing - 0.06) / 0.94);
+                    // Opposing soft knees are summed, not chosen by a sign
+                    // switch; bottom reflection survives when fill=0.
+                    float keyKnee = key / (1.0 + 0.35 * (1.0 - key));
+                    float fillKnee = fill / (1.0 + 0.35 * (1.0 - fill));
+                    return clamp(
+                            keyKnee * (0.72 + 0.24 * clamp(keyIntensity, 0.0, 1.0))
+                            + fillKnee * (0.66 + 0.20 * clamp(fillIntensity, 0.0, 1.0)),
+                            0.0, 1.0);
+                }
+
                 vec3 shadeOpticalMeniscus(vec3 transmitted, float darkWeight,
                         float specEnergy) {
                     float y = dot(transmitted, vec3(0.2126, 0.7152, 0.0722));
@@ -126,23 +150,20 @@ final class PrismalEdgeDecorationShader {
                             float sideWeight = opticalSmoother01(sideT);
                             float horizontalWeight = 1.0 - sideWeight;
                             float signedFacing = dot(normal, u_invariantLightXY);
-                            float direction01 = 0.5 + 0.5 * signedFacing;
-                            opticalDark = sideWeight * mix(1.0, 0.88, direction01);
-                            // The original OS4 soft-light locals are declared
-                            // after the discard. Only uniform light values
-                            // may be consulted at this earlier stage.
-                            float directionalFill = clamp(
-                                    max(u_os4DirectionalIntensity, 0.0) * 0.55
-                                    + max(u_os4DirectionalOppositeIntensity, 0.0) * 0.25,
-                                    0.0, 1.0);
+                            // Independent +normal / -normal key and fill.
+                            // This remains a secondary response to material
+                            // orientation, so top AND bottom stay reflective.
+                            float opposingFill = opticalOpposingFill(
+                                    signedFacing, u_os4DirectionalIntensity,
+                                    u_os4DirectionalOppositeIntensity);
+                            opticalDark = sideWeight * mix(1.0, 0.88, opposingFill);
                             opticalSpec = horizontalWeight
-                                    * mix(0.82, 1.0, direction01)
-                                    * mix(0.72, 1.0, directionalFill);
+                                    * mix(0.72, 1.0, opposingFill);
                             // A distinct internal highlight, not a different
                             // RGB choice for the same outer-outline alpha.
                             innerHighlightAlpha = clamp(
                                     u_backlitStrength * innerBand
-                                    * horizontalWeight * mix(0.24, 0.46, direction01),
+                                    * horizontalWeight * mix(0.26, 0.46, opposingFill),
                                     0.0, 0.52);
 
                             // Only the outside contour requires a sharp backdrop
@@ -161,8 +182,26 @@ final class PrismalEdgeDecorationShader {
                                         os4EdgeWidthPx * 0.55, 2.5, 5.0);
                                 float opticalMeniscusProfile = 1.0 - smoothstep(
                                         0.0, meniscusWidthPx, abs(surfaceDistance));
-                                float bendPx = bendPeakPx
-                                        * mix(0.35, 1.0, opticalMeniscusProfile);
+                                // Two refractive lobe profiles, in the same
+                                // physical SDF distance units as the glass.
+                                // A tiny AA offset avoids sqrt'(0) singularity.
+                                float innerT = clamp(
+                                        (max(-surfaceDistance, 0.0) + aa * 0.15)
+                                        / meniscusWidthPx, 0.0, 1.0);
+                                float outerT = clamp(
+                                        (max(surfaceDistance, 0.0) + aa * 0.15)
+                                        / meniscusWidthPx, 0.0, 1.0);
+                                float innerBendPx = max(u_lensRefractionPx, 0.0)
+                                        * 0.14 * (1.0 - opticalLensArc(innerT));
+                                float outerBendPx = rimReflectPx * 0.35
+                                        * (1.0 - opticalLensArc(outerT));
+                                // Continuous outer/inner handoff straddles the
+                                // same SDF zero crossing as the two alpha bands.
+                                float refractionHandoff = smoothstep(
+                                        -aa * 0.65, aa * 0.65, surfaceDistance);
+                                float bendPx = min(sizeCapPx,
+                                        mix(innerBendPx, outerBendPx, refractionHandoff)
+                                        * mix(0.35, 1.0, opticalMeniscusProfile));
                                 vec2 rimUv = backdropUv(v_screenTexCoord,
                                         -normal * bendPx / u_resolution, 0.0);
                                 edgeTransmission =

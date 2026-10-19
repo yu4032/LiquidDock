@@ -148,6 +148,72 @@ public class PrismalEdgeDecorationShaderTest {
         assertTrue(outline+interior*(1f-outline)>interior);
     }
 
+
+    @Test public void reference27RefractionUsesTwoLensLobesOnOneSourceTap() {
+        String shader=decorated();
+        assertTrue(shader.contains("float opticalLensArc(float t)"));
+        assertTrue(shader.contains("sqrt(max((2.0 - t) * t, 0.0))"));
+        assertTrue(shader.contains("float innerBendPx = max(u_lensRefractionPx, 0.0)"));
+        assertTrue(shader.contains("float outerBendPx = rimReflectPx * 0.35"));
+        assertTrue(shader.contains("float refractionHandoff = smoothstep("));
+        assertTrue(shader.contains("mix(innerBendPx, outerBendPx, refractionHandoff)"));
+        assertEquals("two curves share one prepared-background fetch",1,
+                occurrences(shader,"texture2D(u_backgroundTexture, rimUv).rgb;"));
+        assertFalse(shader.contains("texture2D(u_blurredTexture, rimUv)"));
+        float aa=.75f, w=4f, innerPx=7f, outerPx=6f;
+        // A smooth AA transition should not jump at the true SDF boundary.
+        float minus=bendAt(-.001f,aa,w,innerPx,outerPx);
+        float plus=bendAt(.001f,aa,w,innerPx,outerPx);
+        assertTrue("no inner/outer refraction seam",Math.abs(plus-minus)<.05f);
+        assertTrue("distortion falls off from the surface",
+                bendAt(0f,aa,w,innerPx,outerPx)>bendAt(3f,aa,w,innerPx,outerPx));
+        assertTrue("bounded by physical edge size",
+                bendAt(0f,aa,w,innerPx,outerPx)<=Math.max(innerPx,outerPx));
+    }
+
+    private static float lensArc(float t) {
+        t=Math.max(0f,Math.min(1f,t));
+        return (float)Math.sqrt(Math.max((2f-t)*t,0f));
+    }
+
+    private static float bendAt(float d,float aa,float width,float inner,float outer) {
+        float a=(Math.max(-d,0f)+aa*.15f)/width;
+        float b=(Math.max(d,0f)+aa*.15f)/width;
+        float innerBend=inner*.14f*(1-lensArc(a));
+        float outerBend=outer*.35f*(1-lensArc(b));
+        float h=smooth((d+aa*.65f)/(aa*1.30f));
+        float band=1f-smooth(Math.abs(d)/width);
+        return (innerBend*(1-h)+outerBend*h)*(.35f+.65f*band);
+    }
+
+    @Test public void opposingKeyAndFillRemainDistinctFromAxisMaterialShading() {
+        String shader=decorated();
+        assertTrue(shader.contains("float opticalOpposingFill(float facing"));
+        assertTrue(shader.contains("opticalSmoother01((facing - 0.06) / 0.94)"));
+        assertTrue(shader.contains("opticalSmoother01((-facing - 0.06) / 0.94)"));
+        assertTrue(shader.contains("float keyKnee = key / (1.0 + 0.35 * (1.0 - key))"));
+        assertTrue(shader.contains("float fillKnee = fill / (1.0 + 0.35 * (1.0 - fill))"));
+        assertTrue(shader.contains("opticalSpec = horizontalWeight"));
+        assertTrue(shader.contains("innerBand"));
+        assertTrue(shader.contains("float opposingFill = opticalOpposingFill("));
+        assertFalse(shader.contains("float direction01 = 0.5 + 0.5 * signedFacing"));
+        // On the negative side the counter-light is meaningful even when
+        // the optional opposite intensity is set to zero.
+        assertTrue(opposingFill(-1f,.8f,0f)>.45f);
+        assertTrue(opposingFill(1f,.8f,0f)>.70f);
+        assertTrue(opposingFill(0f,.8f,0f)<.05f);
+    }
+
+    private static float opposingFill(float n,float ki,float fi) {
+        float key=smoother((n-.06f)/.94f);
+        float fill=smoother((-n-.06f)/.94f);
+        float ka=key/(1f+.35f*(1f-key));
+        float fa=fill/(1f+.35f*(1f-fill));
+        return Math.max(0f,Math.min(1f,
+                ka*(.72f+.24f*Math.max(0f,Math.min(1f,ki)))
+                +fa*(.66f+.20f*Math.max(0f,Math.min(1f,fi)))));
+    }
+
     @Test public void sharpRimUsesSourceTextureWithoutASecondGlassPass() {
         String shader=decorated();
         assertEquals(1,occurrences(shader,"texture2D(u_backgroundTexture, rimUv).rgb;"));
@@ -220,7 +286,9 @@ public class PrismalEdgeDecorationShaderTest {
         String beforeDiscard=shader.substring(start,early);
         assertFalse(beforeDiscard.contains("os4SoftLight"));
         assertFalse(beforeDiscard.contains("hiSoft"));
-        assertTrue(beforeDiscard.contains("float directionalFill = clamp("));
+        assertTrue(beforeDiscard.contains("float opposingFill = opticalOpposingFill("));
+        assertFalse(beforeDiscard.contains("os4SoftLight"));
+        assertFalse(beforeDiscard.contains("directionalFill"));
         assertTrue(beforeDiscard.contains("float signedFacing = dot(normal, u_invariantLightXY);"));
     }
 
