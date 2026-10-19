@@ -788,9 +788,8 @@ public final class PrismalRenderer implements AutoCloseable {
                     || lastUploadedMinDimension != minDimension) {
                 uniform1f("u_backlitWidthPx", decoration.backlitWidthDp * edgeDensity);
                 uniform1f("u_backlitStrength", decoration.backlitStrength);
-                uniform1f("u_backlitGrazingStart", decoration.backlitGrazingStart());
-                uniform1f("u_backlitGrazingSpan", decoration.backlitGrazingSpan());
-                uniform1f("u_backlitViewportInsetPx", decoration.inkViewportInsetPx);
+                uniform1f("u_backlitSideStart", decoration.backlitSideStart());
+                uniform1f("u_backlitSideSpan", decoration.backlitSideSpan());
                 uniform1f("u_castShadowRadiusPx",
                         decoration.effectiveShadowRadiusPx(edgeDensity, minDimension));
                 uniform1f("u_castShadowLightFollow", decoration.shadowLightFollow);
