@@ -72,7 +72,7 @@ internal fun optionSummary(key: String): String = when (key) {
     "workstation_all_apps_portrait_horizontal_offset" -> "直接设置工作台所有应用竖屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_top_spacing" -> "直接设置工作台所有应用竖屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_bottom_spacing" -> "直接设置工作台所有应用竖屏图标区下间距；不叠加系统默认位置"
-    "workstation_dock_icon_top_offset" -> "通过图标顶部装饰偏移调整工作台 Dock 图标垂直位置；正值通常向下移动"
+    "workstation_dock_icon_top_offset" -> "工作台任务栏模式直接平移整行图标（正值向下、负值向上）；普通工作台模式仍调整图标顶部间距"
     "liquid_blur" -> "控制玻璃背景的模糊程度"
     "liquid_thickness" -> "控制虚拟玻璃厚度对折射效果的影响"
     "liquid_ior" -> "折射率 IOR（155 表示 1.55）；控制边缘透镜弯曲与反射，1.00 关闭透镜折射、1.55 保持默认视觉"
