@@ -116,11 +116,8 @@ final class LiveGlassConfigState {
     private static final Set<String> WORKSTATION_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
                     ConfigSchema.Workstation.TASKBAR_MODE.name(),
-                    ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET.name(),
-                    ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_HORIZONTAL_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET.name(),
-                    ConfigSchema.Workstation.DOCK_ICON_HORIZONTAL_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET.name())));
     private static final Set<String> POPUP_POLICY_KEYS = Collections.unmodifiableSet(

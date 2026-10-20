@@ -151,7 +151,7 @@ Recents supports:
 - disabling wallpaper dimming;
 - glass backgrounds for the “Clear All” and device-interconnect buttons.
 
-The Workstation taskbar toggle applies to both liquid glass and the native background. Workstation mode provides a **vertical offset for the entire Dock including its background**, separate **horizontal and vertical icon offsets for portrait and landscape**, Dock icon glass corner radius, home-screen horizontal positioning, and All Apps spacing for both orientations. Workstation Dock icon settings require Workstation customization to be enabled; the divider has its own switch.
+The Workstation taskbar toggle applies to both liquid glass and the native background. Workstation mode provides a **vertical offset for the entire Dock including its background**, separate **vertical icon offsets for portrait and landscape**, Dock icon glass corner radius, home-screen horizontal positioning, and All Apps spacing for both orientations. Workstation Dock icon settings require Workstation customization to be enabled; the divider has its own switch.
 
 ### System UI and Security Center
 

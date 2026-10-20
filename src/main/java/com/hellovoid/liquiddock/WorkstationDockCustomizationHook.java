@@ -19,19 +19,13 @@ import java.util.WeakHashMap;
 final class WorkstationDockCustomizationHook {
     private static volatile boolean dockEnabled;
     private static volatile boolean taskbarEnabled;
-    private static volatile int iconHorizontalOffset;
     private static volatile int iconTopOffset;
     private static volatile int iconBottomOffset;
-    private static volatile int iconLandscapeHorizontalOffset;
     private static volatile int iconLandscapeTopOffset;
 
     private static boolean landscape(View view) {
         return view.getResources().getConfiguration().orientation
                 == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-    }
-
-    private static int horizontalOffset(View view) {
-        return landscape(view) ? iconLandscapeHorizontalOffset : iconHorizontalOffset;
     }
 
     private static int verticalOffset(View view) {
@@ -46,24 +40,18 @@ final class WorkstationDockCustomizationHook {
         if (config == null) return;
         float scale = config.dimensionsDp
                 ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
-        int horizontal = Math.round(config.iconHorizontalOffset * scale);
         int top = Math.round(config.iconTopOffset * scale);
-        int landscapeHorizontal = Math.round(config.iconLandscapeHorizontalOffset * scale);
         int landscapeTop = Math.round(config.iconLandscapeTopOffset * scale);
         int bottom = Math.round(config.iconBottomOffset * scale);
         boolean nextTaskbar = config.dockEnabled && config.taskbarMode;
         if (dockEnabled == config.dockEnabled && taskbarEnabled == nextTaskbar
-                && iconLandscapeHorizontalOffset == landscapeHorizontal
                 && iconLandscapeTopOffset == landscapeTop
-                && iconHorizontalOffset == horizontal
                 && iconTopOffset == top && iconBottomOffset == bottom) return;
 
         dockEnabled = config.dockEnabled;
         taskbarEnabled = nextTaskbar;
-        iconHorizontalOffset = horizontal;
         iconTopOffset = top;
         iconBottomOffset = bottom;
-        iconLandscapeHorizontalOffset = landscapeHorizontal;
         iconLandscapeTopOffset = landscapeTop;
         ArrayList<View> observed;
         synchronized (OBSERVED_RECYCLERS) {
@@ -86,7 +74,6 @@ final class WorkstationDockCustomizationHook {
                 View recycler = entry.getKey();
                 RowTranslation state = entry.getValue();
                 if (recycler != null && state != null) {
-                    state.applyHorizontal(recycler, active && dockEnabled, horizontalOffset(recycler));
                     state.apply(recycler, active && dockEnabled && taskbarEnabled,
                             verticalOffset(recycler));
                 }
@@ -98,8 +85,6 @@ final class WorkstationDockCustomizationHook {
         synchronized (OBSERVED_RECYCLERS) {
             RowTranslation state = OBSERVED_RECYCLERS.get(recycler);
             if (state != null) {
-                state.applyHorizontal(recycler, dockEnabled && WorkstationRuntimeState.isActive(),
-                        horizontalOffset(recycler));
                 state.apply(recycler,
                         dockEnabled && taskbarEnabled && WorkstationRuntimeState.isActive(),
                         verticalOffset(recycler));
@@ -167,31 +152,12 @@ final class WorkstationDockCustomizationHook {
         synchronized (OBSERVED_RECYCLERS) {
             RowTranslation state = OBSERVED_RECYCLERS.get(recycler);
             if (state != null) {
-                state.applyHorizontal(recycler, false, 0);
                 state.apply(recycler, false, 0);
             }
         }
     }
 
     private static final class RowTranslation {
-        private float nativeHorizontal = Float.NaN;
-        private float lastHorizontal = Float.NaN;
-
-        void applyHorizontal(View row, boolean active, int offset) {
-            float current = row.getTranslationX();
-            boolean owned = Float.isFinite(lastHorizontal)
-                    && Math.abs(current - lastHorizontal) < 0.5f;
-            if (!active) {
-                if (owned) row.setTranslationX(nativeHorizontal);
-                nativeHorizontal = lastHorizontal = Float.NaN;
-                return;
-            }
-            if (!owned || !Float.isFinite(nativeHorizontal)) nativeHorizontal = current;
-            float target = nativeHorizontal + offset;
-            if (Math.abs(current - target) >= 0.5f) row.setTranslationX(target);
-            lastHorizontal = target;
-        }
-
         private float nativeTranslation = Float.NaN;
         private float lastAppliedTranslation = Float.NaN;
         private float stableCorrection = Float.NaN;

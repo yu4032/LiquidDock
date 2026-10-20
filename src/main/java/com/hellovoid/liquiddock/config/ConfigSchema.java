@@ -529,9 +529,6 @@ public final class ConfigSchema {
                 "workstation_dock_customization", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> TASKBAR_MODE = bool(
                 "workstation_taskbar_mode", false, false, false, ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> DOCK_WIDTH_OFFSET = dp(
-                "workstation_dock_width_offset", 0, 0, 0, -240, 240,
-                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_GLASS_CORNER_RADIUS = dp(
                 "workstation_dock_icon_glass_corner_radius", 0, 0, 0, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
@@ -559,14 +556,8 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> DOCK_VERTICAL_OFFSET = dp(
                 "workstation_dock_vertical_offset", 0, 0, 0, -120, 120,
                 ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> DOCK_ICON_LANDSCAPE_HORIZONTAL_OFFSET = dp(
-                "workstation_dock_icon_landscape_horizontal_offset", 0, 0, 0, -48, 48,
-                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET = dp(
                 "workstation_dock_icon_landscape_vertical_offset", 0, 0, 0, -48, 48,
-                ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> DOCK_ICON_HORIZONTAL_OFFSET = dp(
-                "workstation_dock_icon_horizontal_offset", 0, 0, 0, -48, 48,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_TOP_OFFSET = dp(
                 "workstation_dock_icon_top_offset", 0, 0, 0, -48, 48,
@@ -691,7 +682,6 @@ public final class ConfigSchema {
                 LauncherHighlight.PRESS_GLOW, LauncherHighlight.LARGE_SKY_HAZE,
                 LauncherHighlight.LARGE_CAUSTICS, LauncherHighlight.LARGE_PRESS_GLOW);
         add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.TASKBAR_MODE,
-                Workstation.DOCK_WIDTH_OFFSET,
                 Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
                 Workstation.GRID_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
@@ -701,9 +691,7 @@ public final class ConfigSchema {
                 Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
                 Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
                 Workstation.DOCK_VERTICAL_OFFSET,
-                Workstation.DOCK_ICON_LANDSCAPE_HORIZONTAL_OFFSET,
                 Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
-                Workstation.DOCK_ICON_HORIZONTAL_OFFSET,
                 Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET);
         add(keys, Recents.BACKGROUND_BLUR_PERCENT, Recents.DISABLE_WALLPAPER_DIMMING);
         add(keys, Debug.LOGGING);

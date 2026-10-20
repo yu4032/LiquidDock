@@ -5,7 +5,6 @@ import org.junit.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -15,20 +14,9 @@ public class WorkstationDockGeometryContractTest {
         return Files.readString(Path.of("src/main/java/com/hellovoid/liquiddock/" + name));
     }
 
-    @Test public void workstationWidthOffsetDoesNotAccumulateAndRebasesOnNativeWidth() {
-        WorkstationDockWidthState state = new WorkstationDockWidthState();
-
-        assertEquals(1100, state.targetWidth(1000, 100));
-        assertEquals(1100, state.targetWidth(1100, 100));
-        assertEquals(1300, state.targetWidth(1200, 100));
-        assertEquals(1, state.targetWidth(1200, -5000));
-    }
-
-    @Test public void workstationWidthTargetsVisibleDockContainerInsteadOfHiddenNormalBackground()
+    @Test public void workstationGeometryBindsVisibleDockContainer()
             throws Exception {
         String main = source("MainHook.java");
-        assertFalse("workstation width must not mutate the hidden normal HotSeats background",
-                main.contains("widthOffset != 0) args[0]"));
         assertTrue("MainHook must install the visible workstation Dock geometry hook",
                 main.contains("WorkstationDockGeometryHook.install(classLoader, config.workstation);"));
 
@@ -36,16 +24,16 @@ public class WorkstationDockGeometryContractTest {
         assertTrue(hook.contains("HotSeatsListContentAdapter$LineViewHolder"));
         assertTrue(hook.contains("DockContainer"));
     }
-    @Test public void horizontalOffsetIsConfiguredAndAppliedIndependently() throws Exception {
+    @Test public void iconRowsNeverReceiveAWorkstationHorizontalTranslation() throws Exception {
         String hook = source("WorkstationDockCustomizationHook.java");
-        assertTrue(hook.contains("config.iconHorizontalOffset * scale"));
-        assertTrue(hook.contains("float target = nativeHorizontal + offset;"));
-        assertTrue(hook.contains("if (owned) row.setTranslationX(nativeHorizontal);"));
+        assertFalse(hook.contains("setTranslationX("));
+        assertFalse(hook.contains("applyHorizontal("));
+        assertTrue(hook.contains("verticalOffset(recycler)"));
         String schema = source("config/ConfigSchema.java");
-        assertTrue(schema.contains("workstation_dock_icon_horizontal_offset"));
+        assertFalse(schema.contains("workstation_dock_icon_horizontal_offset"));
+        assertFalse(schema.contains("workstation_dock_icon_landscape_horizontal_offset"));
         assertTrue(schema.contains("workstation_dock_icon_top_offset"));
-        String live = source("LiveGlassConfigState.java");
-        assertTrue(live.contains("ConfigSchema.Workstation.DOCK_ICON_HORIZONTAL_OFFSET.name()"));
+        assertTrue(schema.contains("workstation_dock_icon_landscape_vertical_offset"));
     }
     @Test public void wholeDockTranslationAlsoBindsTheIndependentMaterialShell() throws Exception {
         assertTrue(source("MiuixGlassHook.java").contains(

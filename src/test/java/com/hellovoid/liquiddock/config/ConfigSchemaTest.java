@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class ConfigSchemaTest {
@@ -149,7 +150,6 @@ public class ConfigSchemaTest {
 
     @Test
     public void composeWorkstationSpecsKeepTheirCurrentDefaultsAndBounds() {
-        assertComposeIntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET, 0, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, 0, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, 0, 0, 240);
@@ -266,6 +266,31 @@ public class ConfigSchemaTest {
         assertEquals(Integer.valueOf(0), renderFps.minInt());
         assertEquals(Integer.valueOf(Integer.MAX_VALUE), renderFps.maxInt());
         assertEquals(ConfigKey.ExportMode.ALWAYS, renderFps.exportMode());
+    }
+
+    @Test
+    public void obsoleteWorkstationDockWidthAndIconXOffsetsCannotAffectGeometry() {
+        String[] removed = {
+                "workstation_dock_width_offset",
+                "workstation_dock_icon_horizontal_offset",
+                "workstation_dock_icon_landscape_horizontal_offset"
+        };
+        java.util.Map<String, Object> oldPreferences = java.util.Map.of(
+                "workstation_dock_width_offset", 26.5d,
+                "workstation_dock_icon_horizontal_offset", 12.5d,
+                "workstation_dock_icon_landscape_horizontal_offset", -6.5d);
+        java.util.Map<String, Object> imported = ConfigCodec.importValues(oldPreferences);
+        java.util.Map<String, Object> exported = ConfigCodec.exportValues(oldPreferences);
+        for (String removedKey : removed) {
+            assertFalse(removedKey, ConfigSchema.all().stream()
+                    .anyMatch(key -> key.name().equals(removedKey)));
+            assertFalse(removedKey, imported.containsKey(removedKey));
+            assertFalse(removedKey, exported.containsKey(removedKey));
+        }
+        assertTrue(ConfigSchema.all().contains(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET));
+        assertTrue(ConfigSchema.all().contains(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET));
+        assertTrue(ConfigSchema.all().contains(
+                ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET));
     }
 
     private static ConfigKey<?> findKey(String name) {

@@ -588,11 +588,12 @@ public class ModernSettingsArchitectureTest {
         assertTrue(specs.contains("整个 Dock 垂直平移"));
         assertTrue(specs.contains("横屏 · Dock 图标垂直偏移"));
         assertTrue(specs.contains("竖屏 · Dock 图标垂直偏移"));
+        assertFalse(specs.contains("Dock 图标水平偏移"));
         assertFalse(ui.contains("工作台 Dock 图标上间距"));
         assertFalse(ui.contains("工作台 Dock 图标下间距"));
         assertFalse(ui.contains("工作台 Dock 长度偏移"));
         assertTrue(specs.contains("ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,"));
-        assertFalse(specs.contains("IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,"));
+        assertFalse(specs.contains("DOCK_WIDTH_OFFSET"));
         assertFalse(specs.contains("IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,"));
     }
 

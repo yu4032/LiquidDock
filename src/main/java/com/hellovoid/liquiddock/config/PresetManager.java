@@ -317,7 +317,6 @@ public final class PresetManager {
         source.put("launcher_large_surface_component_press_glow", Boolean.FALSE);
         source.put("workstation_dock_customization", Boolean.FALSE);
         source.put(ConfigSchema.Workstation.TASKBAR_MODE.name(), Boolean.FALSE);
-        source.put("workstation_dock_width_offset", 26.5d);
         source.put("workstation_dock_icon_glass_corner_radius", 12);
         source.put("workstation_grid_horizontal_offset", 0);
         source.put("workstation_all_apps_landscape_horizontal_offset", 41.1d);
@@ -327,9 +326,7 @@ public final class PresetManager {
         source.put("workstation_all_apps_portrait_top_spacing", 132);
         source.put("workstation_all_apps_portrait_bottom_spacing", 60.8d);
         source.put("workstation_dock_vertical_offset", 0);
-        source.put("workstation_dock_icon_landscape_horizontal_offset", 0);
         source.put("workstation_dock_icon_landscape_vertical_offset", 0);
-        source.put("workstation_dock_icon_horizontal_offset", 0);
         source.put("workstation_dock_icon_top_offset", 0);
         source.put("workstation_dock_icon_bottom_offset", 0);
         source.put("recents_background_blur_percent", 36);

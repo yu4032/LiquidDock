@@ -138,7 +138,7 @@ internal val dockEntries = listOf(
 )
 
 internal val workstationEntries = listOf(
-    HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "任务栏模式、图标水平、垂直偏移与玻璃圆角"),
+    HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "任务栏模式、图标垂直偏移与玻璃圆角"),
     HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "按当前网格列数整体调整工作台桌面水平位置"),
     HubEntry(Page.WorkstationAppsLandscape, R.string.page_workstation_apps_landscape, "所有应用横屏水平与上下间距"),
     HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
