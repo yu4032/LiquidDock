@@ -254,14 +254,6 @@ internal fun WorkstationDockPage(
         ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
         ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault(),
     )
-    var taskbarMode by remember {
-        mutableStateOf(
-            prefs.getBoolean(
-                ConfigSchema.Workstation.TASKBAR_MODE.name(),
-                ConfigSchema.Workstation.TASKBAR_MODE.uiDefault(),
-            ),
-        )
-    }
     DenseSettingsList(
         padding = padding,
         title = "",
@@ -273,20 +265,14 @@ internal fun WorkstationDockPage(
                     prefs,
                     ConfigSchema.Workstation.TASKBAR_MODE,
                     "任务栏模式",
-                    "将工作台 Dock 移至屏幕底部，玻璃背景延伸至左右和下边缘，图标自动垂直居中。此模式暂不使用手动图标偏移；关闭后恢复原布局。",
+                    "将工作台 Dock 移至屏幕底部，玻璃背景延伸至左右和下边缘。使用下方“工作台 Dock 图标垂直偏移”直接平移图标行，关闭后恢复原布局。",
                     masterEnabled && enabled,
-                ) { taskbarMode = it }
+                )
             }
         }
         items(workstationDockSpecs, key = { it.key }) { spec ->
             SettingsCard {
-                IntSetting(
-                    prefs,
-                    spec,
-                    masterEnabled && enabled
-                        && !(taskbarMode
-                            && spec.key == ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name()),
-                )
+                IntSetting(prefs, spec, masterEnabled && enabled)
             }
         }
     }
