@@ -31,29 +31,13 @@ final class WorkstationTaskbarGeometry {
     }
 
     /** Visible taskbar retains the native Dock body height; optical bleed is outside the screen. */
-    /**
-     * Dock icon and glass may live in separate windows. Their root identities do not matter;
-     * only live attachment to the same physical display and a valid body height matter.
-     */
-    static boolean canAlignIconRow(boolean taskbarMode, boolean workstationActive,
-                                   boolean materialAttached, boolean rowAttached,
-                                   int materialDisplayId, int rowDisplayId,
-                                   int screenHeight, int dockHeight) {
-        return taskbarMode && workstationActive && materialAttached && rowAttached
-                && materialDisplayId == rowDisplayId
-                && dockHeight > 0 && screenHeight > dockHeight;
-    }
-
     static float visibleTop(int screenHeight, int nativeDockHeight) {
         return screenHeight - nativeDockHeight;
     }
 
-    static float visibleCenter(int screenHeight, int nativeDockHeight) {
-        return visibleTop(screenHeight, nativeDockHeight) + nativeDockHeight * 0.5f;
-    }
-
-    static float iconCenterCorrection(float taskbarCenter, float iconCenter) {
-        return taskbarCenter - iconCenter;
+    /** Apply the signed user offset to the native RecyclerView translation exactly once. */
+    static float iconRowTranslation(float nativeTranslation, float offsetPx) {
+        return nativeTranslation + offsetPx;
     }
 
     static float bottomTranslation(int screenHeight, int dockScreenBottom, float translationY) {
