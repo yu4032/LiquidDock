@@ -152,8 +152,12 @@ final class Miuix307ZeroCopyRenderer {
                 || !host.isAttachedToWindow() || !row.isAttachedToWindow()
                 || host.getHeight() <= 0 || host.getDisplay() == null || row.getDisplay() == null
                 || host.getDisplay().getDisplayId() != row.getDisplay().getDisplayId()) return Float.NaN;
-        host.getDisplay().getRealSize(realScreenSize);
-        return realScreenSize.y - host.getHeight() * .5f;
+        // The body rides on the native Dock view transform during its fly-out
+        // animation. The row target must ride with that host, not stay pinned
+        // to a stationary display center and cancel the animated icon motion.
+        host.getLocationOnScreen(materialScreenPosition);
+        return WorkstationTaskbarGeometry.movingBodyCenter(
+                materialScreenPosition[1] + host.getHeight(), host.getHeight());
     }
 
     static void setWorkstationTaskbarMode(boolean enabled) {

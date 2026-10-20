@@ -408,6 +408,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private volatile float nativeOpticsRadiusPx = Float.NaN;
     private volatile boolean taskbarMode;
     private final android.graphics.Point taskbarScreenSize = new android.graphics.Point();
+    private final int[] taskbarDockScreenPosition = new int[2];
 
     void setTaskbarMode(boolean enabled) {
         if (taskbarMode == enabled) return;
@@ -1376,9 +1377,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
         if (observer == null || !observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
-            // Keep the Dock background pinned during native orientation transitions.
-            // Icon rows now use direct configured translation, not per-frame auto-centering.
-            WorkstationDockGeometryHook.reconcileTaskbarPlacementForFrame();
+            // The Launcher owns both Dock placement and native fly motion; the glass
+            // must observe its geometry without writing Dock translationY.
             Miuix307ZeroCopyRenderer.refreshDockShadowViewport();
             refreshProducerGeometryInPlace();
             updateBackdropMapping();
@@ -1596,11 +1596,13 @@ final class Miuix307PassBlurTextureView extends TextureView
                     getResources().getDisplayMetrics().density);
             float screenLeft = -bleed;
             float screenRight = taskbarScreenSize.x + bleed;
-            // The former host-top anchor enlarged the visible body by the remaining
-            // bottom gap. Pin the VISIBLE bar to one native Dock height instead.
-            float screenTop = WorkstationTaskbarGeometry.visibleTop(
-                    taskbarScreenSize.y, dockNativeHeight);
-            float screenBottom = taskbarScreenSize.y + bleed;
+            // Track the moving native Dock body, not the physical screen bottom.
+            // This preserves the original resting Y and the fly-in/out motion.
+            nativeDock.getLocationOnScreen(taskbarDockScreenPosition);
+            float nativeScreenBottom = taskbarDockScreenPosition[1] + dockNativeHeight;
+            float screenTop = WorkstationTaskbarGeometry.movingBodyTop(
+                    nativeScreenBottom, dockNativeHeight);
+            float screenBottom = nativeScreenBottom + bleed;
             if (taskbarScreenSize.x > 0 && screenTop >= 0f
                     && screenBottom > screenTop) {
                 nextDockUvLeft = WorkstationTaskbarGeometry.bodyUvLeft(

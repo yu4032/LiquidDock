@@ -48,14 +48,26 @@ public class WorkstationTaskbarGeometryTest {
         assertEquals(180, WorkstationTaskbarGeometry.bottomOutputMargin(850, 150, 1100, bleed, 10));
     }
 
-    @Test public void dockMovesToPhysicalBottomWithoutAccumulatingDelta() {
-        assertEquals(100f, WorkstationTaskbarGeometry.bottomTranslation(1100, 1000, 0f), 0.001f);
-        assertEquals(100f, WorkstationTaskbarGeometry.bottomTranslation(1100, 1100, 100f), 0.001f);
+    @Test public void glassBodyTracksNativeDockFlyInAndOut() {
+        // The rest position is native, not forcibly moved to a hypothetical 1080px screen bottom.
+        assertEquals(880f, WorkstationTaskbarGeometry.movingBodyTop(1000f, 120), 0f);
+        assertEquals(960f, WorkstationTaskbarGeometry.movingBodyTop(1080f, 120), 0f);
+        assertEquals(1020f, WorkstationTaskbarGeometry.movingBodyTop(1140f, 120), 0f);
+        assertEquals(920f, WorkstationTaskbarGeometry.movingBodyTop(1040f, 120), 0f);
+        assertEquals(1020f, WorkstationTaskbarGeometry.movingBodyCenter(1080f, 120), 0f);
+        assertEquals(1080f, WorkstationTaskbarGeometry.movingBodyCenter(1140f, 120), 0f);
     }
 
-    @Test public void visibleHeightIsNativeHeightEvenWhenOpticsBleedPastScreen() {
-        assertEquals(960f, WorkstationTaskbarGeometry.visibleTop(1080, 120), 0.001f);
-        assertEquals(950f, WorkstationTaskbarGeometry.visibleTop(1080, 130), 0.001f);
+    @Test public void originalIconFlyMotionIsNeverCancelledByOpticalCorrection() {
+        assertEquals(24f, WorkstationTaskbarGeometry.animatedIconRowTranslation(
+                20f, 4f, 0, 0), 0f);
+        assertEquals(124f, WorkstationTaskbarGeometry.animatedIconRowTranslation(
+                120f, 4f, 0, 0), 0f);
+        assertEquals(134f, WorkstationTaskbarGeometry.animatedIconRowTranslation(
+                120f, 4f, 10, 0), 0f);
+        // The slider adjustment is a delta, not a cumulative correction.
+        assertEquals(134f, WorkstationTaskbarGeometry.animatedIconRowTranslation(
+                120f, 14f, 10, 10), 0f);
     }
 
     @Test public void taskbarBodyUsesAbsoluteScreenCoordinates() {

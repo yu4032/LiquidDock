@@ -1,7 +1,5 @@
 package com.hellovoid.liquiddock;
 
-import android.graphics.Point;
-import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -107,22 +105,6 @@ final class WorkstationDockGeometryHook {
         WorkstationDockCustomizationHook.onWorkstationModeChanged(enabled);
     }
 
-    /**
-     * Native Dock windows resize and reposition after configuration callbacks, not necessarily
-     * in the same frame. Reconcile their physical bottom anchor before the GPU host samples
-     * screen geometry; only the actual translation delta is written.
-     */
-    static void reconcileTaskbarPlacementForFrame() {
-        if (!MainHook.isWorkstationMode() || !dockEnabled || !taskbarEnabled) return;
-        synchronized (bindings) {
-            // No per-frame list allocation: translation does not mutate Binding ownership.
-            for (WeakReference<Binding> ref : bindings.values()) {
-                Binding binding = ref != null ? ref.get() : null;
-                if (binding != null) binding.reconcileTaskbarPosition();
-            }
-        }
-    }
-
     private static void bindFromAnchor(View anchor) {
         View container = resolveDockContainer(anchor);
         if (container == null) {
@@ -176,10 +158,6 @@ final class WorkstationDockGeometryHook {
             View.OnAttachStateChangeListener {
         private final WeakReference<View> containerRef;
         private final WorkstationDockWidthState widthState = new WorkstationDockWidthState();
-        private final int[] screenPosition = new int[2];
-        private final Point screenSize = new Point();
-        private float originalTranslationY = Float.NaN;
-        private float appliedTranslationY = Float.NaN;
 
         Binding(View container) {
             containerRef = new WeakReference<>(container);
@@ -205,13 +183,6 @@ final class WorkstationDockGeometryHook {
             containerRef.clear();
         }
 
-        void reconcileTaskbarPosition() {
-            View container = containerRef.get();
-            if (container != null && container.isAttachedToWindow()) {
-                applyTaskbarPosition(container, true);
-            }
-        }
-
         void apply(boolean workstation) {
             View container = containerRef.get();
             if (container == null) return;
@@ -231,35 +202,7 @@ final class WorkstationDockGeometryHook {
                             + " -> " + targetWidth + " active=" + workstation);
                 }
             }
-            applyTaskbarPosition(container, workstation && taskbarEnabled);
+            // Preserve native Dock placement and translationY for Launcher animations.
         }
-
-        private void applyTaskbarPosition(View container, boolean taskbar) {
-            float current = container.getTranslationY();
-            if (!taskbar) {
-                if (!Float.isNaN(originalTranslationY)
-                        && Float.compare(current, appliedTranslationY) == 0) {
-                    container.setTranslationY(originalTranslationY);
-                }
-                originalTranslationY = Float.NaN;
-                appliedTranslationY = Float.NaN;
-                        return;
-            }
-            Display display = container.getDisplay();
-            if (display == null || container.getHeight() <= 0) return;
-            display.getRealSize(screenSize);
-            if (screenSize.y <= 0) return;
-            if (Float.isNaN(originalTranslationY)
-                    || (!Float.isNaN(appliedTranslationY)
-                            && Float.compare(current, appliedTranslationY) != 0)) {
-                originalTranslationY = current;
-            }
-            container.getLocationOnScreen(screenPosition);
-            float target = WorkstationTaskbarGeometry.bottomTranslation(
-                    screenSize.y, screenPosition[1] + container.getHeight(), current);
-            if (Math.abs(target - current) < 0.5f) return;
-            container.setTranslationY(target);
-            appliedTranslationY = target;
-            }
     }
 }
