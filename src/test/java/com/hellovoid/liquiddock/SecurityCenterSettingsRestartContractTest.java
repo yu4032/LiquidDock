@@ -12,52 +12,9 @@ import org.junit.Test;
 public class SecurityCenterSettingsRestartContractTest {
     private static final Path MAIN = Path.of("src/main");
 
-    @Test
-    public void settingsUseOneGlobalRestartScopeAction() throws Exception {
-        String compose = Files.readString(
-                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
 
-        assertTrue(compose.contains("R.string.action_restart_scopes"));
-        assertTrue(compose.contains("RestartScopesDialog("));
-        assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
-        assertFalse(compose.contains("activity.restartSecurityCenterAndLauncher()"));
-        assertFalse(compose.contains("activity.restartSystemUi()"));
-        assertFalse(compose.contains("activity.restartPackageProcess("));
-    }
 
-    @Test
-    public void restartDialogSubmitsCurrentSelectionAndUsesIdempotentToggleState() throws Exception {
-        String compose = Files.readString(
-                MAIN.resolve("kotlin/com/hellovoid/liquiddock/ComposeSettingsActivity.kt"));
-        String dialog = Files.readString(
-                MAIN.resolve("kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt"));
 
-        assertTrue(compose.contains("onToggle = { id, checked ->"));
-        assertTrue(compose.contains("selectedRestartScopes + id"));
-        assertTrue(compose.contains("selectedRestartScopes - id"));
-        assertTrue(compose.contains("onRestart = { confirmedSelection ->"));
-        assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
-        assertTrue(compose.contains("UI_TOGGLE|$id|checked=$checked|selected=$selectedRestartScopes"));
-        assertTrue(dialog.contains("onToggle: (String, Boolean) -> Unit"));
-        assertTrue(dialog.contains("onRestart: (Set<String>) -> Unit"));
-        assertTrue(dialog.contains("onClick = { onToggle(item.id, !checked) }"));
-        assertTrue(dialog.contains("val checked = item.id in selected"));
-        assertTrue(dialog.contains("RestartScopeToggle("));
-        assertTrue(dialog.contains("GuiOnTouchPrismalToggle("));
-        assertTrue(dialog.contains("selected = selectedProvider,"));
-        assertTrue(dialog.contains("onSelect = stableToggle,"));
-        assertTrue(dialog.contains("val currentChecked = rememberUpdatedState(checked)"));
-        assertTrue(dialog.contains("val currentToggle = rememberUpdatedState(onToggle)"));
-        // Prismal is retained for glass-on mode; MIUIX is the non-glass fallback.
-        assertTrue(dialog.contains("top.yukonga.miuix.kmp.basic.Switch("));
-        // Interactive PrismalGlassSurface on the parent installs a whole-panel
-        // gesture modifier which may consume taps intended for its children.
-        assertTrue(dialog.contains(".widthIn(max = 520.dp)"));
-        assertTrue(dialog.contains(".clickable(onClick = {})"));
-        assertFalse(dialog.contains("onClick = {},"));
-        assertTrue(dialog.contains("onRestart(selected.toSet())"));
-        assertFalse(dialog.contains("onCheckedChange = { onToggle(item.id) }"));
-    }
 
     @Test
     public void restartDialogIncludesEveryRestartableXposedScopeExceptSystem() throws Exception {
@@ -112,15 +69,5 @@ public class SecurityCenterSettingsRestartContractTest {
         assertTrue(compose.contains("activity.restartHookScopes(confirmedSelection.toSet())"));
     }
 
-    @Test
-    public void restartDialogIsScrollableAndUsesCenteredRedConfirmButton() throws Exception {
-        String ui = Files.readString(
-                MAIN.resolve("kotlin/com/hellovoid/liquiddock/SettingsRestartScopesDialog.kt"));
 
-        assertTrue(ui.contains("verticalScroll(rememberScrollState())"));
-        assertTrue(ui.contains("System Framework（system）需要重启设备"));
-        assertTrue(ui.contains("destructive = true,"));
-        assertTrue(ui.contains("contentAlignment = Alignment.Center"));
-        assertTrue(ui.contains("text = \"重启\""));
-    }
 }

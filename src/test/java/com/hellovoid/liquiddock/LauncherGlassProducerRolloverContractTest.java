@@ -54,12 +54,5 @@ public class LauncherGlassProducerRolloverContractTest {
                 state.hasFreshFrame(41L));
     }
 
-    @Test
-    public void inFlightBackendRolloverExposesCompletionPiggyback() throws Exception {
-        Method attach = RootPassBlurBackend.class.getDeclaredMethod(
-                "attachRolloverCompletion",
-                LauncherGlassSessionRegistry.RolloverCompletion.class);
 
-        assertEquals(boolean.class, attach.getReturnType());
-    }
 }

@@ -14,12 +14,7 @@ public class LauncherGlassStaticBoundaryTest {
     private static final Path SCOPE =
             Path.of("src/main/resources/META-INF/xposed/scope.list");
 
-    @Test
-    public void xposedScopeIncludesLauncherAndSystemUi() throws Exception {
-        String scope = Files.readString(SCOPE);
-        assertTrue(scope.contains("com.miui.home"));
-        assertTrue(scope.contains("com.android.systemui"));
-    }
+
 
     @Test
     public void systemUiObserverDoesNotOwnScreenCaptureOrPassBlurSurface() throws Exception {

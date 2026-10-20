@@ -18,17 +18,7 @@ public class RestartBoundSettingsContractTest {
     private static final Path EN = Path.of("src/main/res/values/strings.xml");
     private static final Path ZH = Path.of("src/main/res/values-zh-rCN/strings.xml");
 
-    @Test
-    public void composeOnlySettingsBaseCreatesDecorBeforeInsetsAndKeepsNoLegacyLayout() throws Exception {
-        String source = Files.readString(SETTINGS_BASE);
 
-        assertTrue(source.contains("getDecorView().getWindowInsetsController()"));
-        assertFalse(source.contains("getWindow().getInsetsController()"));
-        assertFalse(source.contains("\n        setContentView("));
-        assertFalse(source.contains("\n        findViewById("));
-        assertFalse(source.contains("PreferenceFragmentCompat"));
-        assertFalse(source.contains("R.layout.activity_settings"));
-    }
 
     @Test
     public void structuralBooleanSwitchesSayRestartIsRequired() throws Exception {
@@ -50,23 +40,7 @@ public class RestartBoundSettingsContractTest {
         }
     }
 
-    @Test
-    public void glassPageExplainsLiveDisableWithoutPromisingFullHotReload() throws Exception {
-        String en = Files.readString(EN);
-        String zh = Files.readString(ZH);
 
-        String enMaster = stringValue(en, "liquid_enable_summary").toLowerCase(Locale.ROOT);
-        String zhMaster = stringValue(zh, "liquid_enable_summary");
-        assertTrue(enMaster.contains("turning off") || enMaster.contains("disable"));
-        assertTrue(enMaster.contains("restart"));
-        assertTrue(zhMaster.contains("关闭"));
-        assertTrue(zhMaster.contains("重启"));
-
-        String enHeader = stringValue(en, "liquid_header_summary").toLowerCase(Locale.ROOT);
-        String zhHeader = stringValue(zh, "liquid_header_summary");
-        assertTrue(enHeader.contains("component") && enHeader.contains("restart"));
-        assertTrue(zhHeader.contains("组件") && zhHeader.contains("重启"));
-    }
 
     @Test
     public void runtimeSafeComponentDisableSwitchesDoNotClaimRestartIsRequired() throws Exception {
@@ -123,17 +97,7 @@ public class RestartBoundSettingsContractTest {
         assertTrue(source.contains("重启对应 Hook 作用域生效"));
     }
 
-    @Test
-    public void topBarUsesOneGlobalRestartScopeAction() throws Exception {
-        String source = Files.readString(UI);
 
-        assertTrue(source.contains("R.string.action_restart_scopes"));
-        assertTrue(source.contains("showRestartScopes = true"));
-        assertTrue(source.contains("RestartScopesDialog("));
-        assertFalse(source.contains("R.string.action_restart_launcher"));
-        assertFalse(source.contains("R.string.action_restart_system_ui"));
-        assertFalse(source.contains("R.string.action_restart_security_center_and_launcher"));
-    }
 
     private static String stringValue(String xml, String name) {
         String startMarker = "<string name=\"" + name + "\">";

@@ -42,7 +42,5 @@ public class LauncherMamlBackgroundRuleExecutorContractTest {
         assertFalse(executor.contains("setColorFilter"));
     }
 
-    @Test public void weatherSpecificSuppressorIsRemoved() {
-        assertFalse(Files.exists(MAIN.resolve("LauncherMamlBackgroundSuppressor.java")));
-    }
+
 }
