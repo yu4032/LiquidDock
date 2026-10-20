@@ -265,7 +265,7 @@ internal fun WorkstationDockPage(
                     prefs,
                     ConfigSchema.Workstation.TASKBAR_MODE,
                     "任务栏模式",
-                    "将工作台 Dock 移至屏幕底部，玻璃背景延伸至左右和下边缘。使用下方“工作台 Dock 图标垂直偏移”直接平移图标行，关闭后恢复原布局。",
+                    "保留工作台 Dock 的原生垂直位置及飞入、飞出动画，将玻璃背景扩展为任务栏样式，不再自动下移。可使用下方图标垂直偏移调整图标位置。",
                     masterEnabled && enabled,
                 )
             }
