@@ -42,8 +42,19 @@ final class WorkstationTaskbarGeometry {
         return current + (targetScreenCenter - observedScreenCenter) / parentScaleY + offsetPx;
     }
 
-    static float bottomTranslation(int screenHeight, int dockScreenBottom, float translationY) {
-        return translationY + (screenHeight - dockScreenBottom);
+    /** The glass body follows the currently animated native Dock bottom, not the screen edge. */
+    static float movingBodyTop(float dockScreenBottom, int dockHeight) {
+        return dockScreenBottom - dockHeight;
+    }
+
+    static float movingBodyCenter(float dockScreenBottom, int dockHeight) {
+        return dockScreenBottom - dockHeight * .5f;
+    }
+
+    /** In motion, preserve native Y and add only our last stable optical correction. */
+    static float animatedIconRowTranslation(float nativeTranslation, float stableCorrection,
+                                           int newOffset, int previousOffset) {
+        return nativeTranslation + stableCorrection + (newOffset - previousOffset);
     }
 
     static float bodyUvLeft(int sampleInsetLeft, int screenLeft, int outputScreenLeft,
