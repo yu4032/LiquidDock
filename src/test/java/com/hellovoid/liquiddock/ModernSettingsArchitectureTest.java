@@ -593,7 +593,7 @@ public class ModernSettingsArchitectureTest {
         assertFalse(ui.contains("工作台 Dock 图标下间距"));
         assertFalse(ui.contains("工作台 Dock 长度偏移"));
         assertTrue(specs.contains("ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,"));
-        assertFalse(specs.contains("IntSpec(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET,"));
+        assertFalse(specs.contains("DOCK_WIDTH_OFFSET"));
         assertFalse(specs.contains("IntSpec(ConfigSchema.Workstation.DOCK_ICON_BOTTOM_OFFSET,"));
     }
 
