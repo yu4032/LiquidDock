@@ -90,6 +90,14 @@ Launcher package ready 后依次完成：
 
 支持路径会 Hook Launcher 自己加载的 RecyclerView layout/decoration 签名。这里存在跨 ClassLoader 类名约束，相关 keep rule 不能随意删除。
 
+### Workstation position and rotation
+
+`WorkstationDockGeometryHook` 通过普通与工作台 `DockContainerView.onAttachedToWindow` 绑定可见容器，分隔线 holder 仅作补充入口。`HotSeats.onAttachedToWindow` 同时绑定原生背景，不依赖玻璃渲染开关。整体垂直平移在 pre-draw 中叠加到原生 translationY，关闭或 detach 时恢复最后观测到的原生值。背景若已继承容器平移，不再重复叠加。缺失的 vendor 类或生命周期入口只记录门控诊断日志。
+
+`WorkstationNativeTaskbarHook` 在关闭液态玻璃时接管原生材质的横向变换、圆角与 outline，不修改图标测量或原生纵向动画。任务栏关闭、离开工作台、视图 detach 或恢复玻璃时还原观测到的原生状态；恢复玻璃前先还原原生圆角，避免 replacement 缓存零圆角。
+
+`WorkstationDockCustomizationHook` 按当前 View 的 configuration 选择横屏或竖屏图标偏移。`HomeGridCellGeometryHook` 在 `calculateXsAndYs` 中使用 All Apps 本轮 measured bounds，确保 `measureChild` 与最终 layout 使用同一方向的单元格尺寸；All Apps 面板不受普通 HOME 的屏幕比例过滤和尺寸缓存限制。该路径已在官方桌面 RELEASE-4.50.0.1181 上验证，无修改版专用开关。
+
 ### Vendor material ownership
 
 只有在 LiquidDock 已经建立有效 replacement owner 后，才允许压制 vendor visual。release 时恢复的是实际 snapshot/observed state，而不是猜测默认值。

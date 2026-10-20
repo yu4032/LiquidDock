@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -13,10 +14,9 @@ import java.util.WeakHashMap;
 /**
  * Applies workstation-only geometry to the visible laptop Dock container.
  *
- * The normal HotSeats blur background is deliberately hidden in workstation mode, so changing
- * HotSeatsListContentBlurBackground2 cannot affect the capsule the user actually sees. The
- * divider holder is a stable runtime anchor inside that visible Dock; walking its parent chain
- * lets us bind the real DockContainer without depending on a concrete vendor subclass name.
+ * Container and HotSeats attachment own the binding lifecycle; divider holders provide a
+ * supplementary anchor. Background shells in a separate hierarchy receive the same user
+ * translation, while descendants inherit the container transform exactly once.
  */
 final class WorkstationDockGeometryHook {
     private static final String LINE_HOLDER =
@@ -26,19 +26,23 @@ final class WorkstationDockGeometryHook {
     // the View itself owns the listeners for exactly as long as it is attached.
     private static final WeakHashMap<View, WeakReference<Binding>> bindings = new WeakHashMap<>();
     private static volatile int widthOffsetPx;
+    private static volatile int verticalOffsetPx;
     private static volatile boolean dockEnabled;
     private static volatile boolean taskbarEnabled;
     private static boolean unresolvedChainLogged;
 
     static void applyLiveConfig(LiquidDockConfig.Workstation config) {
         if (config == null) return;
+        WorkstationNativeTaskbarHook.applyLiveConfig(config);
         float scale = config.dimensionsDp
                 ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
         int nextWidth = Math.round(config.dockWidthOffset * scale);
+        int nextVertical = Math.round(config.dockVerticalOffset * scale);
         boolean nextTaskbar = config.dockEnabled && config.taskbarMode;
-        if (widthOffsetPx == nextWidth && dockEnabled == config.dockEnabled
+        if (widthOffsetPx == nextWidth && verticalOffsetPx == nextVertical && dockEnabled == config.dockEnabled
                 && taskbarEnabled == nextTaskbar) return;
         widthOffsetPx = nextWidth;
+        verticalOffsetPx = nextVertical;
         dockEnabled = config.dockEnabled;
         taskbarEnabled = nextTaskbar;
         refreshInstalledWidth();
@@ -63,6 +67,38 @@ final class WorkstationDockGeometryHook {
 
     static void install(ClassLoader classLoader, LiquidDockConfig.Workstation config) {
         applyLiveConfig(config);
+        // Bind the actual container lifecycle; divider holders may be cached or absent.
+        for (String name : new String[]{
+                "com.miui.home.launcher.laptop.dockbar.DockContainerView",
+                "com.miui.home.launcher.dock.DockContainerView"}) {
+            try {
+                HookUtil.hookMethod(classLoader, name, "onAttachedToWindow", chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof View) bindGeometryView((View) owner, true);
+                    return result;
+                });
+            } catch (Throwable error) {
+                MainHook.log("[DC] Dock container attach hook unavailable " + name + ": " + error);
+            }
+        }
+
+        try {
+            HookUtil.hookMethod(classLoader, "com.miui.home.launcher.hotseats.HotSeats",
+                    "onAttachedToWindow", chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object owner = chain.getThisObject();
+                        if (owner instanceof View) bindFromAnchor((View) owner);
+                        HookUtil.InvocationResult<Object> background =
+                                HookUtil.tryInvoke(owner, "getHotSeatsBackground");
+                        if (background.succeeded() && background.value() instanceof View) {
+                            bindBackground((View) background.value());
+                        }
+                        return result;
+                    });
+        } catch (Throwable error) {
+            MainHook.log("[DC] workstation native background attach hook unavailable: " + error);
+        }
 
         try {
             HookUtil.hookMethod(classLoader, LINE_HOLDER, "bindView", chain -> {
@@ -82,6 +118,7 @@ final class WorkstationDockGeometryHook {
     }
 
     static void onWorkstationModeChanged(boolean enabled) {
+        WorkstationNativeTaskbarHook.refresh();
         // Workstation and the normal HotSeats background can overlap during the hierarchy handoff.
         // Release the remembered native foreground ring before changing visible Dock geometry.
         DockStrokeRenderer.onWorkstationModeChanged(enabled);
@@ -112,21 +149,45 @@ final class WorkstationDockGeometryHook {
             return;
         }
 
+        bindGeometryView(container, true);
+    }
+
+    static void bindBackground(View background) {
+        if (background == null) return;
+        WorkstationNativeTaskbarHook.bind(background);
+        bindGeometryView(background, false);
+    }
+
+    private static void bindGeometryView(View container, boolean controlsWidth) {
         Binding binding;
         synchronized (bindings) {
             WeakReference<Binding> bindingRef = bindings.get(container);
             binding = bindingRef != null ? bindingRef.get() : null;
             if (binding == null) {
-                binding = new Binding(container);
+                binding = new Binding(container, controlsWidth);
                 bindings.put(container, new WeakReference<>(binding));
                 container.addOnLayoutChangeListener(binding);
                 container.addOnAttachStateChangeListener(binding);
+                binding.installPreDraw(container);
                 MainHook.log("[DC] workstation Dock container resolved class="
                         + container.getClass().getName());
             }
         }
         final Binding bound = binding;
         container.post(() -> bound.apply(MainHook.isWorkstationMode() && dockEnabled));
+    }
+
+    private static boolean hasTranslatedAncestor(View view) {
+        ViewParent parent = view.getParent();
+        synchronized (bindings) {
+            while (parent instanceof View) {
+                WeakReference<Binding> reference = bindings.get((View) parent);
+                Binding binding = reference == null ? null : reference.get();
+                if (binding != null && binding.controlsWidth) return true;
+                parent = parent.getParent();
+            }
+        }
+        return false;
     }
 
     private static View resolveDockContainer(View anchor) {
@@ -155,11 +216,38 @@ final class WorkstationDockGeometryHook {
     }
 
     private static final class Binding implements View.OnLayoutChangeListener,
-            View.OnAttachStateChangeListener {
+            View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         private final WeakReference<View> containerRef;
+        private final boolean controlsWidth;
         private final WorkstationDockWidthState widthState = new WorkstationDockWidthState();
 
-        Binding(View container) {
+        private final WorkstationDockTranslationState translationState = new WorkstationDockTranslationState();
+        private ViewTreeObserver observer;
+
+        void installPreDraw(View container) {
+            if (observer != null || !container.isAttachedToWindow()) return;
+            observer = container.getViewTreeObserver();
+            observer.addOnPreDrawListener(this);
+        }
+
+        @Override public boolean onPreDraw() {
+            applyTranslation(MainHook.isWorkstationMode() && dockEnabled);
+            return true;
+        }
+
+        private void applyTranslation(boolean enabled) {
+            View container = containerRef.get();
+            if (container == null) return;
+            float current = container.getTranslationY();
+            // Some launcher versions parent the material under the icon container; others
+            // compose it in a separate shell. Apply the user offset exactly once in either tree.
+            int offset = !controlsWidth && hasTranslatedAncestor(container) ? 0 : verticalOffsetPx;
+            float target = translationState.apply(current, enabled, offset);
+            if (Math.abs(target - current) > .001f) container.setTranslationY(target);
+        }
+
+        Binding(View container, boolean controlsWidth) {
+            this.controlsWidth = controlsWidth;
             containerRef = new WeakReference<>(container);
         }
 
@@ -170,10 +258,13 @@ final class WorkstationDockGeometryHook {
         }
 
         @Override
-        public void onViewAttachedToWindow(View v) {}
+        public void onViewAttachedToWindow(View v) { installPreDraw(v); }
 
         @Override
         public void onViewDetachedFromWindow(View v) {
+            applyTranslation(false);
+            if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
+            observer = null;
             try { v.removeOnLayoutChangeListener(this); } catch (Throwable ignored) {}
             try { v.removeOnAttachStateChangeListener(this); } catch (Throwable ignored) {}
             synchronized (bindings) {
@@ -186,6 +277,10 @@ final class WorkstationDockGeometryHook {
         void apply(boolean workstation) {
             View container = containerRef.get();
             if (container == null) return;
+            if (!controlsWidth) {
+                applyTranslation(workstation);
+                return;
+            }
             int observedWidth = container.getWidth();
             if (observedWidth <= 0) return;
 
@@ -202,7 +297,7 @@ final class WorkstationDockGeometryHook {
                             + " -> " + targetWidth + " active=" + workstation);
                 }
             }
-            // Preserve native Dock placement and translationY for Launcher animations.
+            applyTranslation(workstation);
         }
     }
 }

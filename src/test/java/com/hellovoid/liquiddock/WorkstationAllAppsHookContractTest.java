@@ -67,4 +67,23 @@ public class WorkstationAllAppsHookContractTest {
         assertTrue("the final policy height gap must be written to CellLayout",
                 source.contains("HookUtil.setIntField(cellLayout, \"mHeightGap\", geometry.heightGap);"));
     }
+    @Test
+    public void allAppsLayoutPreparationBypassesScreenAspectAndSignatureCache() throws IOException {
+        String source = source();
+        int start = source.indexOf("private static void prepareGeometryForLayout");
+        int end = source.indexOf("private static void applyCellLayoutOffsets", start);
+        String prepare = source.substring(start, end);
+        assertTrue(prepare.contains("boolean allApps = isLaptopAllApps(layout);"));
+        assertTrue(prepare.contains("!allApps && !current.enabled"));
+        assertTrue(prepare.contains("!allApps && !sizeMatchesOrientation(layout, width, height)"));
+        assertTrue(prepare.contains("if (!allApps)"));
+    }
+    @Test
+    public void allAppsMeasurementUsesCurrentMeasuredBoundsBeforeMeasuringChildren() throws IOException {
+        String source = source();
+        assertTrue(source.contains("applyCellLayoutOffsets(owner, true);"));
+        assertTrue(source.contains("measuring && workstationAllApps"));
+        assertTrue(source.contains("layout.getMeasuredWidth() : layout.getWidth()"));
+        assertTrue(source.contains("layout.getMeasuredHeight() : layout.getHeight()"));
+    }
 }

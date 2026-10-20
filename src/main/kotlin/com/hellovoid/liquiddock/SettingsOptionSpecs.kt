@@ -72,6 +72,10 @@ internal fun optionSummary(key: String): String = when (key) {
     "workstation_all_apps_portrait_horizontal_offset" -> "直接设置工作台所有应用竖屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_top_spacing" -> "直接设置工作台所有应用竖屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_bottom_spacing" -> "直接设置工作台所有应用竖屏图标区下间距；不叠加系统默认位置"
+    "workstation_dock_vertical_offset" -> "同时移动工作台 Dock 背景和全部图标，正值向下、负值向上；横竖屏共用"
+    "workstation_dock_icon_landscape_horizontal_offset" -> "仅在横屏平移整行图标，正值向右、负值向左"
+    "workstation_dock_icon_landscape_vertical_offset" -> "仅在横屏调整图标垂直偏移，正值向下、负值向上"
+    "workstation_dock_icon_horizontal_offset" -> "仅在竖屏平移整行图标，正值向右、负值向左"
     "workstation_dock_icon_top_offset" -> "工作台任务栏模式直接平移整行图标（正值向下、负值向上）；普通工作台模式仍调整图标顶部间距"
     "liquid_blur" -> "控制玻璃背景的模糊程度"
     "liquid_thickness" -> "控制虚拟玻璃厚度对折射效果的影响"
@@ -180,6 +184,10 @@ internal fun workstationSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> 
 internal val workstationDockSpecs by lazy {
     workstationSpecsFor(
         ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
+        ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET,
+        ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_HORIZONTAL_OFFSET,
+        ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
+        ConfigSchema.Workstation.DOCK_ICON_HORIZONTAL_OFFSET,
         ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
     )
 }
@@ -228,7 +236,11 @@ internal val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, "所有应用 · 竖屏水平间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING, "所有应用 · 竖屏上间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, "所有应用 · 竖屏下间距"),
-    IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "工作台 Dock 图标垂直偏移"),
+    IntSpec(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET, "整个 Dock 垂直平移"),
+    IntSpec(ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_HORIZONTAL_OFFSET, "横屏 · Dock 图标水平偏移"),
+    IntSpec(ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET, "横屏 · Dock 图标垂直偏移"),
+    IntSpec(ConfigSchema.Workstation.DOCK_ICON_HORIZONTAL_OFFSET, "竖屏 · Dock 图标水平偏移"),
+    IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "竖屏 · Dock 图标垂直偏移"),
 )
 internal val recentsBlurSpec = IntSpec(
     ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,
