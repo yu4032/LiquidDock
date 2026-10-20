@@ -418,8 +418,8 @@ final class LiquidDockConfig {
         final float allAppsLandscapeTopSpacing, allAppsLandscapeBottomSpacing;
         final float allAppsPortraitHorizontalOffset;
         final float allAppsPortraitTopSpacing, allAppsPortraitBottomSpacing;
-        final float iconHorizontalOffset, iconTopOffset, iconBottomOffset;
-        final float dockVerticalOffset, iconLandscapeHorizontalOffset, iconLandscapeTopOffset;
+        final float iconTopOffset, iconBottomOffset;
+        final float dockVerticalOffset, iconLandscapeTopOffset;
 
         Workstation(ConfigReader c) {
             dockEnabled = c.b(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
@@ -452,14 +452,9 @@ final class LiquidDockConfig {
             allAppsPortraitBottomSpacing = c.f(
                     ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.name(),
                     ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.runtimeFallback());
-            iconHorizontalOffset = c.f(ConfigSchema.Workstation.DOCK_ICON_HORIZONTAL_OFFSET.name(),
-                    ConfigSchema.Workstation.DOCK_ICON_HORIZONTAL_OFFSET.runtimeFallback());
             iconTopOffset = c.f(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.runtimeFallback());
             dockVerticalOffset = c.f(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET.name(), 0f);
-            iconLandscapeHorizontalOffset = c.f(
-                    ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_HORIZONTAL_OFFSET.name(),
-                    ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_HORIZONTAL_OFFSET.runtimeFallback());
             iconLandscapeTopOffset = c.f(
                     ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET.runtimeFallback());
