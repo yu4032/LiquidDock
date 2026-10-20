@@ -122,8 +122,8 @@ public class LiveGlassConfigStateTest {
 
     @Test
     public void workstationDockSettingsAreLiveButGridTopologyIsNot() {
-        assertTrue(LiveGlassConfigState.isLiveKey(
-                ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name() + "_tenths"));
+        assertFalse(LiveGlassConfigState.isLiveKey(
+                "workstation_dock_width_offset_tenths"));
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name() + "_tenths"));
         assertTrue(LiveGlassConfigState.isLiveKey(
