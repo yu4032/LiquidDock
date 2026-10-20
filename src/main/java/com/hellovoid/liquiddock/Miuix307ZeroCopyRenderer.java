@@ -151,16 +151,16 @@ final class Miuix307ZeroCopyRenderer {
      */
     static float taskbarVisualCenterFor(View recycler) {
         View material = materialHostRef.get();
-        if (!workstationTaskbarMode || !WorkstationRuntimeState.isActive()
-                || recycler == null || material == null
-                || !material.isAttachedToWindow() || !recycler.isAttachedToWindow()
-                || material.getHeight() <= 0) return Float.NaN;
+        if (recycler == null || material == null) return Float.NaN;
         Display materialDisplay = material.getDisplay();
         Display rowDisplay = recycler.getDisplay();
-        if (materialDisplay == null || rowDisplay == null
-                || materialDisplay.getDisplayId() != rowDisplay.getDisplayId()) return Float.NaN;
+        if (materialDisplay == null || rowDisplay == null) return Float.NaN;
         materialDisplay.getRealSize(realScreenSize);
-        if (realScreenSize.y <= material.getHeight()) return Float.NaN;
+        if (!WorkstationTaskbarGeometry.canAlignIconRow(
+                workstationTaskbarMode, WorkstationRuntimeState.isActive(),
+                material.isAttachedToWindow(), recycler.isAttachedToWindow(),
+                materialDisplay.getDisplayId(), rowDisplay.getDisplayId(),
+                realScreenSize.y, material.getHeight())) return Float.NaN;
         return WorkstationTaskbarGeometry.visibleCenter(
                 realScreenSize.y, material.getHeight());
     }
