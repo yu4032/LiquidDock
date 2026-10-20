@@ -16,7 +16,7 @@ This change reduces **40 source-level JUnit tests** without touching production 
 | `LauncherGlassProducerRolloverContractTest.java` | 3 | 2 | Keep two typed recovery-state tests; remove private signature reflection |
 | `SecurityCenterHookLifecycleContractTest.java` | 2 | 0 | Pure method-presence reflection; `SecurityCenterSemanticCompatibilityTest` and material authority tests exercise resolution and lifecycle policy |
 
-Removed total including the complete method-presence class: **42**. Pending CI confirmation of executed case delta.
+Removed total including the complete method-presence class: **42**. [CI #8960](https://github.com/yu4032/LiquidDock/actions/runs/39462787915) verified the actual executed-case count **1,126 → 1,084** (42 fewer): **0 failed, 0 skipped**, 228 JUnit XML reports. Gradle `BUILD SUCCESSFUL in 28s` on this run; timing differences are not proof that fewer tests materially accelerate CI.
 
 ## Retained critical signals
 - `ModernSettingsArchitectureTest`: retains slider preview, grid guard, root search/navigation, global preference refresh, glass off, emergency sampling guard, capsule tab sampler, restart descriptions and activity integration checks.
