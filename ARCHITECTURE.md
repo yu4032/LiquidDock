@@ -1,6 +1,6 @@
 # LiquidDock Architecture
 
-本文档记录 LiquidDock 生产架构（原逐项核验于 2026-10-03）。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。具体 Hook 时序以源码和测试为准；当前架构技术债见 [TODO.md](TODO.md) 与 [2026-10-10 可维护性审计](docs/maintainability-audit-20261010.md)。历史 `docs/superpowers/*` 是阶段性记录。
+本文档记录 LiquidDock 生产架构（原逐项核验于 2026-10-03）。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。具体 Hook 时序以源码和测试为准；当前架构技术债见 [TODO.md](TODO.md)。过时的阶段性方案已从 `docs/` 清理，仍可通过 Git 历史查阅。
 
 当前新增边界：
 
@@ -636,6 +636,4 @@ Runtime behavior 应通过生产使用的 typed state/policy 测试。
 2. `ConfigSchema` / settings UI / build config；
 3. 根目录当前文档；
 4. `CHANGELOG.md` 的版本历史；
-5. `docs/superpowers/*` 历史记录。
-
-`docs/superpowers/*` 不得覆盖当前生产事实。
+5. Git 历史中的旧设计和审计记录（仅用于追溯，不作为当前实现依据）。

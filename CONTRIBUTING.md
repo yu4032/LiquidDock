@@ -1,6 +1,6 @@
 # Contributing
 
-本文档面向 LiquidDock 的开发流程。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。生产源码、设置页、`ConfigSchema`、构建配置是事实来源；`docs/superpowers/*` 是历史记录。当前未完成事项见 [TODO.md](TODO.md)，维护性核验见 [docs/maintainability-audit-20261010.md](docs/maintainability-audit-20261010.md)。
+本文档面向 LiquidDock 的开发流程。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。生产源码、设置页、`ConfigSchema`、构建配置是事实来源；当前未完成事项见 [TODO.md](TODO.md)。已失效的阶段性方案和审计记录可通过 Git 历史追溯。
 
 ## 1. Build baseline
 
@@ -63,7 +63,7 @@ Debug 与 Release 都启用 optimization/R8。不要假设 debug APK 保留原�
 
 ### 历史文档
 
-`docs/superpowers/plans`、`specs`、`verification` 是时间点记录。保留原内容，但必须带历史归档提示，不能被引用为当前 runtime contract。
+过时的实施计划、设计草案和阶段性审计不再存放于当前 `docs/` 文件树。需要追溯时可查阅 Git 历史；旧记录不得被引用为当前 runtime contract。
 
 ## 4. Configuration contract
 

@@ -44,4 +44,4 @@
 2. **端到端掉帧归因**：采集 FrameTimeline、UI/RenderThread 调度、GPU、EGL swap 和 SurfaceFlinger，匹配 165Hz（约 6.06 ms）预算分析 missed deadline。
 3. **低频静止唤醒尾延迟及严格 A/B**：记录 CPU 频率、温度、实际页面节点、APK SHA、trace loss 和相同操作序列，必要时再研究 dirty-scene / event-revision 模型。
 
-当前维护状态以 [TODO.md](../../TODO.md) 为准；2026-10-10 的 [最初采样方案](../workspace-ui-node-scan-perfetto-20261010.md) 和原始 24-trace 审计均是**当时的历史观察**，不得倒改为后来优化后的统计。
+当前维护状态以 [TODO.md](../../TODO.md) 为准；2026-10-10 的 [最初采样方案](https://github.com/yu4032/LiquidDock/blob/fb15884469678d9c02a2ba6d0a753e92ff2c1192/docs/workspace-ui-node-scan-perfetto-20261010.md)（已归入 Git 历史）和原始 24-trace 审计均是**当时的历史观察**，不得倒改为后来优化后的统计。

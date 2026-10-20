@@ -1,6 +1,6 @@
 # LiquidDock Hook / Listener Map
 
-本文档记录 LiquidDock 的主要 Hook、listener、reflection 和 runtime ownership 边界（原逐项核验于 2026-10-03）。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。新增或更改的时序以当前源码、契约测试和真实设备记录为准；见 [TODO.md](TODO.md) 与 [可维护性审计](docs/maintainability-audit-20261010.md)。
+本文档记录 LiquidDock 的主要 Hook、listener、reflection 和 runtime ownership 边界（原逐项核验于 2026-10-03）。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。新增或更改的时序以当前源码、契约测试和真实设备记录为准；未完成的 Hook 风险及维护任务见 [TODO.md](TODO.md)。
 
 当前 Xposed scope：
 

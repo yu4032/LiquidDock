@@ -77,11 +77,9 @@ v2.5.1 已不仅有 Launcher Workspace。当前 source domain 还包括：
 
 小型、有限、非 backdrop 用途的 Bitmap 不在此禁令中，例如 ShortcutMenu 图标颜色分类。
 
-## 6. Historical superpowers documents
+## 6. 历史设计与审计记录
 
-`docs/superpowers/plans`、`specs`、`verification` 保存各开发阶段的方案和验证记录。
-
-它们会保留原始内容，并统一标记为 historical record。文件中的 TODO、类名、架构结论或失败方案都不能覆盖当前生产源码。
+已过时的 `docs/superpowers/` 阶段性计划、设计和验证资料，以及被现行文档取代的单次审计记录，已从当前文件树移除以避免误用。内容仍保存在 Git 历史中，可使用 `git log --all -- docs/superpowers/` 等命令追溯。历史 TODO、类名和架构结论不能覆盖当前生产源码。
 
 当前事实请优先查看：
 
