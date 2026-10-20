@@ -114,14 +114,13 @@ final class WorkstationDockGeometryHook {
      */
     static void reconcileTaskbarPlacementForFrame() {
         if (!MainHook.isWorkstationMode() || !dockEnabled || !taskbarEnabled) return;
-        ArrayList<Binding> snapshot = new ArrayList<>();
         synchronized (bindings) {
+            // No per-frame list allocation: translation does not mutate Binding ownership.
             for (WeakReference<Binding> ref : bindings.values()) {
                 Binding binding = ref != null ? ref.get() : null;
-                if (binding != null) snapshot.add(binding);
+                if (binding != null) binding.reconcileTaskbarPosition();
             }
         }
-        for (Binding binding : snapshot) binding.reconcileTaskbarPosition();
     }
 
     private static void bindFromAnchor(View anchor) {
