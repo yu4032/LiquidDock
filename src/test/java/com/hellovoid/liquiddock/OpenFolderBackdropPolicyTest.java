@@ -36,38 +36,10 @@ public class OpenFolderBackdropPolicyTest {
         assertEquals(1f, opacity(2f), 0f);
     }
 
-    @Test public void closingGlassSmoothlyBecomesWorkspaceMaterial() {
-        assertEquals(1f, OpenFolderBackdropPolicy.workspaceGlassMix(0f), 0f);
-        assertEquals(.5f, OpenFolderBackdropPolicy.workspaceGlassMix(.5f), 0.0001f);
-        assertEquals(0f, OpenFolderBackdropPolicy.workspaceGlassMix(1f), 0f);
-        float previous = 1f;
-        for (int i = 0; i <= 100; i++) {
-            float mix = OpenFolderBackdropPolicy.workspaceGlassMix(i / 100f);
-            assertTrue(mix >= 0f && mix <= 1f);
-            assertTrue("closing mix is monotone as folder expands", mix <= previous);
-            previous = mix;
-        }
-        assertEquals(0f, OpenFolderBackdropPolicy.backdropOpacity(0f), 0f);
-    }
-
     @Test public void preparedDesktopBlurMapsFboRowsOntoLogicalFullscreenQuad() {
         assertEquals(1f, OpenFolderBackdropPolicy.backdropSampleY(0f), 0f);
         assertEquals(.75f, OpenFolderBackdropPolicy.backdropSampleY(.25f), 0f);
         assertEquals(0f, OpenFolderBackdropPolicy.backdropSampleY(1f), 0f);
-    }
-
-    @Test public void closingSamplesActualTransformedPlateInsteadOfInterpolatedPosition() {
-        OpenFolderGlassGeometry.Frame closed = new OpenFolderGlassGeometry.Frame(200, 500, 300, 600, 20);
-        OpenFolderGlassGeometry.Frame expanded = new OpenFolderGlassGeometry.Frame(50, 100, 650, 800, 80);
-        // Folme scale = 0.6 progress while its independent translation is at
-        // another point on the spring; lens must retain the measured rectangle.
-        OpenFolderGlassGeometry.Frame live = new OpenFolderGlassGeometry.Frame(137, 318, 437, 658, 40);
-        assertEquals(.4f, OpenFolderBackdropPolicy.nativeFrameProgress(closed, expanded, live), .0001f);
-        OpenFolderGlassGeometry geometry = new OpenFolderGlassGeometry();
-        assertSame(live, geometry.acceptAnimation(live, 1000, 1200));
-        assertEquals(137f, geometry.current().left, 0f);
-        assertEquals(318f, geometry.current().top, 0f);
-        assertTrue(Float.isNaN(OpenFolderBackdropPolicy.nativeFrameProgress(closed, expanded, null)));
     }
 
     @Test public void folderWallpaperExcludesLauncherAndDock() {

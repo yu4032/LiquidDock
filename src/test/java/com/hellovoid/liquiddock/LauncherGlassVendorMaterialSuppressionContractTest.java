@@ -160,8 +160,6 @@ public class LauncherGlassVendorMaterialSuppressionContractTest {
 
         assertTrue("Installed OEM hooks must stop taking ownership after global disable",
                 folder.contains("if (!GlassRuntimeState.isEnabled()) return;"));
-        assertTrue("Full teardown must explicitly reset pending capture handoff",
-                folder.contains("pendingInputResumeSerial = 0L;"));
         assertTrue("Folder cleanup uses the root-wide Workspace coverage release",
                 folder.contains("releaseFrozenInputs();"));
         assertTrue("Release propagates to all existing Workspace roots",

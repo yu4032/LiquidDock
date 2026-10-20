@@ -45,7 +45,6 @@ final class MiuixFolderGlassHook {
     private static long openedFolderSerial;
     private static boolean folderStatusDispatcherInstalled;
     private static final FolderCloseCompletionGate NATIVE_CLOSE = new FolderCloseCompletionGate();
-    private static long pendingInputResumeSerial;
     private static boolean installed;
 
     private MiuixFolderGlassHook() {}
@@ -167,7 +166,6 @@ final class MiuixFolderGlassHook {
         // not reactivate folder capture while all glass ownership is released.
         if (!GlassRuntimeState.isEnabled()) return;
         OemFolderBlurStrengthHook.setFolderOpening(true);
-        pendingInputResumeSerial = 0L;
         LauncherGlassSceneController.setFolderCoveredForAll(true);
     }
 
@@ -211,12 +209,9 @@ final class MiuixFolderGlassHook {
         // Workspace alpha as the ordinary icons. Dock keeps its own live
         // PassBlur producer and native FolderState throughout this transition.
         //
-        // The opening folder's own static node stays suppressed by
-        // openedFolderSink until the native content/background completion.
-        // Its temporary icon-shaped lens stays presented through the later
-        // fresh-frame handoff, so recovering the siblings cannot create a
-        // transparent gap at the closing folder.
-        if (animated && OpenFolderGlassCoordinator.hasActiveSession()) {
+        // The cached lens fades independently of the native background spring.
+        // Prepare the resident desktop material even for native close(false).
+        if (OpenFolderGlassCoordinator.hasActiveSession()) {
             LauncherGlassSceneController.beginNativeFolderCloseForAll();
         }
     }
@@ -376,17 +371,11 @@ final class MiuixFolderGlassHook {
         // Restore the Workspace source only after native folder close.
         // Dock's independent PassBlur producer was never frozen; the expanded
         // folder kept its own wallpaper snapshot during the transition.
-        if (sink != null) sink.restoreFolderVisibilityImmediately();
-        // The native close may finish before the sibling glass TextureView
-        // is disposed. Keep all producers paused through that final output.
-        if (OpenFolderGlassCoordinator.hasActiveSession()) {
-            // This token MUST come from the prepared glass output, not
-            // openedFolderSerial. Background prepare() also occurs on icon
-            // ACTION_DOWN/cancel, so its serial and OEM opens diverge.
-            pendingInputResumeSerial = OpenFolderGlassCoordinator.activeSessionSerial();
-        } else {
-            releaseFrozenInputs();
+        if (sink != null) {
+            sink.endFolderCloseReturn();
+            sink.restoreFolderVisibilityImmediately();
         }
+        releaseFrozenInputs();
         if (owner != null && !folderStatusDispatcherInstalled) {
             LauncherGlassSceneController.setWorkspaceCovered(owner, false);
         }
@@ -395,32 +384,24 @@ final class MiuixFolderGlassHook {
         openedFolderSink = new WeakReference<>(null);
     }
 
-    /** Thaw the resident Workspace/Folder glass producer while keeping the
-     * completed opening-folder surface on screen. The caller must wait for the
-     * resident source's first swapped frame before disposing that surface.
-     */
-    static boolean beginExpandedFolderHandoff(long serial) {
-        if (serial == 0L || pendingInputResumeSerial != serial) return false;
-        pendingInputResumeSerial = 0L;
+    static void onExpandedFolderFadeStarted(long serial, LauncherGlassGeometry.Snapshot geometry,
+                                            int width, int height) {
+        if (serial == 0L || OpenFolderGlassCoordinator.activeSessionSerial() != serial) return;
+        LauncherGlassStaticNode sink = openedFolderSink.get();
+        if (sink != null) sink.beginFolderCloseReturn(geometry, width, height);
         releaseFrozenInputs();
-        return true;
     }
 
-    static void onExpandedFolderOutputReleased(long serial) {
-        beginExpandedFolderHandoff(serial);
-    }
-
-    /** An early glass-session abort (e.g. detached Launcher root) has no
-     * native close completion token. Never strand shared Workspace/Dock
-     * producers or keep the icon's native fallback material suppressed.
-     */
-    static void onExpandedFolderOutputAborted(long serial) {
+    /** Clear native ownership after completion, cancellation or timeout. */
+    static void releaseExpandedFolderOwner(long serial) {
         if (serial == 0L) return;
-        pendingInputResumeSerial = 0L;
         NATIVE_CLOSE.cancel();
         OemFolderBlurStrengthHook.setFolderOpening(false);
         LauncherGlassStaticNode sink = openedFolderSink.get();
-        if (sink != null) sink.restoreFolderVisibilityImmediately();
+        if (sink != null) {
+            sink.endFolderCloseReturn();
+            sink.restoreFolderVisibilityImmediately();
+        }
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
         releaseFrozenInputs();
@@ -781,10 +762,9 @@ final class MiuixFolderGlassHook {
     static void onRuntimeGlassDisabled() {
         OemFolderBlurStrengthHook.setFolderOpening(false);
         OpenFolderGlassCoordinator.releaseAll();
-        // releaseAll() only calls the abort callback when there is a live
+        // releaseAll() only clears native ownership when there is a live
         // OPEN_FOLDER session. A native FolderCling can be open without one;
         // clear the global Workspace coverage in both cases on master disable.
-        pendingInputResumeSerial = 0L;
         releaseFrozenInputs();
         for (View material : new ArrayList<>(CLAIMED.keySet())) {
             releaseMaterialOwnership(material);
