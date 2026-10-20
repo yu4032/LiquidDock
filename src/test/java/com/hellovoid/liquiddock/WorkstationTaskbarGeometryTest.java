@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import org.junit.Test;
+
 import static org.junit.Assert.assertEquals;
 
 public class WorkstationTaskbarGeometryTest {
@@ -19,45 +20,26 @@ public class WorkstationTaskbarGeometryTest {
 
     @Test public void visibleHeightIsNativeHeightEvenWhenOpticsBleedPastScreen() {
         assertEquals(960f, WorkstationTaskbarGeometry.visibleTop(1080, 120), 0.001f);
-        assertEquals(1020f, WorkstationTaskbarGeometry.visibleCenter(1080, 120), 0.001f);
-        // A 40px extruded bottom edge affects sampling, never the visible taskbar center.
-        assertEquals(1020f, WorkstationTaskbarGeometry.visibleCenter(1080, 120), 0.001f);
         assertEquals(950f, WorkstationTaskbarGeometry.visibleTop(1080, 130), 0.001f);
     }
 
-    @Test public void iconRowCorrectionIsGeometricAndStable() {
-        assertEquals(21f, WorkstationTaskbarGeometry.iconCenterCorrection(1020f, 999f), 0.001f);
-        assertEquals(0f, WorkstationTaskbarGeometry.iconCenterCorrection(1020f, 1020f), 0.001f);
-        assertEquals(-7f, WorkstationTaskbarGeometry.iconCenterCorrection(1020f, 1027f), 0.001f);
+    @Test public void iconTranslationUsesOnlyVendorBaselineAndConfiguredOffset() {
+        assertEquals(12f, WorkstationTaskbarGeometry.iconRowTranslation(0f, 12f), 0.001f);
+        assertEquals(-8f, WorkstationTaskbarGeometry.iconRowTranslation(0f, -8f), 0.001f);
+        assertEquals(20f, WorkstationTaskbarGeometry.iconRowTranslation(8f, 12f), 0.001f);
+        // Repeating the same request must not treat our previous translation as the new baseline.
+        assertEquals(20f, WorkstationTaskbarGeometry.iconRowTranslation(8f, 12f), 0.001f);
+        // Editing the slider replaces, rather than accumulates, the former offset.
+        assertEquals(14f, WorkstationTaskbarGeometry.iconRowTranslation(8f, 6f), 0.001f);
     }
 
-    @Test public void iconAlignmentAllowsDifferentWindowRootsOnTheSameDisplay() {
-        // Deliberately no root identity in the policy: Dock background and icons
-        // can belong to separate Launcher floating-window roots.
-        assertEquals(true, WorkstationTaskbarGeometry.canAlignIconRow(
-                true, true, true, true, 0, 0, 2400, 140));
-        assertEquals(false, WorkstationTaskbarGeometry.canAlignIconRow(
-                true, true, true, true, 0, 1, 2400, 140));
-        assertEquals(false, WorkstationTaskbarGeometry.canAlignIconRow(
-                true, true, false, true, 0, 0, 2400, 140));
-        assertEquals(false, WorkstationTaskbarGeometry.canAlignIconRow(
-                true, false, true, true, 0, 0, 2400, 140));
-        assertEquals(false, WorkstationTaskbarGeometry.canAlignIconRow(
-                true, true, true, true, 0, 0, 140, 140));
-    }
-
-    @Test public void rotationRecomputesIndependentOrientationAnchors() {
-        // Portrait and landscape use their current physical display heights;
-        // a previously applied icon translation never changes the new target.
-        float portrait = WorkstationTaskbarGeometry.visibleCenter(2400, 140);
-        float landscape = WorkstationTaskbarGeometry.visibleCenter(1080, 110);
-        assertEquals(2330f, portrait, 0.001f);
-        assertEquals(1025f, landscape, 0.001f);
-        assertEquals(24f,
-                WorkstationTaskbarGeometry.iconCenterCorrection(portrait, 2306f), 0.001f);
-        assertEquals(-19f,
-                WorkstationTaskbarGeometry.iconCenterCorrection(landscape, 1044f), 0.001f);
-        assertEquals(portrait, WorkstationTaskbarGeometry.visibleCenter(2400, 140), 0.001f);
+    @Test public void iconTranslationIsIndependentOfScreenOrientation() {
+        float nativeY = 4f;
+        float offset = 10f;
+        float beforeRotation = WorkstationTaskbarGeometry.iconRowTranslation(nativeY, offset);
+        float afterRotation = WorkstationTaskbarGeometry.iconRowTranslation(nativeY, offset);
+        assertEquals(14f, beforeRotation, 0.001f);
+        assertEquals(beforeRotation, afterRotation, 0.001f);
     }
 
     @Test public void taskbarBodyUsesAbsoluteScreenCoordinates() {
