@@ -31,6 +31,21 @@ public class WorkstationTaskbarGeometryTest {
         assertEquals(-7f, WorkstationTaskbarGeometry.iconCenterCorrection(1020f, 1027f), 0.001f);
     }
 
+    @Test public void iconAlignmentAllowsDifferentWindowRootsOnTheSameDisplay() {
+        // Deliberately no root identity in the policy: Dock background and icons
+        // can belong to separate Launcher floating-window roots.
+        assertEquals(true, WorkstationTaskbarGeometry.canAlignIconRow(
+                true, true, true, true, 0, 0, 2400, 140));
+        assertEquals(false, WorkstationTaskbarGeometry.canAlignIconRow(
+                true, true, true, true, 0, 1, 2400, 140));
+        assertEquals(false, WorkstationTaskbarGeometry.canAlignIconRow(
+                true, true, false, true, 0, 0, 2400, 140));
+        assertEquals(false, WorkstationTaskbarGeometry.canAlignIconRow(
+                true, false, true, true, 0, 0, 2400, 140));
+        assertEquals(false, WorkstationTaskbarGeometry.canAlignIconRow(
+                true, true, true, true, 0, 0, 140, 140));
+    }
+
     @Test public void rotationRecomputesIndependentOrientationAnchors() {
         // Portrait and landscape use their current physical display heights;
         // a previously applied icon translation never changes the new target.
