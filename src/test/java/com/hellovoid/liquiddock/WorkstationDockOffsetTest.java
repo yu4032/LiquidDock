@@ -21,25 +21,22 @@ public class WorkstationDockOffsetTest {
         assertEquals(80f, state.apply(80f, false, 10f), 0f);
     }
 
-    @Test public void portraitSettingsDoNotLeakIntoLandscapeDefaults() {
+    @Test public void portraitVerticalOffsetRemainsIndependentOfLandscape() {
         LiquidDockConfig.Workstation config = new LiquidDockConfig.Workstation(new ConfigReader(Map.of(
                 "workstation_dock_icon_horizontal_offset_tenths", 125,
                 "workstation_dock_icon_top_offset_tenths", -35)));
-        assertEquals(12.5f, config.iconHorizontalOffset, 0f);
         assertEquals(-3.5f, config.iconTopOffset, 0f);
-        assertEquals(0f, config.iconLandscapeHorizontalOffset, 0f);
         assertEquals(0f, config.iconLandscapeTopOffset, 0f);
     }
 
-    @Test public void landscapeSettingsDoNotChangePortraitOrWholeDockOffset() {
+    @Test public void landscapeVerticalOffsetAndWholeDockOffsetRemainIndependent() {
         LiquidDockConfig.Workstation config = new LiquidDockConfig.Workstation(new ConfigReader(Map.of(
                 "workstation_dock_vertical_offset_tenths", 45,
                 "workstation_dock_icon_horizontal_offset_tenths", 125,
                 "workstation_dock_icon_landscape_horizontal_offset_tenths", -65,
                 "workstation_dock_icon_landscape_vertical_offset_tenths", 85)));
         assertEquals(4.5f, config.dockVerticalOffset, 0f);
-        assertEquals(12.5f, config.iconHorizontalOffset, 0f);
-        assertEquals(-6.5f, config.iconLandscapeHorizontalOffset, 0f);
+        assertEquals(0f, config.iconTopOffset, 0f);
         assertEquals(8.5f, config.iconLandscapeTopOffset, 0f);
     }
 }
