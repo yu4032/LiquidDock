@@ -26,5 +26,7 @@ Removed total including the complete method-presence class: **42**. Pending CI c
 - `LauncherGlassProducerRolloverContractTest`: retained true producer recovery and endpoint race state-machine tests.
 - `SecurityCenterHookSpecTest`: retained stable vendor entrypoint anchors.
 
+The PR uses `main` as the target branch to trigger the repository's existing CI workflow. It still depends on PR #445 and must not be merged before #445; GitHub will drop the earlier diff from PR #446 after #445 is merged.
+
 ## Risks / validation
 This is a reduction in independent regression checks, not proof of unchanged test coverage. GUI source-text checks are not substitutes for instrumentation; JaCoCo and real-device visual baseline remain unavailable. CI must run `testDebugUnitTest assembleDebug` and publish the JUnit inventory. Do not force the <500 target until duplicated runtime scenarios are individually compared and benchmarked.
