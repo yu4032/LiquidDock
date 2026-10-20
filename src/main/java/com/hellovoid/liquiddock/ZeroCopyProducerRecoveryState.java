@@ -26,8 +26,8 @@ final class ZeroCopyProducerRecoveryState {
             return new Decision(false, false, false, false, false);
         }
 
-        static Decision rebind() {
-            return new Decision(true, true, true, true, false);
+        static Decision rebind(boolean outputReady) {
+            return new Decision(true, true, true, outputReady, false);
         }
 
         static Decision bind() {
@@ -42,13 +42,29 @@ final class ZeroCopyProducerRecoveryState {
     private boolean rebindPending;
     private boolean freshFrame;
     private boolean activationExhausted;
+    private boolean waitingForOutput;
 
     synchronized Decision onRebindRequested() {
+        return onRebindRequested(true);
+    }
+
+    synchronized Decision onRebindRequested(boolean outputReady) {
         if (rebindPending) return Decision.none();
         rebindPending = true;
         freshFrame = false;
         activationExhausted = false;
-        return Decision.rebind();
+        waitingForOutput = !outputReady;
+        return Decision.rebind(outputReady);
+    }
+
+    synchronized Decision onOutputReady() {
+        if (!rebindPending || !waitingForOutput) return Decision.none();
+        waitingForOutput = false;
+        return new Decision(true, false, false, true, false);
+    }
+
+    synchronized void onOutputUnavailable() {
+        if (rebindPending) waitingForOutput = true;
     }
 
     synchronized Decision onProducerRecreated() {
@@ -57,11 +73,13 @@ final class ZeroCopyProducerRecoveryState {
     }
 
     synchronized void onBindSucceeded() {
+        waitingForOutput = false;
         rebindPending = false;
         activationExhausted = false;
     }
 
     synchronized void onBindExhausted() {
+        waitingForOutput = false;
         rebindPending = false;
         freshFrame = false;
         activationExhausted = true;
@@ -85,6 +103,7 @@ final class ZeroCopyProducerRecoveryState {
     }
 
     synchronized void onShutdown() {
+        waitingForOutput = false;
         rebindPending = false;
         freshFrame = false;
     }

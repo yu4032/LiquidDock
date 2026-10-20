@@ -412,7 +412,7 @@ final class LiquidDockConfig {
     }
 
     static final class Workstation {
-        final boolean dockEnabled, dimensionsDp;
+        final boolean dockEnabled, taskbarMode, dimensionsDp;
         final float dockWidthOffset, dockIconGlassCornerRadius, gridHorizontalOffset;
         final float allAppsLandscapeHorizontalOffset;
         final float allAppsLandscapeTopSpacing, allAppsLandscapeBottomSpacing;
@@ -423,6 +423,8 @@ final class LiquidDockConfig {
         Workstation(ConfigReader c) {
             dockEnabled = c.b(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
                     ConfigSchema.Workstation.DOCK_CUSTOMIZATION.runtimeFallback());
+            taskbarMode = c.b(ConfigSchema.Workstation.TASKBAR_MODE.name(),
+                    ConfigSchema.Workstation.TASKBAR_MODE.runtimeFallback());
             dimensionsDp = true;
             dockWidthOffset = c.f(ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_WIDTH_OFFSET.runtimeFallback());

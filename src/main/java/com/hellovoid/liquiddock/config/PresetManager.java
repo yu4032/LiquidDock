@@ -316,6 +316,7 @@ public final class PresetManager {
         source.put("launcher_large_surface_component_caustics", Boolean.TRUE);
         source.put("launcher_large_surface_component_press_glow", Boolean.FALSE);
         source.put("workstation_dock_customization", Boolean.FALSE);
+        source.put(ConfigSchema.Workstation.TASKBAR_MODE.name(), Boolean.FALSE);
         source.put("workstation_dock_width_offset", 26.5d);
         source.put("workstation_dock_icon_glass_corner_radius", 12);
         source.put("workstation_grid_horizontal_offset", 0);

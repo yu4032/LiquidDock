@@ -237,7 +237,9 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
 
         DockLiquidGlassHostView host = new DockLiquidGlassHostView(dockBg.getContext());
         host.setId(View.generateViewId());
-        host.setGeometry(nativeRadius, false, SQUIRCLE_CP);
+        host.setGeometry(WorkstationRuntimeState.isActive()
+                && config.workstation.dockEnabled && config.workstation.taskbarMode
+                ? 0f : nativeRadius, false, SQUIRCLE_CP);
 
         boolean zeroCopyCandidate = Miuix307ZeroCopyRenderer.install(
                 materialHost, host, config.glass, config.workstation,
@@ -335,6 +337,11 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         host.invalidate();
     }
 
+    static void refreshTaskbarGeometry() {
+        View background = currentBackground();
+        if (background != null) syncGeometry(background, LiquidDockConfig.load());
+    }
+
     static void syncGeometry(View dockBg, LiquidDockConfig config) {
         if (dockBg == null || config == null || dockBg != currentBackground()) return;
         DockLiquidGlassHostView host = currentHost();
@@ -342,11 +349,13 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
 
         float nativeRadius = readAndCacheRadius(dockBg);
         suppressVendorMaterialBody(dockBg, nativeRadius);
-        host.setGeometry(nativeRadius, false, SQUIRCLE_CP);
+        float shapeRadius = Miuix307ZeroCopyRenderer.isWorkstationTaskbarMode()
+                ? 0f : nativeRadius;
+        host.setGeometry(shapeRadius, false, SQUIRCLE_CP);
         Miuix307ZeroCopyRenderer.setNativeOpticsRadiusPx(nativeRadius);
         Miuix307ZeroCopyRenderer.sync(config.glass, Math.round(config.glass.blur));
         DockStrokeRenderer.configureReplacingForeground(
-                host, config.dock, nativeRadius);
+                host, config.dock, shapeRadius);
         DockShadowOwnership.syncDockShadow(dockBg, config.dock);
         host.bringToFront();
         host.invalidate();
