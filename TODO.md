@@ -96,6 +96,7 @@ Workspace 性能清单状态更新：**2026-10-18**；P0 静态几何复用已�
 - 无 GUI 控件但仍存在的键；
 - 旧网格边距键；
 - 工作台旧偏移键。
+- Prismal **边缘折射衰减**：当前单边折射改造将最终 `baseOffset` 改成 `dLens * lensDir / u_resolution`，导致旧 `edgeFalloffPower/dropLens` 的计算结果不再被消费；配置键仍存在。必须先确认 GUI、预设和视觉契约，再单独修复控制链或清理无效键，不得在性能清理 PR 内悄悄更改折射曲线。
 
 要求：
 

@@ -501,10 +501,11 @@ public final class PrismalRenderer implements AutoCloseable {
             blurVProgram = createProgram(PrismalShaderSources.BLUR_VERTEX,
                     PrismalShaderSources.BLUR_V);
         }
-        String glassFragment = PrismalOs4InvariantShader.apply(
-                PrismalComponentGateShader.apply(
-                        PrismalOpticalEdgeShader.apply(
-                                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
+        String glassFragment = PrismalZeroContributionShader.apply(
+                PrismalOs4InvariantShader.apply(
+                        PrismalComponentGateShader.apply(
+                                PrismalOpticalEdgeShader.apply(
+                                        PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)))));
         String glassVertex = PrismalRasterGuardShader.apply(PrismalShaderSources.VERTEX);
         if (dualBlurEnabled) glassFragment = PrismalDualBlurShader.apply(glassFragment);
         // Critical: user-disabled effects cannot change the GL program used for
