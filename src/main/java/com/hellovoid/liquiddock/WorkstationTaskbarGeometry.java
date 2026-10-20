@@ -1,11 +1,11 @@
 package com.hellovoid.liquiddock;
 
 /**
- * Workstation taskbar geometry in physical screen coordinates.
+ * Workstation taskbar glass geometry in physical screen coordinates.
  *
- * The native Dock is kept as the icon/layout owner. Only its GPU output is extended to cover
- * the lower screen edge and both sides; the body is deliberately oversized so its left/right/
- * bottom Prismal rim, highlight, rounded corners and shadow fall outside the visible screen.
+ * The Launcher owns the native Dock's vertical placement and animation. The glass output
+ * extends to the display's sides while its body follows the moving Dock, including optical
+ * bleed beyond the native body edges.
  */
 final class WorkstationTaskbarGeometry {
     private WorkstationTaskbarGeometry() {}
@@ -28,11 +28,6 @@ final class WorkstationTaskbarGeometry {
                                   int bleed, int normalMargin) {
         return Math.max(normalMargin,
                 Math.max(0, screenHeight - dockY - dockHeight + bleed));
-    }
-
-    /** Visible taskbar retains the native Dock body height; optical bleed is outside the screen. */
-    static float visibleTop(int screenHeight, int nativeDockHeight) {
-        return screenHeight - nativeDockHeight;
     }
 
     static float centeredIconRowTranslation(float current, float targetScreenCenter,
