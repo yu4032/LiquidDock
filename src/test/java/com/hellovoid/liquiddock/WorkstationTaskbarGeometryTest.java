@@ -31,6 +31,20 @@ public class WorkstationTaskbarGeometryTest {
         assertEquals(-7f, WorkstationTaskbarGeometry.iconCenterCorrection(1020f, 1027f), 0.001f);
     }
 
+    @Test public void rotationRecomputesIndependentOrientationAnchors() {
+        // Portrait and landscape use their current physical display heights;
+        // a previously applied icon translation never changes the new target.
+        float portrait = WorkstationTaskbarGeometry.visibleCenter(2400, 140);
+        float landscape = WorkstationTaskbarGeometry.visibleCenter(1080, 110);
+        assertEquals(2330f, portrait, 0.001f);
+        assertEquals(1025f, landscape, 0.001f);
+        assertEquals(24f,
+                WorkstationTaskbarGeometry.iconCenterCorrection(portrait, 2306f), 0.001f);
+        assertEquals(-19f,
+                WorkstationTaskbarGeometry.iconCenterCorrection(landscape, 1044f), 0.001f);
+        assertEquals(portrait, WorkstationTaskbarGeometry.visibleCenter(2400, 140), 0.001f);
+    }
+
     @Test public void taskbarBodyUsesAbsoluteScreenCoordinates() {
         assertEquals(0f, WorkstationTaskbarGeometry.bodyUvLeft(80, -80, 0, 2200), 0.001f);
         assertEquals(0f, WorkstationTaskbarGeometry.bodyUvBottom(80, 1180, 1260, 500), 0.001f);
