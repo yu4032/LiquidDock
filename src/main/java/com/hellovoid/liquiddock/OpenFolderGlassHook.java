@@ -41,7 +41,6 @@ final class OpenFolderGlassHook {
                         (int[]) args[3], (int[]) args[4], ((Number) args[5]).intValue()));
                 Object result = chain.proceed(args);
                 if (!Boolean.TRUE.equals(args[0])) {
-                    safe(OpenFolderGlassCoordinator::onClosingNativePlatePrepared);
                     safe(OpenFolderGlassCoordinator::onClosingAnimationMaterialUpdated);
                 }
                 return result;

@@ -53,54 +53,6 @@ public class OpenFolderGlassGeometryTest {
                 20, 30, 400, 500, 48);
     }
 
-    @Test public void nativeCloseBackdropContractsToDesktopSmallFolderIconOnActualSpringProgress() {
-        // Native expanded folder is much larger; the CLOSE target is the
-        // desktop 1x1 folder *icon*, not the Recents expanded panel.
-        OpenFolderGlassGeometry.Frame icon =
-                new OpenFolderGlassGeometry.Frame(780f, 450f, 940f, 610f, 34f);
-        OpenFolderGlassGeometry.Frame start =
-                OpenFolderGlassGeometry.closingBackdropMask(icon, 1728, 1080, 1f);
-        assertEquals(0f, start.left, .001f);
-        assertEquals(0f, start.top, .001f);
-        assertEquals(1728f, start.right, .001f);
-        assertEquals(1080f, start.bottom, .001f);
-        assertEquals(0f, start.radius, .001f);
-        OpenFolderGlassGeometry.Frame midway =
-                OpenFolderGlassGeometry.closingBackdropMask(icon, 1728, 1080, .5f);
-        assertEquals(390f, midway.left, .001f);
-        assertEquals(225f, midway.top, .001f);
-        assertEquals(1334f, midway.right, .001f);
-        assertEquals(845f, midway.bottom, .001f);
-        assertEquals(17f, midway.radius, .001f);
-        OpenFolderGlassGeometry.Frame end =
-                OpenFolderGlassGeometry.closingBackdropMask(icon, 1728, 1080, 0f);
-        assertEquals(icon.left, end.left, .001f);
-        assertEquals(icon.top, end.top, .001f);
-        assertEquals(icon.right, end.right, .001f);
-        assertEquals(icon.bottom, end.bottom, .001f);
-        assertEquals(icon.radius, end.radius, .001f);
-    }
-
-    @Test public void nativeCloseBackdropHasNoFixedSizeAndClampsSpringOvershoot() {
-        OpenFolderGlassGeometry.Frame largeIcon =
-                new OpenFolderGlassGeometry.Frame(200f, 250f, 540f, 590f, 70f);
-        OpenFolderGlassGeometry.Frame finished =
-                OpenFolderGlassGeometry.closingBackdropMask(largeIcon, 1728, 1080, -0.1f);
-        assertEquals(largeIcon.right, finished.right, .001f);
-        assertEquals(largeIcon.radius, finished.radius, .001f);
-        OpenFolderGlassGeometry.Frame started =
-                OpenFolderGlassGeometry.closingBackdropMask(largeIcon, 1728, 1080, 1.1f);
-        assertEquals(0f, started.radius, .001f);
-        assertEquals(1728f, started.right, .001f);
-        // A missing native progress sample retains the full backdrop, not an
-        // arbitrary half-contracted mask that flashes during setup.
-        OpenFolderGlassGeometry.Frame missing =
-                OpenFolderGlassGeometry.closingBackdropMask(largeIcon, 1728, 1080, Float.NaN);
-        assertEquals(1728f, missing.right, .001f);
-        assertNull(OpenFolderGlassGeometry.closingBackdropMask(null, 1728, 1080, .4f));
-        assertNull(OpenFolderGlassGeometry.closingBackdropMask(largeIcon, 0, 1080, .4f));
-    }
-
     @Test public void desktopSmallFolderUsesItsOwnCornerSettingNotExpandedLargeFolderSetting() {
         float small = OpenFolderGlassGeometry.sourceIconRadiusPx(
                 true, 9f, 54f, 2f, Float.NaN, 80f, 80f);

@@ -28,6 +28,8 @@ final class LauncherGlassStaticNode {
             new LauncherGlassVisualOwnerState();
     private final LauncherGlassStaticGeometryCache geometryCache =
             new LauncherGlassStaticGeometryCache();
+    private final LauncherGlassFolderReturnState folderReturnState =
+            new LauncherGlassFolderReturnState();
     private final float[] geometryPoints = new float[8];
     private final Matrix materialToGlobal = new Matrix();
     private final Matrix rootToGlobal = new Matrix();
@@ -68,6 +70,7 @@ final class LauncherGlassStaticNode {
             }
 
             @Override public void onViewDetachedFromWindow(View v) {
+                folderReturnState.clear();
                 homeReturnAlpha = 1f;
                 resetPressInteraction(false);
                 hideImmediately();
@@ -227,13 +230,25 @@ final class LauncherGlassStaticNode {
      * Do not add a second static-glass alpha animator on top of that spring.
      */
     void restoreFolderVisibilityImmediately() {
-        if (disposed || !suppressionState.setFolderOpen(false)) return;
+        if (disposed) return;
+        suppressionState.setFolderOpen(false);
         if (visibilityAnimator != null) {
             visibilityAnimator.cancel();
             visibilityAnimator = null;
         }
         visibilityAlpha = suppressionState.isSuppressed() ? 0f : 1f;
         requestLifecycleRefresh();
+    }
+
+    void beginFolderCloseReturn(LauncherGlassGeometry.Snapshot geometry, int width, int height) {
+        if (disposed) return;
+        folderReturnState.begin(geometry, width, height);
+        restoreFolderVisibilityImmediately();
+        requestLifecycleRefresh();
+    }
+
+    void endFolderCloseReturn() {
+        if (folderReturnState.clear() && !disposed) requestLifecycleRefresh();
     }
 
     void setSuppressedByDrag(boolean suppressed) {
@@ -267,7 +282,7 @@ final class LauncherGlassStaticNode {
     boolean canReuseStaticGeometry(
             View root, HomeGridCellGeometryHook.WidgetWidthFrame widgetWidthFrame,
             LauncherGlassStaticGeometryCache.Frame staticViewFrame) {
-        if (disposed || visualOwnerState.isLaunchProxyActive()) {
+        if (disposed || folderReturnState.isActive() || visualOwnerState.isLaunchProxyActive()) {
             geometryCache.invalidate();
             return false;
         }
@@ -448,6 +463,11 @@ final class LauncherGlassStaticNode {
         GlassComponentStyle style = componentStyle();
         if (disposed || material == null || root == null || sharedGlobalToRoot == null
                 || style == null || !style.enabled || visibilityAlpha <= 0.001f) return null;
+        // The OEM can keep its desktop background image transparent until a
+        // hidden closing spring ends. Our cached fade needs the desktop glass
+        // immediately, at its recorded desktop bounds rather than that image.
+        LauncherGlassGeometry.Snapshot returning = folderReturnState.geometryForRoot(rootWidth, rootHeight);
+        if (returning != null) return returning;
         if (rootWidth <= 0 || rootHeight <= 0) return null;
 
         int hostWidth = material.getWidth();

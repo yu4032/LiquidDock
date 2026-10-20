@@ -15,21 +15,6 @@ public class OpenFolderGlassOpticsTest {
         assertEquals(base.causticIntensity, result.causticIntensity, 0.0001f);
         assertEquals(base.blurRadiusPx, PrismalParams.builder(base).build().blurRadiusPx, 0.0001f);
     }
-    @Test public void folderOpticsBecomeWorkspaceOpticsAtNativeCloseEndpoint() {
-        PrismalParams workspace = PrismalParams.builder().build();
-        PrismalParams folder = OpenFolderGlassOptics.apply(workspace, 48, 180, 34, 150, 2f);
-        PrismalParams[] steps = OpenFolderGlassOptics.closeToWorkspace(folder, workspace);
-        assertSame(folder, steps[0]);
-        assertSame(workspace, steps[64]);
-        assertEquals(1.8f, steps[0].ior, .0001f);
-        assertEquals(workspace.ior, steps[64].ior, 0f);
-        assertEquals((folder.tintA + workspace.tintA) / 2f, steps[32].tintA, .0001f);
-        assertEquals((folder.glassThicknessPx + workspace.glassThicknessPx) / 2f,
-                steps[32].glassThicknessPx, .0001f);
-        assertEquals(workspace.causticIntensity, steps[64].causticIntensity, 0f);
-        assertEquals(workspace.blurRadiusPx, steps[64].blurRadiusPx, 0f);
-    }
-
     @Test public void folderMaterialMustRemainStableAcrossNativeClose() {
         PrismalParams base = PrismalParams.builder().build();
         PrismalParams folder = OpenFolderGlassOptics.apply(base, 45, 180, 26, 125, 2f);

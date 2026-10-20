@@ -182,8 +182,6 @@ final class LauncherGlassSceneController {
     private int displayRotation;
     private LauncherGlassStaticLayer layer;
     private boolean bootstrapPosted;
-    private Runnable pendingFolderHandoff;
-    private boolean pendingFolderHandoffFresh;
 
     // Wallpaper semantics stay here rather than in the generic PassBlur Session. Only one
     // wallpaper-labelled producer pulse may be in flight for a root at a time; a newer content
@@ -456,33 +454,6 @@ final class LauncherGlassSceneController {
         return generation;
     }
 
-    /** Arm before thawing folder inputs so the first valid, composited
-     * Workspace frame can acknowledge ownership without a release gap.
-     */
-    static boolean awaitFolderHandoff(View root, Runnable onReady) {
-        LauncherGlassSceneController controller = findRoot(root);
-        if (controller == null || controller.layer == null || onReady == null) return false;
-        controller.pendingFolderHandoff = onReady;
-        // On an animated close the Workspace producer was resumed at the
-        // START of the OEM reverse spring. Its generation may already have
-        // presented before the temporary lens reaches its final icon shape.
-        // That is a valid fresh output, not a reason to demand another source
-        // capture and introduce an avoidable ownership gap.
-        controller.pendingFolderHandoffFresh =
-                !controller.folderCovered
-                && controller.state.state() == State.HOME_VISIBLE;
-        if (controller.pendingFolderHandoffFresh) controller.checkFolderHandoffPresentation();
-        return true;
-    }
-
-    static void cancelFolderHandoff(View root) {
-        LauncherGlassSceneController controller = findRoot(root);
-        if (controller != null) {
-            controller.pendingFolderHandoff = null;
-            controller.pendingFolderHandoffFresh = false;
-        }
-    }
-
     static void requestFreshForRoot(View root) {
         LauncherGlassSceneController controller = findRoot(root);
         if (controller != null) controller.requestFreshBackdrop(controller.state.generation());
@@ -536,39 +507,10 @@ final class LauncherGlassSceneController {
         boolean rotationWasPending = state.isRotationPresentationPending();
         state.onFreshFrameReady(generation);
         applyLayerVisibility();
-        if (pendingFolderHandoff != null && !folderCovered
-                && state.state() == State.HOME_VISIBLE) {
-            pendingFolderHandoffFresh = true;
-            checkFolderHandoffPresentation();
-        }
         if (rotationWasPending && !state.isRotationPresentationPending()) {
             MainHook.log(TAG + " rotation presentation released generation=" + generation);
         }
         flushDeferredWallpaperPulse();
-    }
-
-    /** Rendering alone is not enough: the view-alpha / native Workspace
-     * visibility must also be restored before swapping surface ownership.
-     * Check once per display frame only during an armed handoff. The folder
-     * coordinator has a bounded failure path if a fresh frame never arrives.
-     */
-    private void checkFolderHandoffPresentation() {
-        Runnable completion = pendingFolderHandoff;
-        View root = rootRef.get();
-        if (completion == null || !pendingFolderHandoffFresh || root == null
-                || !root.isAttachedToWindow()) return;
-        root.postOnAnimation(() -> {
-            if (pendingFolderHandoff != completion || folderCovered
-                    || state.state() != State.HOME_VISIBLE) return;
-            if (layer == null || !layer.isAttachedToWindow()
-                    || layer.getAlpha() < 0.95f) {
-                checkFolderHandoffPresentation();
-                return;
-            }
-            pendingFolderHandoff = null;
-            pendingFolderHandoffFresh = false;
-            completion.run();
-        });
     }
 
     private synchronized void onWallpaperChanged() {
@@ -728,8 +670,6 @@ final class LauncherGlassSceneController {
         if (folderCovered == covered) return;
         folderCovered = covered;
         if (covered) {
-            pendingFolderHandoff = null;
-            pendingFolderHandoffFresh = false;
             // The native Launcher hides Workspace for modal FolderCling, but
             // our independent TextureView would otherwise retain the original
             // folder lens in its frozen buffer at the desktop coordinates.
