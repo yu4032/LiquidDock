@@ -144,27 +144,6 @@ final class Miuix307ZeroCopyRenderer {
         return workstationTaskbarMode;
     }
 
-    /**
-     * The workstation icon RecyclerView can belong to a different window root than the
-     * material TextureView. Both are in the same display's physical screen coordinate system;
-     * comparing getRootView() identities incorrectly discards valid icon rows.
-     */
-    static float taskbarVisualCenterFor(View recycler) {
-        View material = materialHostRef.get();
-        if (recycler == null || material == null) return Float.NaN;
-        Display materialDisplay = material.getDisplay();
-        Display rowDisplay = recycler.getDisplay();
-        if (materialDisplay == null || rowDisplay == null) return Float.NaN;
-        materialDisplay.getRealSize(realScreenSize);
-        if (!WorkstationTaskbarGeometry.canAlignIconRow(
-                workstationTaskbarMode, WorkstationRuntimeState.isActive(),
-                material.isAttachedToWindow(), recycler.isAttachedToWindow(),
-                materialDisplay.getDisplayId(), rowDisplay.getDisplayId(),
-                realScreenSize.y, material.getHeight())) return Float.NaN;
-        return WorkstationTaskbarGeometry.visibleCenter(
-                realScreenSize.y, material.getHeight());
-    }
-
     static void setWorkstationTaskbarMode(boolean enabled) {
         if (workstationTaskbarMode == enabled) return;
         workstationTaskbarMode = enabled;
