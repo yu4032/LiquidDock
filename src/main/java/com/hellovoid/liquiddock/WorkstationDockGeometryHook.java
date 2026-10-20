@@ -202,9 +202,7 @@ final class WorkstationDockGeometryHook {
                             + " -> " + targetWidth + " active=" + workstation);
                 }
             }
-            // The native Dock container keeps its original vertical layout.
-            // Only the glass projection changes in taskbar mode; translationY
-            // remains exclusively owned by Launcher's fly-in/out animation.
+            // Preserve native Dock placement and translationY for Launcher animations.
         }
     }
 }
