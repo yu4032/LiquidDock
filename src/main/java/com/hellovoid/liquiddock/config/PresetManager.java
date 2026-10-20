@@ -326,6 +326,10 @@ public final class PresetManager {
         source.put("workstation_all_apps_portrait_horizontal_offset", 41.2d);
         source.put("workstation_all_apps_portrait_top_spacing", 132);
         source.put("workstation_all_apps_portrait_bottom_spacing", 60.8d);
+        source.put("workstation_dock_vertical_offset", 0);
+        source.put("workstation_dock_icon_landscape_horizontal_offset", 0);
+        source.put("workstation_dock_icon_landscape_vertical_offset", 0);
+        source.put("workstation_dock_icon_horizontal_offset", 0);
         source.put("workstation_dock_icon_top_offset", 0);
         source.put("workstation_dock_icon_bottom_offset", 0);
         source.put("recents_background_blur_percent", 36);

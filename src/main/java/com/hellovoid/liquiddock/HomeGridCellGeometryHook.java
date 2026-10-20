@@ -32,9 +32,9 @@ final class HomeGridCellGeometryHook {
 
         HookUtil.hookMethod(cellLayout, "calculateXsAndYs", new Class<?>[0], chain -> {
             Object owner = chain.getThisObject();
-            applyCellLayoutOffsets(owner);
+            applyCellLayoutOffsets(owner, true);
             Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-            applyCellLayoutOffsets(owner);
+            applyCellLayoutOffsets(owner, true);
             rebuildCellCoordinates(owner);
             return result;
         });
@@ -237,16 +237,20 @@ final class HomeGridCellGeometryHook {
 
     private static void prepareGeometryForLayout(View layout) {
         HomeGridInstallConfig current = installConfig;
-        if (current == null || !current.enabled) return;
+        boolean allApps = isLaptopAllApps(layout);
+        if (current == null || (!allApps && !current.enabled)) return;
         int width = layout.getWidth();
         int height = layout.getHeight();
-        if (width <= 0 || height <= 0 || !sizeMatchesOrientation(layout, width, height)) return;
+        if (width <= 0 || height <= 0
+                || (!allApps && !sizeMatchesOrientation(layout, width, height))) return;
 
         int orientation = layout.getResources().getConfiguration().orientation;
         long signature = (((long) orientation & 0xffL) << 56)
                 ^ (((long) width & 0x0fffffffL) << 28)
                 ^ ((long) height & 0x0fffffffL);
-        synchronized (PREPARED_GEOMETRY) {
+        // All Apps can finish loading its new grid after its bounds have settled.
+        // Its panel aspect ratio also need not match the screen orientation.
+        if (!allApps) synchronized (PREPARED_GEOMETRY) {
             Long previous = PREPARED_GEOMETRY.get(layout);
             if (previous != null && previous == signature) return;
             PREPARED_GEOMETRY.put(layout, signature);
@@ -257,6 +261,10 @@ final class HomeGridCellGeometryHook {
     }
 
     private static void applyCellLayoutOffsets(Object cellLayout) {
+        applyCellLayoutOffsets(cellLayout, false);
+    }
+
+    private static void applyCellLayoutOffsets(Object cellLayout, boolean measuring) {
         try {
             HomeGridInstallConfig current = installConfig;
             if (current == null) return;
@@ -319,11 +327,15 @@ final class HomeGridCellGeometryHook {
             }
             int baseWidthGap = HookUtil.getIntField(cellLayout, "mWidthGap");
             int baseHeightGap = Math.max(0, HookUtil.getIntField(cellLayout, "mHeightGap"));
-            int width = layout.getWidth();
-            int height = layout.getHeight();
+            boolean workstationAllApps = isLaptopAllApps(cellLayout);
+            // calculateXsAndYs runs inside onMeasure, after setMeasuredDimension and before
+            // measureChild. getWidth/getHeight still belong to the previous layout here.
+            int width = measuring && workstationAllApps
+                    ? layout.getMeasuredWidth() : layout.getWidth();
+            int height = measuring && workstationAllApps
+                    ? layout.getMeasuredHeight() : layout.getHeight();
             if (width <= 0 || height <= 0) return;
 
-            boolean workstationAllApps = isLaptopAllApps(cellLayout);
             if (!workstationAllApps && !sizeMatchesOrientation(layout, width, height)) return;
             boolean workstationActive = workstationAllApps || MainHook.isWorkstationMode();
 

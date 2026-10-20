@@ -75,6 +75,7 @@ final class MiuixGlassHook {
         Miuix307ZeroCopyRenderer.clear();
         restoreVendorMaterialBody();
         clearTrackedViews();
+        WorkstationNativeTaskbarHook.refresh();
         DockShadowOwnership.refreshVendorDockShadow();
         if (host != null && host.getParent() instanceof ViewGroup) {
             ((ViewGroup) host.getParent()).removeView(host);
@@ -199,7 +200,10 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
     static boolean install(View dockBg, LiquidDockConfig config) {
         if (!GlassRuntimeState.isEnabled()) return false;
         if (!(dockBg instanceof ViewGroup) || config == null) return false;
+        // Restore native corner metadata before the replacement renderer snapshots its radius.
+        WorkstationNativeTaskbarHook.refresh();
         ViewGroup materialHost = (ViewGroup) dockBg;
+        WorkstationDockGeometryHook.bindBackground(materialHost);
         boolean nativeVisualOwner = isNativeVisualOwner(dockBg);
 
         DockLiquidGlassHostView existingHost = currentHost();

@@ -265,7 +265,7 @@ internal fun WorkstationDockPage(
                     prefs,
                     ConfigSchema.Workstation.TASKBAR_MODE,
                     "任务栏模式",
-                    "保留工作台 Dock 的原生垂直位置及飞入、飞出动画，将玻璃背景扩展为任务栏样式，不再自动下移。可使用下方图标垂直偏移调整图标位置。",
+                    "保留工作台 Dock 的原生垂直位置及飞入、飞出动画，将液态玻璃或原生背景扩展为任务栏样式，不再自动下移。可使用整体垂直平移移动背景和图标，或分别设置横竖屏图标偏移。",
                     masterEnabled && enabled,
                 )
             }

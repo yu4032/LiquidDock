@@ -451,13 +451,14 @@ Context + Dialog + Window
 
 ## 14. Workstation
 
-Workstation 使用独立参数和 runtime state。
+Workstation 使用独立参数和 runtime state。整体 Dock 垂直平移由容器生命周期与材质 shell 的 pre-draw 绑定共同维护，背景继承容器变换时只应用一次。图标偏移按当前 View 的横竖屏配置选择；All Apps 测量阶段使用本轮 measured bounds，避免旋转时混用旧布局尺寸。
 
 当前模块包括：
 
 - `WorkstationModeHook`；
 - `WorkstationDockCustomizationHook`；
 - `WorkstationDockGeometryHook`；
+- `WorkstationNativeTaskbarHook`；
 - `WorkstationGridMarginPolicy`；
 - `WorkstationNormalLayoutOwner`；
 - `WorkstationProducerPolicy`；
