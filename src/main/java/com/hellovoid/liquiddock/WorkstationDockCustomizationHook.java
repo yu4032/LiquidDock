@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
@@ -93,19 +94,18 @@ final class WorkstationDockCustomizationHook {
      */
     static void reconcileTaskbarRowsForFrame() {
         if (!dockEnabled || !taskbarEnabled || !WorkstationRuntimeState.isActive()) return;
-        ArrayList<View> observed;
+        // This runs at the display refresh rate: iterate the weak registry directly and
+        // retain per-row scratch buffers rather than allocating on every Prismal frame.
         synchronized (OBSERVED_RECYCLERS) {
-            observed = new ArrayList<>(OBSERVED_RECYCLERS.keySet());
-        }
-        for (View recycler : observed) {
-            if (recycler == null || !recycler.isAttachedToWindow()) continue;
-            float bodyCenter = Miuix307ZeroCopyRenderer.taskbarVisualCenterFor(recycler);
-            if (!Float.isFinite(bodyCenter)) continue;
-            float iconCenter = iconRowCenterOnScreen(recycler);
-            if (!Float.isFinite(iconCenter)) continue;
-            synchronized (OBSERVED_RECYCLERS) {
-                RowAlignment row = OBSERVED_RECYCLERS.get(recycler);
-                if (row != null) row.align(recycler, bodyCenter, iconCenter);
+            for (Map.Entry<View, RowAlignment> entry : OBSERVED_RECYCLERS.entrySet()) {
+                View recycler = entry.getKey();
+                RowAlignment row = entry.getValue();
+                if (recycler == null || row == null || !recycler.isAttachedToWindow()) continue;
+                float bodyCenter = Miuix307ZeroCopyRenderer.taskbarVisualCenterFor(recycler);
+                if (!Float.isFinite(bodyCenter)) continue;
+                float iconCenter = iconRowCenterOnScreen(recycler, row);
+                if (!Float.isFinite(iconCenter)) continue;
+                row.align(recycler, bodyCenter, iconCenter);
             }
         }
     }
@@ -121,14 +121,15 @@ final class WorkstationDockCustomizationHook {
     }
 
     /** Median icon graphic center ignores the occasional dragging/animating item. */
-    private static float iconRowCenterOnScreen(View recycler) {
+    private static float iconRowCenterOnScreen(View recycler, RowAlignment row) {
         if (!(recycler instanceof ViewGroup)) return Float.NaN;
         ViewGroup group = (ViewGroup) recycler;
         int childCount = group.getChildCount();
         if (childCount == 0) return Float.NaN;
-        float[] centers = new float[childCount];
+        row.ensureCapacity(childCount);
+        float[] centers = row.centers;
         int count = 0;
-        int[] position = new int[2];
+        int[] position = row.screenPosition;
         float minWidth = 8f * recycler.getResources().getDisplayMetrics().density;
         for (int i = 0; i < childCount; i++) {
             View child = group.getChildAt(i);
@@ -151,6 +152,12 @@ final class WorkstationDockCustomizationHook {
     private static final class RowAlignment {
         private float originalTranslationY = Float.NaN;
         private float appliedTranslationY = Float.NaN;
+        private float[] centers = new float[0];
+        private final int[] screenPosition = new int[2];
+
+        void ensureCapacity(int childCount) {
+            if (centers.length < childCount) centers = new float[childCount];
+        }
 
         void align(View recycler, float targetCenter, float observedCenter) {
             float current = recycler.getTranslationY();
