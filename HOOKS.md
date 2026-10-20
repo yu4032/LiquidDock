@@ -96,7 +96,7 @@ Launcher package ready 后依次完成：
 
 `WorkstationNativeTaskbarHook` 在关闭液态玻璃时接管原生材质的横向变换、圆角与 outline，不修改图标测量或原生纵向动画。任务栏关闭、离开工作台、视图 detach 或恢复玻璃时还原观测到的原生状态；恢复玻璃前先还原原生圆角，避免 replacement 缓存零圆角。
 
-`WorkstationDockCustomizationHook` 按当前 View 的 configuration 选择横屏或竖屏图标偏移。`HomeGridCellGeometryHook` 在 `calculateXsAndYs` 中使用 All Apps 本轮 measured bounds，确保 `measureChild` 与最终 layout 使用同一方向的单元格尺寸；All Apps 面板不受普通 HOME 的屏幕比例过滤和尺寸缓存限制。该路径已在官方桌面 RELEASE-4.50.0.1181 上验证，无修改版专用开关。
+`WorkstationDockCustomizationHook` 按当前 View 的 configuration 选择横屏或竖屏图标垂直偏移，不再写入图标行的 `translationX`。`HomeGridCellGeometryHook` 在 `calculateXsAndYs` 中使用 All Apps 本轮 measured bounds，确保 `measureChild` 与最终 layout 使用同一方向的单元格尺寸；All Apps 面板不受普通 HOME 的屏幕比例过滤和尺寸缓存限制。该路径已在官方桌面 RELEASE-4.50.0.1181 上验证，无修改版专用开关。
 
 ### Vendor material ownership
 
