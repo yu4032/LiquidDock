@@ -239,7 +239,7 @@ When opening an issue, please include:
 - [DIVIDER.md](DIVIDER.md) — Workstation divider
 - [docs/release-signing.md](docs/release-signing.md) — Release builds, isolated signing, and security boundaries
 
-The plans, specs, and verification records under `docs/superpowers/` are historical development records, not descriptions of the current implementation.
+Superseded plans, specs, and verification records were removed from the current `docs/` tree. They remain retrievable from Git history and do not describe the current implementation.
 
 ## Risk notice
 
