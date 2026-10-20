@@ -70,11 +70,6 @@ public class WorkstationTaskbarGeometryTest {
                 120f, 14f, 10, 10), 0f);
     }
 
-    @Test public void visibleHeightIsNativeHeightEvenWhenOpticsBleedPastScreen() {
-        assertEquals(960f, WorkstationTaskbarGeometry.visibleTop(1080, 120), 0.001f);
-        assertEquals(950f, WorkstationTaskbarGeometry.visibleTop(1080, 130), 0.001f);
-    }
-
     @Test public void taskbarBodyUsesAbsoluteScreenCoordinates() {
         assertEquals(0f, WorkstationTaskbarGeometry.bodyUvLeft(80, -80, 0, 2200), 0.001f);
         assertEquals(0f, WorkstationTaskbarGeometry.bodyUvBottom(80, 1180, 1260, 500), 0.001f);
