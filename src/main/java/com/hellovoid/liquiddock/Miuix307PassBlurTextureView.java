@@ -1366,11 +1366,10 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
         if (observer == null || !observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
-            // Both rows and optics must read the same committed orientation and screen
-            // position. Reconcile native layout before recording the next GPU mapping.
+            // Keep the Dock background pinned during native orientation transitions.
+            // Icon rows now use direct configured translation, not per-frame auto-centering.
             WorkstationDockGeometryHook.reconcileTaskbarPlacementForFrame();
             Miuix307ZeroCopyRenderer.refreshDockShadowViewport();
-            WorkstationDockCustomizationHook.reconcileTaskbarRowsForFrame();
             refreshProducerGeometryInPlace();
             updateBackdropMapping();
             return true;
