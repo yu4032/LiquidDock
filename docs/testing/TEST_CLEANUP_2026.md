@@ -52,5 +52,7 @@ if a protected behavioral scenario loses its only assertion.
 ## Validation
 
 - First eight removals: CI run #8957 passed.
-- Expanded ten-file batch: requires a fresh CI run on the updated PR head.
+- Expanded ten-file batch: [CI #8958 passed](https://github.com/yu4032/LiquidDock/actions/runs/39453692672) on commit `338b159910d0a8ee9fd3c2b8f27e07342f5f47f2`.
+- CI #8958: **1,126 executed JUnit cases, 0 failed, 0 skipped**, 229 JUnit XML reports; 1,126 source `@Test` annotations across 233 test-tree source files (including Kotlin and helpers). Gradle reported `BUILD SUCCESSFUL in 36s`; this is build/test task wall time, not sum of individual testcase durations.
+- Before-cleanup **source annotation count inferred as 1,141** from the unchanged baseline plus 15 removed annotations; a separate baseline JUnit XML execution count was not collected, so 1,141 must **not** be represented as a measured baseline executed-case count.
 - Real-device HyperOS/LSPosed behavior is not verified by JVM CI.
