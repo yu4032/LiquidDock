@@ -84,8 +84,13 @@ final class WorkstationDockCustomizationHook {
             if (OBSERVED_RECYCLERS.containsKey(recycler)) return;
             OBSERVED_RECYCLERS.put(recycler, new RowTranslation());
             recycler.addOnLayoutChangeListener(
-                    (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
-                            applyRowTranslation(view));
+                    (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                        // Recalibrate optical centering only when native layout changes,
+                        // never on an ordinary native translation-animation frame.
+                        RowTranslation state = OBSERVED_RECYCLERS.get(view);
+                        if (state != null) state.invalidateRestAlignment();
+                        applyRowTranslation(view);
+                    });
             recycler.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View view) {
                     installPreDrawAlignment(view);
@@ -140,6 +145,14 @@ final class WorkstationDockCustomizationHook {
     private static final class RowTranslation {
         private float nativeTranslation = Float.NaN;
         private float lastAppliedTranslation = Float.NaN;
+        private float stableCorrection = Float.NaN;
+        private boolean vendorMotionActive;
+        private int alignedUserOffset;
+
+        void invalidateRestAlignment() {
+            stableCorrection = Float.NaN;
+            vendorMotionActive = false;
+        }
         private ViewTreeObserver observer;
         private ViewTreeObserver.OnPreDrawListener preDraw;
         private final Matrix matrix = new Matrix();
@@ -193,14 +206,27 @@ final class WorkstationDockCustomizationHook {
                 }
                 nativeTranslation = Float.NaN;
                 lastAppliedTranslation = Float.NaN;
+                invalidateRestAlignment();
                 return;
             }
-            // OEM animation/layout is allowed to replace translation. Retain the latest
-            // vendor baseline, but never compound our previous offset on repeated calls.
-            if (!Float.isFinite(nativeTranslation)
-                    || (Float.isFinite(lastAppliedTranslation)
-                            && Math.abs(current - lastAppliedTranslation) >= 0.5f)) {
+            // A vendor animation that writes translationY is authoritative. Do not
+            // recalculate against a fixed visual target on each following frame;
+            // merely reapply the stable optical/user offset to the new vendor value.
+            if (Float.isFinite(lastAppliedTranslation)
+                    && Math.abs(current - lastAppliedTranslation) >= 0.5f) {
                 nativeTranslation = current;
+                if (Float.isFinite(stableCorrection)) vendorMotionActive = true;
+            } else if (!Float.isFinite(nativeTranslation)) {
+                nativeTranslation = current;
+            }
+            if (vendorMotionActive && Float.isFinite(stableCorrection)) {
+                float animated = WorkstationTaskbarGeometry.animatedIconRowTranslation(
+                        current, stableCorrection, offsetPx, alignedUserOffset);
+                if (Math.abs(current - animated) >= 0.5f) recycler.setTranslationY(animated);
+                stableCorrection = animated - current;
+                alignedUserOffset = offsetPx;
+                lastAppliedTranslation = animated;
+                return;
             }
             View graphic = findGraphic(recycler, 0);
             if (graphic == null) return;
@@ -214,6 +240,8 @@ final class WorkstationDockCustomizationHook {
                     current, Miuix307ZeroCopyRenderer.taskbarCenterFor(recycler), center,
                     points[3] - points[1], offsetPx);
             if (Math.abs(current - target) >= 0.5f) recycler.setTranslationY(target);
+            stableCorrection = target - current;
+            alignedUserOffset = offsetPx;
             lastAppliedTranslation = target;
         }
     }
