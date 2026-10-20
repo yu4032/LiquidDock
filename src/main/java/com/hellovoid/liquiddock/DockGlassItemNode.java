@@ -139,7 +139,8 @@ final class DockGlassItemNode {
         Drawable drawable = iconDrawable(view);
         float fallback = Math.min(width, height) * 0.22f;
         float radius = style.cornerRadiusDp > 0f
-                ? style.cornerRadiusDp * density * Math.min(scaleX, scaleY)
+                ? WorkstationDockIconRadiusPolicy.renderedRadius(style.cornerRadiusDp, density,
+                        b[2] - b[0], b[3] - b[1], width, height)
                 : LauncherGlassIconShapeResolver.resolveAutoRadius(drawable, width, height, fallback);
         return LauncherGlassGeometry.resolve(framebufferWidth, framebufferHeight,
                 x, y, x + width, y + height,

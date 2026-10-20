@@ -478,7 +478,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     void rebindProducer(String reason) {
         if (shuttingDown) return;
         ZeroCopyProducerRecoveryState.Decision recovery =
-                producerRecovery.onRebindRequested();
+                producerRecovery.onRebindRequested(outputWindowSurface != null);
         if (!recovery.accepted) return;
         if (recovery.clearFrameworkBinding) {
             Miuix307PassBlurBridge.Binding stale = binding;
@@ -504,6 +504,12 @@ final class Miuix307PassBlurTextureView extends TextureView
      * producer that already crossed that boundary must not be reused; create a new BufferQueue.
      */
     private void recreateInputProducer(String reason) {
+        if (shuttingDown) return;
+        if (eglWindowSurface == EGL14.EGL_NO_SURFACE || normalizeProgram == 0
+                || compositeProgram == 0 || inputProducerSurface == null) {
+            producerRecovery.onOutputUnavailable();
+            return;
+        }
         Surface staleProducer = inputProducerSurface;
         SurfaceTexture staleInput = inputSurfaceTexture;
         try {
@@ -653,6 +659,10 @@ final class Miuix307PassBlurTextureView extends TextureView
                 || eglWindowSurface == EGL14.EGL_NO_SURFACE) return;
         try {
             makeCurrent();
+            ZeroCopyProducerRecoveryState.Decision pending = producerRecovery.onOutputReady();
+            if (pending.recreateProducer && inputProducerSurface != null) {
+                recreateInputProducer("output-ready");
+            }
             ensureGlResources();
             ensureFboSize(Math.max(1, width), Math.max(1, height));
             drawLatestFrame(false);

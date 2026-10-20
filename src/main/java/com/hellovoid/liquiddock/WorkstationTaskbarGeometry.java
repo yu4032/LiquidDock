@@ -35,9 +35,11 @@ final class WorkstationTaskbarGeometry {
         return screenHeight - nativeDockHeight;
     }
 
-    /** Apply the signed user offset to the native RecyclerView translation exactly once. */
-    static float iconRowTranslation(float nativeTranslation, float offsetPx) {
-        return nativeTranslation + offsetPx;
+    static float centeredIconRowTranslation(float current, float targetScreenCenter,
+            float observedScreenCenter, float parentScaleY, float offsetPx) {
+        if (!Float.isFinite(targetScreenCenter) || !Float.isFinite(observedScreenCenter)
+                || !Float.isFinite(parentScaleY) || parentScaleY <= 0.001f) return current;
+        return current + (targetScreenCenter - observedScreenCenter) / parentScaleY + offsetPx;
     }
 
     static float bottomTranslation(int screenHeight, int dockScreenBottom, float translationY) {

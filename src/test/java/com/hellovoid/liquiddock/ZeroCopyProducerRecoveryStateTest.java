@@ -7,6 +7,29 @@ import org.junit.Test;
 
 /** Pure producer rollover/fresh-frame recovery behavior for the zero-copy PassBlur path. */
 public class ZeroCopyProducerRecoveryStateTest {
+    @Test public void resumeBeforeOutputCreationWaitsRatherThanExhaustingRecovery() {
+        ZeroCopyProducerRecoveryState state = new ZeroCopyProducerRecoveryState();
+        ZeroCopyProducerRecoveryState.Decision pending = state.onRebindRequested(false);
+        assertTrue(pending.accepted);
+        assertFalse(pending.recreateProducer);
+        assertTrue(state.isRebindPending());
+        assertFalse(state.isActivationExhausted());
+        assertTrue(state.onOutputReady().recreateProducer);
+        assertFalse(state.onOutputReady().recreateProducer);
+        state.onBindSucceeded();
+        assertFalse(state.isRebindPending());
+    }
+
+    @Test public void anAllocatedWindowStillWaitsForInitialGlResources() {
+        ZeroCopyProducerRecoveryState state = new ZeroCopyProducerRecoveryState();
+        state.onRebindRequested(true);
+        state.onOutputUnavailable();
+        assertFalse(state.isActivationExhausted());
+        assertTrue(state.onOutputReady().recreateProducer);
+        state.onProducerRecreated();
+        state.onBindSucceeded();
+        assertFalse(state.onOutputReady().recreateProducer);
+    }
     @Test public void rebindRequestClearsFreshnessAndAcceptsOnlyOnce() {
         ZeroCopyProducerRecoveryState state = new ZeroCopyProducerRecoveryState();
         state.onFreshFrameConsumed();

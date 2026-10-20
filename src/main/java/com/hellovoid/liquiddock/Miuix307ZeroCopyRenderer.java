@@ -144,6 +144,18 @@ final class Miuix307ZeroCopyRenderer {
         return workstationTaskbarMode;
     }
 
+    static float taskbarCenterFor(View row) {
+        DockLiquidGlassHostView host = hostRef.get();
+        // Let the native layout establish a drawable TextureView before translating its
+        // sibling icon row. Moving it during bootstrap can prevent the initial Surface.
+        if (!workstationTaskbarMode || !isActive() || host == null || row == null
+                || !host.isAttachedToWindow() || !row.isAttachedToWindow()
+                || host.getHeight() <= 0 || host.getDisplay() == null || row.getDisplay() == null
+                || host.getDisplay().getDisplayId() != row.getDisplay().getDisplayId()) return Float.NaN;
+        host.getDisplay().getRealSize(realScreenSize);
+        return realScreenSize.y - host.getHeight() * .5f;
+    }
+
     static void setWorkstationTaskbarMode(boolean enabled) {
         if (workstationTaskbarMode == enabled) return;
         workstationTaskbarMode = enabled;

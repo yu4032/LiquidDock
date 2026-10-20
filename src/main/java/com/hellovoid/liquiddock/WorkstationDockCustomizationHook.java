@@ -1,15 +1,20 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Rect;
+import android.graphics.Matrix;
+import android.graphics.drawable.Drawable;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.TextView;
+import java.lang.ref.WeakReference;
 
 import java.util.ArrayList;
 import java.util.WeakHashMap;
 
 /**
- * Workstation-only icon offsets. In taskbar mode the configured vertical offset directly
- * translates the complete RecyclerView instead of trying to infer an optical center from
- * icon graphics, screen coordinates or the floating Dock's separate window.
+ * Workstation icon placement. Taskbar alignment maps the native icon graphic through its
+ * complete view transform; the user's offset remains an additional row-local adjustment.
  */
 final class WorkstationDockCustomizationHook {
     private static volatile boolean dockEnabled;
@@ -83,17 +88,46 @@ final class WorkstationDockCustomizationHook {
                             applyRowTranslation(view));
             recycler.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View view) {
+                    installPreDrawAlignment(view);
                     view.post(() -> applyRowTranslation(view));
                 }
 
                 @Override public void onViewDetachedFromWindow(View view) {
+                    removePreDrawAlignment(view);
                     applyRowTranslationForDetach(view);
                 }
             });
         }
+        installPreDrawAlignment(recycler);
         // Wait until RecyclerView finishes its initial layout; translation does not
         // trigger remeasurement, so changing it cannot accumulate item inset changes.
         recycler.post(() -> applyRowTranslation(recycler));
+    }
+
+    private static void installPreDrawAlignment(View recycler) {
+        synchronized (OBSERVED_RECYCLERS) {
+            RowTranslation state = OBSERVED_RECYCLERS.get(recycler);
+            if (state == null || !recycler.isAttachedToWindow() || state.observer != null) return;
+            WeakReference<View> reference = new WeakReference<>(recycler);
+            state.preDraw = () -> {
+                View row = reference.get();
+                if (row != null && taskbarEnabled) applyRowTranslation(row);
+                return true;
+            };
+            state.observer = recycler.getViewTreeObserver();
+            state.observer.addOnPreDrawListener(state.preDraw);
+        }
+    }
+
+    private static void removePreDrawAlignment(View recycler) {
+        synchronized (OBSERVED_RECYCLERS) {
+            RowTranslation state = OBSERVED_RECYCLERS.get(recycler);
+            if (state == null) return;
+            if (state.observer != null && state.observer.isAlive())
+                state.observer.removeOnPreDrawListener(state.preDraw);
+            state.observer = null;
+            state.preDraw = null;
+        }
     }
 
     private static void applyRowTranslationForDetach(View recycler) {
@@ -106,6 +140,49 @@ final class WorkstationDockCustomizationHook {
     private static final class RowTranslation {
         private float nativeTranslation = Float.NaN;
         private float lastAppliedTranslation = Float.NaN;
+        private ViewTreeObserver observer;
+        private ViewTreeObserver.OnPreDrawListener preDraw;
+        private final Matrix matrix = new Matrix();
+        private final float[] points = new float[4];
+        private final int[] screenPosition = new int[2];
+
+        private View findGraphic(View view, int depth) {
+            if (depth > 4 || view.getVisibility() != View.VISIBLE || view.getAlpha() <= 0f
+                    || view.getWidth() <= 0 || view.getHeight() <= 0) return null;
+            if (view instanceof TextView) {
+                Drawable[] icons = ((TextView) view).getCompoundDrawables();
+                if (icons[1] != null) return view;
+            }
+            if (view instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) view;
+                for (int i = 0; i < group.getChildCount(); i++) {
+                    View found = findGraphic(group.getChildAt(i), depth + 1);
+                    if (found != null) return found;
+                }
+            }
+            return null;
+        }
+
+        private float graphicScreenCenter(View graphic) {
+            LauncherGlassIconGeometry.Bounds bounds = LauncherGlassIconGeometry.resolve(graphic);
+            if (bounds == null) return Float.NaN;
+            matrix.reset();
+            graphic.transformMatrixToGlobal(matrix);
+            points[0] = 0f; points[1] = 0f;
+            points[2] = (bounds.left + bounds.right) * .5f;
+            points[3] = (bounds.top + bounds.bottom) * .5f;
+            matrix.mapPoints(points);
+            float center = points[3];
+            View root = graphic.getRootView();
+            matrix.reset();
+            root.transformMatrixToGlobal(matrix);
+            points[0] = 0f; points[1] = 0f;
+            matrix.mapPoints(points, 0, points, 0, 1);
+            root.getLocationOnScreen(screenPosition);
+            // Only round the stable window origin. Rounding the moving icon's origin
+            // would make half-pixel targets alternate corrections on successive frames.
+            return center + screenPosition[1] - points[1];
+        }
 
         void apply(View recycler, boolean taskbar, int offsetPx) {
             float current = recycler.getTranslationY();
@@ -125,8 +202,17 @@ final class WorkstationDockCustomizationHook {
                             && Math.abs(current - lastAppliedTranslation) >= 0.5f)) {
                 nativeTranslation = current;
             }
-            float target = WorkstationTaskbarGeometry.iconRowTranslation(
-                    nativeTranslation, offsetPx);
+            View graphic = findGraphic(recycler, 0);
+            if (graphic == null) return;
+            float center = graphicScreenCenter(graphic);
+            matrix.reset();
+            if (!(recycler.getParent() instanceof View)) return;
+            ((View) recycler.getParent()).transformMatrixToGlobal(matrix);
+            points[0] = 0f; points[1] = 0f; points[2] = 0f; points[3] = 1f;
+            matrix.mapPoints(points);
+            float target = WorkstationTaskbarGeometry.centeredIconRowTranslation(
+                    current, Miuix307ZeroCopyRenderer.taskbarCenterFor(recycler), center,
+                    points[3] - points[1], offsetPx);
             if (Math.abs(current - target) >= 0.5f) recycler.setTranslationY(target);
             lastAppliedTranslation = target;
         }
