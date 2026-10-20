@@ -49,6 +49,8 @@ public class WorkstationTaskbarGeometryTest {
     }
 
     @Test public void glassBodyTracksNativeDockFlyInAndOut() {
+        // The rest position is native, not forcibly moved to a hypothetical 1080px screen bottom.
+        assertEquals(880f, WorkstationTaskbarGeometry.movingBodyTop(1000f, 120), 0f);
         assertEquals(960f, WorkstationTaskbarGeometry.movingBodyTop(1080f, 120), 0f);
         assertEquals(1020f, WorkstationTaskbarGeometry.movingBodyTop(1140f, 120), 0f);
         assertEquals(920f, WorkstationTaskbarGeometry.movingBodyTop(1040f, 120), 0f);
