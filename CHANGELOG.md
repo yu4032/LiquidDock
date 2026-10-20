@@ -14,6 +14,13 @@
 - 修复工作台竖屏缩放图标时，玻璃圆角与实际图标尺寸不匹配的问题；改善桌面恢复期间 Dock 背景偶尔消失的情况。[#437](https://github.com/yu4032/LiquidDock/pull/437)
 - 修复工作台 All Apps 与桌面大文件夹状态互相影响的问题，避免桌面大文件夹在应用列表处理后意外改变布局。[#437](https://github.com/yu4032/LiquidDock/pull/437)
 
+### 工作台交互与兼容性修复
+
+- 恢复任务栏模式下 Launcher 原生 Dock 的飞入、飞出动画，背景与图标同步运动，不再为任务栏强制下移整个 Dock；保留手动垂直偏移。[#439](https://github.com/yu4032/LiquidDock/pull/439)
+- 改善工作台横竖屏切换后 All Apps 图标尺寸及排列异常，修正布局测量使用旧方向尺寸的问题。[#440](https://github.com/yu4032/LiquidDock/pull/440)
+- 新增整个工作台 Dock 的垂直平移，以及横屏、竖屏独立的**图标垂直偏移**；任务栏模式也支持关闭玻璃后将原生 Dock 背景横向扩展。[#440](https://github.com/yu4032/LiquidDock/pull/440)
+- 移除不必要的横竖屏 Dock 图标水平偏移，修复竖屏图标向右偏移；删除隐藏的 Dock 宽度增量和默认 +26.5 dp 补偿，修复启用自定义工作台后 Dock 稍微变大的问题。旧偏移键不再生效。[#441](https://github.com/yu4032/LiquidDock/pull/441)
+
 ### 解锁与返回桌面动画
 
 - 恢复解锁时工作区图标玻璃的渐显：独立设置解锁玻璃渐显时长（默认 450 ms），在解锁动画末段逐渐显示，不受普通工作区显隐时长影响。[#434](https://github.com/yu4032/LiquidDock/pull/434)、[#435](https://github.com/yu4032/LiquidDock/pull/435)
