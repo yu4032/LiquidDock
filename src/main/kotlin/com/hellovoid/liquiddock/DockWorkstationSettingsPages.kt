@@ -245,6 +245,40 @@ internal fun WorkstationPage(
 }
 
 @Composable
+internal fun WorkstationDockPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val enabled = prefs.getBoolean(
+        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
+        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault(),
+    )
+    DenseSettingsList(
+        padding = padding,
+        title = "",
+        summary = "调整工作台 Dock 的外观与图标位置。",
+    ) {
+        item(key = "workstation-taskbar-mode") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Workstation.TASKBAR_MODE,
+                    "任务栏模式",
+                    "将工作台 Dock 移至屏幕底部，玻璃背景延伸至左右和下边缘。使用下方“工作台 Dock 图标垂直偏移”直接平移图标行，关闭后恢复原布局。",
+                    masterEnabled && enabled,
+                )
+            }
+        }
+        items(workstationDockSpecs, key = { it.key }) { spec ->
+            SettingsCard {
+                IntSetting(prefs, spec, masterEnabled && enabled)
+            }
+        }
+    }
+}
+
+@Composable
 internal fun WorkstationSpecPage(
     padding: PaddingValues,
     prefs: SharedPreferences,

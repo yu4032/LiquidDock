@@ -83,6 +83,7 @@ final class LauncherNativeFourFolderHook {
 
     static boolean isCustomFolderInfo(View contextOwner, Object info) {
         return contextOwner != null && isFourGridInfo(info)
+                && !HomeGridCellGeometryHook.isWorkstationAllAppsView(contextOwner)
                 && LauncherLargeFolderPickerHook.isMarked(contextOwner.getContext(), info);
     }
 
@@ -517,6 +518,20 @@ final class LauncherNativeFourFolderHook {
 
     private static int installNativeBindingHook(Class<?> folderIcon, Class<?> launcher, Class<?> infoType) {
         int installedHooks = 0;
+        if (infoType != null) {
+            try {
+                HookUtil.hook(infoType.getDeclaredMethod("load", Context.class, android.database.Cursor.class), chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    if (chain.getArg(0) instanceof Context) {
+                        normalizeAllAppsFolder((Context) chain.getArg(0), chain.getThisObject());
+                    }
+                    return result;
+                });
+                installedHooks++;
+            } catch (Throwable error) {
+                MainHook.log(TAG + " AllApps folder load scope unavailable: " + error);
+            }
+        }
         // Native FolderIcon.fromXml() caches mBuddyIconView across resize.
         // If it still points to a 1x1 folder after conversion, force the
         // correct OEM 2x2_4 binding instead of layering another renderer.
@@ -526,6 +541,10 @@ final class LauncherNativeFourFolderHook {
                 int.class, launcher, ViewGroup.class, infoType), chain -> {
             Object info = chain.getArg(3);
             ViewGroup parent = (ViewGroup) chain.getArg(2);
+            if (HomeGridCellGeometryHook.isWorkstationAllAppsView(parent)) {
+                normalizeAllAppsFolder(parent.getContext(), info);
+                return chain.proceed(chain.getArgs().toArray(new Object[0]));
+            }
             if (info != null) {
                 boolean marked = LauncherLargeFolderPickerHook.isMarked(
                         parent.getContext(), info);
@@ -1081,6 +1100,23 @@ final class LauncherNativeFourFolderHook {
         return frame == null ? null : new int[]{frame[2], frame[3]};
     }
 
+    private static void normalizeAllAppsFolder(Context context, Object info) {
+        if (info == null) return;
+        try {
+            if (LargeFolderFootprintPolicy.normalizeAllAppsCopy(
+                    LauncherLargeFolderPickerHook.isMarked(context, info),
+                    ((Number) HookUtil.getField(info, "container")).longValue(),
+                    HookUtil.getIntField(info, "itemType"),
+                    HookUtil.getIntField(info, "spanX"), HookUtil.getIntField(info, "spanY"))) {
+                HookUtil.setIntField(info, "spanX", 1);
+                HookUtil.setIntField(info, "spanY", 1);
+                MainHook.log(TAG + " AllApps folder copy footprint normalized to 1x1");
+            }
+        } catch (Throwable error) {
+            MainHook.log(TAG + " AllApps folder scope unavailable: " + error);
+        }
+    }
+
     private static boolean eligible(View folder) {
         if (!nativeFolderClass(folder) || !isFourGridInfo(folder.getTag())) return false;
         int type = HookUtil.getIntField(folder.getTag(), "itemType");
@@ -1088,8 +1124,9 @@ final class LauncherNativeFourFolderHook {
                 && !NATIVE_FOUR.equals(folder.getClass().getName())) return false;
         if (type == LargeFolderFootprintPolicy.NINE
                 && !NATIVE_NINE.equals(folder.getClass().getName())) return false;
-        return LauncherLargeFolderPickerHook.isMarked(
-                folder.getContext(), folder.getTag());
+        return LargeFolderFootprintPolicy.customizeDesktopFolder(
+                LauncherLargeFolderPickerHook.isMarked(folder.getContext(), folder.getTag()),
+                HomeGridCellGeometryHook.isWorkstationAllAppsView(folder));
     }
 
     private static String expectedFolderClass(Object info) {

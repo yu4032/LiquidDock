@@ -1,12 +1,16 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Point;
+import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import com.hellovoid.prismal.PrismalEdgeDecoration;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 
 /** Builds the feedback-safe HyperOS 307 PassBlur -> OES -> TextureView material composition. */
 final class Miuix307ZeroCopyRenderer {
@@ -25,6 +29,11 @@ final class Miuix307ZeroCopyRenderer {
     private static long homeFreshnessSerial;
     private static ClipOwner materialClipOwner;
     private static ClipOwner parentClipOwner;
+    private static final ArrayList<ClipOwner> taskbarAncestorClips = new ArrayList<>();
+    private static View taskbarClipRoot;
+    private static volatile boolean workstationTaskbarMode;
+    private static final int[] materialScreenPosition = new int[2];
+    private static final Point realScreenSize = new Point();
 
     private static final class ClipOwner {
         final ViewGroup view;
@@ -74,6 +83,9 @@ final class Miuix307ZeroCopyRenderer {
         Miuix307PassBlurTextureView gpuBackdrop = new Miuix307PassBlurTextureView(
                 materialHost.getContext(), materialHost);
         gpuBackdrop.setGlassConfig(glassConfig);
+        workstationTaskbarMode = WorkstationRuntimeState.isActive()
+                && workstationConfig.dockEnabled && workstationConfig.taskbarMode;
+        gpuBackdrop.setTaskbarMode(workstationTaskbarMode);
         gpuBackdrop.setWorkstationDockIconCornerRadiusDp(
                 workstationConfig.dockIconGlassCornerRadius);
         gpuBackdrop.setId(View.generateViewId());
@@ -128,6 +140,32 @@ final class Miuix307ZeroCopyRenderer {
         return gpuBackdrop != null ? gpuBackdrop.getHeight() : 0;
     }
 
+    static boolean isWorkstationTaskbarMode() {
+        return workstationTaskbarMode;
+    }
+
+    static float taskbarCenterFor(View row) {
+        DockLiquidGlassHostView host = hostRef.get();
+        // Let the native layout establish a drawable TextureView before translating its
+        // sibling icon row. Moving it during bootstrap can prevent the initial Surface.
+        if (!workstationTaskbarMode || !isActive() || host == null || row == null
+                || !host.isAttachedToWindow() || !row.isAttachedToWindow()
+                || host.getHeight() <= 0 || host.getDisplay() == null || row.getDisplay() == null
+                || host.getDisplay().getDisplayId() != row.getDisplay().getDisplayId()) return Float.NaN;
+        host.getDisplay().getRealSize(realScreenSize);
+        return realScreenSize.y - host.getHeight() * .5f;
+    }
+
+    static void setWorkstationTaskbarMode(boolean enabled) {
+        if (workstationTaskbarMode == enabled) return;
+        workstationTaskbarMode = enabled;
+        Miuix307PassBlurTextureView output = gpuBackdropRef.get();
+        if (output != null) output.setTaskbarMode(enabled);
+        refreshDockShadowViewport();
+        MiuixGlassHook.refreshTaskbarGeometry();
+        requestDockSceneRefresh();
+    }
+
     static void setNativeOpticsRadiusPx(float radiusPx) {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null) gpuBackdrop.setNativeOpticsRadiusPx(radiusPx);
@@ -147,12 +185,30 @@ final class Miuix307ZeroCopyRenderer {
         float density = host.getResources().getDisplayMetrics().density;
         int shortSide = Math.min(host.getWidth(), host.getHeight());
         int margin = DockPrismalShadowViewportPolicy.marginPx(style, density, shortSide);
+        int leftMargin = margin, rightMargin = margin, bottomMargin = margin;
+        if (workstationTaskbarMode) {
+            Display display = material.getDisplay();
+            if (display != null && material.getWidth() > 0 && material.getHeight() > 0) {
+                display.getRealSize(realScreenSize);
+                material.getLocationOnScreen(materialScreenPosition);
+                int bleed = WorkstationTaskbarGeometry.bleedPx(density);
+                leftMargin = WorkstationTaskbarGeometry.leftOutputMargin(
+                        materialScreenPosition[0], bleed, margin);
+                rightMargin = WorkstationTaskbarGeometry.rightOutputMargin(
+                        materialScreenPosition[0], material.getWidth(),
+                        realScreenSize.x, bleed, margin);
+                bottomMargin = WorkstationTaskbarGeometry.bottomOutputMargin(
+                        materialScreenPosition[1], material.getHeight(),
+                        realScreenSize.y, bleed, margin);
+            }
+        }
+        refreshTaskbarAncestorClips(material);
         if (!(output.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) output.getLayoutParams();
-        if (lp.leftMargin == -margin && lp.topMargin == -margin
-                && lp.rightMargin == -margin && lp.bottomMargin == -margin) return;
+        if (lp.leftMargin == -leftMargin && lp.topMargin == -margin
+                && lp.rightMargin == -rightMargin && lp.bottomMargin == -bottomMargin) return;
 
-        if (margin > 0) {
+        if (leftMargin > 0 || margin > 0 || rightMargin > 0 || bottomMargin > 0) {
             if (material instanceof ViewGroup && materialClipOwner == null) {
                 materialClipOwner = new ClipOwner((ViewGroup) material);
             }
@@ -163,13 +219,42 @@ final class Miuix307ZeroCopyRenderer {
             restoreShadowClips();
         }
 
-        lp.setMargins(-margin, -margin, -margin, -margin);
+        lp.setMargins(-leftMargin, -margin, -rightMargin, -bottomMargin);
         output.setLayoutParams(lp);
-        MainHook.log(TAG + " Prismal Dock shadow output margin=" + margin
-                + "px native=" + host.getWidth() + "x" + host.getHeight());
+        MainHook.log(TAG + " Prismal Dock viewport margins L/T/R/B="
+                + leftMargin + "/" + margin + "/" + rightMargin + "/"
+                + bottomMargin + "px taskbar=" + workstationTaskbarMode);
+    }
+
+    private static void refreshTaskbarAncestorClips(View material) {
+        View root = material.getRootView();
+        if (!workstationTaskbarMode || taskbarClipRoot != root) {
+            restoreTaskbarAncestorClips();
+        }
+        if (!workstationTaskbarMode || !taskbarAncestorClips.isEmpty()) return;
+        taskbarClipRoot = root;
+        // TextureView output may span the screen while the vendor material and native icons
+        // retain their original Dock bounds. Release only ancestor child-clips and restore
+        // every original value when the option is disabled or the host detaches.
+        ViewParent ancestor = material.getParent();
+        if (ancestor instanceof View) ancestor = ((View) ancestor).getParent();
+        while (ancestor instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) ancestor;
+            taskbarAncestorClips.add(new ClipOwner(group));
+            ancestor = group.getParent();
+        }
+    }
+
+    private static void restoreTaskbarAncestorClips() {
+        for (int i = taskbarAncestorClips.size() - 1; i >= 0; i--) {
+            taskbarAncestorClips.get(i).restore();
+        }
+        taskbarAncestorClips.clear();
+        taskbarClipRoot = null;
     }
 
     private static void restoreShadowClips() {
+        restoreTaskbarAncestorClips();
         if (parentClipOwner != null) {
             parentClipOwner.restore();
             parentClipOwner = null;

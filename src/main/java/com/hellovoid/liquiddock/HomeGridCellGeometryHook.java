@@ -366,6 +366,17 @@ final class HomeGridCellGeometryHook {
         }
     }
 
+    static boolean isWorkstationAllAppsView(View view) {
+        for (View cursor = view; cursor != null; ) {
+            String name = cursor.getClass().getName();
+            if ("com.miui.home.launcher.CellLayout".equals(name)) return isLaptopAllApps(cursor);
+            if (WorkstationLayoutClassifier.matches(false, "", name)) return true;
+            android.view.ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
     private static boolean isLaptopAllApps(Object cellLayout) {
         // Stable Launcher identity: CellLayout.setGridType() stores
         // GRID_TYPE_IN_ALL_APPS_WORKSPACE directly in CellLayout.mGridType.
