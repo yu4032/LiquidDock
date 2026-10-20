@@ -60,14 +60,12 @@ public class RuntimeBehaviorTestPolicyContractTest {
             "RootPassBlurBackendBoundaryTest.java",
             "SecurityCenterFrameworkDockContractTest.java",
             "SecurityCenterLauncherStylePresentationContractTest.java",
-            "SecurityCenterNoNameAnchorContractTest.java",
             "SecurityCenterPassBlurOwnershipContractTest.java",
             "SecurityCenterScopeContractTest.java",
             "SideSlideHoldArchitectureContractTest.java",
             "ShortcutSecondaryGlassContractTest.java",
             "SystemUiHandleMenuGlassContractTest.java",
             "UserFacingPreferenceSchemaTest.java",
-            "WidgetRemoteViewsRootBackgroundContractTest.java",
             "WidgetSystemUiReflectionContractTest.java",
             "WorkstationDockGeometryContractTest.java");
 
