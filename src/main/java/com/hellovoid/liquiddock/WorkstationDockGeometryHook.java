@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
@@ -25,7 +24,6 @@ final class WorkstationDockGeometryHook {
     // Weak key alone is insufficient if the value strongly owns the key. Keep both sides weak;
     // the View itself owns the listeners for exactly as long as it is attached.
     private static final WeakHashMap<View, WeakReference<Binding>> bindings = new WeakHashMap<>();
-    private static volatile int widthOffsetPx;
     private static volatile int verticalOffsetPx;
     private static volatile boolean dockEnabled;
     private static volatile boolean taskbarEnabled;
@@ -36,21 +34,19 @@ final class WorkstationDockGeometryHook {
         WorkstationNativeTaskbarHook.applyLiveConfig(config);
         float scale = config.dimensionsDp
                 ? android.content.res.Resources.getSystem().getDisplayMetrics().density : 1f;
-        int nextWidth = Math.round(config.dockWidthOffset * scale);
         int nextVertical = Math.round(config.dockVerticalOffset * scale);
         boolean nextTaskbar = config.dockEnabled && config.taskbarMode;
-        if (widthOffsetPx == nextWidth && verticalOffsetPx == nextVertical && dockEnabled == config.dockEnabled
+        if (verticalOffsetPx == nextVertical && dockEnabled == config.dockEnabled
                 && taskbarEnabled == nextTaskbar) return;
-        widthOffsetPx = nextWidth;
         verticalOffsetPx = nextVertical;
         dockEnabled = config.dockEnabled;
         taskbarEnabled = nextTaskbar;
-        refreshInstalledWidth();
+        refreshInstalledGeometry();
         Miuix307ZeroCopyRenderer.setWorkstationTaskbarMode(
                 MainHook.isWorkstationMode() && taskbarEnabled);
     }
 
-    private static void refreshInstalledWidth() {
+    private static void refreshInstalledGeometry() {
         ArrayList<Binding> snapshot = new ArrayList<>();
         synchronized (bindings) {
             for (WeakReference<Binding> ref : bindings.values()) {
@@ -110,8 +106,7 @@ final class WorkstationDockGeometryHook {
                 }
                 return result;
             });
-            MainHook.log("[DC] workstation visible Dock geometry hook installed widthOffset="
-                    + widthOffsetPx);
+            MainHook.log("[DC] workstation visible Dock geometry hook installed");
         } catch (Throwable error) {
             MainHook.log("[DC] workstation visible Dock geometry hook unavailable: " + error);
         }
@@ -158,13 +153,13 @@ final class WorkstationDockGeometryHook {
         bindGeometryView(background, false);
     }
 
-    private static void bindGeometryView(View container, boolean controlsWidth) {
+    private static void bindGeometryView(View container, boolean isDockContainer) {
         Binding binding;
         synchronized (bindings) {
             WeakReference<Binding> bindingRef = bindings.get(container);
             binding = bindingRef != null ? bindingRef.get() : null;
             if (binding == null) {
-                binding = new Binding(container, controlsWidth);
+                binding = new Binding(container, isDockContainer);
                 bindings.put(container, new WeakReference<>(binding));
                 container.addOnLayoutChangeListener(binding);
                 container.addOnAttachStateChangeListener(binding);
@@ -183,7 +178,7 @@ final class WorkstationDockGeometryHook {
             while (parent instanceof View) {
                 WeakReference<Binding> reference = bindings.get((View) parent);
                 Binding binding = reference == null ? null : reference.get();
-                if (binding != null && binding.controlsWidth) return true;
+                if (binding != null && binding.isDockContainer) return true;
                 parent = parent.getParent();
             }
         }
@@ -218,8 +213,7 @@ final class WorkstationDockGeometryHook {
     private static final class Binding implements View.OnLayoutChangeListener,
             View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         private final WeakReference<View> containerRef;
-        private final boolean controlsWidth;
-        private final WorkstationDockWidthState widthState = new WorkstationDockWidthState();
+        private final boolean isDockContainer;
 
         private final WorkstationDockTranslationState translationState = new WorkstationDockTranslationState();
         private ViewTreeObserver observer;
@@ -241,13 +235,13 @@ final class WorkstationDockGeometryHook {
             float current = container.getTranslationY();
             // Some launcher versions parent the material under the icon container; others
             // compose it in a separate shell. Apply the user offset exactly once in either tree.
-            int offset = !controlsWidth && hasTranslatedAncestor(container) ? 0 : verticalOffsetPx;
+            int offset = !isDockContainer && hasTranslatedAncestor(container) ? 0 : verticalOffsetPx;
             float target = translationState.apply(current, enabled, offset);
             if (Math.abs(target - current) > .001f) container.setTranslationY(target);
         }
 
-        Binding(View container, boolean controlsWidth) {
-            this.controlsWidth = controlsWidth;
+        Binding(View container, boolean isDockContainer) {
+            this.isDockContainer = isDockContainer;
             containerRef = new WeakReference<>(container);
         }
 
@@ -275,28 +269,8 @@ final class WorkstationDockGeometryHook {
         }
 
         void apply(boolean workstation) {
-            View container = containerRef.get();
-            if (container == null) return;
-            if (!controlsWidth) {
-                applyTranslation(workstation);
-                return;
-            }
-            int observedWidth = container.getWidth();
-            if (observedWidth <= 0) return;
-
-            int targetWidth = workstation
-                    ? widthState.targetWidth(observedWidth, widthOffsetPx)
-                    : widthState.restoreWidth(observedWidth);
-            if (targetWidth > 0 && targetWidth != observedWidth) {
-                ViewGroup.LayoutParams lp = container.getLayoutParams();
-                if (lp != null) {
-                    lp.width = targetWidth;
-                    container.setLayoutParams(lp);
-                    container.requestLayout();
-                    MainHook.log("[DC] workstation Dock width " + observedWidth
-                            + " -> " + targetWidth + " active=" + workstation);
-                }
-            }
+            // Only user-requested vertical translation belongs here. The Launcher
+            // retains the Dock's native width, horizontal placement, and fly motion.
             applyTranslation(workstation);
         }
     }
