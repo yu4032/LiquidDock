@@ -1377,8 +1377,8 @@ final class Miuix307PassBlurTextureView extends TextureView
         ViewTreeObserver observer = root != null ? root.getViewTreeObserver() : null;
         if (observer == null || !observer.isAlive()) return;
         ViewTreeObserver.OnPreDrawListener listener = () -> {
-            // Native Dock layout owns its static bottom offset. Do not overwrite
-            // the fly-in/out animation's translationY during pre-draw.
+            // The Launcher owns both Dock placement and native fly motion; the glass
+            // must observe its geometry without writing Dock translationY.
             Miuix307ZeroCopyRenderer.refreshDockShadowViewport();
             refreshProducerGeometryInPlace();
             updateBackdropMapping();
@@ -1596,9 +1596,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                     getResources().getDisplayMetrics().density);
             float screenLeft = -bleed;
             float screenRight = taskbarScreenSize.x + bleed;
-            // The taskbar is bottom-anchored through the native Dock's layout, not
-            // through its animated translationY. Follow the same moving host for
-            // the glass, or the body would stay pinned while native icons fly out.
+            // Track the moving native Dock body, not the physical screen bottom.
+            // This preserves the original resting Y and the fly-in/out motion.
             nativeDock.getLocationOnScreen(taskbarDockScreenPosition);
             float nativeScreenBottom = taskbarDockScreenPosition[1] + dockNativeHeight;
             float screenTop = WorkstationTaskbarGeometry.movingBodyTop(
