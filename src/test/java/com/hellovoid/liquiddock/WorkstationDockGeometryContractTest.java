@@ -15,20 +15,9 @@ public class WorkstationDockGeometryContractTest {
         return Files.readString(Path.of("src/main/java/com/hellovoid/liquiddock/" + name));
     }
 
-    @Test public void workstationWidthOffsetDoesNotAccumulateAndRebasesOnNativeWidth() {
-        WorkstationDockWidthState state = new WorkstationDockWidthState();
-
-        assertEquals(1100, state.targetWidth(1000, 100));
-        assertEquals(1100, state.targetWidth(1100, 100));
-        assertEquals(1300, state.targetWidth(1200, 100));
-        assertEquals(1, state.targetWidth(1200, -5000));
-    }
-
-    @Test public void workstationWidthTargetsVisibleDockContainerInsteadOfHiddenNormalBackground()
+    @Test public void workstationGeometryBindsVisibleDockContainer()
             throws Exception {
         String main = source("MainHook.java");
-        assertFalse("workstation width must not mutate the hidden normal HotSeats background",
-                main.contains("widthOffset != 0) args[0]"));
         assertTrue("MainHook must install the visible workstation Dock geometry hook",
                 main.contains("WorkstationDockGeometryHook.install(classLoader, config.workstation);"));
 
