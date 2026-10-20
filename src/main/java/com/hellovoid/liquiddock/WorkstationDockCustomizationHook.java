@@ -2,44 +2,22 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Rect;
 import android.view.View;
-import android.view.ViewGroup;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Workstation Dock icon spacing and taskbar optical centering.
- *
- * Dock background and its icon RecyclerView may belong to separate ViewRoots. Both use
- * screen-space bounds; a shared root identity is not a valid ownership requirement.
- * Align during pre-draw AFTER the native layouts/parent transforms settle. Do not depend
- * on a one-shot postOnAnimation request during the asynchronous rotation handoff.
+ * Workstation-only icon offsets. In taskbar mode the configured vertical offset directly
+ * translates the complete RecyclerView instead of trying to infer an optical center from
+ * icon graphics, screen coordinates or the floating Dock's separate window.
  */
 final class WorkstationDockCustomizationHook {
     private static volatile boolean dockEnabled;
     private static volatile boolean taskbarEnabled;
     private static volatile int iconTopOffset;
     private static volatile int iconBottomOffset;
-    private static final WeakHashMap<View, RowAlignment> OBSERVED_RECYCLERS =
+    private static final WeakHashMap<View, RowTranslation> OBSERVED_RECYCLERS =
             new WeakHashMap<>();
-
-    private static final View.OnAttachStateChangeListener ROW_ATTACH_LISTENER =
-            new View.OnAttachStateChangeListener() {
-                @Override public void onViewAttachedToWindow(View view) {
-                    // Workstation and its floating Dock may attach in either order.
-                    view.postOnAnimation(
-                            WorkstationDockCustomizationHook::reconcileTaskbarRowsForFrame);
-                }
-
-                @Override public void onViewDetachedFromWindow(View view) {
-                    synchronized (OBSERVED_RECYCLERS) {
-                        RowAlignment row = OBSERVED_RECYCLERS.get(view);
-                        if (row != null) row.restore(view);
-                    }
-                }
-            };
 
     private WorkstationDockCustomizationHook() {}
 
@@ -57,55 +35,41 @@ final class WorkstationDockCustomizationHook {
         taskbarEnabled = nextTaskbar;
         iconTopOffset = top;
         iconBottomOffset = bottom;
-
         ArrayList<View> observed;
         synchronized (OBSERVED_RECYCLERS) {
             observed = new ArrayList<>(OBSERVED_RECYCLERS.keySet());
         }
         for (View recycler : observed) {
             if (recycler == null) continue;
-            if (!nextTaskbar || !dockEnabled) {
-                synchronized (OBSERVED_RECYCLERS) {
-                    RowAlignment row = OBSERVED_RECYCLERS.get(recycler);
-                    if (row != null) row.restore(recycler);
-                }
-            }
+            applyRowTranslation(recycler);
             if (!recycler.isAttachedToWindow()) continue;
+            // Item decorations own the old top/bottom insets in normal mode only.
             HookUtil.tryInvoke(recycler, "invalidateItemDecorations");
             recycler.requestLayout();
         }
     }
 
-    /** Reset the row when exiting Workstation even if the settings keys did not change. */
     static void onWorkstationModeChanged(boolean active) {
-        if (active) return;
         synchronized (OBSERVED_RECYCLERS) {
-            for (java.util.Map.Entry<View, RowAlignment> entry : OBSERVED_RECYCLERS.entrySet()) {
-                if (entry.getKey() != null && entry.getValue() != null) {
-                    entry.getValue().restore(entry.getKey());
+            for (java.util.Map.Entry<View, RowTranslation> entry
+                    : OBSERVED_RECYCLERS.entrySet()) {
+                View recycler = entry.getKey();
+                RowTranslation state = entry.getValue();
+                if (recycler != null && state != null) {
+                    state.apply(recycler, active && dockEnabled && taskbarEnabled,
+                            iconTopOffset);
                 }
             }
         }
     }
 
-    /**
-     * Called by the existing Dock GPU host pre-draw observer after the native Dock position is
-     * reconciled. No posts, timers or extra layout passes; correct only if geometry differs.
-     */
-    static void reconcileTaskbarRowsForFrame() {
-        if (!dockEnabled || !taskbarEnabled || !WorkstationRuntimeState.isActive()) return;
-        // This runs at the display refresh rate: iterate the weak registry directly and
-        // retain per-row scratch buffers rather than allocating on every Prismal frame.
+    private static void applyRowTranslation(View recycler) {
         synchronized (OBSERVED_RECYCLERS) {
-            for (Map.Entry<View, RowAlignment> entry : OBSERVED_RECYCLERS.entrySet()) {
-                View recycler = entry.getKey();
-                RowAlignment row = entry.getValue();
-                if (recycler == null || row == null || !recycler.isAttachedToWindow()) continue;
-                float bodyCenter = Miuix307ZeroCopyRenderer.taskbarVisualCenterFor(recycler);
-                if (!Float.isFinite(bodyCenter)) continue;
-                float iconCenter = iconRowCenterOnScreen(recycler, row);
-                if (!Float.isFinite(iconCenter)) continue;
-                row.align(recycler, bodyCenter, iconCenter);
+            RowTranslation state = OBSERVED_RECYCLERS.get(recycler);
+            if (state != null) {
+                state.apply(recycler,
+                        dockEnabled && taskbarEnabled && WorkstationRuntimeState.isActive(),
+                        iconTopOffset);
             }
         }
     }
@@ -113,78 +77,58 @@ final class WorkstationDockCustomizationHook {
     private static void observeRecycler(View recycler) {
         synchronized (OBSERVED_RECYCLERS) {
             if (OBSERVED_RECYCLERS.containsKey(recycler)) return;
-            OBSERVED_RECYCLERS.put(recycler, new RowAlignment());
-            recycler.addOnAttachStateChangeListener(ROW_ATTACH_LISTENER);
+            OBSERVED_RECYCLERS.put(recycler, new RowTranslation());
+            recycler.addOnLayoutChangeListener(
+                    (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                            applyRowTranslation(view));
+            recycler.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(View view) {
+                    view.post(() -> applyRowTranslation(view));
+                }
+
+                @Override public void onViewDetachedFromWindow(View view) {
+                    applyRowTranslationForDetach(view);
+                }
+            });
         }
-        // The first item decoration may happen after this window's own pre-draw.
-        recycler.postOnAnimation(WorkstationDockCustomizationHook::reconcileTaskbarRowsForFrame);
+        // Wait until RecyclerView finishes its initial layout; translation does not
+        // trigger remeasurement, so changing it cannot accumulate item inset changes.
+        recycler.post(() -> applyRowTranslation(recycler));
     }
 
-    /** Median icon graphic center ignores the occasional dragging/animating item. */
-    private static float iconRowCenterOnScreen(View recycler, RowAlignment row) {
-        if (!(recycler instanceof ViewGroup)) return Float.NaN;
-        ViewGroup group = (ViewGroup) recycler;
-        int childCount = group.getChildCount();
-        if (childCount == 0) return Float.NaN;
-        row.ensureCapacity(childCount);
-        float[] centers = row.centers;
-        int count = 0;
-        int[] position = row.screenPosition;
-        float minWidth = 8f * recycler.getResources().getDisplayMetrics().density;
-        for (int i = 0; i < childCount; i++) {
-            View child = group.getChildAt(i);
-            if (!child.isAttachedToWindow() || child.getVisibility() != View.VISIBLE
-                    || child.getAlpha() <= 0f || child.getWidth() < minWidth
-                    || child.getHeight() <= 0) continue;
-            child.getLocationOnScreen(position);
-            LauncherGlassIconGeometry.Bounds graphic = LauncherGlassIconGeometry.resolve(child);
-            centers[count++] = position[1] + (graphic == null
-                    ? child.getHeight() * 0.5f
-                    : (graphic.top + graphic.bottom) * 0.5f);
+    private static void applyRowTranslationForDetach(View recycler) {
+        synchronized (OBSERVED_RECYCLERS) {
+            RowTranslation state = OBSERVED_RECYCLERS.get(recycler);
+            if (state != null) state.apply(recycler, false, 0);
         }
-        if (count == 0) return Float.NaN;
-        Arrays.sort(centers, 0, count);
-        return (count & 1) == 1
-                ? centers[count / 2]
-                : 0.5f * (centers[count / 2 - 1] + centers[count / 2]);
     }
 
-    private static final class RowAlignment {
-        private float originalTranslationY = Float.NaN;
-        private float appliedTranslationY = Float.NaN;
-        private float[] centers = new float[0];
-        private final int[] screenPosition = new int[2];
+    private static final class RowTranslation {
+        private float nativeTranslation = Float.NaN;
+        private float lastAppliedTranslation = Float.NaN;
 
-        void ensureCapacity(int childCount) {
-            if (centers.length < childCount) centers = new float[childCount];
-        }
-
-        void align(View recycler, float targetCenter, float observedCenter) {
+        void apply(View recycler, boolean taskbar, int offsetPx) {
             float current = recycler.getTranslationY();
-            if (!Float.isFinite(originalTranslationY)
-                    || (Float.isFinite(appliedTranslationY)
-                        && Math.abs(current - appliedTranslationY) > 0.5f)) {
-                // If Launcher takes translation ownership during a rotation/animation,
-                // regard the new vendor value as the baseline, not our previous result.
-                originalTranslationY = current;
+            if (!taskbar) {
+                if (Float.isFinite(lastAppliedTranslation)
+                        && Math.abs(current - lastAppliedTranslation) < 0.5f) {
+                    recycler.setTranslationY(nativeTranslation);
+                }
+                nativeTranslation = Float.NaN;
+                lastAppliedTranslation = Float.NaN;
+                return;
             }
-            float delta = WorkstationTaskbarGeometry.iconCenterCorrection(
-                    targetCenter, observedCenter);
-            if (Math.abs(delta) < 1f) return;
-            float next = current + delta;
-            recycler.setTranslationY(next);
-            appliedTranslationY = next;
-        }
-
-        void restore(View recycler) {
-            float current = recycler.getTranslationY();
-            if (Float.isFinite(originalTranslationY)
-                    && Float.isFinite(appliedTranslationY)
-                    && Math.abs(current - appliedTranslationY) <= 0.5f) {
-                recycler.setTranslationY(originalTranslationY);
+            // OEM animation/layout is allowed to replace translation. Retain the latest
+            // vendor baseline, but never compound our previous offset on repeated calls.
+            if (!Float.isFinite(nativeTranslation)
+                    || (Float.isFinite(lastAppliedTranslation)
+                            && Math.abs(current - lastAppliedTranslation) >= 0.5f)) {
+                nativeTranslation = current;
             }
-            originalTranslationY = Float.NaN;
-            appliedTranslationY = Float.NaN;
+            float target = WorkstationTaskbarGeometry.iconRowTranslation(
+                    nativeTranslation, offsetPx);
+            if (Math.abs(current - target) >= 0.5f) recycler.setTranslationY(target);
+            lastAppliedTranslation = target;
         }
     }
 
@@ -203,7 +147,6 @@ final class WorkstationDockCustomizationHook {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         Object recycler = chain.getArg(2);
                         if (recycler instanceof View) observeRecycler((View) recycler);
-                        // Taskbar auto-centering supersedes the manual icon-decoration offsets.
                         if (dockEnabled && WorkstationRuntimeState.isActive() && !taskbarEnabled) {
                             Rect out = (Rect) chain.getArg(0);
                             out.top += iconTopOffset;
@@ -212,7 +155,7 @@ final class WorkstationDockCustomizationHook {
                         return result;
                     },
                     Rect.class, View.class, recyclerView, recyclerState);
-            MainHook.log("[DC] workstation Dock icon vertical offsets top="
+            MainHook.log("[DC] workstation Dock icon offsets top="
                     + iconTopOffset + " bottom=" + iconBottomOffset);
         } catch (Throwable error) {
             MainHook.log("[DC] workstation Dock icon offset hook unavailable: " + error);
