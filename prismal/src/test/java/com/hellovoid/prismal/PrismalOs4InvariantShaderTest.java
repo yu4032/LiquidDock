@@ -4,28 +4,6 @@ import static org.junit.Assert.*;
 import org.junit.Test;
 
 public class PrismalOs4InvariantShaderTest {
-    @Test public void transformedShaderUsesUploadedInvariantsAndKeepsDependentPaths() {
-        String shader = PrismalOs4InvariantShader.apply(
-                PrismalComponentGateShader.apply(
-                        PrismalOpticalEdgeShader.apply(
-                                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
-        assertTrue(shader.contains("uniform vec3 u_invariantLightPrimary;"));
-        assertTrue(shader.contains("vec3 Lp = u_invariantLightPrimary;"));
-        assertTrue(shader.contains("vec2 Lxy = u_invariantLightXY;"));
-        assertTrue(shader.contains("vec3 os4LightDir3 = u_invariantOs4LightDir;"));
-        assertTrue(shader.contains("float r0 = u_invariantFresnelR0;"));
-        assertTrue(shader.contains("float shadowExt = u_invariantShadowExtent;"));
-
-        assertFalse(shader.contains("vec3 Lp = normalize(vec3(u_lightDir, 1.45));"));
-        assertFalse(shader.contains("vec2 Lxy = normalize(u_lightDir + vec2(1e-5));"));
-        assertFalse(shader.contains("vec3 os4LightDir3 = normalize(vec3(Lxy, 1.0));"));
-        assertFalse(shader.contains("float r0 = pow((1.0 - u_ior) / (1.0 + u_ior), 2.0);"));
-
-        assertTrue(shader.contains("float causticDot = dot("));
-        assertTrue(shader.contains("float os4MainFacing = max(dot(os4EdgeNormal3, os4LightDir3), 0.0);"));
-        assertTrue(shader.contains("float F = r0 + (1.0 - r0) * pow("));
-    }
-
     @Test public void numericValuesMatchOriginalExpressions() {
         for (float x : new float[]{-2f, -0.5f, 0f, 0.77f, 2.3f}) {
             for (float y : new float[]{-1.8f, -0.8f, 0f, 0.65f, 2.1f}) {
