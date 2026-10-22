@@ -74,7 +74,11 @@ class ComposeSettingsActivity : SettingsActivity() {
                 preferences.registerOnSharedPreferenceChangeListener(listener)
                 onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
             }
-            CompositionLocalProvider(LocalSettingsPreferenceRevisions provides revisions) {
+            val availability = remember { SettingsAvailability.detect(this) }
+            CompositionLocalProvider(
+                LocalSettingsPreferenceRevisions provides revisions,
+                LocalSettingsAvailability provides availability,
+            ) {
                 SettingsUiColorTheme(controller = controller, palette = palette) {
                     LiquidDockSettings(
                         activity = this,
@@ -116,9 +120,12 @@ private fun LiquidDockSettings(
             ),
         )
     }
+    val availability = LocalSettingsAvailability.current
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var navigationStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
-    val root = isRootPage(page)
+    // Saved navigation from another Launcher build must never expose unsupported controls.
+    val visiblePage = if (availability.allows(page)) page else Page.Home
+    val root = isRootPage(visiblePage)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     val searchCatalog = remember(activity) { settingsSearchCatalog(activity) }
@@ -132,7 +139,7 @@ private fun LiquidDockSettings(
         searchQuery = ""
         searchOpen = true
     }
-    val selectedRootIndex = ROOT_PAGES.indexOf(page).coerceAtLeast(0)
+    val selectedRootIndex = ROOT_PAGES.indexOf(visiblePage).coerceAtLeast(0)
     val rootIcons = listOf(
         MiuixIcons.Home,
         MiuixIcons.GridView,
@@ -152,19 +159,21 @@ private fun LiquidDockSettings(
     }
 
     fun navigateTo(target: Page) {
-        if (target == page) return
-        navigationStack = ArrayList(navigationStack).apply { add(page.name) }
+        if (!availability.allows(target) || target == visiblePage) return
+        navigationStack = ArrayList(navigationStack).apply { add(visiblePage.name) }
         page = target
     }
 
     fun navigateBack() {
-        val previous = navigationStack.lastOrNull()
-            ?.let { runCatching { Page.valueOf(it) }.getOrNull() }
-        navigationStack = ArrayList(navigationStack.dropLast(1))
+        val previous = navigationStack.asReversed()
+            .mapNotNull { runCatching { Page.valueOf(it) }.getOrNull() }
+            .firstOrNull(availability::allows)
+        navigationStack = arrayListOf()
         page = previous ?: Page.Home
     }
 
     fun selectRoot(target: Page) {
+        if (!availability.allows(target)) return
         navigationStack = arrayListOf()
         page = target
     }
@@ -191,7 +200,7 @@ private fun LiquidDockSettings(
     }
 
     ModernSettingsScaffold(
-        title = if (searchOpen) "搜索设置" else stringResource(page.titleRes),
+        title = if (searchOpen) "搜索设置" else stringResource(visiblePage.titleRes),
         glassEnabled = uiGlassEnabled,
         showBack = searchOpen || !root,
         backLabel = stringResource(R.string.action_back),
@@ -200,7 +209,7 @@ private fun LiquidDockSettings(
             if (!searchOpen) ModernTopActionButton(
                 text = stringResource(R.string.action_restart_scopes),
                 onClick = {
-                    selectedRestartScopes = when (page) {
+                    selectedRestartScopes = when (visiblePage) {
                         Page.Gboard -> setOf("com.google.android.inputmethod.latin")
                         Page.SecurityCenterSidebar,
                         Page.Animation,
@@ -303,7 +312,7 @@ private fun LiquidDockSettings(
                 )
             } else {
                 AnimatedContent(
-                    targetState = page,
+                    targetState = visiblePage,
                     modifier = Modifier.fillMaxSize().then(
                         // Only the four bottom-navigation root pages may reveal search.
                         // Keep nested-scroll entirely off subpages, not merely disabled.

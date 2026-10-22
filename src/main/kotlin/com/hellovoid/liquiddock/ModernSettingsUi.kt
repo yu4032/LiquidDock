@@ -353,11 +353,13 @@ internal fun ModernFeatureCard(
     summary: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    page: Page? = null,
 ) {
+    val available = page == null || LocalSettingsAvailability.current.allows(page)
     val onSurface = MiuixTheme.colorScheme.onSurface
     ModernSurface(
-        modifier = modifier,
-        onClick = onClick,
+        modifier = modifier.alpha(if (available) 1f else 0.42f),
+        onClick = if (available) onClick else null,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -373,7 +375,7 @@ internal fun ModernFeatureCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = summary,
+                    text = if (available) summary else "尚未移植 · HyperOS 4",
                     modifier = Modifier.padding(top = 5.dp),
                     fontSize = 12.sp,
                     color = onSurface.copy(alpha = 0.62f),
@@ -501,12 +503,15 @@ internal fun ArrowPreference(
     summary: String? = null,
     enabled: Boolean = true,
     insideMargin: PaddingValues = ModernPreferenceMargin,
+    targetPage: Page? = null,
     onClick: () -> Unit,
 ) {
+    val available = targetPage == null || LocalSettingsAvailability.current.allows(targetPage)
+    val effectiveEnabled = enabled && available
     BasicComponent(
         title = title,
-        summary = summary,
-        enabled = enabled,
+        summary = if (available) summary else "尚未移植 · HyperOS 4",
+        enabled = effectiveEnabled,
         insideMargin = insideMargin,
         endActions = {
             Icon(
@@ -516,7 +521,7 @@ internal fun ArrowPreference(
                 modifier = Modifier.size(width = 10.dp, height = 16.dp),
             )
         },
-        onClick = { if (enabled) onClick() },
+        onClick = { if (effectiveEnabled) onClick() },
     )
 }
 
