@@ -2,6 +2,8 @@ name: LiquidDock4 isolated foundation
 
 on:
   push:
+    branches: [liquiddock4, fix/os4-27d78f8-audit]
+  pull_request:
     branches: [liquiddock4]
   workflow_dispatch:
 
@@ -26,6 +28,15 @@ jobs:
           /tmp/os4-grid-conf-test
       - name: Offline AOT binary identity and target checks
         run: python3 -m unittest discover -s os4/tests -p 'test_*.py' -v
+      - name: Compile actual ARM64 native backend
+        run: |
+          set -euo pipefail
+          sdkmanager --install "ndk;28.2.13676358" >/dev/null
+          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash os4/native/build.sh
+          "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws os4/out/libliquiddock4.so | grep ' native_init        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug --stacktrace
+
       - name: Android and compatibility policy tests
         run: |
           chmod +x gradlew
