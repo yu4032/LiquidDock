@@ -9,11 +9,17 @@ history; no broad copy remains.
 ## Baseline and isolation
 
 - Based on LiquidDock `main` commit `c0ffef235`.
-- Android 16 / OS4 AOT Launcher under investigation:
-  `com.miui.home` `RELEASE-8.01.02.7751-260904-10100945-R`.
+- Active target: Xiaomi 13 (`fuxi`) on Android 17 / HyperOS
+  `OS4.0.27.0.XEOCNXM`, with `com.miui.home`
+  `RELEASE-8.01.02.8583-260918-10161026-R`.
+- The exact target ELF hashes and tablet-mode reproduction are recorded in
+  [`docs/os4-device-contract-fuxi-8583.md`](../docs/os4-device-contract-fuxi-8583.md).
 - Original Java Launcher 4.50 path is unchanged.
 - `Os4LauncherIdentityPolicy` is the first conservative eligibility gate;
   its positive result **cannot** authorize native hooks by itself.
+- The legacy Launcher 4.50 Java backend is bypassed for every Android 16+ AOT
+  Launcher, including unknown builds. OS4 settings pages remain available, but
+  unsupported native capabilities fail closed.
 - `os4/native` builds a standalone **read-only** native injection bootstrap.
   It neither hooks functions nor writes Launcher state.
 - No device-mode spoofing, root configuration publishing, or launcher DB rewrites

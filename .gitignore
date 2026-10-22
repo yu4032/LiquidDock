@@ -1,6 +1,8 @@
 .gradle/
 build/
 local.properties
+__pycache__/
+*.pyc
 *.apk
 *.aab
 *.jks

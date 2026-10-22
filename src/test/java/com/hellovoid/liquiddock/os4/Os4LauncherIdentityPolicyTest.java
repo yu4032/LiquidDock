@@ -13,19 +13,28 @@ public final class Os4LauncherIdentityPolicyTest {
 
     @Test public void knownProfileIsEligibleOnlyForFurtherVerification() {
         assertTrue(matches("com.miui.home",
-                Os4LauncherIdentityPolicy.TARGET_RELEASE, 36, false, true));
+                Os4LauncherIdentityPolicy.TARGET_RELEASE,
+                Os4LauncherIdentityPolicy.TARGET_SDK, false, true));
     }
 
     @Test public void otherLaunchersAndBuildsFailClosed() {
         String version = Os4LauncherIdentityPolicy.TARGET_RELEASE;
-        assertFalse(matches("com.android.launcher3", version, 36, false, true));
-        assertFalse(matches("com.miui.home", "RELEASE-8.01.02.7752-260904-10100945-R",
-                36, false, true));
-        assertFalse(matches("com.miui.home", "RELEASE-8.01.02.7751", 36, false, true));
-        assertFalse(matches("com.miui.home", version, 35, false, true));
-        assertFalse(matches("com.miui.home", version, 37, false, true));
-        assertFalse(matches("com.miui.home", version, 36, true, true));
-        assertFalse(matches("com.miui.home", version, 36, false, false));
-        assertFalse(matches(null, null, 36, false, true));
+        int sdk = Os4LauncherIdentityPolicy.TARGET_SDK;
+        assertFalse(matches("com.android.launcher3", version, sdk, false, true));
+        assertFalse(matches("com.miui.home",
+                "RELEASE-8.01.02.7751-260904-10100945-R", sdk, false, true));
+        assertFalse(matches("com.miui.home", "RELEASE-8.01.02.8583", sdk, false, true));
+        assertFalse(matches("com.miui.home", version, sdk - 1, false, true));
+        assertFalse(matches("com.miui.home", version, sdk + 1, false, true));
+        assertFalse(matches("com.miui.home", version, sdk, true, true));
+        assertFalse(matches("com.miui.home", version, sdk, false, false));
+        assertFalse(matches(null, null, sdk, false, true));
+    }
+
+    @Test public void legacyJavaBackendIsBlockedForEveryAotOs4Launcher() {
+        assertTrue(Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(36, false));
+        assertTrue(Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(37, false));
+        assertFalse(Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(35, false));
+        assertFalse(Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(37, true));
     }
 }

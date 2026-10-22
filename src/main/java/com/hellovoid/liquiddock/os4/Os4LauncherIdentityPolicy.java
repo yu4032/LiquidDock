@@ -10,8 +10,8 @@ package com.hellovoid.liquiddock.os4;
 public final class Os4LauncherIdentityPolicy {
     public static final String TARGET_PACKAGE = "com.miui.home";
     public static final String TARGET_RELEASE =
-            "RELEASE-8.01.02.7751-260904-10100945-R";
-    public static final int TARGET_SDK = 36;
+            "RELEASE-8.01.02.8583-260918-10161026-R";
+    public static final int TARGET_SDK = 37;
 
     private Os4LauncherIdentityPolicy() {}
 
@@ -22,5 +22,14 @@ public final class Os4LauncherIdentityPolicy {
                 && sdkInt == TARGET_SDK
                 && !hasCode
                 && arm64;
+    }
+
+    /**
+     * The Launcher 4.50 Java backend targets the dex-based process. Any Android
+     * 16+ AOT Launcher must bypass it, including unknown builds: unsupported AOT
+     * code fails closed instead of running hooks against absent Java classes.
+     */
+    public static boolean shouldBlockLegacyJavaBackend(int sdkInt, boolean hasCode) {
+        return sdkInt >= 36 && !hasCode;
     }
 }

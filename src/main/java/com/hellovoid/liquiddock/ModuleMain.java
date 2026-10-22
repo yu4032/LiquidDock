@@ -2,8 +2,12 @@ package com.hellovoid.liquiddock;
 
 import androidx.annotation.NonNull;
 
+import android.content.pm.ApplicationInfo;
+import android.os.Build;
+
 import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.liquiddock.config.PresetManager;
+import com.hellovoid.liquiddock.os4.Os4LauncherIdentityPolicy;
 
 import android.content.SharedPreferences;
 
@@ -138,6 +142,7 @@ public final class ModuleMain extends XposedModule {
             return;
         }
         if (!LAUNCHER_PACKAGE.equals(packageName)) return;
+        if (shouldBlockLegacyLauncherBackend(param)) return;
         try {
             initializeCurrentProfileIfEmpty();
             ClassLoader classLoader = param.getClassLoader();
@@ -209,6 +214,28 @@ public final class ModuleMain extends XposedModule {
         } catch (Throwable error) {
             Api101Bridge.errorAlways("[DC] API101 package init failed", error);
         }
+    }
+
+    /**
+     * OS4's Launcher is an AOT process with no dex classes. The Launcher 4.50
+     * Java hooks are not a valid fallback there; installing them would only probe
+     * absent classes. Keep this gate independent from exact-build eligibility:
+     * unknown AOT builds are blocked until their own native backend is attested.
+     */
+    private static boolean shouldBlockLegacyLauncherBackend(PackageReadyParam param) {
+        ApplicationInfo info = param.getApplicationInfo();
+        if (info == null) {
+            Api101Bridge.log("[DC][OS4] legacy Java backend disabled unknown metadata");
+            return true;
+        }
+        boolean hasCode = (info.flags & ApplicationInfo.FLAG_HAS_CODE) != 0;
+        if (!Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(
+                Build.VERSION.SDK_INT, hasCode)) {
+            return false;
+        }
+        Api101Bridge.log("[DC][OS4] legacy Java backend disabled aot sdk="
+                + Build.VERSION.SDK_INT);
+        return true;
     }
 
     /** First-install initialization, never reinterpretation of prior persisted keys. */
