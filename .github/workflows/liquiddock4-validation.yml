@@ -1,0 +1,27 @@
+name: LiquidDock4 isolated foundation
+
+on:
+  push:
+    branches: [liquiddock4]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Native process isolation
+        run: |
+          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
+            os4/native/process_gate.c os4/tests/process_gate_test.c \
+            -o /tmp/os4-process-gate-test
+          /tmp/os4-process-gate-test
+      - name: Android and compatibility policy tests
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug --stacktrace

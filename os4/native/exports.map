@@ -1,0 +1,4 @@
+{
+    global: native_init;
+    local: *;
+};

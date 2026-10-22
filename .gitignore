@@ -19,3 +19,6 @@ keystore.properties
 # Hermes desktop attachments
 .hermes/
 .worktrees/
+
+# Standalone OS4 build products
+os4/out/
