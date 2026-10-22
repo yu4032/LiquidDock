@@ -201,7 +201,8 @@ private fun LiquidDockSettings(
     }
 
     ModernSettingsScaffold(
-        title = if (searchOpen) "搜索设置" else stringResource(visiblePage.titleRes),
+        title = if (searchOpen) "搜索设置" else stringResource(visiblePage.titleRes) +
+            if (availability.status(visiblePage) == PagePortState.TESTING) " · 实验中" else "",
         glassEnabled = uiGlassEnabled,
         showBack = searchOpen || !root,
         backLabel = stringResource(R.string.action_back),
@@ -568,7 +569,7 @@ private fun HomePage(
         }
         if (os4Launcher) {
             item {
-                PageHeader("", "HyperOS 4 桌面功能正在独立移植。未验收的项目置灰；系统界面、安全中心与第三方应用设置保持可用。")
+                PageHeader("", "HyperOS 4：实验中页面可进入调整，用于后续真机移植测试，但目前没有对应 OS4 Hook。尚未开展的页面置灰；系统界面及第三方应用设置正常使用。")
             }
         }
         item { ModernSectionLabel("快捷入口") }
@@ -588,12 +589,15 @@ private fun HomePage(
                 modifier = Modifier.padding(start = 14.dp, top = 4.dp, end = 14.dp),
             ) {
                 Text(
-                    text = if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
+                    text = if (os4Launcher) "LiquidDock4 开发模式" else
+                        if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = if (masterEnabled) {
+                    text = if (os4Launcher) {
+                        "实验页面仅供测试配置界面，尚不代表 OS4 功能生效；其他应用的独立 Hook 保持原有逻辑。"
+                    } else if (masterEnabled) {
                         "可即时生效的外观设置会立即更新；需要重启的项目会在说明中明确标注。"
                     } else {
                         "LiquidDock 已暂停，已保存的设置不会丢失。"

@@ -6,25 +6,37 @@ import android.os.Build
 import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
- * Presentation capability policy for the HyperOS 4 native/AOT Launcher.
+ * OS4 GUI release status is not the same as OS4 native-hook eligibility.
  *
- * This is intentionally distinct from binary compatibility: identifying an OS4
- * Launcher means we must hide unsupported pages, not that a native hook can run.
- * Add Launcher pages only after an OS4 backend implementation and device-level
- * behavior verification, never merely after a successful Gradle build.
+ * READY       - independent SystemUI/third-party/GUI behavior or a hub
+ * TESTING     - can be opened and configured during the OS4 port, not validated
+ * UNAVAILABLE - not being ported yet: visible, grayed out, and non-clickable
+ *
+ * The TESTING classification deliberately does not authorize native injection.
+ * Promote to READY only after OS4 device-level functional acceptance.
  */
-internal class SettingsAvailability(private val os4Launcher: Boolean) {
-    fun allows(page: Page): Boolean = !os4Launcher || page in OS4_AVAILABLE_PAGES
+internal enum class PagePortState {
+    READY, TESTING, UNAVAILABLE,
+}
 
+internal class SettingsAvailability(private val os4Launcher: Boolean) {
+    fun status(page: Page): PagePortState = when {
+        !os4Launcher -> PagePortState.READY
+        page in OS4_READY_PAGES -> PagePortState.READY
+        page in OS4_TESTING_PAGES -> PagePortState.TESTING
+        else -> PagePortState.UNAVAILABLE
+    }
+
+    fun allows(page: Page): Boolean = status(page) != PagePortState.UNAVAILABLE
     fun isOs4Launcher(): Boolean = os4Launcher
 
     companion object {
-        // Pages here are app GUI, non-Launcher processes, or mixed hubs with
-        // independently guarded Launcher-specific children.
-        private val OS4_AVAILABLE_PAGES = setOf(
+        // No Launcher AOT hook is counted as production-ready at this stage.
+        // Hub pages are accessible because unsupported child destinations are
+        // separately classified; independent process hooks need no port.
+        private val OS4_READY_PAGES = setOf(
             Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub,
             Page.ThemePalette, Page.Data, Page.About,
-            Page.Liquid, Page.GlassEdge,
             Page.GlassComponents, Page.GlassMenus,
             Page.HandleMenuCustomization, Page.HandleMenuAll, Page.HandleMenuEdge,
             Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.GboardEdge,
@@ -32,17 +44,23 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.Animation, Page.AnimationPopups, Page.AnimationSystem, Page.AnimationGui,
         )
 
-        /** Detect the Rust/Dart AOT Launcher family, including unknown OS4 builds. */
+        // Available for iterative GUI/port testing, but they are not claims of
+        // functional OS4 support. The native bootstrap currently installs no hooks.
+        // Keep the set narrow; enroll other pages as their implementation begins.
+        private val OS4_TESTING_PAGES = setOf(
+            Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
+            Page.Dock, Page.DockBehavior, Page.DockGeometry,
+            Page.Liquid, Page.LiquidMaterial, Page.LiquidRefraction,
+            Page.LiquidColor, Page.LiquidLighting, Page.LiquidShadow,
+            Page.LiquidSampling, Page.GlassEdge,
+        )
+
+        /** Detect AOT desktop independently of its build number (unknown builds fail closed). */
         fun detect(context: Context): SettingsAvailability {
             if (Build.VERSION.SDK_INT < 36) return SettingsAvailability(false)
             val isAot = runCatching {
                 val info = context.packageManager.getApplicationInfo("com.miui.home", 0)
-                val version = context.packageManager
-                    .getPackageInfo("com.miui.home", 0).versionName.orEmpty()
-                // The research build has hasCode=false and RELEASE-8.* naming.
-                // Unknown AOT builds must fail closed in the UI as well.
-                (info.flags and ApplicationInfo.FLAG_HAS_CODE) == 0 &&
-                    (version.startsWith("RELEASE-8.") || version.isBlank())
+                (info.flags and ApplicationInfo.FLAG_HAS_CODE) == 0
             }.getOrDefault(false)
             return SettingsAvailability(isAot)
         }

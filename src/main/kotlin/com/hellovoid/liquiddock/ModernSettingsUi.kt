@@ -355,7 +355,8 @@ internal fun ModernFeatureCard(
     modifier: Modifier = Modifier,
     page: Page? = null,
 ) {
-    val available = page == null || LocalSettingsAvailability.current.allows(page)
+    val state = page?.let(LocalSettingsAvailability.current::status) ?: PagePortState.READY
+    val available = state != PagePortState.UNAVAILABLE
     val onSurface = MiuixTheme.colorScheme.onSurface
     ModernSurface(
         modifier = modifier.alpha(if (available) 1f else 0.42f),
@@ -367,7 +368,7 @@ internal fun ModernFeatureCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = title,
+                    text = if (state == PagePortState.TESTING) "$title · 实验中" else title,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = onSurface,
@@ -375,7 +376,11 @@ internal fun ModernFeatureCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = if (available) summary else "尚未移植 · HyperOS 4",
+                    text = when (state) {
+                        PagePortState.READY -> summary
+                        PagePortState.TESTING -> "测试入口 · OS4 Hook 尚未接通"
+                        PagePortState.UNAVAILABLE -> "尚未移植 · HyperOS 4"
+                    },
                     modifier = Modifier.padding(top = 5.dp),
                     fontSize = 12.sp,
                     color = onSurface.copy(alpha = 0.62f),
@@ -506,11 +511,15 @@ internal fun ArrowPreference(
     targetPage: Page? = null,
     onClick: () -> Unit,
 ) {
-    val available = targetPage == null || LocalSettingsAvailability.current.allows(targetPage)
-    val effectiveEnabled = enabled && available
+    val state = targetPage?.let(LocalSettingsAvailability.current::status) ?: PagePortState.READY
+    val effectiveEnabled = enabled && state != PagePortState.UNAVAILABLE
     BasicComponent(
-        title = title,
-        summary = if (available) summary else "尚未移植 · HyperOS 4",
+        title = if (state == PagePortState.TESTING) "$title · 实验中" else title,
+        summary = when (state) {
+            PagePortState.READY -> summary
+            PagePortState.TESTING -> "测试入口 · OS4 Hook 尚未接通"
+            PagePortState.UNAVAILABLE -> "尚未移植 · HyperOS 4"
+        },
         enabled = effectiveEnabled,
         insideMargin = insideMargin,
         endActions = {
