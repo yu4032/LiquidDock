@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Portable out-of-tree build for the read-only OS4 bootstrap.
+# Portable out-of-tree build for the attested OS4 native backend.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
@@ -17,5 +17,5 @@ mkdir -p "$ROOT/os4/out"
   -shared -Wl,-z,now -Wl,--no-undefined -Wl,-z,max-page-size=16384 \
   -Wl,--version-script="$ROOT/os4/native/exports.map" \
   "$ROOT/os4/native/native_entry.c" "$ROOT/os4/native/process_gate.c" \
-  -llog -o "$ROOT/os4/out/libliquiddock4.so"
-echo "Built read-only bootstrap: os4/out/libliquiddock4.so"
+  -llog -ldl -o "$ROOT/os4/out/libliquiddock4.so"
+echo "Built OS4 native backend: os4/out/libliquiddock4.so"

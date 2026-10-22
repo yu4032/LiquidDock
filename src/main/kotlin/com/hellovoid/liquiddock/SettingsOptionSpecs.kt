@@ -144,7 +144,7 @@ internal val launcher450IconSizeSpec = IntSpec(
 
 internal val gridDimensionSpecs = listOf(
     IntSpec(ConfigSchema.Grid.COLUMNS, "横屏列数", "列", summary = "2–10 列；竖屏自动交换为行数"),
-    IntSpec(ConfigSchema.Grid.ROWS, "横屏行数", "行", summary = "2–6 行；竖屏自动交换为列数"),
+    IntSpec(ConfigSchema.Grid.ROWS, "横屏行数", "行", summary = "2–10 行；竖屏自动交换为列数"),
 )
 
 internal val gridSpecs = listOf(

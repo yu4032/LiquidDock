@@ -95,6 +95,43 @@ LSPosed configuration were copied to:
 
 That directory is device-local recovery data and is not committed.
 
+## Native grid acceptance
+
+The 8583 symbol table resolves the relevant count authority to:
+
+```text
+GridConfig.calGridSize                       0x199b6a4 / 7372
+GridController._filterActiveGridConfig       0x8d26c0  / 728
+PadRowColHandler.handle                      0x1a88188 / 344
+CellLayoutGetxController.changeCellCount     0xa523cc  / 932
+```
+
+The native backend pins the complete 344-byte `PadRowColHandler.handle` body and
+hooks its `+0x80` row/column substitution window. On this portrait display the
+observed mapping was:
+
+```text
+config 7x4   -> raw(cols=4,rows=6) -> final(cols=10,rows=4) when 4x10 is set
+config 10x10 -> raw(cols=4,rows=6) -> final(cols=10,rows=10)
+```
+
+Final verified full-reboot log:
+
+```text
+20.344 native_init enter pid=5844
+20.345 grid config 10x10 source=/data/user_de/.../liquiddock-native-early.conf
+20.352 grid repack before load 10x10 moved=0
+20.695 PadRowColHandler count authority installed
+21.354 PadRowCol calls=32 raw(cols=4,rows=6) final(cols=10,rows=10)
+```
+
+`sys.boot_completed=1`, `ro.build.characteristics=tablet`, Launcher focus and a
+stable PID were confirmed. The device owner accepted the resulting 10x10
+layout. No tombstone was produced.
+
+The configured range is `2..10` columns by `2..10` rows. Rows above 10 fail
+closed in both the GUI publisher and native parser.
+
 ## Guardrail
 
 Identity matching authorizes further verification only. It does not authorize

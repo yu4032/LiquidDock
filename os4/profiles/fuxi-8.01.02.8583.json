@@ -1,0 +1,23 @@
+{
+  "elf_sha256": "6f5274f435cc07aab165ce5315d1d35afab559a659afd6200379d309c9d08b91",
+  "targets": [
+    {
+      "name": "PadRowColHandler.handle",
+      "vaddr": "0x1a88188",
+      "size": 344,
+      "sha256": "c61ba5de6aa7826aeed12d1c9417783ce753eef71f0a42dd86c2b5105020a6b3"
+    },
+    {
+      "name": "GridController._filterActiveGridConfig",
+      "vaddr": "0x8d26c0",
+      "size": 728,
+      "sha256": "ad87ec93e2c82a8dd3f1691ce89b5a7676a36681ce34b7793f8c1e02c86a6a9a"
+    },
+    {
+      "name": "CellLayoutGetxController.changeCellCount",
+      "vaddr": "0xa523cc",
+      "size": 932,
+      "sha256": "33596d4986041ebe577c0bdf2c4d3d5b95479da62f0d5d30582c91faa78f6084"
+    }
+  ]
+}

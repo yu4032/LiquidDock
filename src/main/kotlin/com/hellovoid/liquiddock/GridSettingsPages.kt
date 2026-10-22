@@ -63,7 +63,7 @@ internal fun GridPage(
                     prefs,
                     ConfigSchema.Grid.ENABLED,
                     "自由主界面网格",
-                    "允许 2×2 到 10×6 的工作区布局；全屏居中、分屏跟随系统 pane 对齐；重启桌面生效",
+                    "允许 2×2 到 10×10 的工作区布局；全屏居中、分屏跟随系统 pane 对齐；重启桌面生效",
                     masterEnabled,
                 ) { customGrid = it }
             }

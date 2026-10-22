@@ -1,10 +1,9 @@
 # LiquidDock4 / HyperOS 4 — controlled rewrite
 
-This branch intentionally does **not** incorporate the research repository's
-`port-source/` or ship its native AOT hooks. It uses
-`yu4032/liquiddock-os4-research` strictly as observations and test evidence.
-Previous prototype code has been removed from this branch's file tree and
-history; no broad copy remains.
+This branch keeps the OS4 port isolated from the legacy Launcher Java backend.
+It uses `yu4032/liquiddock-os4-research` as evidence, but only reintroduces
+components that have been re-targeted to the active vendor build and verified
+on the device.
 
 ## Baseline and isolation
 
@@ -20,11 +19,19 @@ history; no broad copy remains.
 - The legacy Launcher 4.50 Java backend is bypassed for every Android 16+ AOT
   Launcher, including unknown builds. OS4 settings pages remain available, but
   unsupported native capabilities fail closed.
-- `os4/native` builds a standalone **read-only** native injection bootstrap.
-  It neither hooks functions nor writes Launcher state.
-- No device-mode spoofing, root configuration publishing, or launcher DB rewrites
-  have been adopted. OS4 capability activation is postponed until compatibility
-  and rollback checks exist.
+- `os4/native` now installs one minimal AOT hook at
+  `PadRowColHandler.handle+0x80`. It preserves the original Dart frame/ABI and
+  replaces only the validated row/column registers before the vendor tagging.
+- The complete `PadRowColHandler.handle` body is pinned to the exact 8583
+  function. The ELF load bias is cross-checked before installation.
+- A versioned `grid_cols/grid_rows/end` snapshot is published through the
+  Launcher mount namespace with a `/data/user_de` early-boot mirror.
+- Before layout load, workspace items are packed into the target grid in one
+  SQLite transaction. Overflow goes to the final page, then to a new page.
+- `2..10` columns by `2..10` rows are accepted. The 10x10 target was verified
+  on `fuxi`, including a full-system reboot.
+- Device-mode spoofing remains a separate KernelSU module and is never executed
+  by `native_init`.
 
 ## Rejected approaches from the research history
 
@@ -76,6 +83,9 @@ vendor build. No fingerprints are promoted from research notes without
 reverification. Passing disk attestation is necessary but not sufficient for
 runtime load-bias verification and calling-convention proofs.
 
+The verified fuxi/8583 profile is
+[`os4/profiles/fuxi-8.01.02.8583.json`](profiles/fuxi-8.01.02.8583.json).
+
 Example format (values intentionally omitted):
 
 ```json
@@ -99,6 +109,9 @@ cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
    os4/native/process_gate.c os4/tests/process_gate_test.c \
    -o /tmp/os4-process-gate-test
 /tmp/os4-process-gate-test
+cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
+   os4/tests/grid_conf_test.c -o /tmp/os4-grid-conf-test
+/tmp/os4-grid-conf-test
 python3 -m unittest discover -s os4/tests -p 'test_*.py' -v
 ./gradlew testDebugUnitTest assembleDebug
 ```
@@ -109,5 +122,27 @@ Optional Android NDK read-only bootstrap build:
 ANDROID_NDK_HOME=/path/to/android-ndk bash os4/native/build.sh
 ```
 
-This does **not** produce an installable OS4 release APK yet. No research
-binary, device secrets, or private debug artifacts are committed.
+Package the native backend into the signed debug APK after Gradle builds it:
+
+```sh
+python3 os4/tools/package_native.py \
+  build/outputs/apk/debug/LiquidDock-debug.apk \
+  os4/out/libliquiddock4.so \
+  os4/out/LiquidDock-os4-unsigned.apk
+```
+
+The script strips the old signature, inserts
+`lib/arm64-v8a/libliquiddock4.so`, writes
+`META-INF/xposed/native_init.list`, and enforces 16 KiB ZIP alignment. Sign the
+result with the normal Android signing key afterward.
+
+The development environment is WSL. With the local Android SDK view:
+
+```sh
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+ANDROID_HOME=/home/angle/android-sdk \
+GRADLE_USER_HOME=/mnt/c/Users/angle/.gradle \
+./gradlew testDebugUnitTest assembleDebug
+```
+
+No vendor APK/SO, device secrets, or private debug artifacts are committed.

@@ -71,7 +71,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> COLUMNS = integer(
                 "grid_columns", 8, 8, 8, 2, 10, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ROWS = integer(
-                "grid_rows", 4, 4, 4, 2, 6, ConfigKey.ExportMode.ALWAYS);
+                "grid_rows", 4, 4, 4, 2, 10, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> ICON_SIZE_ENABLED = bool(
                 "launcher450_icon_size_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ICON_SIZE_PERCENT = integer(

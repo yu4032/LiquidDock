@@ -90,7 +90,7 @@ final class LiquidDockConfig {
             columns = Math.max(2, Math.min(10, c.i(
                     ConfigSchema.Grid.COLUMNS.name(),
                     ConfigSchema.Grid.COLUMNS.runtimeFallback())));
-            rows = Math.max(2, Math.min(6, c.i(
+            rows = Math.max(2, Math.min(10, c.i(
                     ConfigSchema.Grid.ROWS.name(),
                     ConfigSchema.Grid.ROWS.runtimeFallback())));
             iconSizeEnabled = c.b(ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),

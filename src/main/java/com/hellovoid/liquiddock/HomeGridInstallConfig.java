@@ -101,7 +101,7 @@ final class HomeGridInstallConfig {
             boolean widgetHorizontalStretch) {
         this.enabled = enabled;
         this.columns = Math.max(2, Math.min(10, columns));
-        this.rows = Math.max(2, Math.min(6, rows));
+        this.rows = Math.max(2, Math.min(10, rows));
         this.landscape = new Orientation(
                 landscapeLeft, landscapeRight, landscapeTop, landscapeBottom,
                 landscapeRowGap, landscapeIndicatorY);
