@@ -181,61 +181,61 @@ internal fun GlassEdgeSettingsPage(
             item(key = "scope-dock") {
                 SettingsCard {
                     ArrowPreference("Dock 本体", "独立调节 Dock 外阴影、颜色与光照",
-                        enabled = active, onClick = { open(Page.DockEdge) })
+                        enabled = active, targetPage = Page.DockEdge, onClick = { open(Page.DockEdge) })
                 }
             }
             item(key = "scope-icon") {
                 SettingsCard {
                     ArrowPreference("桌面图标", "图标和多任务胶囊",
-                        enabled = active, onClick = { open(Page.IconEdge) })
+                        enabled = active, targetPage = Page.IconEdge, onClick = { open(Page.IconEdge) })
                 }
             }
             item(key = "scope-widget") {
                 SettingsCard {
                     ArrowPreference("小组件", "宽大玻璃表面的柔和光学变化",
-                        enabled = active, onClick = { open(Page.WidgetEdge) })
+                        enabled = active, targetPage = Page.WidgetEdge, onClick = { open(Page.WidgetEdge) })
                 }
             }
             item(key = "scope-folder") {
                 SettingsCard {
                     ArrowPreference("文件夹", "小文件夹与展开文件夹",
-                        enabled = active, onClick = { open(Page.FolderEdge) })
+                        enabled = active, targetPage = Page.FolderEdge, onClick = { open(Page.FolderEdge) })
                 }
             }
             item(key = "scope-popup") {
                 SettingsCard {
                     ArrowPreference("快捷菜单", "长按应用菜单",
-                        enabled = active, onClick = { open(Page.PopupEdge) })
+                        enabled = active, targetPage = Page.PopupEdge, onClick = { open(Page.PopupEdge) })
                 }
             }
             item(key = "scope-handle") {
                 SettingsCard {
                     ArrowPreference("顶部菜单", "独立 Prismal 光照和阴影",
-                        enabled = active, onClick = { open(Page.HandleMenuEdge) })
+                        enabled = active, targetPage = Page.HandleMenuEdge, onClick = { open(Page.HandleMenuEdge) })
                 }
             }
             item(key = "scope-dialog") {
                 SettingsCard {
                     ArrowPreference("对话弹窗", "独立 Prismal 光照和阴影",
-                        enabled = active, onClick = { open(Page.DialogEdge) })
+                        enabled = active, targetPage = Page.DialogEdge, onClick = { open(Page.DialogEdge) })
                 }
             }
             item(key = "scope-gboard") {
                 SettingsCard {
                     ArrowPreference("Gboard", "浮层玻璃",
-                        enabled = active, onClick = { open(Page.GboardEdge) })
+                        enabled = active, targetPage = Page.GboardEdge, onClick = { open(Page.GboardEdge) })
                 }
             }
             item(key = "scope-searchbox") {
                 SettingsCard {
                     ArrowPreference("搜索框", "系统搜索框",
-                        enabled = active, onClick = { open(Page.SearchboxEdge) })
+                        enabled = active, targetPage = Page.SearchboxEdge, onClick = { open(Page.SearchboxEdge) })
                 }
             }
             item(key = "scope-security") {
                 SettingsCard {
                     ArrowPreference("安全中心", "独立 Prismal 光照和阴影",
-                        enabled = active, onClick = { open(Page.SecurityCenterEdge) })
+                        enabled = active, targetPage = Page.SecurityCenterEdge, onClick = { open(Page.SecurityCenterEdge) })
                 }
             }
         }

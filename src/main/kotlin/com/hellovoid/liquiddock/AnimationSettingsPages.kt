@@ -81,9 +81,14 @@ internal fun AnimationPopupsPage(
     SettingsList(
         padding,
         stringResource(R.string.page_animation_popups),
-        "调整快捷菜单与安全中心玻璃的退出渐隐。",
+        if (LocalSettingsAvailability.current.isOs4Launcher())
+            "安全中心退出动画保持可用；桌面快捷菜单动画尚未移植。"
+        else "调整快捷菜单与安全中心玻璃的退出渐隐。",
     ) {
-        IntSetting(prefs, animationShortcutDismissSpec, masterEnabled)
+        IntSetting(
+            prefs, animationShortcutDismissSpec,
+            masterEnabled && !LocalSettingsAvailability.current.isOs4Launcher(),
+        )
         ModernListDivider()
         IntSetting(prefs, animationSecurityCenterExitSpec, masterEnabled)
     }

@@ -51,7 +51,10 @@ internal fun SecurityCenterSidebarPage(
         item { SmallTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
         item {
             SettingsCard {
-                SideSlideHoldSetting(prefs, masterEnabled)
+                // The Launcher 4.50 gesture interception does not run in OS4's AOT process.
+                SideSlideHoldSetting(
+                    prefs, masterEnabled && !LocalSettingsAvailability.current.isOs4Launcher(),
+                )
             }
         }
         item { SmallTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }

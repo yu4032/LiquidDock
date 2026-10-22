@@ -70,6 +70,7 @@ internal fun LiquidPage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }
@@ -78,6 +79,7 @@ internal fun LiquidPage(
                 title = stringResource(R.string.page_glass_components),
                 summary = "管理图标、小组件、文件夹与菜单玻璃",
                 onClick = { open(Page.GlassComponents) },
+                page = Page.GlassComponents,
                 modifier = Modifier.padding(horizontal = 14.dp),
             )
         }
@@ -545,6 +547,7 @@ internal fun GlassMenusPage(
                     title = stringResource(R.string.page_handle_menu),
                     summary = "应用顶部控制器的菜单玻璃、颜色、模糊与独立光学参数",
                     enabled = masterEnabled && liquidEnabled,
+                    targetPage = Page.HandleMenuCustomization,
                     onClick = { open(Page.HandleMenuCustomization) },
                 )
             }
@@ -555,6 +558,7 @@ internal fun GlassMenusPage(
                     title = stringResource(R.string.page_shortcut_popup),
                     summary = "长按快捷菜单的玻璃、深色模式、模糊、颜色及独立光学参数",
                     enabled = masterEnabled && liquidEnabled,
+                    targetPage = Page.ShortcutPopupCustomization,
                     onClick = { open(Page.ShortcutPopupCustomization) },
                 )
             }
@@ -565,6 +569,7 @@ internal fun GlassMenusPage(
                     title = stringResource(R.string.page_dialog_customization),
                     summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
                     enabled = masterEnabled && liquidEnabled,
+                    targetPage = Page.DialogCustomization,
                     onClick = { open(Page.DialogCustomization) },
                 )
             }

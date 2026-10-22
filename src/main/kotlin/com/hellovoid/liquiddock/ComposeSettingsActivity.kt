@@ -165,11 +165,12 @@ private fun LiquidDockSettings(
     }
 
     fun navigateBack() {
-        val previous = navigationStack.asReversed()
-            .mapNotNull { runCatching { Page.valueOf(it) }.getOrNull() }
-            .firstOrNull(availability::allows)
-        navigationStack = arrayListOf()
-        page = previous ?: Page.Home
+        val index = navigationStack.indexOfLast { name ->
+            runCatching { availability.allows(Page.valueOf(name)) }.getOrDefault(false)
+        }
+        val previous = if (index >= 0) Page.valueOf(navigationStack[index]) else Page.Home
+        navigationStack = ArrayList(navigationStack.take(index.coerceAtLeast(0)))
+        page = previous
     }
 
     fun selectRoot(target: Page) {
@@ -564,6 +565,11 @@ private fun HomePage(
                 ) { onMasterChanged(it) }
             }
         }
+        if (LocalSettingsAvailability.current.isOs4Launcher()) {
+            item {
+                PageHeader("", "HyperOS 4 桌面功能正在独立移植。未验收的项目置灰；系统界面、安全中心与第三方应用设置保持可用。")
+            }
+        }
         item { ModernSectionLabel("快捷入口") }
         overviewEntries.forEach { entry ->
             item {
@@ -572,6 +578,7 @@ private fun HomePage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }
@@ -621,6 +628,7 @@ internal fun HubPage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }
@@ -660,6 +668,7 @@ private fun MoreHubPage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }

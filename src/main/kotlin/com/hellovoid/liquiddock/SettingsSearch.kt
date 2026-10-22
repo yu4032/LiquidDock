@@ -249,6 +249,7 @@ internal fun SettingsSearchScreen(
                     ModernFeatureCard(
                         title = result.title,
                         summary = result.description,
+                        page = result.page,
                         modifier = Modifier.padding(horizontal = 14.dp),
                         onClick = {
                             keyboard?.hide()
