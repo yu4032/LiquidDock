@@ -31,13 +31,18 @@ jobs:
           /tmp/os4-sha256-test
       - name: Offline AOT binary identity and target checks
         run: python3 -m unittest discover -s os4/tests -p 'test_*.py' -v
-      - uses: android-actions/setup-android@v3
       - name: Compile actual ARM64 native backend
         run: |
           set -euo pipefail
-          sdkmanager --install "ndk;28.2.13676358" >/dev/null
-          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash os4/native/build.sh
-          "$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws os4/out/libliquiddock4.so | grep ' native_init$'
+          NDK="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -1 || true)"
+          if [[ -z "$NDK" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+            [[ -n "$SDKMANAGER" ]] || { echo 'Android SDK manager unavailable' >&2; exit 1; }
+            "$SDKMANAGER" --install "ndk;28.2.13676358" >/dev/null
+            NDK="$ANDROID_HOME/ndk/28.2.13676358"
+          fi
+          ANDROID_NDK_HOME="$NDK" bash os4/native/build.sh
+          "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws os4/out/libliquiddock4.so | grep ' native_init$'
       - name: Android and compatibility policy tests
         run: |
           chmod +x gradlew
