@@ -1,5 +1,6 @@
 #include "native_api.h"
 #include "process_gate.h"
+#include "sha256_region.h"
 
 #include <android/log.h>
 #include <fcntl.h>
@@ -150,6 +151,25 @@ static void install_grid_hook(const struct native_api *api)
                sizeof ld_pad_rowcol_words) != 0) {
         LOGE("PadRowColHandler 8583 full-body fingerprint mismatch");
         ld_blog("PadRowColHandler 8583 full-body fingerprint mismatch");
+        pthread_mutex_unlock(&g_install_lock);
+        return;
+    }
+
+    // A function-body match alone does not establish the surrounding ELF or
+    // database schema identity. Hash the *whole* 8583 libapp.so before changes.
+    static const unsigned char expected_sha256[32] = {
+        0x6f,0x52,0x74,0xf4,0x35,0xcc,0x07,0xaa,
+        0xb1,0x65,0xce,0x53,0x15,0xd1,0xd3,0x5a,
+        0xfa,0xb5,0x59,0xa6,0x59,0xaf,0xd6,0x20,
+        0x03,0x79,0xd3,0x09,0xc9,0xd0,0x8b,0x91
+    };
+    char apk_path[256];
+    unsigned char observed_sha256[32];
+    if (!ld_apk_real_path("MiuiHome.apk", apk_path, sizeof apk_path) ||
+        !ld_sha256_region(apk_path, lib.entry_off, 29983600u, observed_sha256) ||
+        memcmp(expected_sha256, observed_sha256, sizeof expected_sha256) != 0) {
+        LOGE("8583 whole-ELF SHA-256 mismatch: refusing OS4 hook and DB repack");
+        ld_blog("8583 whole-ELF SHA-256 mismatch");
         pthread_mutex_unlock(&g_install_lock);
         return;
     }

@@ -23,7 +23,8 @@ on the device.
   `PadRowColHandler.handle+0x80`. It preserves the original Dart frame/ABI and
   replaces only the validated row/column registers before the vendor tagging.
 - The complete `PadRowColHandler.handle` body is pinned to the exact 8583
-  function. The ELF load bias is cross-checked before installation.
+  function; the complete on-disk 8583 `libapp.so` SHA-256 and ELF load bias
+  are checked before **any hook installation or database mutation**.
 - A versioned `grid_cols/grid_rows/end` snapshot is published through the
   Launcher mount namespace with a `/data/user_de` early-boot mirror.
 - Before layout load, workspace items are packed into the target grid in one
