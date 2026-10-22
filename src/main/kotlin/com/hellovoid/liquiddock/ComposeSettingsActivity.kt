@@ -546,6 +546,7 @@ private fun HomePage(
     onMasterChanged: (Boolean) -> Unit,
     open: (Page) -> Unit,
 ) {
+    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -565,7 +566,7 @@ private fun HomePage(
                 ) { onMasterChanged(it) }
             }
         }
-        if (LocalSettingsAvailability.current.isOs4Launcher()) {
+        if (os4Launcher) {
             item {
                 PageHeader("", "HyperOS 4 桌面功能正在独立移植。未验收的项目置灰；系统界面、安全中心与第三方应用设置保持可用。")
             }
