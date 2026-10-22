@@ -95,7 +95,10 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                            bit4=grid_cols bit5=grid_rows bit6=end */
     int ok = 0;
 
-    if (buf && len > 0 && len <= LD_GRID_CONF_MAX_BYTES) {
+    // A binary NUL could make strcmp/strchr accept only a prefix of an
+    // otherwise invalid line. The config is a strict LF-delimited text protocol.
+    if (buf && len > 0 && len <= LD_GRID_CONF_MAX_BYTES &&
+        memchr(buf, '\0', len) == NULL) {
         const char *p = buf, *end = buf + len;
         int done = 0, bad = 0;
         while (p < end && !bad && !done) {

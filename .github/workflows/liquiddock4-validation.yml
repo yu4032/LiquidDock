@@ -2,6 +2,8 @@ name: LiquidDock4 isolated foundation
 
 on:
   push:
+    branches: [liquiddock4, fix/os4-27d78f8-audit]
+  pull_request:
     branches: [liquiddock4]
   workflow_dispatch:
 
@@ -24,8 +26,23 @@ jobs:
           cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
             os4/tests/grid_conf_test.c -o /tmp/os4-grid-conf-test
           /tmp/os4-grid-conf-test
+          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
+            os4/tests/sha256_test.c -o /tmp/os4-sha256-test
+          /tmp/os4-sha256-test
       - name: Offline AOT binary identity and target checks
         run: python3 -m unittest discover -s os4/tests -p 'test_*.py' -v
+      - name: Compile actual ARM64 native backend
+        run: |
+          set -euo pipefail
+          NDK="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -1 || true)"
+          if [[ -z "$NDK" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+            [[ -n "$SDKMANAGER" ]] || { echo 'Android SDK manager unavailable' >&2; exit 1; }
+            "$SDKMANAGER" --install "ndk;28.2.13676358" >/dev/null
+            NDK="$ANDROID_HOME/ndk/28.2.13676358"
+          fi
+          ANDROID_NDK_HOME="$NDK" bash os4/native/build.sh
+          "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -Ws os4/out/libliquiddock4.so | grep ' native_init$'
       - name: Android and compatibility policy tests
         run: |
           chmod +x gradlew

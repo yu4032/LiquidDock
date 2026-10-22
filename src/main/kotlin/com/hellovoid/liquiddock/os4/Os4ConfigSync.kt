@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock.os4
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.os.Build
 import android.util.Log
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
@@ -30,10 +32,26 @@ object Os4ConfigSync {
     }
 
     private fun request(context: Context, reason: String) {
+        // Root publishing must never run on legacy or unknown OS4 launchers.
+        if (!supportsPublisher(context)) return
         worker.execute {
             runCatching { publishNow(context, reason) }
                 .onFailure { Log.e(TAG, "[$reason] publish failed", it) }
         }
+    }
+
+    private fun supportsPublisher(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT != Os4LauncherIdentityPolicy.TARGET_SDK) return false
+        if (!Build.SUPPORTED_ABIS.contains("arm64-v8a")) return false
+        return runCatching {
+            val info = context.packageManager.getApplicationInfo("com.miui.home", 0)
+            val version = context.packageManager
+                .getPackageInfo("com.miui.home", 0).versionName
+            Os4LauncherIdentityPolicy.matches(
+                "com.miui.home", version, Build.VERSION.SDK_INT,
+                (info.flags and ApplicationInfo.FLAG_HAS_CODE) != 0, true,
+            )
+        }.getOrDefault(false)
     }
 
     private fun publishNow(context: Context, reason: String) {
