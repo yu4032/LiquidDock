@@ -28,6 +28,7 @@ jobs:
           /tmp/os4-grid-conf-test
       - name: Offline AOT binary identity and target checks
         run: python3 -m unittest discover -s os4/tests -p 'test_*.py' -v
+      - uses: android-actions/setup-android@v3
       - name: Compile actual ARM64 native backend
         run: |
           set -euo pipefail
