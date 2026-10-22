@@ -30,6 +30,14 @@ on the device.
   SQLite transaction. Overflow goes to the final page, then to a new page.
 - `2..10` columns by `2..10` rows are accepted. The 10x10 target was verified
   on `fuxi`, including a full-system reboot.
+- OS4's hot-rotation metrics path compares only the display's shorter edge.
+  On a phone whose portrait and landscape widths share that edge, rotation
+  keeps the old row/column domain even when the configured grid is rectangular.
+- For rectangular grids, the Java module therefore installs a debounced
+  `Activity.onConfigurationChanged` hook. After the orientation settles, it
+  calls `Activity.recreate()` in the same Launcher process. It does not kill or
+  restart `com.miui.home`; the PID remains unchanged. The 4x8 test grid was
+  verified across repeated portrait/landscape rotations and a full reboot.
 - Device-mode spoofing remains a separate KernelSU module and is never executed
   by `native_init`.
 

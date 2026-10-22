@@ -142,7 +142,14 @@ public final class ModuleMain extends XposedModule {
             return;
         }
         if (!LAUNCHER_PACKAGE.equals(packageName)) return;
-        if (shouldBlockLegacyLauncherBackend(param)) return;
+        if (shouldBlockLegacyLauncherBackend(param)) {
+            try {
+                Os4RotationActivityReloadHook.install();
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][OS4Rotation] Activity reload hook unavailable", error);
+            }
+            return;
+        }
         try {
             initializeCurrentProfileIfEmpty();
             ClassLoader classLoader = param.getClassLoader();
