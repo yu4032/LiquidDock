@@ -24,7 +24,7 @@ int main(void)
         puts("FAIL: 10x11 accepted");
         return 1;
     }
-    const char corrupted[] = "grid_cols=10\\0junk\\ngrid_rows=10\\nend=1\\n";
+    const char corrupted[] = "grid_cols=10\0junk\ngrid_rows=10\nend=1\n";
     struct ld_grid_conf reject = {9, 9};
     if (ld_grid_conf_parse(corrupted, sizeof(corrupted) - 1, &reject) ||
         reject.cols != 0 || reject.rows != 0) {
