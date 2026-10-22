@@ -21,6 +21,8 @@ jobs:
             os4/native/process_gate.c os4/tests/process_gate_test.c \
             -o /tmp/os4-process-gate-test
           /tmp/os4-process-gate-test
+      - name: Offline AOT binary identity and target checks
+        run: python3 -m unittest discover -s os4/tests -p 'test_*.py' -v
       - name: Android and compatibility policy tests
         run: |
           chmod +x gradlew

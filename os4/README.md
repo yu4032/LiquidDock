@@ -59,6 +59,33 @@ history; no broad copy remains.
 6. **Feature parity**: folder, widgets, animations, Recents and settings one
    capability at a time; preserve stock presentation when unsupported.
 
+## Offline target attestation
+
+`os4/tools/attest_elf.py` is a new, source-independent verifier for a
+**locally extracted** ARM64 `libapp.so`. It refuses mismatched full ELF hashes,
+unmapped or non-executable target ranges, and mismatched **whole-function**
+SHA-256 fingerprints. It deliberately does not generate or guess a trust
+profile: a target profile must be independently established from the exact
+vendor build. No fingerprints are promoted from research notes without
+reverification. Passing disk attestation is necessary but not sufficient for
+runtime load-bias verification and calling-convention proofs.
+
+Example format (values intentionally omitted):
+
+```json
+{
+  "elf_sha256": "<exact 64-hex SHA-256>",
+  "targets": [
+    {
+      "name": "independently-verified-function",
+      "vaddr": "0x...",
+      "size": 128,
+      "sha256": "<exact whole-function SHA-256>"
+    }
+  ]
+}
+```
+
 ## Test
 
 ```sh
@@ -66,6 +93,7 @@ cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
    os4/native/process_gate.c os4/tests/process_gate_test.c \
    -o /tmp/os4-process-gate-test
 /tmp/os4-process-gate-test
+python3 -m unittest discover -s os4/tests -p 'test_*.py' -v
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
