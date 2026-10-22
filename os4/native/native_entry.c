@@ -35,6 +35,10 @@ static volatile uintptr_t g_pad_pool __attribute__((used));
 static void *g_orig_pad_counts;
 static const struct native_api *g_api;
 static bool g_installed;
+static bool g_trace_started;
+static struct ld_grid_conf g_requested_grid;
+static pthread_mutex_t g_install_lock = PTHREAD_MUTEX_INITIALIZER;
+static void *trace_thread(void *unused);
 
 void ld_blog(const char *fmt, ...)
 {
@@ -68,31 +72,33 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_grid_rows, g_grid_cols,
 
 static void load_grid_config(void)
 {
-    struct ld_grid_conf conf;
+    struct ld_grid_conf conf = {0, 0};
     const char *source = LD_PRIMARY_CONF;
     int ok = ld_grid_conf_parse_file(LD_PRIMARY_CONF, &conf);
-    if (!ok && access(LD_EARLY_CONF, R_OK) == 0) {
+
+    // If CE is available, its file is authoritative even when empty,
+    // malformed, or absent. Never silently resurrect an older DE snapshot.
+    // The DE mirror is read only before CE storage can be accessed.
+    struct stat ce;
+    bool ce_available = stat("/data/user/0/com.miui.home/files", &ce) == 0 &&
+                        S_ISDIR(ce.st_mode);
+    if (!ok && !ce_available) {
         ok = ld_grid_conf_parse_file(LD_EARLY_CONF, &conf);
         source = LD_EARLY_CONF;
     }
-    if (!ok) {
-        g_grid_cols = 0;
-        g_grid_rows = 0;
-        LOGI("grid config rejected/missing; stock counts");
-        ld_blog("grid config rejected/missing; stock counts");
+
+    if (!ok || conf.cols == 0 || conf.rows == 0) {
+        g_requested_grid = (struct ld_grid_conf){0, 0};
+        LOGI("grid config rejected/disabled; stock counts");
+        ld_blog("grid config rejected/disabled; stock counts");
         return;
     }
-
-    g_grid_cols = conf.cols;
-    g_grid_rows = conf.rows;
-    LOGI("grid config %dx%d source=%s", conf.cols, conf.rows, source);
-    ld_blog("grid config %dx%d source=%s", conf.cols, conf.rows, source);
-    if (conf.cols > 0 && conf.rows > 0) {
-        int moved = ld_grid_db_repack(conf.cols, conf.rows);
-        LOGI("grid repack moved=%d", moved);
-        ld_blog("grid repack before load %dx%d moved=%d",
-                conf.cols, conf.rows, moved);
-    }
+    // Parsing alone has no side effects. Do not touch a Launcher database
+    // until the exact, executable Dart function body has been authenticated
+    // and its hook has been installed successfully.
+    g_requested_grid = conf;
+    LOGI("grid request %dx%d source=%s", conf.cols, conf.rows, source);
+    ld_blog("grid request %dx%d source=%s", conf.cols, conf.rows, source);
 }
 
 static bool executable_range(uintptr_t address, size_t size)
@@ -117,16 +123,23 @@ static bool executable_range(uintptr_t address, size_t size)
 
 static void install_grid_hook(const struct native_api *api)
 {
-    if (g_installed || !api || !api->hook) return;
+    if (!api || !api->hook || !g_requested_grid.cols || !g_requested_grid.rows)
+        return;
+    pthread_mutex_lock(&g_install_lock);
+    if (g_installed) {
+        pthread_mutex_unlock(&g_install_lock);
+        return;
+    }
 
     static ld_lib_info lib;
     if (!ld_resolve_lib("MiuiHome.apk", "lib/arm64-v8a/libapp.so", &lib)) {
-        LOGI("libapp.so not mapped yet");
+        pthread_mutex_unlock(&g_install_lock);
         return;
     }
     if (!ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
         LOGE("libapp.so identity cross-check failed");
         ld_blog("libapp.so identity cross-check failed");
+        pthread_mutex_unlock(&g_install_lock);
         return;
     }
 
@@ -137,6 +150,7 @@ static void install_grid_hook(const struct native_api *api)
                sizeof ld_pad_rowcol_words) != 0) {
         LOGE("PadRowColHandler 8583 full-body fingerprint mismatch");
         ld_blog("PadRowColHandler 8583 full-body fingerprint mismatch");
+        pthread_mutex_unlock(&g_install_lock);
         return;
     }
 
@@ -146,6 +160,7 @@ static void install_grid_hook(const struct native_api *api)
     if (result != 0 || !backup) {
         LOGE("PadRowColHandler hook failed result=%d backup=%p", result, backup);
         ld_blog("PadRowColHandler hook failed result=%d", result);
+        pthread_mutex_unlock(&g_install_lock);
         return;
     }
 
@@ -153,13 +168,41 @@ static void install_grid_hook(const struct native_api *api)
     g_installed = true;
     LOGI("PadRowColHandler count authority installed");
     ld_blog("PadRowColHandler count authority installed");
+
+    // Only now is it safe to modify Launcher state. The hook is active
+    // with both count overrides still at zero (stock pass-through).
+    int moved = ld_grid_db_repack(g_requested_grid.cols, g_requested_grid.rows);
+    if (moved < 0) {
+        LOGE("grid repack failed: keeping stock row/column counts");
+        ld_blog("grid repack failed: keeping stock counts");
+    } else {
+        // Activate atomically for the first layout call after DB consistency.
+        __atomic_store_n(&g_grid_rows, g_requested_grid.rows, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_grid_cols, g_requested_grid.cols, __ATOMIC_RELEASE);
+        LOGI("grid repack %dx%d moved=%d",
+             g_requested_grid.cols, g_requested_grid.rows, moved);
+        ld_blog("grid repack after attestation %dx%d moved=%d",
+                g_requested_grid.cols, g_requested_grid.rows, moved);
+    }
+    if (!g_trace_started) {
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, trace_thread, NULL) == 0) {
+            pthread_detach(thread);
+            g_trace_started = true;
+        }
+    }
+    pthread_mutex_unlock(&g_install_lock);
 }
 
 static void on_library_loaded(const char *name, void *handle)
 {
     (void)handle;
-    if (name && strstr(name, "libapp.so")) {
-        install_grid_hook(g_api);
+    if (name) {
+        size_t n = strlen(name);
+        if (n >= sizeof("libapp.so") - 1 &&
+            strcmp(name + n - (sizeof("libapp.so") - 1), "libapp.so") == 0) {
+            install_grid_hook(g_api);
+        }
     }
 }
 
@@ -188,8 +231,10 @@ static void *trace_thread(void *unused)
 __attribute__((visibility("default"), used))
 on_library_loaded_t native_init(struct native_api *api)
 {
-    ld_blog("native_init enter pid=%d", (int)getpid());
+    // The native module may be injected into other processes. No I/O before
+    // the process gate, including persistent boot diagnostics.
     if (!os4_is_launcher_process()) return NULL;
+    ld_blog("native_init enter pid=%d", (int)getpid());
     if (!api || api->version != 2 || !api->hook) {
         LOGE("unknown native injection ABI");
         return NULL;
@@ -198,9 +243,5 @@ on_library_loaded_t native_init(struct native_api *api)
     g_api = api;
     load_grid_config();
     install_grid_hook(api);
-    pthread_t thread;
-    if (pthread_create(&thread, NULL, trace_thread, NULL) == 0) {
-        pthread_detach(thread);
-    }
     return on_library_loaded;
 }
