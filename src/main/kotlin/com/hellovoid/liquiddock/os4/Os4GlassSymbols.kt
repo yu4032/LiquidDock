@@ -28,6 +28,12 @@ internal object Os4GlassSymbols {
         "BlurUtilities.isHyperMaterialSupported",
         "BlurUtilities.isMaterialDisabled",
     )
+    private val pipelineNames = listOf(
+        "_DockGlassWidgetState._buildLightGlassFilter",
+        "_DockGlassWidgetState._buildDarkGlassFilter",
+        "ImageFilterCompat.glass",
+        "GlassLightConfig.applyTo",
+    )
     @Volatile private var cached: Pair<String, String>? = null
 
     fun fromInstalledLauncher(context: Context): String? = runCatching {
@@ -97,9 +103,33 @@ internal object Os4GlassSymbols {
             hits.singleOrNull() ?: return null
         }
         if (found.map { pair -> pair.first }.distinct().size != 3) return null
-        return found.joinToString(",") { pair ->
+        fun format(pairs: List<Pair<Long, Long>>) = pairs.joinToString(",") { pair ->
             "0x" + pair.first.toString(16) + ":" + pair.second
         }
+        val gate = format(found)
+        val probes = pipelineNames.map { requested ->
+            val hits = mutableSetOf<Pair<Long, Long>>()
+            for (table in sections) {
+                if (table.type != 2L || table.link !in sections.indices ||
+                    table.entrySize != 24L) continue
+                val strings = sections[table.link]
+                if (strings.type != 3L || table.size / 24L > 200_000L) continue
+                for (i in 0 until (table.size / 24L).toInt()) {
+                    val pos = table.offset + i * 24L
+                    val strOff = elf.u32(pos)
+                    val kind = elf.u8(pos + 4) and 15
+                    val section = elf.u16(pos + 6)
+                    val value = elf.u64(pos + 8)
+                    val size = elf.u64(pos + 16)
+                    if (strOff == 0L || (kind != 0 && kind != 2) || section == 0 ||
+                        value < 0x4000 || value % 4 != 0L || size !in 16L..2048L) continue
+                    if (elf.equalsString(strings,strOff,requested)) hits.add(value to size)
+                }
+            }
+            hits.singleOrNull() ?: return gate
+        }
+        if ((found + probes).map { pair -> pair.first }.distinct().size != 7) return gate
+        return gate + "|" + format(probes)
     }
 
     private class Elf64(private val data: ByteArray) {

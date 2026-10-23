@@ -72,6 +72,9 @@ struct ld_grid_conf {
     int glass_targets_present;
     uint64_t glass_vaddr[3];
     size_t glass_size[3];
+    int glass_observers_present;
+    uint64_t glass_obs_vaddr[4];
+    size_t glass_obs_size[4];
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -140,11 +143,12 @@ static inline int ld_grid_parse_bounded_decimal(const char *s, double lo, double
 /* Canonical, device-local AOT addresses extracted from .gnu_debugdata by
  * the module app. The whole 8583 vendor ELF and all live code bodies are
  * independently authenticated in native_entry.c before any hook. */
-static inline int ld_grid_parse_glass_targets(const char *s,uint64_t vaddr[3],size_t bytes[3])
+static inline int ld_grid_parse_aot_targets(const char *s,uint64_t *vaddr,size_t *bytes,size_t count)
 {
     if(!s || !*s) return 0;
     const char *p=s;
-    for(size_t i=0;i<3;i++) {
+    if(count<1 || count>16) return 0;
+    for(size_t i=0;i<count;i++) {
         if(p[0]!='0' || p[1]!='x') return 0;
         p+=2;
         if(!((*p>='0' && *p<='9') || (*p>='a' && *p<='f'))) return 0;
@@ -167,13 +171,13 @@ static inline int ld_grid_parse_glass_targets(const char *s,uint64_t vaddr[3],si
             return 0;
         vaddr[i]=(uint64_t)address;
         bytes[i]=(size_t)length;
-        if(i<2) {
+        if(i+1<count) {
             if(*p!=',') return 0;
             p++;
         } else if(*p!='\0') return 0;
     }
-    for(size_t i=0;i<3;i++)
-        for(size_t j=i+1;j<3;j++)
+    for(size_t i=0;i<count;i++)
+        for(size_t j=i+1;j<count;j++)
             if(vaddr[i]==vaddr[j]) return 0;
     return 1;
 }
@@ -240,9 +244,16 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if (!ld_grid_parse_int(val, LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX,
                                            &c.rows)) { bad = 1; break; }
                     seen |= 32u;
+                } else if (strcmp(key, "glass_observers") == 0) {
+                    if ((seen & (1u << 28)) ||
+                        !ld_grid_parse_aot_targets(val,c.glass_obs_vaddr,c.glass_obs_size,4)) {
+                        bad=1; break;
+                    }
+                    c.glass_observers_present=1;
+                    seen |= 1u << 28;
                 } else if (strcmp(key, "glass_targets") == 0) {
                     if ((seen & (1u << 27)) ||
-                            !ld_grid_parse_glass_targets(val,c.glass_vaddr,c.glass_size)) {
+                            !ld_grid_parse_aot_targets(val,c.glass_vaddr,c.glass_size,3)) {
                         bad=1; break;
                     }
                     c.glass_targets_present=1;

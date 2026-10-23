@@ -94,6 +94,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
 #include "home_widgets.h"
 #include "dock_geometry.h"
 #include "glass_gates.h"
+#include "glass_trace.h"
 static void *g_orig_home_pipeline;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
@@ -218,6 +219,8 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         (void *)repl_os4_material_enabled,
     };
     uintptr_t targets[3]={0};
+    uintptr_t pipeline[4]={0};
+    bool pipeline_verified[4]={0};
     char path[256];
     if(!ld_apk_real_path("MiuiHome.apk",path,sizeof path)) {
         ld_blog("OS4 glass gate unavailable: APK path"); return;
@@ -261,6 +264,24 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             ready=0;
         }
     }
+    if(ready && g_home_options.glass_observers_present) {
+        for(size_t i=0;i<4;i++) {
+            uint64_t v=g_home_options.glass_obs_vaddr[i];
+            uint64_t len=g_home_options.glass_obs_size[i];
+            if(!ld_vaddr_to_runtime(lib,(uintptr_t)v,&pipeline[i])
+                    || !executable_range(pipeline[i],(size_t)len)) continue;
+            for(uint16_t j=0;j<lib->phnum;j++) {
+                uint64_t off,base,sz,mem;
+                if(!ld_phdr_load(lib,j,&off,&base,&sz,&mem)) continue;
+                if(v<base || v-base>sz || len>sz-(v-base)) continue;
+                uint64_t at=lib->entry_off+off+(v-base);
+                if(at>(uint64_t)st.st_size || len>(uint64_t)st.st_size-at) continue;
+                pipeline_verified[i]=!memcmp((const void *)pipeline[i],apk+at,(size_t)len)
+                    && *(const uint32_t *)pipeline[i]==0xa9bf79fdu;
+                break;
+            }
+        }
+    }
     munmap(mapping,(size_t)st.st_size);
     if(!ready) return;
     for(size_t i=0;i<3;i++) {
@@ -275,6 +296,24 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     __atomic_store_n(&g_os4_glass_override,1u,__ATOMIC_RELEASE);
     g_os4_glass_installed=true;
     ld_blog("OS4 glass gate enabled: 3 vendor Dart capability predicates");
+    const char *label[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};
+    void *wrapper[4]={(void *)repl_os4_trace_light,(void *)repl_os4_trace_dark,
+        (void *)repl_os4_trace_filter,(void *)repl_os4_trace_apply};
+    void **original[4]={&g_os4_trace_light_original,&g_os4_trace_dark_original,
+        &g_os4_trace_filter_original,&g_os4_trace_apply_original};
+    if(!g_home_options.glass_observers_present)
+        ld_blog("OS4 glass pipeline unavailable: observer addresses not published");
+    for(size_t i=0;i<4 && g_home_options.glass_observers_present;i++) {
+        if(!pipeline_verified[i]) {
+            ld_blog("OS4 glass pipeline skipped %s: complete AOT body mismatch",label[i]);
+            continue;
+        }
+        int rc=api->hook((void *)pipeline[i],wrapper[i],original[i]);
+        if(rc==0 && *original[i] && ld_pin_code_pages(pipeline[i],16)) {
+            g_os4_pipeline_mask|=1u<<i;
+            ld_blog("OS4 glass pipeline installed %s",label[i]);
+        } else ld_blog("OS4 glass pipeline skipped %s: hook/pin rc=%d",label[i],rc);
+    }
 }
 
 /* The Rust pre-load transpose assumes the stock lattice and can index past
@@ -475,6 +514,7 @@ static void *trace_thread(void *unused)
 {
     (void)unused;
     unsigned last_calls = 0, last_glass_calls = 0;
+    unsigned last_pipeline[4]={0};
     for (;;) {
         unsigned calls = __atomic_load_n(&g_pad_trace[0], __ATOMIC_RELAXED);
         if (calls != last_calls) {
@@ -494,6 +534,15 @@ static void *trace_thread(void *unused)
         if(gc!=last_glass_calls) {
             last_glass_calls=gc;
             ld_blog("OS4 glass gate calls=%u",gc);
+        }
+        const char *labels[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};
+        for(size_t i=0;i<4;i++) {
+            if(!(g_os4_pipeline_mask & (1u<<i))) continue;
+            unsigned now=__atomic_load_n(&g_os4_pipeline_counts[i],__ATOMIC_RELAXED);
+            if(now!=last_pipeline[i]) {
+                last_pipeline[i]=now;
+                ld_blog("OS4 glass pipeline %s calls=%u",labels[i],now);
+            }
         }
         usleep(500000);
     }

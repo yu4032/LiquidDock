@@ -83,6 +83,17 @@ After installing, open LiquidDock settings (or toggle liquid_glass) so the
 module process publishes the new `glass_targets` field, then restart
 Launcher. No legacy constant addresses are used.
 
+The next stage adds four independent, **read-only** full-body-attested
+Dart observers for the actual native glass pipeline:
+`_DockGlassWidgetState._buildLightGlassFilter`,
+`_DockGlassWidgetState._buildDarkGlassFilter`,
+`ImageFilterCompat.glass`, and `GlassLightConfig.applyTo`.
+Unlike the earlier three capability checks these show whether the Flutter
+Dock/filter/light configuration path is actually constructed. They never
+change vendor material arguments or shader bytes, and log aggregate call
+counts rather than frame-by-frame events. Missing/inlined functions fail
+closed without disabling the already device-verified gate.
+
 Device log markers: `OS4 glass gate enabled`,
 `OS4 glass gate unavailable`, and `OS4 glass gate calls=`.
 This phase only unlocks the **vendor's native glass**. It does not yet install

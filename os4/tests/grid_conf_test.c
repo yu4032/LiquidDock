@@ -66,6 +66,13 @@ int main(void)
             puts("FAIL: malformed or repeated glass_targets accepted"); return 1;
         }
     }
-    puts("PASS: grid, glass gate targets and opt-in config fail closed");
+
+    const char *probes="glass_enabled=1\nglass_targets=0x123400:88,0x128000:140,0x134000:88\n"
+        "glass_observers=0x140000:660,0x142000:644,0x144000:548,0x146000:292\nend=1\n";
+    if(!ld_grid_conf_parse(probes,strlen(probes),&glass)
+            || !glass.glass_observers_present || glass.glass_obs_size[3]!=292) return 1;
+    const char *truncated="glass_enabled=1\nglass_observers=0x140000:660,0x142000:644\nend=1\n";
+    if(ld_grid_conf_parse(truncated,strlen(truncated),&glass)) return 1;
+    puts("PASS: strict glass gates and four AOT pipeline observers");
     return 0;
 }

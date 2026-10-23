@@ -57,7 +57,13 @@ object Os4ConfigSync {
         val resolved = if (conf?.contains("glass_enabled=1\n") == true) {
             val addresses = Os4GlassSymbols.fromInstalledLauncher(context)
             if (addresses == null) conf
-            else conf.replace("end=1\n","glass_targets=" + addresses + "\nend=1\n")
+            else {
+                val gates = addresses.substringBefore('|')
+                val probes = addresses.substringAfter('|', "")
+                val lines = "glass_targets=" + gates + "\n" +
+                    (if (probes.isEmpty()) "" else "glass_observers=" + probes + "\n")
+                conf.replace("end=1\n",lines + "end=1\n")
+            }
         } else conf
         val published = Os4RootConfWriter.write(context, resolved ?: "")
         Log.i(TAG, "[$reason] options published=$published cleared=${conf.isNullOrEmpty()}")
