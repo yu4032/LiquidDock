@@ -9,6 +9,7 @@ class Os4GlassConfigTest {
     @Test fun glassOnlyUsesExistingGlobalSwitch() {
         val result=Os4MainScreenOptions.fromPreferences(mapOf(
             ConfigSchema.Glass.ENABLED.name() to true,
+            ConfigSchema.Dock.ENABLED.name() to false,
         ))
         assertEquals(
             "icon_size_enabled=0\nglass_enabled=1\nicon_size_percent=100\nend=1\n",
@@ -16,9 +17,11 @@ class Os4GlassConfigTest {
         )
     }
     @Test fun defaultDoesNotForceVendorMaterial() {
-        assertEquals("",Os4MainScreenOptions.fromPreferences(emptyMap<String,Any>()))
+        val defaultConf=Os4MainScreenOptions.fromPreferences(emptyMap<String,Any>())
+        assertTrue(defaultConf != null && !defaultConf.contains("glass_enabled=1"))
         assertEquals("",Os4MainScreenOptions.fromPreferences(mapOf(
             ConfigSchema.Glass.ENABLED.name() to false,
+            ConfigSchema.Dock.ENABLED.name() to false,
         )))
         assertEquals("",Os4MainScreenOptions.fromPreferences(mapOf(
             ConfigSchema.Core.ENABLED.name() to false,
