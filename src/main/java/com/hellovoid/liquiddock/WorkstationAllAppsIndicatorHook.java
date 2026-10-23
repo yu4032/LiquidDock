@@ -6,238 +6,92 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
+import io.github.libxposed.api.XposedInterface;
+
 /**
- * Positions only the Workstation launchpad AllAppsWorkspace indicator.
+ * Applies independent portrait/landscape offsets to the workstation All Apps indicator.
  *
- * AllAppsWorkspace can inherit Launcher Workspace/ScreenView: the generic HOME
- * indicator hook must never control it. This hook binds directly to the vendor
- * launchpad class and captures its actual indicator translation after layout,
- * without modifying either cell geometry or any system-wide View property.
+ * Launcher 4.50 places ScreenView$SeekBarIndicator directly under AllAppsWorkspace.
+ * Its getter is not exposed, so the view is resolved from that workspace only.
+ * OEM layout remains authoritative: restore its translation before each update,
+ * then apply our offset relative to the resulting vendor position.
  */
 final class WorkstationAllAppsIndicatorHook {
     private static final String ALL_APPS_WORKSPACE =
             "com.miui.home.launcher.laptop.launchpad.AllAppsWorkspace";
-    private static final String PROBE_TAG = "[DC][AllAppsIndicatorProbe]";
-    // Debug-only, bounded per Launcher process: avoid per-frame I/O or an unbounded logcat.
-    private static int logBudget = 150;
-    private static int targetCallbacks;
-    private static int otherCallbacks;
-    private static int missingViews;
-    private static int preDrawChecks;
-    private static int hierarchyDumps;
-    private static final WeakHashMap<View, Float> BASE_Y = new WeakHashMap<>();
+
+    private static final WeakHashMap<View, Float> VENDOR_Y = new WeakHashMap<>();
     private static final WeakHashMap<View, PositionGuard> GUARDS = new WeakHashMap<>();
     private static final ThreadLocal<Boolean> UPDATING =
             ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    private static volatile Class<?> workspaceClass;
     private static volatile HomeGridWorkstationGeometryConfig config =
             HomeGridWorkstationGeometryConfig.NONE;
-    private static volatile Class<?> targetClass;
 
     private WorkstationAllAppsIndicatorHook() {}
 
     static boolean isTargetWorkspace(Object owner) {
         if (owner == null) return false;
-        Class<?> type = targetClass;
-        return type != null ? type.isInstance(owner)
+        Class<?> target = workspaceClass;
+        return target != null ? target.isInstance(owner)
                 : ALL_APPS_WORKSPACE.equals(owner.getClass().getName());
     }
 
     static void install(ClassLoader loader, HomeGridWorkstationGeometryConfig settings) {
         config = settings == null ? HomeGridWorkstationGeometryConfig.NONE : settings;
-        probe("install", "loader=" + (loader == null ? "null" : loader.getClass().getName())
-                + " workstation=" + MainHook.isWorkstationMode()
-                + " orientationPx landscape=" + config.allAppsLandscapeIndicatorY
-                + " portrait=" + config.allAppsPortraitIndicatorY);
         final Class<?> allApps;
         try {
             allApps = Class.forName(ALL_APPS_WORKSPACE, false, loader);
-            targetClass = allApps;
-            probe("target-class", "resolved " + allApps.getName()
-                    + " super=" + (allApps.getSuperclass() == null
-                    ? "null" : allApps.getSuperclass().getName()));
-            try {
-                probe("api", classMembers(allApps));
-            } catch (Throwable error) {
-                probe("api", "introspection unavailable: " + error);
-            }
+            workspaceClass = allApps;
         } catch (Throwable error) {
-            probe("target-class", "NOT FOUND: " + error);
+            MainHook.log("[DC][WorkstationAllAppsIndicator] workspace unavailable: " + error);
             return;
         }
 
-        // Install independently. A missing vendor indicator-position method must not
-        // suppress the onLayout probe; it was previously the source of a silent failure.
+        // Resolve independently: a missing OEM method must not disable other layout paths.
         hookBoundary(allApps, "updateIndicatorPositions",
-                new Class<?>[]{int.class, boolean.class}, "positions");
+                new Class<?>[]{int.class, boolean.class});
         hookBoundary(allApps, "onLayout",
-                new Class<?>[]{boolean.class, int.class, int.class, int.class, int.class},
-                "layout");
-        hookBoundary(allApps, "onAttachedToWindow",
-                new Class<?>[0], "attach");
+                new Class<?>[]{boolean.class, int.class, int.class, int.class, int.class});
+        hookBoundary(allApps, "onAttachedToWindow", new Class<?>[0]);
     }
 
-    private static void hookBoundary(
-            Class<?> target, String name, Class<?>[] signature, String stage) {
+    private static void hookBoundary(Class<?> target, String method, Class<?>[] parameters) {
         try {
-            Method method = HookUtil.findMethodExact(target, name, signature);
-            // Do not install a process-wide View/ViewGroup hook merely to sample
-            // launchpad attachment: only hook OEM-defined lifecycle methods.
-            if ("attach".equals(stage)
-                    && !method.getDeclaringClass().getName().startsWith("com.miui.home.")) {
-                probe("hook-" + stage, "skipped framework owner "
-                        + method.getDeclaringClass().getName());
+            Method boundary = HookUtil.findMethodExact(target, method, parameters);
+            // Never hook framework-wide View attachment callbacks.
+            if ("onAttachedToWindow".equals(method)
+                    && !boundary.getDeclaringClass().getName().startsWith("com.miui.home.")) {
                 return;
             }
-            HookUtil.hook(method, chain -> aroundVendorLayout(chain, stage));
-            probe("hook-" + stage, "BOUND " + method.getDeclaringClass().getName()
-                    + "#" + name);
+            HookUtil.hook(boundary, WorkstationAllAppsIndicatorHook::aroundVendorUpdate);
         } catch (Throwable error) {
-            probe("hook-" + stage, "FAILED " + name + ": " + error);
+            MainHook.log("[DC][WorkstationAllAppsIndicator] "
+                    + method + " unavailable: " + error);
         }
     }
 
-    private static Object aroundVendorLayout(
-            io.github.libxposed.api.XposedInterface.Chain chain, String stage)
-            throws Throwable {
+    private static Object aroundVendorUpdate(XposedInterface.Chain chain) throws Throwable {
         Object owner = chain.getThisObject();
         Object[] args = chain.getArgs().toArray(new Object[0]);
-        if (!isTargetWorkspace(owner)) {
-            if (MainHook.debugLogging && otherCallbacks++ < 5) {
-                probe("other-receiver", stage + " owner="
-                        + (owner == null ? "null" : owner.getClass().getName()));
-            }
-            return chain.proceed(args);
-        }
-        if (Boolean.TRUE.equals(UPDATING.get())) {
-            if (MainHook.debugLogging && targetCallbacks < 12) {
-                probe("reentrant", stage + " owner=" + owner.getClass().getName());
-            }
+        if (!isTargetWorkspace(owner) || Boolean.TRUE.equals(UPDATING.get())) {
             return chain.proceed(args);
         }
 
         UPDATING.set(Boolean.TRUE);
         try {
-            boolean detail = MainHook.debugLogging && targetCallbacks++ < 14;
             View before = indicatorOf(owner);
-            if (detail) probe("callback-before", stage
-                    + " workstation=" + MainHook.isWorkstationMode()
-                    + " owner=" + describe(owner)
-                    + " indicator=" + describe(before)
-                    + " storedBase=" + baseline(before));
             if (before != null) restoreVendorY(before);
             Object result = chain.proceed(args);
             View after = indicatorOf(owner);
-            if (after == null && MainHook.debugLogging && missingViews++ < 5) {
-                probe("indicator-missing", stage + " no direct SeekBarIndicator"
-                        + " children=" + (owner instanceof ViewGroup
-                        ? ((ViewGroup) owner).getChildCount() : -1));
-                dumpHierarchy(owner);
-            }
-            if (after != null) captureVendorY(after);
-            if (detail) {
-                probe("callback-after", stage + " indicator=" + describe(after)
-                        + " storedBase=" + baseline(after));
-                if (after == null && owner instanceof View) {
-                    ViewParentLog.logAncestors((View) owner);
-                }
-            }
+            if (after != null) captureAndApply(after);
             return result;
         } finally {
             UPDATING.remove();
-        }
-    }
-
-    private static String baseline(View indicator) {
-        if (indicator == null) return "null";
-        synchronized (BASE_Y) {
-            return String.valueOf(BASE_Y.get(indicator));
-        }
-    }
-
-    private static String describe(Object object) {
-        if (object == null) return "null";
-        if (!(object instanceof View)) return object.getClass().getName();
-        View view = (View) object;
-        String resource = "";
-        try {
-            if (view.getId() != View.NO_ID) {
-                resource = view.getResources().getResourceEntryName(view.getId());
-            }
-        } catch (Throwable ignored) {}
-        return view.getClass().getName() + "@" + Integer.toHexString(
-                System.identityHashCode(view))
-                + (resource.isEmpty() ? "" : "#" + resource)
-                + " y=" + view.getY() + " ty=" + view.getTranslationY()
-                + " top=" + view.getTop() + " h=" + view.getHeight()
-                + " shown=" + view.isShown();
-    }
-
-    private static String classMembers(Class<?> type) {
-        StringBuilder out = new StringBuilder();
-        for (Class<?> cursor = type; cursor != null
-                && cursor.getName().startsWith("com.miui.home.");
-             cursor = cursor.getSuperclass()) {
-            out.append(cursor.getSimpleName()).append('{');
-            int count = 0;
-            for (Method method : cursor.getDeclaredMethods()) {
-                String name = method.getName().toLowerCase(java.util.Locale.ROOT);
-                if ((name.contains("indicator") || name.contains("page")
-                        || name.contains("layout") || name.contains("attach"))
-                        && count++ < 14) {
-                    out.append(method.getName()).append('(')
-                            .append(method.getParameterCount()).append("),");
-                }
-            }
-            for (Field field : cursor.getDeclaredFields()) {
-                String name = field.getName().toLowerCase(java.util.Locale.ROOT);
-                if ((name.contains("indicator") || name.contains("page"))
-                        && count++ < 20) {
-                    out.append(field.getName()).append(',');
-                }
-            }
-            out.append("} ");
-            if (out.length() > 900) break;
-        }
-        return out.toString();
-    }
-
-    private static void dumpHierarchy(Object owner) {
-        if (!(owner instanceof ViewGroup) || hierarchyDumps++ >= 2) return;
-        ViewGroup root = (ViewGroup) owner;
-        probe("hierarchy-root", describe(root));
-        int[] remaining = {24};
-        dumpChildren(root, 0, remaining);
-    }
-
-    private static void dumpChildren(ViewGroup group, int depth, int[] remaining) {
-        if (depth > 4 || remaining[0] <= 0) return;
-        for (int i = 0; i < group.getChildCount() && remaining[0] > 0; i++) {
-            View child = group.getChildAt(i);
-            if (child == null) continue;
-            remaining[0]--;
-            probe("hierarchy", "depth=" + depth + " index=" + i + " " + describe(child));
-            if (child instanceof ViewGroup) {
-                dumpChildren((ViewGroup) child, depth + 1, remaining);
-            }
-        }
-    }
-
-    private static synchronized void probe(String stage, String message) {
-        if (!MainHook.debugLogging || logBudget-- <= 0) return;
-        MainHook.log(PROBE_TAG + " " + stage + " " + message);
-    }
-
-    private static final class ViewParentLog {
-        static void logAncestors(View view) {
-            android.view.ViewParent parent = view.getParent();
-            for (int depth = 0; parent != null && depth < 5; depth++) {
-                probe("ancestor", "depth=" + depth + " " + describe(parent));
-                parent = parent.getParent();
-            }
         }
     }
 
@@ -245,9 +99,7 @@ final class WorkstationAllAppsIndicatorHook {
         if (!(owner instanceof ViewGroup)) return null;
         ViewGroup workspace = (ViewGroup) owner;
 
-        // Confirmed by Launcher 4.50 hierarchy logs: AllAppsWorkspace directly
-        // contains ScreenView$SeekBarIndicator (after the CellScreen pages).
-        // There is NO getScreenIndicator() method on this vendor class.
+        // The first path matches the verified Launcher 4.50 hierarchy.
         for (int i = 0; i < workspace.getChildCount(); i++) {
             View child = workspace.getChildAt(i);
             if (child != null && WorkstationAllAppsIndicatorPolicy.isIndicatorClass(
@@ -255,13 +107,10 @@ final class WorkstationAllAppsIndicatorHook {
                 return child;
             }
         }
-        // Some Launcher variants may wrap the vendor indicator one layer down.
-        return findIndicator(workspace);
-    }
 
-    private static View findIndicator(ViewGroup parent) {
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            View child = parent.getChildAt(i);
+        // Compatibility for OEM builds that wrap the same indicator once.
+        for (int i = 0; i < workspace.getChildCount(); i++) {
+            View child = workspace.getChildAt(i);
             if (!(child instanceof ViewGroup)) continue;
             ViewGroup group = (ViewGroup) child;
             for (int j = 0; j < group.getChildCount(); j++) {
@@ -276,19 +125,19 @@ final class WorkstationAllAppsIndicatorHook {
     }
 
     private static void restoreVendorY(View indicator) {
-        Float base;
-        synchronized (BASE_Y) {
-            base = BASE_Y.get(indicator);
+        Float baseline;
+        synchronized (VENDOR_Y) {
+            baseline = VENDOR_Y.get(indicator);
         }
-        if (base != null && indicator.getTranslationY() != base) {
-            indicator.setTranslationY(base);
+        if (baseline != null && indicator.getTranslationY() != baseline) {
+            indicator.setTranslationY(baseline);
         }
     }
 
-    private static void captureVendorY(View indicator) {
-        float vendorY = indicator.getTranslationY();
-        synchronized (BASE_Y) {
-            BASE_Y.put(indicator, vendorY);
+    private static void captureAndApply(View indicator) {
+        float baseline = indicator.getTranslationY();
+        synchronized (VENDOR_Y) {
+            VENDOR_Y.put(indicator, baseline);
         }
         synchronized (GUARDS) {
             if (!GUARDS.containsKey(indicator)) {
@@ -296,60 +145,38 @@ final class WorkstationAllAppsIndicatorHook {
                 GUARDS.put(indicator, guard);
                 indicator.getViewTreeObserver().addOnPreDrawListener(guard);
                 indicator.addOnAttachStateChangeListener(guard);
-                probe("indicator-bound", describe(indicator)
-                        + " orientation=" + indicator.getResources()
-                        .getConfiguration().orientation);
             }
         }
-        apply(indicator, vendorY);
+        apply(indicator, baseline);
     }
 
-    private static void apply(View indicator, float vendorY) {
+    private static void apply(View indicator, float baseline) {
         boolean portrait = indicator.getResources().getConfiguration().orientation
                 == Configuration.ORIENTATION_PORTRAIT;
         HomeGridWorkstationGeometryConfig current = config;
-        float y = WorkstationAllAppsIndicatorPolicy.targetY(
-                vendorY, MainHook.isWorkstationMode(), true, portrait,
+        float target = WorkstationAllAppsIndicatorPolicy.targetY(
+                baseline, MainHook.isWorkstationMode(), true, portrait,
                 current.allAppsLandscapeIndicatorY, current.allAppsPortraitIndicatorY);
-        float oldY = indicator.getTranslationY();
-        if (oldY != y) indicator.setTranslationY(y);
-        if (MainHook.debugLogging && (preDrawChecks < 10 || oldY != y
-                && preDrawChecks < 24)) {
-            preDrawChecks++;
-            probe("apply", "portrait=" + portrait + " workstation="
-                    + MainHook.isWorkstationMode() + " base=" + vendorY
-                    + " target=" + y + " before=" + oldY
-                    + " after=" + indicator.getTranslationY()
-                    + " landscapePx=" + current.allAppsLandscapeIndicatorY
-                    + " portraitPx=" + current.allAppsPortraitIndicatorY
-                    + " view=" + describe(indicator));
-        }
+        if (indicator.getTranslationY() != target) indicator.setTranslationY(target);
     }
 
     private static final class PositionGuard implements
             ViewTreeObserver.OnPreDrawListener, View.OnAttachStateChangeListener {
-        private final WeakReference<View> indicator;
+        private final WeakReference<View> indicatorRef;
 
-        PositionGuard(View view) {
-            indicator = new WeakReference<>(view);
+        PositionGuard(View indicator) {
+            indicatorRef = new WeakReference<>(indicator);
         }
 
         @Override
         public boolean onPreDraw() {
-            View view = indicator.get();
-            if (view == null) return true;
+            View indicator = indicatorRef.get();
+            if (indicator == null) return true;
             Float baseline;
-            synchronized (BASE_Y) {
-                baseline = BASE_Y.get(view);
+            synchronized (VENDOR_Y) {
+                baseline = VENDOR_Y.get(indicator);
             }
-            if (baseline != null) {
-                float observed = view.getTranslationY();
-                apply(view, baseline);
-                if (MainHook.debugLogging && preDrawChecks < 12) {
-                    probe("pre-draw", "observed=" + observed + " base=" + baseline
-                            + " corrected=" + view.getTranslationY());
-                }
-            }
+            if (baseline != null) apply(indicator, baseline);
             return true;
         }
 
@@ -364,11 +191,10 @@ final class WorkstationAllAppsIndicatorHook {
             synchronized (GUARDS) {
                 if (GUARDS.get(view) == this) GUARDS.remove(view);
             }
-            synchronized (BASE_Y) {
-                BASE_Y.remove(view);
+            synchronized (VENDOR_Y) {
+                VENDOR_Y.remove(view);
             }
-            probe("indicator-detached", describe(view));
-            indicator.clear();
+            indicatorRef.clear();
         }
     }
 }
