@@ -25,8 +25,7 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Text
 
-// Pure source relocation: keeps the widget 4×2 preflight, in-flight cancellation,
-// stale reply rejection and large warning dialog inside their existing GridBasicsPage.
+// The legacy widget receiver does not run inside the OS4 AOT Launcher.
 @Composable
 internal fun GridPage(
     padding: PaddingValues,
@@ -98,6 +97,7 @@ internal fun GridBasicsPage(
     masterEnabled: Boolean,
 ) {
     val context = LocalContext.current
+    val skipWidgetPreflight = LocalSettingsAvailability.current.isOs4Launcher()
     var gridCheckPending by remember { mutableStateOf(false) }
     var gridWarning by remember { mutableStateOf<String?>(null) }
     // Cancel an in-flight request when the user leaves the page: late Launcher
@@ -159,14 +159,14 @@ internal fun GridBasicsPage(
                 // Safe grid stops persist as their label changes. A transition
                 // below 4 must still wait for Launcher widget preflight on release.
                 previewWriteAllowed = { proposed ->
-                    !GridWidget4x2PreflightPolicy.needsCheck(
+                    skipWidgetPreflight || !GridWidget4x2PreflightPolicy.needsCheck(
                         prefs.getInt(spec.key, spec.default), proposed.roundToInt(),
                     )
                 },
                 beforeSave = { proposed, commit ->
                     val current = prefs.getInt(spec.key, spec.default)
                     val target = proposed.roundToInt()
-                    if (!GridWidget4x2PreflightPolicy.needsCheck(current, target)) {
+                    if (skipWidgetPreflight || !GridWidget4x2PreflightPolicy.needsCheck(current, target)) {
                         commit()
                     } else if (!gridCheckPending) {
                         gridCheckPending = true

@@ -1,0 +1,11 @@
+{
+  "elf_sha256": "f70a2d15505abc83bbc2f03cbe9e90b635a8add6d89ae0fef764100aea1c6d8b",
+  "targets": [
+    {
+      "name": "ld_rust_orientation_words",
+      "vaddr": "0x90ffa0",
+      "size": 6384,
+      "sha256": "f0d4f495586d50f7ce07f1ee76144fceea239293a7e1e24c1532dd013c2bbd3a"
+    }
+  ]
+}

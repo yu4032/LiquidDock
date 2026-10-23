@@ -142,7 +142,11 @@ public final class ModuleMain extends XposedModule {
             return;
         }
         if (!LAUNCHER_PACKAGE.equals(packageName)) return;
-        if (shouldBlockLegacyLauncherBackend(param)) return;
+        if (shouldBlockLegacyLauncherBackend(param)) {
+            // The fuxi OS4 Launcher runs in hyos_spawner without ART. Java Activity hooks
+            // cannot implement its rotation lifecycle; OS4 layout work belongs in native_init.
+            return;
+        }
         try {
             initializeCurrentProfileIfEmpty();
             ClassLoader classLoader = param.getClassLoader();

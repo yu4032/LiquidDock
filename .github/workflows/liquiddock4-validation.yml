@@ -29,6 +29,14 @@ jobs:
           cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
             os4/tests/sha256_test.c -o /tmp/os4-sha256-test
           /tmp/os4-sha256-test
+      - name: Native independent layout and patch lifetime tests
+        run: |
+          set -euo pipefail
+          for test in layout_memory layout_changes layout_load executable_range layout_runtime hook_page_pin; do
+            cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror \
+              "os4/tests/${test}_test.c" -o "/tmp/os4-${test}-test"
+            "/tmp/os4-${test}-test"
+          done
       - name: Offline AOT binary identity and target checks
         run: python3 -m unittest discover -s os4/tests -p 'test_*.py' -v
       - name: Compile actual ARM64 native backend

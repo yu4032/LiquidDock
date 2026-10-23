@@ -8,16 +8,64 @@
       "sha256": "c61ba5de6aa7826aeed12d1c9417783ce753eef71f0a42dd86c2b5105020a6b3"
     },
     {
-      "name": "GridController._filterActiveGridConfig",
+      "name": "CellLayoutGetxController.changeCellCount",
+      "vaddr": "0xa523cc",
+      "size": 932,
+      "sha256": "33596d4986041ebe577c0bdf2c4d3d5b95479da62f0d5d30582c91faa78f6084"
+    },
+    {
+      "name": "ld_delete_item_words",
+      "vaddr": "0x917d00",
+      "size": 132,
+      "sha256": "9acf12aeb59c3848ca4d81dec5c7f31a8ff09246a7a1ddc0dab219be28f0d358"
+    },
+    {
+      "name": "ld_save_batch_words",
+      "vaddr": "0x8eecc0",
+      "size": 224,
+      "sha256": "e02418cc7fd98d4c653b936e59f87f81d9694e87958d117b9b03a70285665e16"
+    },
+    {
+      "name": "ld_save_single_words",
+      "vaddr": "0x8e2128",
+      "size": 132,
+      "sha256": "ed8d07e6f3eb689ef61fdf3780368454a55c1bdb5ff863cf0eedc77723a0b46d"
+    },
+    {
+      "name": "ld_load_items_words",
+      "vaddr": "0x15e6f6c",
+      "size": 9476,
+      "sha256": "a7e6b09fa22ee3355195e969526b74723c3ed14a68363ca260b728f2d4f1fddb"
+    },
+    {
+      "name": "ld_widget_lattice_words",
+      "vaddr": "0x18c4568",
+      "size": 96,
+      "sha256": "ec741341443d7b220c9311b82e9b2f38ee013d33dcf8ed9b36ba993f5fedfb45"
+    },
+    {
+      "name": "ld_filter_words",
       "vaddr": "0x8d26c0",
       "size": 728,
       "sha256": "ad87ec93e2c82a8dd3f1691ce89b5a7676a36681ce34b7793f8c1e02c86a6a9a"
     },
     {
-      "name": "CellLayoutGetxController.changeCellCount",
-      "vaddr": "0xa523cc",
-      "size": 932,
-      "sha256": "33596d4986041ebe577c0bdf2c4d3d5b95479da62f0d5d30582c91faa78f6084"
+      "name": "ld_process_screen_words",
+      "vaddr": "0x8eefdc",
+      "size": 2192,
+      "sha256": "c99ad27f24856b9c59e2fb5889bf7493f949e3b94514b8719d24bb584b854ac0"
+    },
+    {
+      "name": "ld_no_vacant_words",
+      "vaddr": "0x8eb92c",
+      "size": 48,
+      "sha256": "36b5e96af51b6639d510a6294931bc5a17f8ef1813caa4cb614998fc5817905a"
+    },
+    {
+      "name": "ld_orientation_words",
+      "vaddr": "0x8ee38c",
+      "size": 1336,
+      "sha256": "e685dae55c52a8b73931cbc06d8d54b7860cea2aa0792d89797767625e3c990b"
     }
   ]
 }
