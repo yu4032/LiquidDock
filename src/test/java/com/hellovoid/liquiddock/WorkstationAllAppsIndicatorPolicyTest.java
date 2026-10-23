@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -24,5 +26,19 @@ public class WorkstationAllAppsIndicatorPolicyTest {
                 120f, true, true, false, -10, 10), 0.001f);
         assertEquals(110f, WorkstationAllAppsIndicatorPolicy.targetY(
                 120f, true, true, false, -10, 10), 0.001f);
+    }
+
+    @Test public void launcher450SeekBarIndicatorIsRecognized() {
+        assertTrue(WorkstationAllAppsIndicatorPolicy.isIndicatorClass(
+                "com.miui.home.launcher.ScreenView$SeekBarIndicator"));
+        assertTrue(WorkstationAllAppsIndicatorPolicy.isIndicatorClass(
+                "com.miui.home.launcher.ScreenIndicator"));
+        assertTrue(WorkstationAllAppsIndicatorPolicy.isIndicatorClass(
+                "com.miui.home.launcher.PageIndicator"));
+        assertFalse(WorkstationAllAppsIndicatorPolicy.isIndicatorClass(
+                "com.miui.home.launcher.CellScreen"));
+        assertFalse(WorkstationAllAppsIndicatorPolicy.isIndicatorClass(
+                "android.widget.ImageView"));
+        assertFalse(WorkstationAllAppsIndicatorPolicy.isIndicatorClass(null));
     }
 }

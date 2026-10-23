@@ -132,11 +132,9 @@ final class WorkstationAllAppsIndicatorHook {
             Object result = chain.proceed(args);
             View after = indicatorOf(owner);
             if (after == null && MainHook.debugLogging && missingViews++ < 5) {
-                HookUtil.InvocationResult<Object> getter =
-                        HookUtil.tryInvoke(owner, "getScreenIndicator");
-                probe("indicator-missing", stage + " getter="
-                        + (getter.succeeded()
-                        ? describe(getter.value()) : String.valueOf(getter.failure())));
+                probe("indicator-missing", stage + " no direct SeekBarIndicator"
+                        + " children=" + (owner instanceof ViewGroup
+                        ? ((ViewGroup) owner).getChildCount() : -1));
                 dumpHierarchy(owner);
             }
             if (after != null) captureVendorY(after);
@@ -244,28 +242,34 @@ final class WorkstationAllAppsIndicatorHook {
     }
 
     private static View indicatorOf(Object owner) {
-        HookUtil.InvocationResult<Object> result =
-                HookUtil.tryInvoke(owner, "getScreenIndicator");
-        if (result.succeeded() && result.value() instanceof View) {
-            return (View) result.value();
-        }
-        // The launchpad may host the indicator as a direct descendant rather
-        // than expose the ScreenView getter. Do not search beyond this workspace.
-        return owner instanceof ViewGroup ? findIndicator((ViewGroup) owner, 0) : null;
-    }
+        if (!(owner instanceof ViewGroup)) return null;
+        ViewGroup workspace = (ViewGroup) owner;
 
-    private static View findIndicator(ViewGroup parent, int depth) {
-        if (depth > 8) return null;
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            View child = parent.getChildAt(i);
-            if (child == null) continue;
-            String name = child.getClass().getName();
-            if (name.contains("ScreenIndicator") || name.contains("PageIndicator")) {
+        // Confirmed by Launcher 4.50 hierarchy logs: AllAppsWorkspace directly
+        // contains ScreenView$SeekBarIndicator (after the CellScreen pages).
+        // There is NO getScreenIndicator() method on this vendor class.
+        for (int i = 0; i < workspace.getChildCount(); i++) {
+            View child = workspace.getChildAt(i);
+            if (child != null && WorkstationAllAppsIndicatorPolicy.isIndicatorClass(
+                    child.getClass().getName())) {
                 return child;
             }
-            if (child instanceof ViewGroup) {
-                View result = findIndicator((ViewGroup) child, depth + 1);
-                if (result != null) return result;
+        }
+        // Some Launcher variants may wrap the vendor indicator one layer down.
+        return findIndicator(workspace);
+    }
+
+    private static View findIndicator(ViewGroup parent) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (!(child instanceof ViewGroup)) continue;
+            ViewGroup group = (ViewGroup) child;
+            for (int j = 0; j < group.getChildCount(); j++) {
+                View nested = group.getChildAt(j);
+                if (nested != null && WorkstationAllAppsIndicatorPolicy.isIndicatorClass(
+                        nested.getClass().getName())) {
+                    return nested;
+                }
             }
         }
         return null;
