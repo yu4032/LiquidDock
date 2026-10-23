@@ -66,6 +66,7 @@ struct ld_grid_conf {
     int icon_size_enabled, icon_size_percent, widget_horizontal_stretch;
     struct ld_grid_offsets landscape, portrait;
     struct ld_dock_conf dock;
+    int glass_enabled;
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -192,6 +193,13 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if (!ld_grid_parse_int(val, LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX,
                                            &c.rows)) { bad = 1; break; }
                     seen |= 32u;
+                } else if (strcmp(key, "glass_enabled") == 0) {
+                    int value;
+                    if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {
+                        bad=1; break;
+                    }
+                    c.glass_enabled=value;
+                    seen |= 1u << 26;
                 } else if (strcmp(key, "dock_geometry_enabled") == 0) {
                     int bv;
                     if (seen & (1u << 20) || !ld_grid_parse_bool01(val, &bv)) {

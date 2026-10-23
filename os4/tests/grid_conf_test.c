@@ -25,12 +25,30 @@ int main(void)
         return 1;
     }
     const char corrupted[] = "grid_cols=10\0junk\ngrid_rows=10\nend=1\n";
-    struct ld_grid_conf reject = {9, 9};
+    struct ld_grid_conf reject = {.cols=9, .rows=9};
     if (ld_grid_conf_parse(corrupted, sizeof(corrupted) - 1, &reject) ||
         reject.cols != 0 || reject.rows != 0) {
         puts("FAIL: embedded NUL or partial config accepted");
         return 1;
     }
-    puts("PASS: grid config supports 10x10 and rejects 11 rows");
+    struct ld_grid_conf glass={0};
+    const char *glass_only="glass_enabled=1\nend=1\n";
+    if(!ld_grid_conf_parse(glass_only,strlen(glass_only),&glass)
+            || !glass.glass_enabled || glass.cols || glass.rows) {
+        puts("FAIL: independent glass-only configuration"); return 1;
+    }
+    const char *bad_glass[]={
+        "glass_enabled=2\nend=1\n",
+        "glass_enabled=1\nglass_enabled=0\nend=1\n",
+        "glass_enabled=1\nend=1\nextra=1\n"
+    };
+    for(size_t i=0;i<sizeof bad_glass/sizeof *bad_glass;i++) {
+        glass.glass_enabled=1;
+        if(ld_grid_conf_parse(bad_glass[i],strlen(bad_glass[i]),&glass)
+                || glass.glass_enabled) {
+            puts("FAIL: malformed glass option accepted"); return 1;
+        }
+    }
+    puts("PASS: grid and opt-in glass config fail closed");
     return 0;
 }

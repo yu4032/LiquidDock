@@ -52,6 +52,37 @@ Indicator Y changes the fresh Transform's Matrix4 translation, including its
 hit testing. The earlier scale-origin Offset does not move an identity scale
 and is left untouched. All these geometry adjustments reject split configs.
 
+## OS4 liquid glass phase 1 — native material gate
+
+The existing `liquid_glass` preference is now published as the optional
+`glass_enabled=1` in the same CE/DE launcher snapshot. This works without
+enabling custom grids, dock geometry or icon sizing. With the preference off
+the module leaves vendor material capability checks entirely untouched.
+On enable, a Launcher restart is required.
+
+The first stage hooks only the Dart capability predicates
+`BlurUtilities.isGlassMaterialSupported`,
+`BlurUtilities.isHyperMaterialSupported`, and
+`BlurUtilities.isMaterialDisabled`. Unlike the archived research prototype,
+the other reactive glass predicates are deliberately not overridden because
+constant returns could discard Rx dependency registration.
+
+Target lookup reads uniquely named functions from the **actual 8583 ELF
+symbol table**: old addresses are never used. Whole-ELF SHA-256 must first
+match the recorded fuxi profile; the entire runtime function must match the
+mapped, immutable vendor ELF bytes, and its entry must match the Dart ABI
+before inline hooking. A missing/ambiguous symbol or changed code disables
+the entire override. All three hooks must install and mlock-pin their code
+pages before the override flag becomes active. Until then wrappers tail-call
+the vendor functions unchanged.
+
+Device log markers: `OS4 glass gate enabled`,
+`OS4 glass gate unavailable`, and `OS4 glass gate calls=`.
+This phase only unlocks the **vendor's native glass**. It does not yet install
+the Prismal meniscus, refraction, chromatic dispersion or optical shader,
+and must not be described as the completed LiquidDock glass port. A full
+end-to-end device visual / hit-region check is still required.
+
 ## Native safety and compatibility
 
 Every hook verifies its complete function body against the exact local vendor

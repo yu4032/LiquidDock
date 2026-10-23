@@ -40,6 +40,7 @@ data class Os4MainScreenOptions(
     val landscape: Os4GridOffsets = Os4GridOffsets(),
     val portrait: Os4GridOffsets = Os4GridOffsets(),
     val dock: Os4DockOptions = Os4DockOptions(),
+    val glassEnabled: Boolean = false,
 ) {
     companion object {
         val offsetKeys = listOf(
@@ -67,6 +68,7 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
                 ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH).map { it.name() })
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
+            add(ConfigSchema.Glass.ENABLED.name())
             add(ConfigSchema.Dock.ENABLED.name())
             dockKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
         }
@@ -90,7 +92,8 @@ data class Os4MainScreenOptions(
                 val grid = boolean(ConfigSchema.Grid.ENABLED)
                 val icons = boolean(ConfigSchema.Grid.ICON_SIZE_ENABLED)
                 val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
-                if (!grid && !icons && !dockEnabled) ""
+                val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
+                if (!grid && !icons && !dockEnabled && !glassEnabled) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
                         enabled = true,
@@ -114,6 +117,7 @@ data class Os4MainScreenOptions(
                             landscape = if (grid) offsets(0) else Os4GridOffsets(),
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),
                             dock = if (dockEnabled) dockOptions() else Os4DockOptions(),
+                            glassEnabled = glassEnabled,
                         ),
                     )
                 }

@@ -32,6 +32,8 @@ object Os4NativeConfPublisher {
                 append("grid_rows=").append(gridRows).append('\n')
             }
             append("icon_size_enabled=").append(if (options.iconSizeEnabled) 1 else 0).append('\n')
+            // Explicit opt-in only. An absent key preserves the stock OS4 material.
+            if (options.glassEnabled) append("glass_enabled=1\n")
             append("icon_size_percent=").append(options.iconSizePercent).append('\n')
             if (grid) {
                 append("widget_horizontal_stretch=")
