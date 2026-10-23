@@ -173,7 +173,7 @@ public final class PresetManager {
         source.put("indicator_portrait_y", 11.8d);
         source.put("dock_customization", Boolean.FALSE);
         source.put("dock_hide_mirror_shortcut", Boolean.FALSE);
-        source.put(ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS.name(), Boolean.TRUE);
+        source.put(ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS.name(), Boolean.FALSE);
         source.put("dock_frame_sync", Boolean.TRUE);
         source.put("dock_resize_animation", Boolean.FALSE);
         source.put("dock_smooth_resize_animation", Boolean.TRUE);

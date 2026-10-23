@@ -127,7 +127,7 @@ public final class ConfigSchema {
                 "dock_hide_mirror_shortcut", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> HIDE_RECENT_TASK_ICONS = bool(
-                "dock_hide_recent_task_icons", true, true, true,
+                "dock_hide_recent_task_icons", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> FRAME_SYNC = bool(
                 "dock_frame_sync", true, true, true, ConfigKey.ExportMode.ALWAYS);
