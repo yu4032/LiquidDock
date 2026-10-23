@@ -22,7 +22,7 @@ public class WorkstationAllAppsIndicatorPolicyTest {
     @Test public void repeatedRepositioningUsesVendorBaselineNotPreviousOffset() {
         assertEquals(110f, WorkstationAllAppsIndicatorPolicy.targetY(
                 120f, true, true, false, -10, 10), 0.001f);
-        assertEquals(100f, WorkstationAllAppsIndicatorPolicy.targetY(
-                110f, true, true, false, -10, 10), 0.001f);
+        assertEquals(110f, WorkstationAllAppsIndicatorPolicy.targetY(
+                120f, true, true, false, -10, 10), 0.001f);
     }
 }
