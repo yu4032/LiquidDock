@@ -127,6 +127,7 @@ final class LiquidDockConfig {
 
     static final class Dock {
         final boolean enabled, resizeAnimation, smoothResizeAnimation, dimensionsDp;
+        final boolean hideRecentTaskIcons;
         final float widthOffset, heightOffset, spacing, bottomOffset;
         final int blurRadius;
         final boolean cornersDp, squircle, fillDiff, strokeEnabled, strokeShadow, shadowEnabled;
@@ -139,6 +140,8 @@ final class LiquidDockConfig {
         Dock(ConfigReader c) {
             enabled = c.b(ConfigSchema.Dock.ENABLED.name(),
                     ConfigSchema.Dock.ENABLED.runtimeFallback());
+            hideRecentTaskIcons = c.b(ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS.name(),
+                    ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS.runtimeFallback());
             resizeAnimation = c.b(ConfigSchema.Dock.RESIZE_ANIMATION.name(),
                     ConfigSchema.Dock.RESIZE_ANIMATION.runtimeFallback());
             smoothResizeAnimation = c.b(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(),
@@ -418,6 +421,7 @@ final class LiquidDockConfig {
         final float allAppsLandscapeTopSpacing, allAppsLandscapeBottomSpacing;
         final float allAppsPortraitHorizontalOffset;
         final float allAppsPortraitTopSpacing, allAppsPortraitBottomSpacing;
+        final float allAppsLandscapeIndicatorY, allAppsPortraitIndicatorY;
         final float iconTopOffset, iconBottomOffset;
         final float dockVerticalOffset, iconLandscapeTopOffset;
 
@@ -450,6 +454,12 @@ final class LiquidDockConfig {
             allAppsPortraitBottomSpacing = c.f(
                     ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.name(),
                     ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.runtimeFallback());
+            allAppsLandscapeIndicatorY = c.f(
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y.name(),
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y.runtimeFallback());
+            allAppsPortraitIndicatorY = c.f(
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y.name(),
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y.runtimeFallback());
             iconTopOffset = c.f(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.runtimeFallback());
             dockVerticalOffset = c.f(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET.name(), 0f);

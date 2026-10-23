@@ -25,7 +25,8 @@ public class HomeGridCellGeometryPolicyTest {
         return new HomeGridWorkstationGeometryConfig(
                 20,
                 24, 30, 34,
-                18, 26, 28);
+                18, 26, 28,
+                9, -7);
     }
 
     @Test

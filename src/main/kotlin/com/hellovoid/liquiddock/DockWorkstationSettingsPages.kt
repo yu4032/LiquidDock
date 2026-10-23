@@ -122,6 +122,13 @@ internal fun DockBehaviorPage(
     ) {
         BooleanSetting(
             prefs,
+            ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS,
+            "隐藏 Dock 最近任务图标",
+            "直接过滤 Dock 推荐的最近任务，不影响固定图标与系统多任务界面；重启桌面生效",
+            masterEnabled,
+        )
+        BooleanSetting(
+            prefs,
             ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT,
             "隐藏手机互联图标",
             "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态",

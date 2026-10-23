@@ -126,6 +126,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> HIDE_MIRROR_SHORTCUT = bool(
                 "dock_hide_mirror_shortcut", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> HIDE_RECENT_TASK_ICONS = bool(
+                "dock_hide_recent_task_icons", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> FRAME_SYNC = bool(
                 "dock_frame_sync", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> RESIZE_ANIMATION = bool(
@@ -553,6 +556,12 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_BOTTOM_SPACING = dp(
                 "workstation_all_apps_portrait_bottom_spacing", 0, 0, 0, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_INDICATOR_Y = dp(
+                "workstation_all_apps_landscape_indicator_y", 0, 0, 0, -160, 160,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_INDICATOR_Y = dp(
+                "workstation_all_apps_portrait_indicator_y", 0, 0, 0, -160, 160,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_VERTICAL_OFFSET = dp(
                 "workstation_dock_vertical_offset", 0, 0, 0, -120, 120,
                 ConfigKey.ExportMode.ALWAYS);
@@ -612,7 +621,8 @@ public final class ConfigSchema {
                 Grid.SPLIT_HORIZONTAL_OFFSET ,
                 Grid.LANDSCAPE_ROW_GAP, Grid.PORTRAIT_ROW_GAP,
                 Grid.LANDSCAPE_INDICATOR_Y, Grid.PORTRAIT_INDICATOR_Y);
-        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT, Dock.FRAME_SYNC,
+        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT,
+                Dock.HIDE_RECENT_TASK_ICONS, Dock.FRAME_SYNC,
                 Dock.RESIZE_ANIMATION, Dock.SMOOTH_RESIZE_ANIMATION,
                 Dock.WIDTH_OFFSET, Dock.HEIGHT_OFFSET, Dock.SPACING,
                 Dock.BOTTOM_OFFSET, Dock.BLUR_RADIUS, Dock.CORNER_OFFSET,
@@ -690,6 +700,8 @@ public final class ConfigSchema {
                 Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
                 Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
+                Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y,
+                Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y,
                 Workstation.DOCK_VERTICAL_OFFSET,
                 Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
                 Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET);

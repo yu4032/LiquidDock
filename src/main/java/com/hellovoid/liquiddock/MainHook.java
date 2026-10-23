@@ -53,13 +53,14 @@ public class MainHook {
         LauncherManualDiscoveryBridge.installGridPreflightRegistration(classLoader);
 
         // Independent of the visual owner: filter only the vendor Dock recommendation source.
-        DockRecentAppBlacklistHook.install(classLoader);
+        DockRecentAppBlacklistHook.install(classLoader, config.dock.hideRecentTaskIcons);
 
         // Grid feature.
         DockDividerHook.install(classLoader);
         LauncherGridInstallConfig grid = LauncherGridInstallConfig.from(config, density);
         HomeGridHook.install(classLoader, grid.home);
         HomeGridHook.setWorkstationGeometryConfig(grid.workstation);
+        WorkstationAllAppsIndicatorHook.install(classLoader, grid.workstation);
         order.advance(LauncherInstallSequence.Stage.GRID);
 
         // Vendor Dock presentation ownership must exist before glass/fallback customization.
