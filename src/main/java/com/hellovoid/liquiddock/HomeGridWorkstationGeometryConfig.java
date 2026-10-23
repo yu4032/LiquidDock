@@ -3,7 +3,7 @@ package com.hellovoid.liquiddock;
 /** Immutable Workstation-specific grid geometry; kept separate from normal HOME install config. */
 final class HomeGridWorkstationGeometryConfig {
     static final HomeGridWorkstationGeometryConfig NONE =
-            new HomeGridWorkstationGeometryConfig(0, 0, 0, 0, 0, 0, 0);
+            new HomeGridWorkstationGeometryConfig(0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     final int workspaceHorizontalOffset;
     final int allAppsLandscapeHorizontal;
@@ -12,6 +12,8 @@ final class HomeGridWorkstationGeometryConfig {
     final int allAppsPortraitHorizontal;
     final int allAppsPortraitTop;
     final int allAppsPortraitBottom;
+    final int allAppsLandscapeIndicatorY;
+    final int allAppsPortraitIndicatorY;
 
     HomeGridWorkstationGeometryConfig(
             int workspaceHorizontalOffset,
@@ -20,7 +22,9 @@ final class HomeGridWorkstationGeometryConfig {
             int allAppsLandscapeBottom,
             int allAppsPortraitHorizontal,
             int allAppsPortraitTop,
-            int allAppsPortraitBottom) {
+            int allAppsPortraitBottom,
+            int allAppsLandscapeIndicatorY,
+            int allAppsPortraitIndicatorY) {
         this.workspaceHorizontalOffset = workspaceHorizontalOffset;
         this.allAppsLandscapeHorizontal = allAppsLandscapeHorizontal;
         this.allAppsLandscapeTop = allAppsLandscapeTop;
@@ -28,5 +32,7 @@ final class HomeGridWorkstationGeometryConfig {
         this.allAppsPortraitHorizontal = allAppsPortraitHorizontal;
         this.allAppsPortraitTop = allAppsPortraitTop;
         this.allAppsPortraitBottom = allAppsPortraitBottom;
+        this.allAppsLandscapeIndicatorY = allAppsLandscapeIndicatorY;
+        this.allAppsPortraitIndicatorY = allAppsPortraitIndicatorY;
     }
 }
