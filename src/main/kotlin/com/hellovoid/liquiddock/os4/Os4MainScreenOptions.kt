@@ -16,6 +16,22 @@ data class Os4GridOffsets(
             indicatorY.isFinite() && indicatorY in -160.0..160.0
 }
 
+data class Os4DockOptions(
+    val enabled: Boolean = false,
+    val width: Double = 0.0,
+    val height: Double = 0.0,
+    val spacing: Double = 0.0,
+    val bottom: Double = 0.0,
+    val corner: Double = 0.0,
+) {
+    internal fun isValid(): Boolean =
+        width.isFinite() && width in -80.0..80.0 &&
+            height.isFinite() && height in -80.0..80.0 &&
+            spacing.isFinite() && spacing in -8.0..12.0 &&
+            bottom.isFinite() && bottom in -30.0..40.0 &&
+            corner.isFinite() && corner in -50.0..100.0
+}
+
 /** Pure preference extraction, independent from Android/root and launcher identity checks. */
 data class Os4MainScreenOptions(
     val iconSizeEnabled: Boolean = false,
@@ -23,6 +39,7 @@ data class Os4MainScreenOptions(
     val widgetHorizontalStretch: Boolean = false,
     val landscape: Os4GridOffsets = Os4GridOffsets(),
     val portrait: Os4GridOffsets = Os4GridOffsets(),
+    val dock: Os4DockOptions = Os4DockOptions(),
 ) {
     companion object {
         val offsetKeys = listOf(
@@ -37,12 +54,21 @@ data class Os4MainScreenOptions(
             ConfigSchema.Grid.PORTRAIT_ROW_GAP,
             ConfigSchema.Grid.PORTRAIT_INDICATOR_Y,
         )
+        private val dockKeys = listOf(
+            ConfigSchema.Dock.WIDTH_OFFSET,
+            ConfigSchema.Dock.HEIGHT_OFFSET,
+            ConfigSchema.Dock.SPACING,
+            ConfigSchema.Dock.BOTTOM_OFFSET,
+            ConfigSchema.Dock.BLUR_CORNER_OFFSET,
+        )
         val watchedKeys: Set<String> = buildSet {
             addAll(listOf(ConfigSchema.Core.ENABLED, ConfigSchema.Grid.ENABLED,
                 ConfigSchema.Grid.COLUMNS, ConfigSchema.Grid.ROWS,
                 ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
                 ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH).map { it.name() })
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
+            add(ConfigSchema.Dock.ENABLED.name())
+            dockKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
         }
 
         /** Empty means disabled; null means corrupt active settings and must clear stale state. */
@@ -63,8 +89,17 @@ data class Os4MainScreenOptions(
             else {
                 val grid = boolean(ConfigSchema.Grid.ENABLED)
                 val icons = boolean(ConfigSchema.Grid.ICON_SIZE_ENABLED)
-                if (!grid && !icons) ""
+                val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
+                if (!grid && !icons && !dockEnabled) ""
                 else {
+                    fun dockOptions() = Os4DockOptions(
+                        enabled = true,
+                        width = dp(ConfigSchema.Dock.WIDTH_OFFSET),
+                        height = dp(ConfigSchema.Dock.HEIGHT_OFFSET),
+                        spacing = dp(ConfigSchema.Dock.SPACING),
+                        bottom = dp(ConfigSchema.Dock.BOTTOM_OFFSET),
+                        corner = dp(ConfigSchema.Dock.BLUR_CORNER_OFFSET),
+                    )
                     fun offsets(start: Int) = Os4GridOffsets(
                         dp(offsetKeys[start]), dp(offsetKeys[start + 1]),
                         dp(offsetKeys[start + 2]), dp(offsetKeys[start + 3]), dp(offsetKeys[start + 4]),
@@ -78,6 +113,7 @@ data class Os4MainScreenOptions(
                             widgetHorizontalStretch = grid && boolean(ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH),
                             landscape = if (grid) offsets(0) else Os4GridOffsets(),
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),
+                            dock = if (dockEnabled) dockOptions() else Os4DockOptions(),
                         ),
                     )
                 }

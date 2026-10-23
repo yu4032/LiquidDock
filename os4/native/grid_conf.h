@@ -55,11 +55,17 @@ struct ld_grid_offsets {
     double horizontal, top, bottom, row_gap, indicator_y;
 };
 
+struct ld_dock_conf {
+    int enabled;
+    double width, height, spacing, bottom, corner;
+};
+
 struct ld_grid_conf {
     int cols;   /* 0 = 不改（缺键）；否则 [LD_GRID_COLS_MIN, LD_GRID_COLS_MAX] */
     int rows;   /* 0 = 不改（缺键）；否则 [LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX] */
     int icon_size_enabled, icon_size_percent, widget_horizontal_stretch;
     struct ld_grid_offsets landscape, portrait;
+    struct ld_dock_conf dock;
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -94,6 +100,32 @@ static inline int ld_grid_parse_double(const char *s, double *outv)
     if (!s || !*s) return 0;
     v = strtod(s, &end);
     if (end == s || *end != '\0' || !isfinite(v)) return 0;
+    *outv = v;
+    return 1;
+}
+
+/* Signed decimal accepted by Kotlin Double.toString; hex, whitespace, NaN and infinity rejected. */
+static inline int ld_grid_parse_bounded_decimal(const char *s, double lo, double hi, double *outv)
+{
+    const char *q = s;
+    int digits = 0, dots = 0;
+    double v;
+    if (!q || !*q) return 0;
+    if (*q == '-' || *q == '+') ++q;
+    for (; *q && *q != 'e' && *q != 'E'; ++q) {
+        if (*q >= '0' && *q <= '9') ++digits;
+        else if (*q == '.') ++dots;
+        else return 0;
+    }
+    if (digits == 0 || dots > 1) return 0;
+    if (*q == 'e' || *q == 'E') {
+        int exponent_digits = 0;
+        ++q;
+        if (*q == '-' || *q == '+') ++q;
+        for (; *q >= '0' && *q <= '9'; ++q) ++exponent_digits;
+        if (exponent_digits == 0) return 0;
+    }
+    if (*q != '\0' || !ld_grid_parse_double(s, &v) || v < lo || v > hi) return 0;
     *outv = v;
     return 1;
 }
@@ -160,6 +192,35 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if (!ld_grid_parse_int(val, LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX,
                                            &c.rows)) { bad = 1; break; }
                     seen |= 32u;
+                } else if (strcmp(key, "dock_geometry_enabled") == 0) {
+                    int bv;
+                    if (seen & (1u << 20) || !ld_grid_parse_bool01(val, &bv)) {
+                        bad = 1; break;
+                    }
+                    c.dock.enabled = bv;
+                    seen |= 1u << 20;
+                } else if (strcmp(key, "dock_geometry_width") == 0 ||
+                           strcmp(key, "dock_geometry_height") == 0 ||
+                           strcmp(key, "dock_geometry_spacing") == 0 ||
+                           strcmp(key, "dock_geometry_bottom") == 0 ||
+                           strcmp(key, "dock_geometry_corner") == 0) {
+                    unsigned bit;
+                    double lo, hi, *target;
+                    if (strcmp(key, "dock_geometry_width") == 0) {
+                        bit = 1u << 21; lo = -80; hi = 80; target = &c.dock.width;
+                    } else if (strcmp(key, "dock_geometry_height") == 0) {
+                        bit = 1u << 22; lo = -80; hi = 80; target = &c.dock.height;
+                    } else if (strcmp(key, "dock_geometry_spacing") == 0) {
+                        bit = 1u << 23; lo = -8; hi = 12; target = &c.dock.spacing;
+                    } else if (strcmp(key, "dock_geometry_bottom") == 0) {
+                        bit = 1u << 24; lo = -30; hi = 40; target = &c.dock.bottom;
+                    } else {
+                        bit = 1u << 25; lo = -50; hi = 100; target = &c.dock.corner;
+                    }
+                    if ((seen & bit) || !ld_grid_parse_bounded_decimal(val, lo, hi, target)) {
+                        bad = 1; break;
+                    }
+                    seen |= bit;
                 } else if (strcmp(key, "end") == 0) {
                     if (seen & 64u) { bad = 1; break; }
                     if (val[0] != '1' || val[1] != '\0') { bad = 1; break; }

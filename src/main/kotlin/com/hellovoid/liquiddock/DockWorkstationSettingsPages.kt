@@ -153,6 +153,7 @@ internal fun DockGeometryPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
 ) {
+    val nativeGlass = LocalSettingsAvailability.current.isOs4Launcher()
     val dockEnabled = prefs.getBoolean(
         ConfigSchema.Dock.ENABLED.name(),
         ConfigSchema.Dock.ENABLED.uiDefault(),
@@ -160,9 +161,14 @@ internal fun DockGeometryPage(
     DenseSettingsList(
         padding,
         stringResource(R.string.page_dock_geometry),
-        "调整 Dock 的尺寸、位置、圆角与图标间距。",
+        if (nativeGlass) "保留原生柔光玻璃，调整 Dock 的尺寸、位置、圆角与图标间距；重启桌面生效。"
+        else "调整 Dock 的尺寸、位置、圆角与图标间距。",
     ) {
-        groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)
+        groupedIntSettings(
+            if (nativeGlass) dockSpecs.filterNot { it.key == ConfigSchema.Dock.BLUR_RADIUS.name() } else dockSpecs,
+            prefs,
+            masterEnabled && dockEnabled,
+        )
     }
 }
 
