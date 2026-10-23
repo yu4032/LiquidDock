@@ -4,7 +4,7 @@
  *   hooks_dock.c 的解析器是编译单元私有的，且本特性不得改它（他人维护）。
  *   这里做**全键集**解析（dock_* / glass / icons / grid_cols / grid_rows / end），
  *   校验规则与 hooks_dock.c 逐条对齐（含未知键/重复键/截断/超长全部拒绝），
- *   但只提取 grid_cols / grid_rows 两个键。这样任一侧发现配置损坏时，
+ *   并提取网格、图标大小和全屏布局偏移。这样任一侧发现配置损坏时，
  *   两侧都会 fail-closed（整份作废），不会出现「一边开一边关」。
  *
  * ⚠ 协议同步：hooks_dock.c 的已知键集目前**不含** grid_cols / grid_rows，
@@ -18,7 +18,13 @@
  *   icons=0|1
  *   grid_cols=<2..10>     桌面网格列数（缺省 = 不改）
  *   grid_rows=<2..10>     桌面网格行数（缺省 = 不改）
+ *   icon_size_enabled=0|1; icon_size_percent=80..120 (缺省100)
+ *   widget_horizontal_stretch=0|1
+ *   grid_{landscape,portrait}_{horizontal_distance,top_distance,bottom_distance}=-600..600 dp
+ *   grid_{landscape,portrait}_row_gap=-200..400 dp
+ *   indicator_{landscape,portrait}_y=-160..160 dp
  *   end=1                 终止行，必须是最后一行
+ * grid_cols/grid_rows 必须成对出现；无计数键支持独立的图标大小设置。
  * 每行 LF 结尾的 key=value；行序任意；缺键 = 该特性不生效。
  *
  * fail-closed 规则（任一触发 = 整份配置作废，网格不改，绝不沿用旧值）：
@@ -45,9 +51,15 @@
 #define LD_GRID_ROWS_MIN 2            /* 与 app 层 ConfigSchema.Grid.ROWS 一致 */
 #define LD_GRID_ROWS_MAX 10
 
+struct ld_grid_offsets {
+    double horizontal, top, bottom, row_gap, indicator_y;
+};
+
 struct ld_grid_conf {
     int cols;   /* 0 = 不改（缺键）；否则 [LD_GRID_COLS_MIN, LD_GRID_COLS_MAX] */
     int rows;   /* 0 = 不改（缺键）；否则 [LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX] */
+    int icon_size_enabled, icon_size_percent, widget_horizontal_stretch;
+    struct ld_grid_offsets landscape, portrait;
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -90,7 +102,8 @@ static inline int ld_grid_parse_double(const char *s, double *outv)
  * len 含全部字节；文本中每行必须以 LF 结尾（含最后一行）。 */
 static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid_conf *out)
 {
-    struct ld_grid_conf c = { 0, 0 };
+    struct ld_grid_conf c = {0};
+    c.icon_size_percent = 100;
     unsigned seen = 0;  /* bit0=dock_offset_y bit1=dock_offset_x bit2=glass bit3=icons
                            bit4=grid_cols bit5=grid_rows bit6=end */
     int ok = 0;
@@ -153,16 +166,68 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     seen |= 64u;
                     done = 1;                            /* 必须是最后一行 */
                 } else {
-                    bad = 1; break;                      /* 未知键 = 损坏 */
+                    static const char *const keys[] = {
+                        "icon_size_enabled", "icon_size_percent", "widget_horizontal_stretch",
+                        "grid_landscape_horizontal_distance", "grid_landscape_top_distance",
+                        "grid_landscape_bottom_distance", "grid_landscape_row_gap",
+                        "grid_portrait_horizontal_distance", "grid_portrait_top_distance",
+                        "grid_portrait_bottom_distance", "grid_portrait_row_gap",
+                        "indicator_landscape_y", "indicator_portrait_y"
+                    };
+                    double *offsets[] = {
+                        &c.landscape.horizontal, &c.landscape.top, &c.landscape.bottom,
+                        &c.landscape.row_gap, &c.portrait.horizontal, &c.portrait.top,
+                        &c.portrait.bottom, &c.portrait.row_gap,
+                        &c.landscape.indicator_y, &c.portrait.indicator_y
+                    };
+                    unsigned i;
+                    for (i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i)
+                        if (strcmp(key, keys[i]) == 0) break;
+                    if (i == sizeof(keys) / sizeof(keys[0]) || (seen & (128u << i))) {
+                        bad = 1; break;
+                    }
+                    int valid;
+                    if (i == 0) valid = ld_grid_parse_bool01(val, &c.icon_size_enabled);
+                    else if (i == 1) valid = ld_grid_parse_int(val, 80, 120, &c.icon_size_percent);
+                    else if (i == 2) valid = ld_grid_parse_bool01(val, &c.widget_horizontal_stretch);
+                    else {
+                        double v;
+                        double lo = -600, hi = 600;
+                        if (i == 6 || i == 10) { lo = -200; hi = 400; }
+                        if (i >= 11) { lo = -160; hi = 160; }
+                        /* Signed decimal (including Double.toString's exponent form).
+                         * No whitespace, hex, NaN or infinity. */
+                        const char *q = val;
+                        if (*q == '-' || *q == '+') ++q;
+                        int digits = 0, dots = 0;
+                        for (; *q && *q != 'e' && *q != 'E'; ++q) {
+                            if (*q >= '0' && *q <= '9') ++digits;
+                            else if (*q == '.') ++dots;
+                            else { dots = 2; break; }
+                        }
+                        int syntax = digits > 0 && dots <= 1;
+                        if (*q == 'e' || *q == 'E') {
+                            ++q;
+                            if (*q == '-' || *q == '+') ++q;
+                            int exponent_digits = 0;
+                            for (; *q >= '0' && *q <= '9'; ++q) ++exponent_digits;
+                            syntax = syntax && exponent_digits > 0;
+                        }
+                        valid = syntax && *q == '\0' && ld_grid_parse_double(val, &v)
+                                && v >= lo && v <= hi;
+                        if (valid) *offsets[i - 3] = v;
+                    }
+                    if (!valid) { bad = 1; break; }
+                    seen |= 128u << i;
                 }
             }
         }
-        if (!bad && done && p == end) ok = 1;
+        if (!bad && done && p == end && ((seen & 48u) == 0 || (seen & 48u) == 48u)) ok = 1;
         /* done 后仍有内容 / 未见 end=1（截断）/ 末行无 LF —— 全部保持 ok=0 */
     }
 
     if (ok) { if (out) *out = c; }
-    else    { if (out) { out->cols = 0; out->rows = 0; } }
+    else    { if (out) memset(out, 0, sizeof(*out)); }
     return ok;
 }
 
@@ -174,7 +239,7 @@ static inline int ld_grid_conf_parse_file(const char *path, struct ld_grid_conf 
     char buf[LD_GRID_CONF_MAX_BYTES + 1];
     size_t n;
 
-    if (out) { out->cols = 0; out->rows = 0; }
+    if (out) memset(out, 0, sizeof(*out));
     f = fopen(path, "rb");
     if (!f) return 0;
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }

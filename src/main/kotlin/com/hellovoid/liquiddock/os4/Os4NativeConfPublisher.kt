@@ -17,6 +17,38 @@ object Os4NativeConfPublisher {
         }
     }
 
+    /** Both counts are absent for icon-only snapshots; placement remains stock. */
+    @JvmStatic
+    fun buildConf(gridCols: Int?, gridRows: Int?, options: Os4MainScreenOptions): String? {
+        if ((gridCols == null) != (gridRows == null)) return null
+        val grid = gridCols != null
+        if (grid && (gridCols !in 2..10 || gridRows !in 2..10)) return null
+        if (options.iconSizePercent !in 80..120) return null
+        if (grid && (!options.landscape.isValid() || !options.portrait.isValid())) return null
+        return buildString {
+            if (grid) {
+                append("grid_cols=").append(gridCols).append('\n')
+                append("grid_rows=").append(gridRows).append('\n')
+            }
+            append("icon_size_enabled=").append(if (options.iconSizeEnabled) 1 else 0).append('\n')
+            append("icon_size_percent=").append(options.iconSizePercent).append('\n')
+            if (grid) {
+                append("widget_horizontal_stretch=")
+                    .append(if (options.widgetHorizontalStretch) 1 else 0).append('\n')
+                fun offsets(direction: String, offsets: Os4GridOffsets) {
+                    append("grid_${direction}_horizontal_distance=").append(offsets.horizontal).append('\n')
+                    append("grid_${direction}_top_distance=").append(offsets.top).append('\n')
+                    append("grid_${direction}_bottom_distance=").append(offsets.bottom).append('\n')
+                    append("grid_${direction}_row_gap=").append(offsets.rowGap).append('\n')
+                    append("indicator_${direction}_y=").append(offsets.indicatorY).append('\n')
+                }
+                offsets("landscape", options.landscape)
+                offsets("portrait", options.portrait)
+            }
+            append("end=1\n")
+        }
+    }
+
     @JvmStatic
     fun publish(context: Context, gridCols: Int, gridRows: Int): Boolean {
         val conf = buildConf(gridCols, gridRows)

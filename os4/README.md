@@ -28,6 +28,30 @@ runtime implementation. The legacy Launcher Java backend remains separate.
   The attested Rust guard delegates this conversion to the DTO planner only when
   the complete native layout pipeline is installed; otherwise it calls original.
 
+## Main-screen options
+
+The attested backend also applies the existing icon-size percentage, widget
+horizontal stretch and independent full-screen portrait/landscape horizontal,
+top, bottom, row-gap and indicator-Y settings. Fractional offsets use Flutter
+logical dp; preference `_tenths` values take precedence. Restart Launcher after
+changing these settings. Split-layout tuning is not connected in this stage.
+
+Icon sizing works independently of custom grid and affects the shared icon
+record consumed by the workspace, Dock and folders. Geometry is applied once
+when each fresh grid configuration is computed. Bottom distance and row gap
+change workspace row stride while preserving the shared inset used by Dock.
+Impossible viewports retain the complete original geometry.
+
+With widget stretch disabled, native widget content keeps its original width
+and stays centered. Enabled multi-column widgets fill their allocated grid
+width; one-column widgets retain native sizing. A bounded cache stores only
+primitive before/after dimensions for each configuration variant. The widget
+hook reuses the vendor's existing Double allocation path and GC stack root.
+
+Indicator Y changes the fresh Transform's Matrix4 translation, including its
+hit testing. The earlier scale-origin Offset does not move an identity scale
+and is left untouched. All these geometry adjustments reject split configs.
+
 ## Native safety and compatibility
 
 Every hook verifies its complete function body against the exact local vendor
@@ -39,7 +63,8 @@ mutation or Rust conversion delegation is enabled.
 Successful inline hooks pin their patch pages with `mlock`. File-backed private
 code-page discard can restore the APK bytes and silently remove every hook;
 this was observed in a long-running process whose rotation callbacks stopped.
-The patched pages occupy 40 KiB on the tested 4 KiB-page device. A pin failure
+The original layout hooks occupy 40 KiB on the tested 4 KiB-page device; the
+main-screen option hooks add three patch sites. A pin failure
 also disables custom counts and placement, retaining a coherent stock pipeline.
 The regression harness reproduces patch loss under `MADV_DONTNEED`, then verifies
 that locked pages retain the patch across a page boundary. The original caller
