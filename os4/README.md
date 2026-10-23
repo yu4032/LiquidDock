@@ -91,3 +91,10 @@ Device acceptance compares item IDs, pages, coordinates and spans across
 rotation, Launcher restart and full reboot. A successful build or Java test is
 not a device acceptance result. Occasional blank stock widgets on page one are
 retained at the user's request.
+
+The integrated audit retains CE configuration authority after unlock, whole-ELF
+SHA-256 attestation for both Dart and Rust entries before hooking, process gating
+before diagnostics, serialized hook installation, and atomic configuration
+publication. Sidecar profile switching occurs only after the native layout
+pipeline has been verified and installed. The obsolete direct SQLite repack is
+not part of the active layout path.

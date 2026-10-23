@@ -75,37 +75,21 @@ static inline int ld_sqlite_api_load(struct ld_sqlite_api *api)
     return 1;
 }
 
+/*
+ * 8583 on the verified fuxi tablet-mode target uses this database. Scanning
+ * for the newest launcher*.db by mtime can select an inactive workspace and
+ * corrupt unrelated layouts; unknown layouts must be rejected, not guessed.
+ */
 static inline int ld_pick_active_launcher_db(char *out, size_t out_size)
 {
-    DIR *dir = opendir(LD_HOME_DB_DIR);
-    if (!dir) return 0;
-
-    struct dirent *entry;
-    struct stat best_stat;
-    char best[512] = {0};
-    int have_best = 0;
-    while ((entry = readdir(dir)) != NULL) {
-        size_t len = strlen(entry->d_name);
-        int is_launcher_db = strncmp(entry->d_name, "launcher", 8) == 0;
-        int is_db = len >= 3 && strcmp(entry->d_name + len - 3, ".db") == 0;
-        if (!is_launcher_db || !is_db) continue;
-
-        char path[512];
-        int n = snprintf(path, sizeof path, "%s/%s", LD_HOME_DB_DIR, entry->d_name);
-        if (n <= 0 || (size_t)n >= sizeof path) continue;
-        struct stat st;
-        if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) continue;
-        if (!have_best || st.st_mtim.tv_sec > best_stat.st_mtim.tv_sec ||
-            (st.st_mtim.tv_sec == best_stat.st_mtim.tv_sec &&
-             st.st_mtim.tv_nsec > best_stat.st_mtim.tv_nsec)) {
-            have_best = 1;
-            best_stat = st;
-            snprintf(best, sizeof best, "%s", path);
-        }
+    static const char target[] = LD_HOME_DB_DIR "/launcher_rotatable4x6.db";
+    struct stat st;
+    if (!out || out_size < sizeof target ||
+        stat(target, &st) != 0 || !S_ISREG(st.st_mode)) {
+        LOGE("grid-repack: verified 8583 tablet DB not found; no mutation");
+        return 0;
     }
-    closedir(dir);
-    if (!have_best || strlen(best) >= out_size) return 0;
-    snprintf(out, out_size, "%s", best);
+    memcpy(out, target, sizeof target);
     return 1;
 }
 
