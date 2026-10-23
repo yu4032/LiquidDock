@@ -29,6 +29,7 @@
 #include "rust_orientation_fingerprint.h"
 #include "home_options_fingerprints.h"
 #include "home_geometry_fingerprints.h"
+#include "dock_geometry_fingerprints.h"
 
 #define LD_PRIMARY_CONF "/data/user/0/com.miui.home/files/liquiddock-native.conf"
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
@@ -90,6 +91,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
 #include "home_geometry.h"
 #include "home_indicator.h"
 #include "home_widgets.h"
+#include "dock_geometry.h"
 static void *g_orig_home_pipeline;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
@@ -269,6 +271,16 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             ld_home_indicator_words,sizeof ld_home_indicator_words,(void *)repl_home_indicator,&g_orig_home_indicator},
         {LD_HOME_WIDGET_FUNCTION_OFFSET,LD_HOME_WIDGET_HOOK_OFFSET,
             ld_home_widget_words,sizeof ld_home_widget_words,(void *)repl_home_widget,&g_orig_home_widget},
+        {LD_DOCK_FUNCTION_SIZE_START,LD_DOCK_FUNCTION_SIZE_SITE,
+            ld_dock_function_size_body,sizeof ld_dock_function_size_body,(void *)repl_dock_function_size,&g_orig_dock_function_size},
+        {LD_DOCK_ICON_PADDING_START,LD_DOCK_ICON_PADDING_SITE,
+            ld_dock_icon_padding_body,sizeof ld_dock_icon_padding_body,(void *)repl_dock_icon_padding,&g_orig_dock_icon_padding},
+        {LD_DOCK_CONTAINER_HEIGHT_START,LD_DOCK_CONTAINER_HEIGHT_SITE,
+            ld_dock_container_height_body,sizeof ld_dock_container_height_body,(void *)repl_dock_container_height,&g_orig_dock_container_height},
+        {LD_DOCK_BACKGROUND_START,LD_DOCK_BACKGROUND_SITE,
+            ld_dock_background_words,sizeof ld_dock_background_words,(void *)repl_dock_background,&g_orig_dock_background},
+        {LD_DOCK_SPACING_START,LD_DOCK_SPACING_SITE,
+            ld_dock_spacing_words,sizeof ld_dock_spacing_words,(void *)repl_dock_spacing,&g_orig_dock_spacing},
     };
     for(size_t i=0;i<sizeof home_hooks/sizeof *home_hooks;i++) {
         if(*home_hooks[i].orig) continue;
@@ -355,7 +367,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 }
 
 static void install_grid_hook(const struct native_api *api) {
-    if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled) return;
+    if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled && !g_home_options.dock.enabled) return;
     pthread_mutex_lock(&g_install_lock);
     install_grid_hook_unlocked(api);
     if(g_installed && !g_trace_started) {

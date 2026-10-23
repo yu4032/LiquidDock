@@ -25,6 +25,7 @@ object Os4NativeConfPublisher {
         if (grid && (gridCols !in 2..10 || gridRows !in 2..10)) return null
         if (options.iconSizePercent !in 80..120) return null
         if (grid && (!options.landscape.isValid() || !options.portrait.isValid())) return null
+        if (options.dock.enabled && !options.dock.isValid()) return null
         return buildString {
             if (grid) {
                 append("grid_cols=").append(gridCols).append('\n')
@@ -44,6 +45,14 @@ object Os4NativeConfPublisher {
                 }
                 offsets("landscape", options.landscape)
                 offsets("portrait", options.portrait)
+            }
+            if (options.dock.enabled) {
+                append("dock_geometry_enabled=1\n")
+                append("dock_geometry_width=").append(options.dock.width).append('\n')
+                append("dock_geometry_height=").append(options.dock.height).append('\n')
+                append("dock_geometry_spacing=").append(options.dock.spacing).append('\n')
+                append("dock_geometry_bottom=").append(options.dock.bottom).append('\n')
+                append("dock_geometry_corner=").append(options.dock.corner).append('\n')
             }
             append("end=1\n")
         }
