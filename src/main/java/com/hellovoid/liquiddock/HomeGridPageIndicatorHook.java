@@ -45,9 +45,6 @@ final class HomeGridPageIndicatorHook {
     }
 
     private static void indicator(Object workspace, boolean restore) {
-        // Workstation launchpad owns its own page indicator. Its AllAppsWorkspace
-        // may inherit Workspace, so the HOME guard must never reset its translation.
-        if (WorkstationAllAppsIndicatorHook.isTargetWorkspace(workspace)) return;
         HookUtil.InvocationResult<Object> result =
                 HookUtil.tryInvoke(workspace, "getScreenIndicator");
         if (!result.succeeded() || !(result.value() instanceof View)) return;
