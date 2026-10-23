@@ -31,7 +31,6 @@
 #include "home_options_fingerprints.h"
 #include "home_geometry_fingerprints.h"
 #include "dock_geometry_fingerprints.h"
-#include "glass_elf.h"
 
 #define LD_PRIMARY_CONF "/data/user/0/com.miui.home/files/liquiddock-native.conf"
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
@@ -203,6 +202,10 @@ static void pin_installed_hook(uintptr_t site) {
 static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info *lib)
 {
     if(!g_home_options.glass_enabled || g_os4_glass_installed || g_os4_glass_attempted) return;
+    if(!g_home_options.glass_targets_present) {
+        ld_blog("OS4 glass gate unavailable: glass_targets not published; open LiquidDock settings");
+        return;
+    }
     g_os4_glass_attempted=true;
     const char *symbols[3]={
         "BlurUtilities.isGlassMaterialSupported",
@@ -228,17 +231,16 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     close(fd);
     if(mapping==MAP_FAILED) { ld_blog("OS4 glass gate unavailable: mmap"); return; }
     const unsigned char *apk=mapping;
-    const unsigned char *vendor=apk+lib->entry_off;
-    size_t vendor_size=29983600u;
+    const size_t vendor_size=29983600u;
     int ready=lib->entry_off<=(size_t)st.st_size
         && vendor_size<=(size_t)st.st_size-lib->entry_off;
     for(size_t i=0;i<3 && ready;i++) {
-        uint64_t vaddr=0,len=0;
-        if(!ld_os4_glass_symbol(vendor,vendor_size,symbols[i],&vaddr,&len)
-                || !ld_vaddr_to_runtime(lib,(uintptr_t)vaddr,&targets[i])
-                || !executable_range(targets[i],(size_t)len)
-                || vaddr>UINTPTR_MAX || len<16) {
-            ld_blog("OS4 glass gate unavailable: symbol %s",symbols[i]);
+        uint64_t vaddr=g_home_options.glass_vaddr[i];
+        uint64_t len=g_home_options.glass_size[i];
+        if(!ld_vaddr_to_runtime(lib,(uintptr_t)vaddr,&targets[i])
+                || !executable_range(targets[i],(size_t)len)) {
+            ld_blog("OS4 glass gate unavailable: 8583 target %s unmapped at %llx",
+                    symbols[i],(unsigned long long)vaddr);
             ready=0; break;
         }
         /* The whole binary was already SHA-256 attested; now check the

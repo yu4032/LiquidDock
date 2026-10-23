@@ -67,14 +67,21 @@ The first stage hooks only the Dart capability predicates
 the other reactive glass predicates are deliberately not overridden because
 constant returns could discard Rx dependency registration.
 
-Target lookup reads uniquely named functions from the **actual 8583 ELF
-symbol table**: old addresses are never used. Whole-ELF SHA-256 must first
-match the recorded fuxi profile; the entire runtime function must match the
-mapped, immutable vendor ELF bytes, and its entry must match the Dart ABI
-before inline hooking. A missing/ambiguous symbol or changed code disables
-the entire override. All three hooks must install and mlock-pin their code
-pages before the override flag becomes active. Until then wrappers tail-call
-the vendor functions unchanged.
+The 8583 AOT symbols are located in the XZ-compressed `.gnu_debugdata`
+mini ELF, **not in the outer ELF's `.symtab`**. The LiquidDock settings
+process extracts the three uniquely named functions from the installed
+vendor APK using XZ for Java, and publishes `glass_targets` in the existing
+atomic native snapshot. The Launcher startup path never runs XZ decoding.
+Whole-ELF SHA-256 must first match the recorded fuxi profile; the entire
+runtime function must match the mapped, immutable vendor ELF bytes, and its
+entry must match the Dart ABI before inline hooking. An absent/ambiguous
+symbol or changed code disables the override. All three hooks must install
+and mlock-pin their code pages before the override flag becomes active.
+Until then wrappers tail-call the vendor functions unchanged.
+
+After installing, open LiquidDock settings (or toggle liquid_glass) so the
+module process publishes the new `glass_targets` field, then restart
+Launcher. No legacy constant addresses are used.
 
 Device log markers: `OS4 glass gate enabled`,
 `OS4 glass gate unavailable`, and `OS4 glass gate calls=`.

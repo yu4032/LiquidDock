@@ -49,6 +49,23 @@ int main(void)
             puts("FAIL: malformed glass option accepted"); return 1;
         }
     }
-    puts("PASS: grid and opt-in glass config fail closed");
+    const char *targets="glass_enabled=1\nglass_targets=0x123400:88,0x128000:140,0x134000:88\nend=1\n";
+    if(!ld_grid_conf_parse(targets,strlen(targets),&glass)
+            || !glass.glass_targets_present || glass.glass_vaddr[0]!=0x123400
+            || glass.glass_size[1]!=140 || glass.glass_size[2]!=88)
+        return 1;
+    const char *bad_targets[]={
+        "glass_enabled=1\nglass_targets=0x123400:88,0x123400:140,0x134000:88\nend=1\n",
+        "glass_enabled=1\nglass_targets=0x123401:88,0x128000:140,0x134000:88\nend=1\n",
+        "glass_enabled=1\nglass_targets=0x123400:88,0x128000:3,0x134000:88\nend=1\n",
+        "glass_enabled=1\nglass_targets=0x123400:88,0x128000:140\nend=1\n",
+        "glass_enabled=1\nglass_targets=0x123400:88,0x128000:140,0x134000:88\nglass_targets=0x123400:88,0x128000:140,0x134000:88\nend=1\n"
+    };
+    for(size_t i=0;i<sizeof bad_targets/sizeof *bad_targets;i++) {
+        if(ld_grid_conf_parse(bad_targets[i],strlen(bad_targets[i]),&glass)) {
+            puts("FAIL: malformed or repeated glass_targets accepted"); return 1;
+        }
+    }
+    puts("PASS: grid, glass gate targets and opt-in config fail closed");
     return 0;
 }
