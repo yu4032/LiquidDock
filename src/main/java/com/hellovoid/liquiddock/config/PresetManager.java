@@ -173,6 +173,7 @@ public final class PresetManager {
         source.put("indicator_portrait_y", 11.8d);
         source.put("dock_customization", Boolean.FALSE);
         source.put("dock_hide_mirror_shortcut", Boolean.FALSE);
+        source.put(ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS.name(), Boolean.TRUE);
         source.put("dock_frame_sync", Boolean.TRUE);
         source.put("dock_resize_animation", Boolean.FALSE);
         source.put("dock_smooth_resize_animation", Boolean.TRUE);
@@ -325,6 +326,8 @@ public final class PresetManager {
         source.put("workstation_all_apps_portrait_horizontal_offset", 41.2d);
         source.put("workstation_all_apps_portrait_top_spacing", 132);
         source.put("workstation_all_apps_portrait_bottom_spacing", 60.8d);
+        source.put(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y.name(), 0);
+        source.put(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y.name(), 0);
         source.put("workstation_dock_vertical_offset", 0);
         source.put("workstation_dock_icon_landscape_vertical_offset", 0);
         source.put("workstation_dock_icon_top_offset", 0);
