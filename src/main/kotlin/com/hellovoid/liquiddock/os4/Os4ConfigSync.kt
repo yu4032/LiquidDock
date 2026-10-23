@@ -52,7 +52,14 @@ object Os4ConfigSync {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         val conf = Os4MainScreenOptions.fromPreferences(prefs.all)
         if (conf == null) Log.e(TAG, "[$reason] invalid options; native snapshot cleared")
-        val published = Os4RootConfWriter.write(context, conf ?: "")
+        // The vendor's named Dart AOT symbols live in XZ .gnu_debugdata.
+        // Extract off the Launcher process, and let Native authenticate bytes.
+        val resolved = if (conf?.contains("glass_enabled=1\n") == true) {
+            val addresses = Os4GlassSymbols.fromInstalledLauncher(context)
+            if (addresses == null) conf
+            else conf.replace("end=1\n","glass_targets=" + addresses + "\nend=1\n")
+        } else conf
+        val published = Os4RootConfWriter.write(context, resolved ?: "")
         Log.i(TAG, "[$reason] options published=$published cleared=${conf.isNullOrEmpty()}")
     }
 }

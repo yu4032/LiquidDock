@@ -65,6 +65,7 @@ android {
 
 dependencies {
     implementation(project(":prismal"))
+    implementation("org.tukaani:xz:1.12") // XZ mini-debug ELF, module app only
 
     // API 101 is provided by the Xposed framework inside hooked processes.
     compileOnly("io.github.libxposed:api:101.0.1")
