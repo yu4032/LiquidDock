@@ -8,7 +8,7 @@ int main(void)
     struct {double old,offset,want;} cases[]={
         {-24,0,-24}, {-24,12,-36}, {-24,-8,-16}, {0,40,-40},
         {-24,-30,0}, {-5,-30,0}, {-5,-1,-4},
-        {0,-12,0}, {12,-12,12}, {12,0,12}, {-6,0.5,-6.5}
+        {12,0,12}, {-6,0.5,-6.5}
     };
     for(size_t i=0;i<sizeof cases/sizeof *cases;i++) {
         double actual=0;
@@ -17,6 +17,14 @@ int main(void)
             fprintf(stderr,"FAIL Dock bottom offset case %zu\n",i);
             return 1;
         }
+    }
+    // No downward headroom: reject rather than report a fictitious write.
+    double unchanged=123;
+    if(ld_dock_bottom_inset(0,-12,&unchanged)
+            || ld_dock_bottom_inset(12,-12,&unchanged)
+            || unchanged!=123) {
+        puts("FAIL: downward move crossed zero or logged a no-op");
+        return 1;
     }
     double result=123;
     if(ld_dock_bottom_inset(-24,41,&result)
