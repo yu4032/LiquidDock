@@ -70,7 +70,7 @@ final class WorkstationAllAppsIndicatorHook {
         }
     }
 
-    private static Object aroundVendorLayout(io.github.libxposed.api.XposedInterface.Hooker.Chain chain)
+    private static Object aroundVendorLayout(io.github.libxposed.api.XposedInterface.Chain chain)
             throws Throwable {
         Object owner = chain.getThisObject();
         Object[] args = chain.getArgs().toArray(new Object[0]);
