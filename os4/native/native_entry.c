@@ -92,6 +92,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
 #include "home_indicator.h"
 #include "home_widgets.h"
 #include "dock_geometry.h"
+#include "dock_bottom_offset.h"
 static void *g_orig_home_pipeline;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
@@ -120,6 +121,10 @@ __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_contex
         baseline.direction=direction; baseline.valid=1;
     }
     ld_apply_home_geometry(c,grid);
+    // The vendor consumes the shared bottom inset for HotSeatsMarginBottom.
+    // Adjust only that scalar on the fresh full-screen grid, without changing
+    // cell size, row stride, icon geometry or the Dock background dimensions.
+    ld_apply_dock_bottom_offset(c,grid);
     ld_apply_home_icons(c,grid);
     if(baseline.valid && ld_read_heap(grid+0x2b,&baseline.current_width,8)
             && ld_read_heap(grid+0x33,&baseline.current_height,8)

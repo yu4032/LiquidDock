@@ -27,6 +27,9 @@ jobs:
             os4/tests/grid_conf_test.c -o /tmp/os4-grid-conf-test
           /tmp/os4-grid-conf-test
           cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
+            os4/tests/dock_bottom_test.c -lm -o /tmp/os4-dock-bottom-test
+          /tmp/os4-dock-bottom-test
+          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
             os4/tests/sha256_test.c -o /tmp/os4-sha256-test
           /tmp/os4-sha256-test
       - name: Native independent layout and patch lifetime tests

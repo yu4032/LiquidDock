@@ -52,6 +52,24 @@ Indicator Y changes the fresh Transform's Matrix4 translation, including its
 hit testing. The earlier scale-origin Offset does not move an identity scale
 and is left untouched. All these geometry adjustments reject split configs.
 
+## Dock bottom offset (experimental)
+
+The existing GUI slider (`Dock → Dock geometry → Dock bottom offset`) now
+publishes `dock_geometry_bottom` through the same checked configuration as
+the other Dock dimensions. Positive values move the Dock away from the physical
+bottom (up); negative values move it down. This **does not** add the obsolete
+7751 `calculateDockOffsetY` hook: the 8583 AOT offset/body is not proven.
+Instead, the existing full-function-attested fresh GridConfig observer changes
+only the signed bottom inset consumed by the vendor HotSeatsMarginBottom
+calculation; no width/height/spacing or workspace row stride is modified.
+
+This is a candidate binding, **not yet visually accepted on fuxi**. It is
+gated by the normal active/fullscreen Dock identity checks, is disabled at zero,
+and fails closed if the expected object fields are absent. Verify positive,
+negative, zero, portrait/landscape and workstation exclusion on-device; inspect
+whether the common inset changes workspace viewport reservation before marking
+the setting as fully ported.
+
 ## Native safety and compatibility
 
 Every hook verifies its complete function body against the exact local vendor
