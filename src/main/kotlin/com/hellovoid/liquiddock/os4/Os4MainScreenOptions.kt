@@ -2,6 +2,7 @@ package com.hellovoid.liquiddock.os4
 
 import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
+import com.hellovoid.liquiddock.WidgetComponentStore
 
 data class Os4GridOffsets(
     val horizontal: Double = 0.0,
@@ -42,6 +43,11 @@ data class Os4MainScreenOptions(
     val dock: Os4DockOptions = Os4DockOptions(),
     val glassEnabled: Boolean = false,
     val glassNativeOverrides: Map<String, Double> = emptyMap(),
+    val glassIcons: Boolean = false,
+    val glassWidgets: Boolean = false,
+    val widgetOverrides: Boolean = false,
+    val glassIconSize: Double = 0.0,
+    val glassIconCorner: Double = 0.0,
 ) {
     companion object {
         val offsetKeys = listOf(
@@ -71,6 +77,11 @@ data class Os4MainScreenOptions(
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Glass.ENABLED.name())
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
+            add(ConfigSchema.Glass.ICON_GLASS.name())
+            add(ConfigSchema.Glass.WIDGET_GLASS.name())
+            listOf(ConfigSchema.Glass.ICON_SIZE_OFFSET, ConfigSchema.Glass.ICON_CORNER_RADIUS)
+                .forEach { add(it.name()); add("${it.name()}_tenths") }
+            add(WidgetComponentStore.SELECTION_KEY)
             add(ConfigSchema.Dock.ENABLED.name())
             dockKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
         }
@@ -97,11 +108,14 @@ data class Os4MainScreenOptions(
                 val icons = boolean(ConfigSchema.Grid.ICON_SIZE_ENABLED)
                 val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
+                val glassIcons = glassEnabled && boolean(ConfigSchema.Glass.ICON_GLASS)
+                val glassWidgets = glassEnabled && boolean(ConfigSchema.Glass.WIDGET_GLASS)
+                val widgetOverrides = selectedOs4MamlWidget(values[WidgetComponentStore.SELECTION_KEY])
                 val nativeGlassOverrides = if (glassEnabled) {
                     Os4NativeGlassOptions.parse(string(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES))
                         ?: return null
                 } else emptyMap()
-                if (!grid && !icons && !dockEnabled && !glassEnabled) ""
+                if (!grid && !icons && !dockEnabled && !glassEnabled && !widgetOverrides) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
                         enabled = true,
@@ -127,6 +141,11 @@ data class Os4MainScreenOptions(
                             dock = if (dockEnabled) dockOptions() else Os4DockOptions(),
                             glassEnabled = glassEnabled,
                             glassNativeOverrides = nativeGlassOverrides,
+                            glassIcons = glassIcons,
+                            glassWidgets = glassWidgets,
+                            widgetOverrides = widgetOverrides,
+                            glassIconSize = if (glassIcons) dp(ConfigSchema.Glass.ICON_SIZE_OFFSET) else 0.0,
+                            glassIconCorner = if (glassIcons) dp(ConfigSchema.Glass.ICON_CORNER_RADIUS) else 0.0,
                         ),
                     )
                 }
@@ -138,5 +157,13 @@ data class Os4MainScreenOptions(
         } catch (_: NullPointerException) {
             null
         }
+
+        private fun selectedOs4MamlWidget(value: Any?): Boolean =
+            (value as? Set<*>)?.any { encoded ->
+                if (encoded !is String) return@any false
+                val parts = encoded.split('\t')
+                parts.size >= 2 && parts[0] == WidgetComponentStore.MAML_V2 &&
+                    parts[1].startsWith("os4:")
+            } == true
     }
 }
