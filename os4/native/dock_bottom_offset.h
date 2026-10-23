@@ -18,8 +18,17 @@ static int ld_dock_bottom_inset(double original, double offset, double *result)
 {
     if(!result || !isfinite(original) || !isfinite(offset)
             || offset < -30 || offset > 40) return 0;
+    // GridConfig Insets.bottom is not a general signed translation target:
+    // the vendor bottom-distance consumer folds both signs into a nonnegative
+    // margin. Crossing zero would turn a requested downward move into an
+    // *upward* move. Stop at the physical lower bound instead.
+    if(offset<0 && original>=0) {
+        *result=original;
+        return 1;
+    }
     double next=original-offset;
     if(!isfinite(next)) return 0;
+    if(offset<0 && next>0) next=0;
     *result=next;
     return 1;
 }

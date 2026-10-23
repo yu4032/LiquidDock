@@ -57,7 +57,13 @@ and is left untouched. All these geometry adjustments reject split configs.
 The existing GUI slider (`Dock → Dock geometry → Dock bottom offset`) now
 publishes `dock_geometry_bottom` through the same checked configuration as
 the other Dock dimensions. Positive values move the Dock away from the physical
-bottom (up); negative values move it down. This **does not** add the obsolete
+bottom (up); negative values move it down only while the vendor bottom-margin
+inset remains negative. The signed inset crosses a zero boundary and the
+downstream vendor margin computation folds negative and positive values; to
+prevent a negative slider setting from unexpectedly moving Dock upward, it now
+saturates at the stock lower boundary instead of crossing zero. Moving Dock
+below that boundary requires an independently fingerprinted direct Dart Y
+translation hook; this experimental inset implementation cannot supply it. This **does not** add the obsolete
 7751 `calculateDockOffsetY` hook: the 8583 AOT offset/body is not proven.
 Instead, the existing full-function-attested fresh GridConfig observer changes
 only the signed bottom inset consumed by the vendor HotSeatsMarginBottom

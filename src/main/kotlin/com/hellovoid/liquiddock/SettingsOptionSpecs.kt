@@ -57,7 +57,7 @@ internal fun optionSummary(key: String): String = when (key) {
     "corner_offset" -> "相对默认值调整外部描边圆角"
     "blur_corner_offset" -> "单独调整内部模糊背景圆角"
     "dock_spacing" -> "增减相邻 Dock 图标之间的距离"
-    "dock_bottom_offset" -> "正值上移、负值下移 Dock（OS4 普通桌面；重启桌面生效）"
+    "dock_bottom_offset" -> "正值上移，负值下移；OS4 负值受原生底部边界限制，重启桌面生效"
     "dock_divider_width_dp" -> "调整图标分隔竖线的宽度"
     "dock_divider_height_scale" -> "调整分隔竖线占图标高度的百分比"
     "dock_divider_y_offset" -> "上下偏移分隔竖线，正值下移负值上移"
