@@ -24,6 +24,7 @@ object Os4NativeConfPublisher {
         val grid = gridCols != null
         if (grid && (gridCols !in 2..10 || gridRows !in 2..10)) return null
         if (options.iconSizePercent !in 80..120) return null
+        if (Os4NativeGlassOptions.configLines(options.glassNativeOverrides) == null) return null
         if (grid && (!options.landscape.isValid() || !options.portrait.isValid())) return null
         if (options.dock.enabled && !options.dock.isValid()) return null
         return buildString {
@@ -34,6 +35,11 @@ object Os4NativeConfPublisher {
             append("icon_size_enabled=").append(if (options.iconSizeEnabled) 1 else 0).append('\n')
             // Explicit opt-in only. An absent key preserves the stock OS4 material.
             if (options.glassEnabled) append("glass_enabled=1\n")
+            if (options.glassEnabled) {
+                Os4NativeGlassOptions.configLines(options.glassNativeOverrides)!!.forEach {
+                    append(it).append('\n')
+                }
+            }
             append("icon_size_percent=").append(options.iconSizePercent).append('\n')
             if (grid) {
                 append("widget_horizontal_stretch=")

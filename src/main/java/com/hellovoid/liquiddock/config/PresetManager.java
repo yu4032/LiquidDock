@@ -248,6 +248,7 @@ public final class PresetManager {
         source.put("liquid_large_folder_size_offset", 0);
         source.put("liquid_large_folder_corner_radius", 16);
         source.put("liquid_blur_mode", "advanced_material");
+        source.put("liquid_os4_native_overrides", "");
         source.put("liquid_blur", 7.2d);
         source.put("liquid_chromatic", 9);
         source.put("liquid_tint_alpha", 0);

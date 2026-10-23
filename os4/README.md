@@ -52,62 +52,40 @@ Indicator Y changes the fresh Transform's Matrix4 translation, including its
 hit testing. The earlier scale-origin Offset does not move an identity scale
 and is left untouched. All these geometry adjustments reject split configs.
 
-## OS4 liquid glass phase 1 — native material gate
+## OS4 native glass controls
 
-The existing `liquid_glass` preference is now published as the optional
-`glass_enabled=1` in the same CE/DE launcher snapshot. This works without
-enabling custom grids, dock geometry or icon sizing. With the preference off
-the module leaves vendor material capability checks entirely untouched.
-On enable, a Launcher restart is required.
+The OS4 liquid-glass page exposes 39 native material controls, each independently
+switchable between inherited and customized values. Every control supports a
+slider, decimal input and restoration to the native value. Restart Launcher to
+apply changes. No optical preset is forced when the override bundle is empty.
 
-The first stage hooks only the Dart capability predicates
-`BlurUtilities.isGlassMaterialSupported`,
-`BlurUtilities.isHyperMaterialSupported`, and
-`BlurUtilities.isMaterialDisabled`. Unlike the archived research prototype,
-the other reactive glass predicates are deliberately not overridden because
-constant returns could discard Rx dependency registration.
+Controls cover edge width/falloff, thickness, reflection offset, IOR, light XYZ,
+main/opposite intensity and angular range, edge lighting, reflection strength and
+lighten, inner bottom glow, RGBA, opacity, tint blend, gamma, independent refract
+and background blur, darkening and its luminance range, foreground/background
+saturation and brightness, inner color mix/white, luminance amount and four
+Bezier control points, and burn. Blur controls remain separate because changing
+both original blur inputs to one value changes the native backdrop appearance.
+Shader-internal fixed light width and refract-blur constants are not exposed.
 
-The 8583 AOT symbols are located in the XZ-compressed `.gnu_debugdata`
-mini ELF, **not in the outer ELF's `.symtab`**. The LiquidDock settings
-process extracts the three uniquely named functions from the installed
-vendor APK using XZ for Java, and publishes `glass_targets` in the existing
-atomic native snapshot. The Launcher startup path never runs XZ decoding.
-Whole-ELF SHA-256 must first match the recorded fuxi profile; the entire
-runtime function must match the mapped, immutable vendor ELF bytes, and its
-entry must match the Dart ABI before inline hooking. An absent/ambiguous
-symbol or changed code disables the override. All three hooks must install
-and mlock-pin their code pages before the override flag becomes active.
-Until then wrappers tail-call the vendor functions unchanged.
+Only explicit overrides are serialized as `glass_native_<field>=<decimal>` lines.
+The native parser validates names, ranges and duplicates. The app stores the
+sparse bundle in the exported `liquid_os4_native_overrides` preference; old
+Prismal/blur preferences do not activate native overrides.
 
-After installing, open LiquidDock settings (or toggle liquid_glass) so the
-module process publishes the new `glass_targets` field, then restart
-Launcher. No legacy constant addresses are used.
+There is no shader replacement or custom backdrop capture. A full-body-attested
+`_ImageFilter.__initGlassV7` observer runs immediately after native construction.
+It identifies the newly allocated C++ `DlGlassImageFilter` via the saved native
+receiver and verified vtable, then changes selected float fields and owned vector
+components before the filter is cached or drawn. Dart heap objects and HDR/
+geometry/capture-coordinate fields are untouched. The exact engine file SHA-256
+and live V7 dispatcher body must match before any material write. Unknown engines,
+invalid vectors or invalid light directions preserve the original material.
 
-The next stage adds four independent, **read-only** full-body-attested
-Dart observers for the actual native glass pipeline:
-`_DockGlassWidgetState._buildLightGlassFilter`,
-`_DockGlassWidgetState._buildDarkGlassFilter`,
-`ImageFilterCompat.glass`, and `GlassLightConfig.applyTo`.
-Unlike the earlier three capability checks these show whether the Flutter
-Dock/filter/light configuration path is actually constructed. They never
-change vendor material arguments or shader bytes, and log aggregate call
-counts rather than frame-by-frame events.
-
-The first 12 `GlassLightConfig.applyTo` callbacks also attempt a bounded,
-read-only sample of the 5-double config record from the first four Dart
-argument registers. They log one sanitized `OS4 glass light sample` line
-(or explicit `sample unavailable`), with NO heap address and no writes.
-**These five fields still have unknown semantics**; merely observing them
-is not a license to modify HDR matrices or vendor color transforms. The
-optical replacement will only be enabled after binding and ABI verification. Missing/inlined functions fail
-closed without disabling the already device-verified gate.
-
-Device log markers: `OS4 glass gate enabled`,
-`OS4 glass gate unavailable`, and `OS4 glass gate calls=`.
-This phase only unlocks the **vendor's native glass**. It does not yet install
-the Prismal meniscus, refraction, chromatic dispersion or optical shader,
-and must not be described as the completed LiquidDock glass port. A full
-end-to-end device visual / hit-region check is still required.
+The earlier capability hooks still opt into the native material on the supported
+8583 Launcher build. Native boot logs report engine verification and how many
+explicit fields were applied. Visual acceptance of individual controls remains
+part of device testing.
 
 ## Native safety and compatibility
 

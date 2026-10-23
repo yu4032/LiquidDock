@@ -95,6 +95,8 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
 #include "dock_geometry.h"
 #include "glass_gates.h"
 #include "glass_trace.h"
+#include "glass_filter.h"
+#include "glass_filter_fingerprints.h"
 static void *g_orig_home_pipeline;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
@@ -387,6 +389,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     }
     ld_install_os4_glass(api,&lib);
     struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
+        {LD_GLASS_FILTER_START,LD_GLASS_FILTER_SITE,ld_glass_filter_words,sizeof ld_glass_filter_words,(void*)repl_glass_filter,&g_orig_glass_filter},
         {LD_HOME_PIPELINE_FUNCTION_OFFSET,LD_HOME_PIPELINE_HOOK_OFFSET,
             ld_home_pipeline_words,sizeof ld_home_pipeline_words,(void *)repl_home_pipeline,&g_orig_home_pipeline},
         {LD_HOME_INDICATOR_FUNCTION_OFFSET,LD_HOME_INDICATOR_HOOK_OFFSET,
@@ -575,6 +578,7 @@ on_library_loaded_t native_init(struct native_api *api)
 
     g_api = api;
     load_grid_config();
+    ld_prepare_native_glass();
     install_grid_hook(api);
     return on_library_loaded;
 }

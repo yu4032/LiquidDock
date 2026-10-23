@@ -19,6 +19,8 @@
  *   grid_cols=<2..10>     桌面网格列数（缺省 = 不改）
  *   grid_rows=<2..10>     桌面网格行数（缺省 = 不改）
  *   icon_size_enabled=0|1; icon_size_percent=80..120 (缺省100)
+ *   glass_enabled=0|1
+ *   glass_native_<field>=decimal (逐项原生参数，缺键保留系统值)
  *   widget_horizontal_stretch=0|1
  *   grid_{landscape,portrait}_{horizontal_distance,top_distance,bottom_distance}=-600..600 dp
  *   grid_{landscape,portrait}_row_gap=-200..400 dp
@@ -44,6 +46,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <errno.h>
+#include "native_glass_schema.h"
 
 #define LD_GRID_CONF_MAX_BYTES 4096
 #define LD_GRID_LINE_MAX       255   /* 含 LF；对齐 hooks_dock.c 的 fgets(line,256) */
@@ -69,6 +72,7 @@ struct ld_grid_conf {
     struct ld_grid_offsets landscape, portrait;
     struct ld_dock_conf dock;
     int glass_enabled;
+    struct ld_native_glass_options native_glass;
     int glass_targets_present;
     uint64_t glass_vaddr[3];
     size_t glass_size[3];
@@ -138,6 +142,26 @@ static inline int ld_grid_parse_bounded_decimal(const char *s, double lo, double
     *outv = v;
     return 1;
 }
+
+/* Plain decimal only (no exponent, whitespace, NaN or infinity). */
+static inline int ld_grid_parse_plain_decimal(const char *s, double lo, double hi, double *outv)
+{
+    const char *p=s;
+    int digits=0, fraction_digits=0, dot=0;
+    double v;
+    if(!p || !*p) return 0;
+    if(*p=='-' || *p=='+') ++p;
+    for(;*p;++p) {
+        if(*p>='0' && *p<='9') { ++digits; if(dot) ++fraction_digits; }
+        else if(*p=='.' && !dot) dot=1;
+        else return 0;
+    }
+    if(digits==0 || (dot && fraction_digits==0) || !ld_grid_parse_double(s,&v)
+            || v<lo || v>hi) return 0;
+    *outv=v;
+    return 1;
+}
+
 
 
 /* Canonical, device-local AOT addresses extracted from .gnu_debugdata by
@@ -294,6 +318,12 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         bad = 1; break;
                     }
                     seen |= bit;
+                } else if (strncmp(key,"glass_native_",13)==0) {
+                    unsigned index=0;
+                    while(index<LD_NATIVE_GLASS_COUNT && strcmp(key+13,ld_native_glass_fields[index].name)) index++;
+                    if(index==LD_NATIVE_GLASS_COUNT || (c.native_glass.mask&(1ull<<index)) ||
+                        !ld_grid_parse_plain_decimal(val,ld_native_glass_fields[index].min,ld_native_glass_fields[index].max,&c.native_glass.values[index])) {bad=1;break;}
+                    c.native_glass.mask|=1ull<<index;
                 } else if (strcmp(key, "end") == 0) {
                     if (seen & 64u) { bad = 1; break; }
                     if (val[0] != '1' || val[1] != '\0') { bad = 1; break; }

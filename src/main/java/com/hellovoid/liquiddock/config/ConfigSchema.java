@@ -459,6 +459,8 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> OS4_DIRECTIONAL_OPPOSITE_INTENSITY = integer(
                 "liquid_os4_directional_opposite_intensity", 14, 14, 14, 0, 200,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<String> OS4_NATIVE_OVERRIDES = string(
+                "liquid_os4_native_overrides", "", "", "", ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_X = integer(
                 "liquid_prismal_light_dir_x", -50, -50, 100, -200, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_Y = integer(
@@ -670,6 +672,7 @@ public final class ConfigSchema {
                 Glass.OS4_REFLECTION_STRENGTH, Glass.OS4_REFLECTION_LIGHTEN,
                 Glass.OS4_DIRECTIONAL_ANGLE_RANGE, Glass.OS4_DIRECTIONAL_INTENSITY,
                 Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
+                Glass.OS4_NATIVE_OVERRIDES,
                 Glass.PRISMAL_LIGHT_DIR_X, Glass.PRISMAL_LIGHT_DIR_Y,
                 Glass.PRISMAL_SHADOW_RED, Glass.PRISMAL_SHADOW_GREEN,
                 Glass.PRISMAL_SHADOW_BLUE, Glass.PRISMAL_SHADOW_ALPHA,

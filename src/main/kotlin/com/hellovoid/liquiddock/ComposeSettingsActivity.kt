@@ -569,7 +569,7 @@ private fun HomePage(
         }
         if (os4Launcher) {
             item {
-                PageHeader("", "HyperOS 4：实验中页面可进入调整，用于后续真机移植测试，但目前没有对应 OS4 Hook。尚未开展的页面置灰；系统界面及第三方应用设置正常使用。")
+                PageHeader("", "HyperOS 4：部分功能已完成移植，具体支持项见各页面说明。实验中页面用于真机验证；尚未开展的页面置灰。")
             }
         }
         item { ModernSectionLabel("快捷入口") }
