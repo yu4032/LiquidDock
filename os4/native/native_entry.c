@@ -4,6 +4,7 @@
 
 #include <android/log.h>
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -92,6 +93,10 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
 #include "home_indicator.h"
 #include "home_widgets.h"
 #include "dock_geometry.h"
+#include "glass_gates.h"
+#include "glass_trace.h"
+#include "glass_filter.h"
+#include "glass_filter_fingerprints.h"
 static void *g_orig_home_pipeline;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
@@ -195,6 +200,124 @@ static void pin_installed_hook(uintptr_t site) {
     }
     ld_blog("hook page pinned site=%llx ok=%d errno=%d",(unsigned long long)site,ok,ok?0:errno);
 }
+
+/* Direct Dart AOT gates, resolved by name on the SHA-pinned 8583 ELF. */
+static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info *lib)
+{
+    if(!g_home_options.glass_enabled || g_os4_glass_installed || g_os4_glass_attempted) return;
+    if(!g_home_options.glass_targets_present) {
+        ld_blog("OS4 glass gate unavailable: glass_targets not published; open LiquidDock settings");
+        return;
+    }
+    g_os4_glass_attempted=true;
+    const char *symbols[3]={
+        "BlurUtilities.isGlassMaterialSupported",
+        "BlurUtilities.isHyperMaterialSupported",
+        "BlurUtilities.isMaterialDisabled",
+    };
+    void *replacements[3]={
+        (void *)repl_os4_glass_supported,
+        (void *)repl_os4_hyper_supported,
+        (void *)repl_os4_material_enabled,
+    };
+    uintptr_t targets[3]={0};
+    uintptr_t pipeline[4]={0};
+    bool pipeline_verified[4]={0};
+    char path[256];
+    if(!ld_apk_real_path("MiuiHome.apk",path,sizeof path)) {
+        ld_blog("OS4 glass gate unavailable: APK path"); return;
+    }
+    int fd=open(path,O_RDONLY|O_CLOEXEC);
+    if(fd<0) { ld_blog("OS4 glass gate unavailable: APK read"); return; }
+    struct stat st;
+    void *mapping=MAP_FAILED;
+    if(fstat(fd,&st)==0 && st.st_size>0 && st.st_size<128*1024*1024)
+        mapping=mmap(NULL,(size_t)st.st_size,PROT_READ,MAP_PRIVATE,fd,0);
+    close(fd);
+    if(mapping==MAP_FAILED) { ld_blog("OS4 glass gate unavailable: mmap"); return; }
+    const unsigned char *apk=mapping;
+    const size_t vendor_size=29983600u;
+    int ready=lib->entry_off<=(size_t)st.st_size
+        && vendor_size<=(size_t)st.st_size-lib->entry_off;
+    for(size_t i=0;i<3 && ready;i++) {
+        uint64_t vaddr=g_home_options.glass_vaddr[i];
+        uint64_t len=g_home_options.glass_size[i];
+        if(!ld_vaddr_to_runtime(lib,(uintptr_t)vaddr,&targets[i])
+                || !executable_range(targets[i],(size_t)len)) {
+            ld_blog("OS4 glass gate unavailable: 8583 target %s unmapped at %llx",
+                    symbols[i],(unsigned long long)vaddr);
+            ready=0; break;
+        }
+        /* The whole binary was already SHA-256 attested; now check the
+         * complete live body against its independently mapped file bytes. */
+        int found=0;
+        for(uint16_t k=0;k<lib->phnum;k++) {
+            uint64_t po,pv,pfs,pms;
+            if(!ld_phdr_load(lib,k,&po,&pv,&pfs,&pms)) continue;
+            if(vaddr<pv || vaddr-pv>pfs || len>pfs-(vaddr-pv)) continue;
+            uint64_t off=lib->entry_off+po+(vaddr-pv);
+            if(off>(uint64_t)st.st_size || len>(uint64_t)st.st_size-off) continue;
+            if(memcmp((const void *)targets[i],apk+off,(size_t)len)==0
+                    && *(const uint32_t *)targets[i]==0xa9bf79fdu) found=1;
+            break;
+        }
+        if(!found) {
+            ld_blog("OS4 glass gate unavailable: function %s changed",symbols[i]);
+            ready=0;
+        }
+    }
+    if(ready && g_home_options.glass_observers_present) {
+        for(size_t i=0;i<4;i++) {
+            uint64_t v=g_home_options.glass_obs_vaddr[i];
+            uint64_t len=g_home_options.glass_obs_size[i];
+            if(!ld_vaddr_to_runtime(lib,(uintptr_t)v,&pipeline[i])
+                    || !executable_range(pipeline[i],(size_t)len)) continue;
+            for(uint16_t j=0;j<lib->phnum;j++) {
+                uint64_t off,base,sz,mem;
+                if(!ld_phdr_load(lib,j,&off,&base,&sz,&mem)) continue;
+                if(v<base || v-base>sz || len>sz-(v-base)) continue;
+                uint64_t at=lib->entry_off+off+(v-base);
+                if(at>(uint64_t)st.st_size || len>(uint64_t)st.st_size-at) continue;
+                pipeline_verified[i]=!memcmp((const void *)pipeline[i],apk+at,(size_t)len)
+                    && *(const uint32_t *)pipeline[i]==0xa9bf79fdu;
+                break;
+            }
+        }
+    }
+    munmap(mapping,(size_t)st.st_size);
+    if(!ready) return;
+    for(size_t i=0;i<3;i++) {
+        int rc=api->hook((void *)targets[i],replacements[i],&g_os4_glass_original[i]);
+        if(rc!=0 || !g_os4_glass_original[i]
+                || !ld_pin_code_pages(targets[i],16)) {
+            /* Any previously installed hooks still tail-call the original. */
+            ld_blog("OS4 glass gate unavailable: hook/pin %zu rc=%d",i,rc);
+            return;
+        }
+    }
+    __atomic_store_n(&g_os4_glass_override,1u,__ATOMIC_RELEASE);
+    g_os4_glass_installed=true;
+    ld_blog("OS4 glass gate enabled: 3 vendor Dart capability predicates");
+    const char *label[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};
+    void *wrapper[4]={(void *)repl_os4_trace_light,(void *)repl_os4_trace_dark,
+        (void *)repl_os4_trace_filter,(void *)repl_os4_trace_apply};
+    void **original[4]={&g_os4_trace_light_original,&g_os4_trace_dark_original,
+        &g_os4_trace_filter_original,&g_os4_trace_apply_original};
+    if(!g_home_options.glass_observers_present)
+        ld_blog("OS4 glass pipeline unavailable: observer addresses not published");
+    for(size_t i=0;i<4 && g_home_options.glass_observers_present;i++) {
+        if(!pipeline_verified[i]) {
+            ld_blog("OS4 glass pipeline skipped %s: complete AOT body mismatch",label[i]);
+            continue;
+        }
+        int rc=api->hook((void *)pipeline[i],wrapper[i],original[i]);
+        if(rc==0 && *original[i] && ld_pin_code_pages(pipeline[i],16)) {
+            g_os4_pipeline_mask|=1u<<i;
+            ld_blog("OS4 glass pipeline installed %s",label[i]);
+        } else ld_blog("OS4 glass pipeline skipped %s: hook/pin rc=%d",label[i],rc);
+    }
+}
+
 /* The Rust pre-load transpose assumes the stock lattice and can index past
  * a three-column grid before Dart receives any DTOs. Our DTO planner handles
  * orientation and bounds; retain the original path unless the complete native
@@ -264,7 +387,9 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     if(!attest_layout_elf(&lib,29983600u,dart_digest)) {
         ld_blog("8583 whole-ELF SHA-256 mismatch; refusing native layout hooks"); return;
     }
+    ld_install_os4_glass(api,&lib);
     struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
+        {LD_GLASS_FILTER_START,LD_GLASS_FILTER_SITE,ld_glass_filter_words,sizeof ld_glass_filter_words,(void*)repl_glass_filter,&g_orig_glass_filter},
         {LD_HOME_PIPELINE_FUNCTION_OFFSET,LD_HOME_PIPELINE_HOOK_OFFSET,
             ld_home_pipeline_words,sizeof ld_home_pipeline_words,(void *)repl_home_pipeline,&g_orig_home_pipeline},
         {LD_HOME_INDICATOR_FUNCTION_OFFSET,LD_HOME_INDICATOR_HOOK_OFFSET,
@@ -367,10 +492,11 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 }
 
 static void install_grid_hook(const struct native_api *api) {
-    if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled && !g_home_options.dock.enabled) return;
+    if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled
+            && !g_home_options.dock.enabled && !g_home_options.glass_enabled) return;
     pthread_mutex_lock(&g_install_lock);
     install_grid_hook_unlocked(api);
-    if(g_installed && !g_trace_started) {
+    if((g_installed || g_os4_glass_installed) && !g_trace_started) {
         pthread_t thread;
         if(pthread_create(&thread,NULL,trace_thread,NULL)==0) {
             pthread_detach(thread); g_trace_started=true;
@@ -390,7 +516,9 @@ static void on_library_loaded(const char *name, void *handle)
 static void *trace_thread(void *unused)
 {
     (void)unused;
-    unsigned last_calls = 0;
+    unsigned last_calls = 0, last_glass_calls = 0;
+    unsigned last_pipeline[4]={0};
+    int light_sample_reported=0;
     for (;;) {
         unsigned calls = __atomic_load_n(&g_pad_trace[0], __ATOMIC_RELAXED);
         if (calls != last_calls) {
@@ -403,6 +531,35 @@ static void *trace_thread(void *unused)
                  calls, raw_cols, raw_rows, final_cols, final_rows);
             ld_blog("PadRowCol calls=%u raw(cols=%d,rows=%d) final(cols=%d,rows=%d)",
                     calls, raw_cols, raw_rows, final_cols, final_rows);
+        }
+        unsigned gc=__atomic_load_n(&g_os4_glass_calls[0],__ATOMIC_RELAXED)
+            + __atomic_load_n(&g_os4_glass_calls[1],__ATOMIC_RELAXED)
+            + __atomic_load_n(&g_os4_glass_calls[2],__ATOMIC_RELAXED);
+        if(gc!=last_glass_calls) {
+            last_glass_calls=gc;
+            ld_blog("OS4 glass gate calls=%u",gc);
+        }
+        const char *labels[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};
+        for(size_t i=0;i<4;i++) {
+            if(!(g_os4_pipeline_mask & (1u<<i))) continue;
+            unsigned now=__atomic_load_n(&g_os4_pipeline_counts[i],__ATOMIC_RELAXED);
+            if(now!=last_pipeline[i]) {
+                last_pipeline[i]=now;
+                ld_blog("OS4 glass pipeline %s calls=%u",labels[i],now);
+            }
+        }
+        if(!light_sample_reported && (g_os4_pipeline_mask & (1u<<3))) {
+            unsigned state=__atomic_load_n(&g_os4_light_sample_status,__ATOMIC_ACQUIRE);
+            if(state==2) {
+                light_sample_reported=1;
+                ld_blog("OS4 glass light sample register=x%d doubles=%.4f,%.4f,%.4f,%.4f,%.4f (diagnostic, semantic unknown)",
+                    g_os4_light_sample_register,g_os4_light_sample_fields[0],
+                    g_os4_light_sample_fields[1],g_os4_light_sample_fields[2],
+                    g_os4_light_sample_fields[3],g_os4_light_sample_fields[4]);
+            } else if(__atomic_load_n(&g_os4_light_sample_attempts,__ATOMIC_RELAXED)>=12) {
+                light_sample_reported=1;
+                ld_blog("OS4 glass light sample unavailable: 12 applyTo calls inspected; no plausible 5-double record");
+            }
         }
         usleep(500000);
     }
@@ -421,6 +578,7 @@ on_library_loaded_t native_init(struct native_api *api)
 
     g_api = api;
     load_grid_config();
+    ld_prepare_native_glass();
     install_grid_hook(api);
     return on_library_loaded;
 }

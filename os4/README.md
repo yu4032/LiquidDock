@@ -52,6 +52,41 @@ Indicator Y changes the fresh Transform's Matrix4 translation, including its
 hit testing. The earlier scale-origin Offset does not move an identity scale
 and is left untouched. All these geometry adjustments reject split configs.
 
+## OS4 native glass controls
+
+The OS4 liquid-glass page exposes 39 native material controls, each independently
+switchable between inherited and customized values. Every control supports a
+slider, decimal input and restoration to the native value. Restart Launcher to
+apply changes. No optical preset is forced when the override bundle is empty.
+
+Controls cover edge width/falloff, thickness, reflection offset, IOR, light XYZ,
+main/opposite intensity and angular range, edge lighting, reflection strength and
+lighten, inner bottom glow, RGBA, opacity, tint blend, gamma, independent refract
+and background blur, darkening and its luminance range, foreground/background
+saturation and brightness, inner color mix/white, luminance amount and four
+Bezier control points, and burn. Blur controls remain separate because changing
+both original blur inputs to one value changes the native backdrop appearance.
+Shader-internal fixed light width and refract-blur constants are not exposed.
+
+Only explicit overrides are serialized as `glass_native_<field>=<decimal>` lines.
+The native parser validates names, ranges and duplicates. The app stores the
+sparse bundle in the exported `liquid_os4_native_overrides` preference; old
+Prismal/blur preferences do not activate native overrides.
+
+There is no shader replacement or custom backdrop capture. A full-body-attested
+`_ImageFilter.__initGlassV7` observer runs immediately after native construction.
+It identifies the newly allocated C++ `DlGlassImageFilter` via the saved native
+receiver and verified vtable, then changes selected float fields and owned vector
+components before the filter is cached or drawn. Dart heap objects and HDR/
+geometry/capture-coordinate fields are untouched. The exact engine file SHA-256
+and live V7 dispatcher body must match before any material write. Unknown engines,
+invalid vectors or invalid light directions preserve the original material.
+
+The earlier capability hooks still opt into the native material on the supported
+8583 Launcher build. Native boot logs report engine verification and how many
+explicit fields were applied. Visual acceptance of individual controls remains
+part of device testing.
+
 ## Native safety and compatibility
 
 Every hook verifies its complete function body against the exact local vendor

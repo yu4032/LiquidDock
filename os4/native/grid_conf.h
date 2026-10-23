@@ -19,6 +19,8 @@
  *   grid_cols=<2..10>     桌面网格列数（缺省 = 不改）
  *   grid_rows=<2..10>     桌面网格行数（缺省 = 不改）
  *   icon_size_enabled=0|1; icon_size_percent=80..120 (缺省100)
+ *   glass_enabled=0|1
+ *   glass_native_<field>=decimal (逐项原生参数，缺键保留系统值)
  *   widget_horizontal_stretch=0|1
  *   grid_{landscape,portrait}_{horizontal_distance,top_distance,bottom_distance}=-600..600 dp
  *   grid_{landscape,portrait}_row_gap=-200..400 dp
@@ -42,6 +44,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdint.h>
+#include <errno.h>
+#include "native_glass_schema.h"
 
 #define LD_GRID_CONF_MAX_BYTES 4096
 #define LD_GRID_LINE_MAX       255   /* 含 LF；对齐 hooks_dock.c 的 fgets(line,256) */
@@ -66,6 +71,14 @@ struct ld_grid_conf {
     int icon_size_enabled, icon_size_percent, widget_horizontal_stretch;
     struct ld_grid_offsets landscape, portrait;
     struct ld_dock_conf dock;
+    int glass_enabled;
+    struct ld_native_glass_options native_glass;
+    int glass_targets_present;
+    uint64_t glass_vaddr[3];
+    size_t glass_size[3];
+    int glass_observers_present;
+    uint64_t glass_obs_vaddr[4];
+    size_t glass_obs_size[4];
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -127,6 +140,69 @@ static inline int ld_grid_parse_bounded_decimal(const char *s, double lo, double
     }
     if (*q != '\0' || !ld_grid_parse_double(s, &v) || v < lo || v > hi) return 0;
     *outv = v;
+    return 1;
+}
+
+/* Plain decimal only (no exponent, whitespace, NaN or infinity). */
+static inline int ld_grid_parse_plain_decimal(const char *s, double lo, double hi, double *outv)
+{
+    const char *p=s;
+    int digits=0, fraction_digits=0, dot=0;
+    double v;
+    if(!p || !*p) return 0;
+    if(*p=='-' || *p=='+') ++p;
+    for(;*p;++p) {
+        if(*p>='0' && *p<='9') { ++digits; if(dot) ++fraction_digits; }
+        else if(*p=='.' && !dot) dot=1;
+        else return 0;
+    }
+    if(digits==0 || (dot && fraction_digits==0) || !ld_grid_parse_double(s,&v)
+            || v<lo || v>hi) return 0;
+    *outv=v;
+    return 1;
+}
+
+
+
+/* Canonical, device-local AOT addresses extracted from .gnu_debugdata by
+ * the module app. The whole 8583 vendor ELF and all live code bodies are
+ * independently authenticated in native_entry.c before any hook. */
+static inline int ld_grid_parse_aot_targets(const char *s,uint64_t *vaddr,size_t *bytes,size_t count)
+{
+    if(!s || !*s) return 0;
+    const char *p=s;
+    if(count<1 || count>16) return 0;
+    for(size_t i=0;i<count;i++) {
+        if(p[0]!='0' || p[1]!='x') return 0;
+        p+=2;
+        if(!((*p>='0' && *p<='9') || (*p>='a' && *p<='f'))) return 0;
+        const char *start=p;
+        errno=0;
+        char *end=NULL;
+        unsigned long long address=strtoull(p,&end,16);
+        if(errno || end==p || *end!=':' || address<0x4000 || address%4
+                || (size_t)(end-start)>12) return 0;
+        p=end+1;
+        int length=0;
+        const char *last=p;
+        while(*p>='0' && *p<='9') {
+            if(length>2048) return 0;
+            length=length*10+(*p-'0');
+            p++;
+        }
+        if(p==last || (*last=='0' && p-last>1) || length<16 || length>2048
+                || address>=29983600ull || (unsigned long long)length>29983600ull-address)
+            return 0;
+        vaddr[i]=(uint64_t)address;
+        bytes[i]=(size_t)length;
+        if(i+1<count) {
+            if(*p!=',') return 0;
+            p++;
+        } else if(*p!='\0') return 0;
+    }
+    for(size_t i=0;i<count;i++)
+        for(size_t j=i+1;j<count;j++)
+            if(vaddr[i]==vaddr[j]) return 0;
     return 1;
 }
 
@@ -192,6 +268,27 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if (!ld_grid_parse_int(val, LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX,
                                            &c.rows)) { bad = 1; break; }
                     seen |= 32u;
+                } else if (strcmp(key, "glass_observers") == 0) {
+                    if ((seen & (1u << 28)) ||
+                        !ld_grid_parse_aot_targets(val,c.glass_obs_vaddr,c.glass_obs_size,4)) {
+                        bad=1; break;
+                    }
+                    c.glass_observers_present=1;
+                    seen |= 1u << 28;
+                } else if (strcmp(key, "glass_targets") == 0) {
+                    if ((seen & (1u << 27)) ||
+                            !ld_grid_parse_aot_targets(val,c.glass_vaddr,c.glass_size,3)) {
+                        bad=1; break;
+                    }
+                    c.glass_targets_present=1;
+                    seen |= 1u << 27;
+                } else if (strcmp(key, "glass_enabled") == 0) {
+                    int value;
+                    if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {
+                        bad=1; break;
+                    }
+                    c.glass_enabled=value;
+                    seen |= 1u << 26;
                 } else if (strcmp(key, "dock_geometry_enabled") == 0) {
                     int bv;
                     if (seen & (1u << 20) || !ld_grid_parse_bool01(val, &bv)) {
@@ -221,6 +318,12 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         bad = 1; break;
                     }
                     seen |= bit;
+                } else if (strncmp(key,"glass_native_",13)==0) {
+                    unsigned index=0;
+                    while(index<LD_NATIVE_GLASS_COUNT && strcmp(key+13,ld_native_glass_fields[index].name)) index++;
+                    if(index==LD_NATIVE_GLASS_COUNT || (c.native_glass.mask&(1ull<<index)) ||
+                        !ld_grid_parse_plain_decimal(val,ld_native_glass_fields[index].min,ld_native_glass_fields[index].max,&c.native_glass.values[index])) {bad=1;break;}
+                    c.native_glass.mask|=1ull<<index;
                 } else if (strcmp(key, "end") == 0) {
                     if (seen & 64u) { bad = 1; break; }
                     if (val[0] != '1' || val[1] != '\0') { bad = 1; break; }

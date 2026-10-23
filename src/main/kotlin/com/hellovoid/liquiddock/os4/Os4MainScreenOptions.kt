@@ -40,6 +40,8 @@ data class Os4MainScreenOptions(
     val landscape: Os4GridOffsets = Os4GridOffsets(),
     val portrait: Os4GridOffsets = Os4GridOffsets(),
     val dock: Os4DockOptions = Os4DockOptions(),
+    val glassEnabled: Boolean = false,
+    val glassNativeOverrides: Map<String, Double> = emptyMap(),
 ) {
     companion object {
         val offsetKeys = listOf(
@@ -67,6 +69,8 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
                 ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH).map { it.name() })
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
+            add(ConfigSchema.Glass.ENABLED.name())
+            add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
             add(ConfigSchema.Dock.ENABLED.name())
             dockKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
         }
@@ -77,6 +81,8 @@ data class Os4MainScreenOptions(
                 if (values.containsKey(key.name())) values[key.name()] as Boolean else key.uiDefault()
             fun integer(key: ConfigKey<Int>): Int =
                 if (values.containsKey(key.name())) values[key.name()] as Int else key.uiDefault()
+            fun string(key: ConfigKey<String>): String =
+                if (values.containsKey(key.name())) values[key.name()] as String else key.uiDefault()
             fun dp(key: ConfigKey<Int>): Double {
                 val tenths = "${key.name()}_tenths"
                 val value = if (values.containsKey(tenths)) (values[tenths] as Int) / 10.0
@@ -90,7 +96,12 @@ data class Os4MainScreenOptions(
                 val grid = boolean(ConfigSchema.Grid.ENABLED)
                 val icons = boolean(ConfigSchema.Grid.ICON_SIZE_ENABLED)
                 val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
-                if (!grid && !icons && !dockEnabled) ""
+                val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
+                val nativeGlassOverrides = if (glassEnabled) {
+                    Os4NativeGlassOptions.parse(string(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES))
+                        ?: return null
+                } else emptyMap()
+                if (!grid && !icons && !dockEnabled && !glassEnabled) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
                         enabled = true,
@@ -114,6 +125,8 @@ data class Os4MainScreenOptions(
                             landscape = if (grid) offsets(0) else Os4GridOffsets(),
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),
                             dock = if (dockEnabled) dockOptions() else Os4DockOptions(),
+                            glassEnabled = glassEnabled,
+                            glassNativeOverrides = nativeGlassOverrides,
                         ),
                     )
                 }

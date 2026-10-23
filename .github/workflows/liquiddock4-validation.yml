@@ -27,6 +27,9 @@ jobs:
             os4/tests/grid_conf_test.c -o /tmp/os4-grid-conf-test
           /tmp/os4-grid-conf-test
           cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
+            os4/tests/glass_light_sample_test.c -lm -o /tmp/os4-glass-light-sample-test
+          /tmp/os4-glass-light-sample-test
+          cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
             os4/tests/sha256_test.c -o /tmp/os4-sha256-test
           /tmp/os4-sha256-test
       - name: Native independent layout and patch lifetime tests
@@ -55,3 +58,44 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Package and debug-sign installable OS4 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          APKS=(build/outputs/apk/debug/*.apk)
+          [[ "${#APKS[@]}" -eq 1 ]] || { echo "Expected exactly one debug APK" >&2; exit 1; }
+          TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          [[ -x "$TOOLS/apksigner" ]] || { echo "apksigner not found" >&2; exit 1; }
+          "$TOOLS/apksigner" sign --help | grep -F -q -- '--alignment-preserved'
+          python3 os4/tools/package_native.py "${APKS[0]}" os4/out/libliquiddock4.so os4/out/LiquidDock4-unsigned.apk
+          "$TOOLS/apksigner" sign \
+            --ks signing/hellovoid-debug.keystore \
+            --ks-key-alias hellovoid-debug \
+            --ks-pass pass:hellovoid-debug \
+            --key-pass pass:hellovoid-debug \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --alignment-preserved true \
+            --out os4/out/LiquidDock4-fuxi-debug.apk \
+            os4/out/LiquidDock4-unsigned.apk
+          "$TOOLS/apksigner" verify --verbose --print-certs os4/out/LiquidDock4-fuxi-debug.apk
+          python3 os4/tools/verify_installer.py \
+            os4/out/LiquidDock4-fuxi-debug.apk os4/out/libliquiddock4.so
+          {
+            echo "Source: $GITHUB_REPOSITORY"
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Signature: Public, fixed LiquidDock debug test key (not release)"
+            sha256sum os4/out/LiquidDock4-fuxi-debug.apk
+            sha256sum os4/out/libliquiddock4.so
+          } > os4/out/LiquidDock4-provenance.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiquidDock4-fuxi-debug-${{ github.sha }}
+          path: |
+            os4/out/LiquidDock4-fuxi-debug.apk
+            os4/out/LiquidDock4-provenance.txt
+          if-no-files-found: error
+          retention-days: 5
+          compression-level: 0

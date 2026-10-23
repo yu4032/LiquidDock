@@ -29,6 +29,7 @@ internal fun LiquidPage(
     masterEnabled: Boolean,
     open: (Page) -> Unit,
 ) {
+    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
     var liquidGlass by remember(liquidRevision) {
         mutableStateOf(
@@ -49,7 +50,8 @@ internal fun LiquidPage(
         item {
             PageHeader(
                 stringResource(R.string.page_liquid),
-                stringResource(R.string.liquid_header_summary),
+                if (os4Launcher) "背景由桌面原生采样；可独立调整原生玻璃参数。重启桌面生效，背景模糊设为 0 可观察清晰折射。"
+                else stringResource(R.string.liquid_header_summary),
             )
         }
         item {
@@ -58,30 +60,35 @@ internal fun LiquidPage(
                     prefs,
                     ConfigSchema.Glass.ENABLED,
                     stringResource(R.string.liquid_enable),
-                    stringResource(R.string.liquid_enable_summary),
+                    if (os4Launcher) "启用或关闭原生玻璃后重启桌面生效。"
+                    else stringResource(R.string.liquid_enable_summary),
                     masterEnabled,
                 ) { liquidGlass = it }
             }
         }
-        liquidEntries.forEach { entry ->
+        if (os4Launcher) {
+            os4NativeGlassSettings(prefs, masterEnabled && liquidGlass)
+        } else {
+            liquidEntries.forEach { entry ->
+                item {
+                    ModernFeatureCard(
+                        title = stringResource(entry.titleRes),
+                        summary = entry.summary,
+                        onClick = { open(entry.page) },
+                        modifier = Modifier.padding(horizontal = 14.dp),
+                        page = entry.page,
+                    )
+                }
+            }
             item {
                 ModernFeatureCard(
-                    title = stringResource(entry.titleRes),
-                    summary = entry.summary,
-                    onClick = { open(entry.page) },
+                    title = stringResource(R.string.page_glass_components),
+                    summary = "管理图标、小组件、文件夹与菜单玻璃",
+                    onClick = { open(Page.GlassComponents) },
+                    page = Page.GlassComponents,
                     modifier = Modifier.padding(horizontal = 14.dp),
-                    page = entry.page,
                 )
             }
-        }
-        item {
-            ModernFeatureCard(
-                title = stringResource(R.string.page_glass_components),
-                summary = "管理图标、小组件、文件夹与菜单玻璃",
-                onClick = { open(Page.GlassComponents) },
-                page = Page.GlassComponents,
-                modifier = Modifier.padding(horizontal = 14.dp),
-            )
         }
         if (!liquidGlass) {
             item {
