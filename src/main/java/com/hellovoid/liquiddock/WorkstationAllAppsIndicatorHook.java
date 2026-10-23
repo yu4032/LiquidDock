@@ -59,7 +59,11 @@ final class WorkstationAllAppsIndicatorHook {
             probe("target-class", "resolved " + allApps.getName()
                     + " super=" + (allApps.getSuperclass() == null
                     ? "null" : allApps.getSuperclass().getName()));
-            probe("api", classMembers(allApps));
+            try {
+                probe("api", classMembers(allApps));
+            } catch (Throwable error) {
+                probe("api", "introspection unavailable: " + error);
+            }
         } catch (Throwable error) {
             probe("target-class", "NOT FOUND: " + error);
             return;
@@ -204,10 +208,10 @@ final class WorkstationAllAppsIndicatorHook {
     }
 
     private static void dumpHierarchy(Object owner) {
-        if (!(owner instanceof ViewGroup) || hierarchyDumps++ >= 3) return;
+        if (!(owner instanceof ViewGroup) || hierarchyDumps++ >= 2) return;
         ViewGroup root = (ViewGroup) owner;
         probe("hierarchy-root", describe(root));
-        int[] remaining = {36};
+        int[] remaining = {24};
         dumpChildren(root, 0, remaining);
     }
 
