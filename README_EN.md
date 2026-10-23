@@ -87,13 +87,15 @@ Most appearance changes take effect **immediately** when the relevant hook is al
 
 ### Home screen layout
 
-Enable “Free Home Screen Grid” to choose **2–10 columns and 2–6 rows** in landscape. Portrait swaps the dimensions, with icon positions remembered separately for each orientation. Landscape and portrait have independent controls for:
+Enable “Free Home Screen Grid” to choose **2–10 columns and 2–6 rows** in landscape, with the dimensions swapped in portrait. Rotation-based position mapping is disabled, so icon and widget positions are saved independently in landscape and portrait. Each orientation has its own controls for:
 
 - horizontal spacing;
 - top and bottom spacing;
 - row gaps;
 - page-indicator position;
 - widget sizing.
+
+The previous placement restrictions on **2×1, 2×2, and 4×2 widgets** have also been removed, allowing these widgets to be placed at any grid position.
 
 When reducing the number of rows or columns, the settings app checks whether an existing **4×2 widget** would no longer fit. It warns you instead of saving an incompatible grid. Restart Launcher after changing the grid.
 
