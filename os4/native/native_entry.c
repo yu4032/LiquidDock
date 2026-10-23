@@ -412,8 +412,10 @@ static void *trace_thread(void *unused)
         unsigned bottom_updates = __atomic_load_n(&g_dock_bottom_updates, __ATOMIC_ACQUIRE);
         if (bottom_updates != last_dock_updates) {
             last_dock_updates = bottom_updates;
-            double from = __atomic_load_n(&g_dock_bottom_last_from, __ATOMIC_RELAXED);
-            double to = __atomic_load_n(&g_dock_bottom_last_to, __ATOMIC_RELAXED);
+            uint64_t old_bits = __atomic_load_n(&g_dock_bottom_last_from_bits, __ATOMIC_RELAXED);
+            uint64_t new_bits = __atomic_load_n(&g_dock_bottom_last_to_bits, __ATOMIC_RELAXED);
+            double from=0,to=0;
+            memcpy(&from,&old_bits,8); memcpy(&to,&new_bits,8);
             ld_blog("Dock bottom inset applied count=%u from=%.2f to=%.2f",bottom_updates,from,to);
         }
         usleep(500000);

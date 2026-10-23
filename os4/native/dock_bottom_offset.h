@@ -27,7 +27,7 @@ static int ld_dock_bottom_inset(double original, double offset, double *result)
 #ifndef LD_DOCK_BOTTOM_TEST_ONLY
 /* Read only by the existing trace worker, never log or allocate from a Dart observer. */
 static volatile unsigned g_dock_bottom_updates;
-static volatile double g_dock_bottom_last_from, g_dock_bottom_last_to;
+static volatile uint64_t g_dock_bottom_last_from_bits, g_dock_bottom_last_to_bits;
 static void ld_apply_dock_bottom_offset(struct ld_dart_context *c,uintptr_t grid)
 {
     const double offset=g_home_options.dock.bottom;
@@ -48,8 +48,10 @@ static void ld_apply_dock_bottom_offset(struct ld_dart_context *c,uintptr_t grid
     if(!insets || !ld_read_heap(insets+0x1f,&original,8)
             || !ld_dock_bottom_inset(original,offset,&shifted)) return;
     memcpy((void *)(insets+0x1f),&shifted,8);
-    __atomic_store_n(&g_dock_bottom_last_from,original,__ATOMIC_RELAXED);
-    __atomic_store_n(&g_dock_bottom_last_to,shifted,__ATOMIC_RELAXED);
+    uint64_t old_bits=0,new_bits=0;
+    memcpy(&old_bits,&original,8); memcpy(&new_bits,&shifted,8);
+    __atomic_store_n(&g_dock_bottom_last_from_bits,old_bits,__ATOMIC_RELAXED);
+    __atomic_store_n(&g_dock_bottom_last_to_bits,new_bits,__ATOMIC_RELAXED);
     __atomic_add_fetch(&g_dock_bottom_updates,1u,__ATOMIC_RELEASE);
 }
 #endif
