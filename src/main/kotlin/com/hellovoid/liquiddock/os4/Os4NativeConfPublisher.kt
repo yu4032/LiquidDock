@@ -27,6 +27,9 @@ object Os4NativeConfPublisher {
         if (Os4NativeGlassOptions.configLines(options.glassNativeOverrides) == null) return null
         if (grid && (!options.landscape.isValid() || !options.portrait.isValid())) return null
         if (options.dock.enabled && !options.dock.isValid()) return null
+        if (options.glassEnabled && options.glassIcons &&
+            (!options.glassIconSize.isFinite() || options.glassIconSize !in -40.0..40.0 ||
+                !options.glassIconCorner.isFinite() || options.glassIconCorner !in 0.0..128.0)) return null
         return buildString {
             if (grid) {
                 append("grid_cols=").append(gridCols).append('\n')
@@ -40,6 +43,13 @@ object Os4NativeConfPublisher {
                     append(it).append('\n')
                 }
             }
+            if (options.glassEnabled && options.glassIcons) {
+                append("glass_icons=1\n")
+                append("glass_icon_size=").append(options.glassIconSize).append('\n')
+                append("glass_icon_corner=").append(options.glassIconCorner).append('\n')
+            }
+            if (options.glassEnabled && options.glassWidgets) append("glass_widgets=1\n")
+            if (options.widgetOverrides) append("widget_overrides=1\n")
             append("icon_size_percent=").append(options.iconSizePercent).append('\n')
             if (grid) {
                 append("widget_horizontal_stretch=")

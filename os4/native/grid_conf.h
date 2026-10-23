@@ -72,6 +72,8 @@ struct ld_grid_conf {
     struct ld_grid_offsets landscape, portrait;
     struct ld_dock_conf dock;
     int glass_enabled;
+    int glass_icons, glass_widgets, widget_overrides;
+    double glass_icon_size, glass_icon_corner;
     struct ld_native_glass_options native_glass;
     int glass_targets_present;
     uint64_t glass_vaddr[3];
@@ -212,7 +214,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
 {
     struct ld_grid_conf c = {0};
     c.icon_size_percent = 100;
-    unsigned seen = 0;  /* bit0=dock_offset_y bit1=dock_offset_x bit2=glass bit3=icons
+    uint64_t seen = 0;  /* bit0=dock_offset_y bit1=dock_offset_x bit2=glass bit3=icons
                            bit4=grid_cols bit5=grid_rows bit6=end */
     int ok = 0;
 
@@ -289,6 +291,29 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.glass_enabled=value;
                     seen |= 1u << 26;
+                } else if (strcmp(key, "glass_icons") == 0 ||
+                           strcmp(key, "glass_widgets") == 0 ||
+                           strcmp(key, "widget_overrides") == 0) {
+                    uint64_t bit = !strcmp(key,"glass_icons") ? (1ull<<29) :
+                        (!strcmp(key,"glass_widgets") ? (1ull<<30) : (1ull<<31));
+                    int value;
+                    if ((seen & bit) || !ld_grid_parse_bool01(val,&value)) {
+                        bad=1; break;
+                    }
+                    if (bit==(1ull<<29)) c.glass_icons=value;
+                    else if (bit==(1ull<<30)) c.glass_widgets=value;
+                    else c.widget_overrides=value;
+                    seen |= bit;
+                } else if (strcmp(key, "glass_icon_size") == 0 ||
+                           strcmp(key, "glass_icon_corner") == 0) {
+                    uint64_t bit = !strcmp(key,"glass_icon_size") ? (1ull<<32) : (1ull<<33);
+                    double *target = bit==(1ull<<32) ? &c.glass_icon_size : &c.glass_icon_corner;
+                    double lo = bit==(1ull<<32) ? -40.0 : 0.0;
+                    double hi = bit==(1ull<<32) ? 40.0 : 128.0;
+                    if ((seen & bit) || !ld_grid_parse_bounded_decimal(val,lo,hi,target)) {
+                        bad=1; break;
+                    }
+                    seen |= bit;
                 } else if (strcmp(key, "dock_geometry_enabled") == 0) {
                     int bv;
                     if (seen & (1u << 20) || !ld_grid_parse_bool01(val, &bv)) {

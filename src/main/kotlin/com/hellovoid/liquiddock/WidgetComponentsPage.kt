@@ -13,12 +13,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.hellovoid.liquiddock.os4.Os4WidgetMaterials
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 
@@ -28,6 +34,9 @@ internal fun WidgetComponentsPage(
     activity: ComposeSettingsActivity,
     prefs: SharedPreferences,
 ) {
+    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
+    val coroutineScope = rememberCoroutineScope()
+    var scanning by remember { mutableStateOf(false) }
     val catalogPrefs = remember(activity) {
         activity.getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)
     }
@@ -50,7 +59,12 @@ internal fun WidgetComponentsPage(
         }
     }
 
-    val descriptors = remember(catalogRevision) { loadWidgetCatalog(catalogPrefs) }
+    val descriptors = remember(catalogRevision, os4Launcher) {
+        loadWidgetCatalog(catalogPrefs).let { catalog ->
+            if (os4Launcher) catalog.filter { it.isMaml() && it.owner.startsWith("os4:") }
+            else catalog
+        }
+    }
     val selected = remember(selectionRevision) {
         prefs.getStringSet(WidgetComponentStore.SELECTION_KEY, emptySet())?.toSet().orEmpty()
     }
@@ -65,7 +79,8 @@ internal fun WidgetComponentsPage(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             Text(
-                "仅在手动载入时扫描当前桌面小组件；普通桌面重启不会扫描内部组件。",
+                if (os4Launcher) "仅在手动载入时扫描当前已挂载的 MAML 小组件；普通桌面重启不会扫描内部组件。"
+                else "仅在手动载入时扫描当前桌面小组件；普通桌面重启不会扫描内部组件。",
                 fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
@@ -73,9 +88,43 @@ internal fun WidgetComponentsPage(
         item {
             Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                 ArrowPreference(
-                    title = "载入当前小组件",
-                    summary = "扫描当前已挂载小组件，保持设置页前台，完成后自动关闭扫描",
+                    title = if (os4Launcher) "载入当前 MAML 小组件" else "载入当前小组件",
+                    summary = when {
+                        scanning -> "正在扫描当前已挂载的 MAML 小组件…"
+                        os4Launcher -> "手动扫描当前已挂载的 MAML 小组件并载入隐藏目录"
+                        else -> "扫描当前已挂载小组件，保持设置页前台，完成后自动关闭扫描"
+                    },
+                    enabled = !scanning,
                     onClick = {
+                        if (os4Launcher) {
+                            scanning = true
+                            coroutineScope.launch {
+                                val result = runCatching {
+                                    withContext(Dispatchers.IO) {
+                                        Os4WidgetMaterials.scan(activity)
+                                    }
+                                }.fold({ it }, { Result.failure(it) })
+                                scanning = false
+                                result.fold(
+                                    onSuccess = { count ->
+                                        catalogRevision++
+                                        Toast.makeText(
+                                            activity,
+                                            "已载入 $count 个 MAML 小组件",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    },
+                                    onFailure = { error ->
+                                        Toast.makeText(
+                                            activity,
+                                            "MAML 小组件扫描失败：${error.message ?: "请重试"}",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    },
+                                )
+                            }
+                            return@ArrowPreference
+                        }
                         val request = UUID.randomUUID().toString()
                         val stored = prefs.edit()
                             .putString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, request)
@@ -138,7 +187,7 @@ internal fun WidgetComponentsPage(
                 }
             }
         } else {
-            item { SmallTitle("已载入小组件") }
+            item { SmallTitle(if (os4Launcher) "已载入的 MAML 小组件" else "已载入小组件") }
             // Bound each LazyColumn item rather than composing every discovered provider
             // into one giant card. Keep grouping and the exact node-navigation keys.
             groups.chunked(6).forEach { batch ->

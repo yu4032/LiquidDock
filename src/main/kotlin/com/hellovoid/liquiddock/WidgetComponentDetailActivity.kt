@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -40,10 +41,13 @@ class WidgetComponentDetailActivity : SettingsActivity() {
         }
         setContent {
             val uiPrefs = remember { getSharedPreferences(SETTINGS_UI_PREFS, Context.MODE_PRIVATE) }
+            val availability = remember { SettingsAvailability.detect(this@WidgetComponentDetailActivity) }
             val palette = rememberSettingsUiPalette(uiPrefs).value
             val controller = rememberSettingsUiThemeController(palette)
             SettingsUiColorTheme(controller = controller, palette = palette) {
-                WidgetComponentDetailScreen(this, widgetKey)
+                CompositionLocalProvider(LocalSettingsAvailability provides availability) {
+                    WidgetComponentDetailScreen(this, widgetKey)
+                }
             }
         }
     }
@@ -92,8 +96,11 @@ private fun WidgetComponentDetailScreen(
     val first = components.firstOrNull()
     val owner = first?.displayOwner() ?: "小组件组件"
     val isMaml = first?.isMaml() == true
+    val isOs4Maml = LocalSettingsAvailability.current.isOs4Launcher() &&
+        isMaml && first?.owner?.startsWith("os4:") == true
+    val activeWhiteMode = whiteMode && !isOs4Maml
     val categoryVisible = when {
-        whiteMode -> components.filter { WidgetComponentWhiteningPolicy.supports(it) }
+        activeWhiteMode -> components.filter { WidgetComponentWhiteningPolicy.supports(it) }
         isMaml && !showAllMaml -> components.filter { it.componentType != WidgetComponentStore.TYPE_INTERNAL }
         !isMaml && !showAdvancedRemote -> components.filter {
             it.componentType == WidgetComponentStore.TYPE_BACKGROUND ||
@@ -131,12 +138,13 @@ private fun WidgetComponentDetailScreen(
                 padding = padding,
                 owner = owner,
                 isMaml = isMaml,
+                hideWhitening = isOs4Maml,
                 components = components,
                 typeGroups = typeGroups,
                 likelyBackgrounds = likelyBackgrounds,
-                selected = if (whiteMode) whitened else selected,
-                whiteMode = whiteMode,
-                onWhiteModeChanged = { whiteMode = it; selectedType = null },
+                selected = if (activeWhiteMode) whitened else selected,
+                whiteMode = activeWhiteMode,
+                onWhiteModeChanged = { if (!isOs4Maml) whiteMode = it; selectedType = null },
                 showAllMaml = showAllMaml,
                 onShowAllMaml = { showAllMaml = it },
                 showAdvancedRemote = showAdvancedRemote,
@@ -148,12 +156,12 @@ private fun WidgetComponentDetailScreen(
                 padding = padding,
                 type = selectedType!!,
                 components = currentTypeComponents,
-                selected = if (whiteMode) whitened else selected,
-                whiteMode = whiteMode,
+                selected = if (activeWhiteMode) whitened else selected,
+                whiteMode = activeWhiteMode,
                 onSelectionChanged = { descriptor, checked ->
                     val key = descriptor.selectorKey()
-                    val changed = (if (whiteMode) whitened else selected).toMutableSet()
-                    val other = (if (whiteMode) selected else whitened).toMutableSet()
+                    val changed = (if (activeWhiteMode) whitened else selected).toMutableSet()
+                    val other = (if (activeWhiteMode) selected else whitened).toMutableSet()
                     if (checked) {
                         changed.add(key)
                         // An image node may have different selector actions for hiding
@@ -166,7 +174,7 @@ private fun WidgetComponentDetailScreen(
                     } else {
                         changed.remove(key)
                     }
-                    if (whiteMode) {
+                    if (activeWhiteMode) {
                         whitened = changed.toSet()
                         selected = other.toSet()
                     } else {
@@ -188,6 +196,7 @@ private fun WidgetComponentTypePage(
     padding: androidx.compose.foundation.layout.PaddingValues,
     owner: String,
     isMaml: Boolean,
+    hideWhitening: Boolean,
     components: List<WidgetComponentStore.Descriptor>,
     typeGroups: Map<String, List<WidgetComponentStore.Descriptor>>,
     likelyBackgrounds: List<WidgetComponentStore.Descriptor>,
@@ -201,7 +210,7 @@ private fun WidgetComponentTypePage(
     onOpenType: (String) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item {
+        if (!hideWhitening) item {
             ModernSurface(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),

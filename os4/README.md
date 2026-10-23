@@ -158,3 +158,22 @@ before diagnostics, serialized hook installation, and atomic configuration
 publication. Sidecar profile switching occurs only after the native layout
 pipeline has been verified and installed. The obsolete direct SQLite repack is
 not part of the active layout path.
+
+## Icon and MAML widget materials
+
+The OS4 component pages expose native glass switches for desktop/Dock app icons
+and loaded MAML widgets. Icon background size and corner radius are configurable;
+zero radius inherits the vendor shape. Restart Launcher after changes.
+
+The widget component page performs discovery only when manually requested. Native
+widget initialization records loaded source archive identities without traversing
+XML. Manual discovery lists render nodes with exact source-tree selectors. Selected
+nodes are hidden in immutable shadow archives; the original widget resources are
+never modified. Clearing selections or disabling glass restores original content
+on the next Launcher load. Component hiding works independently of glass.
+
+Widget glass uses the vendor MaterialToken/GlassConfig with rustPassWindow enabled.
+It preserves native background capture and does not replace shaders. Only loaded
+MAML archives are supported in this stage; RemoteViews component handling and icon
+transition animation coverage are not included. Native code and SDK fingerprints
+must match the attested Launcher build before hooks are installed.

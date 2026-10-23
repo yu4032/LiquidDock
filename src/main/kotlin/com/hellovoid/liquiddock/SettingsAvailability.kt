@@ -53,6 +53,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.Liquid, Page.LiquidMaterial, Page.LiquidRefraction,
             Page.LiquidColor, Page.LiquidLighting, Page.LiquidShadow,
             Page.LiquidSampling, Page.GlassEdge,
+            Page.GlassIcons, Page.GlassWidgets, Page.WidgetComponents,
         )
 
         /** Detect AOT desktop independently of its build number (unknown builds fail closed). */

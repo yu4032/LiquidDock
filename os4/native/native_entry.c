@@ -55,6 +55,9 @@ static void *trace_thread(void *unused);
 static int g_hook_pin_ok=1;
 static void (*g_orig_rust_orientation)(void *);
 
+#include "icon_glass.h"
+#include "maml_widget_materials.h"
+
 void ld_blog(const char *fmt, ...)
 {
     static int fd = -2;
@@ -344,6 +347,55 @@ static void update_layout_ready(void) {
     __atomic_store_n(&g_count_cols,g_layout_hooks_ready?g_grid_cols:0,__ATOMIC_RELEASE);
     ld_blog("complete layout pipeline ready=%d",g_layout_hooks_ready);
 }
+
+static void ld_install_icon_materials(const struct native_api *api,const ld_lib_info *lib)
+{
+    if(!g_hook_pin_ok || !api || !api->hook || !lib || !g_home_options.glass_enabled || !g_home_options.glass_icons)
+        return;
+    if(!g_icon_glass_installed) {
+        if(!ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_BODY_START,
+                    LD_ICON_GLASS_BODY_SIZE,ld_icon_glass_body_sha)) return;
+        static const uintptr_t sites[]={0x1782818u,0x1782944u};
+        void *const replacements[]={(void*)repl_icon_glass_enabled,(void*)repl_icon_glass_size};
+        void **const originals[]={&g_orig_icon_glass_enabled,&g_orig_icon_glass_size};
+        uintptr_t targets[2]={0};
+        for(size_t i=0;i<2;i++)
+            if(!ld_vaddr_to_runtime(lib,sites[i],&targets[i]) || !executable_range(targets[i],16)) return;
+        for(size_t i=0;i<2;i++) {
+            if(*originals[i]) continue;
+            void *backup=NULL;
+            if(!ld_pin_code_pages(targets[i],16)
+                    || api->hook((void*)targets[i],replacements[i],&backup)!=0 || !backup) return;
+            *originals[i]=backup;
+        }
+        if(g_orig_icon_glass_enabled && g_orig_icon_glass_size) g_icon_glass_installed=1;
+    }
+    if(g_icon_glass_installed && g_home_options.glass_icon_corner>0.0
+            && !g_icon_glass_radius_installed
+            && ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_RADIUS_START,
+                    LD_ICON_GLASS_RADIUS_SIZE,ld_icon_glass_radius_sha)) {
+        uintptr_t target=0;
+        if(ld_vaddr_to_runtime(lib,0x14e87a8u,&target) && executable_range(target,16)
+                && ld_pin_code_pages(target,16)) {
+            void *backup=NULL;
+            if(api->hook((void*)target,(void*)repl_icon_glass_radius,&backup)==0 && backup) {
+                g_orig_icon_glass_radius=backup;
+                g_icon_glass_radius_installed=1;
+            }
+        }
+    }
+}
+
+static void ld_widget_inventory_reset_once(void)
+{
+    if(g_widget_inventory_reset) return;
+    int fd=open(LD_WIDGET_INVENTORY,O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC|O_NOFOLLOW,0600);
+    if(fd<0) return;
+    struct stat st; int ok=fstat(fd,&st)==0 && S_ISREG(st.st_mode);
+    if(close(fd)!=0) ok=0;
+    if(ok) g_widget_inventory_reset=1;
+}
+
 static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
@@ -387,6 +439,9 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     if(!attest_layout_elf(&lib,29983600u,dart_digest)) {
         ld_blog("8583 whole-ELF SHA-256 mismatch; refusing native layout hooks"); return;
     }
+    ld_install_icon_materials(api,&lib);
+    ld_widget_inventory_reset_once();
+    (void)ld_maml_install(api);
     ld_install_os4_glass(api,&lib);
     struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
         {LD_GLASS_FILTER_START,LD_GLASS_FILTER_SITE,ld_glass_filter_words,sizeof ld_glass_filter_words,(void*)repl_glass_filter,&g_orig_glass_filter},
@@ -493,7 +548,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 
 static void install_grid_hook(const struct native_api *api) {
     if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled
-            && !g_home_options.dock.enabled && !g_home_options.glass_enabled) return;
+            && !g_home_options.dock.enabled && !g_home_options.glass_enabled
+            && !g_home_options.widget_overrides) return;
     pthread_mutex_lock(&g_install_lock);
     install_grid_hook_unlocked(api);
     if((g_installed || g_os4_glass_installed) && !g_trace_started) {
@@ -510,6 +566,12 @@ static void on_library_loaded(const char *name, void *handle)
     if(name) {
         const char *base=strrchr(name,'/'); base=base?base+1:name;
         if(!strcmp(base,"libapp.so") || !strcmp(base,"libapp_launcher.so")) install_grid_hook(g_api);
+        else if(!strcmp(base,"librust_maml_sdk.so")) {
+            pthread_mutex_lock(&g_install_lock);
+            ld_widget_inventory_reset_once();
+            (void)ld_maml_install(g_api);
+            pthread_mutex_unlock(&g_install_lock);
+        }
     }
 }
 
