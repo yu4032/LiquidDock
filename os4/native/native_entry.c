@@ -395,7 +395,7 @@ static void on_library_loaded(const char *name, void *handle)
 static void *trace_thread(void *unused)
 {
     (void)unused;
-    unsigned last_calls = 0;
+    unsigned last_calls = 0, last_dock_updates = 0;
     for (;;) {
         unsigned calls = __atomic_load_n(&g_pad_trace[0], __ATOMIC_RELAXED);
         if (calls != last_calls) {
@@ -408,6 +408,13 @@ static void *trace_thread(void *unused)
                  calls, raw_cols, raw_rows, final_cols, final_rows);
             ld_blog("PadRowCol calls=%u raw(cols=%d,rows=%d) final(cols=%d,rows=%d)",
                     calls, raw_cols, raw_rows, final_cols, final_rows);
+        }
+        unsigned bottom_updates = __atomic_load_n(&g_dock_bottom_updates, __ATOMIC_ACQUIRE);
+        if (bottom_updates != last_dock_updates) {
+            last_dock_updates = bottom_updates;
+            double from = __atomic_load_n(&g_dock_bottom_last_from, __ATOMIC_RELAXED);
+            double to = __atomic_load_n(&g_dock_bottom_last_to, __ATOMIC_RELAXED);
+            ld_blog("Dock bottom inset applied count=%u from=%.2f to=%.2f",bottom_updates,from,to);
         }
         usleep(500000);
     }

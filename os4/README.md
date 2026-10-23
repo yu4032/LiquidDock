@@ -68,7 +68,9 @@ gated by the normal active/fullscreen Dock identity checks, is disabled at zero,
 and fails closed if the expected object fields are absent. Verify positive,
 negative, zero, portrait/landscape and workstation exclusion on-device; inspect
 whether the common inset changes workspace viewport reservation before marking
-the setting as fully ported.
+the setting as fully ported. The native trace worker reports
+`Dock bottom inset applied count=...` to the Launcher DE boot log. A missing
+counter means the observer never reached the write, even if the hook installed.
 
 ## Native safety and compatibility
 
