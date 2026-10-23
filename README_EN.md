@@ -81,7 +81,7 @@ With the LiquidDock and Liquid Glass master switches enabled, LiquidDock can add
 - the MIUI System Search main screen;
 - the Gboard floating keyboard and related toolbars.
 
-Blur, refraction, chromatic dispersion, tint, brightness, shadows, highlights, corner radii, and different highlight layers can be adjusted separately.
+Blur, refraction, chromatic dispersion, tint, brightness, shadows, highlights, corner radii, and different highlight layers can be adjusted separately. The optical rim supports light-responsive bright/dark outlines and soft outer shadows. Dock, icons, widgets, folders, and supported menus can override or inherit Prismal outline and shadow settings. “OS4” names an optical effect here; it does not imply HyperOS 4 support.
 
 Most appearance changes take effect **immediately** when the relevant hook is already running. Installing a hook for the first time, or changing structural settings such as the grid, may still require restarting the corresponding scope.
 
@@ -97,6 +97,8 @@ Enable “Free Home Screen Grid” to choose **2–10 columns and 2–6 rows** i
 
 When reducing the number of rows or columns, the settings app checks whether an existing **4×2 widget** would no longer fit. It warns you instead of saving an incompatible grid. Restart Launcher after changing the grid.
 
+An optional **80%–120% icon-size control** applies to supported home-screen, Dock, folder-preview, and Workstation All Apps icons; it does not uniformly resize the ordinary app drawer or search results.
+
 ### Dock
 
 Enable Dock customization to change its dimensions, position, and icon spacing. Outline, shadow, and divider settings are also available:
@@ -111,7 +113,9 @@ Enable Dock customization to change its dimensions, position, and icon spacing. 
 
 The phone-interconnect shortcut can be hidden without disabling the system interconnect feature or affecting its transfer icon.
 
-A recent-app blacklist can prevent selected apps from appearing in the Dock's recent-app suggestions.
+A recent-app blacklist can prevent selected apps from appearing in the Dock's recent-app suggestions. **Dock → Behavior → Hide Dock recent-task icons** can instead hide the entire group of suggested recent-task icons. It is **off by default**, does not remove pinned Dock icons or change system Recents, and requires restarting Launcher.
+
+**Native Dock Shadow** applies only with Dock customization enabled and Liquid Glass disabled. When Liquid Glass is enabled, a separate **Liquid Glass Shadow** page controls Prismal outer shadows and light-responsive outlines.
 
 ### Widgets and folders
 
@@ -125,13 +129,15 @@ Part-level whitening currently supports **RemoteViews TextView / ImageView**. In
 
 Small and large folders have separate glass switches, sizes, and corner-radius settings.
 
-Expanded folders can also use an independent Liquid Glass background while retaining the native opening and closing animations. Under **Appearance → Glass Components → Folders**, configure its switch, interior blur, refraction, thickness, tint, and native outside blur strength. The glass follows Recents and Dock transitions. Restart Launcher after enabling or disabling expanded-folder glass.
+Expanded folders can also use an independent Liquid Glass background while retaining the native opening and closing animations. Under **Appearance → Glass Components → Folders**, configure its switch, interior blur, refraction, thickness, tint, and native outside blur strength. The glass follows Recents and Dock transitions. Other home-screen glass elements can fade away over a separately adjustable duration when a folder opens, rather than disappearing abruptly. Restart Launcher after enabling or disabling expanded-folder glass.
 
 On Launcher 4.50, four-preview and nine-preview large folders support a real **2×2 home-screen footprint**. Enable real large folders and titles per folder in the launcher's native folder settings. Under **Appearance → Folders**, adjust preview icon size (**60%–110%, 100% by default**) and toggle the native outline. Preview icon sizing works independently of the glass switch.
 
+An optional compatibility switch for the modified Mingou Launcher is **off by default**. It only restores saved 2×2 folder footprints marked by LiquidDock, without automatically detecting the Launcher build.
+
 ### Shortcut menus and dialogs
 
-The shortcut menu shown when long-pressing a home-screen icon can use a glass background, with an optional white-text-and-icon mode for dark themes.
+The shortcut menu shown when long-pressing a home-screen icon can use a glass background, with an optional white-text-and-icon mode for dark themes. Its glass switch, blur, tint, and detailed optical parameters can be configured independently of the global glass appearance.
 
 Launcher uninstall, remove, and second-confirmation dialogs can also use glass backgrounds, with controls for:
 
@@ -151,7 +157,9 @@ Recents supports:
 - disabling wallpaper dimming;
 - glass backgrounds for the “Clear All” and device-interconnect buttons.
 
-The Workstation taskbar toggle applies to both liquid glass and the native background. Workstation mode provides a **vertical offset for the entire Dock including its background**, separate **vertical icon offsets for portrait and landscape**, Dock icon glass corner radius, home-screen horizontal positioning, and All Apps spacing for both orientations. Workstation Dock icon settings require Workstation customization to be enabled; the divider has its own switch.
+**Workstation taskbar mode** extends the Dock background to the left, right, and bottom screen edges, removing the corresponding rounded corners and optical highlights. It works with both Liquid Glass and the native Dock background while preserving the vendor fly-in/fly-out animation. Workstation mode also provides a **vertical offset for the entire Dock including its background**, separate **vertical icon offsets for portrait and landscape**, Dock icon glass corner radius, and home-screen horizontal positioning.
+
+Besides separate All Apps horizontal and top/bottom spacing for both orientations, Workstation offers **independent portrait and landscape All Apps page-indicator vertical offsets** (-160 to 160 dp; positive moves down). They do not affect the ordinary home-screen indicator. Workstation Dock icon settings require Workstation customization to be enabled; the divider has its own switch.
 
 ### System UI and Security Center
 
@@ -159,6 +167,8 @@ Optional system integrations include:
 
 - the app's top menu for split-screen, floating windows, and related controls;
 - supported Security Center sidebars, including Game Toolbox, Video Toolbox, Global Dock, and All Apps, with support for the slide-and-hold gesture.
+
+The app-top control menu has separate glass, blur, tint, and optical settings; it need not match the global glass appearance.
 
 Both glass integrations require the LiquidDock master switch, the Liquid Glass master switch, and their respective feature switches. They also depend on compatibility with the installed system components.
 
@@ -170,9 +180,11 @@ Gboard supports glass for the floating keyboard and related toolbars, with indep
 
 ### Configuration, animation, and backups
 
-Animation timing can be adjusted for workspace visibility, Dock icon reveal, press feedback, Dock resizing, and settings-page transitions. An optional **Disable wallpaper zoom** switch constrains Launcher's wallpaper zoom target during app and Recents transitions without changing workspace animation; first-time installation requires restarting Launcher. Effectiveness depends on the vendor Launcher implementation.
+Animation timing can be adjusted for workspace visibility, **unlock-time workspace-glass reveal**, Dock icon reveal, the fade of other glass elements when opening folders, press feedback, Dock resizing, and settings-page transitions. Dock icon glass also fades in during the final part of the native app-to-home return animation. An optional **Disable wallpaper zoom** switch constrains Launcher's wallpaper zoom target during app and Recents transitions without changing workspace animation; first-time installation requires restarting Launcher. Effectiveness depends on the vendor Launcher implementation.
 
-The settings app uses MIUIX and Prismal glass styling, with options grouped by feature. Sliders support continuous dragging, live values, and spring animations on release. You can also tap a value to enter it directly or use the plus, minus, and reset buttons. Settings dialogs have transition animations, and the bottom glass capsule supports swipe navigation with moving icon and text highlights.
+An optional **Hide gesture handle on Home/Recents** setting (off by default) hides the system gesture bar while those screens are shown, returning control to the system upon leaving. Its first-time hook installation requires restarting SystemUI.
+
+The settings app uses MIUIX and Prismal glass styling, with options grouped by feature. **Pull down on one of the four top-level pages to search** for settings pages and individual parameters, then navigate to the corresponding page. Sliders support continuous dragging, live values, and spring animations on release. You can also tap a value to enter it directly or use the plus, minus, and reset buttons. Settings dialogs have transition animations, and the bottom glass capsule supports swipe navigation with moving icon and text highlights.
 
 The **iOS Glass Effect** switch controls the settings app's appearance. The Restart Scopes dialog supports scrolling and multiple selections, independently of the desktop glass switches.
 
