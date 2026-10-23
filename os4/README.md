@@ -91,7 +91,15 @@ Dart observers for the actual native glass pipeline:
 Unlike the earlier three capability checks these show whether the Flutter
 Dock/filter/light configuration path is actually constructed. They never
 change vendor material arguments or shader bytes, and log aggregate call
-counts rather than frame-by-frame events. Missing/inlined functions fail
+counts rather than frame-by-frame events.
+
+The first 12 `GlassLightConfig.applyTo` callbacks also attempt a bounded,
+read-only sample of the 5-double config record from the first four Dart
+argument registers. They log one sanitized `OS4 glass light sample` line
+(or explicit `sample unavailable`), with NO heap address and no writes.
+**These five fields still have unknown semantics**; merely observing them
+is not a license to modify HDR matrices or vendor color transforms. The
+optical replacement will only be enabled after binding and ABI verification. Missing/inlined functions fail
 closed without disabling the already device-verified gate.
 
 Device log markers: `OS4 glass gate enabled`,

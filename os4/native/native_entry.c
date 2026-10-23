@@ -515,6 +515,7 @@ static void *trace_thread(void *unused)
     (void)unused;
     unsigned last_calls = 0, last_glass_calls = 0;
     unsigned last_pipeline[4]={0};
+    int light_sample_reported=0;
     for (;;) {
         unsigned calls = __atomic_load_n(&g_pad_trace[0], __ATOMIC_RELAXED);
         if (calls != last_calls) {
@@ -542,6 +543,19 @@ static void *trace_thread(void *unused)
             if(now!=last_pipeline[i]) {
                 last_pipeline[i]=now;
                 ld_blog("OS4 glass pipeline %s calls=%u",labels[i],now);
+            }
+        }
+        if(!light_sample_reported && (g_os4_pipeline_mask & (1u<<3))) {
+            unsigned state=__atomic_load_n(&g_os4_light_sample_status,__ATOMIC_ACQUIRE);
+            if(state==2) {
+                light_sample_reported=1;
+                ld_blog("OS4 glass light sample register=x%d doubles=%.4f,%.4f,%.4f,%.4f,%.4f (diagnostic, semantic unknown)",
+                    g_os4_light_sample_register,g_os4_light_sample_fields[0],
+                    g_os4_light_sample_fields[1],g_os4_light_sample_fields[2],
+                    g_os4_light_sample_fields[3],g_os4_light_sample_fields[4]);
+            } else if(__atomic_load_n(&g_os4_light_sample_attempts,__ATOMIC_RELAXED)>=12) {
+                light_sample_reported=1;
+                ld_blog("OS4 glass light sample unavailable: 12 applyTo calls inspected; no plausible 5-double record");
             }
         }
         usleep(500000);
