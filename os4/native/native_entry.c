@@ -92,7 +92,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
 #include "home_indicator.h"
 #include "home_widgets.h"
 #include "dock_geometry.h"
-#include "dock_bottom_offset.h"
+#include "dock_y_direct.h"
 static void *g_orig_home_pipeline;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
@@ -121,10 +121,6 @@ __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_contex
         baseline.direction=direction; baseline.valid=1;
     }
     ld_apply_home_geometry(c,grid);
-    // The vendor consumes the shared bottom inset for HotSeatsMarginBottom.
-    // Adjust only that scalar on the fresh full-screen grid, without changing
-    // cell size, row stride, icon geometry or the Dock background dimensions.
-    ld_apply_dock_bottom_offset(c,grid);
     ld_apply_home_icons(c,grid);
     if(baseline.valid && ld_read_heap(grid+0x2b,&baseline.current_width,8)
             && ld_read_heap(grid+0x33,&baseline.current_height,8)
@@ -301,6 +297,43 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             ld_blog("home options observer %lx installed result=%d",(unsigned long)home_hooks[i].site,status);
         }
     }
+    /*
+     * Experimental 8583 direct Y return-value adjustment. This Dock-only
+     * hook installs before the grid-only early return, so a stock workspace
+     * with custom Dock geometry can exercise it independently.
+     */
+    if(g_home_options.dock.enabled && g_home_options.dock.bottom!=0.0 && !g_orig_dock_y) {
+        uintptr_t dock_site=0;
+        double delta=0.0;
+        if(ld_dock_y_delta_for_setting(g_home_options.dock.bottom,&delta)
+                && ld_vaddr_to_runtime(&lib,LD_DOCK_Y_VADDR,&dock_site)
+                && executable_range(dock_site,LD_DOCK_Y_SIZE)) {
+            uint32_t original[LD_DOCK_Y_SIZE/sizeof(uint32_t)];
+            memcpy(original,(const void *)dock_site,sizeof original);
+            if(ld_dock_y_matches(original,sizeof original)) {
+                g_dock_y_delta=delta;
+                int status=api->hook((void *)dock_site,(void *)repl_dock_y_direct,&g_orig_dock_y);
+                if(status==0 && g_orig_dock_y) {
+                    if(ld_pin_code_pages(dock_site,16)) {
+                        g_dock_y_installed=true;
+                        ld_blog("experimental direct Dock Y hooked vaddr=%lx delta=%.1f",
+                                (unsigned long)LD_DOCK_Y_VADDR,delta);
+                    } else {
+                        g_dock_y_delta=0;
+                        ld_blog("experimental direct Dock Y pin failed; delta disabled");
+                    }
+                } else {
+                    g_dock_y_delta=0;
+                    ld_blog("experimental direct Dock Y hook failed status=%d",status);
+                }
+            } else {
+                ld_blog("experimental direct Dock Y entry/tail mismatch at %lx; skipped",
+                        (unsigned long)LD_DOCK_Y_VADDR);
+            }
+        } else {
+            ld_blog("experimental direct Dock Y address unavailable; skipped");
+        }
+    }
     if(!g_grid_cols || !g_grid_rows) return;
     void *site = (void *)(entry + 0x80);
     void *backup = NULL;
@@ -375,7 +408,7 @@ static void install_grid_hook(const struct native_api *api) {
     if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled && !g_home_options.dock.enabled) return;
     pthread_mutex_lock(&g_install_lock);
     install_grid_hook_unlocked(api);
-    if(g_installed && !g_trace_started) {
+    if((g_installed || g_dock_y_installed) && !g_trace_started) {
         pthread_t thread;
         if(pthread_create(&thread,NULL,trace_thread,NULL)==0) {
             pthread_detach(thread); g_trace_started=true;
@@ -395,7 +428,7 @@ static void on_library_loaded(const char *name, void *handle)
 static void *trace_thread(void *unused)
 {
     (void)unused;
-    unsigned last_calls = 0, last_dock_updates = 0;
+    unsigned last_calls = 0, last_dock_calls = 0;
     for (;;) {
         unsigned calls = __atomic_load_n(&g_pad_trace[0], __ATOMIC_RELAXED);
         if (calls != last_calls) {
@@ -409,14 +442,10 @@ static void *trace_thread(void *unused)
             ld_blog("PadRowCol calls=%u raw(cols=%d,rows=%d) final(cols=%d,rows=%d)",
                     calls, raw_cols, raw_rows, final_cols, final_rows);
         }
-        unsigned bottom_updates = __atomic_load_n(&g_dock_bottom_updates, __ATOMIC_ACQUIRE);
-        if (bottom_updates != last_dock_updates) {
-            last_dock_updates = bottom_updates;
-            uint64_t old_bits = __atomic_load_n(&g_dock_bottom_last_from_bits, __ATOMIC_RELAXED);
-            uint64_t new_bits = __atomic_load_n(&g_dock_bottom_last_to_bits, __ATOMIC_RELAXED);
-            double from=0,to=0;
-            memcpy(&from,&old_bits,8); memcpy(&to,&new_bits,8);
-            ld_blog("Dock bottom inset applied count=%u from=%.2f to=%.2f",bottom_updates,from,to);
+        unsigned dock_calls = __atomic_load_n(&g_dock_y_calls, __ATOMIC_RELAXED);
+        if(dock_calls!=last_dock_calls) {
+            last_dock_calls=dock_calls;
+            ld_blog("direct Dock Y invoked count=%u applied_delta=%.1f",dock_calls,g_dock_y_delta);
         }
         usleep(500000);
     }

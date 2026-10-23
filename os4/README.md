@@ -52,31 +52,31 @@ Indicator Y changes the fresh Transform's Matrix4 translation, including its
 hit testing. The earlier scale-origin Offset does not move an identity scale
 and is left untouched. All these geometry adjustments reject split configs.
 
-## Dock bottom offset (experimental)
+## Direct Dock Y offset (experimental)
 
-The existing GUI slider (`Dock → Dock geometry → Dock bottom offset`) now
-publishes `dock_geometry_bottom` through the same checked configuration as
-the other Dock dimensions. Positive values move the Dock away from the physical
-bottom (up); negative values move it down only while the vendor bottom-margin
-inset remains negative. The signed inset crosses a zero boundary and the
-downstream vendor margin computation folds negative and positive values; to
-prevent a negative slider setting from unexpectedly moving Dock upward, it now
-saturates at the stock lower boundary instead of crossing zero. Moving Dock
-below that boundary requires an independently fingerprinted direct Dart Y
-translation hook; this experimental inset implementation cannot supply it. This **does not** add the obsolete
-7751 `calculateDockOffsetY` hook: the 8583 AOT offset/body is not proven.
-Instead, the existing full-function-attested fresh GridConfig observer changes
-only the signed bottom inset consumed by the vendor HotSeatsMarginBottom
-calculation; no width/height/spacing or workspace row stride is modified.
+The existing GUI slider under Dock → Dock geometry remains the only setting
+source; `dock_geometry_bottom` supports signed logical dp. For the prototype,
+native computes `deltaY=-bottomSetting` and adds that value to the vendor
+`HotseatLayerGetxController.calculateDockOffsetY` double return in d0.
+For example: +10 → -10 (up), -10 → +10 (down), 0 → no hook.
+Unlike the previous Insets.bottom experiment, this never changes GridConfig
+insets, workspace reserves or row stride.
 
-This is a candidate binding, **not yet visually accepted on fuxi**. It is
-gated by the normal active/fullscreen Dock identity checks, is disabled at zero,
-and fails closed if the expected object fields are absent. Verify positive,
-negative, zero, portrait/landscape and workstation exclusion on-device; inspect
-whether the common inset changes workspace viewport reservation before marking
-the setting as fully ported. The native trace worker reports
-`Dock bottom inset applied count=...` to the Launcher DE boot log. A missing
-counter means the observer never reached the write, even if the hook installed.
+The prototype assumes the research version's 0xa8a03c / 240-byte
+`calculateDockOffsetY` is present on the fuxi 8583 whole-ELF pinned image.
+The runtime only installs if the entry prologue and identified fsub/return
+epilogue both match; otherwise it fails closed. This is a PARTIAL signature,
+unlike the full-body fingerprints used elsewhere. It must not be promoted into
+a fully supported hook without extracting and attesting the complete 8583
+function and checking actual consumers. The patch page must be mlock-pinned.
+
+Logs to `/data/user_de/0/com.miui.home/files/liquiddock4-boot.log`:
+`experimental direct Dock Y hooked` (installed) and
+`direct Dock Y invoked count=N applied_delta=...` (actually called).
+If you only see entry/tail mismatch or never see invoked, the
+research function did not bind to this device's active visual path.
+Recheck both orientations, hit regions, dock background, icon animations,
+workstation exclusion, and offset signs before merging.
 
 ## Native safety and compatibility
 
