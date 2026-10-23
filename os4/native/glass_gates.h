@@ -5,6 +5,9 @@
 /* These functions return Dart canonical bool objects, not C booleans:
  * x22+0x20 is true, x22+0x30 false.
  * Override is inactive until ALL selected functions are safely hooked.
+ * During the tiny installation window, a missing backup returns the desired
+ * capability instead of branching to NULL; a partial failed transaction stays
+ * inactive and each installed wrapper delegates to its stored backup.
  * Never replace isAnyMaterialActive / isWidgetMaterialActive:
  * those may register Flutter reactive dependencies. */
 static volatile uint8_t g_os4_glass_override __attribute__((used));
@@ -29,7 +32,10 @@ __attribute__((used,naked)) static void fn(void) { \
         "1: adrp x16, g_os4_glass_original\n" \
         "add x16, x16, :lo12:g_os4_glass_original\n" \
         "ldr x16, [x16, #" #orig_off "]\n" \
+        "cbz x16, 2f\n" \
         "br x16\n" \
+        "2: add x0, x22, #" #retval "\n" \
+        "ret\n" \
     ); \
 }
 LD_OS4_BOOL_GATE(repl_os4_glass_supported, 0, 0, 0x20)
