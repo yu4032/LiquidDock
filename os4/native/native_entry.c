@@ -18,13 +18,19 @@
 
 #include "bootlog.h"
 #include "grid_conf.h"
-#include "grid_db_repack.h"
 #include "layout_fingerprints.h"
 #include "lib_base.h"
 #include "pad_counts_wrapper.h"
+#include "rotation_fingerprint.h"
+#include "layout_runtime_fingerprints.h"
+#include "executable_range.h"
+#include "hook_page_pin.h"
+#include "rust_orientation_fingerprint.h"
 
 #define LD_PRIMARY_CONF "/data/user/0/com.miui.home/files/liquiddock-native.conf"
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
+#define LD_LAYOUT_MANAGED_MARKER \
+    "/data/user_de/0/com.miui.home/files/liquiddock-layout-managed-v1"
 #define LD_PAD_ROWCOL_VADDR 0x1a88188u
 #define LD_FILTER_VADDR 0x8d26c0u
 
@@ -33,8 +39,11 @@ static volatile int g_grid_rows;
 static volatile unsigned g_pad_trace[5] __attribute__((used));
 static volatile uintptr_t g_pad_pool __attribute__((used));
 static void *g_orig_pad_counts;
+static void *g_orig_orientation __attribute__((used));
 static const struct native_api *g_api;
 static bool g_installed;
+static int g_hook_pin_ok=1;
+static void (*g_orig_rust_orientation)(void *);
 
 void ld_blog(const char *fmt, ...)
 {
@@ -65,6 +74,16 @@ void ld_blog(const char *fmt, ...)
 
 LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_grid_rows, g_grid_cols,
                      g_orig_pad_counts, g_pad_pool, g_pad_trace)
+#include "layout_runtime.h"
+#include "layout_profiles.h"
+#include "layout_load.h"
+#include "layout_save.h"
+#include "free_place_wrapper.h"
+static void *g_orig_no_vacant __attribute__((used));
+static volatile unsigned g_free_place_calls __attribute__((used));
+LD_FREE_PLACE_WRAPPER(repl_free_place, g_grid_cols, g_orig_no_vacant, g_free_place_calls)
+static void *g_orig_widget_lattice __attribute__((used));
+LD_WIDGET_LATTICE_WRAPPER(repl_widget_lattice, g_grid_cols, g_orig_widget_lattice)
 
 static void load_grid_config(void)
 {
@@ -85,13 +104,13 @@ static void load_grid_config(void)
 
     g_grid_cols = conf.cols;
     g_grid_rows = conf.rows;
+    if(conf.cols>0 && conf.rows>0 && !ld_layout_select_profile(LD_LAYOUT_FILE,conf.cols,conf.rows))
+        ld_blog("layout profile could not be archived");
     LOGI("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     ld_blog("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     if (conf.cols > 0 && conf.rows > 0) {
-        int moved = ld_grid_db_repack(conf.cols, conf.rows);
-        LOGI("grid repack moved=%d", moved);
-        ld_blog("grid repack before load %dx%d moved=%d",
-                conf.cols, conf.rows, moved);
+        LOGI("grid DB repack skipped: orientation-aware layout is active");
+        ld_blog("grid DB repack skipped: orientation-aware layout is active");
     }
 }
 
@@ -99,25 +118,52 @@ static bool executable_range(uintptr_t address, size_t size)
 {
     FILE *maps = fopen("/proc/self/maps", "r");
     if (!maps) return false;
-    char line[512];
-    bool ok = false;
-    while (fgets(line, sizeof line, maps)) {
-        unsigned long start, end;
-        char permissions[8];
-        if (sscanf(line, "%lx-%lx %7s", &start, &end, permissions) == 3 &&
-            permissions[0] == 'r' && permissions[2] == 'x' &&
-            address >= start && address + size <= end) {
-            ok = true;
-            break;
-        }
-    }
+    bool ok=ld_executable_maps(maps,address,size);
     fclose(maps);
     return ok;
 }
 
+static void pin_installed_hook(uintptr_t site) {
+    int ok=ld_pin_code_pages(site,16);
+    if(!ok) {
+        g_hook_pin_ok=0; g_layout_hooks_ready=0;
+        g_grid_cols=0; g_grid_rows=0;
+        ld_blog("hook pin failed; custom grid and placement disabled");
+    }
+    ld_blog("hook page pinned site=%llx ok=%d errno=%d",(unsigned long long)site,ok,ok?0:errno);
+}
+/* The Rust pre-load transpose assumes the stock lattice and can index past
+ * a three-column grid before Dart receives any DTOs. Our DTO planner handles
+ * orientation and bounds; retain the original path unless the complete native
+ * layout pipeline was installed successfully. Rust uses normal AAPCS64. */
+static void repl_rust_orientation(void *grid) {
+    if(g_layout_hooks_ready && g_grid_cols>0 && g_grid_rows>0) {
+        ld_blog("vendor pre-load transpose delegated to DTO planner");
+        return;
+    }
+    g_orig_rust_orientation(grid);
+}
+static void update_layout_ready(void) {
+    g_layout_hooks_ready=g_hook_pin_ok && g_layout_mid_ready && g_orig_orientation && g_orig_filter_return
+        && g_orig_load_items && g_orig_save_batch && g_orig_save_single && g_orig_delete_item
+        && g_orig_rust_orientation;
+    ld_blog("complete layout pipeline ready=%d",g_layout_hooks_ready);
+}
 static void install_grid_hook(const struct native_api *api)
 {
-    if (g_installed || !api || !api->hook) return;
+    if (!api || !api->hook) return;
+    if(!g_orig_rust_orientation) {
+        ld_lib_info rust; uintptr_t target=0;
+        if(ld_resolve_lib("MiuiHome.apk","lib/arm64-v8a/libapp_launcher.so",&rust)
+                && ld_vaddr_to_runtime(&rust,0x90ffa0u,&target)
+                && executable_range(target,sizeof ld_rust_orientation_words)
+                && !memcmp((void *)target,ld_rust_orientation_words,sizeof ld_rust_orientation_words)) {
+            int result=api->hook((void *)target,(void *)repl_rust_orientation,(void **)&g_orig_rust_orientation);
+            if(result==0 && g_orig_rust_orientation) pin_installed_hook(target);
+            ld_blog("Rust pre-load orientation guard installed result=%d",result);
+        }
+    }
+    if (g_installed) { update_layout_ready(); return; }
 
     static ld_lib_info lib;
     if (!ld_resolve_lib("MiuiHome.apk", "lib/arm64-v8a/libapp.so", &lib)) {
@@ -150,15 +196,69 @@ static void install_grid_hook(const struct native_api *api)
     }
 
     g_orig_pad_counts = backup;
+    pin_installed_hook((uintptr_t)site);
     g_installed = true;
     LOGI("PadRowColHandler count authority installed");
     ld_blog("PadRowColHandler count authority installed");
+    /* Observe active geometry; startup positions use the DTO load boundary. */
+    uintptr_t filter=0;
+    if(ld_vaddr_to_runtime(&lib,LD_FILTER_VADDR,&filter)
+            && executable_range(filter,sizeof ld_filter_words)
+            && !memcmp((void *)filter,ld_filter_words,sizeof ld_filter_words)) {
+        result=api->hook((void *)(filter+0x2a4),(void *)repl_filter_grid,&g_orig_filter_return);
+        if(result==0 && g_orig_filter_return) pin_installed_hook(filter+0x2a4);
+        ld_blog("read-only grid selection installed result=%d",result);
+    }
+    struct { uintptr_t vaddr; const void *words; size_t size; void *replace; void **orig; } observers[] = {
+        {0x917d00u, ld_delete_item_words, sizeof ld_delete_item_words, (void *)repl_delete_item, &g_orig_delete_item},
+        {0x8eecc0u, ld_save_batch_words, sizeof ld_save_batch_words, (void *)repl_save_batch, &g_orig_save_batch},
+        {0x8e2128u, ld_save_single_words, sizeof ld_save_single_words, (void *)repl_save_single, &g_orig_save_single},
+        {0x15e6f6cu, ld_load_items_words, sizeof ld_load_items_words, (void *)repl_load_items, &g_orig_load_items},
+        {0x18c4568u, ld_widget_lattice_words, sizeof ld_widget_lattice_words, (void *)repl_widget_lattice, &g_orig_widget_lattice},
+        {0x8eb92cu, ld_no_vacant_words, sizeof ld_no_vacant_words, (void *)repl_free_place, &g_orig_no_vacant},
+        {0x8eefdcu, ld_process_screen_words, sizeof ld_process_screen_words, (void *)repl_process_screen, &g_orig_process_screen},
+    };
+    for (size_t i = 0; i < sizeof observers / sizeof *observers; i++) {
+        uintptr_t target = 0;
+        if (ld_vaddr_to_runtime(&lib, observers[i].vaddr, &target)
+                && executable_range(target, observers[i].size)
+                && !memcmp((void *)target, observers[i].words, observers[i].size)) {
+            result = api->hook((void *)target, observers[i].replace, observers[i].orig);
+            if(result==0 && *observers[i].orig) pin_installed_hook(target);
+            ld_blog("layout observer %lx installed result=%d", (unsigned long)observers[i].vaddr, result);
+            if(observers[i].vaddr==0x8eefdcu && result==0) {
+                g_process_resume=target+0x384;
+                int mid_result=api->hook((void *)(target+0x218),(void *)repl_process_mid,&g_orig_process_mid);
+                g_layout_mid_ready=mid_result==0 && g_orig_process_mid!=NULL;
+                if(g_layout_mid_ready) pin_installed_hook(target+0x218);
+                ld_blog("layout continuation installed result=%d",mid_result);
+            }
+        } else if(target && executable_range(target,observers[i].size)) {
+            for(size_t k=0;k<observers[i].size;k+=4) if(((uint32_t *)target)[k/4]!=((const uint32_t *)observers[i].words)[k/4]) {
+                ld_blog("observer mismatch %lx +%zx live=%08x expected=%08x",(unsigned long)observers[i].vaddr,k,((uint32_t *)target)[k/4],((const uint32_t *)observers[i].words)[k/4]); break;
+            }
+        }
+    }
+    uintptr_t orientation = 0;
+    if (ld_vaddr_to_runtime(&lib, 0x8ee38cu, &orientation)
+            && executable_range(orientation, sizeof ld_orientation_words)
+            && memcmp((const void *)orientation, ld_orientation_words,
+                      sizeof ld_orientation_words) == 0) {
+        backup = NULL;
+        result = api->hook((void *)orientation, (void *)repl_orientation_observed, &backup);
+        if (result == 0 && backup) {
+            g_orig_orientation = backup;
+            pin_installed_hook(orientation);
+            ld_blog("orientation layout transaction installed (whole body verified)");
+        }
+    }
+    update_layout_ready();
 }
 
 static void on_library_loaded(const char *name, void *handle)
 {
     (void)handle;
-    if (name && strstr(name, "libapp.so")) {
+    if (name && strstr(name, "libapp")) {
         install_grid_hook(g_api);
     }
 }

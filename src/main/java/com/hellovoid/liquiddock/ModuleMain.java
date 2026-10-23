@@ -143,11 +143,8 @@ public final class ModuleMain extends XposedModule {
         }
         if (!LAUNCHER_PACKAGE.equals(packageName)) return;
         if (shouldBlockLegacyLauncherBackend(param)) {
-            try {
-                Os4RotationActivityReloadHook.install();
-            } catch (Throwable error) {
-                Api101Bridge.log("[DC][OS4Rotation] Activity reload hook unavailable", error);
-            }
+            // The fuxi OS4 Launcher runs in hyos_spawner without ART. Java Activity hooks
+            // cannot implement its rotation lifecycle; OS4 layout work belongs in native_init.
             return;
         }
         try {
