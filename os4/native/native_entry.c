@@ -27,6 +27,8 @@
 #include "executable_range.h"
 #include "hook_page_pin.h"
 #include "rust_orientation_fingerprint.h"
+#include "home_options_fingerprints.h"
+#include "home_geometry_fingerprints.h"
 
 #define LD_PRIMARY_CONF "/data/user/0/com.miui.home/files/liquiddock-native.conf"
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
@@ -38,6 +40,7 @@
 static volatile int g_grid_cols;
 static volatile int g_grid_rows;
 static volatile int g_count_cols,g_count_rows;
+static struct ld_grid_conf g_home_options;
 static volatile unsigned g_pad_trace[5] __attribute__((used));
 static volatile uintptr_t g_pad_pool __attribute__((used));
 static void *g_orig_pad_counts;
@@ -83,6 +86,51 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
 #include "layout_profiles.h"
 #include "layout_load.h"
 #include "layout_save.h"
+#include "home_icons.h"
+#include "home_geometry.h"
+#include "home_indicator.h"
+#include "home_widgets.h"
+static void *g_orig_home_pipeline;
+__attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
+{
+    /* The last field's original load/store is in the relocated instructions.
+     * Publish its identical compressed value before inspecting the fresh grid.
+     * No allocation or Dart call occurs before the vendor replays that store. */
+    uintptr_t variables=0,grid=c->x[1];
+    if(!(grid&1) || grid==c->x[22]
+            || !ld_read_heap(c->x[29]-0x18,&variables,8)
+            || !(variables&1) || variables==c->x[22]) return;
+    uint32_t compressed=(uint32_t)variables;
+    memcpy((void *)(grid+0x8f),&compressed,4);
+    struct ld_home_baseline baseline={0};
+    int direction=ld_grid_direction(c,grid);
+    uintptr_t fullscreen=0,icons=ld_heap_pointer(c,grid,0x6b);
+    uint32_t layout=0;
+    if(g_count_cols>0 && direction>=0 && direction<=1 && icons
+            && ld_heap_i64(grid,0x1b)==(direction?g_grid_rows:g_grid_cols)
+            && ld_heap_i64(grid,0x23)==(direction?g_grid_cols:g_grid_rows)
+            && ld_read_heap(variables+0x27,&layout,4)
+            && ld_read_heap(c->x[27]+0xef20,&fullscreen,8)
+            && (layout&1) && layout==(uint32_t)fullscreen
+            && ld_read_heap(grid+0x2b,&baseline.cell_width,8)
+            && ld_read_heap(grid+0x33,&baseline.cell_height,8)
+            && ld_read_heap(icons+0x17,&baseline.icon_size,8)) {
+        baseline.direction=direction; baseline.valid=1;
+    }
+    ld_apply_home_geometry(c,grid);
+    ld_apply_home_icons(c,grid);
+    if(baseline.valid && ld_read_heap(grid+0x2b,&baseline.current_width,8)
+            && ld_read_heap(grid+0x33,&baseline.current_height,8)
+            && ld_read_heap(icons+0x17,&baseline.current_icon,8)) {
+        for(size_t i=0;i<sizeof g_home_baseline/sizeof *g_home_baseline;i++) {
+            if(!g_home_baseline[i].valid || (g_home_baseline[i].direction==direction
+                    && !memcmp(&g_home_baseline[i],&baseline,6*sizeof(double)))) {
+                g_home_baseline[i]=baseline; break;
+            }
+        }
+    }
+}
+LD_DART_OBSERVER(repl_home_pipeline,ld_observe_home_pipeline,g_orig_home_pipeline)
 #include "free_place_wrapper.h"
 static void *g_orig_no_vacant __attribute__((used));
 static volatile unsigned g_free_place_calls __attribute__((used));
@@ -92,7 +140,7 @@ LD_WIDGET_LATTICE_WRAPPER(repl_widget_lattice, g_count_cols, g_orig_widget_latti
 
 static void load_grid_config(void)
 {
-    struct ld_grid_conf conf={0,0};
+    struct ld_grid_conf conf={0};
     const char *source = LD_PRIMARY_CONF;
     int ok = ld_grid_conf_parse_file(LD_PRIMARY_CONF, &conf);
     struct stat ce;
@@ -111,6 +159,7 @@ static void load_grid_config(void)
 
     g_grid_cols = conf.cols;
     g_grid_rows = conf.rows;
+    g_home_options=conf;
     LOGI("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     ld_blog("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     if (conf.cols > 0 && conf.rows > 0) {
@@ -174,7 +223,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
     static const unsigned char rust_digest[32]={0xf7,0xa,0x2d,0x15,0x50,0x5a,0xbc,0x83,0xbb,0xc2,0xf0,0x3c,0xbe,0x9e,0x90,0xb6,0x35,0xa8,0xad,0xd6,0xd8,0x9a,0xe0,0xfe,0xf7,0x64,0x10,0xa,0xea,0x1c,0x6d,0x8b};
-    if(!g_orig_rust_orientation) {
+    if(g_grid_cols>0 && g_grid_rows>0 && !g_orig_rust_orientation) {
         ld_lib_info rust; uintptr_t target=0;
         if(ld_resolve_lib("MiuiHome.apk","lib/arm64-v8a/libapp_launcher.so",&rust)
                 && ld_vaddr_to_runtime(&rust,0x90ffa0u,&target)
@@ -213,6 +262,29 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     if(!attest_layout_elf(&lib,29983600u,dart_digest)) {
         ld_blog("8583 whole-ELF SHA-256 mismatch; refusing native layout hooks"); return;
     }
+    struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
+        {LD_HOME_PIPELINE_FUNCTION_OFFSET,LD_HOME_PIPELINE_HOOK_OFFSET,
+            ld_home_pipeline_words,sizeof ld_home_pipeline_words,(void *)repl_home_pipeline,&g_orig_home_pipeline},
+        {LD_HOME_INDICATOR_FUNCTION_OFFSET,LD_HOME_INDICATOR_HOOK_OFFSET,
+            ld_home_indicator_words,sizeof ld_home_indicator_words,(void *)repl_home_indicator,&g_orig_home_indicator},
+        {LD_HOME_WIDGET_FUNCTION_OFFSET,LD_HOME_WIDGET_HOOK_OFFSET,
+            ld_home_widget_words,sizeof ld_home_widget_words,(void *)repl_home_widget,&g_orig_home_widget},
+    };
+    for(size_t i=0;i<sizeof home_hooks/sizeof *home_hooks;i++) {
+        if(*home_hooks[i].orig) continue;
+        uintptr_t start=0,target=0;
+        if(ld_vaddr_to_runtime(&lib,home_hooks[i].start,&start)
+                && ld_vaddr_to_runtime(&lib,home_hooks[i].site,&target)
+                && executable_range(start,home_hooks[i].size)
+                && !memcmp((void *)start,home_hooks[i].words,home_hooks[i].size)) {
+            int status=api->hook((void *)target,home_hooks[i].replace,home_hooks[i].orig);
+            if(status==0 && *home_hooks[i].orig) pin_installed_hook(target);
+            if(status==0 && *home_hooks[i].orig && home_hooks[i].site==LD_HOME_WIDGET_HOOK_OFFSET)
+                ld_vaddr_to_runtime(&lib,LD_HOME_WIDGET_ALLOC_OFFSET,&g_home_widget_allocate);
+            ld_blog("home options observer %lx installed result=%d",(unsigned long)home_hooks[i].site,status);
+        }
+    }
+    if(!g_grid_cols || !g_grid_rows) return;
     void *site = (void *)(entry + 0x80);
     void *backup = NULL;
     int result = api->hook(site, (void *)repl_pad_rowcol_counts, &backup);
@@ -283,7 +355,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 }
 
 static void install_grid_hook(const struct native_api *api) {
-    if(!g_grid_cols || !g_grid_rows) return;
+    if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled) return;
     pthread_mutex_lock(&g_install_lock);
     install_grid_hook_unlocked(api);
     if(g_installed && !g_trace_started) {
