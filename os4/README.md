@@ -177,3 +177,20 @@ It preserves native background capture and does not replace shaders. Only loaded
 MAML archives are supported in this stage; RemoteViews component handling and icon
 transition animation coverage are not included. Native code and SDK fingerprints
 must match the attested Launcher build before hooks are installed.
+
+Dock bottom offset adjusts the native hotseat bottom reference in logical dp:
+positive values move Dock upward, negative values move it downward, and zero
+retains the vendor placement. Background, icons and hit regions move together;
+the page indicator follows the vendor's same bottom reference. HOME grid
+coordinates and stored layout profiles remain unchanged.
+
+Manual MAML discovery also records source-tree render order and depth. Area
+ratios are calculated only when XML dimensions and aliases can be resolved;
+runtime-dependent dimensions and unavailable Z values remain unknown. Existing
+background ranking uses these fields without changing exact node selectors.
+
+Shadow archive publication assigns the directory and files to the Launcher UID
+and restores their SELinux contexts before publishing the mapping. Upgrading
+invalidates the prior publish cache so existing root-owned directories are
+repaired automatically. Read or hash failures retain the original resource and
+are recorded in the native boot log.

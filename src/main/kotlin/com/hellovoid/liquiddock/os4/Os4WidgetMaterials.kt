@@ -81,7 +81,7 @@ object Os4WidgetMaterials {
         val active = preferences.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault())
         val glass = active && widgetGlass
         val sourceState = state.getString(SOURCES, "").orEmpty()
-        val fingerprint = sha256((sourceState + "\nselected=" + selected.sorted().joinToString("\n") +
+        val fingerprint = sha256(("permissions-v2\n" + sourceState + "\nselected=" + selected.sorted().joinToString("\n") +
             "\nglass=$glass\nactive=$active").toByteArray())
         if (!force && state.getString(PUBLISH_KEY, null) == fingerprint) return true
         val catalog = app.getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)
@@ -232,8 +232,12 @@ object Os4WidgetMaterials {
               umask 077
               DE=/data/user_de/0/com.miui.home/files
               [ -d "${'$'}DE" ] || exit 21
-              D="${'$'}DE/liquiddock-widget-shadows"; mkdir -p "${'$'}D"
+              D="${'$'}DE/liquiddock-widget-shadows"
+              [ ! -L "${'$'}D" ] || exit 21
+              mkdir -p "${'$'}D"
               U="${'$'}(stat -c %u "${'$'}DE")"
+              chown "${'$'}U:${'$'}U" "${'$'}D"; chmod 700 "${'$'}D"
+              restorecon -F "${'$'}D"
               IFS= read -r head; [ "${'$'}head" = "WIDGETS1" ] || exit 22
               ROWS="${'$'}(mktemp "${'$'}DE/.liquiddock-widget-rows.XXXXXX")"
               trap "rm -f ${'$'}ROWS" EXIT
@@ -256,7 +260,7 @@ EOF
                 t="${'$'}(mktemp "${'$'}D/.shadow.XXXXXX")"
                 head -c "${'$'}size" > "${'$'}t"
                 [ "${'$'}(sha256sum "${'$'}t" | cut -d " " -f 1)" = "${'$'}outsha" ] || exit 26
-                chown "${'$'}U:${'$'}U" "${'$'}t"; chmod 600 "${'$'}t"; mv -f "${'$'}t" "${'$'}dst"
+                chown "${'$'}U:${'$'}U" "${'$'}t"; chmod 600 "${'$'}t"; restorecon -F "${'$'}t"; mv -f "${'$'}t" "${'$'}dst"
                 printf "%s\t%s\t%s\t%s\n" "${'$'}srcsha" "${'$'}outsha" "${'$'}src" "${'$'}dst" >> "${'$'}ROWS"
                 n=${'$'}((n+1)); [ "${'$'}n" -le 64 ] || exit 27
               done
@@ -264,7 +268,7 @@ EOF
               t="${'$'}(mktemp "${'$'}DE/.liquiddock-widget-map.XXXXXX")"
               { printf "version=1\n"; cat "${'$'}ROWS"; printf "end=1\n"; } > "${'$'}t"
               [ "${'$'}(stat -c %s "${'$'}t")" -le 65536 ] || exit 28
-              chown "${'$'}U:${'$'}U" "${'$'}t"; chmod 600 "${'$'}t"
+              chown "${'$'}U:${'$'}U" "${'$'}t"; chmod 600 "${'$'}t"; restorecon -F "${'$'}t"
               mv -f "${'$'}t" "${'$'}DE/liquiddock-widget-overrides.conf"
               echo RESULT_OK
             '
@@ -295,7 +299,7 @@ EOF
               U="${'$'}(stat -c %u "${'$'}D")"; umask 077
               t="${'$'}(mktemp "${'$'}D/.liquiddock-widget-clear.XXXXXX")"
               printf "version=1\nend=1\n" > "${'$'}t"
-              chown "${'$'}U:${'$'}U" "${'$'}t"; chmod 600 "${'$'}t"
+              chown "${'$'}U:${'$'}U" "${'$'}t"; chmod 600 "${'$'}t"; restorecon -F "${'$'}t"
               mv -f "${'$'}t" "${'$'}D/liquiddock-widget-overrides.conf"
               echo RESULT_OK
             '
