@@ -17,7 +17,6 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** Frozen full-screen backdrop plus live Prismal geometry for SearchActivityBackground. */
@@ -55,7 +54,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final RootPassBlurBackend sourceBackend;
     private final MiuiSearchboxSnapshotState snapshotState = new MiuiSearchboxSnapshotState();
     private final AtomicLong freshGeneration = new AtomicLong();
-    private final AtomicInteger rotationLogBudget = new AtomicInteger(24);
     private final AtomicLong lastGeometryMismatchRefreshMs = new AtomicLong();
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
@@ -230,8 +228,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         }
         if (!geometryChanged && !rootSizeChanged) return;
         if (rootSizeChanged && !rotationSettlePending) {
-            rotationLog("window-resized", "root=" + next.rootWidth + "x" + next.rootHeight
-                    + " outputView=" + outputViewWidth + "x" + outputViewHeight);
             if (listener != null) listener.onRootSizeChanged();
             // Only the rotation path below performs native producer rollover.
             // Insets and other non-rotation resizes need merely a fresh frame.
@@ -250,7 +246,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         if (listener != null) listener.onRootSizeChanged();
         sourceBackend.setUpdatesEnabled(false, "searchbox-rotation-settle");
         long delay = LauncherGlassRotationSettlePolicy.settleDelayMs(1f);
-        rotationLog("rotation-settle", "rotation=" + rotation + " delayMs=" + delay);
         mainHandler.postDelayed(() -> {
             if (!shuttingDown && rotationSettlePending && serial == rotationSettleSerial
                     && configRotation == rotation && sourceRoot.isAttachedToWindow()) {
@@ -281,9 +276,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             if (attempts < 24) {
                 sourceRoot.postOnAnimation(() ->
                         finishRotationSettle(sourceRoot, serial, rotation, attempts + 1));
-            } else {
-                rotationLog("rotation-unsettled", "rotation=" + rotation
-                        + " root=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
             }
             return;
         }
@@ -293,8 +285,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.requestRebind("searchbox-rotation-settle");
         }
         rotationSettlePending = false;
-        rotationLog("rotation-ready", "rotation=" + rotation
-                + " root=" + current.rootWidth + "x" + current.rootHeight);
         requestFreshCapture();
     }
 
@@ -307,23 +297,11 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         MiuiSearchboxGlassGeometry next = MiuiSearchboxGlassGeometry.capture(
                 sourceRoot, view, 0f);
         if (next == null) return;
-        int oldViewWidth = outputViewWidth;
-        int oldViewHeight = outputViewHeight;
         outputViewWidth = view.getWidth();
         outputViewHeight = view.getHeight();
         MiuiSearchboxGlassGeometry previous = outputGeometry;
         if (previous != null && previous.sameAs(next)) return;
         outputGeometry = next;
-        // Entrance animations change bounds continuously. Log actual buffer/window
-        // dimension changes only, preserving the budget for the rotation repro.
-        if (previous == null || previous.rootWidth != next.rootWidth
-                || previous.rootHeight != next.rootHeight
-                || oldViewWidth != outputViewWidth || oldViewHeight != outputViewHeight) {
-            rotationLog("output-geometry", "root=" + next.rootWidth + "x" + next.rootHeight
-                    + " view=" + outputViewWidth + "x" + outputViewHeight
-                    + " bounds=" + next.left + "," + next.top + " "
-                    + next.width + "x" + next.height);
-        }
         sourceBackend.postToRenderThread(this::renderCurrent);
     }
 
@@ -359,10 +337,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             OutputState current = output;
             if (current == null || shuttingDown) return;
             if (current.width != width || current.height != height) {
-                rotationLog("surface-resized", "old=" + current.width + "x" + current.height
-                        + " new=" + width + "x" + height
-                        + " root=" + (geometry == null ? "null"
-                        : geometry.rootWidth + "x" + geometry.rootHeight));
                 // TextureView may retain its pre-rotation EGL window surface.
                 // Recreate only the window surface; the GL context, shader and
                 // normalized PassBlur source remain under the backend's ownership.
@@ -410,9 +384,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 overlay != null ? overlay.rootWidth : 0,
                 overlay != null ? overlay.rootHeight : 0);
         if (mismatch != null) {
-            rotationLog("stale-source", "reason=" + mismatch
-                    + " frame=" + frame.logicalWidth + "x" + frame.logicalHeight
-                    + " rot=" + frame.rotation + " expectedRot=" + configRotation);
             long now = SystemClock.uptimeMillis();
             long last = lastGeometryMismatchRefreshMs.get();
             if (now - last >= 180 && lastGeometryMismatchRefreshMs.compareAndSet(last, now)) {
@@ -427,10 +398,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         }
         if (!snapshotState.acceptFreshFrame(frame.logicalWidth, frame.logicalHeight)) return;
         try {
-            rotationLog("source-frame", "generation=" + frame.generation
-                    + " logical=" + frame.logicalWidth + "x" + frame.logicalHeight
-                    + " physical=" + frame.physicalWidth + "x" + frame.physicalHeight
-                    + " rotation=" + frame.rotation);
             ensureGl();
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
@@ -509,13 +476,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             swapSucceeded = true;
         } catch (Throwable error) {
             notifyFailure("render", error);
-        }
-    }
-
-    private void rotationLog(String event, String details) {
-        if (!Api101Bridge.isDebugLoggingEnabled()) return;
-        if (rotationLogBudget.getAndDecrement() > 0) {
-            Api101Bridge.log(TAG + " [Rotation] " + event + " " + details);
         }
     }
 
