@@ -67,7 +67,6 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
     numbers(Page.DockGeometry, dockSpecs)
     numbers(Page.Divider, dividerSpecs)
     numbers(Page.WorkstationDock, workstationDockSpecs)
-    numbers(Page.WorkstationDesktop, workstationDesktopSpecs)
     numbers(Page.WorkstationAppsLandscape, workstationAppsLandscapeSpecs)
     numbers(Page.WorkstationAppsPortrait, workstationAppsPortraitSpecs)
     number(Page.Recents, recentsBlurSpec)

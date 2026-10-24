@@ -371,10 +371,6 @@ private fun LiquidDockSettings(
                     Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
                     Page.WorkstationDock -> WorkstationDockPage(padding, prefs, masterEnabled)
-                    Page.WorkstationDesktop -> WorkstationSpecPage(
-                        padding, prefs, masterEnabled, workstationDesktopSpecs,
-                        "工作台桌面水平偏移作用于当前实际网格，不限制固定列数",
-                    )
                     Page.WorkstationAppsLandscape -> WorkstationSpecPage(
                         padding, prefs, masterEnabled, workstationAppsLandscapeSpecs,
                         "所有应用横屏布局参数",

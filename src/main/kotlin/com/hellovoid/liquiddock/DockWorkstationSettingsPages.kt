@@ -217,7 +217,7 @@ internal fun WorkstationPage(
         item {
             PageHeader(
                 stringResource(R.string.page_workstation),
-                "调整工作台桌面、Dock 与所有应用布局。",
+                "调整工作台 Dock 与所有应用布局。",
             )
         }
         item {

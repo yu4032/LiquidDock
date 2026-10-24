@@ -3,9 +3,8 @@ package com.hellovoid.liquiddock;
 /** Immutable Workstation-specific grid geometry; kept separate from normal HOME install config. */
 final class HomeGridWorkstationGeometryConfig {
     static final HomeGridWorkstationGeometryConfig NONE =
-            new HomeGridWorkstationGeometryConfig(0, 0, 0, 0, 0, 0, 0, 0, 0);
+            new HomeGridWorkstationGeometryConfig(0, 0, 0, 0, 0, 0, 0, 0);
 
-    final int workspaceHorizontalOffset;
     final int allAppsLandscapeHorizontal;
     final int allAppsLandscapeTop;
     final int allAppsLandscapeBottom;
@@ -16,7 +15,6 @@ final class HomeGridWorkstationGeometryConfig {
     final int allAppsPortraitIndicatorY;
 
     HomeGridWorkstationGeometryConfig(
-            int workspaceHorizontalOffset,
             int allAppsLandscapeHorizontal,
             int allAppsLandscapeTop,
             int allAppsLandscapeBottom,
@@ -25,7 +23,6 @@ final class HomeGridWorkstationGeometryConfig {
             int allAppsPortraitBottom,
             int allAppsLandscapeIndicatorY,
             int allAppsPortraitIndicatorY) {
-        this.workspaceHorizontalOffset = workspaceHorizontalOffset;
         this.allAppsLandscapeHorizontal = allAppsLandscapeHorizontal;
         this.allAppsLandscapeTop = allAppsLandscapeTop;
         this.allAppsLandscapeBottom = allAppsLandscapeBottom;

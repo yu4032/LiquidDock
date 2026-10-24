@@ -319,7 +319,6 @@ public final class PresetManager {
         source.put("workstation_dock_customization", Boolean.FALSE);
         source.put(ConfigSchema.Workstation.TASKBAR_MODE.name(), Boolean.FALSE);
         source.put("workstation_dock_icon_glass_corner_radius", 12);
-        source.put("workstation_grid_horizontal_offset", 0);
         source.put("workstation_all_apps_landscape_horizontal_offset", 41.1d);
         source.put("workstation_all_apps_landscape_top_spacing", 90);
         source.put("workstation_all_apps_landscape_bottom_spacing", 118);

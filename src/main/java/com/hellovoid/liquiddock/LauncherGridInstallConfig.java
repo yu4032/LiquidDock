@@ -48,7 +48,6 @@ final class LauncherGridInstallConfig {
 
         HomeGridWorkstationGeometryConfig workstation =
                 new HomeGridWorkstationGeometryConfig(
-                        Math.round(config.workstation.gridHorizontalOffset * gridScale),
                         Math.round(config.workstation.allAppsLandscapeHorizontalOffset * density),
                         Math.round(config.workstation.allAppsLandscapeTopSpacing * density),
                         Math.round(config.workstation.allAppsLandscapeBottomSpacing * density),

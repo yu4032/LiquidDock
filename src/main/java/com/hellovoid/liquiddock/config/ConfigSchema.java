@@ -535,9 +535,6 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> DOCK_ICON_GLASS_CORNER_RADIUS = dp(
                 "workstation_dock_icon_glass_corner_radius", 0, 0, 0, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> GRID_HORIZONTAL_OFFSET = dp(
-                "workstation_grid_horizontal_offset", 0, 0, 0, -240, 240,
-                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET = dp(
                 "workstation_all_apps_landscape_horizontal_offset", 0, 0, 0, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
@@ -693,7 +690,6 @@ public final class ConfigSchema {
                 LauncherHighlight.LARGE_CAUSTICS, LauncherHighlight.LARGE_PRESS_GLOW);
         add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.TASKBAR_MODE,
                 Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
-                Workstation.GRID_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
                 Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
