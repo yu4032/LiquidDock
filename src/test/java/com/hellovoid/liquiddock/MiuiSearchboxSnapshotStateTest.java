@@ -38,6 +38,15 @@ public class MiuiSearchboxSnapshotStateTest {
     }
 
     @Test
+    public void nativeProducerRebindOnlyOnOrientationSwap() {
+        assertTrue(MiuiSearchboxSnapshotState.orientationChanged(1200, 2400, 2400, 1200));
+        assertTrue(MiuiSearchboxSnapshotState.orientationChanged(2400, 1200, 1200, 2400));
+        assertFalse(MiuiSearchboxSnapshotState.orientationChanged(1200, 2400, 1180, 2200));
+        assertFalse(MiuiSearchboxSnapshotState.orientationChanged(2400, 1200, 2100, 1180));
+        assertFalse(MiuiSearchboxSnapshotState.orientationChanged(0, 0, 2400, 1200));
+    }
+
+    @Test
     public void invalidSizesDoNotInvalidateSnapshotOrConsumePendingFrame() {
         MiuiSearchboxSnapshotState state = new MiuiSearchboxSnapshotState();
         assertFalse(state.updateRootSize(1000, 2000));

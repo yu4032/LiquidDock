@@ -212,10 +212,14 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         if (old != null && old.sameAs(next)) return;
         geometry = next;
         if (snapshotState.updateRootSize(next.rootWidth, next.rootHeight)) {
+            final boolean rotated = old != null
+                    && MiuiSearchboxSnapshotState.orientationChanged(
+                            old.rootWidth, old.rootHeight, next.rootWidth, next.rootHeight);
             rotationLog("window-resized", "root=" + next.rootWidth + "x" + next.rootHeight
                     + " old=" + (old == null ? "null"
                     : old.rootWidth + "x" + old.rootHeight)
-                    + " outputView=" + outputViewWidth + "x" + outputViewHeight);
+                    + " outputView=" + outputViewWidth + "x" + outputViewHeight
+                    + " rotated=" + rotated);
             // The old frozen image cannot be displayed in the rotated output.
             // Avoid resampling on ordinary target bounds / animation changes.
             final int width = next.rootWidth;
@@ -225,6 +229,17 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 if (shuttingDown || latest == null
                         || latest.rootWidth != width || latest.rootHeight != height) return;
                 if (listener != null) listener.onRootSizeChanged();
+                if (rotated) {
+                    // A rotation can retain the same ViewRoot SurfaceControl generation.
+                    // Merely changing SurfaceTexture's default buffer size leaves an
+                    // already-bound native PassBlur producer with stale source geometry.
+                    // Rebind only the Searchbox producer; the established output crop and
+                    // Prismal geometry are untouched.
+                    sourceBackend.reconcileRoot();
+                    boolean accepted = sourceBackend.requestRebind("searchbox-orientation-changed", null);
+                    rotationLog("source-rebind", "accepted=" + accepted
+                            + " root=" + width + "x" + height);
+                }
                 requestFreshCapture();
             });
             return;
