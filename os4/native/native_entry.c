@@ -455,6 +455,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             ld_dock_function_size_body,sizeof ld_dock_function_size_body,(void *)repl_dock_function_size,&g_orig_dock_function_size},
         {LD_DOCK_ICON_PADDING_START,LD_DOCK_ICON_PADDING_SITE,
             ld_dock_icon_padding_body,sizeof ld_dock_icon_padding_body,(void *)repl_dock_icon_padding,&g_orig_dock_icon_padding},
+        {LD_DOCK_BOTTOM_START,LD_DOCK_BOTTOM_SITE,
+            ld_dock_bottom_body,sizeof ld_dock_bottom_body,(void *)repl_dock_bottom,&g_orig_dock_bottom},
         {LD_DOCK_CONTAINER_HEIGHT_START,LD_DOCK_CONTAINER_HEIGHT_SITE,
             ld_dock_container_height_body,sizeof ld_dock_container_height_body,(void *)repl_dock_container_height,&g_orig_dock_container_height},
         {LD_DOCK_BACKGROUND_START,LD_DOCK_BACKGROUND_SITE,

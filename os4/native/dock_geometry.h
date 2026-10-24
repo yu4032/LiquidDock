@@ -89,6 +89,18 @@ __attribute__((used)) static void ld_observe_dock_function_size(struct ld_dart_c
     cell*=base/adjusted;
     memcpy((void *)(c->x[29]-8),&cell,8);
 }
+static void *g_orig_dock_bottom __attribute__((used));
+__attribute__((used)) static void ld_observe_dock_bottom(struct ld_dart_context *c)
+{
+    if(g_home_options.dock.bottom==0 || !ld_dock_active(c)) return;
+    /* GridController.hotSeatsMarginBottom: d1 is the original absolute inset,
+     * d0 is the vendor extra. The replayed fadd consumes both values. Keep
+     * the shared grid immutable so workspace row geometry is unaffected. The
+     * vendor page indicator follows the same hotseat bottom reference. */
+    double margin=0; memcpy(&margin,c->q[1],8);
+    margin+=g_home_options.dock.bottom;
+    if(isfinite(margin)) memcpy(c->q[1],&margin,8);
+}
 static void *g_orig_dock_container_height __attribute__((used));
 __attribute__((used)) static void ld_observe_dock_container_height(struct ld_dart_context *c)
 {
@@ -101,6 +113,7 @@ __attribute__((used)) static void ld_observe_dock_container_height(struct ld_dar
 #ifndef LD_DOCK_NO_BRIDGE
 LD_DART_OBSERVER(repl_dock_function_size,ld_observe_dock_function_size,g_orig_dock_function_size)
 LD_DART_OBSERVER(repl_dock_icon_padding,ld_observe_dock_icon_padding,g_orig_dock_icon_padding)
+LD_DART_OBSERVER(repl_dock_bottom,ld_observe_dock_bottom,g_orig_dock_bottom)
 LD_DART_OBSERVER(repl_dock_container_height,ld_observe_dock_container_height,g_orig_dock_container_height)
 LD_DART_OBSERVER(repl_dock_background,ld_observe_dock_background,g_orig_dock_background)
 LD_DART_OBSERVER(repl_dock_spacing,ld_observe_dock_spacing,g_orig_dock_spacing)

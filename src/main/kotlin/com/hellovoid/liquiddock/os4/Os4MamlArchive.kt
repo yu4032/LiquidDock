@@ -45,6 +45,10 @@ internal object Os4MamlArchive {
         val className: String,
         val hierarchyPath: String,
         val componentType: String,
+        val renderOrdinal: Int,
+        val depth: Int,
+        val areaRatio: Float,
+        val effectiveZ: Float = Float.NaN,
     ) {
         fun selector(owner: String): String = listOf(
             "M2", owner, name, className, hierarchyPath,
@@ -52,6 +56,7 @@ internal object Os4MamlArchive {
 
         fun catalog(owner: String): String = listOf(
             "M2", owner, name, className, hierarchyPath, "", componentType,
+            renderOrdinal.toString(), depth.toString(), areaRatio.toString(), effectiveZ.toString(),
         ).joinToString("\t")
     }
 
@@ -89,7 +94,8 @@ internal object Os4MamlArchive {
             require(product.isNotBlank() && isSafeField(product)) { "Missing or invalid MAML product id" }
             val nodes = ArrayList<NodeInfo>()
             val nodeCounter = intArrayOf(0)
-            walkRendered(document.documentElement, "os4xml", nodes, nodeCounter)
+            walkRendered(document.documentElement, "os4xml", nodes, nodeCounter,
+                Os4MamlMetadata(document.documentElement), 0)
             require(nodeCounter[0] <= MAX_XML_NODES) { "MAML manifest has too many XML nodes" }
             return Inspection(nodes, product)
         }
@@ -185,7 +191,8 @@ internal object Os4MamlArchive {
         }
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
-            isXIncludeAware = false
+            // Android Harmony has no XInclude support and throws even for false.
+            runCatching { isXIncludeAware = false }
             isExpandEntityReferences = false
             runCatching { setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true) }
             runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
@@ -200,13 +207,14 @@ internal object Os4MamlArchive {
         }
         val doc = builder.parse(ByteArrayInputStream(bytes))
         var count = 0
-        fun countNodes(node: Node) {
+        fun countNodes(node: Node, depth: Int = 0) {
+            require(depth <= 128) { "MAML manifest is nested too deeply" }
             if (node.nodeType == Node.ELEMENT_NODE || node.nodeType == Node.TEXT_NODE || node.nodeType == Node.COMMENT_NODE) {
                 count++
                 require(count <= MAX_XML_NODES) { "MAML manifest has too many XML nodes" }
             }
             val children = node.childNodes
-            for (i in 0 until children.length) countNodes(children.item(i))
+            for (i in 0 until children.length) countNodes(children.item(i), depth + 1)
         }
         countNodes(doc)
         return doc
@@ -228,7 +236,8 @@ internal object Os4MamlArchive {
         }
     }
 
-    private fun walkRendered(parent: Element, path: String, out: MutableList<NodeInfo>, count: IntArray) {
+    private fun walkRendered(parent: Element, path: String, out: MutableList<NodeInfo>,
+        count: IntArray, metadata: Os4MamlMetadata, depth: Int) {
         val children = parent.childNodes
         var elementIndex = 0
         for (i in 0 until children.length) {
@@ -242,8 +251,9 @@ internal object Os4MamlArchive {
             elementIndex++
             if (tag in logicTags || !isRenderedTag(tag)) continue
             val name = element.getAttribute("name").takeIf(::isSafeField).orEmpty()
-            out += NodeInfo(name, tag, "${tag}ScreenElement", childPath, classify(tag))
-            walkRendered(element, childPath, out, count)
+            out += NodeInfo(name, tag, "${tag}ScreenElement", childPath, classify(tag),
+                out.size, depth, metadata.areaRatio(element))
+            walkRendered(element, childPath, out, count, metadata, depth + 1)
         }
     }
 

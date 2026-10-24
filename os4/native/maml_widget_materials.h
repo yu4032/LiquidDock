@@ -195,14 +195,17 @@ static int ld_widget_inventory_add(const char *path)
 
 static const char *ld_widget_match(const char *source)
 {
-    if(!ld_widget_map_load()) return NULL;
+    if(!ld_widget_map_load()) { ld_blog("MAML override mapping unavailable/invalid"); return NULL; }
     for(size_t i=0;i<g_widget_map_count;i++) {
         struct ld_widget_map_entry *e=&g_widget_map[i];
         if(strcmp(e->source,source)) continue;
         if(!e->verified) {
             char source_hash[65],shadow_hash[65];
-            if(!ld_widget_hash(e->source,source_hash)||!ld_widget_hash(e->shadow,shadow_hash)
-                    ||strcmp(source_hash,e->source_hash)||strcmp(shadow_hash,e->shadow_hash)) return NULL;
+            int source_ok=ld_widget_hash(e->source,source_hash);
+            int shadow_ok=ld_widget_hash(e->shadow,shadow_hash);
+            if(!source_ok || !shadow_ok || strcmp(source_hash,e->source_hash) || strcmp(shadow_hash,e->shadow_hash)) {
+                ld_blog("MAML override hash rejection source_read=%d shadow_read=%d",source_ok,shadow_ok); return NULL;
+            }
             e->verified=1;
         }
         return e->shadow;
@@ -233,6 +236,8 @@ static void ld_maml_init_replacement(const void *request)
         shadow=ld_widget_match(source);
         pthread_mutex_unlock(&g_widget_materials_lock);
     }
+    if(is_widget) ld_blog("MAML widget id=%u overrides=%d glass=%d redirect=%d entries=%zu",
+        id,g_home_options.widget_overrides,g_home_options.glass_widgets,shadow!=NULL,g_widget_map_count);
     if(shadow) {
         unsigned char copy[0x68] __attribute__((aligned(16)));
         if(ld_read_heap(base,copy,sizeof copy)) {
@@ -269,9 +274,10 @@ static int ld_maml_install(const struct native_api *api)
     struct ld_sha256 sha; ld_sha256_init(&sha); ld_sha256_update(&sha,body,sizeof body); ld_sha256_final(&sha,digest);
     ld_maml_hex(digest,hex); if(strcmp(hex,LD_MAML_INIT_SHA)) return 0;
     void *backup=NULL; int rc=api->hook((void*)target,(void*)ld_maml_init_replacement,&backup);
-    if(rc || !backup) return 0;
+    if(rc || !backup) { ld_blog("MAML init hook failed result=%d",rc); return 0; }
     g_maml_init_original=(void(*)(const void*))backup;
     (void)ld_pin_code_pages(target,16);
+    ld_blog("MAML widget resource hook installed");
     return 1;
 }
 
