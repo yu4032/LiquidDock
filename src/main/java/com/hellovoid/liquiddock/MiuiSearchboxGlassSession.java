@@ -183,9 +183,12 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         backdropPrepared = false;
         swapSucceeded = false;
         presentationSignaled = false;
+        // Publish the newer request identity before opening its one-shot gate:
+        // an already queued frame from the previous orientation must not consume it.
+        long generation = freshGeneration.incrementAndGet();
         snapshotState.beginCapture();
         sourceBackend.reconcileRoot();
-        sourceBackend.requestFresh(freshGeneration.incrementAndGet());
+        sourceBackend.requestFresh(generation);
     }
 
     void reconcileRoot() {
