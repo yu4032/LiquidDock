@@ -155,7 +155,7 @@ final class RootPassBlurEndpointBridge {
         return result;
     }
 
-    private static int readConfigRotation(View view) {
+    static int readConfigRotation(View view) {
         Display display = view != null ? view.getDisplay() : null;
         if (display == null) return 0;
         int installOrientation = 0;

@@ -38,12 +38,15 @@ public class MiuiSearchboxSnapshotStateTest {
     }
 
     @Test
-    public void nativeProducerRebindOnlyOnOrientationSwap() {
-        assertTrue(MiuiSearchboxSnapshotState.orientationChanged(1200, 2400, 2400, 1200));
-        assertTrue(MiuiSearchboxSnapshotState.orientationChanged(2400, 1200, 1200, 2400));
-        assertFalse(MiuiSearchboxSnapshotState.orientationChanged(1200, 2400, 1180, 2200));
-        assertFalse(MiuiSearchboxSnapshotState.orientationChanged(2400, 1200, 2100, 1180));
-        assertFalse(MiuiSearchboxSnapshotState.orientationChanged(0, 0, 2400, 1200));
+    public void workspaceFrameGuardRejectsOldRotationEvenWithMatchingDimensions() {
+        org.junit.Assert.assertEquals("rotation", WorkspaceFrameGeometryPolicy.mismatch(
+                1200, 2400, 0, 1200, 2400, 2, 1200, 2400));
+        org.junit.Assert.assertEquals("root-size", WorkspaceFrameGeometryPolicy.mismatch(
+                1200, 2400, 1, 2400, 1200, 1, 2400, 1200));
+        org.junit.Assert.assertEquals("window-size", WorkspaceFrameGeometryPolicy.mismatch(
+                1200, 2400, 1, 1200, 2400, 1, 2400, 1200));
+        org.junit.Assert.assertNull(WorkspaceFrameGeometryPolicy.mismatch(
+                2400, 1200, 1, 2400, 1200, 1, 2400, 1200));
     }
 
     @Test

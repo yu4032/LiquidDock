@@ -4,6 +4,7 @@ import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.view.Surface;
 import android.view.View;
 
@@ -55,6 +56,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final MiuiSearchboxSnapshotState snapshotState = new MiuiSearchboxSnapshotState();
     private final AtomicLong freshGeneration = new AtomicLong();
     private final AtomicInteger rotationLogBudget = new AtomicInteger(24);
+    private final AtomicLong lastGeometryMismatchRefreshMs = new AtomicLong();
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
@@ -72,6 +74,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private volatile MiuiSearchboxGlassGeometry outputGeometry;
     private volatile int outputViewWidth;
     private volatile int outputViewHeight;
+    private volatile int configRotation;
+    private volatile boolean rotationSettlePending;
+    private long rotationSettleSerial;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
@@ -98,6 +103,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         View sourceRoot = root.getRootView();
         if (sourceRoot == null) throw new IllegalArgumentException("sourceRoot == null");
         rootRef = new WeakReference<>(root);
+        configRotation = RootPassBlurEndpointBridge.readConfigRotation(sourceRoot);
         this.listener = listener;
         this.cornerRadius = Math.max(0f, cornerRadius);
         mainHandler = new Handler(root.getContext().getMainLooper());
@@ -178,7 +184,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestFreshCapture() {
-        if (shuttingDown) return;
+        if (shuttingDown || rotationSettlePending) return;
         if (appliedQualityScale != requestedQualityScale
                 || appliedQualityFps != requestedQualityFps) {
             appliedQualityScale = requestedQualityScale;
@@ -209,42 +215,87 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                 sourceRoot, root, cornerRadius);
         if (next == null) return;
         MiuiSearchboxGlassGeometry old = geometry;
-        if (old != null && old.sameAs(next)) return;
-        geometry = next;
-        if (snapshotState.updateRootSize(next.rootWidth, next.rootHeight)) {
-            final boolean rotated = old != null
-                    && MiuiSearchboxSnapshotState.orientationChanged(
-                            old.rootWidth, old.rootHeight, next.rootWidth, next.rootHeight);
-            rotationLog("window-resized", "root=" + next.rootWidth + "x" + next.rootHeight
-                    + " old=" + (old == null ? "null"
-                    : old.rootWidth + "x" + old.rootHeight)
-                    + " outputView=" + outputViewWidth + "x" + outputViewHeight
-                    + " rotated=" + rotated);
-            // The old frozen image cannot be displayed in the rotated output.
-            // Avoid resampling on ordinary target bounds / animation changes.
-            final int width = next.rootWidth;
-            final int height = next.rootHeight;
-            mainHandler.post(() -> {
-                MiuiSearchboxGlassGeometry latest = geometry;
-                if (shuttingDown || latest == null
-                        || latest.rootWidth != width || latest.rootHeight != height) return;
-                if (listener != null) listener.onRootSizeChanged();
-                if (rotated) {
-                    // A rotation can retain the same ViewRoot SurfaceControl generation.
-                    // Merely changing SurfaceTexture's default buffer size leaves an
-                    // already-bound native PassBlur producer with stale source geometry.
-                    // Rebind only the Searchbox producer; the established output crop and
-                    // Prismal geometry are untouched.
-                    sourceBackend.reconcileRoot();
-                    boolean accepted = sourceBackend.requestRebind("searchbox-orientation-changed", null);
-                    rotationLog("source-rebind", "accepted=" + accepted
-                            + " root=" + width + "x" + height);
-                }
-                requestFreshCapture();
-            });
+        boolean rootSizeChanged = snapshotState.updateRootSize(
+                next.rootWidth, next.rootHeight);
+        boolean geometryChanged = old == null || !old.sameAs(next);
+        if (geometryChanged) geometry = next;
+
+        // Use the same rotation authority and settle policy as Workspace rather
+        // than treating a size change as proof that native PassBlur has rotated.
+        int rotation = RootPassBlurEndpointBridge.readConfigRotation(sourceRoot);
+        if (rotation != configRotation) {
+            configRotation = rotation;
+            beginRotationSettle(sourceRoot, rotation);
             return;
         }
-        sourceBackend.postToRenderThread(this::renderCurrent);
+        if (!geometryChanged && !rootSizeChanged) return;
+        if (rootSizeChanged && !rotationSettlePending) {
+            rotationLog("window-resized", "root=" + next.rootWidth + "x" + next.rootHeight
+                    + " outputView=" + outputViewWidth + "x" + outputViewHeight);
+            if (listener != null) listener.onRootSizeChanged();
+            // Only the rotation path below performs native producer rollover.
+            // Insets and other non-rotation resizes need merely a fresh frame.
+            requestFreshCapture();
+            return;
+        }
+        if (!rotationSettlePending) sourceBackend.postToRenderThread(this::renderCurrent);
+    }
+
+    private void beginRotationSettle(View sourceRoot, int rotation) {
+        long serial = ++rotationSettleSerial;
+        rotationSettlePending = true;
+        backdropPrepared = false;
+        swapSucceeded = false;
+        presentationSignaled = false;
+        if (listener != null) listener.onRootSizeChanged();
+        sourceBackend.setUpdatesEnabled(false, "searchbox-rotation-settle");
+        long delay = LauncherGlassRotationSettlePolicy.settleDelayMs(1f);
+        rotationLog("rotation-settle", "rotation=" + rotation + " delayMs=" + delay);
+        mainHandler.postDelayed(() -> {
+            if (!shuttingDown && rotationSettlePending && serial == rotationSettleSerial
+                    && configRotation == rotation && sourceRoot.isAttachedToWindow()) {
+                sourceRoot.postOnAnimation(() ->
+                        finishRotationSettle(sourceRoot, serial, rotation, 0));
+            }
+        }, delay);
+    }
+
+    private void finishRotationSettle(
+            View sourceRoot, long serial, int rotation, int attempts) {
+        if (shuttingDown || !rotationSettlePending || serial != rotationSettleSerial
+                || configRotation != rotation || !sourceRoot.isAttachedToWindow()) return;
+        MiuiSearchboxGlassGeometry current = geometry;
+        MiuiSearchboxGlassGeometry overlay = outputGeometry;
+        boolean settled = current != null && overlay != null
+                && sourceRoot.getWidth() == current.rootWidth
+                && sourceRoot.getHeight() == current.rootHeight
+                && overlay.rootWidth == current.rootWidth
+                && overlay.rootHeight == current.rootHeight
+                && outputViewWidth > 0 && outputViewHeight > 0
+                && RootPassBlurEndpointBridge.readConfigRotation(sourceRoot) == rotation;
+        if (settled) {
+            sourceBackend.reconcileRoot();
+            settled = sourceBackend.currentRotation() == rotation;
+        }
+        if (!settled) {
+            if (attempts < 24) {
+                sourceRoot.postOnAnimation(() ->
+                        finishRotationSettle(sourceRoot, serial, rotation, attempts + 1));
+            } else {
+                rotationLog("rotation-unsettled", "rotation=" + rotation
+                        + " root=" + sourceRoot.getWidth() + "x" + sourceRoot.getHeight());
+            }
+            return;
+        }
+        // Workspace restarts its native producer only AFTER the rotation has
+        // settled; requesting a fresh frame earlier captures the old backdrop.
+        if (!sourceBackend.isRebindPending()) {
+            sourceBackend.requestRebind("searchbox-rotation-settle");
+        }
+        rotationSettlePending = false;
+        rotationLog("rotation-ready", "rotation=" + rotation
+                + " root=" + current.rootWidth + "x" + current.rootHeight);
+        requestFreshCapture();
     }
 
     /** Keep the output quad in the TextureView's root-space region, not stretched to fill it. */
@@ -347,8 +398,34 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != freshGeneration.get()
-                || !snapshotState.acceptFreshFrame(frame.logicalWidth, frame.logicalHeight)) return;
+                || rotationSettlePending || frame.generation != freshGeneration.get()) return;
+        MiuiSearchboxGlassGeometry current = geometry;
+        MiuiSearchboxGlassGeometry overlay = outputGeometry;
+        // Same authoritative rotation and root geometry validation used by Workspace.
+        String mismatch = WorkspaceFrameGeometryPolicy.mismatch(
+                frame.logicalWidth, frame.logicalHeight, frame.rotation,
+                current != null ? current.rootWidth : 0,
+                current != null ? current.rootHeight : 0,
+                configRotation,
+                overlay != null ? overlay.rootWidth : 0,
+                overlay != null ? overlay.rootHeight : 0);
+        if (mismatch != null) {
+            rotationLog("stale-source", "reason=" + mismatch
+                    + " frame=" + frame.logicalWidth + "x" + frame.logicalHeight
+                    + " rot=" + frame.rotation + " expectedRot=" + configRotation);
+            long now = SystemClock.uptimeMillis();
+            long last = lastGeometryMismatchRefreshMs.get();
+            if (now - last >= 180 && lastGeometryMismatchRefreshMs.compareAndSet(last, now)) {
+                mainHandler.post(() -> {
+                    if (!shuttingDown && !rotationSettlePending) {
+                        updateGeometry();
+                        requestFreshCapture();
+                    }
+                });
+            }
+            return;
+        }
+        if (!snapshotState.acceptFreshFrame(frame.logicalWidth, frame.logicalHeight)) return;
         try {
             rotationLog("source-frame", "generation=" + frame.generation
                     + " logical=" + frame.logicalWidth + "x" + frame.logicalHeight
@@ -357,7 +434,6 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
             ensureGl();
             logicalWidth = frame.logicalWidth;
             logicalHeight = frame.logicalHeight;
-            updateGeometry();
             sourceBackend.makePbufferCurrent();
             lastNormalizedTexture = frame.normalizedTextureId;
             lastPhysicalWidth = frame.physicalWidth;
