@@ -97,7 +97,7 @@ internal fun GlassEdgeSettingsPage(
         GlassEdgeEffects.HANDLE_MENU -> "顶部菜单"
         GlassEdgeEffects.DIALOG -> "对话弹窗"
         GlassEdgeEffects.GBOARD -> "Gboard 浮层"
-        GlassEdgeEffects.SEARCHBOX -> "搜索框"
+        GlassEdgeEffects.SEARCHBOX -> "系统搜索"
         GlassEdgeEffects.SECURITY_CENTER -> "安全中心"
         else -> scope
     }
@@ -228,7 +228,7 @@ internal fun GlassEdgeSettingsPage(
             }
             item(key = "scope-searchbox") {
                 SettingsCard {
-                    ArrowPreference("搜索框", "系统搜索框",
+                    ArrowPreference("系统搜索", "搜索主界面玻璃背景",
                         enabled = active, onClick = { open(Page.SearchboxEdge) })
                 }
             }

@@ -16,16 +16,17 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Frozen full-screen backdrop plus live Prismal geometry for SearchActivityBackground. */
 final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     interface Listener {
         void onPresented();
+        void onRootSizeChanged();
         void onFailure(Throwable error);
     }
 
     private static final String TAG = "[DC][MiuiSearchboxGlass]";
-    private static final long GENERATION = 1L;
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -51,6 +52,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final Listener listener;
     private final RootPassBlurBackend sourceBackend;
     private final MiuiSearchboxSnapshotState snapshotState = new MiuiSearchboxSnapshotState();
+    private final AtomicLong freshGeneration = new AtomicLong();
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
@@ -183,7 +185,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         presentationSignaled = false;
         snapshotState.beginCapture();
         sourceBackend.reconcileRoot();
-        sourceBackend.requestFresh(GENERATION);
+        sourceBackend.requestFresh(freshGeneration.incrementAndGet());
     }
 
     void reconcileRoot() {
@@ -201,6 +203,20 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         MiuiSearchboxGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
+        if (snapshotState.updateRootSize(next.rootWidth, next.rootHeight)) {
+            // The old frozen image cannot be displayed in the rotated output.
+            // Avoid resampling on ordinary target bounds / animation changes.
+            final int width = next.rootWidth;
+            final int height = next.rootHeight;
+            mainHandler.post(() -> {
+                MiuiSearchboxGlassGeometry latest = geometry;
+                if (shuttingDown || latest == null
+                        || latest.rootWidth != width || latest.rootHeight != height) return;
+                if (listener != null) listener.onRootSizeChanged();
+                requestFreshCapture();
+            });
+            return;
+        }
         sourceBackend.postToRenderThread(this::renderCurrent);
     }
 
@@ -263,7 +279,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
-                || frame.generation != GENERATION || !snapshotState.acceptFreshFrame()) return;
+                || frame.generation != freshGeneration.get()
+                || !snapshotState.acceptFreshFrame(frame.logicalWidth, frame.logicalHeight)) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;

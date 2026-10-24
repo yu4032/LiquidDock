@@ -119,6 +119,11 @@ final class MiuiSearchboxGlassHook {
         }
 
         @Override
+        public void onRootSizeChanged() {
+            if (!disposed) glassView.setAlpha(0f);
+        }
+
+        @Override
         public void onPresented() {
             if (disposed) return;
             MiuiSearchboxVendorMaterial.release(background, blurEnabledMethod);
