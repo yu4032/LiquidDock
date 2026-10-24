@@ -99,6 +99,19 @@ final class MiuiSearchboxGlassGeometry {
                 cornerRadiusPx);
     }
 
+    /**
+     * Crop a root-sized Prismal texture into an overlay View occupying only
+     * part of that same root. Output texture coordinates use GL bottom-left.
+     */
+    float[] rootTextureCrop() {
+        return new float[]{
+                left / rootWidth,
+                (rootHeight - top - height) / rootHeight,
+                width / rootWidth,
+                height / rootHeight
+        };
+    }
+
     PrismalGeometry toPrismalGeometry() {
         return new PrismalGeometry(
                 rootWidth,

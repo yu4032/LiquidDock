@@ -94,7 +94,10 @@ final class MiuiSearchboxGlassHook {
                     ViewGroup.LayoutParams.MATCH_PARENT));
             ViewTreeObserver nextObserver = outputHost.getViewTreeObserver();
             ViewTreeObserver.OnPreDrawListener listener = () -> {
-                if (!disposed) session.updateGeometry();
+                if (!disposed) {
+                    session.updateGeometry();
+                    session.updateOutputGeometry(glassView);
+                }
                 return true;
             };
             if (nextObserver.isAlive()) {
@@ -116,6 +119,11 @@ final class MiuiSearchboxGlassHook {
 
         void refreshOnResume() {
             if (freshOnResume) refreshVisible();
+        }
+
+        @Override
+        public void onRootSizeChanged() {
+            if (!disposed) glassView.setAlpha(0f);
         }
 
         @Override
