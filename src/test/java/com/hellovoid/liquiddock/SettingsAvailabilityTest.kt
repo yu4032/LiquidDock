@@ -13,6 +13,7 @@ class SettingsAvailabilityTest {
         val testing = listOf(
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
             Page.Dock, Page.DockBehavior, Page.DockGeometry,
+            Page.GlassIcons, Page.GlassWidgets, Page.WidgetComponents,
             Page.Liquid, Page.LiquidMaterial, Page.LiquidRefraction,
             Page.LiquidColor, Page.LiquidLighting, Page.LiquidShadow,
             Page.LiquidSampling, Page.GlassEdge,
@@ -28,7 +29,7 @@ class SettingsAvailabilityTest {
             Page.GridSplit, Page.DockRecentBlacklist, Page.Divider,
             Page.Workstation, Page.WorkstationDock, Page.WorkstationDesktop,
             Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait, Page.Recents,
-            Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
+            Page.GlassFolders,
             Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
             Page.DialogCustomization, Page.DialogAll, Page.PopupEdge, Page.DialogEdge,
             Page.DockEdge, Page.IconEdge, Page.WidgetEdge, Page.FolderEdge,
@@ -65,7 +66,12 @@ class SettingsAvailabilityTest {
     }
 
     @Test fun futureRoutesFailClosedUnlessExplicitlyEnrolled() {
-        assertEquals(PagePortState.UNAVAILABLE, os4.status(Page.WidgetComponents))
+        // WidgetComponents was explicitly enrolled in the OS4 testing routes.
+        assertEquals(PagePortState.TESTING, os4.status(Page.WidgetComponents))
+        assertTrue(os4.allows(Page.WidgetComponents))
+        // Unported folder customization must still remain gated.
+        assertEquals(PagePortState.UNAVAILABLE, os4.status(Page.GlassFolders))
+        assertFalse(os4.allows(Page.GlassFolders))
     }
 
     @Test fun availablePagesAreTheUnionOfReadyAndTesting() {
