@@ -150,7 +150,6 @@ public class ConfigSchemaTest {
 
     @Test
     public void composeWorkstationSpecsKeepTheirCurrentDefaultsAndBounds() {
-        assertComposeIntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, 0, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, 0, -48, 48);
@@ -266,6 +265,21 @@ public class ConfigSchemaTest {
         assertEquals(Integer.valueOf(0), renderFps.minInt());
         assertEquals(Integer.valueOf(Integer.MAX_VALUE), renderFps.maxInt());
         assertEquals(ConfigKey.ExportMode.ALWAYS, renderFps.exportMode());
+    }
+
+    @Test
+    public void obsoleteWorkstationDesktopOffsetCannotBeImportedOrExported() {
+        String removedKey = "workstation_grid_horizontal_offset";
+        java.util.Map<String, Object> oldPreferences = java.util.Map.of(
+                removedKey, 120,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET.name(), 24);
+        assertFalse(ConfigSchema.all().stream().anyMatch(key -> key.name().equals(removedKey)));
+        assertFalse(ConfigCodec.importValues(oldPreferences).containsKey(removedKey));
+        assertFalse(ConfigCodec.exportValues(oldPreferences).containsKey(removedKey));
+        // Removing the workspace-only offset must not affect existing All Apps / Dock settings.
+        assertTrue(ConfigSchema.all().contains(
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET));
+        assertTrue(ConfigSchema.all().contains(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET));
     }
 
     @Test
