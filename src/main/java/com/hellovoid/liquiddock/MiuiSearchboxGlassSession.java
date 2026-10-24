@@ -67,6 +67,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     private final float cornerRadius;
 
     private volatile MiuiSearchboxGlassGeometry geometry;
+    private volatile MiuiSearchboxGlassGeometry outputGeometry;
+    private volatile int outputViewWidth;
+    private volatile int outputViewHeight;
     private volatile boolean shuttingDown;
     private volatile boolean backdropPrepared;
     private volatile boolean swapSucceeded;
@@ -223,6 +226,23 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.postToRenderThread(this::renderCurrent);
     }
 
+    /** Keep the output quad in the TextureView's root-space region, not stretched to fill it. */
+    void updateOutputGeometry(View view) {
+        View root = rootRef.get();
+        if (root == null || view == null) return;
+        View sourceRoot = root.getRootView();
+        if (sourceRoot == null) return;
+        MiuiSearchboxGlassGeometry next = MiuiSearchboxGlassGeometry.capture(
+                sourceRoot, view, 0f);
+        if (next == null) return;
+        outputViewWidth = view.getWidth();
+        outputViewHeight = view.getHeight();
+        MiuiSearchboxGlassGeometry previous = outputGeometry;
+        if (previous != null && previous.sameAs(next)) return;
+        outputGeometry = next;
+        sourceBackend.postToRenderThread(this::renderCurrent);
+    }
+
     void attachOutput(Surface surface, int width, int height) {
         if (surface == null || shuttingDown) {
             if (surface != null) surface.release();
@@ -248,14 +268,22 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void resizeOutput(int width, int height) {
-        if (shuttingDown) return;
+        if (shuttingDown || width <= 0 || height <= 0) return;
         updateGeometry();
         sourceBackend.reconcileRoot();
         sourceBackend.postToRenderThread(() -> {
             OutputState current = output;
-            if (current == null) return;
-            current.width = Math.max(1, width);
-            current.height = Math.max(1, height);
+            if (current == null || shuttingDown) return;
+            if (current.width != width || current.height != height) {
+                // TextureView may retain its pre-rotation EGL window surface.
+                // Recreate only the window surface; the GL context, shader and
+                // normalized PassBlur source remain under the backend's ownership.
+                sourceBackend.destroyWindowSurface(current.eglSurface);
+                current.eglSurface = EGL14.EGL_NO_SURFACE;
+                current.width = width;
+                current.height = height;
+                current.eglSurface = sourceBackend.createWindowSurface(current.surface);
+            }
             renderCurrent();
         });
     }
@@ -336,13 +364,18 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         OutputState current = output;
         View root = rootRef.get();
         MiuiSearchboxGlassGeometry currentGeometry = geometry;
+        MiuiSearchboxGlassGeometry currentOutputGeometry = outputGeometry;
         if (shuttingDown || !backdropPrepared || current == null
-                || currentGeometry == null
+                || currentGeometry == null || currentOutputGeometry == null
                 || current.eglSurface == EGL14.EGL_NO_SURFACE
                 || root == null || !root.isAttachedToWindow()
                 || logicalWidth <= 0 || logicalHeight <= 0
                 || currentGeometry.rootWidth != logicalWidth
-                || currentGeometry.rootHeight != logicalHeight) return;
+                || currentGeometry.rootHeight != logicalHeight
+                || currentOutputGeometry.rootWidth != logicalWidth
+                || currentOutputGeometry.rootHeight != logicalHeight
+                || current.width != outputViewWidth
+                || current.height != outputViewHeight) return;
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
@@ -355,7 +388,7 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
                     prismalParams,
                     highlightProfile,
                     PrismalInteractionState.IDLE);
-            presentFull(prismalRenderer.outputTexture(), current);
+            presentFull(prismalRenderer.outputTexture(), current, currentOutputGeometry);
             swapSucceeded = true;
         } catch (Throwable error) {
             notifyFailure("render", error);
@@ -383,7 +416,8 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private void presentFull(int sceneTexture, OutputState current) {
+    private void presentFull(
+            int sceneTexture, OutputState current, MiuiSearchboxGlassGeometry outputBounds) {
         sourceBackend.makeCurrent(current.eglSurface);
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         GLES20.glViewport(0, 0, current.width, current.height);
@@ -395,7 +429,9 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sceneTexture);
-                GLES20.glUniform4f(compositeCropRectLocation, 0f, 0f, 1f, 1f);
+        float[] crop = outputBounds.rootTextureCrop();
+        GLES20.glUniform4f(compositeCropRectLocation,
+                crop[0], crop[1], crop[2], crop[3]);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         sourceBackend.swapBuffers(current.eglSurface);
