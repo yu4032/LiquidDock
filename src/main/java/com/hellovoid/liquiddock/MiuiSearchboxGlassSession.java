@@ -241,15 +241,23 @@ final class MiuiSearchboxGlassSession implements RootPassBlurBackend.Consumer {
         MiuiSearchboxGlassGeometry next = MiuiSearchboxGlassGeometry.capture(
                 sourceRoot, view, 0f);
         if (next == null) return;
+        int oldViewWidth = outputViewWidth;
+        int oldViewHeight = outputViewHeight;
         outputViewWidth = view.getWidth();
         outputViewHeight = view.getHeight();
         MiuiSearchboxGlassGeometry previous = outputGeometry;
         if (previous != null && previous.sameAs(next)) return;
         outputGeometry = next;
-        rotationLog("output-geometry", "root=" + next.rootWidth + "x" + next.rootHeight
-                + " view=" + outputViewWidth + "x" + outputViewHeight
-                + " bounds=" + next.left + "," + next.top + " "
-                + next.width + "x" + next.height);
+        // Entrance animations change bounds continuously. Log actual buffer/window
+        // dimension changes only, preserving the budget for the rotation repro.
+        if (previous == null || previous.rootWidth != next.rootWidth
+                || previous.rootHeight != next.rootHeight
+                || oldViewWidth != outputViewWidth || oldViewHeight != outputViewHeight) {
+            rotationLog("output-geometry", "root=" + next.rootWidth + "x" + next.rootHeight
+                    + " view=" + outputViewWidth + "x" + outputViewHeight
+                    + " bounds=" + next.left + "," + next.top + " "
+                    + next.width + "x" + next.height);
+        }
         sourceBackend.postToRenderThread(this::renderCurrent);
     }
 
