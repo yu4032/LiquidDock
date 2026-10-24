@@ -15,6 +15,18 @@ static void *g_orig_icon_glass_size;
 static void *g_orig_icon_glass_radius;
 static int g_icon_glass_installed;
 static int g_icon_glass_radius_installed;
+static void *g_orig_icon_glass_flight;
+
+/* Dart's local Hero flight carries the native glass background with the icon.
+ * The SF bitmap flight only contains the resource image. Select local mode at
+ * capability initialization, so native source hiding and completion remain
+ * paired; changing canUseSfMode after driver setup produces duplicate icons.
+ * Installed only for enabled icon glass. The getter caches this result for
+ * the Launcher process, matching the restart required by material settings. */
+__attribute__((used,naked)) static void repl_icon_glass_local_flight(void)
+{
+    __asm__ volatile("add x0,x22,#0x30\nret\n");
+}
 
 static int ld_icon_body_matches(uintptr_t base,uintptr_t start,size_t size,const unsigned char expected[32])
 {

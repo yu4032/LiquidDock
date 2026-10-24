@@ -370,6 +370,19 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
         }
         if(g_orig_icon_glass_enabled && g_orig_icon_glass_size) g_icon_glass_installed=1;
     }
+    if(g_icon_glass_installed && !g_orig_icon_glass_flight
+            && ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_FLIGHT_START,
+                    LD_ICON_GLASS_FLIGHT_SIZE,ld_icon_glass_flight_sha)) {
+        uintptr_t target=0;
+        if(ld_vaddr_to_runtime(lib,LD_ICON_GLASS_FLIGHT_START,&target)
+                && executable_range(target,16) && ld_pin_code_pages(target,16)) {
+            void *backup=NULL;
+            if(api->hook((void*)target,(void*)repl_icon_glass_local_flight,&backup)==0 && backup) {
+                g_orig_icon_glass_flight=backup;
+                ld_blog("icon glass uses native local Hero flights");
+            }
+        }
+    }
     if(g_icon_glass_installed && g_home_options.glass_icon_corner>0.0
             && !g_icon_glass_radius_installed
             && ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_RADIUS_START,
