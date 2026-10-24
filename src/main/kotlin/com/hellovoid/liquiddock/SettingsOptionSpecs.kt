@@ -65,7 +65,6 @@ internal fun optionSummary(key: String): String = when (key) {
     "dock_divider_color_g" -> "分隔竖线颜色 · 绿"
     "dock_divider_color_b" -> "分隔竖线颜色 · 蓝"
     "dock_divider_alpha" -> "分隔竖线不透明度"
-    "workstation_grid_horizontal_offset" -> "整体平移工作台桌面图标区域，适用于当前实际网格列数；不继承普通桌面水平偏移"
     "workstation_all_apps_landscape_horizontal_offset" -> "直接设置工作台所有应用横屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_landscape_top_spacing" -> "直接设置工作台所有应用横屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_landscape_bottom_spacing" -> "直接设置工作台所有应用横屏图标区下间距；不叠加系统默认位置"
@@ -189,11 +188,6 @@ internal val workstationDockSpecs by lazy {
         ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
     )
 }
-internal val workstationDesktopSpecs by lazy {
-    workstationSpecsFor(
-        ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET,
-    )
-}
 internal val workstationAppsLandscapeSpecs by lazy {
     workstationSpecsFor(
         ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
@@ -229,7 +223,6 @@ internal fun ensureDividerDefaults(prefs: SharedPreferences) {
 }
 internal val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS, "工作台 Dock 图标玻璃圆角", "dp"),
-    IntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, "工作台桌面水平偏移"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, "所有应用 · 横屏水平间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING, "所有应用 · 横屏上间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING, "所有应用 · 横屏下间距"),

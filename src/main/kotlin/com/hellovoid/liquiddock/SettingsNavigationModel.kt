@@ -22,7 +22,6 @@ internal enum class Page(val titleRes: Int) {
     Divider(R.string.page_divider),
     Workstation(R.string.page_workstation),
     WorkstationDock(R.string.page_workstation_dock),
-    WorkstationDesktop(R.string.page_workstation_desktop),
     WorkstationAppsLandscape(R.string.page_workstation_apps_landscape),
     WorkstationAppsPortrait(R.string.page_workstation_apps_portrait),
     Recents(R.string.page_recents),
@@ -103,7 +102,7 @@ internal val overviewEntries = listOf(
 internal val layoutEntries = listOf(
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏间距与分屏布局"),
     HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、尺寸、位置与最近程序"),
-    HubEntry(Page.Workstation, R.string.page_workstation, "工作台桌面、Dock 与所有应用布局"),
+    HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock 与所有应用布局"),
     HubEntry(Page.Recents, R.string.page_recents, "多任务壁纸背景与模糊"),
     HubEntry(Page.SecurityCenterSidebar, R.string.page_security_center_sidebar, "侧滑呼出、工具箱与侧边栏设置"),
 )
@@ -139,7 +138,6 @@ internal val dockEntries = listOf(
 
 internal val workstationEntries = listOf(
     HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "任务栏模式、图标垂直偏移与玻璃圆角"),
-    HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "按当前网格列数整体调整工作台桌面水平位置"),
     HubEntry(Page.WorkstationAppsLandscape, R.string.page_workstation_apps_landscape, "所有应用横屏水平与上下间距"),
     HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
 )

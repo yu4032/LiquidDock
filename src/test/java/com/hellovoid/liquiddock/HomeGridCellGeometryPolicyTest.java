@@ -23,7 +23,6 @@ public class HomeGridCellGeometryPolicyTest {
 
     private static HomeGridWorkstationGeometryConfig workstation() {
         return new HomeGridWorkstationGeometryConfig(
-                20,
                 24, 30, 34,
                 18, 26, 28,
                 9, -7);
@@ -62,7 +61,7 @@ public class HomeGridCellGeometryPolicyTest {
     }
 
     @Test
-    public void workstationWorkspaceAppliesOnlyHorizontalTranslation() {
+    public void workstationWorkspacePreservesNativeMarginsWithoutHorizontalOffset() {
         HomeGridCellGeometryPolicy.Result normal = HomeGridCellGeometryPolicy.calculate(
                 new HomeGridCellGeometryPolicy.Input(
                         config(), workstation(), false, false, false,
@@ -76,8 +75,8 @@ public class HomeGridCellGeometryPolicyTest {
 
         assertNotNull(normal);
         assertNotNull(ws);
-        assertEquals(normal.left - config().landscape.left + 20, ws.left);
-        assertEquals(normal.right - config().landscape.right - 20, ws.right);
+        assertEquals(normal.left - config().landscape.left, ws.left);
+        assertEquals(normal.right - config().landscape.right, ws.right);
     }
 
     @Test
