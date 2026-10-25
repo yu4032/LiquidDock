@@ -78,6 +78,9 @@ final class SystemUiHandleMenuGlassHook {
             binding.nativeBlurRadiusPx = Math.max(1, Math.round(resolved.blur));
             if (binding.prismalSession != null) {
                 binding.prismalSession.applyLiveGlassConfig(resolved);
+                if (binding.prismalPresented && !binding.syncSurfaceCorners()) {
+                    binding.onPrismalFailure(new IllegalStateException("caption corner update failed"));
+                }
             } else {
                 binding.applyMaterialFade(binding.pendingSurfaceAlpha);
             }
@@ -111,7 +114,9 @@ final class SystemUiHandleMenuGlassHook {
                             SurfaceControl menuSurface =
                                     SystemUiHandleMenuSurfaceAnimationAuthority.windowSurface(result);
                             if (menuRoot != null) {
-                                observeMenu(menuRoot, menuSurface, true);
+                                float nativeRadius = HandleMenuSurfaceCornerLease.nativeRadius(
+                                        ((Number) args[4]).floatValue(), Boolean.TRUE.equals(args[7]));
+                                observeMenu(menuRoot, menuSurface, true, nativeRadius);
                             }
                         } catch (Throwable error) {
                             log("MIUI captionMenu observation failed; original result preserved: "
@@ -142,7 +147,7 @@ final class SystemUiHandleMenuGlassHook {
                         try {
                             if (target && result instanceof View) {
                                 View root = (View) result;
-                                observeMenu(root, null, false);
+                                observeMenu(root, null, false, Float.NaN);
                             }
                         } catch (Throwable error) {
                             log("AOSP HandleMenu observation failed; original result preserved: "
@@ -177,13 +182,14 @@ final class SystemUiHandleMenuGlassHook {
     private static void observeMenu(
             View root,
             SurfaceControl menuSurface,
-            boolean trackNativeSurfaceAnimation) {
+            boolean trackNativeSurfaceAnimation,
+            float nativeCornerRadiusPx) {
         LiquidDockConfig.Glass glass = glassConfig;
         if (!liveEnabled || root == null || glass == null) return;
 
         releaseRoot(root);
         PendingBinding pending = new PendingBinding(
-                root, glass, menuSurface, trackNativeSurfaceAnimation);
+                root, glass, menuSurface, trackNativeSurfaceAnimation, nativeCornerRadiusPx);
         PENDING.put(root, pending);
         pending.start();
     }
@@ -202,17 +208,20 @@ final class SystemUiHandleMenuGlassHook {
         LiquidDockConfig.Glass glass;
         final SurfaceControl menuSurface;
         final boolean waitForNativeSurfaceScale;
+        final float nativeCornerRadiusPx;
         boolean released;
 
         PendingBinding(
                 View root,
                 LiquidDockConfig.Glass glass,
                 SurfaceControl menuSurface,
-                boolean waitForNativeSurfaceScale) {
+                boolean waitForNativeSurfaceScale,
+                float nativeCornerRadiusPx) {
             this.root = root;
             this.glass = glass;
             this.menuSurface = menuSurface;
             this.waitForNativeSurfaceScale = waitForNativeSurfaceScale;
+            this.nativeCornerRadiusPx = nativeCornerRadiusPx;
         }
 
         void start() {
@@ -264,7 +273,7 @@ final class SystemUiHandleMenuGlassHook {
                         target,
                         glass,
                         menuSurface,
-                        waitForNativeSurfaceScale);
+                        waitForNativeSurfaceScale, nativeCornerRadiusPx);
                 ACTIVE.put(root, binding);
                 binding.start();
             } catch (Throwable error) {
@@ -316,7 +325,8 @@ final class SystemUiHandleMenuGlassHook {
      * caption-window ViewRoot compositor backdrop through a dedicated short-lived producer,
      * avoiding the generic RootPassBlurBackend lifecycle that previously proved unsafe here.
      */
-    private static final class Binding implements View.OnAttachStateChangeListener {
+    private static final class Binding implements View.OnAttachStateChangeListener,
+            View.OnLayoutChangeListener {
         final View root;
         final View sourceRoot;
         final View target;
@@ -326,6 +336,7 @@ final class SystemUiHandleMenuGlassHook {
         final SurfaceControl menuSurface;
         final boolean trackNativeSurfaceAnimation;
         final SystemUiHandleMenuSurfaceAnimationAuthority.AlphaListener alphaListener;
+        final HandleMenuSurfaceCornerLease surfaceCorners;
 
         boolean replacementBlurApplied;
         boolean customPassBlurOwned;
@@ -343,12 +354,16 @@ final class SystemUiHandleMenuGlassHook {
                 View target,
                 LiquidDockConfig.Glass glass,
                 SurfaceControl menuSurface,
-                boolean waitForNativeSurfaceScale) {
+                boolean waitForNativeSurfaceScale,
+                float nativeCornerRadiusPx) {
             this.root = root;
             this.sourceRoot = sourceRoot;
             this.target = target;
             this.menuSurface = menuSurface;
             this.trackNativeSurfaceAnimation = waitForNativeSurfaceScale && menuSurface != null;
+            surfaceCorners = menuSurface != null && Float.isFinite(nativeCornerRadiusPx)
+                    ? new HandleMenuSurfaceCornerLease(nativeCornerRadiusPx, this::writeSurfaceRadius)
+                    : null;
             stockBackground = target.getBackground();
             glassConfig = glass;
             nativeBlurRadiusPx = Math.max(1, Math.round(glass.blur));
@@ -357,6 +372,7 @@ final class SystemUiHandleMenuGlassHook {
 
         void start() {
             root.addOnAttachStateChangeListener(this);
+            target.addOnLayoutChangeListener(this);
             pendingSurfaceAlpha = trackNativeSurfaceAnimation ? 0f : 1f;
             applyReplacementBlur();
             if (trackNativeSurfaceAnimation) {
@@ -476,9 +492,44 @@ final class SystemUiHandleMenuGlassHook {
             }
         }
 
+        @Override
+        public void onLayoutChange(View view, int left, int top, int right, int bottom,
+                                   int oldLeft, int oldTop, int oldRight, int oldBottom) {
+            if (released || !prismalPresented || target.getWidth() <= 0 || target.getHeight() <= 0) return;
+            if (!syncSurfaceCorners()) {
+                onPrismalFailure(new IllegalStateException("caption corner resize failed"));
+            }
+        }
+
+        private boolean syncSurfaceCorners() {
+            if (surfaceCorners == null) return true;
+            float requestedDp = glassConfig.handleMenuCornerRadiusDp;
+            if (!Float.isFinite(requestedDp) || requestedDp < 0) return surfaceCorners.restore();
+            float radiusPx = GlassComponentCorners.resolve(requestedDp, 0f,
+                    target.getResources().getDisplayMetrics().density,
+                    target.getWidth(), target.getHeight());
+            return surfaceCorners.update(radiusPx);
+        }
+
+        private boolean writeSurfaceRadius(float radiusPx) {
+            if (menuSurface == null || !menuSurface.isValid()) return false;
+            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                HookUtil.requireInvoke(transaction, "setCornerRadius", menuSurface, radiusPx);
+                transaction.apply();
+                return true;
+            } catch (Throwable error) {
+                log("caption Surface corner update failed: " + error);
+                return false;
+            }
+        }
+
         private void onPrismalPresented() {
             if (released || prismalSession == null || prismalOutput == null) return;
             prismalPresented = true;
+            if (!syncSurfaceCorners()) {
+                onPrismalFailure(new IllegalStateException("caption corner update failed"));
+                return;
+            }
             if (customPassBlurOwned) {
                 // Keep the compositor pass-window gate alive: Prismal's exported OES producer
                 // depends on the same native backdrop sampler. Only hide the visible fallback by
@@ -502,6 +553,7 @@ final class SystemUiHandleMenuGlassHook {
             prismalSession = null;
             if (session != null) session.shutdown();
             prismalPresented = false;
+            if (surfaceCorners != null) surfaceCorners.restore();
             if (!replacementBlurApplied || !customPassBlurOwned) {
                 applyReplacementBlur();
             }
@@ -542,6 +594,7 @@ final class SystemUiHandleMenuGlassHook {
             if (released) return;
             released = true;
             try { root.removeOnAttachStateChangeListener(this); } catch (Throwable ignored) {}
+            try { target.removeOnLayoutChangeListener(this); } catch (Throwable ignored) {}
             try {
                 if (menuSurface != null) {
                     SystemUiHandleMenuSurfaceAnimationAuthority.unregisterAlphaListener(
@@ -565,6 +618,7 @@ final class SystemUiHandleMenuGlassHook {
                 }
             }
             prismalPresented = false;
+            if (surfaceCorners != null) surfaceCorners.restore();
             try { restoreStockBackground(); } catch (Throwable error) {
                 log("stock background restore failed: " + error);
             }

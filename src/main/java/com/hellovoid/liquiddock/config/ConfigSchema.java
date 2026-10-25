@@ -271,6 +271,12 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> UNINSTALL_DIALOG_GLASS = bool(
                 "liquid_uninstall_dialog_glass", true, true, true,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DIALOG_CORNER_RADIUS = dp(
+                "liquid_dialog_corner_radius", -1, -1, -1, -1, 160, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SHORTCUT_POPUP_CORNER_RADIUS = dp(
+                "liquid_shortcut_popup_corner_radius", -1, -1, -1, -1, 160, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> HANDLE_MENU_CORNER_RADIUS = dp(
+                "liquid_handle_menu_corner_radius", -1, -1, -1, -1, 160, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> DIALOG_DISABLE_DIMMING = bool(
                 "liquid_dialog_disable_dimming", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
@@ -643,7 +649,9 @@ public final class ConfigSchema {
         add(keys, Glass.ENABLED, Glass.CONTINUOUS_CORNERS, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
-                Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_DISABLE_DIMMING,
+                Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_CORNER_RADIUS,
+                Glass.SHORTCUT_POPUP_CORNER_RADIUS, Glass.HANDLE_MENU_CORNER_RADIUS,
+                Glass.DIALOG_DISABLE_DIMMING,
                 Glass.DIALOG_DARK_MODE, Glass.DIALOG_BLUR, Glass.DIALOG_TINT_RED, Glass.DIALOG_TINT_GREEN,
                 Glass.DIALOG_TINT_BLUE, Glass.DIALOG_TINT_ALPHA,
                 Glass.WIDGET_GLASS,

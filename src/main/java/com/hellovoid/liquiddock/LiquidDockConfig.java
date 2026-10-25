@@ -234,6 +234,7 @@ final class LiquidDockConfig {
         final GlassComponentStyle smallFolderStyle;
         final GlassComponentStyle largeFolderStyle;
         final boolean prismalShowNormals, continuousCorners;
+        final float dialogCornerRadiusDp, shortcutPopupCornerRadiusDp, handleMenuCornerRadiusDp;
         final PrismalHighlightProfile launcherHighlightProfile, largeSurfaceHighlightProfile;
         final float blur, chromatic, thickness, ior, normalStrength, dome,
         lensRefraction, depthEffect, highlightWidth, brightness,
@@ -252,6 +253,9 @@ final class LiquidDockConfig {
         final int openFolderNativeBlurPercent;
 
         Glass(ConfigReader c) {
+            dialogCornerRadiusDp = GlassComponentCorners.readDp(c, ConfigSchema.Glass.DIALOG_CORNER_RADIUS);
+            shortcutPopupCornerRadiusDp = GlassComponentCorners.readDp(c, ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS);
+            handleMenuCornerRadiusDp = GlassComponentCorners.readDp(c, ConfigSchema.Glass.HANDLE_MENU_CORNER_RADIUS);
             continuousCorners = c.b(ConfigSchema.Glass.CONTINUOUS_CORNERS.name(),
                     ConfigSchema.Glass.CONTINUOUS_CORNERS.runtimeFallback());
             enabled = c.b(ConfigSchema.Glass.ENABLED.name(),

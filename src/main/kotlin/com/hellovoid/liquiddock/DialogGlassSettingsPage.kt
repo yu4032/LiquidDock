@@ -193,6 +193,17 @@ internal fun DialogGlassSettingsPage(
                 )
             }
         }
+        item(key = "dialog-corner-heading") { SmallTitle("圆角") }
+        item(key = "dialog-corner-radius") {
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    IntSpec(ConfigSchema.Glass.DIALOG_CORNER_RADIUS, "对话弹窗圆角", "dp",
+                        summary = "小于 0 跟随系统圆角，0 为直角；重新打开弹窗生效"),
+                    controlsEnabled,
+                )
+            }
+        }
         item { SmallTitle("玻璃颜色") }
         item {
             SettingsCard {

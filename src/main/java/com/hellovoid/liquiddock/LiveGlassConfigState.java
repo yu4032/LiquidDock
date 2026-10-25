@@ -128,6 +128,7 @@ final class LiveGlassConfigState {
 
     private static Set<String> popupKeys() {
         Set<String> keys = new HashSet<>(POPUP_POLICY_KEYS);
+        keys.add(ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS.name());
         for (com.hellovoid.liquiddock.config.ConfigKey<Integer> config
                 : ScopedGlassOptics.keysForScope(ScopedGlassOptics.POPUP)) {
             keys.add(ScopedGlassOptics.key(ScopedGlassOptics.POPUP, config));

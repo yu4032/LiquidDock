@@ -56,6 +56,7 @@ final class SystemUiHandleMenuPrismalSession {
     private final Handler renderHandler;
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
+    private volatile float cornerRadiusDp = -1f;
     private volatile PrismalHighlightProfile highlightProfile;
     private volatile PassBlurFrameRateLimiter sourceFrameLimiter;
     private final float[] textureMatrix = new float[16];
@@ -133,6 +134,7 @@ final class SystemUiHandleMenuPrismalSession {
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
         prismalParams = Miuix307PrismalAdapter.toPortable(optical);
+        cornerRadiusDp = glassConfig != null ? glassConfig.handleMenuCornerRadiusDp : -1f;
         highlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
@@ -158,6 +160,7 @@ final class SystemUiHandleMenuPrismalSession {
         PrismalParams next = Miuix307PrismalAdapter.toPortable(
                 Miuix307PrismalMaterial.fromConfig(config, density));
         prismalParams = next;
+        cornerRadiusDp = config.handleMenuCornerRadiusDp;
         highlightProfile = config.largeSurfaceHighlightProfile;
         sourceFrameLimiter = new PassBlurFrameRateLimiter(
                 DisplayRefreshRatePolicy.clampRequestedFps(
@@ -390,7 +393,9 @@ final class SystemUiHandleMenuPrismalSession {
         prismalRenderer.setEdgeDecoration(
                 GlassEdgeEffects.current(GlassEdgeEffects.HANDLE_MENU),
                 host.getResources().getDisplayMetrics().density);
-        float radius = Math.max(1f, Math.min(width, height) * 0.5f);
+        float radius = GlassComponentCorners.resolve(cornerRadiusDp,
+                Math.max(1f, Math.min(width, height) * 0.5f),
+                host.getResources().getDisplayMetrics().density, width, height);
         prismalRenderer.drawGlass(
                 new PrismalGeometry(
                         width, height,
