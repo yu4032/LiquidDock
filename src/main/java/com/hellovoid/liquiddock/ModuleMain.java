@@ -28,6 +28,7 @@ public final class ModuleMain extends XposedModule {
         Api101Bridge.log("[DC] API101 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
         if ("system".equals(loadedProcessName)) {
+            RustSpawnerCompatHook.install();
             try {
                 ConfigReader config = ConfigReader.load();
                 boolean enabled = config.b(
