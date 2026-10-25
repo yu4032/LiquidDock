@@ -9,6 +9,7 @@ final class ThirdPartyPrismalParams {
     static PrismalParams apply(PrismalParams base, ThirdPartyGlassAppearance appearance) {
         if (base == null || appearance == null) return base;
         PrismalParams.Builder b = PrismalParams.builder();
+        b.continuousCorners = base.continuousCorners;
         b.ior = base.ior;
         b.glassThicknessPx = base.glassThicknessPx;
         b.normalStrength = base.normalStrength;

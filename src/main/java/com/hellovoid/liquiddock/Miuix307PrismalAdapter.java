@@ -14,6 +14,7 @@ final class Miuix307PrismalAdapter {
             Miuix307PrismalMaterial.Params p, boolean shaderBlurEnabled) {
         if (p == null) return PrismalParams.builder().build();
         PrismalParams.Builder b = PrismalParams.builder();
+        b.continuousCorners = p.continuousCorners;
         b.ior = p.ior;
         b.glassThicknessPx = p.thicknessPx;
         b.normalStrength = p.normalStrength;

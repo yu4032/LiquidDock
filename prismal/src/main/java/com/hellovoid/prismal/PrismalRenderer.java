@@ -822,6 +822,7 @@ public final class PrismalRenderer implements AutoCloseable {
     private void uploadStaticGlassParams(PrismalParams p) {
         uniform1f("u_refractionInset", p.refractionInsetPx);
         uniform1f("u_sminSmoothing", p.sminSmoothingPx);
+        uniform1f("u_continuousCorners", p.continuousCorners ? 1f : 0f);
         uniform1f("u_edgeRefractionFalloff", p.edgeRefractionFalloff);
         uniform1f("u_ior", p.ior);
         uniform1f("u_glassThickness", p.glassThicknessPx);

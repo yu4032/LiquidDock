@@ -63,6 +63,17 @@ internal fun LiquidPage(
                 ) { liquidGlass = it }
             }
         }
+        item(key = "continuous-glass-corners") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.CONTINUOUS_CORNERS,
+                    "iPadOS 风格连续圆角",
+                    "替换所有液态玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
+                    masterEnabled && liquidGlass,
+                )
+            }
+        }
         liquidEntries.forEach { entry ->
             item {
                 ModernFeatureCard(

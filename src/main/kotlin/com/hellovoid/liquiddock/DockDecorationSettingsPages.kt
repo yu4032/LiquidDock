@@ -26,7 +26,7 @@ internal fun StrokePage(padding: PaddingValues, prefs: SharedPreferences, master
         }
         item(key = "stroke-squircle") {
             SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线", "iPad 风格连续圆角", masterEnabled) { squircle = it }
+                BooleanSetting(prefs, ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线", "调整原生模糊 Dock 轮廓与描边；液态玻璃轮廓由液态玻璃页的连续圆角开关控制", masterEnabled) { squircle = it }
             }
         }
         item(key = "stroke-fill-diff") {

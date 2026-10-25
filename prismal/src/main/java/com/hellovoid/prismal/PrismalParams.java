@@ -54,8 +54,10 @@ public final class PrismalParams {
     public final float glowCenterY;
     public final float glowStrength;
     public final boolean showNormals;
+    public final boolean continuousCorners;
 
     private PrismalParams(Builder b) {
+        continuousCorners = b.continuousCorners;
         ior = b.ior;
         glassThicknessPx = b.glassThicknessPx;
         normalStrength = b.normalStrength;
@@ -122,6 +124,7 @@ public final class PrismalParams {
         public float displacementScale = 1f;
         public float heightTransitionWidthPx = 8f;
         public float sminSmoothingPx = 1f;
+        public boolean continuousCorners;
         public float refractionInsetPx = 20f;
         public float edgeRefractionFalloff = 4f;
         public float liquidDome = 0.78f;
@@ -173,6 +176,7 @@ public final class PrismalParams {
 
         private Builder(PrismalParams source) {
             if (source == null) return;
+            continuousCorners = source.continuousCorners;
             ior = source.ior;
             glassThicknessPx = source.glassThicknessPx;
             normalStrength = source.normalStrength;

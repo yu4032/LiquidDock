@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.content.Context;
 import android.graphics.Outline;
 import android.graphics.Path;
+import android.graphics.RectF;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
@@ -17,6 +18,7 @@ import android.widget.FrameLayout;
 final class DockLiquidGlassHostView extends FrameLayout {
     private final Path outlinePath = new Path();
     private float radius;
+    private boolean continuousCorners;
     private boolean squircle;
     private float squircleCp = .58f;
     private boolean shapeDirty = true;
@@ -64,6 +66,16 @@ final class DockLiquidGlassHostView extends FrameLayout {
         }
     }
 
+    boolean usesContinuousCorners() { return continuousCorners; }
+
+    void setContinuousCorners(boolean enabled) {
+        if (continuousCorners == enabled) return;
+        continuousCorners = enabled;
+        shapeDirty = true;
+        invalidateOutline();
+        invalidate();
+    }
+
     void setRadius(float radius) {
         setGeometry(radius, squircle, squircleCp);
     }
@@ -80,8 +92,12 @@ final class DockLiquidGlassHostView extends FrameLayout {
         if (!shapeDirty) return;
         outlinePath.rewind();
         if (getWidth() > 1 && getHeight() > 1) {
-            DockShapePath.build(
-                    outlinePath, getWidth(), getHeight(), radius, squircle, squircleCp);
+            if (continuousCorners) {
+                DockShapePath.buildContinuous(outlinePath,
+                        new RectF(0f, 0f, getWidth(), getHeight()), radius);
+            } else {
+                DockShapePath.build(outlinePath, getWidth(), getHeight(), radius, squircle, squircleCp);
+            }
         }
         shapeDirty = false;
     }

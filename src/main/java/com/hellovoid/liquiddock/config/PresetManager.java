@@ -214,6 +214,7 @@ public final class PresetManager {
         source.put("dock_divider_alpha", 128);
         source.put("liquid_glass", Boolean.TRUE);
         source.put("liquid_wallpaper_flicker_fix", Boolean.FALSE);
+        source.put("liquid_continuous_corners", Boolean.FALSE);
         source.put("liquid_security_center_glass", Boolean.FALSE);
         source.put("liquid_systemui_handle_menu_glass", Boolean.FALSE);
         source.put("liquid_shortcut_popup_glass", Boolean.TRUE);

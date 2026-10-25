@@ -56,6 +56,7 @@ final float chromaticAberration;
         final float shadowB;
         final float shadowA;
         final boolean showNormals;
+        final boolean continuousCorners;
 
         Params(
                 float ior,
@@ -100,7 +101,7 @@ final float chromaticAberration;
                 float shadowG,
                 float shadowB,
                 float shadowA,
-                boolean showNormals) {
+                boolean showNormals, boolean continuousCorners) {
             this.ior = ior;
             this.thicknessPx = thicknessPx;
             this.normalStrength = normalStrength;
@@ -144,6 +145,7 @@ final float chromaticAberration;
             this.shadowB = shadowB;
             this.shadowA = shadowA;
             this.showNormals = showNormals;
+            this.continuousCorners = continuousCorners;
         }
     }
 
@@ -197,7 +199,7 @@ final float chromaticAberration;
                 1f,
                 1f,
                 35f / 255f,
-                false);
+                false, false);
     }
 
     /**
@@ -254,7 +256,7 @@ final float chromaticAberration;
                 glass.prismalShadowG / 255f,
                 glass.prismalShadowB / 255f,
                 glass.prismalShadowAlpha / 255f,
-                glass.prismalShowNormals);
+                glass.prismalShowNormals, glass.continuousCorners);
     }
 
 
@@ -342,6 +344,7 @@ final float chromaticAberration;
                 cornerRadiusPx, cornerRadiusPx, cornerRadiusPx, cornerRadiusPx);
         uniform1f(program, "u_refractionInset", p.refractionInsetPx);
         uniform1f(program, "u_sminSmoothing", p.sminSmoothingPx);
+        uniform1f(program, "u_continuousCorners", p.continuousCorners ? 1f : 0f);
         uniform1fOptional(program, "u_edgeRefractionFalloff", p.edgeRefractionFalloff);
 
         uniform1f(program, "u_ior", p.ior);
