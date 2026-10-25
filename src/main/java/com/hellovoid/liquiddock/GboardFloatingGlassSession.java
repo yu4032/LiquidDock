@@ -134,7 +134,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 GboardGlassPreferences.resolveShared(reader, glassConfig);
         prismalParams = ThirdPartyPrismalParams.apply(baseParams, appearance);
         highlightProfile = appearance.highlightProfile;
-        appliedBlur = appearance.blur;
+        appliedBlur = prismalParams.blurRadiusPx;
         qualityScalePercent = appearance.captureScalePercent;
         qualityRenderFps = appearance.renderFps;
         sourceBackend = new RootPassBlurBackend(
@@ -156,8 +156,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                         Miuix307PrismalMaterial.fromConfig(
                                 ScopedGlassOptics.resolve(ConfigReader.load(), glass,
                                         ScopedGlassOptics.GBOARD), density)), appearance);
-        boolean blurChanged = Float.compare(appliedBlur, appearance.blur) != 0;
-        appliedBlur = appearance.blur;
+        boolean blurChanged = Float.compare(appliedBlur, next.blurRadiusPx) != 0;
+        appliedBlur = next.blurRadiusPx;
         prismalParams = next;
         highlightProfile = appearance.highlightProfile;
         boolean qualityChanged = qualityScalePercent != appearance.captureScalePercent

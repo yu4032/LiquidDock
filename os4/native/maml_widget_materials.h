@@ -259,9 +259,12 @@ static int ld_maml_hash_path(const char *path,unsigned char digest[32])
 static int ld_maml_install(const struct native_api *api)
 {
     if(!api || !api->hook || g_maml_init_original) return g_maml_init_original!=NULL;
+    int strict=g_home_options.hook_safety_enabled;
     unsigned char digest[32],body[LD_MAML_INIT_SIZE]; char hex[65];
-    if(!ld_maml_hash_path(LD_MAML_SDK_PATH,digest)) return 0;
-    ld_maml_hex(digest,hex); if(strcmp(hex,LD_MAML_SDK_SHA)) return 0;
+    if(strict) {
+        if(!ld_maml_hash_path(LD_MAML_SDK_PATH,digest)) return 0;
+        ld_maml_hex(digest,hex); if(strcmp(hex,LD_MAML_SDK_SHA)) return 0;
+    }
     uintptr_t base=0; char maps[1024]; FILE *f=fopen("/proc/self/maps","r");
     if(!f) return 0;
     while(fgets(maps,sizeof maps,f)) {
@@ -270,14 +273,17 @@ static int ld_maml_install(const struct native_api *api)
     }
     fclose(f); if(!base) return 0;
     uintptr_t target=base+LD_MAML_INIT_OFFSET;
-    if(!ld_read_heap(target,body,sizeof body)) return 0;
-    struct ld_sha256 sha; ld_sha256_init(&sha); ld_sha256_update(&sha,body,sizeof body); ld_sha256_final(&sha,digest);
-    ld_maml_hex(digest,hex); if(strcmp(hex,LD_MAML_INIT_SHA)) return 0;
+    if(!executable_range(target,strict?LD_MAML_INIT_SIZE:16)) return 0;
+    if(strict) {
+        if(!ld_read_heap(target,body,sizeof body)) return 0;
+        struct ld_sha256 sha; ld_sha256_init(&sha); ld_sha256_update(&sha,body,sizeof body); ld_sha256_final(&sha,digest);
+        ld_maml_hex(digest,hex); if(strcmp(hex,LD_MAML_INIT_SHA)) return 0;
+    }
     void *backup=NULL; int rc=api->hook((void*)target,(void*)ld_maml_init_replacement,&backup);
     if(rc || !backup) { ld_blog("MAML init hook failed result=%d",rc); return 0; }
     g_maml_init_original=(void(*)(const void*))backup;
     (void)ld_pin_code_pages(target,16);
-    ld_blog("MAML widget resource hook installed");
+    ld_blog("MAML widget resource hook installed safety=%d",strict);
     return 1;
 }
 

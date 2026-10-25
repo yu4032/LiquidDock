@@ -12,15 +12,15 @@ import java.util.zip.ZipFile
 
 /**
  * Decode Dart AOT .gnu_debugdata only in the LiquidDock app's background
- * config worker, never on the Launcher startup path. The native backend
- * independently authenticates the exact ELF and function bytes before hook.
+ * config worker, never on the Launcher startup path. Exact ELF and function
+ * checks are optional and follow the native hook safety setting.
  */
 internal object Os4GlassSymbols {
     private const val TAG = "LiquidDock-OS4Glass"
     private const val LIB = "lib/arm64-v8a/libapp.so"
-    private const val EXPECTED_SIZE = 29_983_600L
+    private const val EXPECTED_SIZE = 29_980_112L
     private const val EXPECTED_SHA =
-        "6f5274f435cc07aab165ce5315d1d35afab559a659afd6200379d309c9d08b91"
+        "93e511989202a70d38b8231c3133167b830ca7609b61ba6ad133898737d0e0ef"
     private const val MAX_XZ = 8 * 1024 * 1024
     private const val MAX_ELF = 16 * 1024 * 1024
     private val names = listOf(
@@ -34,23 +34,40 @@ internal object Os4GlassSymbols {
         "ImageFilterCompat.glass",
         "GlassLightConfig.applyTo",
     )
-    @Volatile private var cached: Pair<String, String>? = null
+    private val renderGateNames = listOf(
+        "BlurUtilities.isBlurSupported",
+        "BlurUtilities.isMamlBlurSupported",
+        "BlurUtilities.isAnyMaterialActive",
+        "BlurUtilities.isWidgetMaterialActive",
+        "BlurUtilities.isThreeLayerBlurSupported",
+        "BlurUtilities.isFolderBlurSupported",
+        "WidgetMaterialUtils.isGlassOs4SupportedSync",
+        "GlassPressHighlightWidget.isSupported",
+        "_HyperMaterialWidgetState._computeEffective",
+    )
+    private const val PASS_BLUR_SUPPORTED = "PassBlurBackgroundLight.supported"
+    @Volatile private var cached: Pair<Pair<String, Boolean>, String>? = null
 
-    fun fromInstalledLauncher(context: Context): String? = runCatching {
+    fun fromInstalledLauncher(context: Context, strictFingerprint: Boolean): String? = runCatching {
         val source = context.packageManager.getApplicationInfo("com.miui.home", 0).sourceDir
-        cached?.takeIf { pair -> pair.first == source }?.second?.let { result -> return result }
+        val cacheKey = source to strictFingerprint
+        cached?.takeIf { pair -> pair.first == cacheKey }?.second?.let { result -> return result }
         val image = ZipFile(source).use { zip ->
             val entry = zip.getEntry(LIB) ?: error("Launcher has no Dart AOT libapp.so")
-            require(entry.size == EXPECTED_SIZE) { "Vendor ELF changed size" }
+            if (strictFingerprint) require(entry.size == EXPECTED_SIZE) { "Vendor ELF changed size" }
+            require(entry.size in 1L..64L * 1024L * 1024L) { "Vendor ELF size is invalid" }
             zip.getInputStream(entry).use { input -> input.readBytes() }
         }
-        require(image.size.toLong() == EXPECTED_SIZE)
-        val actual = MessageDigest.getInstance("SHA-256").digest(image)
-        val hex = actual.joinToString("") { byte -> "%02x".format(byte) }
-        require(hex == EXPECTED_SHA) { "Vendor ELF SHA-256 differs" }
+        require(image.isNotEmpty())
+        if (strictFingerprint) {
+            require(image.size.toLong() == EXPECTED_SIZE)
+            val actual = MessageDigest.getInstance("SHA-256").digest(image)
+            val hex = actual.joinToString("") { byte -> "%02x".format(byte) }
+            require(hex == EXPECTED_SHA) { "Vendor ELF SHA-256 differs" }
+        }
         val result = extract(image) ?: error("XZ mini-ELF symbols missing or ambiguous")
-        cached = source to result
-        Log.i(TAG, "Resolved version-bound OS4 glass targets: " + result)
+        cached = cacheKey to result
+        Log.i(TAG, "Resolved OS4 glass targets: " + result)
         result
     }.onFailure { err -> Log.e(TAG, "OS4 glass target extraction failed", err) }.getOrNull()
 
@@ -107,7 +124,9 @@ internal object Os4GlassSymbols {
             "0x" + pair.first.toString(16) + ":" + pair.second
         }
         val gate = format(found)
-        val probes = pipelineNames.map { requested ->
+        val probes = mutableListOf<Pair<Long, Long>>()
+        var pipelineComplete = true
+        for (requested in pipelineNames) {
             val hits = mutableSetOf<Pair<Long, Long>>()
             for (table in sections) {
                 if (table.type != 2L || table.link !in sections.indices ||
@@ -126,10 +145,74 @@ internal object Os4GlassSymbols {
                     if (elf.equalsString(strings,strOff,requested)) hits.add(value to size)
                 }
             }
-            hits.singleOrNull() ?: return gate
+            val hit = hits.singleOrNull()
+            if (hit == null) {
+                pipelineComplete = false
+                break
+            }
+            probes.add(hit)
         }
-        if ((found + probes).map { pair -> pair.first }.distinct().size != 7) return gate
-        return gate + "|" + format(probes)
+        val pipelineTargets = pipelineComplete &&
+            (found + probes).map { pair -> pair.first }.distinct().size == 7
+        val pipeline = if (pipelineTargets) format(probes) else ""
+        val passBlurHits = mutableSetOf<Pair<Long, Long>>()
+        for (table in sections) {
+            if (table.type != 2L || table.link !in sections.indices ||
+                table.entrySize != 24L) continue
+            val strings = sections[table.link]
+            if (strings.type != 3L || table.size / 24L > 200_000L) continue
+            for (i in 0 until (table.size / 24L).toInt()) {
+                val pos = table.offset + i * 24L
+                val strOff = elf.u32(pos)
+                val type = elf.u8(pos + 4) and 15
+                val shndx = elf.u16(pos + 6)
+                val vaddr = elf.u64(pos + 8)
+                val size = elf.u64(pos + 16)
+                if (strOff == 0L || (type != 0 && type != 2) || shndx == 0 ||
+                    vaddr < 0x4000L || vaddr % 4L != 0L || size !in 16L..2048L) continue
+                if (elf.equalsString(strings, strOff, PASS_BLUR_SUPPORTED))
+                    passBlurHits.add(vaddr to size)
+            }
+        }
+        val passBlur = passBlurHits.singleOrNull()
+        val passBlurTarget = passBlur?.takeIf { target ->
+            found.none { pair -> pair.first == target.first } &&
+                probes.none { pair -> pair.first == target.first }
+        }?.let { target -> format(listOf(target)) } ?: ""
+        val result = gate + "|" + pipeline + "|" + passBlurTarget
+        val renderGates = mutableListOf<Pair<Long, Long>>()
+        var renderGatesComplete = true
+        for (requested in renderGateNames) {
+            val hits = mutableSetOf<Pair<Long, Long>>()
+            for (table in sections) {
+                if (table.type != 2L || table.link !in sections.indices ||
+                    table.entrySize != 24L) continue
+                val strings = sections[table.link]
+                if (strings.type != 3L || table.size / 24L > 200_000L) continue
+                for (i in 0 until (table.size / 24L).toInt()) {
+                    val pos = table.offset + i * 24L
+                    val strOff = elf.u32(pos)
+                    val type = elf.u8(pos + 4) and 15
+                    val shndx = elf.u16(pos + 6)
+                    val vaddr = elf.u64(pos + 8)
+                    val size = elf.u64(pos + 16)
+                    if (strOff == 0L || (type != 0 && type != 2) || shndx == 0 ||
+                        vaddr < 0x4000L || vaddr % 4L != 0L || size !in 16L..2048L) continue
+                    if (elf.equalsString(strings, strOff, requested)) hits.add(vaddr to size)
+                }
+            }
+            val hit = hits.singleOrNull()
+            if (hit == null) {
+                renderGatesComplete = false
+                break
+            }
+            renderGates.add(hit)
+        }
+        val allTargets = found + probes + listOfNotNull(passBlur) + renderGates
+        if (!renderGatesComplete || renderGates.size != renderGateNames.size ||
+            allTargets.map { pair -> pair.first }.distinct().size != allTargets.size)
+            return result + "||"
+        return result + "|" + format(renderGates)
     }
 
     private class Elf64(private val data: ByteArray) {

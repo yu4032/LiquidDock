@@ -203,7 +203,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     private PrismalParams materialParams(Miuix307PrismalMaterial.Params optical, float density) {
         PrismalParams base = Miuix307PrismalAdapter.toPortable(optical);
-        if (!folderBackdrop) return base;
+        if (!folderBackdrop || optical.softGlassMode) return base;
         SharedPreferences preferences = Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP);
         if (preferences == null) return base;
         return OpenFolderGlassOptics.apply(base,

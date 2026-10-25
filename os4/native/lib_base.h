@@ -176,6 +176,23 @@ done:
 typedef struct { uintptr_t start, end; unsigned long off; } ld_mapseg;
 #define LD_MAX_SEGS 512
 
+/* Updated system apps map from /data/app/.../com.miui.home-<id>/base.apk;
+ * the factory image maps /product/.../MiuiHome.apk. */
+static const char *ld_launcher_apk_substr(void)
+{
+    FILE *f = fopen("/proc/self/maps", "r");
+    if (!f) return "com.miui.home-";
+    char line[512];
+    while (fgets(line, sizeof line, f)) {
+        if (strstr(line, "/com.miui.home-")) {
+            fclose(f);
+            return "com.miui.home-";
+        }
+    }
+    fclose(f);
+    return "MiuiHome.apk";
+}
+
 /* 从 maps 里取该 APK 的真实**完整路径**（并去掉可能的 " (deleted)" 后缀）。
  * ⚠️ 这一步不可省：调用方给的是 maps 匹配子串（如 "MiuiHome.apk"），
  *    但 `fopen` 需要绝对路径；直接拿子串去 fopen 会失败。 */
@@ -298,7 +315,7 @@ static bool ld_verify_load_layout(const ld_lib_info *li, const ld_mapseg *segs, 
 
 /* ---------------- 一步到位：解析 + 校验 ---------------- */
 /*
- * apk_path : 传给 maps 匹配的路径子串，如 "MiuiHome.apk"
+ * apk_path : 传给 maps 匹配的路径子串，如 "com.miui.home-" 或 "MiuiHome.apk"
  * zip_entry: ZIP 内条目名，如 "lib/arm64-v8a/libapp.so"
  */
 /* ZIP 条目偏移对同一 APK 恒定 —— 缓存起来，避免轮询反复解析中央目录。
@@ -341,7 +358,7 @@ static bool ld_resolve_lib(const char *apk_path, const char *zip_entry, ld_lib_i
     memset(out, 0, sizeof *out);
 
     /* ⚠️ 顺序至关重要：先查 maps，再碰 APK 文件。
-     * 反过来的话，库还没映射时也会每次都 fopen 57MB 的 MiuiHome.apk 读中央目录；
+     * 反过来的话，库还没映射时也会每次都 fopen 57MB 的 Launcher APK 读中央目录；
      * 调用方（hooks_device 抢 Rust init 窗口的轮询）前 300 轮间隔仅 2ms，
      * 等于在开机最吃 I/O 的阶段每秒几百次 MB 级读取 —— 实测把桌面拖到开不了机。 */
     ld_mapseg *segs = (ld_mapseg *)malloc(sizeof(ld_mapseg) * LD_MAX_SEGS);

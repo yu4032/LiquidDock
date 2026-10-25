@@ -283,10 +283,15 @@ internal object Os4MamlArchive {
 
     private fun ensureGlass(document: Document): Boolean {
         val root = document.documentElement
+        var changed = false
+        if (elementTag(root) == "Widget" && root.getAttribute("supportBackgroundBlur") != "true") {
+            root.setAttribute("supportBackgroundBlur", "true")
+            changed = true
+        }
         val layers = findElements(root, "Layer")
         val allMaterials = layers.flatMap { directChildren(it, "MaterialToken") }
         // Preserve an existing native GlassConfig byte-for-byte instead of replacing an unknown token.
-        if (allMaterials.any { directChildren(it, "GlassConfig").isNotEmpty() }) return false
+        if (allMaterials.any { directChildren(it, "GlassConfig").isNotEmpty() }) return changed
         val material = allMaterials.firstOrNull()
         if (material != null) {
             material.setAttribute("enableBackgroundBlurConfig", "true")

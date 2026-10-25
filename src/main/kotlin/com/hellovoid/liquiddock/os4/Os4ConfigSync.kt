@@ -5,9 +5,10 @@ import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.util.Log
 import androidx.preference.PreferenceManager
+import com.hellovoid.liquiddock.config.ConfigSchema
 import java.util.concurrent.Executors
 
-/** Publishes main-screen preferences to the attested OS4 native backend. */
+/** Publishes main-screen preferences to the OS4 native backend. */
 object Os4ConfigSync {
     private const val TAG = "LiquidDock-OS4Sync"
     private val worker = Executors.newSingleThreadExecutor {
@@ -35,16 +36,11 @@ object Os4ConfigSync {
     }
 
     private fun supportsPublisher(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT != Os4LauncherIdentityPolicy.TARGET_SDK) return false
         if (!Build.SUPPORTED_ABIS.contains("arm64-v8a")) return false
         return runCatching {
             val info = context.packageManager.getApplicationInfo("com.miui.home", 0)
-            val version = context.packageManager
-                .getPackageInfo("com.miui.home", 0).versionName
-            Os4LauncherIdentityPolicy.matches(
-                "com.miui.home", version, Build.VERSION.SDK_INT,
-                (info.flags and ApplicationInfo.FLAG_HAS_CODE) != 0, true,
-            )
+            val hasCode = (info.flags and ApplicationInfo.FLAG_HAS_CODE) != 0
+            Os4LauncherIdentityPolicy.matchesAotPublisher("com.miui.home", hasCode, true)
         }.getOrDefault(false)
     }
 
@@ -55,15 +51,24 @@ object Os4ConfigSync {
         val conf = Os4MainScreenOptions.fromPreferences(prefs.all)
         if (conf == null) Log.e(TAG, "[$reason] invalid options; native snapshot cleared")
         // The vendor's named Dart AOT symbols live in XZ .gnu_debugdata.
-        // Extract off the Launcher process, and let Native authenticate bytes.
-        val resolved = if (conf?.contains("glass_enabled=1\n") == true) {
-            val addresses = Os4GlassSymbols.fromInstalledLauncher(context)
+        // Extract off the Launcher process; the safety switch controls exact-byte checks.
+        val resolved = if (!conf.isNullOrEmpty()) {
+            val safetyEnabled = prefs.getBoolean(ConfigSchema.Grid.NATIVE_HOOK_SAFETY.name(),
+                ConfigSchema.Grid.NATIVE_HOOK_SAFETY.uiDefault())
+            val addresses = Os4GlassSymbols.fromInstalledLauncher(context, safetyEnabled)
             if (addresses == null) conf
             else {
-                val gates = addresses.substringBefore('|')
-                val probes = addresses.substringAfter('|', "")
-                val lines = "glass_targets=" + gates + "\n" +
-                    (if (probes.isEmpty()) "" else "glass_observers=" + probes + "\n")
+                val parts = addresses.split('|', limit = 4)
+                val gates = parts[0]
+                val probes = parts.getOrElse(1) { "" }
+                val passBlur = parts.getOrElse(2) { "" }
+                val renderGates = parts.getOrElse(3) { "" }
+                val lines = buildString {
+                    append("glass_targets=").append(gates).append('\n')
+                    if (probes.isNotEmpty()) append("glass_observers=").append(probes).append('\n')
+                    if (passBlur.isNotEmpty()) append("passblur_target=").append(passBlur).append('\n')
+                    if (renderGates.isNotEmpty()) append("render_targets=").append(renderGates).append('\n')
+                }
                 conf.replace("end=1\n",lines + "end=1\n")
             }
         } else conf

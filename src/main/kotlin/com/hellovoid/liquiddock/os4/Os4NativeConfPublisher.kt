@@ -31,6 +31,7 @@ object Os4NativeConfPublisher {
             (!options.glassIconSize.isFinite() || options.glassIconSize !in -40.0..40.0 ||
                 !options.glassIconCorner.isFinite() || options.glassIconCorner !in 0.0..128.0)) return null
         return buildString {
+            append("hook_safety_enabled=").append(if (options.hookSafetyEnabled) 1 else 0).append('\n')
             if (grid) {
                 append("grid_cols=").append(gridCols).append('\n')
                 append("grid_rows=").append(gridRows).append('\n')

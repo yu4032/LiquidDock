@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.opengl.GLES20;
 
 import com.hellovoid.prismal.PrismalIorLensPolicy;
+import com.hellovoid.prismal.PrismalSoftGlassProfile;
 
 /**
  * Upstream-Prismal optical parameter adapter for the HyperOS 3.0.307 zero-copy backend.
@@ -38,6 +39,7 @@ final float chromaticAberration;
         final float os4DirectionalAngleRange;
         final float os4DirectionalIntensity;
         final float os4DirectionalOppositeIntensity;
+        final float os4Darker;
         final float lightDirX;
         final float lightDirY;
         final float causticIntensity;
@@ -55,7 +57,9 @@ final float chromaticAberration;
         final float shadowG;
         final float shadowB;
         final float shadowA;
+        final boolean softGlassMode;
         final boolean showNormals;
+        final PrismalSoftGlassProfile softGlassProfile;
 
         Params(
                 float ior,
@@ -83,6 +87,7 @@ final float chromaticAberration;
                 float os4DirectionalAngleRange,
                 float os4DirectionalIntensity,
                 float os4DirectionalOppositeIntensity,
+                float os4Darker,
                 float lightDirX,
                 float lightDirY,
                 float causticIntensity,
@@ -100,7 +105,9 @@ final float chromaticAberration;
                 float shadowG,
                 float shadowB,
                 float shadowA,
-                boolean showNormals) {
+                boolean softGlassMode,
+                boolean showNormals,
+                PrismalSoftGlassProfile softGlassProfile) {
             this.ior = ior;
             this.thicknessPx = thicknessPx;
             this.normalStrength = normalStrength;
@@ -126,6 +133,7 @@ final float chromaticAberration;
             this.os4DirectionalAngleRange = os4DirectionalAngleRange;
             this.os4DirectionalIntensity = os4DirectionalIntensity;
             this.os4DirectionalOppositeIntensity = os4DirectionalOppositeIntensity;
+            this.os4Darker = os4Darker;
             this.lightDirX = lightDirX;
             this.lightDirY = lightDirY;
             this.causticIntensity = causticIntensity;
@@ -143,7 +151,10 @@ final float chromaticAberration;
             this.shadowG = shadowG;
             this.shadowB = shadowB;
             this.shadowA = shadowA;
+            this.softGlassMode = softGlassMode;
             this.showNormals = showNormals;
+            this.softGlassProfile = softGlassProfile != null
+                    ? softGlassProfile : PrismalSoftGlassProfile.DEFAULT;
         }
     }
 
@@ -180,6 +191,7 @@ final float chromaticAberration;
                 0.52f,
                 0.42f,
                 0.14f,
+                0f,
                 -0.5f,
                 -0.8f,
                 0.28f,
@@ -197,7 +209,9 @@ final float chromaticAberration;
                 1f,
                 1f,
                 35f / 255f,
-                false);
+                false,
+                false,
+                PrismalSoftGlassProfile.DEFAULT);
     }
 
     /**
@@ -213,7 +227,7 @@ final float chromaticAberration;
 
         return new Params(
                 glass.ior,
-                Math.max(0f, glass.thickness * d),
+                Math.max(0f, glass.thickness * (glass.softGlassMode ? 1f : d)),
                 glass.normalStrength,
                 glass.prismalDisplacementScale,
                 Math.max(1f, glass.prismalHeightTransitionWidth * d),
@@ -237,6 +251,7 @@ final float chromaticAberration;
                 glass.os4DirectionalAngleRange,
                 glass.os4DirectionalIntensity,
                 glass.os4DirectionalOppositeIntensity,
+                glass.os4Darker,
                 glass.prismalLightDirX,
                 glass.prismalLightDirY,
                 glass.caustics,
@@ -254,7 +269,9 @@ final float chromaticAberration;
                 glass.prismalShadowG / 255f,
                 glass.prismalShadowB / 255f,
                 glass.prismalShadowAlpha / 255f,
-                glass.prismalShowNormals);
+                glass.softGlassMode,
+                glass.prismalShowNormals,
+                glass.softGlassProfile);
     }
 
 

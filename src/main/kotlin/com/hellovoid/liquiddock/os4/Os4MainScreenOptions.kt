@@ -46,6 +46,7 @@ data class Os4MainScreenOptions(
     val glassIcons: Boolean = false,
     val glassWidgets: Boolean = false,
     val widgetOverrides: Boolean = false,
+    val hookSafetyEnabled: Boolean = false,
     val glassIconSize: Double = 0.0,
     val glassIconCorner: Double = 0.0,
 ) {
@@ -71,6 +72,7 @@ data class Os4MainScreenOptions(
         )
         val watchedKeys: Set<String> = buildSet {
             addAll(listOf(ConfigSchema.Core.ENABLED, ConfigSchema.Grid.ENABLED,
+                ConfigSchema.Grid.NATIVE_HOOK_SAFETY,
                 ConfigSchema.Grid.COLUMNS, ConfigSchema.Grid.ROWS,
                 ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
                 ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH).map { it.name() })
@@ -144,6 +146,7 @@ data class Os4MainScreenOptions(
                             glassIcons = glassIcons,
                             glassWidgets = glassWidgets,
                             widgetOverrides = widgetOverrides,
+                            hookSafetyEnabled = boolean(ConfigSchema.Grid.NATIVE_HOOK_SAFETY),
                             glassIconSize = if (glassIcons) dp(ConfigSchema.Glass.ICON_SIZE_OFFSET) else 0.0,
                             glassIconCorner = if (glassIcons) dp(ConfigSchema.Glass.ICON_CORNER_RADIUS) else 0.0,
                         ),

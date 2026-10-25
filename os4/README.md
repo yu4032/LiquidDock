@@ -1,7 +1,7 @@
 # LiquidDock4 / HyperOS 4 native layout
 
 The active device is Xiaomi 13 (`fuxi`), Android 17 / HyperOS
-`OS4.0.27.0.XEOCNXM`, Launcher `RELEASE-8.01.02.8583-260918-10161026-R`.
+`OS4.0.27.0.XEOCNXM`, Launcher `RELEASE-8.01.02.8584-260918-10231931-R`.
 Launcher runs under `hyos_spawner` without ART; Java layout drafts are not the
 runtime implementation. The legacy Launcher Java backend remains separate.
 
@@ -25,12 +25,12 @@ runtime implementation. The legacy Launcher Java backend remains separate.
   four rows/columns. Footprints must still fit the actual grid.
 - The Rust pre-load orientation conversion assumes stock geometry and can panic
   with `index out of bounds: len is 3 but index is 3` on a three-column restart.
-  The attested Rust guard delegates this conversion to the DTO planner only when
+  The Rust guard delegates this conversion to the DTO planner only when
   the complete native layout pipeline is installed; otherwise it calls original.
 
 ## Main-screen options
 
-The attested backend also applies the existing icon-size percentage, widget
+The native backend also applies the existing icon-size percentage, widget
 horizontal stretch and independent full-screen portrait/landscape horizontal,
 top, bottom, row-gap and indicator-Y settings. Fractional offsets use Flutter
 logical dp; preference `_tenths` values take precedence. Restart Launcher after
@@ -73,26 +73,29 @@ The native parser validates names, ranges and duplicates. The app stores the
 sparse bundle in the exported `liquid_os4_native_overrides` preference; old
 Prismal/blur preferences do not activate native overrides.
 
-There is no shader replacement or custom backdrop capture. A full-body-attested
+There is no shader replacement or custom backdrop capture. A full-body checked
 `_ImageFilter.__initGlassV7` observer runs immediately after native construction.
 It identifies the newly allocated C++ `DlGlassImageFilter` via the saved native
 receiver and verified vtable, then changes selected float fields and owned vector
 components before the filter is cached or drawn. Dart heap objects and HDR/
-geometry/capture-coordinate fields are untouched. The exact engine file SHA-256
-and live V7 dispatcher body must match before any material write. Unknown engines,
-invalid vectors or invalid light directions preserve the original material.
+geometry/capture-coordinate fields are untouched. With `OS4 Hook 安全校验`
+enabled, the engine file SHA-256 and live V7 dispatcher body must match before
+any material write. Invalid vectors or invalid light directions preserve the
+original material.
 
-The earlier capability hooks still opt into the native material on the supported
-8583 Launcher build. Native boot logs report engine verification and how many
-explicit fields were applied. Visual acceptance of individual controls remains
+The earlier capability hooks still opt into the native material. Native boot
+logs report engine checks and how many explicit fields were applied. Visual
+acceptance of individual controls remains
 part of device testing.
 
 ## Native safety and compatibility
 
-Every hook verifies its complete function body against the exact local vendor
-ELF. ZIP entry mappings and PT_LOAD ranges determine runtime addresses; mapping
-verification accepts adjacent executable VMAs created by earlier hooks. Unknown
-bodies are refused. The entire layout pipeline must be available before layout
+Hooks install directly at the configured AOT addresses by default. ZIP entry
+mappings and PT_LOAD ranges determine runtime addresses; mapping verification
+accepts adjacent executable VMAs created by earlier hooks. The `OS4 Hook 安全校验`
+setting optionally requires the captured Launcher ELF and hook bodies to match
+the local 8584 fingerprints before installation. Turn it off to remove that
+version check. The complete layout pipeline must still install before layout
 mutation or Rust conversion delegation is enabled.
 
 Successful inline hooks pin their patch pages with `mlock`. File-backed private
@@ -121,7 +124,7 @@ extracted vendor files:
 
 ```sh
 python3 os4/tools/generate_layout_fingerprints.py /path/to/lib/arm64-v8a
-python3 os4/tools/attest_elf.py /path/to/libapp.so os4/profiles/fuxi-8.01.02.8583.json
+python3 os4/tools/attest_elf.py /path/to/libapp.so os4/profiles/fuxi-8.01.02.8584.json
 python3 os4/tests/test_attest_elf.py
 cc -std=c11 -D_GNU_SOURCE -Wall -Wextra -Werror -Ios4/native \
   os4/native/process_gate.c os4/tests/process_gate_test.c -o /tmp/ld-process-test
@@ -152,12 +155,12 @@ rotation, Launcher restart and full reboot. A successful build or Java test is
 not a device acceptance result. Occasional blank stock widgets on page one are
 retained at the user's request.
 
-The integrated audit retains CE configuration authority after unlock, whole-ELF
-SHA-256 attestation for both Dart and Rust entries before hooking, process gating
-before diagnostics, serialized hook installation, and atomic configuration
-publication. Sidecar profile switching occurs only after the native layout
-pipeline has been verified and installed. The obsolete direct SQLite repack is
-not part of the active layout path.
+The integrated backend retains CE configuration authority after unlock, process
+gating before diagnostics, serialized hook installation, and atomic
+configuration publication. Exact SHA-256 checks for Dart and Rust entries run
+only when `OS4 Hook 安全校验` is enabled. Sidecar profile switching occurs only
+after the native layout pipeline has installed. The obsolete direct SQLite
+repack is not part of the active layout path.
 
 ## Icon and MAML widget materials
 
@@ -175,8 +178,8 @@ on the next Launcher load. Component hiding works independently of glass.
 Widget glass uses the vendor MaterialToken/GlassConfig with rustPassWindow enabled.
 It preserves native background capture and does not replace shaders. Only loaded
 MAML archives are supported in this stage; RemoteViews component handling and icon
-transition animation coverage are not included. Native code and SDK fingerprints
-must match the attested Launcher build before hooks are installed.
+transition animation coverage are not included. The MAML and engine fingerprints
+are enforced only when `OS4 Hook 安全校验` is enabled.
 
 Dock bottom offset adjusts the native hotseat bottom reference in logical dp:
 positive values move Dock upward, negative values move it downward, and zero

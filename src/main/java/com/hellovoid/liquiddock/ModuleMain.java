@@ -220,12 +220,7 @@ public final class ModuleMain extends XposedModule {
         }
     }
 
-    /**
-     * OS4's Launcher is an AOT process with no dex classes. The Launcher 4.50
-     * Java hooks are not a valid fallback there; installing them would only probe
-     * absent classes. Keep this gate independent from exact-build eligibility:
-     * unknown AOT builds are blocked until their own native backend is attested.
-     */
+    /** OS4's AOT Launcher has no dex classes, so skip the legacy Java hooks. */
     private static boolean shouldBlockLegacyLauncherBackend(PackageReadyParam param) {
         ApplicationInfo info = param.getApplicationInfo();
         if (info == null) {
@@ -233,12 +228,10 @@ public final class ModuleMain extends XposedModule {
             return true;
         }
         boolean hasCode = (info.flags & ApplicationInfo.FLAG_HAS_CODE) != 0;
-        if (!Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(
-                Build.VERSION.SDK_INT, hasCode)) {
+        if (!Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(hasCode)) {
             return false;
         }
-        Api101Bridge.log("[DC][OS4] legacy Java backend disabled aot sdk="
-                + Build.VERSION.SDK_INT);
+        Api101Bridge.log("[DC][OS4] legacy Java backend disabled for AOT Launcher");
         return true;
     }
 

@@ -397,6 +397,7 @@ private fun LiquidDockSettings(
                     Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
 
                     Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.SoftGlass -> SoftGlassSettingsPage(padding, prefs, masterEnabled)
                     Page.LiquidMaterial -> LiquidSpecPage(
                         padding,
                         prefs,

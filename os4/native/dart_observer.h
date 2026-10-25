@@ -1,5 +1,5 @@
 /* Native observer bridge: no Dart calls, allocations or retained heap pointers.
- * Use only at a verified function entry. x15 may be only 8-byte aligned. The temporary
+ * Use only at the selected function entry. x15 may be only 8-byte aligned. The temporary
  * C stack grows below the current Dart stack; hardware SP and every live Dart
  * register/vector/flags are restored before tail-calling the original.
  */

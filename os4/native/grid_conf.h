@@ -76,8 +76,15 @@ struct ld_grid_conf {
     double glass_icon_size, glass_icon_corner;
     struct ld_native_glass_options native_glass;
     int glass_targets_present;
+    int hook_safety_enabled;
     uint64_t glass_vaddr[3];
     size_t glass_size[3];
+    int passblur_target_present;
+    uint64_t passblur_vaddr;
+    size_t passblur_size;
+    int render_targets_present;
+    uint64_t render_vaddr[9];
+    size_t render_size[9];
     int glass_observers_present;
     uint64_t glass_obs_vaddr[4];
     size_t glass_obs_size[4];
@@ -166,9 +173,9 @@ static inline int ld_grid_parse_plain_decimal(const char *s, double lo, double h
 
 
 
-/* Canonical, device-local AOT addresses extracted from .gnu_debugdata by
- * the module app. The whole 8583 vendor ELF and all live code bodies are
- * independently authenticated in native_entry.c before any hook. */
+/* AOT addresses extracted from the installed Launcher .gnu_debugdata by the
+ * module app. Address bounds are checked against mapped executable segments;
+ * optional exact-build checks are controlled by hook_safety_enabled. */
 static inline int ld_grid_parse_aot_targets(const char *s,uint64_t *vaddr,size_t *bytes,size_t count)
 {
     if(!s || !*s) return 0;
@@ -193,7 +200,8 @@ static inline int ld_grid_parse_aot_targets(const char *s,uint64_t *vaddr,size_t
             p++;
         }
         if(p==last || (*last=='0' && p-last>1) || length<16 || length>2048
-                || address>=29983600ull || (unsigned long long)length>29983600ull-address)
+                || address>UINTPTR_MAX
+                || (uintptr_t)length>UINTPTR_MAX-(uintptr_t)address)
             return 0;
         vaddr[i]=(uint64_t)address;
         bytes[i]=(size_t)length;
@@ -284,6 +292,20 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.glass_targets_present=1;
                     seen |= 1u << 27;
+                } else if (strcmp(key, "passblur_target") == 0) {
+                    if ((seen & (1ull << 35)) ||
+                        !ld_grid_parse_aot_targets(val,&c.passblur_vaddr,&c.passblur_size,1)) {
+                        bad=1; break;
+                    }
+                    c.passblur_target_present=1;
+                    seen |= 1ull << 35;
+                } else if (strcmp(key, "render_targets") == 0) {
+                    if ((seen & (1ull << 36)) ||
+                        !ld_grid_parse_aot_targets(val,c.render_vaddr,c.render_size,9)) {
+                        bad=1; break;
+                    }
+                    c.render_targets_present=1;
+                    seen |= 1ull << 36;
                 } else if (strcmp(key, "glass_enabled") == 0) {
                     int value;
                     if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {
@@ -291,6 +313,13 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.glass_enabled=value;
                     seen |= 1u << 26;
+                } else if (strcmp(key, "hook_safety_enabled") == 0) {
+                    int value;
+                    if ((seen & (1ull << 34)) || !ld_grid_parse_bool01(val,&value)) {
+                        bad=1; break;
+                    }
+                    c.hook_safety_enabled=value;
+                    seen |= 1ull << 34;
                 } else if (strcmp(key, "glass_icons") == 0 ||
                            strcmp(key, "glass_widgets") == 0 ||
                            strcmp(key, "widget_overrides") == 0) {

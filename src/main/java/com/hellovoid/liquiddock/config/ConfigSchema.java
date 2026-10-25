@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock.config;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -68,6 +69,8 @@ public final class ConfigSchema {
     public static final class Grid {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "grid_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> NATIVE_HOOK_SAFETY = bool(
+                "os4_native_hook_safety", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> COLUMNS = integer(
                 "grid_columns", 8, 8, 8, 2, 10, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ROWS = integer(
@@ -247,7 +250,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> BACKLIT_EXTENT = integer(
                 "liquid_backlit_extent", 100, 100, 100, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(
-                "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
+                "liquid_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> SOFT_GLASS_ENABLED = bool(
+                "liquid_soft_glass_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
                 "liquid_wallpaper_flicker_fix", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
@@ -489,6 +494,189 @@ public final class ConfigSchema {
         private Glass() {}
     }
 
+    /** Independent optical preferences for the optional HyperOS 4 soft-glass appearance. */
+    public static final class SoftGlass {
+        public static final String KEY_PREFIX = "soft_glass_";
+        // Seed the independent profile from the values observed in the OS4 native material.
+        // These are defaults only; a saved soft_glass_* value always wins.
+        public static final ConfigKey<Integer> BLUR = soft(Glass.BLUR, 36);
+        // HyperOS 4 separates the 36px edge profile from its 100px refractive thickness.
+        public static final ConfigKey<Integer> THICKNESS = ConfigKey.register(
+                REGISTRATION_AUTHORITY, KEY_PREFIX + Glass.THICKNESS.name(),
+                ConfigKey.Type.INT, 100, 100, 100, 0, 480,
+                ConfigKey.StorageMode.DIRECT, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> PRISMAL_TRANSMITTANCE = soft(Glass.PRISMAL_TRANSMITTANCE);
+        // OS4's uBrightness is an additive channel offset in [0, 3], not Prismal's multiplier.
+        // Start neutral on OS3: the captured launcher texture is opaque, so a native value of
+        // 1.0 adds a full channel value and clips the entire material to white.
+        public static final ConfigKey<Integer> BRIGHTNESS = ConfigKey.register(
+                REGISTRATION_AUTHORITY, KEY_PREFIX + Glass.BRIGHTNESS.name(),
+                ConfigKey.Type.INT, 0, 0, 0, 0, 300,
+                ConfigKey.StorageMode.DIRECT, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> IOR = soft(Glass.IOR, 200);
+        public static final ConfigKey<Integer> DOME = soft(Glass.DOME, 0);
+        public static final ConfigKey<Integer> LENS_REFRACTION = soft(Glass.LENS_REFRACTION, 0);
+        public static final ConfigKey<Integer> NORMAL_STRENGTH = soft(Glass.NORMAL_STRENGTH, 100);
+        public static final ConfigKey<Integer> DEPTH_EFFECT = soft(Glass.DEPTH_EFFECT, 0);
+        public static final ConfigKey<Integer> PRISMAL_DISPLACEMENT_SCALE = soft(Glass.PRISMAL_DISPLACEMENT_SCALE, 100);
+        public static final ConfigKey<Integer> PRISMAL_REFRACTION_INSET = soft(Glass.PRISMAL_REFRACTION_INSET);
+        public static final ConfigKey<Integer> PRISMAL_EDGE_REFRACTION_FALLOFF = soft(Glass.PRISMAL_EDGE_REFRACTION_FALLOFF, 220);
+        public static final ConfigKey<Integer> PRISMAL_HEIGHT_TRANSITION_WIDTH = soft(Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH, 13);
+        public static final ConfigKey<Integer> PRISMAL_SMIN_SMOOTHING = soft(Glass.PRISMAL_SMIN_SMOOTHING);
+        public static final ConfigKey<Integer> TINT_RED = soft(Glass.TINT_RED, 255);
+        public static final ConfigKey<Integer> TINT_GREEN = soft(Glass.TINT_GREEN, 255);
+        public static final ConfigKey<Integer> TINT_BLUE = soft(Glass.TINT_BLUE, 255);
+        public static final ConfigKey<Integer> TINT_ALPHA = soft(Glass.TINT_ALPHA, 0);
+        public static final ConfigKey<Integer> PRISMAL_VIBRANCY = soft(Glass.PRISMAL_VIBRANCY, 100);
+        public static final ConfigKey<Integer> CHROMATIC = soft(Glass.CHROMATIC, 0);
+        public static final ConfigKey<Integer> PRISMAL_DISPERSION_R = soft(Glass.PRISMAL_DISPERSION_R);
+        public static final ConfigKey<Integer> PRISMAL_DISPERSION_B = soft(Glass.PRISMAL_DISPERSION_B);
+        public static final ConfigKey<Integer> HIGHLIGHT_WIDTH = soft(Glass.HIGHLIGHT_WIDTH);
+        public static final ConfigKey<Integer> CAUSTICS = soft(Glass.CAUSTICS, 0);
+        public static final ConfigKey<Integer> PRISMAL_FRESNEL_REFLECT = soft(Glass.PRISMAL_FRESNEL_REFLECT, 100);
+        public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_X = soft(Glass.PRISMAL_LIGHT_DIR_X, 0);
+        public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_Y = soft(Glass.PRISMAL_LIGHT_DIR_Y, 0);
+        public static final ConfigKey<Integer> OS4_EDGE_WIDTH_PX = soft(Glass.OS4_EDGE_WIDTH_PX, 36);
+        public static final ConfigKey<Integer> OS4_REFLECT_OFFSET_PX = soft(
+                Glass.OS4_REFLECT_OFFSET_PX, 200, 0, 400);
+        public static final ConfigKey<Integer> OS4_REFLECTION_STRENGTH = soft(Glass.OS4_REFLECTION_STRENGTH, 60);
+        public static final ConfigKey<Integer> OS4_REFLECTION_LIGHTEN = soft(Glass.OS4_REFLECTION_LIGHTEN, 100);
+        public static final ConfigKey<Integer> OS4_DIRECTIONAL_ANGLE_RANGE = soft(Glass.OS4_DIRECTIONAL_ANGLE_RANGE, 140);
+        public static final ConfigKey<Integer> OS4_DIRECTIONAL_INTENSITY = soft(Glass.OS4_DIRECTIONAL_INTENSITY, 150);
+        public static final ConfigKey<Integer> OS4_DIRECTIONAL_OPPOSITE_INTENSITY = soft(Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY, 100);
+        public static final ConfigKey<Integer> OS4_DARKER = integer(
+                KEY_PREFIX + "os4_darker", 12, 12, 12, 0, 100, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_EDGE_POWER = integer(
+                KEY_PREFIX + "os4_edge_power", 220, 220, 220, 10, 800,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_LIGHT_Z = integer(
+                KEY_PREFIX + "os4_light_z", 100, 100, 100, -200, 200,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_EDGE_AMBIENT = integer(
+                KEY_PREFIX + "os4_edge_ambient", 0, 0, 0, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_EDGE_LIGHT_LENGTH = integer(
+                KEY_PREFIX + "os4_edge_light_length", 100, 100, 100, 10, 800,
+                ConfigKey.ExportMode.ALWAYS);
+        /** OS4's uBgColorTex has its own blur scale, separate from the refractive sample. */
+        public static final ConfigKey<Integer> OS4_BACKGROUND_BLUR_RADIUS = integer(
+                KEY_PREFIX + "os4_background_blur_radius", 500, 500, 500, 0, 1000,
+                ConfigKey.ExportMode.ALWAYS);
+        /** Blend control for adapting the independent OS4 background source on OS3. */
+        public static final ConfigKey<Integer> OS4_BACKGROUND_BLUR_MIX = integer(
+                KEY_PREFIX + "os4_background_blur_mix", 500, 500, 500, 0, 1000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_DARKER_LOW = integer(
+                KEY_PREFIX + "os4_darker_low", 0, 0, 0, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_DARKER_HIGH = integer(
+                KEY_PREFIX + "os4_darker_high", 100, 100, 100, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_BACKGROUND_SATURATION = integer(
+                KEY_PREFIX + "os4_background_saturation", 100, 100, 100, 0, 300,
+                ConfigKey.ExportMode.ALWAYS);
+        // Native uBgColorBrightness is additive and multiplied by source alpha. OS3's
+        // captured launcher image is opaque, so a value of 1.0 clips the soft material white.
+        public static final ConfigKey<Integer> OS4_BACKGROUND_BRIGHTNESS = integer(
+                KEY_PREFIX + "os4_background_brightness", 0, 0, 0, 0, 300,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_INNER_BOTTOM = integer(
+                KEY_PREFIX + "os4_inner_bottom", 0, 0, 0, 0, 200,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_INNER_WHITE = integer(
+                KEY_PREFIX + "os4_inner_white", 0, 0, 0, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_INNER_MIX = integer(
+                KEY_PREFIX + "os4_inner_mix", 0, 0, 0, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_LUMINANCE_AMOUNT = integer(
+                KEY_PREFIX + "os4_luminance_amount", 0, 0, 0, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_LUMINANCE_C0 = integer(
+                KEY_PREFIX + "os4_luminance_c0", 0, 0, 0, -800, 800,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_LUMINANCE_C1 = integer(
+                KEY_PREFIX + "os4_luminance_c1", 0, 0, 0, -800, 800,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_LUMINANCE_C2 = integer(
+                KEY_PREFIX + "os4_luminance_c2", 100, 100, 100, -800, 800,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_LUMINANCE_C3 = integer(
+                KEY_PREFIX + "os4_luminance_c3", 0, 0, 0, -800, 800,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_COLOR_POWER = integer(
+                KEY_PREFIX + "os4_color_power", 100, 100, 100, 10, 400,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_UNSHADE = integer(
+                KEY_PREFIX + "os4_unshade", 0, 0, 0, 0, 100,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OS4_BURN = integer(
+                KEY_PREFIX + "os4_burn", 100, 100, 100, 10, 800,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> PRISMAL_SHADOW_RED = soft(Glass.PRISMAL_SHADOW_RED);
+        public static final ConfigKey<Integer> PRISMAL_SHADOW_GREEN = soft(Glass.PRISMAL_SHADOW_GREEN);
+        public static final ConfigKey<Integer> PRISMAL_SHADOW_BLUE = soft(Glass.PRISMAL_SHADOW_BLUE);
+        public static final ConfigKey<Integer> PRISMAL_SHADOW_ALPHA = soft(Glass.PRISMAL_SHADOW_ALPHA, 0);
+        public static final ConfigKey<Integer> PRISMAL_SHADOW_SOFTNESS = soft(Glass.PRISMAL_SHADOW_SOFTNESS);
+        public static final ConfigKey<Integer> PRISMAL_BACKDROP_SCALE_X = soft(Glass.PRISMAL_BACKDROP_SCALE_X);
+        public static final ConfigKey<Integer> PRISMAL_BACKDROP_SCALE_Y = soft(Glass.PRISMAL_BACKDROP_SCALE_Y);
+        public static final ConfigKey<Integer> PRISMAL_PARALLAX_SCALE = soft(Glass.PRISMAL_PARALLAX_SCALE);
+
+        public static final List<ConfigKey<Integer>> MATERIAL_KEYS = Collections.unmodifiableList(
+                new ArrayList<>(Arrays.asList(
+                        BLUR, THICKNESS, PRISMAL_TRANSMITTANCE, BRIGHTNESS, IOR, DOME,
+                        LENS_REFRACTION, NORMAL_STRENGTH, DEPTH_EFFECT,
+                        PRISMAL_DISPLACEMENT_SCALE, PRISMAL_REFRACTION_INSET,
+                        PRISMAL_EDGE_REFRACTION_FALLOFF, PRISMAL_HEIGHT_TRANSITION_WIDTH,
+                        PRISMAL_SMIN_SMOOTHING, TINT_RED, TINT_GREEN, TINT_BLUE, TINT_ALPHA,
+                        PRISMAL_VIBRANCY, CHROMATIC, PRISMAL_DISPERSION_R,
+                        PRISMAL_DISPERSION_B, HIGHLIGHT_WIDTH, CAUSTICS,
+                        PRISMAL_FRESNEL_REFLECT, PRISMAL_LIGHT_DIR_X, PRISMAL_LIGHT_DIR_Y,
+                        OS4_EDGE_WIDTH_PX, OS4_REFLECT_OFFSET_PX, OS4_REFLECTION_STRENGTH,
+                        OS4_REFLECTION_LIGHTEN, OS4_DIRECTIONAL_ANGLE_RANGE,
+                        OS4_DIRECTIONAL_INTENSITY, OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
+                        OS4_DARKER, OS4_EDGE_POWER, OS4_LIGHT_Z,
+                        OS4_EDGE_AMBIENT, OS4_EDGE_LIGHT_LENGTH,
+                        OS4_BACKGROUND_BLUR_RADIUS, OS4_BACKGROUND_BLUR_MIX,
+                        OS4_DARKER_LOW, OS4_DARKER_HIGH, OS4_BACKGROUND_SATURATION,
+                        OS4_BACKGROUND_BRIGHTNESS, OS4_INNER_BOTTOM, OS4_INNER_WHITE,
+                        OS4_INNER_MIX, OS4_LUMINANCE_AMOUNT, OS4_LUMINANCE_C0,
+                        OS4_LUMINANCE_C1, OS4_LUMINANCE_C2, OS4_LUMINANCE_C3,
+                        OS4_COLOR_POWER, OS4_UNSHADE, OS4_BURN,
+                        PRISMAL_SHADOW_RED, PRISMAL_SHADOW_GREEN, PRISMAL_SHADOW_BLUE,
+                        PRISMAL_SHADOW_ALPHA, PRISMAL_SHADOW_SOFTNESS,
+                        PRISMAL_BACKDROP_SCALE_X, PRISMAL_BACKDROP_SCALE_Y,
+                        PRISMAL_PARALLAX_SCALE)));
+
+        public static ConfigKey<Integer> forBaseKey(String baseKeyName) {
+            if (baseKeyName == null) return null;
+            for (ConfigKey<Integer> key : MATERIAL_KEYS) {
+                if (key.name().substring(KEY_PREFIX.length()).equals(baseKeyName)) return key;
+            }
+            return null;
+        }
+
+        private static ConfigKey<Integer> soft(ConfigKey<Integer> base) {
+            return base.withName(KEY_PREFIX + base.name());
+        }
+
+        private static ConfigKey<Integer> soft(ConfigKey<Integer> base, int defaultValue) {
+            return soft(base, defaultValue, base.minInt(), base.maxInt());
+        }
+
+        private static ConfigKey<Integer> soft(
+                ConfigKey<Integer> base, int defaultValue, int min, int max) {
+            if (defaultValue < min || defaultValue > max) {
+                throw new IllegalArgumentException("Soft-glass default is outside its range: " + base.name());
+            }
+            return ConfigKey.register(REGISTRATION_AUTHORITY, KEY_PREFIX + base.name(),
+                    ConfigKey.Type.INT, defaultValue, defaultValue, defaultValue, min, max,
+                    base.storageMode(), base.exportMode());
+        }
+
+        private SoftGlass() {}
+    }
+
     public static final class Gboard {
         public static final ConfigKey<Boolean> ENABLED = bool(
                 "liquid_gboard_floating_glass", true, true, true,
@@ -605,7 +793,7 @@ public final class ConfigSchema {
                 Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,
                 Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
                 Animation.DISABLE_WALLPAPER_ZOOM);
-        add(keys, Grid.ENABLED, Grid.COLUMNS, Grid.ROWS,
+        add(keys, Grid.ENABLED, Grid.NATIVE_HOOK_SAFETY, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
                 Grid.WIDGET_HORIZONTAL_STRETCH,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
@@ -633,7 +821,7 @@ public final class ConfigSchema {
                 Glass.BACKLIT_ENABLED, Glass.BACKLIT_WIDTH,
                 Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS,
                 Glass.BACKLIT_EXTENT);
-        add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,
+        add(keys, Glass.ENABLED, Glass.SOFT_GLASS_ENABLED, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
                 Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_DISABLE_DIMMING,
@@ -679,6 +867,7 @@ public final class ConfigSchema {
                 Glass.PRISMAL_SHADOW_SOFTNESS, Glass.PRISMAL_TRANSMITTANCE,
                 Glass.PRISMAL_BACKDROP_SCALE_X, Glass.PRISMAL_BACKDROP_SCALE_Y,
                 Glass.PRISMAL_PARALLAX_SCALE, Glass.PRISMAL_SHOW_NORMALS);
+        keys.addAll(SoftGlass.MATERIAL_KEYS);
         add(keys, Gboard.ENABLED, Gboard.BLUR, Gboard.TINT_RED, Gboard.TINT_GREEN,
                 Gboard.TINT_BLUE, Gboard.TINT_ALPHA);
         add(keys, LauncherHighlight.SKY_HAZE, LauncherHighlight.CAUSTICS,

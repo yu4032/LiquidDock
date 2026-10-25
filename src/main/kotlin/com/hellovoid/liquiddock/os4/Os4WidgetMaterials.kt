@@ -20,6 +20,7 @@ object Os4WidgetMaterials {
     private const val SOURCES = "sources_v1"
     private const val PUBLISH_KEY = "publish_key"
     private const val CACHE_PREFIX = "shadow_"
+    private const val TRANSFORM_VERSION = "maml-glass-support-background-blur-v2"
     private const val CE_PREFIX = "/data/user/0/com.miui.home/files/maml/res/"
     private const val DE_PREFIX = "/data/user_de/0/com.miui.home/files/maml/res/"
     private const val SHADOW_DIR = "/data/user_de/0/com.miui.home/files/liquiddock-widget-shadows"
@@ -81,7 +82,7 @@ object Os4WidgetMaterials {
         val active = preferences.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault())
         val glass = active && widgetGlass
         val sourceState = state.getString(SOURCES, "").orEmpty()
-        val fingerprint = sha256(("permissions-v2\n" + sourceState + "\nselected=" + selected.sorted().joinToString("\n") +
+        val fingerprint = sha256(("permissions-v2\ntransform=" + TRANSFORM_VERSION + "\n" + sourceState + "\nselected=" + selected.sorted().joinToString("\n") +
             "\nglass=$glass\nactive=$active").toByteArray())
         if (!force && state.getString(PUBLISH_KEY, null) == fingerprint) return true
         val catalog = app.getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)
@@ -110,7 +111,7 @@ object Os4WidgetMaterials {
             for (source in sourceList) {
                 val paths = selectedPaths[source.sha].orEmpty()
                 if (paths.isEmpty() && !glass) continue
-                val key = sha256((source.sha + "\n" + paths.sorted().joinToString("\n") + "\nglass=$glass").toByteArray())
+                val key = sha256((TRANSFORM_VERSION + "\n" + source.sha + "\n" + paths.sorted().joinToString("\n") + "\nglass=$glass").toByteArray())
                 val shadow = File(cache, "$key.zip")
                 val outputSha = state.getString(CACHE_PREFIX + key, null)
                 if (!shadow.exists() || outputSha == null || sha256(shadow.readBytes()) != outputSha) {

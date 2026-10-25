@@ -478,6 +478,195 @@ internal val liquidAllGroups: List<LiquidSpecGroup> by lazy {
     }
 }
 
+/** Prismal controls that the soft-glass path actually consumes, with independent preference keys. */
+private val softGlassBaseKeys = setOf(
+    ConfigSchema.Glass.BLUR.name(),
+    ConfigSchema.Glass.THICKNESS.name(),
+    ConfigSchema.Glass.PRISMAL_TRANSMITTANCE.name(),
+    ConfigSchema.Glass.BRIGHTNESS.name(),
+    ConfigSchema.Glass.IOR.name(),
+    ConfigSchema.Glass.PRISMAL_REFRACTION_INSET.name(),
+    ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING.name(),
+    ConfigSchema.Glass.TINT_ALPHA.name(),
+    ConfigSchema.Glass.TINT_RED.name(),
+    ConfigSchema.Glass.TINT_GREEN.name(),
+    ConfigSchema.Glass.TINT_BLUE.name(),
+    ConfigSchema.Glass.PRISMAL_VIBRANCY.name(),
+    ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.name(),
+    ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.name(),
+    ConfigSchema.Glass.OS4_REFLECTION_STRENGTH.name(),
+    ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN.name(),
+    ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE.name(),
+    ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY.name(),
+    ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY.name(),
+    ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X.name(),
+    ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y.name(),
+    ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_X.name(),
+    ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y.name(),
+)
+
+internal val softGlassSpecs: List<IntSpec> by lazy {
+    val inherited = liquidSpecs.filter { it.config.name() in softGlassBaseKeys }.map { spec ->
+        val config = requireNotNull(ConfigSchema.SoftGlass.forBaseKey(spec.config.name())) {
+            "Missing independent soft-glass key for ${spec.config.name()}"
+        }
+        spec.copy(
+            config = config,
+            unit = if (spec.config.name() == ConfigSchema.Glass.THICKNESS.name()) "px" else spec.unit,
+            title = when (spec.config.name()) {
+                ConfigSchema.Glass.THICKNESS.name() -> "柔光折射厚度"
+                ConfigSchema.Glass.BRIGHTNESS.name() -> "柔光亮度增量"
+                ConfigSchema.Glass.PRISMAL_REFRACTION_INSET.name() -> "柔光形状边缘内缩"
+                ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING.name() -> "柔光形状圆角平滑"
+                else -> spec.title.replace("OS4 ", "柔光 ")
+            },
+            summary = when (spec.config.name()) {
+                ConfigSchema.Glass.THICKNESS.name() ->
+                    "HyperOS 4 原生折射厚度，直接使用像素，不进行 dp 密度换算"
+                ConfigSchema.Glass.BRIGHTNESS.name() ->
+                    "按 OS4 uBrightness 向颜色通道增加亮度；100 表示增加 1.0，不继承普通模式亮度。OS3 捕获图像为不透明源，默认从 0 开始以免整块裁白"
+                ConfigSchema.Glass.PRISMAL_REFRACTION_INSET.name() ->
+                    "控制 OS3 Prismal 表面轮廓内缩；玻璃尺寸与圆角保持 OS3 几何"
+                ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING.name() ->
+                    "控制 OS3 Prismal SDF 圆角平滑，并供窄边缘光法线采样使用"
+                else -> "仅在柔光玻璃模式生效。${spec.summary}"
+            },
+        )
+    }
+    inherited + listOf(
+        IntSpec(ConfigSchema.SoftGlass.OS4_DARKER, "OS4 暗部压低", "%",
+            summary = "按亮度范围将背景颜色压向 OS4 使用的深紫色"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_EDGE_POWER, "OS4 边缘曲线幂次", "×100",
+            summary = "驱动 mi_ltc 窄边缘光的 SDF；主玻璃折射与反射使用 OS4 固定曲线"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_LIGHT_Z, "OS4 光源 Z", "×100"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_BACKGROUND_BLUR_RADIUS, "OS4 背景模糊尺度", "×1000",
+            summary = "独立生成 uBgColorTex 背景源；0–1000 映射到 OS3 PassBlur 的 0–60px 半径，500 对应 30px"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_BACKGROUND_BLUR_MIX, "OS4 背景层模糊混合", "‰",
+            summary = "混合原始截屏和独立的 OS4 背景模糊源；折射采样仍使用单独的 PassBlur 半径"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_EDGE_AMBIENT, "OS4 边缘环境光", "%"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_EDGE_LIGHT_LENGTH, "OS4 边缘光角度幂次", "×100"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_DARKER_LOW, "OS4 暗部范围起点", "%"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_DARKER_HIGH, "OS4 暗部范围终点", "%"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_BACKGROUND_SATURATION, "OS4 背景饱和度", "%"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_BACKGROUND_BRIGHTNESS, "OS4 背景亮度偏移", "×100",
+            summary = "按 OS4 uBgColorBrightness 乘背景源 alpha 后加到 RGB；OS3 捕获为不透明源，增大后容易裁白"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_INNER_BOTTOM, "OS4 内层底部提亮", "×100"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_INNER_WHITE, "OS4 内层提白", "%"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_INNER_MIX, "OS4 内层混合", "%"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_LUMINANCE_AMOUNT, "OS4 亮度曲线强度", "%"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_LUMINANCE_C0, "OS4 亮度曲线系数 C0", "×100"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_LUMINANCE_C1, "OS4 亮度曲线系数 C1", "×100"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_LUMINANCE_C2, "OS4 亮度曲线系数 C2", "×100"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_LUMINANCE_C3, "OS4 亮度曲线系数 C3", "×100"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_COLOR_POWER, "OS4 颜色幂次", "×100"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_UNSHADE, "OS4 原色保留", "%"),
+        IntSpec(ConfigSchema.SoftGlass.OS4_BURN, "OS4 内层曲线幂次", "×100"),
+    )
+}
+
+internal val softGlassGroups: List<LiquidSpecGroup> by lazy {
+    fun option(key: ConfigKey<Int>) = requireNotNull(softGlassSpecs.singleOrNull {
+        it.config.name() == key.name()
+    })
+
+    fun softOption(base: ConfigKey<Int>) = option(
+        requireNotNull(ConfigSchema.SoftGlass.forBaseKey(base.name())))
+
+    val groups = listOf(
+        LiquidSpecGroup("柔光 · 主体与模糊", listOf(
+            ConfigSchema.Glass.BLUR,
+            ConfigSchema.Glass.THICKNESS,
+            ConfigSchema.Glass.PRISMAL_TRANSMITTANCE,
+        ).map(::softOption)),
+        LiquidSpecGroup("柔光 · 折射与形状", listOf(
+            ConfigSchema.Glass.IOR,
+            ConfigSchema.Glass.PRISMAL_REFRACTION_INSET,
+            ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING,
+        ).map(::softOption)),
+        LiquidSpecGroup("柔光 · 底色与亮度", listOf(
+            ConfigSchema.Glass.TINT_ALPHA,
+            ConfigSchema.Glass.PRISMAL_VIBRANCY,
+            ConfigSchema.Glass.BRIGHTNESS,
+        ).map(::softOption)),
+        LiquidSpecGroup("柔光 · 底色通道", listOf(
+            ConfigSchema.Glass.TINT_RED,
+            ConfigSchema.Glass.TINT_GREEN,
+            ConfigSchema.Glass.TINT_BLUE,
+        ).map(::softOption)),
+        LiquidSpecGroup("柔光 · OS4 折射与反射", listOf(
+            ConfigSchema.Glass.OS4_EDGE_WIDTH_PX,
+            ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX,
+            ConfigSchema.Glass.OS4_REFLECTION_STRENGTH,
+        ).map(::softOption)),
+        LiquidSpecGroup("柔光 · OS4 反射补光", listOf(
+            ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN,
+        ).map(::softOption)),
+        LiquidSpecGroup("柔光 · OS4 方向光", listOf(
+            ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE,
+            ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY,
+            ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
+        ).map(::softOption)),
+        LiquidSpecGroup("柔光 · 方向光位置", listOf(
+            ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X,
+            ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y,
+            ConfigSchema.SoftGlass.OS4_LIGHT_Z,
+        ).map { key ->
+            if (key.name().startsWith(ConfigSchema.SoftGlass.KEY_PREFIX)) option(key)
+            else softOption(key)
+        }),
+        LiquidSpecGroup("柔光 · 背景取样", listOf(
+            ConfigSchema.SoftGlass.OS4_BACKGROUND_BLUR_RADIUS,
+            ConfigSchema.SoftGlass.OS4_BACKGROUND_BLUR_MIX,
+            ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_X,
+            ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y,
+        ).map { key ->
+            if (key.name().startsWith(ConfigSchema.SoftGlass.KEY_PREFIX)) option(key)
+            else softOption(key)
+        }),
+        LiquidSpecGroup("柔光 · OS4 窄边缘光", listOf(
+            ConfigSchema.SoftGlass.OS4_EDGE_POWER,
+            ConfigSchema.SoftGlass.OS4_EDGE_AMBIENT,
+            ConfigSchema.SoftGlass.OS4_EDGE_LIGHT_LENGTH,
+        ).map(::option)),
+        LiquidSpecGroup("柔光 · OS4 暗部处理", listOf(
+            ConfigSchema.SoftGlass.OS4_DARKER,
+            ConfigSchema.SoftGlass.OS4_DARKER_LOW,
+            ConfigSchema.SoftGlass.OS4_DARKER_HIGH,
+        ).map(::option)),
+        LiquidSpecGroup("柔光 · OS4 背景颜色", listOf(
+            ConfigSchema.SoftGlass.OS4_BACKGROUND_SATURATION,
+            ConfigSchema.SoftGlass.OS4_BACKGROUND_BRIGHTNESS,
+        ).map(::option)),
+        LiquidSpecGroup("柔光 · OS4 内层混合", listOf(
+            ConfigSchema.SoftGlass.OS4_INNER_BOTTOM,
+            ConfigSchema.SoftGlass.OS4_INNER_WHITE,
+            ConfigSchema.SoftGlass.OS4_INNER_MIX,
+        ).map(::option)),
+        LiquidSpecGroup("柔光 · OS4 亮度曲线", listOf(
+            ConfigSchema.SoftGlass.OS4_LUMINANCE_AMOUNT,
+            ConfigSchema.SoftGlass.OS4_LUMINANCE_C0,
+            ConfigSchema.SoftGlass.OS4_LUMINANCE_C1,
+        ).map(::option)),
+        LiquidSpecGroup("柔光 · OS4 亮度曲线系数", listOf(
+            ConfigSchema.SoftGlass.OS4_LUMINANCE_C2,
+            ConfigSchema.SoftGlass.OS4_LUMINANCE_C3,
+            ConfigSchema.SoftGlass.OS4_BURN,
+        ).map(::option)),
+        LiquidSpecGroup("柔光 · OS4 最终颜色", listOf(
+            ConfigSchema.SoftGlass.OS4_COLOR_POWER,
+            ConfigSchema.SoftGlass.OS4_UNSHADE,
+        ).map(::option)),
+    )
+    val groupedKeys = groups.flatMap { group -> group.specs.map(IntSpec::key) }
+    require(groupedKeys.size == groupedKeys.toSet().size) {
+        "Every soft-glass setting must appear in exactly one group"
+    }
+    require(groupedKeys.toSet() == softGlassSpecs.map(IntSpec::key).toSet()) {
+        "Every visible soft-glass setting must belong to exactly one group"
+    }
+    groups
+}
+
 internal val strokeSpecs = listOf(
     IntSpec(ConfigSchema.Dock.CORNER_OFFSET, "描边圆角偏移", "dp", null, IntSection.StrokeGeometry),
     IntSpec(ConfigSchema.Dock.STROKE_RED, "描边底色 · 红", "", "dock_stroke", IntSection.StrokeBackground),

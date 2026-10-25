@@ -1,7 +1,12 @@
 package com.hellovoid.liquiddock;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
+import com.hellovoid.liquiddock.config.ConfigKey;
 import com.hellovoid.prismal.PrismalHighlightProfile;
+import com.hellovoid.prismal.PrismalSoftGlassProfile;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /** Immutable, typed runtime configuration. All defaults and unit semantics live here so
  * hooks and renderers do not need to know JSON keys. */
@@ -223,7 +228,7 @@ final class LiquidDockConfig {
     }
 
     static final class Glass {
-        final boolean enabled, securityCenterEnabled, systemUiHandleMenuEnabled,
+        final boolean enabled, softGlassMode, securityCenterEnabled, systemUiHandleMenuEnabled,
                 folderEnabled, openFolderEnabled, widgetEnabled, widgetDarkContent, iconEnabled,
                 functionalDockIconEnabled, recentsCapsuleEnabled;
         final GlassComponentStyle iconStyle;
@@ -240,17 +245,27 @@ final class LiquidDockConfig {
                 prismalDispersionR, prismalDispersionB, prismalVibrancy,
                 os4EdgeWidthPx, os4ReflectOffsetPx, os4ReflectionStrength, os4ReflectionLighten,
                 os4DirectionalAngleRange, os4DirectionalIntensity,
-                os4DirectionalOppositeIntensity,
+                os4DirectionalOppositeIntensity, os4Darker,
                 prismalLightDirX, prismalLightDirY, prismalShadowSoftness, prismalTransmittance,
                 prismalBackdropScaleX, prismalBackdropScaleY, prismalParallaxScale;
         final int tintAlpha, tintR, tintG, tintB,
                 prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;
+        final PrismalSoftGlassProfile softGlassProfile;
         final int passBlurCaptureScalePercent, passBlurRenderFps;
         final int openFolderNativeBlurPercent;
 
         Glass(ConfigReader c) {
             enabled = c.b(ConfigSchema.Glass.ENABLED.name(),
                     ConfigSchema.Glass.ENABLED.runtimeFallback());
+            softGlassMode = c.b(ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+                    ConfigSchema.Glass.SOFT_GLASS_ENABLED.runtimeFallback());
+            if (softGlassMode) c = withSoftGlassProfile(c);
+            os4Darker = softGlassMode
+                    ? clamp(c.i(ConfigSchema.SoftGlass.OS4_DARKER.name(),
+                            ConfigSchema.SoftGlass.OS4_DARKER.runtimeFallback()),
+                            ConfigSchema.SoftGlass.OS4_DARKER.minInt(),
+                            ConfigSchema.SoftGlass.OS4_DARKER.maxInt()) / 100f
+                    : 0f;
             securityCenterEnabled = c.b(ConfigSchema.Glass.SECURITY_CENTER_GLASS.name(),
                     ConfigSchema.Glass.SECURITY_CENTER_GLASS.runtimeFallback());
             systemUiHandleMenuEnabled = c.b(
@@ -358,10 +373,12 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.runtimeFallback()),
                     ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.minInt(),
                     ConfigSchema.Glass.OS4_EDGE_WIDTH_PX.maxInt());
+            ConfigKey<Integer> reflectOffsetKey = softGlassMode
+                    ? ConfigSchema.SoftGlass.OS4_REFLECT_OFFSET_PX
+                    : ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX;
             os4ReflectOffsetPx = clamp(c.i(ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.name(),
-                    ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.runtimeFallback()),
-                    ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.minInt(),
-                    ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX.maxInt());
+                    reflectOffsetKey.runtimeFallback()),
+                    reflectOffsetKey.minInt(), reflectOffsetKey.maxInt());
             os4ReflectionStrength = clamp(c.i(ConfigSchema.Glass.OS4_REFLECTION_STRENGTH.name(),
                     ConfigSchema.Glass.OS4_REFLECTION_STRENGTH.runtimeFallback()),
                     ConfigSchema.Glass.OS4_REFLECTION_STRENGTH.minInt(),
@@ -408,6 +425,55 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE.runtimeFallback()) / 100f;
             prismalShowNormals = c.b(ConfigSchema.Glass.PRISMAL_SHOW_NORMALS.name(),
                     ConfigSchema.Glass.PRISMAL_SHOW_NORMALS.runtimeFallback());
+
+            PrismalSoftGlassProfile.Builder soft = PrismalSoftGlassProfile.builder();
+            soft.edgePower = softValue(c, ConfigSchema.SoftGlass.OS4_EDGE_POWER, 100f);
+            soft.lightZ = softValue(c, ConfigSchema.SoftGlass.OS4_LIGHT_Z, 100f);
+            soft.edgeAmbient = softValue(c, ConfigSchema.SoftGlass.OS4_EDGE_AMBIENT, 100f);
+            soft.edgeLightLength = softValue(c,
+                    ConfigSchema.SoftGlass.OS4_EDGE_LIGHT_LENGTH, 100f);
+            soft.backgroundBlurRadiusPx = softValue(c,
+                    ConfigSchema.SoftGlass.OS4_BACKGROUND_BLUR_RADIUS, 1000f) * 60f;
+            soft.backgroundBlurMix = softValue(c,
+                    ConfigSchema.SoftGlass.OS4_BACKGROUND_BLUR_MIX, 1000f);
+            soft.darkerLow = softValue(c, ConfigSchema.SoftGlass.OS4_DARKER_LOW, 100f);
+            soft.darkerHigh = softValue(c, ConfigSchema.SoftGlass.OS4_DARKER_HIGH, 100f);
+            soft.backgroundSaturation = softValue(c,
+                    ConfigSchema.SoftGlass.OS4_BACKGROUND_SATURATION, 100f);
+            soft.backgroundBrightness = softValue(c,
+                    ConfigSchema.SoftGlass.OS4_BACKGROUND_BRIGHTNESS, 100f);
+            soft.innerBottom = softValue(c, ConfigSchema.SoftGlass.OS4_INNER_BOTTOM, 100f);
+            soft.innerWhite = softValue(c, ConfigSchema.SoftGlass.OS4_INNER_WHITE, 100f);
+            soft.innerMix = softValue(c, ConfigSchema.SoftGlass.OS4_INNER_MIX, 100f);
+            soft.luminanceAmount = softValue(c,
+                    ConfigSchema.SoftGlass.OS4_LUMINANCE_AMOUNT, 100f);
+            soft.luminanceC0 = softValue(c, ConfigSchema.SoftGlass.OS4_LUMINANCE_C0, 100f);
+            soft.luminanceC1 = softValue(c, ConfigSchema.SoftGlass.OS4_LUMINANCE_C1, 100f);
+            soft.luminanceC2 = softValue(c, ConfigSchema.SoftGlass.OS4_LUMINANCE_C2, 100f);
+            soft.luminanceC3 = softValue(c, ConfigSchema.SoftGlass.OS4_LUMINANCE_C3, 100f);
+            soft.colorPower = softValue(c, ConfigSchema.SoftGlass.OS4_COLOR_POWER, 100f);
+            soft.unshade = softValue(c, ConfigSchema.SoftGlass.OS4_UNSHADE, 100f);
+            soft.burn = softValue(c, ConfigSchema.SoftGlass.OS4_BURN, 100f);
+            softGlassProfile = soft.build();
+        }
+
+        private static float softValue(ConfigReader c, ConfigKey<Integer> key, float divisor) {
+            int raw = clamp(c.i(key.name(), key.runtimeFallback()),
+                    key.minInt(), key.maxInt());
+            return raw / Math.max(1f, divisor);
+        }
+
+        private static ConfigReader withSoftGlassProfile(ConfigReader source) {
+            Map<String, Object> aliases = new HashMap<>();
+            for (com.hellovoid.liquiddock.config.ConfigKey<Integer> softKey
+                    : ConfigSchema.SoftGlass.MATERIAL_KEYS) {
+                String baseKey = softKey.name().substring(ConfigSchema.SoftGlass.KEY_PREFIX.length());
+                Object value = source.value(softKey.name());
+                aliases.put(baseKey, value != null ? value : softKey.runtimeFallback());
+                Object tenths = source.value(softKey.name() + "_tenths");
+                if (tenths != null) aliases.put(baseKey + "_tenths", tenths);
+            }
+            return source.withOverrides(aliases);
         }
     }
 

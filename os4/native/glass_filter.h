@@ -6,15 +6,17 @@
 #include "native_glass_apply.h"
 #include "native_glass_fingerprints.h"
 static void *g_orig_glass_filter __attribute__((used));
-static int g_native_glass_engine_verified;
+static int g_native_glass_engine_ready;
 static void ld_prepare_native_glass(void)
 {
     static const unsigned char expected[32]={0x7f,0x88,0xd7,0xf4,0xd9,0xa4,0x64,0xfd,0xd5,0x6f,0xb2,0x55,0x64,0x2c,0x9d,0x30,0x0f,0x28,0xf5,0x02,0x72,0xcc,0xf5,0xfd,0x31,0xf0,0x82,0xc1,0xa5,0x2e,0x17,0xf4};
     const char *path="/system_ext/lib64/libhyper_os_flutter.so";
     unsigned char digest[32];struct stat st;
-    g_native_glass_engine_verified=stat(path,&st)==0 && st.st_size==18815256
-        && ld_sha256_region(path,0,18815256,digest) && !memcmp(digest,expected,32);
-    ld_blog("native glass engine verified=%d; sparse overrides=%llx; stock shaders/capture",g_native_glass_engine_verified,(unsigned long long)g_home_options.native_glass.mask);
+    g_native_glass_engine_ready=!g_home_options.hook_safety_enabled ||
+        (stat(path,&st)==0 && st.st_size==18815256
+        && ld_sha256_region(path,0,18815256,digest) && !memcmp(digest,expected,32));
+    ld_blog("native glass engine ready=%d safety=%d; sparse overrides=%llx; stock shaders/capture",
+        g_native_glass_engine_ready,g_home_options.hook_safety_enabled,(unsigned long long)g_home_options.native_glass.mask);
 }
 static int ld_native_glass_write(const uintptr_t *addresses,const float *values,size_t count)
 {
@@ -24,14 +26,16 @@ static int ld_native_glass_write(const uintptr_t *addresses,const float *values,
 }
 __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context *c)
 {
-    if(!g_hook_pin_ok || !g_home_options.glass_enabled || !g_native_glass_engine_verified || !g_home_options.native_glass.mask) return;
+    if(!g_hook_pin_ok || !g_home_options.glass_enabled || !g_native_glass_engine_ready || !g_home_options.native_glass.mask) return;
+    int strict=g_home_options.hook_safety_enabled;
     uintptr_t holder=0,filter=0,vt=0;
     if(!ld_read_heap(c->x[29]-0x70,&holder,8) || !ld_read_heap(holder+0x30,&filter,8) || !ld_read_heap(filter,&vt,8)) return;
     Dl_info info={0};
-    if(!dladdr((void *)vt,&info) || vt-(uintptr_t)info.dli_fbase!=0x1180c08) return;
+    if(!dladdr((void *)vt,&info) || (strict && (vt<(uintptr_t)info.dli_fbase
+            || vt-(uintptr_t)info.dli_fbase!=0x1180c08))) return;
     static uintptr_t verified_base;
     uintptr_t base=(uintptr_t)info.dli_fbase;
-    if(__atomic_load_n(&verified_base,__ATOMIC_ACQUIRE)!=base) {
+    if(strict && __atomic_load_n(&verified_base,__ATOMIC_ACQUIRE)!=base) {
         unsigned char live[sizeof ld_native_glass_engine_words];
         if(!ld_read_heap(base+0xe878c4,live,sizeof live) || memcmp(live,ld_native_glass_engine_words,sizeof live)) return;
         __atomic_store_n(&verified_base,base,__ATOMIC_RELEASE);

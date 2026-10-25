@@ -6,8 +6,9 @@
 #include <string.h>
 #include <stddef.h>
 
-/* Four verified Dart AOT pipeline entry observers; read-only, exact register
- * preservation, no allocation and no actual material/config mutation. */
+/* Four Dart AOT pipeline observers; strict safety mode checks their exact
+ * function bodies. They preserve registers, allocate nothing and do not mutate
+ * material or config. */
 static volatile unsigned g_os4_pipeline_counts[4] __attribute__((used));
 static unsigned g_os4_pipeline_mask;
 static void *g_os4_trace_light_original __attribute__((used));

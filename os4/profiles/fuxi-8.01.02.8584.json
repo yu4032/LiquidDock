@@ -1,0 +1,149 @@
+{
+  "elf_sha256": "93e511989202a70d38b8231c3133167b830ca7609b61ba6ad133898737d0e0ef",
+  "targets": [
+    {
+      "name": "PadRowColHandler.handle",
+      "vaddr": "0x1a84cfc",
+      "size": 344,
+      "sha256": "5fe5b1ddf95d83b707cb6b0a76bbb061692452cce5ed0e28c51f4c15b0ebbbff"
+    },
+    {
+      "name": "CellLayoutGetxController.changeCellCount",
+      "vaddr": "0xa532a8",
+      "size": 932,
+      "sha256": "7916c63cea2a2fc29e8e1da57c099711cf44ccabe450dd933d48432195dafe62"
+    },
+    {
+      "name": "LauncherModel.deleteItemDatabase",
+      "vaddr": "0x918fe0",
+      "size": 132,
+      "sha256": "131614b140cbcfa0cbe0a8204e2803d9218475d3ec40563a56e74777d8b7c443"
+    },
+    {
+      "name": "RustLibApiImpl.sse_encode_list_item_info",
+      "vaddr": "0x8effa4",
+      "size": 224,
+      "sha256": "64ca71a45ac80f7ee381450f659ce9e7d72f41ec41ff72cc48e1ccdc9eacf93a"
+    },
+    {
+      "name": "LauncherModel.updateItemDatabase",
+      "vaddr": "0x8e340c",
+      "size": 132,
+      "sha256": "f39ed7854a7a88fce66d7e798f0e19bb955835a0e52fe85b33c2558f94eabec6"
+    },
+    {
+      "name": "ItemDataProcessor.processItems",
+      "vaddr": "0x15e91b4",
+      "size": 9476,
+      "sha256": "62816fb59a4aaddb498f37ea53fbd08431ee06bcb82ee178b22d694452f869b7"
+    },
+    {
+      "name": "LayoutDropRuleForSwapPlaces.isLegalXY",
+      "vaddr": "0x18c8f44",
+      "size": 96,
+      "sha256": "ec741341443d7b220c9311b82e9b2f38ee013d33dcf8ed9b36ba993f5fedfb45"
+    },
+    {
+      "name": "GridController._filterActiveGridConfig",
+      "vaddr": "0x8d39a4",
+      "size": 728,
+      "sha256": "7e33ccb7be8d2dd85fc641f8ff57350b697bf6cefec8e607158ba6b0ae1c6629"
+    },
+    {
+      "name": "GridOccupancyController._processScreenList",
+      "vaddr": "0x8f02c0",
+      "size": 2192,
+      "sha256": "2b1eef8a8a4b523c075c6733f170994f933b1289ba4689ce6a1e3bd4f55c3cab"
+    },
+    {
+      "name": "CellLayoutGetxController._usesNoVacantMode",
+      "vaddr": "0x8ecc10",
+      "size": 48,
+      "sha256": "36b5e96af51b6639d510a6294931bc5a17f8ef1813caa4cb614998fc5817905a"
+    },
+    {
+      "name": "GridOccupancyController.onOrientationChanged",
+      "vaddr": "0x8ef670",
+      "size": 1336,
+      "sha256": "b84c95dea15643c0d1d83be73fb4a08d538f64f70d5c76517d2ec237a9ae9c14"
+    },
+    {
+      "name": "GridController.padIndicatorSpacing code window",
+      "vaddr": "0x15373e4",
+      "size": 1408,
+      "sha256": "6de9af45639fa2f6318c543df961c0075a5fffe326c9a825aa8095e3d2f0a34d"
+    },
+    {
+      "name": "_HotseatWidgetPadState._recomputeDockBgParams",
+      "vaddr": "0x1408534",
+      "size": 1856,
+      "sha256": "e6dac288ae9a57754e93931d4cfe7240bfc245856e66e7042400801ad3ae523d"
+    },
+    {
+      "name": "_HotseatWidgetPadState._defaultIconSize",
+      "vaddr": "0x9c5890",
+      "size": 148,
+      "sha256": "5d69895bc0e5e2c8467ecdd39b4bb4f192184e26548e673b19555879813fdeb0"
+    },
+    {
+      "name": "HotseatLayoutCalculator.calculate",
+      "vaddr": "0x9c5594",
+      "size": 588,
+      "sha256": "7339d4a5ea18e6269774bb16c1ac7a92b2811ef7497f36c19681869f8d3dabf0"
+    },
+    {
+      "name": "HotSeatsConstants2.calcScaledIconSize",
+      "vaddr": "0xaa95dc",
+      "size": 236,
+      "sha256": "d358094d9ca12a648ec268ab0cfe8cb1a28803dd08577e8a3ff2d5edd1f03a68"
+    },
+    {
+      "name": "DockBoundsReporter._flushPending code window",
+      "vaddr": "0x118dab0",
+      "size": 1332,
+      "sha256": "f7688ed2d7bb9a6ced2e0320386d37a90ec97c596c649adc3abd377a87ff2423"
+    },
+    {
+      "name": "GridController.hotSeatsMarginBottom",
+      "vaddr": "0xa86e1c",
+      "size": 108,
+      "sha256": "683107e0e97b8e901adb059a1124629da148267547b1b5b9293b634182d738ca"
+    },
+    {
+      "name": "ComputePipeline.compute",
+      "vaddr": "0x199758c",
+      "size": 876,
+      "sha256": "245cfafc883c152a532ea31538b48c3f52a8a28b40989c72999e75f5a1cf8090"
+    },
+    {
+      "name": "WidgetContainerWidget.widgetContainerWidth",
+      "vaddr": "0x118792c",
+      "size": 608,
+      "sha256": "d5773dd7696b95e18b6a0186ecf50ab51fb650fb686952ab196be31bb3acaa6c"
+    },
+    {
+      "name": "_ImageFilter.__initGlassV7$Method$FfiNative",
+      "vaddr": "0x1ba9914",
+      "size": 1208,
+      "sha256": "c1e67a34e3e4cbe2f0d7d32ae022178e31c366b4746ad773d571a5f91f00828f"
+    },
+    {
+      "name": "ShortcutIconWidget._addFolderBgAnim closure",
+      "vaddr": "0x1786e18",
+      "size": 796,
+      "sha256": "9b3152ff0e62a3abcb728606f4e741bdc3cb158c8d0e61c31fcaca8a358b1f6b"
+    },
+    {
+      "name": "ShortCutCommonWidgetMixin.buildBackground closure",
+      "vaddr": "0x14e9b78",
+      "size": 804,
+      "sha256": "da153414a2d700be00dd40780c410cc53962f0be336c98b85f945fd05f21b740"
+    },
+    {
+      "name": "SfAnimConfig._checkSystemSupport",
+      "vaddr": "0xa06648",
+      "size": 136,
+      "sha256": "d2e557f5f27f09a06a442b0b1f5c99e406fff38d32c413162fd91dfd28097f0e"
+    }
+  ]
+}

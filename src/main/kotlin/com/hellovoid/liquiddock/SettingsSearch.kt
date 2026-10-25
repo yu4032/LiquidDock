@@ -73,6 +73,7 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
     number(Page.Recents, recentsBlurSpec)
 
     listOf(
+        Page.SoftGlass to softGlassSpecs,
         Page.LiquidMaterial to liquidMaterialSpecs,
         Page.LiquidRefraction to liquidRefractionSpecs,
         Page.LiquidColor to liquidColorSpecs,
@@ -111,7 +112,7 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
     options(Page.DockBehavior, "Dock 自定义", "隐藏手机互联图标", "Dock 尺寸动画", "LiquidDock 顺滑尺寸动画")
     options(Page.Divider, "自定义 Dock 分隔线")
     options(Page.Recents, "禁用壁纸缩放", "取消壁纸压暗")
-    options(Page.Liquid, "启用液态玻璃", "Dock 帧同步")
+    options(Page.Liquid, "启用液态玻璃", "柔光玻璃", "Dock 帧同步")
     options(Page.LiquidSampling, "OS4 法线与方向光可视化")
     options(Page.GlassIcons, "图标玻璃", "仅 Dock 功能图标玻璃", "多任务操作按钮玻璃")
     options(Page.GlassWidgets, "小部件玻璃", "小组件深色内容适配", "切换部件白化")

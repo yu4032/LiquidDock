@@ -5,7 +5,7 @@
 #include <string.h>
 #include "dart_heap.h"
 /* Call once for the newly constructed GridConfig at ComputePipeline.compute
- * +0x33c (8583 vaddr 0x1998494), before AsyncReturn. The parent observer first
+ * +0x33c (captured 8584 vaddr 0x19978c8), before AsyncReturn. The parent observer first
  * reads the full variables pointer at saved x29-0x18 and initializes grid+0x8f
  * with its low 32 bits, exactly as the displaced load/store will do again.
  * The 16-byte patch ends before the slow-path entry 0x19984a4, which remains

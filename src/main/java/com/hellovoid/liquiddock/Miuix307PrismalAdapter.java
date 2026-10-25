@@ -39,6 +39,7 @@ final class Miuix307PrismalAdapter {
         b.os4DirectionalAngleRange = p.os4DirectionalAngleRange;
         b.os4DirectionalIntensity = p.os4DirectionalIntensity;
         b.os4DirectionalOppositeIntensity = p.os4DirectionalOppositeIntensity;
+        b.os4Darker = p.os4Darker;
         b.lightDirX = p.lightDirX;
         b.lightDirY = p.lightDirY;
         b.causticIntensity = p.causticIntensity;
@@ -56,6 +57,8 @@ final class Miuix307PrismalAdapter {
         b.shadowG = p.shadowG;
         b.shadowB = p.shadowB;
         b.shadowA = p.shadowA;
+        b.softGlassMode = p.softGlassMode;
+        b.softGlassProfile = p.softGlassProfile;
         b.showNormals = p.showNormals;
         return b.build();
     }

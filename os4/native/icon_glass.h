@@ -16,6 +16,9 @@ static void *g_orig_icon_glass_radius;
 static int g_icon_glass_installed;
 static int g_icon_glass_radius_installed;
 static void *g_orig_icon_glass_flight;
+static volatile unsigned g_icon_glass_flag_calls;
+static volatile unsigned g_icon_glass_radius_calls;
+static int g_icon_glass_state_logged;
 
 /* Dart's local Hero flight carries the native glass background with the icon.
  * The SF bitmap flight only contains the resource image. Select local mode at
@@ -42,11 +45,11 @@ static uintptr_t ld_icon_decode_compressed(struct ld_dart_context *c,uint32_t va
     return (uintptr_t)value+(c->x[28]<<32);
 }
 
-static int ld_icon_owner_cid(uintptr_t object,uint32_t cid)
+static uint32_t ld_icon_owner_class_id(uintptr_t object)
 {
     uint64_t header=0;
-    if(!object || object<1 || !ld_read_heap(object-1,&header,sizeof header)) return 0;
-    return (uint32_t)((header>>12)&0xfffff)==cid;
+    if(!object || object<1 || !ld_read_heap(object-1,&header,sizeof header)) return UINT32_MAX;
+    return (uint32_t)((header>>12)&0xfffff);
 }
 
 __attribute__((used)) static void ld_icon_force_folder_flag(struct ld_dart_context *c)
@@ -56,9 +59,14 @@ __attribute__((used)) static void ld_icon_force_folder_flag(struct ld_dart_conte
     if(!ld_read_heap((uintptr_t)c->x[29]-8,&ref,sizeof ref)) return;
     uintptr_t context=ld_icon_decode_compressed(c,ref);
     uintptr_t owner=ld_heap_pointer(c,context,0x0f);
-    if(!ld_icon_owner_cid(owner,8307)) return;
+    uint32_t cid=ld_icon_owner_class_id(owner);
+    unsigned call=__atomic_add_fetch(&g_icon_glass_flag_calls,1,__ATOMIC_RELAXED);
+    if(call<=4) ld_blog("icon glass flag callback call=%u context=%llx owner=%llx cid=%u expected=8306",
+            call,(unsigned long long)context,(unsigned long long)owner,cid);
+    if(cid!=8306) return;
     /* x0 is the boolean returned at this call boundary; do not mutate heap. */
     c->x[0]=c->x[22]+0x20u;
+    if(call<=4) ld_blog("icon glass flag applied to Launcher class id 8306");
 }
 
 __attribute__((used)) static void ld_icon_adjust_native_size(struct ld_dart_context *c)
@@ -69,7 +77,7 @@ __attribute__((used)) static void ld_icon_adjust_native_size(struct ld_dart_cont
     if(!ld_read_heap((uintptr_t)c->x[29]-8,&ref,sizeof ref)) return;
     uintptr_t context=ld_icon_decode_compressed(c,ref);
     uintptr_t owner=ld_heap_pointer(c,context,0x0f);
-    if(!ld_icon_owner_cid(owner,8307)) return;
+    if(ld_icon_owner_class_id(owner)!=8306) return;
     /* At this exact instruction boundary the next original instructions reload
      * d1/d0 from these two fp slots. Patch the source doubles so the trampoline
      * cannot overwrite the adjustment with its replayed loads. */
@@ -97,9 +105,15 @@ __attribute__((used)) static void ld_icon_adjust_radius(struct ld_dart_context *
     if(!new_context) return;
     uintptr_t original_context=ld_heap_pointer(c,new_context,0x0b);
     uintptr_t owner=ld_heap_pointer(c,original_context,0x0f);
-    if(!ld_icon_owner_cid(owner,8307)) return;
+    uint32_t cid=ld_icon_owner_class_id(owner);
+    unsigned call=__atomic_add_fetch(&g_icon_glass_radius_calls,1,__ATOMIC_RELAXED);
+    if(call<=4) ld_blog("icon glass radius callback call=%u context=%llx original=%llx owner=%llx cid=%u expected=8306",
+            call,(unsigned long long)new_context,(unsigned long long)original_context,
+            (unsigned long long)owner,cid);
+    if(cid!=8306) return;
     double radius=g_home_options.glass_icon_corner;
     memcpy(c->q[0],&radius,sizeof radius);
+    if(call<=4) ld_blog("icon glass radius applied %.1f to Launcher class id 8306",radius);
 }
 
 LD_DART_OBSERVER(repl_icon_glass_enabled,ld_icon_force_folder_flag,g_orig_icon_glass_enabled)

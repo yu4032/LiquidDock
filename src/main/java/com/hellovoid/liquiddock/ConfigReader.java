@@ -59,6 +59,8 @@ public class ConfigReader {
         return new ConfigReader(combined);
     }
 
+    Object value(String key) { return prefs.get(key); }
+
     public boolean has(String key) { return prefs.containsKey(key); }
 
     public String s(String key, String def) {

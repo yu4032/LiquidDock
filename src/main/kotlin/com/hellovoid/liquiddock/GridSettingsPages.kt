@@ -33,6 +33,7 @@ internal fun GridPage(
     masterEnabled: Boolean,
     open: (Page) -> Unit,
 ) {
+    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     val customGridRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Grid.ENABLED.name()] ?: 0
     var customGrid by remember(customGridRevision) {
         mutableStateOf(
@@ -65,6 +66,15 @@ internal fun GridPage(
                     "允许 2×2 到 10×10 的工作区布局；全屏居中、分屏跟随系统 pane 对齐；重启桌面生效",
                     masterEnabled,
                 ) { customGrid = it }
+                if (os4Launcher) {
+                    BooleanSetting(
+                        prefs,
+                        ConfigSchema.Grid.NATIVE_HOOK_SAFETY,
+                        "OS4 Hook 安全校验",
+                        "开启时校验完整 Launcher 与 Hook 函数；关闭时按 AOT 符号地址直接安装。关闭校验适用于当前地址配置，系统更新后可能崩溃；重启桌面生效。",
+                        masterEnabled,
+                    )
+                }
             }
         }
         gridEntries.forEach { entry ->

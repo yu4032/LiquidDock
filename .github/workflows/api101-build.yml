@@ -51,12 +51,56 @@ jobs:
           fi
       - name: Unit + debug assembly
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      - name: Package installable OS4 debug APK
+        if: github.ref == 'refs/heads/liquiddock4' || github.head_ref == 'liquiddock4'
+        shell: bash
+        run: |
+          set -euo pipefail
+          NDK_VERSION=28.2.13676358
+          NDK="$ANDROID_HOME/ndk/$NDK_VERSION"
+          if [[ ! -d "$NDK" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+            [[ -n "$SDKMANAGER" ]] || { echo 'Android SDK manager unavailable' >&2; exit 1; }
+            "$SDKMANAGER" --install "ndk;$NDK_VERSION" >/dev/null
+          fi
+          ANDROID_NDK_HOME="$NDK" bash os4/native/build.sh
+
+          shopt -s nullglob
+          APKS=(build/outputs/apk/debug/*.apk)
+          [[ "${#APKS[@]}" -eq 1 ]] || { echo "Expected exactly one debug APK" >&2; exit 1; }
+          TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          [[ -x "$TOOLS/apksigner" ]] || { echo "apksigner not found" >&2; exit 1; }
+          "$TOOLS/apksigner" sign --help | grep -F -q -- '--alignment-preserved'
+          python3 os4/tools/package_native.py \
+            "${APKS[0]}" os4/out/libliquiddock4.so os4/out/LiquidDock4-unsigned.apk
+          "$TOOLS/apksigner" sign \
+            --ks signing/hellovoid-debug.keystore \
+            --ks-key-alias hellovoid-debug \
+            --ks-pass pass:hellovoid-debug \
+            --key-pass pass:hellovoid-debug \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --alignment-preserved true \
+            --out os4/out/LiquidDock4-fuxi-debug.apk \
+            os4/out/LiquidDock4-unsigned.apk
+          "$TOOLS/apksigner" verify --verbose --print-certs os4/out/LiquidDock4-fuxi-debug.apk
+          python3 os4/tools/verify_installer.py \
+            os4/out/LiquidDock4-fuxi-debug.apk os4/out/libliquiddock4.so
       - uses: actions/upload-artifact@v4
+        if: github.ref != 'refs/heads/liquiddock4' && github.head_ref != 'liquiddock4'
         with:
           name: LiquidDock-api101-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/liquiddock4' || github.head_ref == 'liquiddock4'
+        with:
+          name: LiquidDock4-fuxi-debug-${{ github.sha }}
+          path: os4/out/LiquidDock4-fuxi-debug.apk
+          if-no-files-found: error
+          retention-days: 5
+          compression-level: 0
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-build-source

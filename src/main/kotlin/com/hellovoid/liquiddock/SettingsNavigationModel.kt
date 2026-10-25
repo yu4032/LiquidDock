@@ -28,6 +28,7 @@ internal enum class Page(val titleRes: Int) {
     Recents(R.string.page_recents),
 
     Liquid(R.string.page_liquid),
+    SoftGlass(R.string.page_soft_glass),
     LiquidMaterial(R.string.page_liquid_material),
     LiquidRefraction(R.string.page_liquid_refraction),
     LiquidColor(R.string.page_liquid_color),

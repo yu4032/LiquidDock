@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Portable out-of-tree build for the attested OS4 native backend.
+# Portable out-of-tree build for the OS4 native backend.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"

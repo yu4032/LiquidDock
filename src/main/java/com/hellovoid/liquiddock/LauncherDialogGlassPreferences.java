@@ -62,7 +62,8 @@ final class LauncherDialogGlassPreferences {
             float dimAmount) {
         PrismalParams source = Miuix307PrismalAdapter.toPortable(
                 Miuix307PrismalMaterial.fromConfig(base, density));
-        Appearance resolved = appearance != null ? appearance : resolve(null, base);
+        Appearance resolved = appearance != null && (base == null || !base.softGlassMode)
+                ? appearance : resolve(null, base);
         PrismalParams.Builder out = PrismalParams.builder(source);
         out.blurRadiusPx = resolved.blur;
         out.tintR = resolved.tintR / 255f;

@@ -69,6 +69,24 @@ internal fun LiquidPage(
         if (os4Launcher) {
             os4NativeGlassSettings(prefs, masterEnabled && liquidGlass)
         } else {
+            item(key = "soft-glass-mode") {
+                SettingsCard {
+                    BooleanSetting(
+                        prefs,
+                        ConfigSchema.Glass.SOFT_GLASS_ENABLED,
+                        "柔光玻璃",
+                        "替换所有 LiquidDock 液态玻璃表面的共享材质参数；普通液态玻璃参数单独保留。",
+                        masterEnabled && liquidGlass,
+                    )
+                    ModernListDivider()
+                    ArrowPreference(
+                        title = stringResource(R.string.page_soft_glass),
+                        summary = "独立调整柔光材质、折射、色彩、方向光与阴影参数",
+                        enabled = masterEnabled && liquidGlass,
+                        onClick = { open(Page.SoftGlass) },
+                    )
+                }
+            }
             liquidEntries.forEach { entry ->
                 item {
                     ModernFeatureCard(
@@ -112,6 +130,25 @@ internal fun LiquidPage(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun SoftGlassSettingsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    DenseSettingsList(
+        padding = padding,
+        title = stringResource(R.string.page_soft_glass),
+        summary = "此页只保存柔光玻璃参数。可先调整后再开启柔光模式；关闭柔光后恢复普通液态玻璃参数。",
+    ) {
+        groupedLiquidSettings(softGlassGroups, prefs, masterEnabled && liquidEnabled)
     }
 }
 

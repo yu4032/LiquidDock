@@ -24,9 +24,12 @@ final class LiveGlassConfigState {
     private static final String TAG = "[DC][LiveConfig]";
     private static Handler mainHandler;
     private static final AtomicBoolean FRAME_PENDING = new AtomicBoolean();
-    private static final Set<String> GLASS_KEYS = Collections.unmodifiableSet(new HashSet<>(
-            Arrays.asList(
+    private static final Set<String> GLASS_KEYS = glassKeys();
+
+    private static Set<String> glassKeys() {
+        Set<String> keys = new HashSet<>(Arrays.asList(
                     ConfigSchema.Glass.ENABLED.name(),
+                    ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
                     ConfigSchema.Glass.SECURITY_CENTER_GLASS.name(),
                     ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name(),
                     ConfigSchema.Glass.ICON_GLASS.name(),
@@ -99,7 +102,14 @@ final class LiveGlassConfigState {
                     ConfigSchema.LauncherHighlight.PRESS_GLOW.name(),
                     ConfigSchema.LauncherHighlight.LARGE_SKY_HAZE.name(),
                     ConfigSchema.LauncherHighlight.LARGE_CAUSTICS.name(),
-                    ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW.name())));
+                    ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW.name()));
+        for (com.hellovoid.liquiddock.config.ConfigKey<Integer> key
+                : ConfigSchema.SoftGlass.MATERIAL_KEYS) {
+            keys.add(key.name());
+        }
+        return Collections.unmodifiableSet(keys);
+    }
+
     private static final Set<String> EFFECT_KEYS = effectKeys();
 
     private static Set<String> effectKeys() {

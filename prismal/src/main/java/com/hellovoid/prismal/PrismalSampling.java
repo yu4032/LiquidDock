@@ -38,15 +38,19 @@ public final class PrismalSampling {
         float dispersion = Math.max(Math.abs(p.dispersionR), Math.abs(p.dispersionB));
         float chromatic = Math.abs(p.chromaticAberration) * 0.0018f
                 * dispersion * pxNorm * axis;
-        // The OS4 reflection offset is measured in logical output pixels. Its shader factor
-        // 2 * N.xy * N.z has magnitude at most one, so the selected offset is the exact
-        // additional reach; zero retains the automatic/default reflection budget.
-        float reflection = Math.max(56f * pxNorm, Math.max(0f, p.os4ReflectOffsetPx));
+        // OS4's refract vector reaches at most 2 * thicknessPx; its separate reflection
+        // vector reaches reflectOffsetPx because |2*N.xy*N.z| <= 1. Include both before
+        // the existing PassBlur kernel margin so the expanded capture never clamps them.
+        float reflection = p.softGlassMode
+                ? Math.max(0f, p.os4ReflectOffsetPx)
+                : Math.max(56f * pxNorm, Math.max(0f, p.os4ReflectOffsetPx));
+        float softRefraction = p.softGlassMode ? 2f * Math.abs(p.glassThicknessPx) : 0f;
         float blur = BLUR_KERNEL_RADIUS / BLUR_FBO_SCALE;
 
         return Math.max(0, (int) Math.ceil(
-                scaleExpansion + lens + parallax + snell + bulge
-                        + chromatic + reflection + blur + 2f));
+                scaleExpansion + (p.softGlassMode ? softRefraction
+                        : lens + parallax + snell + bulge + chromatic)
+                        + reflection + blur + 2f));
     }
 
     private static float smoothstep(float edge0, float edge1, float x) {

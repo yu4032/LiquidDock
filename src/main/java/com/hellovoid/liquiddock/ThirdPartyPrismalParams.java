@@ -8,6 +8,7 @@ final class ThirdPartyPrismalParams {
 
     static PrismalParams apply(PrismalParams base, ThirdPartyGlassAppearance appearance) {
         if (base == null || appearance == null) return base;
+        if (base.softGlassMode) return PrismalParams.builder(base).build();
         PrismalParams.Builder b = PrismalParams.builder();
         b.ior = base.ior;
         b.glassThicknessPx = base.glassThicknessPx;
@@ -34,6 +35,7 @@ final class ThirdPartyPrismalParams {
         b.os4DirectionalAngleRange = base.os4DirectionalAngleRange;
         b.os4DirectionalIntensity = base.os4DirectionalIntensity;
         b.os4DirectionalOppositeIntensity = base.os4DirectionalOppositeIntensity;
+        b.os4Darker = base.os4Darker;
         b.lightDirX = base.lightDirX;
         b.lightDirY = base.lightDirY;
         b.causticIntensity = base.causticIntensity;
@@ -56,6 +58,8 @@ final class ThirdPartyPrismalParams {
         b.glowCenterX = base.glowCenterX;
         b.glowCenterY = base.glowCenterY;
         b.glowStrength = base.glowStrength;
+        b.softGlassMode = base.softGlassMode;
+        b.softGlassProfile = base.softGlassProfile;
         b.showNormals = base.showNormals;
         return b.build();
     }

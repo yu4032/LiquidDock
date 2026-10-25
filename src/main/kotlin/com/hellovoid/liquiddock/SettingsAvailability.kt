@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.os.Build
 import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
@@ -56,9 +55,8 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.GlassIcons, Page.GlassWidgets, Page.WidgetComponents,
         )
 
-        /** Detect AOT desktop independently of its build number (unknown builds fail closed). */
+        /** Detect the AOT desktop independently of its release and SDK version. */
         fun detect(context: Context): SettingsAvailability {
-            if (Build.VERSION.SDK_INT < 36) return SettingsAvailability(false)
             val isAot = runCatching {
                 val info = context.packageManager.getApplicationInfo("com.miui.home", 0)
                 (info.flags and ApplicationInfo.FLAG_HAS_CODE) == 0

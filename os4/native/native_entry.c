@@ -36,8 +36,8 @@
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
 #define LD_LAYOUT_MANAGED_MARKER \
     "/data/user_de/0/com.miui.home/files/liquiddock-layout-managed-v1"
-#define LD_PAD_ROWCOL_VADDR 0x1a88188u
-#define LD_FILTER_VADDR 0x8d26c0u
+#define LD_PAD_ROWCOL_VADDR 0x1a84cfcu
+#define LD_FILTER_VADDR 0x8d39a4u
 
 static volatile int g_grid_cols;
 static volatile int g_grid_rows;
@@ -56,6 +56,7 @@ static int g_hook_pin_ok=1;
 static void (*g_orig_rust_orientation)(void *);
 
 #include "icon_glass.h"
+static bool executable_range(uintptr_t address, size_t size);
 #include "maml_widget_materials.h"
 
 void ld_blog(const char *fmt, ...)
@@ -187,10 +188,10 @@ static bool executable_range(uintptr_t address, size_t size)
     return ok;
 }
 
-/* Authenticate the entire APK entry before any inline patch or sidecar mutation. */
+/* Optional strict-mode authentication of the entire APK entry. */
 static int attest_layout_elf(const ld_lib_info *lib,size_t size,const unsigned char expected[32]) {
     char apk[256]; unsigned char observed[32];
-    return ld_apk_real_path("MiuiHome.apk",apk,sizeof apk)
+    return ld_apk_real_path(ld_launcher_apk_substr(),apk,sizeof apk)
         && ld_sha256_region(apk,lib->entry_off,size,observed)
         && !memcmp(expected,observed,sizeof observed);
 }
@@ -204,10 +205,10 @@ static void pin_installed_hook(uintptr_t site) {
     ld_blog("hook page pinned site=%llx ok=%d errno=%d",(unsigned long long)site,ok,ok?0:errno);
 }
 
-/* Direct Dart AOT gates, resolved by name on the SHA-pinned 8583 ELF. */
+/* Direct Dart AOT gates, resolved by name from the installed Launcher ELF. */
 static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info *lib)
 {
-    if(!g_home_options.glass_enabled || g_os4_glass_installed || g_os4_glass_attempted) return;
+    if(g_os4_glass_installed || g_os4_glass_attempted) return;
     if(!g_home_options.glass_targets_present) {
         ld_blog("OS4 glass gate unavailable: glass_targets not published; open LiquidDock settings");
         return;
@@ -218,56 +219,144 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         "BlurUtilities.isHyperMaterialSupported",
         "BlurUtilities.isMaterialDisabled",
     };
+    const char *render_symbols[9]={
+        "BlurUtilities.isBlurSupported",
+        "BlurUtilities.isMamlBlurSupported",
+        "BlurUtilities.isAnyMaterialActive",
+        "BlurUtilities.isWidgetMaterialActive",
+        "BlurUtilities.isThreeLayerBlurSupported",
+        "BlurUtilities.isFolderBlurSupported",
+        "WidgetMaterialUtils.isGlassOs4SupportedSync",
+        "GlassPressHighlightWidget.isSupported",
+        "_HyperMaterialWidgetState._computeEffective",
+    };
     void *replacements[3]={
         (void *)repl_os4_glass_supported,
         (void *)repl_os4_hyper_supported,
         (void *)repl_os4_material_enabled,
     };
+    void *render_replacements[9]={
+        (void *)repl_os4_blur_supported,
+        (void *)repl_os4_maml_blur_supported,
+        (void *)repl_os4_any_material_active,
+        (void *)repl_os4_widget_material_active,
+        (void *)repl_os4_three_layer_blur_supported,
+        (void *)repl_os4_folder_blur_supported,
+        (void *)repl_os4_widget_glass_supported,
+        (void *)repl_os4_press_light_supported,
+        (void *)repl_os4_hyper_material_effective,
+    };
     uintptr_t targets[3]={0};
+    uintptr_t render_targets[9]={0};
+    bool render_ready[9]={0};
     uintptr_t pipeline[4]={0};
     bool pipeline_verified[4]={0};
+    uintptr_t passblur_target=0;
+    bool passblur_ready=false;
+    bool strict=g_home_options.hook_safety_enabled;
     char path[256];
-    if(!ld_apk_real_path("MiuiHome.apk",path,sizeof path)) {
-        ld_blog("OS4 glass gate unavailable: APK path"); return;
-    }
-    int fd=open(path,O_RDONLY|O_CLOEXEC);
-    if(fd<0) { ld_blog("OS4 glass gate unavailable: APK read"); return; }
-    struct stat st;
+    struct stat st={0};
     void *mapping=MAP_FAILED;
-    if(fstat(fd,&st)==0 && st.st_size>0 && st.st_size<128*1024*1024)
-        mapping=mmap(NULL,(size_t)st.st_size,PROT_READ,MAP_PRIVATE,fd,0);
-    close(fd);
-    if(mapping==MAP_FAILED) { ld_blog("OS4 glass gate unavailable: mmap"); return; }
-    const unsigned char *apk=mapping;
-    const size_t vendor_size=29983600u;
-    int ready=lib->entry_off<=(size_t)st.st_size
-        && vendor_size<=(size_t)st.st_size-lib->entry_off;
+    const unsigned char *apk=NULL;
+    int ready=1;
+    if(strict) {
+        if(!ld_apk_real_path(ld_launcher_apk_substr(),path,sizeof path)) {
+            ld_blog("OS4 glass safety check unavailable: APK path"); return;
+        }
+        int fd=open(path,O_RDONLY|O_CLOEXEC);
+        if(fd<0) { ld_blog("OS4 glass safety check unavailable: APK read"); return; }
+        if(fstat(fd,&st)==0 && st.st_size>0 && st.st_size<128*1024*1024)
+            mapping=mmap(NULL,(size_t)st.st_size,PROT_READ,MAP_PRIVATE,fd,0);
+        close(fd);
+        if(mapping==MAP_FAILED) { ld_blog("OS4 glass safety check unavailable: mmap"); return; }
+        apk=mapping;
+        const size_t vendor_size=29980112u;
+        ready=lib->entry_off<=(size_t)st.st_size
+            && vendor_size<=(size_t)st.st_size-lib->entry_off;
+    }
     for(size_t i=0;i<3 && ready;i++) {
         uint64_t vaddr=g_home_options.glass_vaddr[i];
         uint64_t len=g_home_options.glass_size[i];
         if(!ld_vaddr_to_runtime(lib,(uintptr_t)vaddr,&targets[i])
                 || !executable_range(targets[i],(size_t)len)) {
-            ld_blog("OS4 glass gate unavailable: 8583 target %s unmapped at %llx",
+            ld_blog("OS4 glass gate unavailable: target %s unmapped at %llx",
                     symbols[i],(unsigned long long)vaddr);
             ready=0; break;
         }
-        /* The whole binary was already SHA-256 attested; now check the
-         * complete live body against its independently mapped file bytes. */
-        int found=0;
-        for(uint16_t k=0;k<lib->phnum;k++) {
-            uint64_t po,pv,pfs,pms;
-            if(!ld_phdr_load(lib,k,&po,&pv,&pfs,&pms)) continue;
-            if(vaddr<pv || vaddr-pv>pfs || len>pfs-(vaddr-pv)) continue;
-            uint64_t off=lib->entry_off+po+(vaddr-pv);
-            if(off>(uint64_t)st.st_size || len>(uint64_t)st.st_size-off) continue;
-            if(memcmp((const void *)targets[i],apk+off,(size_t)len)==0
-                    && *(const uint32_t *)targets[i]==0xa9bf79fdu) found=1;
-            break;
+        /* Optional strict mode compares the live body to the APK bytes. */
+        int found=!strict;
+        if(strict) {
+            for(uint16_t k=0;k<lib->phnum;k++) {
+                uint64_t po,pv,pfs,pms;
+                if(!ld_phdr_load(lib,k,&po,&pv,&pfs,&pms)) continue;
+                if(vaddr<pv || vaddr-pv>pfs || len>pfs-(vaddr-pv)) continue;
+                uint64_t off=lib->entry_off+po+(vaddr-pv);
+                if(off>(uint64_t)st.st_size || len>(uint64_t)st.st_size-off) continue;
+                if(memcmp((const void *)targets[i],apk+off,(size_t)len)==0
+                        && *(const uint32_t *)targets[i]==0xa9bf79fdu) found=1;
+                break;
+            }
         }
         if(!found) {
             ld_blog("OS4 glass gate unavailable: function %s changed",symbols[i]);
             ready=0;
         }
+    }
+    if(ready && g_home_options.render_targets_present) {
+        for(size_t i=0;i<9;i++) {
+            uint64_t v=g_home_options.render_vaddr[i];
+            uint64_t len=g_home_options.render_size[i];
+            if(!ld_vaddr_to_runtime(lib,(uintptr_t)v,&render_targets[i])
+                    || !executable_range(render_targets[i],(size_t)len)) {
+                ld_blog("OS4 render gate skipped: %s unmapped at %llx",
+                        render_symbols[i],(unsigned long long)v);
+                continue;
+            }
+            render_ready[i]=!strict;
+            if(strict) {
+                for(uint16_t j=0;j<lib->phnum;j++) {
+                    uint64_t off,base,sz,mem;
+                    if(!ld_phdr_load(lib,j,&off,&base,&sz,&mem)) continue;
+                    if(v<base || v-base>sz || len>sz-(v-base)) continue;
+                    uint64_t at=lib->entry_off+off+(v-base);
+                    if(at<=(uint64_t)st.st_size && len<=(uint64_t)st.st_size-at) {
+                        render_ready[i]=!memcmp((const void *)render_targets[i],apk+at,(size_t)len)
+                            && *(const uint32_t *)render_targets[i]==0xa9bf79fdu;
+                    }
+                    break;
+                }
+            }
+            if(!render_ready[i]) ld_blog("OS4 render gate skipped: %s body mismatch",render_symbols[i]);
+        }
+    } else if(ready) {
+        ld_blog("OS4 extended render gates unavailable: render_targets was not published");
+    }
+    if(ready && g_home_options.passblur_target_present
+            ) {
+        uint64_t v=g_home_options.passblur_vaddr;
+        uint64_t len=g_home_options.passblur_size;
+        if(ld_vaddr_to_runtime(lib,(uintptr_t)v,&passblur_target)
+                && executable_range(passblur_target,(size_t)len)) {
+            passblur_ready=!strict;
+            if(strict) {
+                for(uint16_t j=0;j<lib->phnum;j++) {
+                    uint64_t off,base,sz,mem;
+                    if(!ld_phdr_load(lib,j,&off,&base,&sz,&mem)) continue;
+                    if(v<base || v-base>sz || len>sz-(v-base)) continue;
+                    uint64_t at=lib->entry_off+off+(v-base);
+                    if(at<=(uint64_t)st.st_size && len<=(uint64_t)st.st_size-at) {
+                        passblur_ready=!memcmp((const void *)passblur_target,apk+at,(size_t)len)
+                            && *(const uint32_t *)passblur_target==0xa9bf79fdu;
+                    }
+                    break;
+                }
+            }
+            if(!passblur_ready) ld_blog("OS4 PassBlur gate skipped: target body mismatch");
+        } else {
+            ld_blog("OS4 PassBlur gate skipped: target unmapped at %llx",(unsigned long long)v);
+        }
+    } else if(ready) {
+        ld_blog("OS4 PassBlur gate unavailable: passblur_target was not published");
     }
     if(ready && g_home_options.glass_observers_present) {
         for(size_t i=0;i<4;i++) {
@@ -275,19 +364,24 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             uint64_t len=g_home_options.glass_obs_size[i];
             if(!ld_vaddr_to_runtime(lib,(uintptr_t)v,&pipeline[i])
                     || !executable_range(pipeline[i],(size_t)len)) continue;
+            if(!strict) {
+                pipeline_verified[i]=true;
+                continue;
+            }
             for(uint16_t j=0;j<lib->phnum;j++) {
                 uint64_t off,base,sz,mem;
                 if(!ld_phdr_load(lib,j,&off,&base,&sz,&mem)) continue;
                 if(v<base || v-base>sz || len>sz-(v-base)) continue;
                 uint64_t at=lib->entry_off+off+(v-base);
                 if(at>(uint64_t)st.st_size || len>(uint64_t)st.st_size-at) continue;
-                pipeline_verified[i]=!memcmp((const void *)pipeline[i],apk+at,(size_t)len)
-                    && *(const uint32_t *)pipeline[i]==0xa9bf79fdu;
+                pipeline_verified[i]=!strict ||
+                    (!memcmp((const void *)pipeline[i],apk+at,(size_t)len)
+                    && *(const uint32_t *)pipeline[i]==0xa9bf79fdu);
                 break;
             }
         }
     }
-    munmap(mapping,(size_t)st.st_size);
+    if(mapping!=MAP_FAILED) munmap(mapping,(size_t)st.st_size);
     if(!ready) return;
     for(size_t i=0;i<3;i++) {
         int rc=api->hook((void *)targets[i],replacements[i],&g_os4_glass_original[i]);
@@ -298,9 +392,40 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             return;
         }
     }
-    __atomic_store_n(&g_os4_glass_override,1u,__ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_glass_override,
+            g_home_options.glass_enabled ? 1u : 0u,__ATOMIC_RELEASE);
     g_os4_glass_installed=true;
-    ld_blog("OS4 glass gate enabled: 3 vendor Dart capability predicates");
+    ld_blog("OS4 glass gates installed: 3 vendor predicates enabled=%d",
+            g_home_options.glass_enabled);
+    unsigned render_mask=0;
+    for(size_t i=0;i<9;i++) {
+        if(!render_ready[i]) continue;
+        int rc=api->hook((void *)render_targets[i],render_replacements[i],
+                &g_os4_render_gate_original[i]);
+        if(rc==0 && g_os4_render_gate_original[i]
+                && ld_pin_code_pages(render_targets[i],16)) {
+            g_os4_render_gate_mask|=(uint16_t)(1u<<i);
+            render_mask|=1u<<i;
+            ld_blog("OS4 render gate installed: %s enabled=%d",
+                    render_symbols[i],g_home_options.glass_enabled);
+        } else {
+            ld_blog("OS4 render gate install failed: %s rc=%d backup=%d",
+                    render_symbols[i],rc,g_os4_render_gate_original[i]!=NULL);
+        }
+    }
+    g_os4_render_gates_installed=render_mask==((1u<<9)-1u);
+    if(passblur_ready && !g_passblur_supported_installed) {
+        int rc=api->hook((void *)passblur_target,(void *)repl_os4_passblur_supported,
+                &g_orig_passblur_supported);
+        if(rc==0 && g_orig_passblur_supported && ld_pin_code_pages(passblur_target,16)) {
+            g_passblur_supported_installed=true;
+            ld_blog("OS4 PassBlur support gate installed: enabled=%d",
+                    g_home_options.glass_enabled);
+        } else {
+            ld_blog("OS4 PassBlur gate install failed rc=%d backup=%d",rc,
+                    g_orig_passblur_supported!=NULL);
+        }
+    }
     const char *label[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};
     void *wrapper[4]={(void *)repl_os4_trace_light,(void *)repl_os4_trace_dark,
         (void *)repl_os4_trace_filter,(void *)repl_os4_trace_apply};
@@ -350,29 +475,45 @@ static void update_layout_ready(void) {
 
 static void ld_install_icon_materials(const struct native_api *api,const ld_lib_info *lib)
 {
-    if(!g_hook_pin_ok || !api || !api->hook || !lib || !g_home_options.glass_enabled || !g_home_options.glass_icons)
+    if(!g_hook_pin_ok || !api || !api->hook || !lib)
         return;
     if(!g_icon_glass_installed) {
-        if(!ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_BODY_START,
-                    LD_ICON_GLASS_BODY_SIZE,ld_icon_glass_body_sha)) return;
-        static const uintptr_t sites[]={0x1782818u,0x1782944u};
+        if(g_home_options.hook_safety_enabled &&
+                !ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_BODY_START,
+                    LD_ICON_GLASS_BODY_SIZE,ld_icon_glass_body_sha)) {
+            ld_blog("icon glass safety check failed for ShortcutIconWidget closure");
+            return;
+        }
+        static const uintptr_t sites[]={0x1786e64u,0x1786f90u};
         void *const replacements[]={(void*)repl_icon_glass_enabled,(void*)repl_icon_glass_size};
         void **const originals[]={&g_orig_icon_glass_enabled,&g_orig_icon_glass_size};
         uintptr_t targets[2]={0};
         for(size_t i=0;i<2;i++)
-            if(!ld_vaddr_to_runtime(lib,sites[i],&targets[i]) || !executable_range(targets[i],16)) return;
+            if(!ld_vaddr_to_runtime(lib,sites[i],&targets[i]) || !executable_range(targets[i],16)) {
+                ld_blog("icon glass hook site unavailable vaddr=%lx",(unsigned long)sites[i]);
+                return;
+            }
         for(size_t i=0;i<2;i++) {
             if(*originals[i]) continue;
             void *backup=NULL;
-            if(!ld_pin_code_pages(targets[i],16)
-                    || api->hook((void*)targets[i],replacements[i],&backup)!=0 || !backup) return;
+            int rc=ld_pin_code_pages(targets[i],16)
+                    ? api->hook((void*)targets[i],replacements[i],&backup) : -1;
+            if(rc!=0 || !backup) {
+                ld_blog("icon glass hook install failed vaddr=%lx rc=%d backup=%d",
+                        (unsigned long)sites[i],rc,backup!=NULL);
+                return;
+            }
             *originals[i]=backup;
         }
-        if(g_orig_icon_glass_enabled && g_orig_icon_glass_size) g_icon_glass_installed=1;
+        if(g_orig_icon_glass_enabled && g_orig_icon_glass_size) {
+            g_icon_glass_installed=1;
+            ld_blog("icon glass hooks installed safety=%d",g_home_options.hook_safety_enabled);
+        }
     }
     if(g_icon_glass_installed && !g_orig_icon_glass_flight
-            && ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_FLIGHT_START,
-                    LD_ICON_GLASS_FLIGHT_SIZE,ld_icon_glass_flight_sha)) {
+            && (!g_home_options.hook_safety_enabled ||
+                ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_FLIGHT_START,
+                    LD_ICON_GLASS_FLIGHT_SIZE,ld_icon_glass_flight_sha))) {
         uintptr_t target=0;
         if(ld_vaddr_to_runtime(lib,LD_ICON_GLASS_FLIGHT_START,&target)
                 && executable_range(target,16) && ld_pin_code_pages(target,16)) {
@@ -385,17 +526,26 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
     }
     if(g_icon_glass_installed && g_home_options.glass_icon_corner>0.0
             && !g_icon_glass_radius_installed
-            && ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_RADIUS_START,
-                    LD_ICON_GLASS_RADIUS_SIZE,ld_icon_glass_radius_sha)) {
+            && (!g_home_options.hook_safety_enabled ||
+                ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_RADIUS_START,
+                    LD_ICON_GLASS_RADIUS_SIZE,ld_icon_glass_radius_sha))) {
         uintptr_t target=0;
-        if(ld_vaddr_to_runtime(lib,0x14e87a8u,&target) && executable_range(target,16)
+        if(ld_vaddr_to_runtime(lib,0x14e9c90u,&target) && executable_range(target,16)
                 && ld_pin_code_pages(target,16)) {
             void *backup=NULL;
             if(api->hook((void*)target,(void*)repl_icon_glass_radius,&backup)==0 && backup) {
                 g_orig_icon_glass_radius=backup;
                 g_icon_glass_radius_installed=1;
+                ld_blog("icon glass radius hook installed corner=%.1f safety=%d",
+                        g_home_options.glass_icon_corner,g_home_options.hook_safety_enabled);
             }
         }
+    }
+    if(!g_icon_glass_state_logged) {
+        g_icon_glass_state_logged=1;
+        ld_blog("icon glass state enabled=%d icons=%d installed=%d radius=%d size=%.1f corner=%.1f",
+                g_home_options.glass_enabled,g_home_options.glass_icons,g_icon_glass_installed,
+                g_icon_glass_radius_installed,g_home_options.glass_icon_size,g_home_options.glass_icon_corner);
     }
 }
 
@@ -412,14 +562,15 @@ static void ld_widget_inventory_reset_once(void)
 static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
+    bool strict=g_home_options.hook_safety_enabled;
     static const unsigned char rust_digest[32]={0xf7,0xa,0x2d,0x15,0x50,0x5a,0xbc,0x83,0xbb,0xc2,0xf0,0x3c,0xbe,0x9e,0x90,0xb6,0x35,0xa8,0xad,0xd6,0xd8,0x9a,0xe0,0xfe,0xf7,0x64,0x10,0xa,0xea,0x1c,0x6d,0x8b};
     if(g_grid_cols>0 && g_grid_rows>0 && !g_orig_rust_orientation) {
         ld_lib_info rust; uintptr_t target=0;
-        if(ld_resolve_lib("MiuiHome.apk","lib/arm64-v8a/libapp_launcher.so",&rust)
+        if(ld_resolve_lib(ld_launcher_apk_substr(),"lib/arm64-v8a/libapp_launcher.so",&rust)
                 && ld_vaddr_to_runtime(&rust,0x90ffa0u,&target)
-                && executable_range(target,sizeof ld_rust_orientation_words)
-                && !memcmp((void *)target,ld_rust_orientation_words,sizeof ld_rust_orientation_words)
-                && attest_layout_elf(&rust,16242592u,rust_digest)) {
+                && executable_range(target,strict?sizeof ld_rust_orientation_words:16)
+                && (!strict || (!memcmp((void *)target,ld_rust_orientation_words,sizeof ld_rust_orientation_words)
+                    && attest_layout_elf(&rust,16242592u,rust_digest)))) {
             int result=api->hook((void *)target,(void *)repl_rust_orientation,(void **)&g_orig_rust_orientation);
             if(result==0 && g_orig_rust_orientation) pin_installed_hook(target);
             ld_blog("Rust pre-load orientation guard installed result=%d",result);
@@ -428,11 +579,17 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     if (g_installed) { update_layout_ready(); return; }
 
     static ld_lib_info lib;
-    if (!ld_resolve_lib("MiuiHome.apk", "lib/arm64-v8a/libapp.so", &lib)) {
+    if (!ld_resolve_lib(ld_launcher_apk_substr(), "lib/arm64-v8a/libapp.so", &lib)) {
         LOGI("libapp.so not mapped yet");
         return;
     }
-    if (!ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
+    /* Rendering hooks use their own resolved AOT symbols and safety checks.
+     * Install them before the unrelated grid-layout address checks below. */
+    ld_install_icon_materials(api,&lib);
+    ld_widget_inventory_reset_once();
+    (void)ld_maml_install(api);
+    ld_install_os4_glass(api,&lib);
+    if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
         LOGE("libapp.so identity cross-check failed");
         ld_blog("libapp.so identity cross-check failed");
         return;
@@ -440,22 +597,19 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 
     uintptr_t entry = 0;
     if (!ld_vaddr_to_runtime(&lib, LD_PAD_ROWCOL_VADDR, &entry) ||
-        !executable_range(entry, sizeof ld_pad_rowcol_words) ||
-        memcmp((const void *)entry, ld_pad_rowcol_words,
-               sizeof ld_pad_rowcol_words) != 0) {
-        LOGE("PadRowColHandler 8583 full-body fingerprint mismatch");
-        ld_blog("PadRowColHandler 8583 full-body fingerprint mismatch");
+        !executable_range(entry+0x80, 16) ||
+        (strict && (!executable_range(entry, sizeof ld_pad_rowcol_words) ||
+         memcmp((const void *)entry, ld_pad_rowcol_words,
+                sizeof ld_pad_rowcol_words) != 0))) {
+        LOGE("PadRowColHandler address unavailable or safety check failed");
+        ld_blog("PadRowColHandler address unavailable or safety check failed");
         return;
     }
 
-    static const unsigned char dart_digest[32]={0x6f,0x52,0x74,0xf4,0x35,0xcc,0x7,0xaa,0xb1,0x65,0xce,0x53,0x15,0xd1,0xd3,0x5a,0xfa,0xb5,0x59,0xa6,0x59,0xaf,0xd6,0x20,0x3,0x79,0xd3,0x9,0xc9,0xd0,0x8b,0x91};
-    if(!attest_layout_elf(&lib,29983600u,dart_digest)) {
-        ld_blog("8583 whole-ELF SHA-256 mismatch; refusing native layout hooks"); return;
+    static const unsigned char dart_digest[32]={0x93,0xe5,0x11,0x98,0x92,0x02,0xa7,0x0d,0x38,0xb8,0x23,0x1c,0x31,0x33,0x16,0x7b,0x83,0x0c,0xa7,0x60,0x9b,0x61,0xba,0x6a,0xd1,0x33,0x89,0x87,0x37,0xd0,0xe0,0xef};
+    if(strict && !attest_layout_elf(&lib,29980112u,dart_digest)) {
+        ld_blog("8584 whole-ELF SHA-256 mismatch; safety switch is enabled"); return;
     }
-    ld_install_icon_materials(api,&lib);
-    ld_widget_inventory_reset_once();
-    (void)ld_maml_install(api);
-    ld_install_os4_glass(api,&lib);
     struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
         {LD_GLASS_FILTER_START,LD_GLASS_FILTER_SITE,ld_glass_filter_words,sizeof ld_glass_filter_words,(void*)repl_glass_filter,&g_orig_glass_filter},
         {LD_HOME_PIPELINE_FUNCTION_OFFSET,LD_HOME_PIPELINE_HOOK_OFFSET,
@@ -482,8 +636,9 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         uintptr_t start=0,target=0;
         if(ld_vaddr_to_runtime(&lib,home_hooks[i].start,&start)
                 && ld_vaddr_to_runtime(&lib,home_hooks[i].site,&target)
-                && executable_range(start,home_hooks[i].size)
-                && !memcmp((void *)start,home_hooks[i].words,home_hooks[i].size)) {
+                && executable_range(start,strict?home_hooks[i].size:16)
+                && executable_range(target,16)
+                && (!strict || !memcmp((void *)start,home_hooks[i].words,home_hooks[i].size))) {
             int status=api->hook((void *)target,home_hooks[i].replace,home_hooks[i].orig);
             if(status==0 && *home_hooks[i].orig) pin_installed_hook(target);
             if(status==0 && *home_hooks[i].orig && home_hooks[i].site==LD_HOME_WIDGET_HOOK_OFFSET)
@@ -509,53 +664,53 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     /* Observe active geometry; startup positions use the DTO load boundary. */
     uintptr_t filter=0;
     if(ld_vaddr_to_runtime(&lib,LD_FILTER_VADDR,&filter)
-            && executable_range(filter,sizeof ld_filter_words)
-            && !memcmp((void *)filter,ld_filter_words,sizeof ld_filter_words)) {
+            && executable_range(filter+(strict?0:0x2a4),strict?sizeof ld_filter_words:16)
+            && (!strict || !memcmp((void *)filter,ld_filter_words,sizeof ld_filter_words))) {
         result=api->hook((void *)(filter+0x2a4),(void *)repl_filter_grid,&g_orig_filter_return);
         if(result==0 && g_orig_filter_return) pin_installed_hook(filter+0x2a4);
         ld_blog("read-only grid selection installed result=%d",result);
     }
     struct { uintptr_t vaddr; const void *words; size_t size; void *replace; void **orig; } observers[] = {
-        {0x917d00u, ld_delete_item_words, sizeof ld_delete_item_words, (void *)repl_delete_item, &g_orig_delete_item},
-        {0x8eecc0u, ld_save_batch_words, sizeof ld_save_batch_words, (void *)repl_save_batch, &g_orig_save_batch},
-        {0x8e2128u, ld_save_single_words, sizeof ld_save_single_words, (void *)repl_save_single, &g_orig_save_single},
-        {0x15e6f6cu, ld_load_items_words, sizeof ld_load_items_words, (void *)repl_load_items, &g_orig_load_items},
-        {0x18c4568u, ld_widget_lattice_words, sizeof ld_widget_lattice_words, (void *)repl_widget_lattice, &g_orig_widget_lattice},
-        {0x8eb92cu, ld_no_vacant_words, sizeof ld_no_vacant_words, (void *)repl_free_place, &g_orig_no_vacant},
-        {0x8eefdcu, ld_process_screen_words, sizeof ld_process_screen_words, (void *)repl_process_screen, &g_orig_process_screen},
+        {0x918fe0u, ld_delete_item_words, sizeof ld_delete_item_words, (void *)repl_delete_item, &g_orig_delete_item},
+        {0x8effa4u, ld_save_batch_words, sizeof ld_save_batch_words, (void *)repl_save_batch, &g_orig_save_batch},
+        {0x8e340cu, ld_save_single_words, sizeof ld_save_single_words, (void *)repl_save_single, &g_orig_save_single},
+        {0x15e91b4u, ld_load_items_words, sizeof ld_load_items_words, (void *)repl_load_items, &g_orig_load_items},
+        {0x18c8f44u, ld_widget_lattice_words, sizeof ld_widget_lattice_words, (void *)repl_widget_lattice, &g_orig_widget_lattice},
+        {0x8ecc10u, ld_no_vacant_words, sizeof ld_no_vacant_words, (void *)repl_free_place, &g_orig_no_vacant},
+        {0x8f02c0u, ld_process_screen_words, sizeof ld_process_screen_words, (void *)repl_process_screen, &g_orig_process_screen},
     };
     for (size_t i = 0; i < sizeof observers / sizeof *observers; i++) {
         uintptr_t target = 0;
         if (ld_vaddr_to_runtime(&lib, observers[i].vaddr, &target)
-                && executable_range(target, observers[i].size)
-                && !memcmp((void *)target, observers[i].words, observers[i].size)) {
+                && executable_range(target, strict?observers[i].size:16)
+                && (!strict || !memcmp((void *)target, observers[i].words, observers[i].size))) {
             result = api->hook((void *)target, observers[i].replace, observers[i].orig);
             if(result==0 && *observers[i].orig) pin_installed_hook(target);
             ld_blog("layout observer %lx installed result=%d", (unsigned long)observers[i].vaddr, result);
-            if(observers[i].vaddr==0x8eefdcu && result==0) {
+            if(observers[i].vaddr==0x8f02c0u && result==0) {
                 g_process_resume=target+0x384;
                 int mid_result=api->hook((void *)(target+0x218),(void *)repl_process_mid,&g_orig_process_mid);
                 g_layout_mid_ready=mid_result==0 && g_orig_process_mid!=NULL;
                 if(g_layout_mid_ready) pin_installed_hook(target+0x218);
                 ld_blog("layout continuation installed result=%d",mid_result);
             }
-        } else if(target && executable_range(target,observers[i].size)) {
+        } else if(target && strict && executable_range(target,observers[i].size)) {
             for(size_t k=0;k<observers[i].size;k+=4) if(((uint32_t *)target)[k/4]!=((const uint32_t *)observers[i].words)[k/4]) {
                 ld_blog("observer mismatch %lx +%zx live=%08x expected=%08x",(unsigned long)observers[i].vaddr,k,((uint32_t *)target)[k/4],((const uint32_t *)observers[i].words)[k/4]); break;
             }
         }
     }
     uintptr_t orientation = 0;
-    if (ld_vaddr_to_runtime(&lib, 0x8ee38cu, &orientation)
-            && executable_range(orientation, sizeof ld_orientation_words)
-            && memcmp((const void *)orientation, ld_orientation_words,
-                      sizeof ld_orientation_words) == 0) {
+    if (ld_vaddr_to_runtime(&lib, 0x8ef670u, &orientation)
+            && executable_range(orientation, strict?sizeof ld_orientation_words:16)
+            && (!strict || memcmp((const void *)orientation, ld_orientation_words,
+                      sizeof ld_orientation_words) == 0)) {
         backup = NULL;
         result = api->hook((void *)orientation, (void *)repl_orientation_observed, &backup);
         if (result == 0 && backup) {
             g_orig_orientation = backup;
             pin_installed_hook(orientation);
-            ld_blog("orientation layout transaction installed (whole body verified)");
+            ld_blog("orientation layout transaction installed safety=%d",strict);
         }
     }
     update_layout_ready();
