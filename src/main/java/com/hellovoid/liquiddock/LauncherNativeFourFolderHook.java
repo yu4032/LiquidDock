@@ -523,7 +523,7 @@ final class LauncherNativeFourFolderHook {
                 HookUtil.hook(infoType.getDeclaredMethod("load", Context.class, android.database.Cursor.class), chain -> {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     if (chain.getArg(0) instanceof Context) {
-                        normalizeAllAppsFolder((Context) chain.getArg(0), chain.getThisObject());
+                        normalizeAllAppsFolder(chain.getThisObject(), false);
                     }
                     return result;
                 });
@@ -542,7 +542,7 @@ final class LauncherNativeFourFolderHook {
             Object info = chain.getArg(3);
             ViewGroup parent = (ViewGroup) chain.getArg(2);
             if (HomeGridCellGeometryHook.isWorkstationAllAppsView(parent)) {
-                normalizeAllAppsFolder(parent.getContext(), info);
+                normalizeAllAppsFolder(info, true);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             }
             if (info != null) {
@@ -1100,17 +1100,21 @@ final class LauncherNativeFourFolderHook {
         return frame == null ? null : new int[]{frame[2], frame[3]};
     }
 
-    private static void normalizeAllAppsFolder(Context context, Object info) {
+    private static void normalizeAllAppsFolder(Object info, boolean workstationAllAppsView) {
         if (info == null) return;
         try {
+            Object container = HookUtil.getField(info, "container");
+            long containerId = container instanceof Number
+                    ? ((Number) container).longValue() : Long.MIN_VALUE;
             if (LargeFolderFootprintPolicy.normalizeAllAppsCopy(
-                    LauncherLargeFolderPickerHook.isMarked(context, info),
-                    ((Number) HookUtil.getField(info, "container")).longValue(),
+                    workstationAllAppsView, containerId,
                     HookUtil.getIntField(info, "itemType"),
                     HookUtil.getIntField(info, "spanX"), HookUtil.getIntField(info, "spanY"))) {
+                // Only normalize the in-memory All Apps copy; never rewrite the
+                // original desktop folder or its persisted 2x2 footprint.
                 HookUtil.setIntField(info, "spanX", 1);
                 HookUtil.setIntField(info, "spanY", 1);
-                MainHook.log(TAG + " AllApps folder copy footprint normalized to 1x1");
+                MainHook.log(TAG + " AllApps ordinary folder footprint normalized to 1x1");
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " AllApps folder scope unavailable: " + error);
