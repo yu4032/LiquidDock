@@ -10,6 +10,8 @@ import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 
+import com.hellovoid.liquiddock.config.ConfigSchema;
+
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Map;
@@ -166,7 +168,13 @@ final class LauncherDialogGlassCoordinator {
 
         applyDialogMaterial(binding, dialogRoot, effectiveDim);
 
-        float radiusPx = resolveDialogCornerRadius(panel);
+        // Launcher can preload this Dialog long before it is shown. Read the radius once
+        // at actual attachment so the preloaded object's original config cannot stale it.
+        float requestedRadius = GlassComponentCorners.readDp(
+                ConfigReader.load(), ConfigSchema.Glass.DIALOG_CORNER_RADIUS);
+        float radiusPx = GlassComponentCorners.resolve(
+                requestedRadius, resolveDialogCornerRadius(panel),
+                panel.getResources().getDisplayMetrics().density, panel.getWidth(), panel.getHeight());
         LauncherGlassSinkView sink = LauncherGlassSinkView.attachToExternalMaterial(
                 panel, authority, radiusPx, binding.glassConfig);
         if (sink == null) {

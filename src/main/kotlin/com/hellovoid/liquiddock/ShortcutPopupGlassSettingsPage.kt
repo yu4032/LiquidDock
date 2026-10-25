@@ -35,6 +35,7 @@ internal fun ShortcutPopupGlassSettingsPage(
     toggleTitle = "启用快捷菜单玻璃",
     toggleDescription = "替换长按图标时的菜单背景；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面",
     blurTitle = "菜单背景模糊",
+    cornerRadiusKey = ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS,
 )
 
 @Composable
@@ -53,6 +54,7 @@ internal fun HandleMenuGlassSettingsPage(
     toggleTitle = "启用应用顶部菜单玻璃",
     toggleDescription = "替换应用顶部控制器展开的分屏、小窗菜单；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启系统界面",
     blurTitle = "顶部菜单背景模糊",
+    cornerRadiusKey = ConfigSchema.Glass.HANDLE_MENU_CORNER_RADIUS,
 )
 
 @Composable
@@ -69,6 +71,7 @@ private fun ScopedMenuGlassSettingsPage(
     toggleTitle: String,
     toggleDescription: String,
     blurTitle: String,
+    cornerRadiusKey: ConfigKey<Int>,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -157,6 +160,17 @@ private fun ScopedMenuGlassSettingsPage(
                         masterEnabled && liquidEnabled,
                     )
                 }
+            }
+        }
+        item(key = "menu-corner-title") { SmallTitle("圆角") }
+        item(key = "menu-corner-radius") {
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    IntSpec(cornerRadiusKey, "菜单圆角", "dp",
+                        summary = "小于 0 跟随系统圆角，0 为直角；重新打开菜单生效"),
+                    controlsEnabled,
+                )
             }
         }
         item(key = "shortcut-color-title") { SmallTitle("玻璃颜色") }

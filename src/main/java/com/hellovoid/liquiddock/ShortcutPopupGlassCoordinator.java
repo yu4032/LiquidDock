@@ -28,6 +28,8 @@ final class ShortcutPopupGlassCoordinator {
         if (glassConfig == null || state == null || state.released) return;
         state.glassConfig = glassConfig;
         if (state.session != null) state.session.applyLiveGlassConfig(glassConfig);
+        View content = state.contentRef.get();
+        if (content != null) content.post(() -> updateGeometry(state));
     }
 
     static synchronized void prepare(View captureRoot, LiquidDockConfig.Glass glassConfig) {
@@ -272,10 +274,14 @@ final class ShortcutPopupGlassCoordinator {
         float radiusScale = Math.min(
                 (right - left) / Math.max(1f, content.getWidth()),
                 (bottom - top) / Math.max(1f, content.getHeight()));
+        float localRadius = GlassComponentCorners.resolve(
+                state.glassConfig != null ? state.glassConfig.shortcutPopupCornerRadiusDp : -1f,
+                resolveShortcutMenuCornerRadius(content), content.getResources().getDisplayMetrics().density,
+                content.getWidth(), content.getHeight());
         LauncherGlassGeometry.Snapshot geometry = LauncherGlassGeometry.resolveStatic(
                 decor.getWidth(), decor.getHeight(),
                 left, top, right, bottom,
-                resolveShortcutMenuCornerRadius(content) * Math.max(0f, radiusScale));
+                localRadius * Math.max(0f, radiusScale));
         if (geometry != null) session.updateGeometry(geometry);
     }
 
