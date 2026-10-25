@@ -216,6 +216,8 @@ public final class ConfigSchema {
     }
 
     public static final class Glass {
+        public static final ConfigKey<Boolean> CONTINUOUS_CORNERS = bool(
+                "liquid_continuous_corners", false, false, false, ConfigKey.ExportMode.ALWAYS);
         // Whole-silhouette cast shadow and optically lit SDF contour are distinct
         // from Prismal's interior optical shading and OS4 light-facing highlights.
         // Both are opt-in to preserve rendering with older presets and OEM native shadows.
@@ -638,7 +640,7 @@ public final class ConfigSchema {
                 Glass.BACKLIT_ENABLED, Glass.BACKLIT_WIDTH,
                 Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS,
                 Glass.BACKLIT_EXTENT);
-        add(keys, Glass.ENABLED, Glass.WALLPAPER_FLICKER_FIX,
+        add(keys, Glass.ENABLED, Glass.CONTINUOUS_CORNERS, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
                 Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_DISABLE_DIMMING,

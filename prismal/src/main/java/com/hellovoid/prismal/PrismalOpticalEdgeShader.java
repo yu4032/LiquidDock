@@ -76,6 +76,7 @@ public final class PrismalOpticalEdgeShader {
             """;
 
     public static String apply(String source) {
+        source = PrismalContinuousCorners.apply(source);
         requireSingle(source, PRECISION);
         requireSingle(source, SHAPE_POSITION);
         requireSingle(source, EDGE_DISTANCE);

@@ -94,7 +94,7 @@ internal fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_refraction_inset" -> "调整玻璃可见遮罩的内缩；20 为原轮廓，保留抗锯齿"
     "liquid_prismal_displacement_scale" -> "折射与视差位移总倍率"
     "liquid_prismal_height_transition_width" -> "控制玻璃表面从边缘到中心的高度过渡范围"
-    "liquid_prismal_smin_smoothing" -> "控制圆角边界的平滑程度"
+    "liquid_prismal_smin_smoothing" -> "控制原轮廓的圆角平滑；开启连续圆角后调整表面法线采样范围"
     "liquid_prismal_edge_refraction_falloff" -> "控制边缘折射向内部的衰减；越高越集中在边缘"
     "liquid_prismal_fresnel_reflect" -> "控制随观察角度增强的边缘反射强度"
     "liquid_prismal_dispersion_r" -> "红色通道相对色散倍率"

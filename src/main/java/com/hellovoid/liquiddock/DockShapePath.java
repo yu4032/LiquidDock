@@ -3,9 +3,22 @@ package com.hellovoid.liquiddock;
 import android.graphics.Path;
 import android.graphics.RectF;
 
+import com.hellovoid.prismal.PrismalContinuousCorners;
+
 /** Shared round-rect/squircle geometry for Liquid Glass host and sharp overlay. */
 final class DockShapePath {
     private DockShapePath() {}
+
+    static void buildContinuous(Path out, RectF bounds, float radius) {
+        out.rewind();
+        float[] points = PrismalContinuousCorners.contour(bounds.width(), bounds.height(), radius);
+        if (points.length < 2) return;
+        out.moveTo(bounds.left + points[0], bounds.top + points[1]);
+        for (int i = 2; i < points.length; i += 2) {
+            out.lineTo(bounds.left + points[i], bounds.top + points[i + 1]);
+        }
+        out.close();
+    }
 
     static void build(Path out, float width, float height, float radius,
                       boolean squircle, float cp) {
