@@ -253,7 +253,7 @@ final class Miuix307PassBlurBridge {
     private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
         if (binding == null) return;
         synchronized (binding) {
-    if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
+            if (!binding.bound || !binding.rootSurface.isValid()) return;
             if (!force && binding.updatesEnabled == enabled) return;
             if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
                 GboardPassBlurContinuousAuthority.setUpdatesEnabled(
@@ -299,8 +299,7 @@ final class Miuix307PassBlurBridge {
     static void setWorkspaceTransitionFrameSync(Binding binding, boolean enabled) {
         if (binding == null) return;
         synchronized (binding) {
-    if (binding == null || !binding.bound
-                    || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
+            if (!binding.bound || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
             binding.workspaceTransitionFrameSync = enabled;
             if (enabled) {
                 renewForceRefresh(binding);
@@ -332,7 +331,7 @@ final class Miuix307PassBlurBridge {
     static void renewForceRefresh(Binding binding) {
         if (binding == null) return;
         synchronized (binding) {
-    if (binding == null || !binding.bound || !binding.updatesEnabled) return;
+            if (!binding.bound || !binding.updatesEnabled) return;
             boolean dock = binding.domain == PassBlurDomain.DOCK;
             boolean gboard = binding.domain == PassBlurDomain.GBOARD_FLOATING;
             boolean workspace = binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
