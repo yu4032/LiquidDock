@@ -170,11 +170,15 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         inheritedHighlightProfile = config.largeSurfaceHighlightProfile;
         applyAppearance(appearance);
         FrameRequest request = frameRequest;
-        if (request != null && cachedSourceFrame != null
-                && request.generation == cachedSourceFrame.generation) {
-            requestCachedPresentation(request.generation);
+        View activeRoot = rootRef.get();
+        if (request != null && activeRoot != null && activeRoot.isShown()) {
+            // Merely replaying the identical cached serial is intentionally deduped by
+            // SecurityCenterFramePipelineState. Offer a NEW serial for this material
+            // revision so a live Prismal/tint/edge change is visibly presented.
+            requestFresh(request.generation, request.frameGeometry, request.sinks);
         }
-        // Capture density/FPS are applied when this semantic session is next established.
+        // Capture scale/FPS change only on the next semantic session. Hidden
+        // panels do not request fresh frames just because a setting was edited.
     }
 
     private void applyAppearance(ThirdPartyGlassAppearance appearance) {
