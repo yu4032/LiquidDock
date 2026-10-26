@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import android.os.SystemClock;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
@@ -28,6 +30,14 @@ final class Miuix307PassBlurBridge {
     private static final long FORCE_REFRESH_MIN_INTERVAL_MS = 50L;
     private static final long FORCE_REFRESH_ERROR_LOG_MIN_MS = 5000L;
     private static long lastForceRefreshErrorLogMs;
+    private static final long DETACH_COMMIT_WARN_MS = 1_000L;
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    // Only the module's actual detach may send a null producer for a claimed root.
+    private static final ThreadLocal<SurfaceControl> MODULE_DETACH_ROOT = new ThreadLocal<>();
+
+    static boolean isModuleDetach(SurfaceControl root) {
+        return root != null && MODULE_DETACH_ROOT.get() == root;
+    }
 
     static final class Binding {
         final SurfaceControl rootSurface;
@@ -45,6 +55,7 @@ final class Miuix307PassBlurBridge {
         volatile boolean bound = true;
         volatile boolean updatesEnabled = true;
         boolean detachPending;
+        boolean vendorClaimReleased;
         final ArrayList<Runnable> detachCallbacks = new ArrayList<>();
         volatile boolean workspaceTransitionFrameSync;
         volatile long lastForceRefreshMs;
@@ -161,6 +172,9 @@ final class Miuix307PassBlurBridge {
 
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
+                if (!PassBlurProducerSubmissionGate.trySubmit(producerSurface)) {
+                    throw new IllegalStateException("PassBlur producer already submitted to native SF");
+                }
                 setPassBlurSurface.invoke(transaction, rootSurface, producerSurface);
                 setUpdateTextureFlag.invoke(
                         transaction, rootSurface, Boolean.TRUE, Float.valueOf(scale));
@@ -365,13 +379,9 @@ final class Miuix307PassBlurBridge {
     }
 
     /**
-     * Asynchronously detach a native PassBlur producer. A true result means the committed
-     * callback has already confirmed detach (or the Binding was previously detached).
-     * Merely returning from Transaction.apply() is NOT success.
-     *
-     * addTransactionCommittedListener reports that SurfaceFlinger has committed the update;
-     * it does not certify that buffers have been released by all GPU consumers.
-     * The producer stays strongly owned by its session until this callback is received.
+     * Only a committed native detach permits producer destruction. A dead root permits
+     * dropping its vendor override claim, NOT freeing a possibly in-flight BufferQueue.
+     * A one-second missing-commit warning is diagnostic only; no timeout frees the GPU.
      */
     static boolean tryUnbind(Binding binding, Runnable onCommitted) {
         if (binding == null) return true;
@@ -380,27 +390,42 @@ final class Miuix307PassBlurBridge {
             if (onCommitted != null && !binding.detachCallbacks.contains(onCommitted)) {
                 binding.detachCallbacks.add(onCommitted);
             }
-            if (binding.detachPending) return false;
             try {
                 if (!binding.rootSurface.isValid()) {
-                    MainHook.log(TAG + " PassBlur detach unavailable: root invalid root="
+                    releaseVendorClaim(binding);
+                    MainHook.log(TAG + " PassBlur root invalid; claim released, producer retained root="
                             + binding.rootName);
                     return false;
                 }
+                if (binding.detachPending) return false;
                 try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-                    binding.setPassBlurSurface.invoke(transaction, binding.rootSurface, null);
-                    binding.setUpdateTextureFlag.invoke(
-                            transaction, binding.rootSurface, Boolean.FALSE,
-                            Float.valueOf(binding.scale));
-                    binding.setMiBlurWinExc.invoke(
-                            transaction, binding.rootSurface, (Object) new String[0]);
+                    MODULE_DETACH_ROOT.set(binding.rootSurface);
+                    try {
+                        binding.setPassBlurSurface.invoke(transaction, binding.rootSurface, null);
+                        binding.setUpdateTextureFlag.invoke(
+                                transaction, binding.rootSurface, Boolean.FALSE,
+                                Float.valueOf(binding.scale));
+                        binding.setMiBlurWinExc.invoke(
+                                transaction, binding.rootSurface, (Object) new String[0]);
+                    } finally {
+                        MODULE_DETACH_ROOT.remove();
+                    }
                     transaction.addTransactionCommittedListener(
                             Runnable::run, () -> onDetachCommitted(binding));
                     binding.detachPending = true;
                     transaction.apply();
                 }
-                // The callback may already have run on another thread. Never claim success
-                // solely because apply returned.
+                if (binding.detachPending) {
+                    boolean posted = MAIN.postDelayed(() -> {
+                        synchronized (binding) {
+                            if (binding.bound && binding.detachPending) {
+                                MainHook.log(TAG + " PassBlur detach commit unconfirmed after 1s;"
+                                        + " producer retained root=" + binding.rootName);
+                            }
+                        }
+                    }, DETACH_COMMIT_WARN_MS);
+                    if (!posted) MainHook.log(TAG + " detach watchdog enqueue unavailable");
+                }
                 return !binding.bound;
             } catch (Throwable error) {
                 binding.detachPending = false;
@@ -415,24 +440,29 @@ final class Miuix307PassBlurBridge {
         return tryUnbind(binding, null);
     }
 
+    private static void releaseVendorClaim(Binding binding) {
+        // Caller holds binding monitor. release(root, producer) is identity-checked,
+        // so a stale retire cannot erase a newer generation's root claim.
+        if (binding.vendorClaimReleased) return;
+        if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
+            SecurityCenterPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        } else if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
+            GboardPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        } else if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
+            MiuiSearchboxPassBlurContinuousAuthority.release(
+                    binding.rootSurface, binding.producerSurface);
+        }
+        binding.vendorClaimReleased = true;
+    }
+
     private static void onDetachCommitted(Binding binding) {
         ArrayList<Runnable> callbacks;
         synchronized (binding) {
             if (!binding.detachPending || !binding.bound) return;
             try {
-                // Only release vendor-authority claims after compositor commit, never on submit.
-                if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
-                    SecurityCenterPassBlurContinuousAuthority.release(
-                            binding.rootSurface, binding.producerSurface);
-                }
-                if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
-                    GboardPassBlurContinuousAuthority.release(
-                            binding.rootSurface, binding.producerSurface);
-                }
-                if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
-                    MiuiSearchboxPassBlurContinuousAuthority.release(
-                            binding.rootSurface, binding.producerSurface);
-                }
+                releaseVendorClaim(binding);
             } catch (Throwable error) {
                 binding.detachPending = false;
                 try { MainHook.log(TAG + " PassBlur authority release failed; retained: " + error); }

@@ -961,6 +961,12 @@ final class RootPassBlurBackend {
                 || rootRef.get() != root) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(bindRequest, producer);
         if (next == null) {
+            if (PassBlurProducerSubmissionGate.wasSubmitted(producer)) {
+                state.onBindExhausted();
+                notifyTerminalFailure(new IllegalStateException(
+                        "PassBlur bind failed after native producer submission; refusing reuse"));
+                return;
+            }
             RootPassBlurEndpointBridge.Endpoint currentEndpoint =
                     RootPassBlurEndpointBridge.inspect(root);
             boolean unavailable = currentEndpoint == null || !currentEndpoint.isValid()

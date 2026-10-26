@@ -1346,6 +1346,12 @@ final class Miuix307PassBlurTextureView extends TextureView
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(
                 PassBlurBindRequest.dock(materialHost, 1.0f), producer);
         if (next == null) {
+            if (PassBlurProducerSubmissionGate.wasSubmitted(producer)) {
+                producerRecovery.onBindExhausted();
+                MainHook.log(TAG + " native producer submission failed; "
+                        + "refusing to resubmit the same Surface");
+                return;
+            }
             retryBind(attempt, "framework bind returned null");
             return;
         }

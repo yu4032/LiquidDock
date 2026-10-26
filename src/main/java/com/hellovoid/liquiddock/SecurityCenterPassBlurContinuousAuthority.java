@@ -25,6 +25,7 @@ final class SecurityCenterPassBlurContinuousAuthority {
     private static final class Claim {
         final Surface surface;
         final float scale;
+        boolean producerSubmitted;
 
         Claim(Surface surface, float scale) {
             this.surface = surface;
@@ -52,14 +53,16 @@ final class SecurityCenterPassBlurContinuousAuthority {
                     SurfaceControl root = args.length > 0 && args[0] instanceof SurfaceControl
                             ? (SurfaceControl) args[0] : null;
                     Claim claim = root != null ? claimFor(root) : null;
-                    if (claim != null && SecurityCenterGlassRuntimeState.isMaterialEnabled()) {
+                    if (claim != null && SecurityCenterGlassRuntimeState.isMaterialEnabled()
+                            && !Miuix307PassBlurBridge.isModuleDetach(root)) {
                         Surface requested = args.length > 1 && args[1] instanceof Surface
                                 ? (Surface) args[1] : null;
-                        if (requested != claim.surface) {
-                            log("suppressed vendor PassBlur surface rebind while LiquidDock owns root layerId="
-                                    + Miuix307PassBlurBridge.surfaceLayerId(root));
-                            return successfulSuppressionResult(
-                                    setPassBlurSurface, chain.getThisObject());
+                        synchronized (LOCK) {
+                            if (claim.producerSubmitted || requested != claim.surface) {
+                                return successfulSuppressionResult(
+                                        setPassBlurSurface, chain.getThisObject());
+                            }
+                            claim.producerSubmitted = true;
                         }
                     }
                     return chain.proceed(args);
@@ -70,7 +73,8 @@ final class SecurityCenterPassBlurContinuousAuthority {
                     SurfaceControl root = args.length > 0 && args[0] instanceof SurfaceControl
                             ? (SurfaceControl) args[0] : null;
                     Claim claim = root != null ? claimFor(root) : null;
-                    if (claim != null && SecurityCenterGlassRuntimeState.isMaterialEnabled()) {
+                    if (claim != null && SecurityCenterGlassRuntimeState.isMaterialEnabled()
+                            && !Miuix307PassBlurBridge.isModuleDetach(root)) {
                         boolean requestedEnabled = args.length > 1 && args[1] instanceof Boolean
                                 && (Boolean) args[1];
                         float requestedScale = args.length > 2 && args[2] instanceof Float
