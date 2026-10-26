@@ -273,7 +273,13 @@ final class RootPassBlurBackend {
                 RootPassBlurEndpointBridge.sameGeneration(old, replacement))) {
             // A destroyed old root cannot acknowledge native detach. Quarantine it and
             // create a separate producer for the new Workspace generation.
-            return scheduleInvalidRootWorkspaceIsolation(old, epoch, reason);
+            boolean queued = scheduleInvalidRootWorkspaceIsolation(old, epoch, reason);
+            if (!queued) {
+                state.onRecreateFailed();
+                notifyTerminalFailure(new IllegalStateException(
+                        "invalid-root Workspace recovery enqueue rejected"));
+            }
+            return queued;
         }
         PassBlurDetachCoordinator.retire(old, () -> {
             if (binding == old) binding = null;
@@ -314,13 +320,27 @@ final class RootPassBlurBackend {
                 replacement != null && replacement.isValid(),
                 RootPassBlurEndpointBridge.sameGeneration(old, replacement))) return false;
         if (!invalidRootIsolationQueued.compareAndSet(false, true)) return true;
-        boolean posted = postToRenderThread(() -> {
-            try {
-                isolateInvalidWorkspaceRoot(old, epoch, reason, replacement);
-            } finally {
-                invalidRootIsolationQueued.set(false);
-            }
-        });
+        boolean posted;
+        try {
+            posted = renderThread.isAlive() && renderHandler.post(() -> {
+                try {
+                    if (shuttingDown) return;
+                    ensureEglAndSource();
+                    makePbufferCurrentUnchecked();
+                    isolateInvalidWorkspaceRoot(old, epoch, reason, replacement);
+                } catch (Throwable error) {
+                    state.onRecreateFailed();
+                    notifyTerminalFailure(error);
+                } finally {
+                    // Unlike the generic postToRenderThread guard, this finally runs even
+                    // when EGL initialization fails before the recovery task can start.
+                    invalidRootIsolationQueued.set(false);
+                }
+            });
+        } catch (Throwable error) {
+            posted = false;
+            MainHook.log(TAG + " invalid-root isolation queue failed: " + error);
+        }
         if (!posted) {
             invalidRootIsolationQueued.set(false);
             MainHook.log(TAG + " invalid-root isolation enqueue rejected reason=" + reason);
