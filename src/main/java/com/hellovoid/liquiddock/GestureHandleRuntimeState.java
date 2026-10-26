@@ -29,7 +29,13 @@ final class GestureHandleRuntimeState {
         if (preferences != null && preferenceListener != null) {
             try {
                 preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener);
-            } catch (Throwable ignored) {}
+            } catch (Throwable error) {
+                // Do not lose the only reference to an observer that might still be registered.
+                // Its epoch is already invalidated; a later retry may detach it safely.
+                throw new IllegalStateException(
+                        "Cannot replace gesture preference observer before detaching previous owner",
+                        error);
+            }
         }
 
         preferences = nextPreferences;
@@ -49,18 +55,23 @@ final class GestureHandleRuntimeState {
         activeGeneration = generation;
         if (nextPreferences == null) return;
         preferenceListener = (sharedPreferences, key) -> {
-            if (!EPOCH.isCurrent(generation)) return;
             if (!ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name().equals(key)) {
                 return;
             }
-            apply(
-                    sharedPreferences.getBoolean(
-                            ConfigSchema.Core.ENABLED.name(),
-                            ConfigSchema.Core.ENABLED.runtimeFallback()),
-                    sharedPreferences.getBoolean(
-                            ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name(),
-                            ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.runtimeFallback()));
+            // Check and apply under the SAME monitor used by initialize()/shutdown().
+            // Checking EPOCH before taking this lock permits a stale callback to update
+            // coreEnabled after shutdown has already returned.
+            synchronized (GestureHandleRuntimeState.class) {
+                if (!EPOCH.isCurrent(generation)) return;
+                apply(
+                        sharedPreferences.getBoolean(
+                                ConfigSchema.Core.ENABLED.name(),
+                                ConfigSchema.Core.ENABLED.runtimeFallback()),
+                        sharedPreferences.getBoolean(
+                                ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name(),
+                                ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.runtimeFallback()));
+            }
         };
         nextPreferences.registerOnSharedPreferenceChangeListener(preferenceListener);
     }
