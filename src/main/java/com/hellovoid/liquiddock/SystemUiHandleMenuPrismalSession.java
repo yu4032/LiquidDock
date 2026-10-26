@@ -111,6 +111,7 @@ final class SystemUiHandleMenuPrismalSession {
 
     private Miuix307PassBlurBridge.Binding sourceBinding;
     private final HandleMenuTeardownGate teardownGate = new HandleMenuTeardownGate();
+    private final Runnable committedDetachCallback = this::requestTeardownRetry;
 
     SystemUiHandleMenuPrismalSession(
             View host,
@@ -363,8 +364,8 @@ final class SystemUiHandleMenuPrismalSession {
             return;
         }
 
-        // The checked transaction was applied (not necessarily acknowledged by a compositor
-        // fence). Only now may the render thread destroy the bound producer and EGL objects.
+        // The checked transaction has received the SurfaceFlinger committed callback.
+        // This is not a GPU-buffer-release fence, but the detach is compositor-acknowledged.
         if (!teardownGate.claimRenderRelease()) return;
         try {
             if (!renderHandler.post(() -> {
@@ -434,7 +435,7 @@ final class SystemUiHandleMenuPrismalSession {
             sourceBound = false;
             return true;
         }
-        if (!Miuix307PassBlurBridge.tryUnbind(current)) {
+        if (!Miuix307PassBlurBridge.tryUnbind(current, committedDetachCallback)) {
             // Keep both the binding and its GPU producer live until a later successful retry.
             return false;
         }
