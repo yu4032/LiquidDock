@@ -177,7 +177,7 @@ internal fun GlassEdgeSettingsPage(
         }
 
         if (global) {
-            item(key = "scope-title") { SmallTitle("各玻璃组件的独立设置") }
+            item(key = "scope-title") { SmallTitle("各组件的独立阴影与描边") }
             item(key = "scope-dock") {
                 SettingsCard {
                     ArrowPreference("Dock 本体", "独立调节 Dock 外阴影、颜色与光照",
@@ -234,8 +234,8 @@ internal fun GlassEdgeSettingsPage(
             }
             item(key = "scope-security") {
                 SettingsCard {
-                    ArrowPreference("侧边栏", "背景模糊、色调、圆角与 Prismal 光照",
-                        enabled = active, onClick = { open(Page.SidebarEdge) })
+                    ArrowPreference("安全中心侧边栏阴影", "仅调整侧边栏的阴影与描边；玻璃背景在「玻璃组件」中设置",
+                        enabled = active, onClick = { open(Page.SecurityCenterEdge) })
                 }
             }
         }

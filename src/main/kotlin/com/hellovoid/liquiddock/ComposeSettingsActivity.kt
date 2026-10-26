@@ -439,6 +439,9 @@ private fun LiquidDockSettings(
                     Page.SidebarEdge -> SidebarGlassSettingsPage(
                         padding, prefs, masterEnabled,
                     )
+                    Page.SecurityCenterEdge -> GlassEdgeSettingsPage(
+                        padding, prefs, masterEnabled, GlassEdgeEffects.SECURITY_CENTER,
+                    )
                     Page.LiquidShadow -> LiquidSpecPage(
                         padding,
                         prefs,

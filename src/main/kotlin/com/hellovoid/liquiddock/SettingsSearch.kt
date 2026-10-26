@@ -40,6 +40,7 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
         Page.PopupEdge to "快捷菜单", Page.HandleMenuEdge to "顶部菜单",
         Page.DialogEdge to "对话弹窗", Page.GboardEdge to "Gboard",
         Page.SearchboxEdge to "系统搜索", Page.SidebarEdge to "侧边栏 / 安全中心",
+        Page.SecurityCenterEdge to "安全中心侧边栏阴影",
     )
     fun location(page: Page): String {
         val name = context.getString(page.titleRes)
