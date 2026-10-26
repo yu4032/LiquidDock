@@ -124,11 +124,9 @@ CI green is insufficient to claim device support; real API 102 verification rema
 - `Miuix307PassBlurBridge.tryUnbind(binding)` returns **false** on an invalid root,
   reflection failure or native transaction failure, without clearing `Binding.bound`,
   `updatesEnabled`, or the vendor continuous-authority claims. Claims are released only
-  after a successful detach transaction. Existing void `unbind()` callers remain
-  source-compatible but do **not** yet enforce release ordering; audit them separately.
-- A `true` return proves only that `SurfaceControl.Transaction.apply()` returned
-  normally. It is **not** a SurfaceFlinger completion fence or proof of compositor
-  acknowledgment. No native GPU fence/transaction completion callback is wired.
+  after a successful detach transaction. **Phase 6 supersedes this intermediate
+  apply-only behavior:** legacy void `unbind()` callers have been removed, and
+  a true result now requires the transaction-committed callback.
 - `SystemUiHandleMenuPrismalSession` now uses `HandleMenuTeardownGate` to forbid
   render-thread EGL/SurfaceTexture destruction until checked producer detach succeeds.
   Failed detaches are retried up to three attempts with an 80ms delay; failures and
@@ -145,8 +143,8 @@ CI green is insufficient to claim device support; real API 102 verification rema
 
 1. Render cleanup functions still swallow some EGL/GL/Surface release failures.
    A queued render cleanup is not proof of successful native resource destruction.
-2. Other PassBlur owners still call legacy `unbind()` without checking success; their
-   producer/SurfaceTexture lifetimes must be migrated one owner at a time.
+2. All direct Bridge call sites now use checked retirement, but the other owners still
+   require API102 device lifecycle verification for their asynchronous callbacks.
 3. HandleMenu's global `SurfaceControl.Transaction.setAlpha` hook, live alpha listeners,
    pending/active View bindings, and cross-owner glass callbacks are not fully drainable.
 4. An invalidated ViewRoot may never become detachable again. Retained failed sessions
@@ -180,6 +178,9 @@ JVM tests or a successful CI build.
   have been committed and are ready to be presented; it explicitly does NOT mean
   all buffers are released by GPU consumers. The implementation does not provide
   buffer-release fencing or a verified drain of in-flight GPU work.
+- HandleMenu now retains blocked cleanup state until the render-thread release task
+  actually completes; thrown cleanup errors trigger retry instead of premature success.
+  Individual EGL return codes may still be swallowed by existing low-level routines.
 - Callbacks, render-thread cleanup, producer-retirement completion, and blocked
   handler dispatch still require on-device lifecycle verification. Native bind's
   partial-success error path and other owner-specific EGL teardown failures remain
