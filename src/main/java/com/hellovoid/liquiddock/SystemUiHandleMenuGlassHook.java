@@ -340,8 +340,8 @@ final class SystemUiHandleMenuGlassHook {
 
         boolean replacementBlurApplied;
         boolean customPassBlurOwned;
-        boolean prismalPresented;
-        SystemUiHandleMenuPrismalSession prismalSession;
+        volatile boolean prismalPresented;
+        volatile SystemUiHandleMenuPrismalSession prismalSession;
         SystemUiHandleMenuGlassOutputView prismalOutput;
         volatile float pendingSurfaceAlpha;
         boolean fadeUpdatePosted;
