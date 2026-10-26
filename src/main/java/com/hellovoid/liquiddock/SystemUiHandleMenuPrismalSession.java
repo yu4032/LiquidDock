@@ -200,28 +200,39 @@ final class SystemUiHandleMenuPrismalSession {
             if (surface != null) surface.release();
             return;
         }
-        renderHandler.post(() -> {
-            if (shuttingDown) {
-                surface.release();
-                return;
-            }
-            try {
-                ensureEgl();
-                releaseOutput();
-                outputSurface = surface;
-                this.width = Math.max(1, width);
-                this.height = Math.max(1, height);
-                outputEglSurface = EGL14.eglCreateWindowSurface(
-                        eglDisplay, eglConfig, surface, new int[]{EGL14.EGL_NONE}, 0);
-                checkEgl("eglCreateWindowSurface",
-                        outputEglSurface != EGL14.EGL_NO_SURFACE);
-                ensureRenderResources();
-                renderLatestIfPossible();
-            } catch (Throwable error) {
-                try { surface.release(); } catch (Throwable ignored) {}
-                fail(error);
-            }
-        });
+        boolean queued;
+        try {
+            queued = renderHandler.post(() -> {
+                if (shuttingDown) {
+                    surface.release();
+                    return;
+                }
+                try {
+                    ensureEgl();
+                    releaseOutput();
+                    outputSurface = surface;
+                    this.width = Math.max(1, width);
+                    this.height = Math.max(1, height);
+                    outputEglSurface = EGL14.eglCreateWindowSurface(
+                            eglDisplay, eglConfig, surface, new int[]{EGL14.EGL_NONE}, 0);
+                    checkEgl("eglCreateWindowSurface",
+                            outputEglSurface != EGL14.EGL_NO_SURFACE);
+                    ensureRenderResources();
+                    renderLatestIfPossible();
+                } catch (Throwable error) {
+                    try { surface.release(); } catch (Throwable ignored) {}
+                    fail(error);
+                }
+            });
+        } catch (Throwable error) {
+            queued = false;
+            log("output attach enqueue failed: " + error);
+        }
+        // A queued shutdown can quit the render looper between the caller-side check and
+        // post(). A rejected post must not leak the newly created TextureView Surface.
+        if (!queued) {
+            try { surface.release(); } catch (Throwable ignored) {}
+        }
     }
 
     void resizeOutput(int width, int height) {
@@ -246,13 +257,22 @@ final class SystemUiHandleMenuPrismalSession {
 
     void detachOutput(Surface surface) {
         if (surface == null) return;
-        renderHandler.post(() -> {
-            if (outputSurface == surface) {
-                releaseOutput();
-            } else {
-                try { surface.release(); } catch (Throwable ignored) {}
-            }
-        });
+        boolean queued;
+        try {
+            queued = renderHandler.post(() -> {
+                if (outputSurface == surface) {
+                    releaseOutput();
+                } else {
+                    try { surface.release(); } catch (Throwable ignored) {}
+                }
+            });
+        } catch (Throwable error) {
+            queued = false;
+            log("output detach enqueue failed: " + error);
+        }
+        if (!queued) {
+            try { surface.release(); } catch (Throwable ignored) {}
+        }
     }
 
     synchronized void shutdown() {
