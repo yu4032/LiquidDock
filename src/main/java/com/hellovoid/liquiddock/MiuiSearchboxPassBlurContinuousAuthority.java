@@ -16,7 +16,7 @@ final class MiuiSearchboxPassBlurContinuousAuthority {
         final Surface surface;
         final float scale;
         boolean updatesEnabled = true;
-        boolean producerSubmitted;
+        final PassBlurClaimSubmissionGuard submission = new PassBlurClaimSubmissionGuard();
 
         Claim(Surface surface, float scale) {
             this.surface = surface;
@@ -47,15 +47,10 @@ final class MiuiSearchboxPassBlurContinuousAuthority {
                     if (claim != null) {
                         Surface requested = args.length > 1 && args[1] instanceof Surface
                                 ? (Surface) args[1] : null;
-                        if (!Miuix307PassBlurBridge.isModuleDetach(root)) {
-                            synchronized (LOCK) {
-                                // Our first bind passes once. Never substitute the same
-                                // already-parceled IGBP into a later vendor transaction.
-                                if (claim.producerSubmitted || requested != claim.surface) {
-                                    return suppressSurfaceWrite(setPassBlurSurface, chain.getThisObject());
-                                }
-                                claim.producerSubmitted = true; // before native, even if it throws
-                            }
+                        if (claim.submission.shouldSuppress(
+                                Miuix307PassBlurBridge.isModuleDetach(root),
+                                requested == claim.surface)) {
+                            return suppressSurfaceWrite(setPassBlurSurface, chain.getThisObject());
                         }
                     }
                     return chain.proceed(args);

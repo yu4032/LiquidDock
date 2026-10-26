@@ -25,7 +25,7 @@ final class SecurityCenterPassBlurContinuousAuthority {
     private static final class Claim {
         final Surface surface;
         final float scale;
-        boolean producerSubmitted;
+        final PassBlurClaimSubmissionGuard submission = new PassBlurClaimSubmissionGuard();
 
         Claim(Surface surface, float scale) {
             this.surface = surface;
@@ -57,12 +57,9 @@ final class SecurityCenterPassBlurContinuousAuthority {
                             && !Miuix307PassBlurBridge.isModuleDetach(root)) {
                         Surface requested = args.length > 1 && args[1] instanceof Surface
                                 ? (Surface) args[1] : null;
-                        synchronized (LOCK) {
-                            if (claim.producerSubmitted || requested != claim.surface) {
-                                return successfulSuppressionResult(
-                                        setPassBlurSurface, chain.getThisObject());
-                            }
-                            claim.producerSubmitted = true;
+                        if (claim.submission.shouldSuppress(false, requested == claim.surface)) {
+                            return successfulSuppressionResult(
+                                    setPassBlurSurface, chain.getThisObject());
                         }
                     }
                     return chain.proceed(args);

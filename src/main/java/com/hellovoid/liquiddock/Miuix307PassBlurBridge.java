@@ -392,9 +392,12 @@ final class Miuix307PassBlurBridge {
             }
             try {
                 if (!binding.rootSurface.isValid()) {
+                    boolean firstInvalidation = !binding.vendorClaimReleased;
                     releaseVendorClaim(binding);
-                    MainHook.log(TAG + " PassBlur root invalid; claim released, producer retained root="
-                            + binding.rootName);
+                    if (firstInvalidation) {
+                        MainHook.log(TAG + " PassBlur root invalid; claim released, producer retained root="
+                                + binding.rootName);
+                    }
                     return false;
                 }
                 if (binding.detachPending) return false;
@@ -415,16 +418,23 @@ final class Miuix307PassBlurBridge {
                     binding.detachPending = true;
                     transaction.apply();
                 }
+                // Dispatch errors after apply() must not clear detachPending. Native
+                // confirmation may still arrive even if the diagnostic Handler fails.
                 if (binding.detachPending) {
-                    boolean posted = MAIN.postDelayed(() -> {
-                        synchronized (binding) {
-                            if (binding.bound && binding.detachPending) {
-                                MainHook.log(TAG + " PassBlur detach commit unconfirmed after 1s;"
-                                        + " producer retained root=" + binding.rootName);
+                    try {
+                        boolean posted = MAIN.postDelayed(() -> {
+                            synchronized (binding) {
+                                if (binding.bound && binding.detachPending) {
+                                    MainHook.log(TAG + " PassBlur detach commit unconfirmed after 1s;"
+                                            + " producer retained root=" + binding.rootName);
+                                }
                             }
-                        }
-                    }, DETACH_COMMIT_WARN_MS);
-                    if (!posted) MainHook.log(TAG + " detach watchdog enqueue unavailable");
+                        }, DETACH_COMMIT_WARN_MS);
+                        if (!posted) MainHook.log(TAG + " detach watchdog enqueue unavailable");
+                    } catch (Throwable diagnosticError) {
+                        try { MainHook.log(TAG + " detach watchdog failed: " + diagnosticError); }
+                        catch (Throwable ignored) {}
+                    }
                 }
                 return !binding.bound;
             } catch (Throwable error) {
