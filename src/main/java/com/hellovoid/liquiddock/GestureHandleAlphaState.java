@@ -27,7 +27,7 @@ final class GestureHandleAlphaState<T> {
         // A new NavigationBar can appear while HOME is already hidden. It must inherit the
         // current visibility even though the scene state has not changed.
         if (!hidden) return true;
-        boolean applied = writer.write(handle, 0f);
+        boolean applied = safeWrite(writer, handle, 0f);
         if (!applied) needsReconcile = true;
         return applied;
     }
@@ -45,7 +45,7 @@ final class GestureHandleAlphaState<T> {
         boolean complete = true;
         for (Map.Entry<T, Float> entry : vendorTargets.entrySet()) {
             T handle = entry.getKey();
-            if (handle != null && !writer.write(handle, next ? 0f : entry.getValue())) {
+            if (handle != null && !safeWrite(writer, handle, next ? 0f : entry.getValue())) {
                 complete = false;
             }
         }
@@ -66,7 +66,7 @@ final class GestureHandleAlphaState<T> {
         while (iterator.hasNext()) {
             Map.Entry<T, Float> entry = iterator.next();
             T handle = entry.getKey();
-            if (handle == null || writer.write(handle, entry.getValue())) {
+            if (handle == null || safeWrite(writer, handle, entry.getValue())) {
                 iterator.remove();
             } else {
                 complete = false;
@@ -77,5 +77,14 @@ final class GestureHandleAlphaState<T> {
 
     synchronized int trackedCount() {
         return vendorTargets.size();
+    }
+
+    private static <T> boolean safeWrite(Writer<T> writer, T handle, float alpha) {
+        try {
+            return writer.write(handle, alpha);
+        } catch (Throwable ignored) {
+            // Keep this native handle in the retry ledger, but continue restoring the others.
+            return false;
+        }
     }
 }
