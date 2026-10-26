@@ -481,11 +481,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         ZeroCopyProducerRecoveryState.Decision recovery =
                 producerRecovery.onRebindRequested(outputWindowSurface != null);
         if (!recovery.accepted) return;
-        if (recovery.clearFrameworkBinding) {
-            Miuix307PassBlurBridge.Binding stale = binding;
-            binding = null;
-            Miuix307PassBlurBridge.unbind(stale);
-        }
         gpuBackdropActive = false;
         if (recovery.clearFrameAvailable) frameAvailable.set(false);
         firstFrameLogged = false;
@@ -495,9 +490,18 @@ final class Miuix307PassBlurTextureView extends TextureView
         prismalMappingLogged = false;
         resetBoundGeometry();
         MainHook.log(TAG + " producer rebind requested reason=" + reason);
-        if (recovery.recreateProducer) {
-            renderHandler.post(() -> recreateInputProducer(reason));
-        }
+        // Retire only after compositor commitment. Keep the old BufferQueue and Binding
+        // until confirmed, even when the recovery state already requests a new producer.
+        Miuix307PassBlurBridge.Binding stale = binding;
+        PassBlurDetachCoordinator.retire(stale, () -> {
+            if (binding == stale) binding = null;
+            if (!shuttingDown && outputWindowSurface != null) {
+                if (!renderHandler.post(() -> recreateInputProducer(reason))) {
+                    MainHook.log(TAG + " producer recreate enqueue rejected after detach");
+                    producerRecovery.onRecreateFailed();
+                }
+            }
+        });
     }
 
     /**
@@ -505,7 +509,7 @@ final class Miuix307PassBlurTextureView extends TextureView
      * producer that already crossed that boundary must not be reused; create a new BufferQueue.
      */
     private void recreateInputProducer(String reason) {
-        if (shuttingDown) return;
+        if (shuttingDown || binding != null) return;
         if (eglWindowSurface == EGL14.EGL_NO_SURFACE || normalizeProgram == 0
                 || compositeProgram == 0 || inputProducerSurface == null) {
             producerRecovery.onOutputUnavailable();
@@ -553,12 +557,20 @@ final class Miuix307PassBlurTextureView extends TextureView
         removeGeometryObserver();
 
         Miuix307PassBlurBridge.Binding currentBinding = binding;
-        binding = null;
-        Miuix307PassBlurBridge.unbind(currentBinding);
         resetBoundGeometry();
 
-        renderHandler.post(this::releaseRenderResources);
-        renderThread.quitSafely();
+        PassBlurDetachCoordinator.retire(currentBinding, () -> {
+            if (binding == currentBinding) binding = null;
+            try {
+                if (renderHandler.post(this::releaseRenderResources)) {
+                    renderThread.quitSafely();
+                } else {
+                    MainHook.log(TAG + " render cleanup enqueue rejected; GPU producer retained");
+                }
+            } catch (Throwable error) {
+                MainHook.log(TAG + " render cleanup enqueue failed: " + error);
+            }
+        });
     }
 
     @Override
