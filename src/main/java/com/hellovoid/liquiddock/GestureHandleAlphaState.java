@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -43,9 +44,12 @@ final class GestureHandleAlphaState<T> {
         if (hidden == next && !needsReconcile) return true;
         hidden = next;
         boolean complete = true;
-        for (Map.Entry<T, Float> entry : vendorTargets.entrySet()) {
-            T handle = entry.getKey();
-            if (handle != null && !safeWrite(writer, handle, next ? 0f : entry.getValue())) {
+        // Native setAlpha may synchronously reenter another NavigationBar capture. Snapshot
+        // the keys so a newly discovered handle cannot invalidate WeakHashMap iteration.
+        for (T handle : new ArrayList<>(vendorTargets.keySet())) {
+            Float vendorTarget = vendorTargets.get(handle);
+            if (handle != null && vendorTarget != null
+                    && !safeWrite(writer, handle, next ? 0f : vendorTarget)) {
                 complete = false;
             }
         }
