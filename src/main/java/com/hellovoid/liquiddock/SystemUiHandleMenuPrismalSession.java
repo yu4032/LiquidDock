@@ -369,29 +369,51 @@ final class SystemUiHandleMenuPrismalSession {
         if (!teardownGate.claimRenderRelease()) return;
         try {
             if (!renderHandler.post(() -> {
-                try {
-                    try { releaseOutput(); } catch (Throwable error) {
-                        log("output release failed: " + error);
+                boolean complete = true;
+                try { releaseOutput(); } catch (Throwable error) {
+                    complete = false;
+                    log("output release failed: " + error);
+                }
+                try { releaseRenderResources(); } catch (Throwable error) {
+                    complete = false;
+                    log("Prismal resource release failed: " + error);
+                }
+                try { releaseSource(); } catch (Throwable error) {
+                    complete = false;
+                    log("source texture release failed: " + error);
+                }
+                try { releaseEgl(); } catch (Throwable error) {
+                    complete = false;
+                    log("EGL release failed: " + error);
+                }
+                if (complete) {
+                    try {
+                        complete = renderThread.quitSafely();
+                    } catch (Throwable error) {
+                        complete = false;
+                        log("render thread shutdown failed: " + error);
                     }
-                    try { releaseRenderResources(); } catch (Throwable error) {
-                        log("Prismal resource release failed: " + error);
+                }
+                if (complete) {
+                    // A queued task is not proof of cleanup. Only acknowledge after it runs.
+                    clearTeardownBlocked();
+                } else {
+                    teardownGate.renderPostRejected();
+                    markTeardownBlocked();
+                    log("render cleanup incomplete; session retained for retry");
+                    try {
+                        if (!mainHandler.postDelayed(
+                                this::unbindThenReleaseOnMain, UNBIND_RETRY_DELAY_MS)) {
+                            log("render cleanup retry enqueue rejected");
+                        }
+                    } catch (Throwable error) {
+                        log("render cleanup retry enqueue failed: " + error);
                     }
-                    try { releaseSource(); } catch (Throwable error) {
-                        log("source texture release failed: " + error);
-                    }
-                    try { releaseEgl(); } catch (Throwable error) {
-                        log("EGL release failed: " + error);
-                    }
-                } finally {
-                    try { renderThread.quitSafely(); }
-                    catch (Throwable error) { log("render thread shutdown failed: " + error); }
                 }
             })) {
                 teardownGate.renderPostRejected();
                 markTeardownBlocked();
                 log("render cleanup rejected after detach; retaining incomplete teardown");
-            } else {
-                clearTeardownBlocked();
             }
         } catch (Throwable error) {
             teardownGate.renderPostRejected();
