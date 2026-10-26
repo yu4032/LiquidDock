@@ -299,9 +299,38 @@ final class RootPassBlurBackend {
                         new IllegalStateException("render queue rejected rebind after detach"));
             }
         });
+        if (old != null && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
+            // ViewRoot may become invalid only AFTER the native detach was submitted.
+            // Re-check without waiting for another scene event to trigger reconcileRoot().
+            scheduleStalledWorkspaceCheck(old, epoch, reason, 300L);
+            scheduleStalledWorkspaceCheck(old, epoch, reason, 1200L);
+        }
         // Completion is asynchronous; rollover remains pending until a new producer binds.
         // A permanent detach failure retains the old binding and its input BufferQueue.
         return true;
+    }
+
+    private void scheduleStalledWorkspaceCheck(
+            Miuix307PassBlurBridge.Binding old, long epoch, String reason, long delayMs) {
+        try {
+            if (!mainHandler.postDelayed(() -> {
+                if (shuttingDown || epoch != bindEpoch.get() || binding != old
+                        || !state.isRebindPending() || old == null
+                        || (old.rootSurface != null && old.rootSurface.isValid())) return;
+                RootPassBlurEndpointBridge.Endpoint next =
+                        RootPassBlurEndpointBridge.inspect(rootRef.get());
+                if (WorkspacePassBlurRolloverPolicy.isolate(
+                        true, false, next != null && next.isValid(),
+                        RootPassBlurEndpointBridge.sameGeneration(old, next))) {
+                    scheduleInvalidRootWorkspaceIsolation(old, epoch,
+                            reason + "-delayed-" + delayMs);
+                }
+            }, delayMs)) {
+                MainHook.log(TAG + " stale-root recovery check enqueue rejected");
+            }
+        } catch (Throwable error) {
+            MainHook.log(TAG + " stale-root recovery check enqueue failed: " + error);
+        }
     }
 
     private boolean scheduleInvalidRootWorkspaceIsolation(
