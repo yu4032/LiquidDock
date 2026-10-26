@@ -21,6 +21,7 @@ import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Root-bound zero-copy PassBlur source backend shared by Launcher and Security Center domains.
@@ -78,6 +79,32 @@ final class RootPassBlurBackend {
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
     private volatile int maxTextureSize;
+    /** Old, invalid ViewRoot generations are quarantined, never freed pre-commit. */
+    private final ArrayList<RetiredInput> retainedInputs = new ArrayList<>();
+    private volatile boolean shutdownSourceDetached;
+    private final AtomicBoolean shutdownGlScheduled = new AtomicBoolean();
+    private final AtomicBoolean invalidRootIsolationQueued = new AtomicBoolean();
+    private Miuix307PassBlurBridge.Binding lastLoggedMismatchBinding;
+    private int lastLoggedMismatchLayer = -1;
+    private int lastLoggedMismatchSequence = -1;
+    private boolean pendingRejectionLogged;
+
+    private static final class RetiredInput {
+        final Miuix307PassBlurBridge.Binding binding;
+        final Surface producer;
+        final SurfaceTexture texture;
+        final int oesTexture;
+
+        RetiredInput(
+                Miuix307PassBlurBridge.Binding binding,
+                Surface producer,
+                SurfaceTexture texture, int oesTexture) {
+            this.binding = binding;
+            this.producer = producer;
+            this.texture = texture;
+            this.oesTexture = oesTexture;
+        }
+    }
 
     private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLConfig eglConfig;
@@ -171,11 +198,21 @@ final class RootPassBlurBackend {
             }
             bindEpoch.incrementAndGet(); // Fence pending bind/retry callbacks.
             Miuix307PassBlurBridge.Binding old = binding;
-            binding = null;
-            Miuix307PassBlurBridge.unbind(old);
-            releaseInputProducerEndpointOnRenderThread(true);
-            MainHook.log(TAG + " one-shot folder producer retired; GPU snapshot retained");
-            if (onRetired != null) mainHandler.post(onRetired);
+            PassBlurDetachCoordinator.retire(old, () -> {
+                if (binding == old) binding = null;
+                // Shutdown may have joined this same pending detach. Its own continuation
+                // owns full EGL cleanup; never retire a snapshot after shutdown starts.
+                if (shuttingDown) return;
+                if (!postToRenderThread(() -> {
+                    if (shuttingDown) return;
+                    releaseInputProducerEndpointOnRenderThread(true);
+                    MainHook.log(TAG
+                            + " one-shot folder producer retired after compositor commit");
+                    if (onRetired != null) mainHandler.post(onRetired);
+                })) {
+                    MainHook.log(TAG + " folder producer render cleanup enqueue rejected");
+                }
+            });
         });
     }
 
@@ -206,45 +243,248 @@ final class RootPassBlurBackend {
         }
         ZeroCopyProducerRecoveryState.Decision decision = state.requestRebind();
         if (!decision.accepted) {
+            // A replacement ViewRoot can appear AFTER detach submission, invalidating
+            // the old SurfaceControl and preventing its committed callback. Do not wait
+            // forever on a previously accepted rollover if a distinct root now exists.
+            if (state.isRebindPending() && binding != null) {
+                scheduleInvalidRootWorkspaceIsolation(
+                        binding, bindEpoch.get(), reason + "-pending");
+            }
             if (state.isRebindPending() && rolloverComplete != null) {
                 boolean attached = attachRolloverCompletion(rolloverComplete);
                 MainHook.log(TAG + " producer rebind piggyback reason=" + reason
                         + " attached=" + attached + " domain=" + bindRequest.domain());
                 return attached;
             }
-            MainHook.log(TAG + " producer rebind rejected reason=" + reason
-                    + " cause=recovery-state domain=" + bindRequest.domain());
+            if (!pendingRejectionLogged) {
+                pendingRejectionLogged = true;
+                MainHook.log(TAG + " producer rebind pending reason=" + reason
+                        + " domain=" + bindRequest.domain()
+                        + " (duplicate requests suppressed)");
+            }
             return false;
         }
+        pendingRejectionLogged = false;
         if (rolloverComplete != null && !attachRolloverCompletion(rolloverComplete)) {
+            state.onRecreateFailed();
             MainHook.log(TAG + " producer rebind rejected reason=" + reason
                     + " cause=completion-attach domain=" + bindRequest.domain());
             return false;
         }
         long epoch = bindEpoch.incrementAndGet();
+        state.onRebindScheduled(epoch);
         Miuix307PassBlurBridge.Binding old = binding;
-        binding = null;
-        if (decision.clearFrameworkBinding) Miuix307PassBlurBridge.unbind(old);
-        boolean queued = postToRenderThread(() -> {
-            try {
-                if (shuttingDown || epoch != bindEpoch.get()) return;
-                releaseInputProducerEndpointOnRenderThread(false);
-                if (shuttingDown || epoch != bindEpoch.get()) return;
-                createInputProducer();
-                ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
-                if (recreated.requestBind) mainHandler.post(() -> bindProducerWhenReady(0));
-                MainHook.log(TAG + " producer recreated reason=" + reason
-                        + " domain=" + bindRequest.domain());
-            } catch (Throwable error) {
+        View sourceRoot = rootRef.get();
+        RootPassBlurEndpointBridge.Endpoint replacement =
+                RootPassBlurEndpointBridge.inspect(sourceRoot);
+        if (old != null && WorkspacePassBlurRolloverPolicy.isolate(
+                bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE,
+                old.rootSurface != null && old.rootSurface.isValid(),
+                replacement != null && replacement.isValid(),
+                RootPassBlurEndpointBridge.sameGeneration(old, replacement),
+                WorkspacePassBlurRolloverPolicy.distinctNativeLayer(
+                        old.rootLayerId, replacement != null ? replacement.rootLayerId : -1))) {
+            // A destroyed old root cannot acknowledge native detach. Quarantine it and
+            // create a separate producer for the new Workspace generation.
+            boolean queued = scheduleInvalidRootWorkspaceIsolation(old, epoch, reason);
+            if (!queued) {
                 state.onRecreateFailed();
-                notifyTerminalFailure(error);
+                notifyTerminalFailure(new IllegalStateException(
+                        "invalid-root Workspace recovery enqueue rejected"));
+            }
+            return queued;
+        }
+        PassBlurDetachCoordinator.retire(old, () -> {
+            if (binding == old) binding = null;
+            if (shuttingDown || epoch != bindEpoch.get()) {
+                state.onRebindAborted(epoch);
+                return;
+            }
+            boolean queued = postToRenderThread(() -> {
+                try {
+                    if (shuttingDown || epoch != bindEpoch.get()) {
+                        state.onRebindAborted(epoch);
+                        return;
+                    }
+                    releaseInputProducerEndpointOnRenderThread(false);
+                    if (shuttingDown || epoch != bindEpoch.get()) {
+                        state.onRebindAborted(epoch);
+                        return;
+                    }
+                    createInputProducer();
+                    ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
+                    if (recreated.requestBind) mainHandler.post(() -> bindProducerWhenReady(0));
+                    MainHook.log(TAG + " producer recreated after detach commit reason=" + reason
+                            + " domain=" + bindRequest.domain());
+                } catch (Throwable error) {
+                    state.onRecreateFailed();
+                    notifyTerminalFailure(error);
+                }
+            });
+            if (!queued) {
+                state.onRecreateFailed();
+                notifyTerminalFailure(
+                        new IllegalStateException("render queue rejected rebind after detach"));
             }
         });
-        if (!queued) {
-            state.onRecreateFailed();
-            notifyTerminalFailure(new IllegalStateException("render queue rejected rebind"));
+        // Completion is asynchronous; rollover remains pending until a new producer binds.
+        // A permanent detach failure retains the old binding and its input BufferQueue.
+        return true;
+    }
+
+    private boolean scheduleInvalidRootWorkspaceIsolation(
+            Miuix307PassBlurBridge.Binding old, long epoch, String reason) {
+        RootPassBlurEndpointBridge.Endpoint replacement =
+                RootPassBlurEndpointBridge.inspect(rootRef.get());
+        if (old == null || !WorkspacePassBlurRolloverPolicy.isolate(
+                bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE,
+                old.rootSurface != null && old.rootSurface.isValid(),
+                replacement != null && replacement.isValid(),
+                RootPassBlurEndpointBridge.sameGeneration(old, replacement),
+                WorkspacePassBlurRolloverPolicy.distinctNativeLayer(
+                        old.rootLayerId, replacement != null ? replacement.rootLayerId : -1))) return false;
+        if (!invalidRootIsolationQueued.compareAndSet(false, true)) return true;
+        boolean posted;
+        try {
+            posted = renderThread.isAlive() && renderHandler.post(() -> {
+                try {
+                    if (shuttingDown) return;
+                    ensureEglAndSource();
+                    makePbufferCurrentUnchecked();
+                    isolateInvalidWorkspaceRoot(old, epoch, reason,
+                            RootPassBlurEndpointBridge.inspect(rootRef.get()));
+                } catch (Throwable error) {
+                    state.onRecreateFailed();
+                    notifyTerminalFailure(error);
+                } finally {
+                    // Unlike the generic postToRenderThread guard, this finally runs even
+                    // when EGL initialization fails before the recovery task can start.
+                    invalidRootIsolationQueued.set(false);
+                }
+            });
+        } catch (Throwable error) {
+            posted = false;
+            MainHook.log(TAG + " invalid-root isolation queue failed: " + error);
         }
-        return queued;
+        if (!posted) {
+            invalidRootIsolationQueued.set(false);
+            MainHook.log(TAG + " invalid-root isolation enqueue rejected reason=" + reason);
+        }
+        return posted;
+    }
+
+    /**
+     * Render-thread only. A distinct native Workspace layer can bind a new
+     * producer while the old input is quarantined until committed native detach.
+     */
+    private void isolateInvalidWorkspaceRoot(
+            Miuix307PassBlurBridge.Binding old, long epoch, String reason,
+            RootPassBlurEndpointBridge.Endpoint replacement) {
+        requireRenderThread();
+        if (shuttingDown) return;
+        if (epoch != bindEpoch.get() || binding != old) {
+            state.onRebindAborted(epoch);
+            return;
+        }
+        if (old == null || !WorkspacePassBlurRolloverPolicy.isolate(
+                true, old.rootSurface.isValid(),
+                replacement != null && replacement.isValid(),
+                RootPassBlurEndpointBridge.sameGeneration(old, replacement),
+                WorkspacePassBlurRolloverPolicy.distinctNativeLayer(
+                        old.rootLayerId, replacement != null ? replacement.rootLayerId : -1))
+                || old.producerSurface != inputProducerSurface
+                || inputSurfaceTexture == null || oesTexture == 0) {
+            if (state.onRebindAborted(epoch)) {
+                MainHook.log(TAG + " Workspace isolation aborted reason=" + reason);
+                completeRolloverCompletions(false, "isolation-aborted");
+            }
+            return;
+        }
+        // Fence the earlier normal-detach continuation before replacing the source.
+        // The in-flight recovery transfers to this new epoch; it must not be cleared.
+        long replacementEpoch = bindEpoch.incrementAndGet();
+        if (!state.transferRebindOwner(epoch, replacementEpoch)) return;
+
+        RetiredInput orphan = new RetiredInput(
+                old, inputProducerSurface, inputSurfaceTexture, oesTexture);
+        try { orphan.texture.setOnFrameAvailableListener(null); }
+        catch (Throwable error) {
+            MainHook.log(TAG + " orphan source listener clear failed: " + error);
+        }
+        retainedInputs.add(orphan);
+        inputSurfaceTexture = null;
+        inputProducerSurface = null;
+        oesTexture = 0;
+        binding = null;
+        // The compositor may never acknowledge a destroyed root, so the orphan remains
+        // retained by the coordinator and this backend. This is NOT an unbind success.
+        PassBlurDetachCoordinator.retire(old, () -> {
+            try {
+                if (!renderHandler.post(() -> releaseRetiredInput(orphan))) {
+                    MainHook.log(TAG + " orphan GPU release enqueue rejected; retained");
+                }
+            } catch (Throwable error) {
+                MainHook.log(TAG + " orphan GPU release enqueue failed: " + error);
+            }
+        });
+
+        try {
+            createInputProducer();
+            ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
+            MainHook.log(TAG + " Workspace invalid ViewRoot isolated, replacement producer"
+                    + " created reason=" + reason + " orphanCount=" + retainedInputs.size());
+            if (recreated.requestBind) mainHandler.post(() -> bindProducerWhenReady(0));
+        } catch (Throwable error) {
+            state.onRecreateFailed();
+            notifyTerminalFailure(error);
+        }
+    }
+
+    /** Called only after compositor commitment, on the backend render thread. */
+    private void releaseRetiredInput(RetiredInput orphan) {
+        requireRenderThread();
+        if (!retainedInputs.contains(orphan)) return;
+        try {
+            if (orphan.texture != null) orphan.texture.setOnFrameAvailableListener(null);
+            if (orphan.producer != null) orphan.producer.release();
+            if (orphan.texture != null) orphan.texture.release();
+            if (orphan.oesTexture != 0 && eglDisplay != EGL14.EGL_NO_DISPLAY) {
+                makePbufferCurrentUnchecked();
+                GLES20.glDeleteTextures(1, new int[]{orphan.oesTexture}, 0);
+            }
+            retainedInputs.remove(orphan);
+            MainHook.log(TAG + " retired Workspace ViewRoot producer after commit");
+            if (shuttingDown && shutdownSourceDetached) scheduleShutdownGlCleanup();
+        } catch (Throwable error) {
+            // A failed native release is still an outstanding cleanup, not a success.
+            MainHook.log(TAG + " orphan GPU release failed; retained: " + error);
+        }
+    }
+
+    /** Shutdown must also await the compositor-bound producers from older generations. */
+    private void scheduleShutdownGlCleanup() {
+        if (!shutdownSourceDetached || !renderThread.isAlive()
+                || !shutdownGlScheduled.compareAndSet(false, true)) return;
+        boolean posted;
+        try {
+            posted = renderHandler.post(() -> {
+                if (!retainedInputs.isEmpty()) {
+                    shutdownGlScheduled.set(false);
+                    MainHook.log(TAG + " shutdown deferred; outstanding old ViewRoot producers="
+                            + retainedInputs.size());
+                    return;
+                }
+                releaseGl();
+                renderThread.quitSafely();
+            });
+        } catch (Throwable error) {
+            posted = false;
+            MainHook.log(TAG + " render shutdown enqueue failed: " + error);
+        }
+        if (!posted) {
+            shutdownGlScheduled.set(false);
+            MainHook.log(TAG + " render shutdown enqueue rejected; resources retained");
+        }
     }
 
     boolean attachRolloverCompletion(
@@ -391,11 +631,18 @@ final class RootPassBlurBackend {
         contentRect = nextContentRect;
 
         if (endpointChanged) {
-            MainHook.log(TAG + " endpoint generation changed old=" + current.rootName
-                    + " oldLayerId=" + current.rootLayerId
-                    + " newLayerId=" + endpoint.rootLayerId
-                    + " oldSurfaceSeq=" + current.surfaceSequenceId
-                    + " newSurfaceSeq=" + endpoint.surfaceSequenceId);
+            if (lastLoggedMismatchBinding != current
+                    || lastLoggedMismatchLayer != endpoint.rootLayerId
+                    || lastLoggedMismatchSequence != endpoint.surfaceSequenceId) {
+                lastLoggedMismatchBinding = current;
+                lastLoggedMismatchLayer = endpoint.rootLayerId;
+                lastLoggedMismatchSequence = endpoint.surfaceSequenceId;
+                MainHook.log(TAG + " endpoint generation changed old=" + current.rootName
+                        + " oldLayerId=" + current.rootLayerId
+                        + " newLayerId=" + endpoint.rootLayerId
+                        + " oldSurfaceSeq=" + current.surfaceSequenceId
+                        + " newSurfaceSeq=" + endpoint.surfaceSequenceId);
+            }
             requestRebind("root-endpoint-changed");
             return true;
         }
@@ -493,12 +740,11 @@ final class RootPassBlurBackend {
         state.onShutdown();
         completeRolloverCompletions(false, "shutdown");
         Miuix307PassBlurBridge.Binding old = binding;
-        binding = null;
-        Miuix307PassBlurBridge.unbind(old);
-        if (renderThread.isAlive()) {
-            try { renderHandler.post(this::releaseGl); } catch (Throwable ignored) {}
-            renderThread.quitSafely();
-        }
+        PassBlurDetachCoordinator.retire(old, () -> {
+            if (binding == old) binding = null;
+            shutdownSourceDetached = true;
+            scheduleShutdownGlCleanup();
+        });
     }
 
     private void ensureBoundAndRefresh(long generation) {
@@ -758,6 +1004,12 @@ final class RootPassBlurBackend {
                 || rootRef.get() != root) return;
         Miuix307PassBlurBridge.Binding next = Miuix307PassBlurBridge.bind(bindRequest, producer);
         if (next == null) {
+            if (PassBlurProducerSubmissionGate.wasSubmitted(producer)) {
+                state.onBindExhausted();
+                notifyTerminalFailure(new IllegalStateException(
+                        "PassBlur bind failed after native producer submission; refusing reuse"));
+                return;
+            }
             RootPassBlurEndpointBridge.Endpoint currentEndpoint =
                     RootPassBlurEndpointBridge.inspect(root);
             boolean unavailable = currentEndpoint == null || !currentEndpoint.isValid()
@@ -767,11 +1019,13 @@ final class RootPassBlurBackend {
             return;
         }
         if (!RootPassBlurEndpointBridge.sameGeneration(next, endpoint)) {
-            Miuix307PassBlurBridge.unbind(next);
-            // The producer endpoint is still valid. Only the ViewRoot generation raced while
-            // binding, so stay inside the accepted rollover and retry against the next frame's
-            // authoritative endpoint instead of issuing a nested rebind that recovery rejects.
-            retryBind(attempt, true);
+            // Keep the only reference to a generation-mismatched binding until confirmed
+            // detach; a pending transaction must not race a new native bind on this producer.
+            binding = next;
+            PassBlurDetachCoordinator.retire(next, () -> {
+                if (binding == next) binding = null;
+                if (!shuttingDown && epoch == bindEpoch.get()) retryBind(attempt, true);
+            });
             return;
         }
         binding = next;

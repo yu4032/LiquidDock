@@ -1,12 +1,15 @@
 package com.hellovoid.liquiddock;
 
 import android.os.SystemClock;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.ArrayList;
 
 /**
  * Minimal HyperOS 3.0.307 bridge that asks SurfaceFlinger PassBlur to render into a caller-owned
@@ -27,6 +30,14 @@ final class Miuix307PassBlurBridge {
     private static final long FORCE_REFRESH_MIN_INTERVAL_MS = 50L;
     private static final long FORCE_REFRESH_ERROR_LOG_MIN_MS = 5000L;
     private static long lastForceRefreshErrorLogMs;
+    private static final long DETACH_COMMIT_WARN_MS = 1_000L;
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    // Only the module's actual detach may send a null producer for a claimed root.
+    private static final ThreadLocal<SurfaceControl> MODULE_DETACH_ROOT = new ThreadLocal<>();
+
+    static boolean isModuleDetach(SurfaceControl root) {
+        return root != null && MODULE_DETACH_ROOT.get() == root;
+    }
 
     static final class Binding {
         final SurfaceControl rootSurface;
@@ -41,8 +52,14 @@ final class Miuix307PassBlurBridge {
         final int surfaceSequenceId;
         final int rootLayerId;
         final PassBlurDomain domain;
-        boolean bound = true;
-        boolean updatesEnabled = true;
+        volatile boolean bound = true;
+        volatile boolean updatesEnabled = true;
+        boolean detachPending;
+        boolean detachApplyReturned;
+        boolean detachSubmitFailed;
+        long detachSubmittedUptimeMs;
+        boolean vendorClaimReleased;
+        final ArrayList<Runnable> detachCallbacks = new ArrayList<>();
         volatile boolean workspaceTransitionFrameSync;
         volatile long lastForceRefreshMs;
 
@@ -158,6 +175,9 @@ final class Miuix307PassBlurBridge {
 
             try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                 setMiBlurWinExc.invoke(transaction, rootSurface, (Object) exclusions);
+                if (!PassBlurProducerSubmissionGate.trySubmit(producerSurface)) {
+                    throw new IllegalStateException("PassBlur producer already submitted to native SF");
+                }
                 setPassBlurSurface.invoke(transaction, rootSurface, producerSurface);
                 setUpdateTextureFlag.invoke(
                         transaction, rootSurface, Boolean.TRUE, Float.valueOf(scale));
@@ -251,39 +271,42 @@ final class Miuix307PassBlurBridge {
     }
 
     private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
-        if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
-        if (!force && binding.updatesEnabled == enabled) return;
-        if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
-            GboardPassBlurContinuousAuthority.setUpdatesEnabled(
-                    binding.rootSurface, enabled);
-        }
-        if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
-            MiuiSearchboxPassBlurContinuousAuthority.setUpdatesEnabled(
-                    binding.rootSurface, enabled);
-        }
-        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-            binding.setUpdateTextureFlag.invoke(
-                    transaction,
-                    binding.rootSurface,
-                    Boolean.valueOf(enabled),
-                    Float.valueOf(binding.scale));
-            if (!enabled
-                    && binding.domain == PassBlurDomain.GBOARD_FLOATING
-                    && binding.setForceRefresh != null) {
-                binding.setForceRefresh.invoke(
+        if (binding == null) return;
+        synchronized (binding) {
+            if (!binding.bound || !binding.rootSurface.isValid()) return;
+            if (!force && binding.updatesEnabled == enabled) return;
+            if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
+                GboardPassBlurContinuousAuthority.setUpdatesEnabled(
+                        binding.rootSurface, enabled);
+            }
+            if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
+                MiuiSearchboxPassBlurContinuousAuthority.setUpdatesEnabled(
+                        binding.rootSurface, enabled);
+            }
+            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                binding.setUpdateTextureFlag.invoke(
                         transaction,
                         binding.rootSurface,
-                        Integer.valueOf(0));
-                binding.lastForceRefreshMs = 0L;
+                        Boolean.valueOf(enabled),
+                        Float.valueOf(binding.scale));
+                if (!enabled
+                        && binding.domain == PassBlurDomain.GBOARD_FLOATING
+                        && binding.setForceRefresh != null) {
+                    binding.setForceRefresh.invoke(
+                            transaction,
+                            binding.rootSurface,
+                            Integer.valueOf(0));
+                    binding.lastForceRefreshMs = 0L;
+                }
+                transaction.apply();
+                binding.updatesEnabled = enabled;
+                MainHook.log(TAG + " PassBlur producer updates=" + enabled
+                        + " force=" + force
+                        + " domain=" + binding.domain
+                        + " root=" + binding.rootName);
+            } catch (Throwable error) {
+                MainHook.log(TAG + " PassBlur update toggle failed: " + error);
             }
-            transaction.apply();
-            binding.updatesEnabled = enabled;
-            MainHook.log(TAG + " PassBlur producer updates=" + enabled
-                    + " force=" + force
-                    + " domain=" + binding.domain
-                    + " root=" + binding.rootName);
-        } catch (Throwable error) {
-            MainHook.log(TAG + " PassBlur update toggle failed: " + error);
         }
     }
 
@@ -294,104 +317,207 @@ final class Miuix307PassBlurBridge {
      * existing lease expires.
      */
     static void setWorkspaceTransitionFrameSync(Binding binding, boolean enabled) {
-        if (binding == null || !binding.bound
-                || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
-        binding.workspaceTransitionFrameSync = enabled;
-        if (enabled) {
-            renewForceRefresh(binding);
-            return;
-        }
-        if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) {
-            binding.lastForceRefreshMs = 0L;
-            return;
-        }
-        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-            binding.setForceRefresh.invoke(
-                    transaction,
-                    binding.rootSurface,
-                    Integer.valueOf(0));
-            transaction.apply();
-        } catch (Throwable error) {
-            long now = SystemClock.uptimeMillis();
-            if (now - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
-                lastForceRefreshErrorLogMs = now;
-                MainHook.log(WORKSPACE_FRAME_SYNC_TAG
-                        + " force refresh release failed: " + error);
+        if (binding == null) return;
+        synchronized (binding) {
+            if (!binding.bound || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
+            binding.workspaceTransitionFrameSync = enabled;
+            if (enabled) {
+                renewForceRefresh(binding);
+                return;
             }
-        } finally {
-            binding.lastForceRefreshMs = 0L;
+            if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) {
+                binding.lastForceRefreshMs = 0L;
+                return;
+            }
+            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                binding.setForceRefresh.invoke(
+                        transaction,
+                        binding.rootSurface,
+                        Integer.valueOf(0));
+                transaction.apply();
+            } catch (Throwable error) {
+                long now = SystemClock.uptimeMillis();
+                if (now - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
+                    lastForceRefreshErrorLogMs = now;
+                    MainHook.log(WORKSPACE_FRAME_SYNC_TAG
+                            + " force refresh release failed: " + error);
+                }
+            } finally {
+                binding.lastForceRefreshMs = 0L;
+            }
         }
     }
 
     static void renewForceRefresh(Binding binding) {
-        if (binding == null || !binding.bound || !binding.updatesEnabled) return;
-        boolean dock = binding.domain == PassBlurDomain.DOCK;
-        boolean gboard = binding.domain == PassBlurDomain.GBOARD_FLOATING;
-        boolean workspace = binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
-                && binding.workspaceTransitionFrameSync;
-        if (!dock && !gboard && !workspace) return;
-        if (dock && !VisualRuntimeState.isDockFrameSyncEnabled()) return;
-        if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) return;
-        long now = SystemClock.uptimeMillis();
-        if (now - binding.lastForceRefreshMs < FORCE_REFRESH_MIN_INTERVAL_MS) return;
-        binding.lastForceRefreshMs = now;
-        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-            binding.setForceRefresh.invoke(
-                    transaction,
-                    binding.rootSurface,
-                    Integer.valueOf(FORCE_REFRESH_LEASE_MS));
-            transaction.apply();
-        } catch (Throwable error) {
-            long errorNow = SystemClock.uptimeMillis();
-            if (errorNow - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
-                lastForceRefreshErrorLogMs = errorNow;
-                String frameSyncTag = gboard ? GBOARD_FRAME_SYNC_TAG
-                        : workspace ? WORKSPACE_FRAME_SYNC_TAG : FRAME_SYNC_TAG;
-                MainHook.log(frameSyncTag
-                        + " force refresh renew failed: " + error);
+        if (binding == null) return;
+        synchronized (binding) {
+            if (!binding.bound || !binding.updatesEnabled) return;
+            boolean dock = binding.domain == PassBlurDomain.DOCK;
+            boolean gboard = binding.domain == PassBlurDomain.GBOARD_FLOATING;
+            boolean workspace = binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
+                    && binding.workspaceTransitionFrameSync;
+            if (!dock && !gboard && !workspace) return;
+            if (dock && !VisualRuntimeState.isDockFrameSyncEnabled()) return;
+            if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) return;
+            long now = SystemClock.uptimeMillis();
+            if (now - binding.lastForceRefreshMs < FORCE_REFRESH_MIN_INTERVAL_MS) return;
+            binding.lastForceRefreshMs = now;
+            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                binding.setForceRefresh.invoke(
+                        transaction,
+                        binding.rootSurface,
+                        Integer.valueOf(FORCE_REFRESH_LEASE_MS));
+                transaction.apply();
+            } catch (Throwable error) {
+                long errorNow = SystemClock.uptimeMillis();
+                if (errorNow - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
+                    lastForceRefreshErrorLogMs = errorNow;
+                    String frameSyncTag = gboard ? GBOARD_FRAME_SYNC_TAG
+                            : workspace ? WORKSPACE_FRAME_SYNC_TAG : FRAME_SYNC_TAG;
+                    MainHook.log(frameSyncTag
+                            + " force refresh renew failed: " + error);
+                }
             }
         }
     }
 
-    static void unbind(Binding binding) {
-        if (binding == null || !binding.bound) return;
+    static String detachState(Binding binding) {
+        if (binding == null) return "NO_BINDING";
+        synchronized (binding) {
+            if (!binding.bound) return "DETACHED";
+            if (!binding.rootSurface.isValid()) return "ROOT_INVALID";
+            if (binding.detachPending) {
+                return "WAITING_COMMIT(applyReturned=" + binding.detachApplyReturned
+                        + ",elapsedMs=" + (SystemClock.uptimeMillis() - binding.detachSubmittedUptimeMs)
+                        + ",layerId=" + binding.rootLayerId + ")";
+            }
+            return binding.detachSubmitFailed ? "SUBMIT_FAILED" : "BOUND";
+        }
+    }
+
+    /**
+     * Only a committed native detach permits producer destruction. A dead root permits
+     * dropping its vendor override claim, NOT freeing a possibly in-flight BufferQueue.
+     * A one-second missing-commit warning is diagnostic only; no timeout frees the GPU.
+     */
+    static boolean tryUnbind(Binding binding, Runnable onCommitted) {
+        if (binding == null) return true;
+        synchronized (binding) {
+            if (!binding.bound) return true;
+            if (onCommitted != null && !binding.detachCallbacks.contains(onCommitted)) {
+                binding.detachCallbacks.add(onCommitted);
+            }
+            try {
+                if (!binding.rootSurface.isValid()) {
+                    boolean firstInvalidation = !binding.vendorClaimReleased;
+                    releaseVendorClaim(binding);
+                    if (firstInvalidation) {
+                        MainHook.log(TAG + " PassBlur root invalid; claim released, producer retained root="
+                                + binding.rootName);
+                    }
+                    return false;
+                }
+                if (binding.detachPending) return false;
+                binding.detachSubmitFailed = false;
+                try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                    MODULE_DETACH_ROOT.set(binding.rootSurface);
+                    try {
+                        binding.setPassBlurSurface.invoke(transaction, binding.rootSurface, null);
+                        binding.setUpdateTextureFlag.invoke(
+                                transaction, binding.rootSurface, Boolean.FALSE,
+                                Float.valueOf(binding.scale));
+                        binding.setMiBlurWinExc.invoke(
+                                transaction, binding.rootSurface, (Object) new String[0]);
+                    } finally {
+                        MODULE_DETACH_ROOT.remove();
+                    }
+                    transaction.addTransactionCommittedListener(
+                            Runnable::run, () -> onDetachCommitted(binding));
+                    binding.detachPending = true;
+                    binding.detachSubmittedUptimeMs = SystemClock.uptimeMillis();
+                    transaction.apply();
+                    binding.detachApplyReturned = true;
+                }
+                if (binding.domain == PassBlurDomain.SYSTEMUI_HANDLE_MENU) {
+                    MainHook.log(TAG + " PassBlur detach apply returned root=" + binding.rootName
+                            + " layerId=" + binding.rootLayerId + " state=" + detachState(binding));
+                }
+                // Dispatch errors after apply() must not clear detachPending. Native
+                // confirmation may still arrive even if the diagnostic Handler fails.
+                if (binding.detachPending) {
+                    try {
+                        boolean posted = MAIN.postDelayed(() -> {
+                            synchronized (binding) {
+                                if (binding.bound && binding.detachPending) {
+                                    MainHook.log(TAG + " PassBlur detach commit unconfirmed after 1s;"
+                                            + " producer retained root=" + binding.rootName);
+                                }
+                            }
+                        }, DETACH_COMMIT_WARN_MS);
+                        if (!posted) MainHook.log(TAG + " detach watchdog enqueue unavailable");
+                        else if (binding.domain == PassBlurDomain.SYSTEMUI_HANDLE_MENU) {
+                            MainHook.log(TAG + " PassBlur detach watchdog scheduled layerId="
+                                    + binding.rootLayerId);
+                        }
+                    } catch (Throwable diagnosticError) {
+                        try { MainHook.log(TAG + " detach watchdog failed: " + diagnosticError); }
+                        catch (Throwable ignored) {}
+                    }
+                }
+                return !binding.bound;
+            } catch (Throwable error) {
+                binding.detachPending = false;
+                binding.detachSubmitFailed = true;
+                try { MainHook.log(TAG + " PassBlur detach submit failed; binding retained: " + error); }
+                catch (Throwable ignored) {}
+                return false;
+            }
+        }
+    }
+
+    static boolean tryUnbind(Binding binding) {
+        return tryUnbind(binding, null);
+    }
+
+    private static void releaseVendorClaim(Binding binding) {
+        // Caller holds binding monitor. release(root, producer) is identity-checked,
+        // so a stale retire cannot erase a newer generation's root claim.
+        if (binding.vendorClaimReleased) return;
         if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
             SecurityCenterPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
-        }
-        if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
+        } else if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
             GboardPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
-        }
-        if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
+        } else if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
             MiuiSearchboxPassBlurContinuousAuthority.release(
                     binding.rootSurface, binding.producerSurface);
         }
-        try {
-            if (!binding.rootSurface.isValid()) {
-                binding.bound = false;
-                binding.updatesEnabled = false;
+        binding.vendorClaimReleased = true;
+    }
+
+    private static void onDetachCommitted(Binding binding) {
+        ArrayList<Runnable> callbacks;
+        synchronized (binding) {
+            if (!binding.detachPending || !binding.bound) return;
+            try {
+                releaseVendorClaim(binding);
+            } catch (Throwable error) {
+                binding.detachPending = false;
+                try { MainHook.log(TAG + " PassBlur authority release failed; retained: " + error); }
+                catch (Throwable ignored) {}
                 return;
             }
-            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-                binding.setPassBlurSurface.invoke(transaction, binding.rootSurface, null);
-                binding.setUpdateTextureFlag.invoke(
-                        transaction,
-                        binding.rootSurface,
-                        Boolean.FALSE,
-                        Float.valueOf(binding.scale));
-                binding.setMiBlurWinExc.invoke(
-                        transaction, binding.rootSurface, (Object) new String[0]);
-                transaction.apply();
-            }
             binding.bound = false;
             binding.updatesEnabled = false;
-            MainHook.log(TAG + " PassBlur producer unbound root=" + binding.rootName);
-        } catch (Throwable error) {
-            binding.bound = false;
-            binding.updatesEnabled = false;
-            MainHook.log(TAG + " PassBlur unbind failed: " + error);
+            binding.detachPending = false;
+            callbacks = new ArrayList<>(binding.detachCallbacks);
+            binding.detachCallbacks.clear();
         }
+        try { MainHook.log(TAG + " PassBlur compositor detach committed root=" + binding.rootName); }
+        catch (Throwable ignored) {}
+        PassBlurDetachCallbacks.dispatch(callbacks, error ->
+                MainHook.log(TAG + " PassBlur detach callback failed: " + error));
     }
 
     static int surfaceLayerId(SurfaceControl surface) {

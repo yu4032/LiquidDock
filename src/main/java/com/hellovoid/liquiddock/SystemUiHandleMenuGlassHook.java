@@ -340,13 +340,14 @@ final class SystemUiHandleMenuGlassHook {
 
         boolean replacementBlurApplied;
         boolean customPassBlurOwned;
-        boolean prismalPresented;
-        SystemUiHandleMenuPrismalSession prismalSession;
+        volatile boolean prismalPresented;
+        volatile SystemUiHandleMenuPrismalSession prismalSession;
         SystemUiHandleMenuGlassOutputView prismalOutput;
         volatile float pendingSurfaceAlpha;
         boolean fadeUpdatePosted;
         int lastAppliedBlurRadius = -1;
         boolean released;
+        final HandleMenuEarlyDetachPolicy earlyDetach = new HandleMenuEarlyDetachPolicy();
 
         Binding(
                 View root,
@@ -385,6 +386,15 @@ final class SystemUiHandleMenuGlassHook {
         private void onNativeSurfaceAlpha(float alpha) {
             if (released) return;
             pendingSurfaceAlpha = Math.max(0f, Math.min(1f, alpha));
+            // The caption fade-out normally starts while its ViewRoot is still live.
+            // Initiate native detach here, but never free EGL until compositor commit.
+            if (earlyDetach.shouldBeginDetach(pendingSurfaceAlpha, prismalPresented)) {
+                SystemUiHandleMenuPrismalSession session = prismalSession;
+                if (session != null) {
+                    log("native caption closing fade: requesting early producer detach");
+                    session.shutdown();
+                }
+            }
             postFadeUpdate();
         }
 
@@ -437,6 +447,15 @@ final class SystemUiHandleMenuGlassHook {
             if (released || menuSurface == null || !menuSurface.isValid()
                     || prismalSession != null || !(target instanceof ViewGroup)
                     || target.getWidth() <= 0 || target.getHeight() <= 0) return;
+            // Fail open to vendor caption material instead of allocating more GPU
+            // producers while a prior native detach is still unconfirmed.
+            int blocked = SystemUiHandleMenuPrismalSession.blockedTeardownCount();
+            if (blocked > 0) {
+                restoreStockBackground();
+                log("native producer teardown pending count=" + blocked
+                        + "; using stock caption material");
+                return;
+            }
             try {
                 SystemUiHandleMenuPrismalSession session =
                         new SystemUiHandleMenuPrismalSession(

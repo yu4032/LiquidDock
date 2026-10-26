@@ -10,6 +10,7 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
@@ -23,6 +24,11 @@ import com.hellovoid.prismal.PrismalRenderer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Dedicated zero-copy PassBlur -> Prismal pipeline for HyperOS' app-caption Handle Menu.
@@ -39,12 +45,20 @@ final class SystemUiHandleMenuPrismalSession {
     }
 
     private static final String TAG = "[DC][SystemUiHandleMenuPrismal]";
+    private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger();
+    private static final int MAX_AUTOMATIC_UNBIND_ATTEMPTS = 3;
+    private static final long UNBIND_RETRY_DELAY_MS = 80L;
+    // Strong references are intentional only while teardown is blocked: never silently lose
+    // the producer/SurfaceTexture after an unconfirmed native detach or rejected queue post.
+    private static final Set<SystemUiHandleMenuPrismalSession> BLOCKED_TEARDOWNS =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
             -1f,  1f, 0f, 1f,
              1f,  1f, 1f, 1f
     };
+    private final int sessionId = NEXT_SESSION_ID.incrementAndGet();
     private final View host;
     private final View sourceRoot;
     private final SurfaceControl sourceSurface;
@@ -99,6 +113,8 @@ final class SystemUiHandleMenuPrismalSession {
     private int compositeCropRectLocation = -1;
 
     private Miuix307PassBlurBridge.Binding sourceBinding;
+    private final HandleMenuTeardownGate teardownGate = new HandleMenuTeardownGate();
+    private final Runnable committedDetachCallback = this::requestTeardownRetry;
 
     SystemUiHandleMenuPrismalSession(
             View host,
@@ -178,9 +194,13 @@ final class SystemUiHandleMenuPrismalSession {
 
     void start(int width, int height) {
         if (shuttingDown) return;
+        retryBlockedTeardowns();
         this.width = Math.max(1, width);
         this.height = Math.max(1, height);
         renderHandler.post(() -> {
+            // shutdown can win after start() has passed its initial guard but before this
+            // queued work executes. Never recreate EGL after teardown has been scheduled.
+            if (shuttingDown) return;
             try {
                 ensureEgl();
                 ensureSource();
@@ -196,28 +216,39 @@ final class SystemUiHandleMenuPrismalSession {
             if (surface != null) surface.release();
             return;
         }
-        renderHandler.post(() -> {
-            if (shuttingDown) {
-                surface.release();
-                return;
-            }
-            try {
-                ensureEgl();
-                releaseOutput();
-                outputSurface = surface;
-                this.width = Math.max(1, width);
-                this.height = Math.max(1, height);
-                outputEglSurface = EGL14.eglCreateWindowSurface(
-                        eglDisplay, eglConfig, surface, new int[]{EGL14.EGL_NONE}, 0);
-                checkEgl("eglCreateWindowSurface",
-                        outputEglSurface != EGL14.EGL_NO_SURFACE);
-                ensureRenderResources();
-                renderLatestIfPossible();
-            } catch (Throwable error) {
-                try { surface.release(); } catch (Throwable ignored) {}
-                fail(error);
-            }
-        });
+        boolean queued;
+        try {
+            queued = renderHandler.post(() -> {
+                if (shuttingDown) {
+                    surface.release();
+                    return;
+                }
+                try {
+                    ensureEgl();
+                    releaseOutput();
+                    outputSurface = surface;
+                    this.width = Math.max(1, width);
+                    this.height = Math.max(1, height);
+                    outputEglSurface = EGL14.eglCreateWindowSurface(
+                            eglDisplay, eglConfig, surface, new int[]{EGL14.EGL_NONE}, 0);
+                    checkEgl("eglCreateWindowSurface",
+                            outputEglSurface != EGL14.EGL_NO_SURFACE);
+                    ensureRenderResources();
+                    renderLatestIfPossible();
+                } catch (Throwable error) {
+                    try { surface.release(); } catch (Throwable ignored) {}
+                    fail(error);
+                }
+            });
+        } catch (Throwable error) {
+            queued = false;
+            log("output attach enqueue failed: " + error);
+        }
+        // A queued shutdown can quit the render looper between the caller-side check and
+        // post(). A rejected post must not leak the newly created TextureView Surface.
+        if (!queued) {
+            try { surface.release(); } catch (Throwable ignored) {}
+        }
     }
 
     void resizeOutput(int width, int height) {
@@ -242,37 +273,161 @@ final class SystemUiHandleMenuPrismalSession {
 
     void detachOutput(Surface surface) {
         if (surface == null) return;
-        renderHandler.post(() -> {
-            if (outputSurface == surface) {
-                releaseOutput();
-            } else {
-                try { surface.release(); } catch (Throwable ignored) {}
-            }
-        });
-    }
-
-    void shutdown() {
-        if (shuttingDown) return;
-        shuttingDown = true;
+        boolean queued;
         try {
-            mainHandler.post(this::unbindSource);
-        } catch (Throwable error) {
-            log("unbind enqueue failed: " + error);
-        }
-        try {
-            renderHandler.post(() -> {
-                try { releaseOutput(); } catch (Throwable ignored) {}
-                try { releaseRenderResources(); } catch (Throwable ignored) {}
-                try { releaseSource(); } catch (Throwable ignored) {}
-                try { releaseEgl(); } catch (Throwable ignored) {}
+            queued = renderHandler.post(() -> {
+                if (outputSurface == surface) {
+                    releaseOutput();
+                } else {
+                    try { surface.release(); } catch (Throwable ignored) {}
+                }
             });
         } catch (Throwable error) {
-            log("render cleanup enqueue failed: " + error);
+            queued = false;
+            log("output detach enqueue failed: " + error);
+        }
+        if (!queued) {
+            try { surface.release(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /**
+     * Failed teardown sessions are kept strongly reachable and can be retried when another
+     * HandleMenu session starts. This is a diagnostic fail-closed ledger, not a reload gate.
+     */
+    static int blockedTeardownCount() {
+        synchronized (BLOCKED_TEARDOWNS) {
+            return BLOCKED_TEARDOWNS.size();
+        }
+    }
+
+    static void retryBlockedTeardowns() {
+        ArrayList<SystemUiHandleMenuPrismalSession> blocked;
+        synchronized (BLOCKED_TEARDOWNS) {
+            blocked = new ArrayList<>(BLOCKED_TEARDOWNS);
+        }
+        for (SystemUiHandleMenuPrismalSession session : blocked) {
+            session.requestTeardownRetry();
+        }
+    }
+
+    private void markTeardownBlocked() {
+        synchronized (BLOCKED_TEARDOWNS) {
+            BLOCKED_TEARDOWNS.add(this);
+        }
+    }
+
+    private void clearTeardownBlocked() {
+        synchronized (BLOCKED_TEARDOWNS) {
+            BLOCKED_TEARDOWNS.remove(this);
+        }
+    }
+
+    synchronized void shutdown() {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        // Serialize main-thread native producer detach before render-thread EGL destruction.
+        // Never release the producer if native detach is unconfirmed.
+        requestTeardownRetry();
+    }
+
+    private void requestTeardownRetry() {
+        if (Looper.myLooper() == mainHandler.getLooper()) {
+            unbindThenReleaseOnMain();
+            return;
         }
         try {
-            renderThread.quitSafely();
+            if (!mainHandler.post(this::unbindThenReleaseOnMain)) {
+                markTeardownBlocked();
+                log("main-thread unbind enqueue rejected; retaining producer and EGL");
+            }
         } catch (Throwable error) {
-            log("render thread shutdown failed: " + error);
+            markTeardownBlocked();
+            log("main-thread unbind enqueue failed; retaining producer and EGL: " + error);
+        }
+    }
+
+    private void unbindThenReleaseOnMain() {
+        if (!shuttingDown) return;
+        if (!teardownGate.attemptDetach(this::unbindSource)) {
+            markTeardownBlocked();
+            int failed = teardownGate.failedDetachAttempts();
+            log("ViewRoot producer detach unconfirmed session=" + sessionId
+                    + " attempt=" + failed
+                    + " state=" + Miuix307PassBlurBridge.detachState(sourceBinding)
+                    + " blocked=" + blockedTeardownCount()
+                    + "; retaining producer SurfaceTexture and EGL");
+            if (failed < MAX_AUTOMATIC_UNBIND_ATTEMPTS) {
+                try {
+                    if (!mainHandler.postDelayed(
+                            this::unbindThenReleaseOnMain, UNBIND_RETRY_DELAY_MS)) {
+                        log("native detach retry enqueue rejected; teardown remains blocked");
+                    }
+                } catch (Throwable error) {
+                    log("native detach retry enqueue failed: " + error);
+                }
+            }
+            return;
+        }
+
+        // The checked transaction has received the SurfaceFlinger committed callback.
+        // This is not a GPU-buffer-release fence, but the detach is compositor-acknowledged.
+        if (!teardownGate.claimRenderRelease()) return;
+        log("ViewRoot producer detach committed session=" + sessionId
+                + " blocked=" + blockedTeardownCount()
+                + "; render cleanup scheduled");
+        try {
+            if (!renderHandler.post(() -> {
+                boolean complete = true;
+                try { releaseOutput(); } catch (Throwable error) {
+                    complete = false;
+                    log("output release failed: " + error);
+                }
+                try { releaseRenderResources(); } catch (Throwable error) {
+                    complete = false;
+                    log("Prismal resource release failed: " + error);
+                }
+                try { releaseSource(); } catch (Throwable error) {
+                    complete = false;
+                    log("source texture release failed: " + error);
+                }
+                try { releaseEgl(); } catch (Throwable error) {
+                    complete = false;
+                    log("EGL release failed: " + error);
+                }
+                if (complete) {
+                    try {
+                        complete = renderThread.quitSafely();
+                    } catch (Throwable error) {
+                        complete = false;
+                        log("render thread shutdown failed: " + error);
+                    }
+                }
+                if (complete) {
+                    // A queued task is not proof of cleanup. Only acknowledge after it runs.
+                    clearTeardownBlocked();
+                } else {
+                    teardownGate.renderPostRejected();
+                    markTeardownBlocked();
+                    log("render cleanup incomplete; session retained for retry");
+                    try {
+                        if (!mainHandler.postDelayed(
+                                this::unbindThenReleaseOnMain, UNBIND_RETRY_DELAY_MS)) {
+                            log("render cleanup retry enqueue rejected");
+                        }
+                    } catch (Throwable error) {
+                        log("render cleanup retry enqueue failed: " + error);
+                    }
+                }
+            })) {
+                teardownGate.renderPostRejected();
+                markTeardownBlocked();
+                log("render cleanup rejected after detach; retaining incomplete teardown");
+            }
+        } catch (Throwable error) {
+            teardownGate.renderPostRejected();
+            markTeardownBlocked();
+            log("render cleanup enqueue failed after detach: " + error);
         }
     }
 
@@ -288,7 +443,13 @@ final class SystemUiHandleMenuPrismalSession {
                 return;
             }
             if (!RootPassBlurEndpointBridge.sameGeneration(next, sourceEndpoint)) {
-                Miuix307PassBlurBridge.unbind(next);
+                // Retain even a generation-mismatched binding until native detach succeeds.
+                // Previously a failed one-off unbind discarded the only reference.
+                sourceBinding = next;
+                sourceBound = true;
+                if (!unbindSource()) {
+                    log("generation-mismatched producer detach deferred to shutdown");
+                }
                 fail(new IllegalStateException("ViewRoot generation changed during bind"));
                 return;
             }
@@ -299,16 +460,19 @@ final class SystemUiHandleMenuPrismalSession {
         }
     }
 
-    private void unbindSource() {
-        if (!sourceBound && sourceBinding == null) return;
-        sourceBound = false;
+    private boolean unbindSource() {
         Miuix307PassBlurBridge.Binding current = sourceBinding;
-        sourceBinding = null;
-        try {
-            Miuix307PassBlurBridge.unbind(current);
-        } catch (Throwable error) {
-            log("ViewRoot producer unbind failed: " + error);
+        if (current == null) {
+            sourceBound = false;
+            return true;
         }
+        if (!Miuix307PassBlurBridge.tryUnbind(current, committedDetachCallback)) {
+            // Keep both the binding and its GPU producer live until a later successful retry.
+            return false;
+        }
+        sourceBinding = null;
+        sourceBound = false;
+        return true;
     }
 
     private void ensureSource() {

@@ -21,6 +21,7 @@
     <string name="page_workstation">Custom workstation</string>
     <string name="page_recents">Recents</string>
     <string name="page_liquid">Liquid glass</string>
+    <string name="page_sidebar_glass">Sidebar glass</string>
     <string name="page_security_center_sidebar">Security Center sidebar</string>
     <string name="security_center_sidebar_header_summary">Manage Launcher side-slide behavior and Security Center sidebar material; when a reload is required, use Restart scopes and select Desktop and Security Center.</string>
     <string name="security_center_sidebar_category_gesture">Side-slide launch</string>

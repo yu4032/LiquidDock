@@ -160,7 +160,7 @@ final class GlassRuntimeState {
                 LauncherGlassDragOverlay.releaseAll();
                 LauncherDialogGlassCoordinator.releaseAll();
                 LauncherGlassSessionRegistry.shutdownAll();
-                Miuix307MaterialPipeline.onRuntimeGlassDisabled();
+                MiuixMaterialPipeline.onRuntimeGlassDisabled();
                 MiuixGlassHook.onRuntimeGlassDisabled();
                 LauncherRecentsCapsuleGlassHook.onRuntimeStateChanged();
                 DockStrokeRenderer.refreshInstalledFromCurrentConfig();

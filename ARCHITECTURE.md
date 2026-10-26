@@ -47,7 +47,7 @@ Launcher 是主功能进程，负责：
 当前主要组合入口：
 
 - `MainHook`：Dock / Workstation / Grid 的安装顺序与 fallback composition；
-- `Miuix307MaterialPipeline`：支持版本的 Dock 主材质路径；
+- `MiuixMaterialPipeline`：支持版本的 Dock 主材质路径；
 - `MiuixLauncherStaticGlassHook`：Workspace 静态节点；
 - `MiuixLauncherDragOverlayHook`：拖拽视觉；
 - `MiuixFolderGlassHook`：文件夹；
@@ -264,7 +264,7 @@ ShortcutMenu 的小型 drawable 颜色分类 Bitmap 不属于 backdrop capture�
 5. Dock shadow ownership；
 6. glass owner / fallback Dock customization。
 
-当支持的 `Miuix307MaterialPipeline` 成功拥有 Dock 时，旧 fallback Dock customization 不再继续安装。
+当支持的 `MiuixMaterialPipeline` 成功拥有 Dock 时，旧 fallback Dock customization 不再继续安装。
 
 Dock 相关主要 owner：
 

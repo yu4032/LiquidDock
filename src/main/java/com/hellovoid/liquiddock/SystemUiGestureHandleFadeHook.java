@@ -7,9 +7,7 @@ import android.view.View;
 
 import java.lang.reflect.Method;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,8 +24,8 @@ final class SystemUiGestureHandleFadeHook {
             "com.android.systemui.navigationbar.views.NavigationBar";
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
 
-    private static final Object LOCK = new Object();
-    private static final WeakHashMap<Object, Float> HOME_HANDLES = new WeakHashMap<>();
+    private static final GestureHandleAlphaState<Object> ALPHA =
+            new GestureHandleAlphaState<>();
     private static final Set<Class<?>> HOOKED_HANDLE_CLASSES = ConcurrentHashMap.newKeySet();
     private static final Set<Class<?>> HOOKED_TASK_LISTENER_CLASSES =
             ConcurrentHashMap.newKeySet();
@@ -35,32 +33,35 @@ final class SystemUiGestureHandleFadeHook {
             ConcurrentHashMap.newKeySet();
     private static final ThreadLocal<Boolean> OWN_ALPHA_WRITE = new ThreadLocal<>();
 
+    private static final Api102HookDomain DOMAIN =
+            Api102HookDomain.forProcess("systemui.gesture.handle");
+
     private static final GestureHandleSystemUiSceneState SCENE =
             new GestureHandleSystemUiSceneState();
 
     private static boolean installed;
-    private static boolean hiddenRequested;
 
     private SystemUiGestureHandleFadeHook() {}
 
     static synchronized void install(ClassLoader classLoader) {
         if (installed || classLoader == null) return;
         try {
+            DOMAIN.begin();
             Class<?> navigationBarClass = Class.forName(NAVIGATION_BAR, false, classLoader);
 
             Method onInit = HookUtil.findMethodExact(
                     navigationBarClass, "onInit", new Class<?>[0]);
-            HookUtil.hook(onInit, chain -> {
+            DOMAIN.hook(onInit, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                captureNavigationBar(chain.getThisObject());
+                DOMAIN.runActiveSideEffect(() -> captureNavigationBar(chain.getThisObject()));
                 return result;
             });
 
             Method onViewAttached = HookUtil.findMethodExact(
                     navigationBarClass, "onViewAttached", new Class<?>[0]);
-            HookUtil.hook(onViewAttached, chain -> {
+            DOMAIN.hook(onViewAttached, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                captureNavigationBar(chain.getThisObject());
+                DOMAIN.runActiveSideEffect(() -> captureNavigationBar(chain.getThisObject()));
                 return result;
             });
 
@@ -68,26 +69,38 @@ final class SystemUiGestureHandleFadeHook {
                     navigationBarClass,
                     "onRecentsAnimationStateChanged",
                     new Class<?>[]{boolean.class});
-            HookUtil.hook(recentsAnimation, chain -> {
+            DOMAIN.hook(recentsAnimation, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 boolean running = args.length > 0
                         && args[0] instanceof Boolean
                         && (Boolean) args[0];
-                reconcileHiddenState(SCENE.onRecentsAnimationChanged(running));
+                DOMAIN.runActiveSideEffect(
+                        () -> reconcileHiddenState(SCENE.onRecentsAnimationChanged(running)));
                 return result;
             });
 
+            DOMAIN.commit();
             installed = true;
-            GestureHandleRuntimeState.setListener(enabled -> reconcileHiddenState());
+            GestureHandleRuntimeState.setListener(enabled ->
+                    DOMAIN.runActiveSideEffect(SystemUiGestureHandleFadeHook::reconcileHiddenState));
         } catch (Throwable error) {
-            installed = false;
+            // If a framework unhook fails, keep the owner logically installed and BLOCKED:
+            // another install would otherwise create a second interception chain.
+            if (DOMAIN.state() == Api102HookDomain.State.INSTALLING
+                    || DOMAIN.state() == Api102HookDomain.State.BLOCKED) {
+                installed = !DOMAIN.abort();
+            } else if (DOMAIN.state() == Api102HookDomain.State.ACTIVE) {
+                installed = !DOMAIN.stop();
+            } else {
+                installed = false;
+            }
             Api101Bridge.log(TAG + " SystemUI-only hook unavailable", error);
         }
     }
 
     private static void captureNavigationBar(Object navigationBar) {
-        if (navigationBar == null) return;
+        if (navigationBar == null || !DOMAIN.isActive()) return;
         try {
             Object navBarView = HookUtil.getField(navigationBar, "mView");
             Context context = navBarView instanceof View
@@ -104,10 +117,9 @@ final class SystemUiGestureHandleFadeHook {
 
             Object handle = handleResult.value();
             ensureHandleAlphaHook(handle.getClass());
-            synchronized (LOCK) {
-                if (!HOME_HANDLES.containsKey(handle)) {
-                    HOME_HANDLES.put(handle, readAlpha(handle));
-                }
+            if (!ALPHA.capture(handle, readAlpha(handle),
+                    (owner, alpha) -> writeAlpha(owner, alpha, true))) {
+                Api101Bridge.log(TAG + " new native handle alpha sync failed");
             }
 
             Object taskListener = HookUtil.getField(navigationBar, "mTaskStackListener");
@@ -135,14 +147,14 @@ final class SystemUiGestureHandleFadeHook {
                     listenerClass,
                     "onTaskMovedToFront",
                     new Class<?>[]{ActivityManager.RunningTaskInfo.class});
-            HookUtil.hook(method, chain -> {
+            DOMAIN.hookDynamic(method, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 ActivityManager.RunningTaskInfo task =
                         args.length > 0 && args[0] instanceof ActivityManager.RunningTaskInfo
                                 ? (ActivityManager.RunningTaskInfo) args[0]
                                 : null;
-                updateTopTask(task);
+                DOMAIN.runActiveSideEffect(() -> updateTopTask(task));
                 return result;
             });
 
@@ -156,31 +168,39 @@ final class SystemUiGestureHandleFadeHook {
     private static void ensureLauncherProxyListenerHook(Class<?> listenerClass) {
         if (listenerClass == null
                 || !HOOKED_LAUNCHER_PROXY_LISTENER_CLASSES.add(listenerClass)) return;
+        boolean someInstalled = false;
         try {
+            // Resolve BOTH signatures before installing either; vendor changes must not leave
+            // half an overview listener without being recorded by its owner.
             Method shown = HookUtil.findMethodExact(
                     listenerClass, "onOverviewShown", new Class<?>[0]);
-            HookUtil.hook(shown, chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                reconcileHiddenState(SCENE.onOverviewShown());
-                return result;
-            });
-
             Method connectionChanged = HookUtil.findMethodExact(
                     listenerClass, "onConnectionChanged", new Class<?>[]{boolean.class});
-            HookUtil.hook(connectionChanged, chain -> {
+            DOMAIN.hookDynamic(shown, chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                DOMAIN.runActiveSideEffect(
+                        () -> reconcileHiddenState(SCENE.onOverviewShown()));
+                return result;
+            });
+            someInstalled = true;
+            DOMAIN.hookDynamic(connectionChanged, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 boolean connected = args.length > 0
                         && args[0] instanceof Boolean
                         && (Boolean) args[0];
                 if (!connected) {
-                    reconcileHiddenState(SCENE.onLauncherProxyDisconnected());
+                    DOMAIN.runActiveSideEffect(
+                            () -> reconcileHiddenState(SCENE.onLauncherProxyDisconnected()));
                 }
                 return result;
             });
+            someInstalled = true;
 
         } catch (Throwable error) {
-            HOOKED_LAUNCHER_PROXY_LISTENER_CLASSES.remove(listenerClass);
+            // A successful first hook already owns the class. Do not erase the class marker
+            // and retry a second registration when the next method is unavailable.
+            if (!someInstalled) HOOKED_LAUNCHER_PROXY_LISTENER_CLASSES.remove(listenerClass);
             Api101Bridge.log(TAG + " native overview authority unavailable class="
                     + listenerClass.getName(), error);
         }
@@ -191,19 +211,14 @@ final class SystemUiGestureHandleFadeHook {
         try {
             Method setAlpha = HookUtil.findMethodExact(
                     handleClass, "setAlpha", new Class<?>[]{float.class, boolean.class});
-            HookUtil.hook(setAlpha, chain -> {
+            DOMAIN.hookDynamic(setAlpha, chain -> {
                 Object owner = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 if (!Boolean.TRUE.equals(OWN_ALPHA_WRITE.get())
                         && args.length >= 2
                         && args[0] instanceof Number) {
-                    synchronized (LOCK) {
-                        if (HOME_HANDLES.containsKey(owner)) {
-                            float vendorTarget = ((Number) args[0]).floatValue();
-                            HOME_HANDLES.put(owner, vendorTarget);
-                            if (hiddenRequested) args[0] = 0.0f;
-                        }
-                    }
+                    DOMAIN.runActiveSideEffect(() -> args[0] =
+                            ALPHA.onVendorAlpha(owner, ((Number) args[0]).floatValue()));
                 }
                 return chain.proceed(args);
             });
@@ -251,24 +266,16 @@ final class SystemUiGestureHandleFadeHook {
     }
 
     private static void reconcileHiddenState(boolean sceneShouldHide) {
+        if (!DOMAIN.isActive()) return;
         setHiddenRequested(GestureHandleRuntimeState.isEnabled() && sceneShouldHide);
     }
 
     private static void setHiddenRequested(boolean hidden) {
-        synchronized (LOCK) {
-            if (hiddenRequested == hidden) return;
-            hiddenRequested = hidden;
-            for (Map.Entry<Object, Float> entry : HOME_HANDLES.entrySet()) {
-                Object handle = entry.getKey();
-                if (handle == null) continue;
-                float target = hidden ? 0.0f : entry.getValue();
-                writeAlpha(handle, target, true);
-            }
-        }
+        ALPHA.setHidden(hidden, (handle, target) -> writeAlpha(handle, target, true));
     }
 
-    private static void writeAlpha(Object handle, float alpha, boolean animate) {
-        if (handle == null) return;
+    private static boolean writeAlpha(Object handle, float alpha, boolean animate) {
+        if (handle == null) return false;
         OWN_ALPHA_WRITE.set(Boolean.TRUE);
         try {
             HookUtil.InvocationResult<Object> result =
@@ -276,8 +283,39 @@ final class SystemUiGestureHandleFadeHook {
             if (!result.succeeded()) {
                 Api101Bridge.log(TAG + " native alpha write failed: " + result.failure());
             }
+            return result.succeeded();
         } finally {
             OWN_ALPHA_WRITE.remove();
+        }
+    }
+
+    /**
+     * Reversible gesture-owner teardown only. Not a process-wide hot-reload entry point:
+     * HandleMenu, keyguard, vendor glass and other process owners still have live resources.
+     *
+     * <p>Disarm preference/posted callbacks, drain hook side effects, unhook, then restore the
+     * last vendor-requested alpha. Failed native restores keep their weak ledger entries for
+     * retry, and never report a completed teardown.</p>
+     */
+    static synchronized boolean stopForFutureReload() {
+        if (!installed && DOMAIN.state() == Api102HookDomain.State.IDLE
+                && ALPHA.trackedCount() == 0) return true;
+        try {
+            if (!GestureHandleRuntimeState.shutdownForFutureReload()) return false;
+            if (!DOMAIN.stop()) return false;
+            if (!ALPHA.restoreAndClear((handle, target) -> writeAlpha(handle, target, false))) {
+                return false;
+            }
+            HOOKED_HANDLE_CLASSES.clear();
+            HOOKED_TASK_LISTENER_CLASSES.clear();
+            HOOKED_LAUNCHER_PROXY_LISTENER_CLASSES.clear();
+            SCENE.resetForFutureReload();
+            installed = false;
+            return true;
+        } catch (Throwable error) {
+            try { Api101Bridge.log(TAG + " gesture owner teardown failed", error); }
+            catch (Throwable ignored) {}
+            return false;
         }
     }
 }

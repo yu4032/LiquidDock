@@ -81,7 +81,7 @@ Launcher package ready 后依次完成：
 - `DockResizeAnimationHook`；
 - `DockDividerHook`；
 - `DockShadowOwnership`；
-- `Miuix307MaterialPipeline`；
+- `MiuixMaterialPipeline`；
 - `DockBottomGeometryHook`；
 - `DockIconAnimationGlassHook`；
 - `DockGlassDropRefreshHook`。

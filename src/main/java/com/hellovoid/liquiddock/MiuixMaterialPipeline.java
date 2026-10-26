@@ -17,7 +17,7 @@ import java.lang.reflect.Modifier;
  * Keep the live vendor background as the authoritative visual shell while LiquidDock composes
  * Prismal inside it; vendor compositor blur is explicitly suppressed.
  */
-final class Miuix307MaterialPipeline {
+final class MiuixMaterialPipeline {
     static final String BACKGROUND_CLASS =
             "com.miui.home.launcher.hotseats.HotSeatsListContentMiuiXBlurBackground";
     static final String THEMED_BACKGROUND_CLASS =
@@ -28,7 +28,6 @@ final class Miuix307MaterialPipeline {
     private static Handler MAIN_HANDLER;
 
     private static boolean installed;
-    private static volatile boolean vendorStaticSnapshotMode;
     private static WeakReference<View> workspaceRef = new WeakReference<>(null);
     private static WeakReference<Object> launcherRef = new WeakReference<>(null);
     private static WeakReference<Object> hotSeatsRef = new WeakReference<>(null);
@@ -41,7 +40,7 @@ final class Miuix307MaterialPipeline {
     // Log only once while one vendor instance is still in its startup placeholder geometry.
     private static WeakReference<View> geometryDeferredLoggedFor = new WeakReference<>(null);
 
-    private Miuix307MaterialPipeline() {}
+    private MiuixMaterialPipeline() {}
 
     static boolean isInstalled() {
         return installed;
@@ -72,7 +71,6 @@ final class Miuix307MaterialPipeline {
             installDockCustomizationCompatibility(classLoader, config);
             installHotSeatsAttachRecovery(classLoader, config);
             installWorkstationResumeProducerRecovery(classLoader);
-            installVendorStaticDockSnapshotPowerHook(classLoader);
             LauncherWallpaperFreshnessHook.install(classLoader);
 
             HookUtil.hookMethod(classLoader,
@@ -155,62 +153,6 @@ final class Miuix307MaterialPipeline {
             MainHook.log("[DC] MiuiX 307 HotSeats attach recovery installed");
         } catch (Throwable error) {
             MainHook.log("[DC] MiuiX 307 HotSeats attach recovery unavailable: " + error);
-        }
-    }
-
-    /**
-     * HyperOS itself switches the static HOME Dock between live blur and a captured overlay.
-     * Its snapshot refresh gate is tied to LauncherState.NORMAL, so mirroring this boolean saves
-     * idle HOME work without degrading Floating Dock/app realtime behavior.
-     */
-    private static void installVendorStaticDockSnapshotPowerHook(ClassLoader classLoader) {
-        try {
-            HookUtil.hookMethod(classLoader,
-                    "com.miui.home.launcher.hotseats.HotSeats",
-                    "setMingouStaticDockSnapshotMode",
-                    chain -> {
-                        Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object result = chain.proceed(args);
-                        boolean snapshotMode = args.length > 0 && args[0] instanceof Boolean
-                                && (Boolean) args[0];
-                        vendorStaticSnapshotMode = snapshotMode;
-                        if (GlassRuntimeState.isEnabled() && !MainHook.isWorkstationMode()) {
-                            Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(!snapshotMode,
-                                    "vendor-static-dock-snapshot");
-                        }
-                        MainHook.log("[DC][PBTX][Power] vendorStaticSnapshotMode=" + snapshotMode);
-                        return result;
-                    }, boolean.class);
-            MainHook.log("[DC] MiuiX 307 vendor static-Dock snapshot power hook installed");
-        } catch (Throwable error) {
-            MainHook.log("[DC] MiuiX 307 vendor snapshot power hook unavailable: " + error);
-            installVendorStaticDockLiveBlurPowerFallback(classLoader);
-        }
-    }
-
-    private static void installVendorStaticDockLiveBlurPowerFallback(ClassLoader classLoader) {
-        try {
-            HookUtil.hookMethod(classLoader,
-                    "com.miui.home.launcher.hotseats.HotSeats",
-                    "setMingouStaticDockLiveBlurVisible",
-                    chain -> {
-                        Object[] args = chain.getArgs().toArray(new Object[0]);
-                        Object result = chain.proceed(args);
-                        boolean liveBlurVisible = args.length > 0 && args[0] instanceof Boolean
-                                && (Boolean) args[0];
-                        vendorStaticSnapshotMode = !liveBlurVisible;
-                        if (GlassRuntimeState.isEnabled() && !MainHook.isWorkstationMode()) {
-                            Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(liveBlurVisible,
-                                    "vendor-live-blur-visible");
-                        }
-                        MainHook.log("[DC][PBTX][Power] vendorLiveBlurVisible="
-                                + liveBlurVisible);
-                        return result;
-                    }, boolean.class);
-            MainHook.log("[DC] MiuiX 307 vendor live-blur power fallback installed");
-        } catch (Throwable fallbackError) {
-            MainHook.log("[DC] MiuiX 307 vendor live-blur power fallback unavailable: "
-                    + fallbackError);
         }
     }
 
@@ -517,10 +459,11 @@ final class Miuix307MaterialPipeline {
         } else {
             DockShadowOwnership.syncDockShadow(background, config.dock);
             observeBoundHierarchy(background, config, classLoader);
+            // Neither vendor static-snapshot setter is present in this Launcher version.
+            // Preserve the previous fallback (live producer on rebind) without a
+            // nonfunctional OEM hook or an orphaned snapshot-mode flag.
             Miuix307ZeroCopyRenderer.setProducerUpdatesEnabled(
-                    MainHook.isWorkstationMode()
-                            || !vendorStaticSnapshotMode,
-                    "vendor-snapshot-state-after-bind");
+                    true, "material-bound-no-vendor-snapshot");
         }
         return installedNow;
     }

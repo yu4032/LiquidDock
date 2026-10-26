@@ -30,13 +30,19 @@ final class SecurityCenterGlassHook {
     private SecurityCenterGlassHook() {}
 
     static void onLiveGlassConfigChanged(LiquidDockConfig config) {
+        onLiveGlassConfigChanged(ConfigReader.load(), config);
+    }
+
+    static void onLiveGlassConfigChanged(ConfigReader reader, LiquidDockConfig config) {
         if (config == null) return;
+        ThirdPartyGlassAppearance sidebar =
+                SecurityCenterGlassPreferences.resolve(reader, config.glass);
         final SecurityCenterGlassCoordinator current;
         synchronized (LOCK) {
             installedConfig = config;
             current = coordinator;
         }
-        if (current != null) current.applyLiveGlassConfig(config.glass);
+        if (current != null) current.applyLiveGlassConfig(config.glass, sidebar);
     }
 
     static void install(ClassLoader classLoader, LiquidDockConfig initialConfig) {
@@ -120,8 +126,9 @@ final class SecurityCenterGlassHook {
                 new SecurityCenterVendorMaterialBridge(contract, videoMainContentResId);
         SecurityCenterGlassCoordinator nextCoordinator =
                 new SecurityCenterGlassCoordinator(
-                        config.glass, vendorBridge,
-                        allAppsCornerRadiusResId, gameToolboxCornerRadiusResId);
+                        config.glass,
+                        SecurityCenterGlassPreferences.resolve(ConfigReader.load(), config.glass),
+                        vendorBridge, allAppsCornerRadiusResId, gameToolboxCornerRadiusResId);
 
         synchronized (LOCK) {
             if (validatedHooksInstalled) {
@@ -167,7 +174,7 @@ final class SecurityCenterGlassHook {
             // methods for compatibility only; attach/detach/root replacement now perform teardown.
             HookUtil.hook(sidebarLifecycle.show(), chain -> {
                 SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-                if (live != null) live.cancelPanelExitFade();
+                if (live != null) live.onSidebarShowRequested();
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             HookUtil.hook(sidebarLifecycle.hideImmediate(), chain ->

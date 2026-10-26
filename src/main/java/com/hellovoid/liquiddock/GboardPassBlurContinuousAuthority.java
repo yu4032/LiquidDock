@@ -20,6 +20,7 @@ final class GboardPassBlurContinuousAuthority {
         final Surface surface;
         final float scale;
         boolean updatesEnabled = true;
+        final PassBlurClaimSubmissionGuard submission = new PassBlurClaimSubmissionGuard();
 
         Claim(Surface surface, float scale) {
             this.surface = surface;
@@ -50,7 +51,11 @@ final class GboardPassBlurContinuousAuthority {
                     if (claim != null) {
                         Surface requested = args.length > 1 && args[1] instanceof Surface
                                 ? (Surface) args[1] : null;
-                        if (requested != claim.surface) args[1] = claim.surface;
+                        if (claim.submission.shouldSuppress(
+                                Miuix307PassBlurBridge.isModuleDetach(root),
+                                requested == claim.surface)) {
+                            return suppressSurfaceWrite(setPassBlurSurface, chain.getThisObject());
+                        }
                     }
                     return chain.proceed(args);
                 });
@@ -60,7 +65,7 @@ final class GboardPassBlurContinuousAuthority {
                     SurfaceControl root = args.length > 0 && args[0] instanceof SurfaceControl
                             ? (SurfaceControl) args[0] : null;
                     Claim claim = root != null ? claimFor(root) : null;
-                    if (claim != null) {
+                    if (claim != null && !Miuix307PassBlurBridge.isModuleDetach(root)) {
                         args[1] = Boolean.valueOf(claim.updatesEnabled);
                         args[2] = Float.valueOf(claim.scale);
                     }
@@ -106,6 +111,12 @@ final class GboardPassBlurContinuousAuthority {
         synchronized (LOCK) {
             return ACTIVE_ROOTS.get(root);
         }
+    }
+
+    private static Object suppressSurfaceWrite(Method method, Object receiver) {
+        Class<?> result = method.getReturnType();
+        if (result == void.class) return null;
+        return receiver != null && result.isInstance(receiver) ? receiver : null;
     }
 
     private static String failureSummary(Throwable error) {

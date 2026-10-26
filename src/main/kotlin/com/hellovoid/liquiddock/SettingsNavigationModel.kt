@@ -43,6 +43,7 @@ internal enum class Page(val titleRes: Int) {
     GboardEdge(R.string.page_glass_edge),
     SearchboxEdge(R.string.page_glass_edge),
     SecurityCenterEdge(R.string.page_glass_edge),
+    SidebarEdge(R.string.page_sidebar_glass),
     LiquidSampling(R.string.page_liquid_sampling),
 
     GlassComponents(R.string.page_glass_components),
@@ -157,6 +158,7 @@ internal val componentEntries = listOf(
     HubEntry(Page.GlassWidgets, R.string.page_glass_widgets, "小组件玻璃、内容适配与组件隐藏"),
     HubEntry(Page.GlassFolders, R.string.page_glass_folders, "大小文件夹玻璃与独立尺寸"),
     HubEntry(Page.GlassMenus, R.string.page_glass_menus, "快捷菜单、系统顶部菜单与对话弹窗"),
+    HubEntry(Page.SidebarEdge, R.string.page_sidebar_glass, "模糊、颜色、透明度、圆角与玻璃高光"),
 )
 
 internal val highlightEntries = listOf(

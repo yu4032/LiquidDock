@@ -54,7 +54,7 @@ final class SecurityCenterSourceAuthorityHook {
                         try {
                             SecurityCenterGlassRuntimeState.onSourceAuthorityChanged(previous, current);
                         } catch (Throwable error) {
-                            log("activity source-authority callback failed closed", error);
+                            log("activity source-authority dispatch failed", error);
                         }
                     }
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
