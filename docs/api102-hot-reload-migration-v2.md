@@ -108,3 +108,13 @@ CI green is insufficient to claim device support; real API 102 verification rema
    considering process-wide reload. No process-wide cleanup contract exists yet.
 
 `autoHotReload=false` and Draft PR status remain unchanged pending device evidence.
+
+### Follow-up race audit
+
+- `SystemUiHandleMenuPrismalSession.start()` rechecks `shuttingDown` inside its
+  render-thread task; the initial caller-side guard alone allowed a queued start to
+  recreate EGL after a concurrently scheduled shutdown. Shutdown dispatch is idempotent.
+- `Miuix307PassBlurBridge.unbind()` currently catches native transaction failures and
+  clears its `Binding.bound` flag even on failure. Thus ordered shutdown cannot yet
+  *prove* the producer was detached. A checked, retryable unbind contract is required
+  before treating HandleMenu as a reloadable process owner.
