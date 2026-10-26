@@ -10,6 +10,7 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
@@ -254,25 +255,55 @@ final class SystemUiHandleMenuPrismalSession {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
-        try {
-            mainHandler.post(this::unbindSource);
-        } catch (Throwable error) {
-            log("unbind enqueue failed: " + error);
+        // The PassBlur producer is owned by SystemUI's main-thread ViewRoot. Previously its
+        // unbind and the EGL/SurfaceTexture destruction were posted to independent loopers:
+        // the renderer could destroy the producer Surface before ViewRoot had unbound it.
+        // Chain these operations: main-thread unbind -> render-thread release -> quit.
+        if (Looper.myLooper() == mainHandler.getLooper()) {
+            unbindThenReleaseOnMain();
+            return;
         }
         try {
-            renderHandler.post(() -> {
-                try { releaseOutput(); } catch (Throwable ignored) {}
-                try { releaseRenderResources(); } catch (Throwable ignored) {}
-                try { releaseSource(); } catch (Throwable ignored) {}
-                try { releaseEgl(); } catch (Throwable ignored) {}
-            });
+            if (!mainHandler.post(this::unbindThenReleaseOnMain)) {
+                log("main-thread unbind rejected; retaining render resources (not reload-safe)");
+            }
         } catch (Throwable error) {
-            log("render cleanup enqueue failed: " + error);
+            log("main-thread unbind enqueue failed; retaining render resources: " + error);
+        }
+    }
+
+    private void unbindThenReleaseOnMain() {
+        try {
+            unbindSource();
+        } catch (Throwable error) {
+            // unbindSource logs its own native failures. We still release our EGL resources
+            // on their owning render thread; a failed producer detach blocks full hot reload.
+            log("ViewRoot producer unbind failed during shutdown: " + error);
         }
         try {
-            renderThread.quitSafely();
+            if (!renderHandler.post(() -> {
+                try {
+                    try { releaseOutput(); } catch (Throwable error) {
+                        log("output release failed: " + error);
+                    }
+                    try { releaseRenderResources(); } catch (Throwable error) {
+                        log("Prismal resource release failed: " + error);
+                    }
+                    try { releaseSource(); } catch (Throwable error) {
+                        log("source texture release failed: " + error);
+                    }
+                    try { releaseEgl(); } catch (Throwable error) {
+                        log("EGL release failed: " + error);
+                    }
+                } finally {
+                    try { renderThread.quitSafely(); }
+                    catch (Throwable error) { log("render thread shutdown failed: " + error); }
+                }
+            })) {
+                log("render cleanup rejected after unbind; EGL teardown incomplete");
+            }
         } catch (Throwable error) {
-            log("render thread shutdown failed: " + error);
+            log("render cleanup enqueue failed after unbind: " + error);
         }
     }
 
