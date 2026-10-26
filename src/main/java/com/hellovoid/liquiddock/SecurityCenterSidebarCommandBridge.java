@@ -805,25 +805,30 @@ final class SecurityCenterSidebarCommandBridge {
                     || method.getReturnType() != void.class) continue;
             Class<?>[] params = method.getParameterTypes();
             if (params.length != 2 || params[1] != Runnable.class
-                    || !params[0].getName().startsWith("com.miui.dock.sidebar.")) continue;
+                    || resolvePanelTurboGetter(params[0]) == null) continue;
             if (unique != null) return null;
             unique = method;
         }
         return unique;
     }
 
-    /** Unobfuscated TurboLayout return type is the stable panel contract. */
-    private static View resolvePanelTurboLayout(Object panel) throws Exception {
+    /** Find an unambiguous semantic getter without vendor package or R8 member names. */
+    private static Method resolvePanelTurboGetter(Class<?> panelType) {
         Method unique = null;
-        for (Method method : panel.getClass().getMethods()) {
+        for (Method method : panelType.getMethods()) {
             if (method.isSynthetic() || method.getParameterTypes().length != 0
                     || !TURBO_LAYOUT_CLASS.equals(method.getReturnType().getName())) continue;
             if (unique != null) return null;
             unique = method;
         }
-        if (unique == null) return null;
-        unique.setAccessible(true);
-        Object result = unique.invoke(panel);
+        return unique;
+    }
+
+    private static View resolvePanelTurboLayout(Object panel) throws Exception {
+        Method getter = resolvePanelTurboGetter(panel.getClass());
+        if (getter == null) return null;
+        getter.setAccessible(true);
+        Object result = getter.invoke(panel);
         return result instanceof View ? (View) result : null;
     }
 
