@@ -243,8 +243,8 @@ public final class ModuleMain extends XposedModule {
      */
     @Override
     public boolean onHotReloading(@NonNull HotReloadingParam param) {
-        if (!reloadGate.beginHandoff()) {
-            Api101Bridge.log("[DC][API102] hot reload rejected: process lifecycle owns resources");
+        if (Api102HookRegistry.installedCount() != 0 || !reloadGate.beginHandoff()) {
+            Api101Bridge.log("[DC][API102] hot reload rejected: active process owners or HookHandles");
             return false;
         }
         try {
