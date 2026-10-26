@@ -34,6 +34,12 @@ final class PassBlurDetachCoordinator {
         Pending pending;
         synchronized (PENDING) {
             pending = PENDING.get(binding);
+            // A finish callback may already have marked the old entry completed but not yet
+            // removed it from the map. Never lose a new owner's continuation in that window.
+            if (pending != null && pending.isCompleted()) {
+                PENDING.remove(binding);
+                pending = null;
+            }
             if (pending == null) {
                 pending = new Pending(binding);
                 PENDING.put(binding, pending);
@@ -87,6 +93,10 @@ final class PassBlurDetachCoordinator {
 
         Pending(Miuix307PassBlurBridge.Binding binding) {
             this.binding = binding;
+        }
+
+        synchronized boolean isCompleted() {
+            return completed;
         }
 
         void addContinuation(Runnable callback) {
