@@ -203,6 +203,7 @@ private fun LiquidDockSettings(
                     selectedRestartScopes = when (page) {
                         Page.Gboard -> setOf("com.google.android.inputmethod.latin")
                         Page.SecurityCenterSidebar,
+                        Page.SidebarEdge,
                         Page.Animation,
                         Page.AnimationPopups -> setOf(
                             "com.miui.home",
@@ -435,8 +436,8 @@ private fun LiquidDockSettings(
                     Page.SearchboxEdge -> GlassEdgeSettingsPage(
                         padding, prefs, masterEnabled, GlassEdgeEffects.SEARCHBOX,
                     )
-                    Page.SecurityCenterEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.SECURITY_CENTER,
+                    Page.SidebarEdge -> SidebarGlassSettingsPage(
+                        padding, prefs, masterEnabled,
                     )
                     Page.LiquidShadow -> LiquidSpecPage(
                         padding,

@@ -234,8 +234,8 @@ internal fun GlassEdgeSettingsPage(
             }
             item(key = "scope-security") {
                 SettingsCard {
-                    ArrowPreference("安全中心", "独立 Prismal 光照和阴影",
-                        enabled = active, onClick = { open(Page.SecurityCenterEdge) })
+                    ArrowPreference("侧边栏", "背景模糊、色调、圆角与 Prismal 光照",
+                        enabled = active, onClick = { open(Page.SidebarEdge) })
                 }
             }
         }

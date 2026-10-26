@@ -42,7 +42,7 @@ internal enum class Page(val titleRes: Int) {
     DialogEdge(R.string.page_glass_edge),
     GboardEdge(R.string.page_glass_edge),
     SearchboxEdge(R.string.page_glass_edge),
-    SecurityCenterEdge(R.string.page_glass_edge),
+    SidebarEdge(R.string.page_glass_edge),
     LiquidSampling(R.string.page_liquid_sampling),
 
     GlassComponents(R.string.page_glass_components),
