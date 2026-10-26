@@ -156,3 +156,41 @@ CI green is insufficient to claim device support; real API 102 verification rema
 
 `autoHotReload=false` and Draft PR #465 are unchanged. Do not infer device safety from
 JVM tests or a successful CI build.
+
+## Phase 6: compositor-committed producer retirement
+
+- `tryUnbind(binding, onCommitted)` installs a real
+  `SurfaceControl.Transaction.addTransactionCommittedListener` before applying the detach
+  transaction. `Binding.bound` remains true until this callback fires; a transaction
+  submission or invalid-root failure does not count as detached. Vendor authority claims
+  are released only in the commit callback.
+- `PassBlurDetachCoordinator` retains the Binding **and owner cleanup continuations**
+  strongly until compositor acknowledgment. It attempts bounded retries, can retry blocked
+  entries explicitly, and exposes `pendingCount()`. A never-acknowledged transaction
+  intentionally blocks producer destruction and remains an outstanding resource liability.
+- All three direct Bridge callers were migrated: `RootPassBlurBackend` (one-shot folder
+  retirement, rebind, shutdown, ViewRoot generation mismatch);
+  `Miuix307PassBlurTextureView` (Dock rebind and shutdown); and
+  `SystemUiHandleMenuPrismalSession` (checked detach, delayed completion retry).
+  The old fire-and-forget `unbind()` method was removed to catch regressions at compile time.
+- `PassBlurDetachCallbacks` isolates independent cleanup callbacks so one failing
+  continuation or logger cannot suppress others. JVM tests simulate late commit,
+  concurrent close, and callback failure.
+- **Semantics:** the Android commit event confirms that the transaction's updates
+  have been committed and are ready to be presented; it explicitly does NOT mean
+  all buffers are released by GPU consumers. The implementation does not provide
+  buffer-release fencing or a verified drain of in-flight GPU work.
+- Callbacks, render-thread cleanup, producer-retirement completion, and blocked
+  handler dispatch still require on-device lifecycle verification. Native bind's
+  partial-success error path and other owner-specific EGL teardown failures remain
+  independent migration blockers.
+- Existing `RootPassBlurBackendState`/producer recovery bookkeeping is retained;
+  no whole-process hot-reload callback is wired and **autoHotReload remains false**.
+
+### Validation checkpoint
+
+- Await GitHub Actions' final unit/R8/assemble conclusion for this HEAD; prior
+  successful run #40274057874 predates the compositor-commit implementation.
+- Verify root rebind and folder snapshot remain responsive after asynchronous detach;
+  inspect the coordinator pending count for leaks, and test missing/delayed native
+  callbacks and forced root invalidation on a real API102 framework.
