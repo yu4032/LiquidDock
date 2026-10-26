@@ -28,3 +28,21 @@ no in-flight hook barrier, no listener/receiver unregistration, and no EGL/Surfa
 5. Only enable automatic hot reload after every affected process owner can atomically drain, release and resume, with device evidence.
 
 A passing CI proves build/JVM compatibility only. There is no device validation yet.
+
+## Phase 2: HookHandle ownership pilot
+
+- Migrated `Api102HookRegistry` and `Api102HookDomain` against the current main-derived code.
+- Existing ordinary HookUtil method and constructor interceptors retain unnamed handles; multiple
+  valid callbacks on the same method are not assigned duplicate synthetic IDs.
+- High-priority Dock and HomeGrid interceptors route through tracked, priority-preserving
+  `HookUtil.hookWithPriority` without changing their callback logic.
+- `SystemUiKeyguardGoneSource` now uses a named, owner-scoped hook transaction with partial
+  install rollback, blocked-on-failed-unhook behavior, and a bounded in-flight side-effect barrier.
+- A named registry handle can be replaced in isolation for testing; production never calls the
+  replace primitive during reload. JVM tests cover identities, rollback and drain behavior.
+- Module entry rejects generation handoff when the registry contains hooks, in addition to the
+  existing owner lifecycle gate. `autoHotReload=false` remains mandatory.
+
+Still blocked: SystemUI gesture/native alpha hooks, preferences listener generations,
+HandleMenu EGL sessions, Launcher Views, native PassBlur producers, and all-process teardown.
+CI green is insufficient to claim device support; real API 102 verification remains required.
