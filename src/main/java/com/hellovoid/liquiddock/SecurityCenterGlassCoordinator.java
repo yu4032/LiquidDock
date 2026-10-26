@@ -356,9 +356,12 @@ final class SecurityCenterGlassCoordinator
     void onSidebarShowRequested() {
         // This vendor callback can originate on Binder. Do not mutate the root or
         // its consumer policy until the Security Center UI looper owns the turn.
+        SecurityCenterGlassSession expectedSession = session;
         mainHandler.post(() -> {
-            SecurityCenterGlassSession live = session;
-            if (live != null && !live.isShutdown()) live.applyDeferredQualityOnShow();
+            if (expectedSession == null || expectedSession != session
+                    || expectedSession.isShutdown()) return;
+            cancelPanelExitFade();
+            expectedSession.applyDeferredQualityOnShow();
         });
     }
     void onSidebarHideRequested(boolean animated) {}

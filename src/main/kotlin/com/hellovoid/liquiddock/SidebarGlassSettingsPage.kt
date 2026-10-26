@@ -251,7 +251,7 @@ internal fun SidebarGlassSettingsPage(
                 )
             }
         }
-        item { SmallTitle("背景采样（下一次会话创建后生效）") }
+        item { SmallTitle("背景采样（下次打开侧边栏生效）") }
         item { SettingsCard { backgroundValue("capture_scale_percent", "采样比例",
             ConfigSchema.Glass.PASSBLUR_CAPTURE_SCALE, 50f, 100f, "%") } }
         item { SettingsCard { backgroundValue("render_fps", "渲染帧率上限",

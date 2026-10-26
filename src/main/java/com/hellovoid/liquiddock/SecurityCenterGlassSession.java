@@ -187,8 +187,8 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
             // revision so a live Prismal/tint/edge change is visibly presented.
             requestFresh(request.generation, request.frameGeometry, request.sinks);
         }
-        // Capture scale/FPS change only on the next semantic session. Hidden
-        // panels do not request fresh frames just because a setting was edited.
+        // Capture scale/FPS are staged until the next vendor Sidebar show.
+        // Hidden panels do not request fresh frames just because a setting was edited.
     }
 
     private void applyAppearance(ThirdPartyGlassAppearance appearance) {
