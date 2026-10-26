@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Dedicated zero-copy PassBlur -> Prismal pipeline for HyperOS' app-caption Handle Menu.
@@ -44,6 +45,7 @@ final class SystemUiHandleMenuPrismalSession {
     }
 
     private static final String TAG = "[DC][SystemUiHandleMenuPrismal]";
+    private static final AtomicInteger NEXT_SESSION_ID = new AtomicInteger();
     private static final int MAX_AUTOMATIC_UNBIND_ATTEMPTS = 3;
     private static final long UNBIND_RETRY_DELAY_MS = 80L;
     // Strong references are intentional only while teardown is blocked: never silently lose
@@ -56,6 +58,7 @@ final class SystemUiHandleMenuPrismalSession {
             -1f,  1f, 0f, 1f,
              1f,  1f, 1f, 1f
     };
+    private final int sessionId = NEXT_SESSION_ID.incrementAndGet();
     private final View host;
     private final View sourceRoot;
     private final SurfaceControl sourceSurface;
@@ -349,7 +352,10 @@ final class SystemUiHandleMenuPrismalSession {
         if (!teardownGate.attemptDetach(this::unbindSource)) {
             markTeardownBlocked();
             int failed = teardownGate.failedDetachAttempts();
-            log("ViewRoot producer detach unconfirmed attempt=" + failed
+            log("ViewRoot producer detach unconfirmed session=" + sessionId
+                    + " attempt=" + failed
+                    + " state=" + Miuix307PassBlurBridge.detachState(sourceBinding)
+                    + " blocked=" + blockedTeardownCount()
                     + "; retaining producer SurfaceTexture and EGL");
             if (failed < MAX_AUTOMATIC_UNBIND_ATTEMPTS) {
                 try {
@@ -367,6 +373,9 @@ final class SystemUiHandleMenuPrismalSession {
         // The checked transaction has received the SurfaceFlinger committed callback.
         // This is not a GPU-buffer-release fence, but the detach is compositor-acknowledged.
         if (!teardownGate.claimRenderRelease()) return;
+        log("ViewRoot producer detach committed session=" + sessionId
+                + " blocked=" + blockedTeardownCount()
+                + "; render cleanup scheduled");
         try {
             if (!renderHandler.post(() -> {
                 boolean complete = true;
