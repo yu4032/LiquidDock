@@ -118,3 +118,41 @@ CI green is insufficient to claim device support; real API 102 verification rema
   clears its `Binding.bound` flag even on failure. Thus ordered shutdown cannot yet
   *prove* the producer was detached. A checked, retryable unbind contract is required
   before treating HandleMenu as a reloadable process owner.
+
+## Phase 5: checked native PassBlur detach (experimental)
+
+- `Miuix307PassBlurBridge.tryUnbind(binding)` returns **false** on an invalid root,
+  reflection failure or native transaction failure, without clearing `Binding.bound`,
+  `updatesEnabled`, or the vendor continuous-authority claims. Claims are released only
+  after a successful detach transaction. Existing void `unbind()` callers remain
+  source-compatible but do **not** yet enforce release ordering; audit them separately.
+- A `true` return proves only that `SurfaceControl.Transaction.apply()` returned
+  normally. It is **not** a SurfaceFlinger completion fence or proof of compositor
+  acknowledgment. No native GPU fence/transaction completion callback is wired.
+- `SystemUiHandleMenuPrismalSession` now uses `HandleMenuTeardownGate` to forbid
+  render-thread EGL/SurfaceTexture destruction until checked producer detach succeeds.
+  Failed detaches are retried up to three attempts with an 80ms delay; failures and
+  rejected Handler posts retain a strong, explicitly countable blocked-session reference.
+  `retryBlockedTeardowns()` retries those sessions when a new HandleMenu starts.
+  Permanent native failures can intentionally retain GPU resources rather than release
+  a still-bound producer; this is a **fail-closed leak risk**, not full cleanup.
+- A ViewRoot generation mismatch now retains its producer Binding if detach fails,
+  rather than discarding the only retryable reference.
+- Pure-JVM `HandleMenuTeardownGateTest` covers false/throwing detach, blocked render
+  release, duplicate release prevention, and retry after rejected render enqueue.
+
+### Remaining safety blockers
+
+1. Render cleanup functions still swallow some EGL/GL/Surface release failures.
+   A queued render cleanup is not proof of successful native resource destruction.
+2. Other PassBlur owners still call legacy `unbind()` without checking success; their
+   producer/SurfaceTexture lifetimes must be migrated one owner at a time.
+3. HandleMenu's global `SurfaceControl.Transaction.setAlpha` hook, live alpha listeners,
+   pending/active View bindings, and cross-owner glass callbacks are not fully drainable.
+4. An invalidated ViewRoot may never become detachable again. Retained failed sessions
+   require explicit diagnostics and device verification; no automatic hot reload admission.
+5. The native bind error path may have partial compositor side effects before returning
+   null; this needs a separate transactional bind audit.
+
+`autoHotReload=false` and Draft PR #465 are unchanged. Do not infer device safety from
+JVM tests or a successful CI build.
