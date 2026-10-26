@@ -146,8 +146,12 @@ final class Api102HookRegistry {
                 // Keep the handle in the ledger and the feature in installed state. Retrying
                 // registration after a failed unhook would duplicate callbacks.
                 complete = false;
-                Api101Bridge.log("[DC][API102] identified-hook rollback failed id="
-                        + ids.get(i), error);
+                try {
+                    Api101Bridge.log("[DC][API102] identified-hook rollback failed id="
+                            + ids.get(i), error);
+                } catch (Throwable ignored) {
+                    // Logging must never abort the rest of a multi-hook rollback.
+                }
             }
         }
         return complete;
