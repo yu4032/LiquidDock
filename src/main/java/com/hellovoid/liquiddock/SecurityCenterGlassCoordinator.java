@@ -357,8 +357,11 @@ final class SecurityCenterGlassCoordinator
                 || previousAuthority == null || currentAuthority == null
                 || previousAuthority.equals(currentAuthority)
                 || turboRef.get() == null || session == null || session.isShutdown()) return false;
+        if (!hideAndRestoreVendor()) {
+            log("source authority rollover deferred; vendor material restore incomplete", null);
+            return false;
+        }
         advancePresentationGeneration("source authority");
-        hideAndRestoreVendor();
         prepareCustomOwnershipForPresentation();
         boolean accepted = session.requestSourceRebind("security-center-source-authority");
         refreshCurrentFrame(true);
@@ -878,20 +881,25 @@ final class SecurityCenterGlassCoordinator
         if (appsSink != null && !appsSink.isDisposed()) appsSink.setAuthorizedVisible(false);
     }
 
-    private void hideAndRestoreVendor() {
-        hideCustomOnly();
+    private boolean hideAndRestoreVendor() {
         boolean wasCustom = ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR;
         View ownedTurbo = customOwnerTurboRef.get();
+        // Preserve the currently presented custom glass if restoring the OEM
+        // background fails. Hiding it first makes the app page completely blank.
+        if (wasCustom && ownedTurbo != null && vendorMaterialBridge != null) {
+            try {
+                vendorMaterialBridge.restoreVendor(ownedTurbo);
+            } catch (Throwable error) {
+                log("vendor material restore failed; keeping custom presentation", error);
+                return false;
+            }
+        }
+        hideCustomOnly();
         ownership.releaseToVendor();
         handoffPending = false;
         renderedGeneration = -1L;
         customOwnerTurboRef = new WeakReference<>(null);
-        if (!wasCustom || ownedTurbo == null || vendorMaterialBridge == null) return;
-        try {
-            vendorMaterialBridge.restoreVendor(ownedTurbo);
-        } catch (Throwable error) {
-            log("vendor material restore failed", error);
-        }
+        return true;
     }
 
     private void releasePanel(View turboLayout, String reason) {

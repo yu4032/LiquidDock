@@ -2,6 +2,8 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Point;
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 
 import java.lang.ref.WeakReference;
@@ -148,9 +150,23 @@ final class SecurityCenterVendorMaterialState {
 
     static void restoreOwner(Object owner) {
         if (owner == null) return;
+        // A Binder observer can request restoration off-thread. Keep the claim ledger
+        // intact until the UI looper actually replays each View mutation.
+        Looper main = Looper.getMainLooper();
+        if (Looper.myLooper() != main) {
+            boolean queued = new Handler(main).post(() -> {
+                try {
+                    restoreOwner(owner);
+                } catch (Throwable error) {
+                    log("vendor material deferred restore failed", error);
+                }
+            });
+            if (!queued) throw new IllegalStateException("vendor material main-thread restore rejected");
+            return;
+        }
         List<RestoreEntry> restore = new ArrayList<>();
         synchronized (LOCK) {
-            List<WeakReference<View>> owned = VIEWS_BY_OWNER.remove(owner);
+            List<WeakReference<View>> owned = VIEWS_BY_OWNER.get(owner);
             if (owned == null) return;
             for (WeakReference<View> ref : owned) {
                 View target = ref.get();
@@ -158,7 +174,6 @@ final class SecurityCenterVendorMaterialState {
                 WeakReference<Object> currentOwnerRef = OWNER_BY_VIEW.get(target);
                 Object currentOwner = currentOwnerRef != null ? currentOwnerRef.get() : null;
                 if (currentOwner != owner) continue;
-                OWNER_BY_VIEW.remove(target);
                 Snapshot snapshot = OBSERVED.get(target);
                 if (snapshot != null) restore.add(new RestoreEntry(target, new Snapshot(snapshot)));
             }
@@ -168,12 +183,24 @@ final class SecurityCenterVendorMaterialState {
         for (RestoreEntry entry : restore) {
             try {
                 replay(entry.target, entry.snapshot);
+                synchronized (LOCK) {
+                    WeakReference<Object> currentRef = OWNER_BY_VIEW.get(entry.target);
+                    if (currentRef != null && currentRef.get() == owner) {
+                        OWNER_BY_VIEW.remove(entry.target);
+                    }
+                }
             } catch (Throwable error) {
+                // Do not forget the owner on a partial replay: a later restore can
+                // retry the failed carrier without reapplying successful ones.
                 if (firstFailure == null) firstFailure = error;
                 log("vendor material replay failed for " + entry.target.getClass().getName(), error);
             }
         }
-        if (firstFailure != null) {
+        if (firstFailure == null) {
+            synchronized (LOCK) {
+                VIEWS_BY_OWNER.remove(owner);
+            }
+        } else {
             throw new IllegalStateException("Security Center vendor material replay failed", firstFailure);
         }
     }

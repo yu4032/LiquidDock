@@ -188,7 +188,12 @@ final class SecurityCenterSidebarCommandBridge {
             filter.addAction(SidebarCommandContract.ACTION_CONFIRM_END);
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             appContext = context;
-            installSidebarHandleSuppressionHook(source.getClassLoader());
+            if (SideSlideHoldFeatureConfig.isEnabled(ConfigReader.load())) {
+                installSidebarHandleSuppressionHook(source.getClassLoader());
+            } else {
+                SideSlideHoldDiagnostics.log(TAG
+                        + " native Sidebar handle retained: side-slide hold disabled");
+            }
             bindVendorService(context);
             installTurboTouchReleaseHook(source.getClassLoader());
             installSidebarRootClickReleaseHook(source.getClassLoader());
@@ -265,6 +270,7 @@ final class SecurityCenterSidebarCommandBridge {
     }
 
     private static void suppressCurrentSidebarHandles() {
+        if (!sidebarHandleSuppressionHookInstalled) return;
         Object service = serviceOwner;
         Class<?> lineClass = sidebarHandleClass;
         if (service == null || lineClass == null) return;

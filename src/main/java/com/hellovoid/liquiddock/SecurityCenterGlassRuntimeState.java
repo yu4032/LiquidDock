@@ -93,11 +93,16 @@ final class SecurityCenterGlassRuntimeState {
     static void onSourceAuthorityChanged(Object previousAuthority, Object currentAuthority) {
         if (!isEnabled() || previousAuthority == null || currentAuthority == null
                 || previousAuthority.equals(currentAuthority)) return;
-        Owner currentOwner = owner;
-        if (currentOwner instanceof SecurityCenterGlassCoordinator) {
-            ((SecurityCenterGlassCoordinator) currentOwner)
+        // IActivityChangeListener is dispatched by Binder, not the UI looper.
+        // Capture ownership now and revalidate after dispatch: a newer panel/session
+        // must not receive an outdated source rollover from the previous owner.
+        Owner expectedOwner = owner;
+        if (!(expectedOwner instanceof SecurityCenterGlassCoordinator)) return;
+        runOnMain(() -> {
+            if (!isEnabled() || owner != expectedOwner) return;
+            ((SecurityCenterGlassCoordinator) expectedOwner)
                     .onSourceAuthorityChanged(previousAuthority, currentAuthority);
-        }
+        });
     }
 
     private static synchronized void apply(
