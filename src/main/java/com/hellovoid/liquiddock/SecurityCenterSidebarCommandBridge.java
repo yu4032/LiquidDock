@@ -8,7 +8,9 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.app.Service;
 import android.os.Binder;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.view.View;
@@ -21,7 +23,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.AbstractMap;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Security Center :ui bridge to the exported DockWindowManagerService Sidebar endpoint.
@@ -43,7 +48,10 @@ final class SecurityCenterSidebarCommandBridge {
     private static volatile boolean sidebarRootClickReleaseHookInstalled;
     private static volatile boolean windowLayoutPassDownGuardHookInstalled;
     private static volatile boolean sidebarHandleSuppressionHookInstalled;
+    private static volatile boolean sidebarHandleSuppressionEnabled;
     private static volatile Class<?> sidebarHandleClass;
+    private static final Map<View, Float> ORIGINAL_HANDLE_ALPHA = new WeakHashMap<>();
+    private static final ThreadLocal<Boolean> MODULE_HANDLE_ALPHA = new ThreadLocal<>();
     private static volatile View releasedSidebarWindowRoot;
     private static final int MIUI_FLAG_CLICK_PASS_DOWN = 0x20;
     private static final String TURBO_LAYOUT_CLASS =
@@ -188,12 +196,8 @@ final class SecurityCenterSidebarCommandBridge {
             filter.addAction(SidebarCommandContract.ACTION_CONFIRM_END);
             context.registerReceiver(RECEIVER, filter, Context.RECEIVER_EXPORTED);
             appContext = context;
-            if (SideSlideHoldFeatureConfig.isEnabled(ConfigReader.load())) {
-                installSidebarHandleSuppressionHook(source.getClassLoader());
-            } else {
-                SideSlideHoldDiagnostics.log(TAG
-                        + " native Sidebar handle retained: side-slide hold disabled");
-            }
+            onSideSlideHoldPreferenceChanged(
+                    SideSlideHoldFeatureConfig.isEnabled(ConfigReader.load()));
             bindVendorService(context);
             installTurboTouchReleaseHook(source.getClassLoader());
             installSidebarRootClickReleaseHook(source.getClassLoader());
@@ -228,6 +232,63 @@ final class SecurityCenterSidebarCommandBridge {
      * sampling/touch/lifecycle authority, so only its visual alpha is suppressed. The guard is
      * installed only when the side-slide hold feature itself is enabled.</p>
      */
+    /** The listener can disable an already-installed Hook without restarting Security Center. */
+    static void onSideSlideHoldPreferenceChanged(boolean enabled) {
+        Looper main = Looper.getMainLooper();
+        if (Looper.myLooper() != main) {
+            if (!new Handler(main).post(() -> onSideSlideHoldPreferenceChanged(enabled))) {
+                SideSlideHoldDiagnostics.log(TAG + " handle preference dispatch rejected");
+            }
+            return;
+        }
+        sidebarHandleSuppressionEnabled = enabled;
+        if (enabled) {
+            Object owner = serviceOwner;
+            if (!sidebarHandleSuppressionHookInstalled && owner != null) {
+                installSidebarHandleSuppressionHook(owner.getClass().getClassLoader());
+            }
+            suppressCurrentSidebarHandles();
+        } else {
+            restoreSavedSidebarHandles();
+            SideSlideHoldDiagnostics.log(TAG
+                    + " native Sidebar handle restored: side-slide hold disabled");
+        }
+    }
+
+    private static void suppressHandle(View handle) {
+        if (handle == null || !sidebarHandleSuppressionEnabled) return;
+        synchronized (ORIGINAL_HANDLE_ALPHA) {
+            if (!ORIGINAL_HANDLE_ALPHA.containsKey(handle)) {
+                ORIGINAL_HANDLE_ALPHA.put(handle, handle.getAlpha());
+            }
+        }
+        MODULE_HANDLE_ALPHA.set(Boolean.TRUE);
+        try {
+            handle.setAlpha(0.0f);
+        } finally {
+            MODULE_HANDLE_ALPHA.remove();
+        }
+    }
+
+    private static void restoreSavedSidebarHandles() {
+        List<Map.Entry<View, Float>> snapshot = new ArrayList<>();
+        synchronized (ORIGINAL_HANDLE_ALPHA) {
+            for (Map.Entry<View, Float> entry : ORIGINAL_HANDLE_ALPHA.entrySet()) {
+                snapshot.add(new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue()));
+            }
+            ORIGINAL_HANDLE_ALPHA.clear();
+        }
+        for (Map.Entry<View, Float> entry : snapshot) {
+            View view = entry.getKey();
+            if (view != null) {
+                try { view.setAlpha(entry.getValue()); }
+                catch (Throwable error) {
+                    SideSlideHoldDiagnostics.log(TAG + " native Sidebar alpha restore failed", error);
+                }
+            }
+        }
+    }
+
     private static void installSidebarHandleSuppressionHook(ClassLoader classLoader) {
         if (sidebarHandleSuppressionHookInstalled || classLoader == null) return;
         try {
@@ -238,9 +299,14 @@ final class SecurityCenterSidebarCommandBridge {
             HookUtil.hook(setAlpha, chain -> {
                 Object owner = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
-                if (lineClass.isInstance(owner)
-                        && args.length == 1
-                        && args[0] instanceof Number) {
+                if (lineClass.isInstance(owner) && owner instanceof View
+                        && args.length == 1 && args[0] instanceof Number
+                        && sidebarHandleSuppressionEnabled
+                        && !Boolean.TRUE.equals(MODULE_HANDLE_ALPHA.get())) {
+                    synchronized (ORIGINAL_HANDLE_ALPHA) {
+                        ORIGINAL_HANDLE_ALPHA.put(
+                                (View) owner, ((Number) args[0]).floatValue());
+                    }
                     args[0] = 0.0f;
                 }
                 return chain.proceed(args);
@@ -252,7 +318,7 @@ final class SecurityCenterSidebarCommandBridge {
                 Object owner = chain.getThisObject();
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 if (lineClass.isInstance(owner) && owner instanceof View) {
-                    ((View) owner).setAlpha(0.0f);
+                    suppressHandle((View) owner);
                 }
                 return result;
             });
@@ -270,7 +336,7 @@ final class SecurityCenterSidebarCommandBridge {
     }
 
     private static void suppressCurrentSidebarHandles() {
-        if (!sidebarHandleSuppressionHookInstalled) return;
+        if (!sidebarHandleSuppressionEnabled || !sidebarHandleSuppressionHookInstalled) return;
         Object service = serviceOwner;
         Class<?> lineClass = sidebarHandleClass;
         if (service == null || lineClass == null) return;
@@ -286,7 +352,7 @@ final class SecurityCenterSidebarCommandBridge {
                 if (candidate == null || !isSidebarWrapperType(candidate.getClass())) continue;
                 View line = resolveSidebarLineView(candidate);
                 if (line == null || !lineClass.isInstance(line)) continue;
-                line.setAlpha(0.0f);
+                suppressHandle(line);
                 suppressed++;
             }
             if (suppressed > 0) {

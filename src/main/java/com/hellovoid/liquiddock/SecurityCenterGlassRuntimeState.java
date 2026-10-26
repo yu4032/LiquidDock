@@ -45,6 +45,13 @@ final class SecurityCenterGlassRuntimeState {
         if (nextPreferences == null) return;
 
         listener = (sharedPreferences, key) -> {
+            if (SideSlideHoldFeatureConfig.KEY.equals(key)) {
+                SecurityCenterSidebarCommandBridge.onSideSlideHoldPreferenceChanged(
+                        sharedPreferences.getBoolean(
+                                SideSlideHoldFeatureConfig.KEY,
+                                SideSlideHoldFeatureConfig.DEFAULT_ENABLED));
+                return;
+            }
             if (!ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.SECURITY_CENTER_GLASS.name().equals(key)) {
