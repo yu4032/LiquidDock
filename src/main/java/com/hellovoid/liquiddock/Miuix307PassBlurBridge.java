@@ -447,13 +447,8 @@ final class Miuix307PassBlurBridge {
         }
         try { MainHook.log(TAG + " PassBlur compositor detach committed root=" + binding.rootName); }
         catch (Throwable ignored) {}
-        for (Runnable callback : callbacks) {
-            try { callback.run(); }
-            catch (Throwable error) {
-                try { MainHook.log(TAG + " PassBlur detach callback failed: " + error); }
-                catch (Throwable ignored) {}
-            }
-        }
+        PassBlurDetachCallbacks.dispatch(callbacks, error ->
+                MainHook.log(TAG + " PassBlur detach callback failed: " + error));
     }
 
     static int surfaceLayerId(SurfaceControl surface) {
