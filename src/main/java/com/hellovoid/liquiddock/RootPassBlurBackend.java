@@ -173,7 +173,11 @@ final class RootPassBlurBackend {
             Miuix307PassBlurBridge.Binding old = binding;
             PassBlurDetachCoordinator.retire(old, () -> {
                 if (binding == old) binding = null;
+                // Shutdown may have joined this same pending detach. Its own continuation
+                // owns full EGL cleanup; never retire a snapshot after shutdown starts.
+                if (shuttingDown) return;
                 if (!postToRenderThread(() -> {
+                    if (shuttingDown) return;
                     releaseInputProducerEndpointOnRenderThread(true);
                     MainHook.log(TAG
                             + " one-shot folder producer retired after compositor commit");
