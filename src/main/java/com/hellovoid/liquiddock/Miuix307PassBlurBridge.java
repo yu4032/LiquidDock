@@ -41,8 +41,8 @@ final class Miuix307PassBlurBridge {
         final int surfaceSequenceId;
         final int rootLayerId;
         final PassBlurDomain domain;
-        boolean bound = true;
-        boolean updatesEnabled = true;
+        volatile boolean bound = true;
+        volatile boolean updatesEnabled = true;
         volatile boolean workspaceTransitionFrameSync;
         volatile long lastForceRefreshMs;
 
@@ -353,45 +353,61 @@ final class Miuix307PassBlurBridge {
         }
     }
 
-    static void unbind(Binding binding) {
-        if (binding == null || !binding.bound) return;
-        if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
-            SecurityCenterPassBlurContinuousAuthority.release(
-                    binding.rootSurface, binding.producerSurface);
-        }
-        if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
-            GboardPassBlurContinuousAuthority.release(
-                    binding.rootSurface, binding.producerSurface);
-        }
-        if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
-            MiuiSearchboxPassBlurContinuousAuthority.release(
-                    binding.rootSurface, binding.producerSurface);
-        }
-        try {
-            if (!binding.rootSurface.isValid()) {
+    /**
+     * Attempt a native producer detach. A true result means the root was valid and the
+     * transaction's apply() returned without throwing; it is not a SurfaceFlinger fence.
+     * Failure keeps the Binding live so the owning session can retry before releasing its
+     * producer Surface/SurfaceTexture. Do not clear authority claims on a failed detach.
+     */
+    static boolean tryUnbind(Binding binding) {
+        if (binding == null) return true;
+        synchronized (binding) {
+            if (!binding.bound) return true;
+            try {
+                if (!binding.rootSurface.isValid()) {
+                    MainHook.log(TAG + " PassBlur unbind deferred: root invalid root="
+                            + binding.rootName);
+                    return false;
+                }
+                try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                    binding.setPassBlurSurface.invoke(transaction, binding.rootSurface, null);
+                    binding.setUpdateTextureFlag.invoke(
+                            transaction, binding.rootSurface, Boolean.FALSE,
+                            Float.valueOf(binding.scale));
+                    binding.setMiBlurWinExc.invoke(
+                            transaction, binding.rootSurface, (Object) new String[0]);
+                    transaction.apply();
+                }
+                // Release the vendor continuous-authority claims only AFTER native detach.
+                // If a release fails, retain the binding and retry the idempotent detach.
+                if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
+                    SecurityCenterPassBlurContinuousAuthority.release(
+                            binding.rootSurface, binding.producerSurface);
+                }
+                if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
+                    GboardPassBlurContinuousAuthority.release(
+                            binding.rootSurface, binding.producerSurface);
+                }
+                if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
+                    MiuiSearchboxPassBlurContinuousAuthority.release(
+                            binding.rootSurface, binding.producerSurface);
+                }
                 binding.bound = false;
                 binding.updatesEnabled = false;
-                return;
+                MainHook.log(TAG + " PassBlur producer detach applied root=" + binding.rootName);
+                return true;
+            } catch (Throwable error) {
+                // Never report success or discard a retryable binding on transaction failure.
+                try { MainHook.log(TAG + " PassBlur unbind failed; binding retained: " + error); }
+                catch (Throwable ignored) {}
+                return false;
             }
-            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-                binding.setPassBlurSurface.invoke(transaction, binding.rootSurface, null);
-                binding.setUpdateTextureFlag.invoke(
-                        transaction,
-                        binding.rootSurface,
-                        Boolean.FALSE,
-                        Float.valueOf(binding.scale));
-                binding.setMiBlurWinExc.invoke(
-                        transaction, binding.rootSurface, (Object) new String[0]);
-                transaction.apply();
-            }
-            binding.bound = false;
-            binding.updatesEnabled = false;
-            MainHook.log(TAG + " PassBlur producer unbound root=" + binding.rootName);
-        } catch (Throwable error) {
-            binding.bound = false;
-            binding.updatesEnabled = false;
-            MainHook.log(TAG + " PassBlur unbind failed: " + error);
         }
+    }
+
+    /** Legacy call sites may ignore the result; Binding.bound still retains failure state. */
+    static void unbind(Binding binding) {
+        tryUnbind(binding);
     }
 
     static int surfaceLayerId(SurfaceControl surface) {
