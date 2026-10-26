@@ -222,3 +222,42 @@ JVM tests or a successful CI build.
   transitions and guard against incorrectly isolating live/same-generation
   producers.
 - No real-device confirmation yet, and `autoHotReload=false` remains unchanged.
+
+
+## Final integration and device acceptance — 2026-10-26
+
+This section supersedes earlier *pending device validation / Draft* status notes for
+the **API102 static-scope build**, but does not supersede the documented limitations
+on whole-process hot reload or compositor buffer-release fencing.
+
+- Device: Redmi K Pad (`turner`), HyperOS 3.0.310.0.WAOCNXM,
+  modified MIUI Launcher 650001143; LiquidDock 2.7.5 / versionCode 37.
+- P0-1 Workspace producer rollover: 30 mixed cycles passed, no rebind-rejected storm.
+- P0-2 SearchBox / Gboard: 30 portrait/landscape cycles passed without new native crashes.
+- P0-3 Security Center sidebar native handle and glass binding: passed on device.
+- P0-4 SystemUI HandleMenu: initial 50-cycle attempt **failed** with unconfirmed
+  detach and retained SurfaceTexture/EGL. Follow-up implementation added a native
+  caption fade-out early-detach trigger, stable per-session detach diagnostics and
+  a native-material fallback that prevents further producer allocation while
+  teardown is blocked. The device tester subsequently reported **pass** for the
+  follow-up. Detailed post-fix counters were not attached to this repository;
+  the earlier failed run must not be presented as passing evidence.
+- P1-5 Dock idle power: Perfetto ~1.3 FPS idle, ~64 FPS during interaction; passed.
+- P1-6 folder edit geometry: passed in an earlier device run, not repeated in
+  the final report.
+- P1-7 API102 process lifecycle: passed; P1-8 transaction/release path passed
+  at log level; extreme buffer-retention scenarios were not constructed.
+- P2-9 functional regression was **sampled**, not exhaustive; P2-10 50-cycle
+  Launcher stability passed with restart-to-baseline memory control; P2-11 log
+  inspection passed.
+- Latest code-validated head before documentation cleanup:
+  `17fad9b18842936a351c13719f2ef6eb357be880`; Actions
+  [#40344294271](https://github.com/yu4032/LiquidDock/actions/runs/40344294271)
+  passed unit tests, debug assembly, zero-copy audit and artifact uploads.
+
+**Merge scope:** API102 migration with existing static-scoped process installation,
+Glass Components / independent Security Center sidebar appearance and targeted
+producer lifecycle corrections. `autoHotReload=false` is intentionally unchanged:
+the gesture owner stop path is not wired into full process reload, and a
+compositor transaction committed callback is not a GPU buffer-release fence.
+Do not advertise safe no-restart APK updates or full owner teardown.
