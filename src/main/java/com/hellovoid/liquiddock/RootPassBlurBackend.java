@@ -84,6 +84,10 @@ final class RootPassBlurBackend {
     private volatile boolean shutdownSourceDetached;
     private final AtomicBoolean shutdownGlScheduled = new AtomicBoolean();
     private final AtomicBoolean invalidRootIsolationQueued = new AtomicBoolean();
+    private Miuix307PassBlurBridge.Binding lastLoggedMismatchBinding;
+    private int lastLoggedMismatchLayer = -1;
+    private int lastLoggedMismatchSequence = -1;
+    private boolean pendingRejectionLogged;
 
     private static final class RetiredInput {
         final Miuix307PassBlurBridge.Binding binding;
@@ -252,16 +256,23 @@ final class RootPassBlurBackend {
                         + " attached=" + attached + " domain=" + bindRequest.domain());
                 return attached;
             }
-            MainHook.log(TAG + " producer rebind rejected reason=" + reason
-                    + " cause=recovery-state domain=" + bindRequest.domain());
+            if (!pendingRejectionLogged) {
+                pendingRejectionLogged = true;
+                MainHook.log(TAG + " producer rebind pending reason=" + reason
+                        + " domain=" + bindRequest.domain()
+                        + " (duplicate requests suppressed)");
+            }
             return false;
         }
+        pendingRejectionLogged = false;
         if (rolloverComplete != null && !attachRolloverCompletion(rolloverComplete)) {
+            state.onRecreateFailed();
             MainHook.log(TAG + " producer rebind rejected reason=" + reason
                     + " cause=completion-attach domain=" + bindRequest.domain());
             return false;
         }
         long epoch = bindEpoch.incrementAndGet();
+        state.onRebindScheduled(epoch);
         Miuix307PassBlurBridge.Binding old = binding;
         View sourceRoot = rootRef.get();
         RootPassBlurEndpointBridge.Endpoint replacement =
@@ -270,7 +281,9 @@ final class RootPassBlurBackend {
                 bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE,
                 old.rootSurface != null && old.rootSurface.isValid(),
                 replacement != null && replacement.isValid(),
-                RootPassBlurEndpointBridge.sameGeneration(old, replacement))) {
+                RootPassBlurEndpointBridge.sameGeneration(old, replacement),
+                WorkspacePassBlurRolloverPolicy.distinctNativeLayer(
+                        old.rootLayerId, replacement != null ? replacement.rootLayerId : -1))) {
             // A destroyed old root cannot acknowledge native detach. Quarantine it and
             // create a separate producer for the new Workspace generation.
             boolean queued = scheduleInvalidRootWorkspaceIsolation(old, epoch, reason);
@@ -283,12 +296,21 @@ final class RootPassBlurBackend {
         }
         PassBlurDetachCoordinator.retire(old, () -> {
             if (binding == old) binding = null;
-            if (shuttingDown || epoch != bindEpoch.get()) return;
+            if (shuttingDown || epoch != bindEpoch.get()) {
+                state.onRebindAborted(epoch);
+                return;
+            }
             boolean queued = postToRenderThread(() -> {
                 try {
-                    if (shuttingDown || epoch != bindEpoch.get()) return;
+                    if (shuttingDown || epoch != bindEpoch.get()) {
+                        state.onRebindAborted(epoch);
+                        return;
+                    }
                     releaseInputProducerEndpointOnRenderThread(false);
-                    if (shuttingDown || epoch != bindEpoch.get()) return;
+                    if (shuttingDown || epoch != bindEpoch.get()) {
+                        state.onRebindAborted(epoch);
+                        return;
+                    }
                     createInputProducer();
                     ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
                     if (recreated.requestBind) mainHandler.post(() -> bindProducerWhenReady(0));
@@ -318,7 +340,9 @@ final class RootPassBlurBackend {
                 bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE,
                 old.rootSurface != null && old.rootSurface.isValid(),
                 replacement != null && replacement.isValid(),
-                RootPassBlurEndpointBridge.sameGeneration(old, replacement))) return false;
+                RootPassBlurEndpointBridge.sameGeneration(old, replacement),
+                WorkspacePassBlurRolloverPolicy.distinctNativeLayer(
+                        old.rootLayerId, replacement != null ? replacement.rootLayerId : -1))) return false;
         if (!invalidRootIsolationQueued.compareAndSet(false, true)) return true;
         boolean posted;
         try {
@@ -327,7 +351,8 @@ final class RootPassBlurBackend {
                     if (shuttingDown) return;
                     ensureEglAndSource();
                     makePbufferCurrentUnchecked();
-                    isolateInvalidWorkspaceRoot(old, epoch, reason, replacement);
+                    isolateInvalidWorkspaceRoot(old, epoch, reason,
+                            RootPassBlurEndpointBridge.inspect(rootRef.get()));
                 } catch (Throwable error) {
                     state.onRecreateFailed();
                     notifyTerminalFailure(error);
@@ -349,25 +374,36 @@ final class RootPassBlurBackend {
     }
 
     /**
-     * Render-thread only. An invalid old ViewRoot has no valid transaction target; keep
-     * its original Surface/SurfaceTexture/OES texture alive until a future successful native
-     * detach instead of locking the replacement Workspace behind that impossible callback.
+     * Render-thread only. A distinct native Workspace layer can bind a new
+     * producer while the old input is quarantined until committed native detach.
      */
     private void isolateInvalidWorkspaceRoot(
             Miuix307PassBlurBridge.Binding old, long epoch, String reason,
             RootPassBlurEndpointBridge.Endpoint replacement) {
         requireRenderThread();
-        if (shuttingDown || epoch != bindEpoch.get() || binding != old) return;
-        if (old == null || old.rootSurface.isValid() || replacement == null
-                || !replacement.isValid()
-                || RootPassBlurEndpointBridge.sameGeneration(old, replacement)
-                || old.producerSurface != inputProducerSurface
-                || inputSurfaceTexture == null || oesTexture == 0) {
-            // Root recovered before the queued isolation. Do not free/reuse the old producer;
-            // re-enter normal detach only when its current root has become valid.
-            MainHook.log(TAG + " invalid-root isolation no longer applicable reason=" + reason);
+        if (shuttingDown) return;
+        if (epoch != bindEpoch.get() || binding != old) {
+            state.onRebindAborted(epoch);
             return;
         }
+        if (old == null || !WorkspacePassBlurRolloverPolicy.isolate(
+                true, old.rootSurface.isValid(),
+                replacement != null && replacement.isValid(),
+                RootPassBlurEndpointBridge.sameGeneration(old, replacement),
+                WorkspacePassBlurRolloverPolicy.distinctNativeLayer(
+                        old.rootLayerId, replacement != null ? replacement.rootLayerId : -1))
+                || old.producerSurface != inputProducerSurface
+                || inputSurfaceTexture == null || oesTexture == 0) {
+            if (state.onRebindAborted(epoch)) {
+                MainHook.log(TAG + " Workspace isolation aborted reason=" + reason);
+                completeRolloverCompletions(false, "isolation-aborted");
+            }
+            return;
+        }
+        // Fence the earlier normal-detach continuation before replacing the source.
+        // The in-flight recovery transfers to this new epoch; it must not be cleared.
+        long replacementEpoch = bindEpoch.incrementAndGet();
+        if (!state.transferRebindOwner(epoch, replacementEpoch)) return;
 
         RetiredInput orphan = new RetiredInput(
                 old, inputProducerSurface, inputSurfaceTexture, oesTexture);
@@ -595,11 +631,18 @@ final class RootPassBlurBackend {
         contentRect = nextContentRect;
 
         if (endpointChanged) {
-            MainHook.log(TAG + " endpoint generation changed old=" + current.rootName
-                    + " oldLayerId=" + current.rootLayerId
-                    + " newLayerId=" + endpoint.rootLayerId
-                    + " oldSurfaceSeq=" + current.surfaceSequenceId
-                    + " newSurfaceSeq=" + endpoint.surfaceSequenceId);
+            if (lastLoggedMismatchBinding != current
+                    || lastLoggedMismatchLayer != endpoint.rootLayerId
+                    || lastLoggedMismatchSequence != endpoint.surfaceSequenceId) {
+                lastLoggedMismatchBinding = current;
+                lastLoggedMismatchLayer = endpoint.rootLayerId;
+                lastLoggedMismatchSequence = endpoint.surfaceSequenceId;
+                MainHook.log(TAG + " endpoint generation changed old=" + current.rootName
+                        + " oldLayerId=" + current.rootLayerId
+                        + " newLayerId=" + endpoint.rootLayerId
+                        + " oldSurfaceSeq=" + current.surfaceSequenceId
+                        + " newSurfaceSeq=" + endpoint.surfaceSequenceId);
+            }
             requestRebind("root-endpoint-changed");
             return true;
         }

@@ -61,6 +61,32 @@ public class RootPassBlurBackendStateTest {
     }
 
     @Test
+    public void oldEpochCannotAbortReplacementRecovery() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        assertTrue(state.requestRebind().accepted);
+        state.onRebindScheduled(8L);
+        assertFalse(state.onRebindAborted(7L));
+        assertTrue(state.isRebindPending());
+        assertTrue(state.transferRebindOwner(8L, 9L));
+        assertFalse(state.onRebindAborted(8L));
+        assertTrue(state.isRebindPending());
+        assertTrue(state.onProducerRecreated().requestBind);
+        state.onBindSucceeded();
+        assertFalse(state.isRebindPending());
+    }
+
+    @Test
+    public void abandonedOwnerCanClearPendingForLaterRequest() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        assertTrue(state.requestRebind().accepted);
+        state.onRebindScheduled(44L);
+        assertTrue(state.onRebindAborted(44L));
+        assertFalse(state.isRebindPending());
+        assertFalse(state.onRebindAborted(44L));
+        assertTrue(state.requestRebind().accepted);
+    }
+
+    @Test
     public void staleGenerationCannotAuthorizeFreshOutput() {
         RootPassBlurBackendState state = new RootPassBlurBackendState();
         assertTrue(state.requestFresh(20L));

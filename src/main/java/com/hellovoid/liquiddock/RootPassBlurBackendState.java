@@ -11,6 +11,8 @@ final class RootPassBlurBackendState {
     // across a delayed bind or endpoint rollover until a new consumer requests a frame.
     private boolean captureUpdatesAllowed = true;
     private boolean shutdown;
+    // Only the currently scheduled render epoch may abandon a pending rebind.
+    private long rebindOwnerEpoch = -1L;
     private volatile boolean capturedSourceRetired;
 
     /** Preserve the already-normalized GPU snapshot while permanently ending
@@ -53,6 +55,26 @@ final class RootPassBlurBackendState {
         return producerRecovery.onRebindRequested();
     }
 
+    synchronized void onRebindScheduled(long epoch) {
+        if (!shutdown && producerRecovery.isRebindPending()) rebindOwnerEpoch = epoch;
+    }
+
+    synchronized boolean transferRebindOwner(long previousEpoch, long nextEpoch) {
+        if (shutdown || !producerRecovery.isRebindPending()
+                || rebindOwnerEpoch != previousEpoch) return false;
+        rebindOwnerEpoch = nextEpoch;
+        return true;
+    }
+
+    synchronized boolean onRebindAborted(long epoch) {
+        if (shutdown || !producerRecovery.isRebindPending()
+                || rebindOwnerEpoch != epoch) return false;
+        rebindOwnerEpoch = -1L;
+        freshGeneration = -1L;
+        producerRecovery.onRecreateFailed();
+        return true;
+    }
+
     synchronized ZeroCopyProducerRecoveryState.Decision onProducerRecreated() {
         if (shutdown || capturedSourceRetired) return ZeroCopyProducerRecoveryState.Decision.none();
         return producerRecovery.onProducerRecreated();
@@ -61,18 +83,21 @@ final class RootPassBlurBackendState {
     synchronized void onBindSucceeded() {
         if (shutdown || capturedSourceRetired) return;
         producerRecovery.onBindSucceeded();
+        rebindOwnerEpoch = -1L;
     }
 
     synchronized void onBindExhausted() {
         if (shutdown) return;
         freshGeneration = -1L;
         producerRecovery.onBindExhausted();
+        rebindOwnerEpoch = -1L;
     }
 
     synchronized void onRecreateFailed() {
         if (shutdown) return;
         freshGeneration = -1L;
         producerRecovery.onRecreateFailed();
+        rebindOwnerEpoch = -1L;
     }
 
     synchronized void onGeometryInvalidated() {
@@ -99,6 +124,7 @@ final class RootPassBlurBackendState {
         if (shutdown) return;
         freshGeneration = -1L;
         producerRecovery.onTerminalFailure();
+        rebindOwnerEpoch = -1L;
     }
 
     synchronized void onShutdown() {
@@ -106,6 +132,7 @@ final class RootPassBlurBackendState {
         shutdown = true;
         freshGeneration = -1L;
         producerRecovery.onShutdown();
+        rebindOwnerEpoch = -1L;
     }
 
     synchronized boolean hasFreshFrame(long generation) {
