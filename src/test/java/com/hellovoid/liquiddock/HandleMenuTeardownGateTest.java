@@ -4,6 +4,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
@@ -61,5 +67,32 @@ public class HandleMenuTeardownGateTest {
         }));
         assertEquals(1, detachCalls.get());
         assertTrue(gate.claimRenderRelease());
+    }
+
+    @Test
+    public void concurrentShutdownAttemptsDetachOnlyOnce() throws Exception {
+        HandleMenuTeardownGate gate = new HandleMenuTeardownGate();
+        AtomicInteger detachCalls = new AtomicInteger();
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Callable<Boolean> action = () -> {
+                start.await();
+                return gate.attemptDetach(() -> {
+                    detachCalls.incrementAndGet();
+                    return true;
+                });
+            };
+            Future<Boolean> first = executor.submit(action);
+            Future<Boolean> second = executor.submit(action);
+            start.countDown();
+            assertTrue(first.get(3, TimeUnit.SECONDS));
+            assertTrue(second.get(3, TimeUnit.SECONDS));
+            assertEquals(1, detachCalls.get());
+            assertTrue(gate.claimRenderRelease());
+            assertFalse(gate.claimRenderRelease());
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }
