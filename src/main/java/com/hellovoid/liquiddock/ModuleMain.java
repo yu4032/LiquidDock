@@ -103,8 +103,9 @@ public final class ModuleMain extends XposedModule {
                 GlassEdgeEffects.refresh(configReader);
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 AnimationRuntimeState.configure(runtimeConfig.animation);
-                boolean sideSlideEnabled = SideSlideHoldFeatureConfig.isEnabled(configReader);
-                if (runtimeConfig.enabled && sideSlideEnabled) {
+                // Native Sidebar bridge also owns the vendor-handle glass entry.
+                // Launcher side-slide extension remains gated separately below.
+                if (runtimeConfig.enabled) {
                     SecurityCenterSidebarCommandBridge.install(classLoader);
                 }
                 SecurityCenterGlassRuntimeState.initialize(

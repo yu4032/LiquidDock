@@ -352,6 +352,14 @@ final class SecurityCenterGlassCoordinator
         if (isCurrentTurbo(turboLayout)) releasePanel(turboLayout, "vendor terminal cleanup");
     }
 
+    /** Native handle show path: refresh existing sinks without replacing root ownership. */
+    void onExternalVendorShow() {
+        if (!SecurityCenterGlassRuntimeState.isEnabled()) return;
+        // refreshCurrentFrame already reconciles sinks and synchronizes their transforms.
+        refreshCurrentFrame(true);
+        onSidebarShowRequested();
+    }
+
     // AIDL show/hide is not a material lifetime boundary. Carrier/root lifecycle owns teardown.
     void onSidebarShowRequested() {
         // This vendor callback can originate on Binder. Do not mutate the root or

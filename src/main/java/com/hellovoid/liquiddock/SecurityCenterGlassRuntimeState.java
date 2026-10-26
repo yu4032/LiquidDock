@@ -97,6 +97,17 @@ final class SecurityCenterGlassRuntimeState {
         }
     }
 
+    /** A real vendor handle show does not carry a Launcher-supplied generation. */
+    static void onExternalVendorShow() {
+        if (!isEnabled()) return;
+        Owner expected = owner;
+        if (!(expected instanceof SecurityCenterGlassCoordinator)) return;
+        runOnMain(() -> {
+            if (!isEnabled() || owner != expected) return;
+            ((SecurityCenterGlassCoordinator) expected).onExternalVendorShow();
+        });
+    }
+
     static void onSourceAuthorityChanged(Object previousAuthority, Object currentAuthority) {
         if (!isEnabled() || previousAuthority == null || currentAuthority == null
                 || previousAuthority.equals(currentAuthority)) return;
