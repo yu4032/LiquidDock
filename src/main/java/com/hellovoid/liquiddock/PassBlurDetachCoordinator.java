@@ -166,10 +166,8 @@ final class PassBlurDetachCoordinator {
             synchronized (PENDING) {
                 if (PENDING.get(binding) == this) PENDING.remove(binding);
             }
-            for (Runnable callback : callbacks) {
-                try { callback.run(); }
-                catch (Throwable error) { log("owner continuation failed: " + error); }
-            }
+            PassBlurDetachCallbacks.dispatch(callbacks,
+                    error -> log("owner continuation failed: " + error));
         }
     }
 }
