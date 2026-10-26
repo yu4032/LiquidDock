@@ -60,3 +60,14 @@ CI green is insufficient to claim device support; real API 102 verification rema
   HOME_HANDLES, and in-flight vendor writes cannot yet be restored/drained atomically.
 - Tests cover listener epochs, stale scene reset, domain tracking and stop failure. These are
   JVM-only and never make a device safe for full APK hot reload.
+
+## Phase 3 audit corrections (follow-up)
+
+- Preference callbacks now acquire the same lifecycle monitor as initialize/shutdown **before**
+  checking the listener epoch and mutating live state. The previous pre-lock epoch check allowed
+  a stale callback to resume after shutdown and re-enable the gesture runtime.
+- A failed preference listener unregister now retains the old listener references and fails
+  initialization closed rather than silently leaking an untracked registered observer.
+- Hook registry rollback diagnostics are best-effort; a logging failure must not interrupt
+  reverse-order unhook of other handles.
+- These are targeted race/error-path corrections; no new hot-reload capability is claimed.
