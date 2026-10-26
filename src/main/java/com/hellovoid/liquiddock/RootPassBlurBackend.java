@@ -21,6 +21,7 @@ import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Root-bound zero-copy PassBlur source backend shared by Launcher and Security Center domains.
@@ -78,6 +79,27 @@ final class RootPassBlurBackend {
     private volatile SurfaceTexture inputSurfaceTexture;
     private volatile Surface inputProducerSurface;
     private volatile int maxTextureSize;
+    /** Old, invalid ViewRoot generations are quarantined, never freed pre-commit. */
+    private final ArrayList<RetiredInput> retainedInputs = new ArrayList<>();
+    private volatile boolean shutdownSourceDetached;
+    private final AtomicBoolean shutdownGlScheduled = new AtomicBoolean();
+
+    private static final class RetiredInput {
+        final Miuix307PassBlurBridge.Binding binding;
+        final Surface producer;
+        final SurfaceTexture texture;
+        final int oesTexture;
+
+        RetiredInput(
+                Miuix307PassBlurBridge.Binding binding,
+                Surface producer,
+                SurfaceTexture texture, int oesTexture) {
+            this.binding = binding;
+            this.producer = producer;
+            this.texture = texture;
+            this.oesTexture = oesTexture;
+        }
+    }
 
     private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLConfig eglConfig;
@@ -233,6 +255,27 @@ final class RootPassBlurBackend {
         }
         long epoch = bindEpoch.incrementAndGet();
         Miuix307PassBlurBridge.Binding old = binding;
+        View sourceRoot = rootRef.get();
+        RootPassBlurEndpointBridge.Endpoint replacement =
+                RootPassBlurEndpointBridge.inspect(sourceRoot);
+        boolean isolateInvalidRoot = old != null
+                && WorkspacePassBlurRolloverPolicy.isolate(
+                        bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE,
+                        old.rootSurface != null && old.rootSurface.isValid(),
+                        replacement != null && replacement.isValid(),
+                        RootPassBlurEndpointBridge.sameGeneration(old, replacement));
+        if (isolateInvalidRoot) {
+            // Old SurfaceControl cannot receive a committed callback anymore. Keep its GPU
+            // producer alive but do not make the new Workspace depend on that dead root.
+            boolean queued = postToRenderThread(
+                    () -> isolateInvalidWorkspaceRoot(old, epoch, reason));
+            if (!queued) {
+                state.onRecreateFailed();
+                notifyTerminalFailure(new IllegalStateException(
+                        "render queue rejected invalid-root Workspace recovery"));
+            }
+            return queued;
+        }
         PassBlurDetachCoordinator.retire(old, () -> {
             if (binding == old) binding = null;
             if (shuttingDown || epoch != bindEpoch.get()) return;
@@ -260,6 +303,106 @@ final class RootPassBlurBackend {
         // Completion is asynchronous; rollover remains pending until a new producer binds.
         // A permanent detach failure retains the old binding and its input BufferQueue.
         return true;
+    }
+
+    /**
+     * Render-thread only. An invalid old ViewRoot has no valid transaction target; keep
+     * its original Surface/SurfaceTexture/OES texture alive until a future successful native
+     * detach instead of locking the replacement Workspace behind that impossible callback.
+     */
+    private void isolateInvalidWorkspaceRoot(
+            Miuix307PassBlurBridge.Binding old, long epoch, String reason) {
+        requireRenderThread();
+        if (shuttingDown || epoch != bindEpoch.get() || binding != old) return;
+        if (old == null || old.rootSurface.isValid()
+                || old.producerSurface != inputProducerSurface
+                || inputSurfaceTexture == null || oesTexture == 0) {
+            // Root recovered before the queued isolation. Do not free/reuse the old producer;
+            // re-enter normal detach only when its current root has become valid.
+            MainHook.log(TAG + " invalid-root isolation no longer applicable reason=" + reason);
+            return;
+        }
+
+        RetiredInput orphan = new RetiredInput(
+                old, inputProducerSurface, inputSurfaceTexture, oesTexture);
+        try { orphan.texture.setOnFrameAvailableListener(null); }
+        catch (Throwable error) {
+            MainHook.log(TAG + " orphan source listener clear failed: " + error);
+        }
+        retainedInputs.add(orphan);
+        inputSurfaceTexture = null;
+        inputProducerSurface = null;
+        oesTexture = 0;
+        binding = null;
+        // The compositor may never acknowledge a destroyed root, so the orphan remains
+        // retained by the coordinator and this backend. This is NOT an unbind success.
+        PassBlurDetachCoordinator.retire(old, () -> {
+            try {
+                if (!renderHandler.post(() -> releaseRetiredInput(orphan))) {
+                    MainHook.log(TAG + " orphan GPU release enqueue rejected; retained");
+                }
+            } catch (Throwable error) {
+                MainHook.log(TAG + " orphan GPU release enqueue failed: " + error);
+            }
+        });
+
+        try {
+            createInputProducer();
+            ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
+            MainHook.log(TAG + " Workspace invalid ViewRoot isolated, replacement producer"
+                    + " created reason=" + reason + " orphanCount=" + retainedInputs.size());
+            if (recreated.requestBind) mainHandler.post(() -> bindProducerWhenReady(0));
+        } catch (Throwable error) {
+            state.onRecreateFailed();
+            notifyTerminalFailure(error);
+        }
+    }
+
+    /** Called only after compositor commitment, on the backend render thread. */
+    private void releaseRetiredInput(RetiredInput orphan) {
+        requireRenderThread();
+        if (!retainedInputs.contains(orphan)) return;
+        try {
+            if (orphan.texture != null) orphan.texture.setOnFrameAvailableListener(null);
+            if (orphan.producer != null) orphan.producer.release();
+            if (orphan.texture != null) orphan.texture.release();
+            if (orphan.oesTexture != 0 && eglDisplay != EGL14.EGL_NO_DISPLAY) {
+                makePbufferCurrentUnchecked();
+                GLES20.glDeleteTextures(1, new int[]{orphan.oesTexture}, 0);
+            }
+            retainedInputs.remove(orphan);
+            MainHook.log(TAG + " retired Workspace ViewRoot producer after commit");
+            if (shuttingDown && shutdownSourceDetached) scheduleShutdownGlCleanup();
+        } catch (Throwable error) {
+            // A failed native release is still an outstanding cleanup, not a success.
+            MainHook.log(TAG + " orphan GPU release failed; retained: " + error);
+        }
+    }
+
+    /** Shutdown must also await the compositor-bound producers from older generations. */
+    private void scheduleShutdownGlCleanup() {
+        if (!shutdownSourceDetached || !renderThread.isAlive()
+                || !shutdownGlScheduled.compareAndSet(false, true)) return;
+        boolean posted;
+        try {
+            posted = renderHandler.post(() -> {
+                if (!retainedInputs.isEmpty()) {
+                    shutdownGlScheduled.set(false);
+                    MainHook.log(TAG + " shutdown deferred; outstanding old ViewRoot producers="
+                            + retainedInputs.size());
+                    return;
+                }
+                releaseGl();
+                renderThread.quitSafely();
+            });
+        } catch (Throwable error) {
+            posted = false;
+            MainHook.log(TAG + " render shutdown enqueue failed: " + error);
+        }
+        if (!posted) {
+            shutdownGlScheduled.set(false);
+            MainHook.log(TAG + " render shutdown enqueue rejected; resources retained");
+        }
     }
 
     boolean attachRolloverCompletion(
@@ -510,17 +653,8 @@ final class RootPassBlurBackend {
         Miuix307PassBlurBridge.Binding old = binding;
         PassBlurDetachCoordinator.retire(old, () -> {
             if (binding == old) binding = null;
-            if (renderThread.isAlive()) {
-                try {
-                    if (renderHandler.post(this::releaseGl)) {
-                        renderThread.quitSafely();
-                    } else {
-                        MainHook.log(TAG + " render shutdown enqueue rejected; GL kept alive");
-                    }
-                } catch (Throwable error) {
-                    MainHook.log(TAG + " render shutdown enqueue failed: " + error);
-                }
-            }
+            shutdownSourceDetached = true;
+            scheduleShutdownGlCleanup();
         });
     }
 
