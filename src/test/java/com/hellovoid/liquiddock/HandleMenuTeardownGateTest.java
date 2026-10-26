@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Arrays;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -11,6 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Test;
 
@@ -89,6 +91,70 @@ public class HandleMenuTeardownGateTest {
             assertTrue(first.get(3, TimeUnit.SECONDS));
             assertTrue(second.get(3, TimeUnit.SECONDS));
             assertEquals(1, detachCalls.get());
+            assertTrue(gate.claimRenderRelease());
+            assertFalse(gate.claimRenderRelease());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void delayedNativeCommitKeepsProducerAliveUntilCallbackObserved() {
+        HandleMenuTeardownGate gate = new HandleMenuTeardownGate();
+        AtomicBoolean committed = new AtomicBoolean(false);
+        AtomicInteger releases = new AtomicInteger();
+
+        // Transaction.apply has returned, but the native committed callback has not.
+        assertFalse(gate.attemptDetach(committed::get));
+        assertFalse(gate.claimRenderRelease());
+        assertEquals(0, releases.get());
+
+        // A completion listener fires later; only then may the main-thread retry proceed.
+        committed.set(true);
+        assertTrue(gate.attemptDetach(committed::get));
+        if (gate.claimRenderRelease()) releases.incrementAndGet();
+        if (gate.claimRenderRelease()) releases.incrementAndGet();
+        assertEquals(1, releases.get());
+    }
+
+    @Test
+    public void failingCompletionCallbackCannotSuppressOtherOwnerCleanup() {
+        AtomicInteger delivered = new AtomicInteger();
+        AtomicInteger failures = new AtomicInteger();
+        PassBlurDetachCallbacks.dispatch(Arrays.asList(
+                () -> { throw new IllegalStateException("callback failed"); },
+                delivered::incrementAndGet,
+                () -> { throw new AssertionError("bad diagnostic route"); },
+                delivered::incrementAndGet),
+                error -> {
+                    failures.incrementAndGet();
+                    // Even logging itself may fail; remaining callbacks must still run.
+                    throw new IllegalStateException("log rejected");
+                });
+        assertEquals(2, delivered.get());
+        assertEquals(2, failures.get());
+    }
+
+    @Test
+    public void concurrentCloseWhileCommitPendingCannotReleaseEarly() throws Exception {
+        HandleMenuTeardownGate gate = new HandleMenuTeardownGate();
+        AtomicBoolean committed = new AtomicBoolean(false);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Callable<Boolean> action = () -> {
+                start.await();
+                boolean result = gate.attemptDetach(committed::get);
+                assertFalse(gate.claimRenderRelease());
+                return result;
+            };
+            Future<Boolean> first = executor.submit(action);
+            Future<Boolean> second = executor.submit(action);
+            start.countDown();
+            assertFalse(first.get(3, TimeUnit.SECONDS));
+            assertFalse(second.get(3, TimeUnit.SECONDS));
+            committed.set(true);
+            assertTrue(gate.attemptDetach(committed::get));
             assertTrue(gate.claimRenderRelease());
             assertFalse(gate.claimRenderRelease());
         } finally {
