@@ -46,3 +46,17 @@ A passing CI proves build/JVM compatibility only. There is no device validation 
 Still blocked: SystemUI gesture/native alpha hooks, preferences listener generations,
 HandleMenu EGL sessions, Launcher Views, native PassBlur producers, and all-process teardown.
 CI green is insufficient to claim device support; real API 102 verification remains required.
+
+## Phase 3: SystemUI gesture owner registry and listener epoch
+
+- Fixed gesture hooks and dynamically discovered TaskStack, LauncherProxy, and native setAlpha
+  hooks use `Api102HookDomain("systemui.gesture.handle")` with stable per-signature IDs.
+- Listener registration now uses `Api102ListenerEpoch`; stale preference callbacks and posted
+  main-thread notification Runnables are ignored after initialization changes or shutdown.
+- `GestureHandleSystemUiSceneState.resetForFutureReload()` clears stale scene authority.
+- Domain startup/abort is transactional. A partially installed LauncherProxyListener retains its
+  class marker, avoiding duplicate callback registration.
+- The gesture owner has NO public complete `stopForFutureReload()`: native alpha writes,
+  HOME_HANDLES, and in-flight vendor writes cannot yet be restored/drained atomically.
+- Tests cover listener epochs, stale scene reset, domain tracking and stop failure. These are
+  JVM-only and never make a device safe for full APK hot reload.
