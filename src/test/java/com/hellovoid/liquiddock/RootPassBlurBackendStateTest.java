@@ -51,7 +51,7 @@ public class RootPassBlurBackendStateTest {
         // A second request is refused by the recovery state. The pending owner must
         // instead isolate the dead ViewRoot's producer when a new generation appears.
         assertFalse(state.requestRebind().accepted);
-        assertTrue(WorkspacePassBlurRolloverPolicy.isolate(true, false, true, false));
+        assertTrue(WorkspacePassBlurRolloverPolicy.isolate(true, false, true, false, false));
         assertFalse(state.hasFreshFrame(11L));
         assertTrue(state.onProducerRecreated().requestBind);
         state.onBindSucceeded();
