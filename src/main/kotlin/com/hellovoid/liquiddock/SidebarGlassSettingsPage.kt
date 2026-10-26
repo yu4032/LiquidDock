@@ -65,6 +65,19 @@ internal fun SidebarGlassSettingsPage(
         revision++
     }
 
+    fun resetAll() {
+        val e = prefs.edit()
+        backgroundKeys.forEach { e.remove(it).remove("${it}_tenths") }
+        highlightKeys.forEach { e.remove(it) }
+        GlassEdgeEffects.KEYS.forEach { config ->
+            val key = GlassEdgeEffects.key(GlassEdgeEffects.SECURITY_CENTER, config)
+            e.remove(key).remove("${key}_tenths")
+        }
+        e.apply()
+        inheritBackground = true
+        revision++
+    }
+
     @Composable
     fun backgroundValue(
         field: String,
@@ -300,10 +313,7 @@ internal fun SidebarGlassSettingsPage(
                     title = "恢复默认（全部）",
                     summary = "仅重置侧边栏背景与光照；不修改总开关",
                     enabled = enabled,
-                    onClick = {
-                        resetBackground()
-                        resetLighting()
-                    },
+                    onClick = ::resetAll,
                 )
             }
         }
