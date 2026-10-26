@@ -61,7 +61,7 @@ final class ExternalGlassLiveConfigState {
             } else if ("com.android.quicksearchbox".equals(target)) {
                 MiuiSearchboxGlassHook.onLiveConfigChanged(reader, config);
             } else if (SecurityCenterProcessPolicy.PACKAGE.equals(target)) {
-                SecurityCenterGlassHook.onLiveGlassConfigChanged(config);
+                SecurityCenterGlassHook.onLiveGlassConfigChanged(reader, config);
                 AnimationRuntimeState.configure(config.animation);
             } else if ("com.android.systemui".equals(target)) {
                 SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(reader, config);

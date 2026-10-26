@@ -79,7 +79,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     private final FloatBuffer quadBuffer;
     private final RootPassBlurBackend sourceBackend;
     private volatile PrismalParams prismalParams;
+    private volatile PrismalParams inheritedPrismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
+    private volatile PrismalHighlightProfile inheritedHighlightProfile;
+    private volatile float cornerRadiusOverrideDp = -1f;
 
     private volatile boolean shuttingDown;
     private final Object pipelineLock = new Object();
@@ -107,6 +110,12 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
 
     SecurityCenterGlassSession(
             View root, LiquidDockConfig.Glass glassConfig, Listener listener) {
+        this(root, glassConfig, null, listener);
+    }
+
+    SecurityCenterGlassSession(
+            View root, LiquidDockConfig.Glass glassConfig,
+            ThirdPartyGlassAppearance appearance, Listener listener) {
         if (root == null) throw new IllegalArgumentException("root == null");
         rootRef = new WeakReference<>(root);
         this.listener = listener;
@@ -119,17 +128,20 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         Miuix307PrismalMaterial.Params optical = glassConfig != null
                 ? Miuix307PrismalMaterial.fromConfig(glassConfig, density)
                 : Miuix307PrismalMaterial.defaults(density);
-        prismalParams = Miuix307PrismalAdapter.toPortable(
+        inheritedPrismalParams = Miuix307PrismalAdapter.toPortable(
                 optical, SecurityCenterMaterialModePolicy.useShaderBlur());
-        highlightProfile = glassConfig != null
+        inheritedHighlightProfile = glassConfig != null
                 ? glassConfig.largeSurfaceHighlightProfile
                 : PrismalHighlightProfile.ALL_ENABLED;
-        int scalePercent = glassConfig != null
-                ? glassConfig.passBlurCaptureScalePercent
-                : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
-        int renderFps = glassConfig != null
-                ? glassConfig.passBlurRenderFps
-                : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+        applyAppearance(appearance);
+        int scalePercent = appearance != null
+                ? appearance.captureScalePercent
+                : glassConfig != null ? glassConfig.passBlurCaptureScalePercent
+                        : PassBlurQualityPolicy.DEFAULT_CAPTURE_SCALE_PERCENT;
+        int renderFps = appearance != null
+                ? appearance.renderFps
+                : glassConfig != null ? glassConfig.passBlurRenderFps
+                        : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
         sourceBackend = new RootPassBlurBackend(
                 root,
                 PassBlurBindRequest.securityCenter(root),
@@ -144,19 +156,35 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     /** Updates the installed Prismal renderer; the existing source generation stays owned by
      * the Security Center presentation state machine. */
     void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
+        applyLiveGlassConfig(config, null);
+    }
+
+    void applyLiveGlassConfig(
+            LiquidDockConfig.Glass config, ThirdPartyGlassAppearance appearance) {
         if (shuttingDown || config == null) return;
         View root = rootRef.get();
         float density = root != null ? root.getResources().getDisplayMetrics().density : 1f;
-        prismalParams = Miuix307PrismalAdapter.toPortable(
+        inheritedPrismalParams = Miuix307PrismalAdapter.toPortable(
                 Miuix307PrismalMaterial.fromConfig(config, density),
                 SecurityCenterMaterialModePolicy.useShaderBlur());
-        highlightProfile = config.largeSurfaceHighlightProfile;
+        inheritedHighlightProfile = config.largeSurfaceHighlightProfile;
+        applyAppearance(appearance);
         FrameRequest request = frameRequest;
         if (request != null && cachedSourceFrame != null
                 && request.generation == cachedSourceFrame.generation) {
             requestCachedPresentation(request.generation);
         }
         // Capture density/FPS are applied when this semantic session is next established.
+    }
+
+    private void applyAppearance(ThirdPartyGlassAppearance appearance) {
+        prismalParams = appearance != null
+                ? ThirdPartyPrismalParams.apply(inheritedPrismalParams, appearance)
+                : inheritedPrismalParams;
+        highlightProfile = appearance != null
+                ? appearance.highlightProfile : inheritedHighlightProfile;
+        cornerRadiusOverrideDp = appearance != null
+                ? appearance.cornerRadiusOverrideDp : -1f;
     }
 
     boolean ownsRoot(View root) {
@@ -460,22 +488,34 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
         try {
             ensureGl();
             sourceBackend.makePbufferCurrent();
+            PrismalParams sidebarParams = prismalParams;
+            PrismalParams vendorParams = inheritedPrismalParams;
+            PrismalHighlightProfile sidebarHighlights = highlightProfile;
+            PrismalHighlightProfile vendorHighlights = inheritedHighlightProfile;
+            float sidebarRadius = cornerRadiusOverrideDp;
             prismalRenderer.prepareBackdrop(
                     frame.normalizedTextureId,
                     frame.physicalWidth,
                     frame.physicalHeight,
                     frame.logicalWidth,
                     frame.logicalHeight,
-                    prismalParams);
+                    sidebarParams);
 
             for (int i = 0; i < request.frameGeometry.nodeCount(); i++) {
                 SecurityCenterGlassGeometry geometry = request.frameGeometry.nodeAt(i);
+                boolean isVendorApps = request.sinks[i].materialRole()
+                        == SecurityCenterSinkOutputPolicy.MaterialRole.ALL_APPS;
+                PrismalParams nodeParams = isVendorApps ? vendorParams : sidebarParams;
+                PrismalHighlightProfile nodeHighlights = isVendorApps
+                        ? vendorHighlights : sidebarHighlights;
                 sourceBackend.makePbufferCurrent();
                 prismalRenderer.beginGlassFrame();
                 prismalRenderer.setEdgeDecoration(
                         GlassEdgeEffects.current(GlassEdgeEffects.SECURITY_CENTER), 1f);
                 prismalRenderer.drawGlass(
-                        geometry.toPrismalGeometry(), prismalParams, highlightProfile);
+                        geometry.toPrismalGeometry(isVendorApps ? -1f : sidebarRadius,
+                                root.getResources().getDisplayMetrics().density),
+                        nodeParams, nodeHighlights);
                 if (submission.awaitPresentationAck) {
                     request.sinks[i].armPresentation(request.serial, request.generation);
                 }

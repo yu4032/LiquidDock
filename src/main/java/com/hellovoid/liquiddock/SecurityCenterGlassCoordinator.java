@@ -117,6 +117,7 @@ final class SecurityCenterGlassCoordinator
             new SecurityCenterMaterialOwnershipState();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile LiquidDockConfig.Glass glassConfig;
+    private volatile ThirdPartyGlassAppearance sidebarAppearance;
     private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
     private final int allAppsCornerRadiusResId;
     private final int gameToolboxCornerRadiusResId;
@@ -196,7 +197,17 @@ final class SecurityCenterGlassCoordinator
             SecurityCenterVendorMaterialBridge vendorMaterialBridge,
             int allAppsCornerRadiusResId,
             int gameToolboxCornerRadiusResId) {
+        this(glassConfig, null, vendorMaterialBridge,
+                allAppsCornerRadiusResId, gameToolboxCornerRadiusResId);
+    }
+
+    SecurityCenterGlassCoordinator(
+            LiquidDockConfig.Glass glassConfig, ThirdPartyGlassAppearance appearance,
+            SecurityCenterVendorMaterialBridge vendorMaterialBridge,
+            int allAppsCornerRadiusResId,
+            int gameToolboxCornerRadiusResId) {
         this.glassConfig = glassConfig;
+        this.sidebarAppearance = appearance;
         this.vendorMaterialBridge = vendorMaterialBridge;
         this.allAppsCornerRadiusResId = allAppsCornerRadiusResId;
         this.gameToolboxCornerRadiusResId = gameToolboxCornerRadiusResId;
@@ -205,10 +216,22 @@ final class SecurityCenterGlassCoordinator
 
     /** Keep existing source, sinks and ownership, updating only shader parameters. */
     void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
+        applyLiveGlassConfig(config, null);
+    }
+
+    void applyLiveGlassConfig(
+            LiquidDockConfig.Glass config, ThirdPartyGlassAppearance appearance) {
         if (config == null) return;
         glassConfig = config;
+        sidebarAppearance = appearance;
+        if (appearance != null && !appearance.enabled) {
+            releaseAll();
+            return;
+        }
         SecurityCenterGlassSession live = session;
-        if (live != null && !live.isShutdown()) live.applyLiveGlassConfig(config);
+        if (live != null && !live.isShutdown()) {
+            live.applyLiveGlassConfig(config, appearance);
+        }
     }
 
     void bindGlobalDock(View turboLayout, View dockLayout) {
@@ -505,7 +528,8 @@ final class SecurityCenterGlassCoordinator
         if (old != null) old.shutdown();
         cleanupRootObserverOnly();
 
-        session = new SecurityCenterGlassSession(root, glassConfig, this);
+        session = new SecurityCenterGlassSession(
+                root, glassConfig, sidebarAppearance, this);
         if (!policy.onSessionCreated(root, session)) {
             session.shutdown();
             session = null;
