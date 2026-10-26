@@ -83,6 +83,7 @@ final class RootPassBlurBackend {
     private final ArrayList<RetiredInput> retainedInputs = new ArrayList<>();
     private volatile boolean shutdownSourceDetached;
     private final AtomicBoolean shutdownGlScheduled = new AtomicBoolean();
+    private final AtomicBoolean invalidRootIsolationQueued = new AtomicBoolean();
 
     private static final class RetiredInput {
         final Miuix307PassBlurBridge.Binding binding;
@@ -238,6 +239,13 @@ final class RootPassBlurBackend {
         }
         ZeroCopyProducerRecoveryState.Decision decision = state.requestRebind();
         if (!decision.accepted) {
+            // A replacement ViewRoot can appear AFTER detach submission, invalidating
+            // the old SurfaceControl and preventing its committed callback. Do not wait
+            // forever on a previously accepted rollover if a distinct root now exists.
+            if (state.isRebindPending() && binding != null) {
+                scheduleInvalidRootWorkspaceIsolation(
+                        binding, bindEpoch.get(), reason + "-pending");
+            }
             if (state.isRebindPending() && rolloverComplete != null) {
                 boolean attached = attachRolloverCompletion(rolloverComplete);
                 MainHook.log(TAG + " producer rebind piggyback reason=" + reason
@@ -258,23 +266,14 @@ final class RootPassBlurBackend {
         View sourceRoot = rootRef.get();
         RootPassBlurEndpointBridge.Endpoint replacement =
                 RootPassBlurEndpointBridge.inspect(sourceRoot);
-        boolean isolateInvalidRoot = old != null
-                && WorkspacePassBlurRolloverPolicy.isolate(
-                        bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE,
-                        old.rootSurface != null && old.rootSurface.isValid(),
-                        replacement != null && replacement.isValid(),
-                        RootPassBlurEndpointBridge.sameGeneration(old, replacement));
-        if (isolateInvalidRoot) {
-            // Old SurfaceControl cannot receive a committed callback anymore. Keep its GPU
-            // producer alive but do not make the new Workspace depend on that dead root.
-            boolean queued = postToRenderThread(
-                    () -> isolateInvalidWorkspaceRoot(old, epoch, reason));
-            if (!queued) {
-                state.onRecreateFailed();
-                notifyTerminalFailure(new IllegalStateException(
-                        "render queue rejected invalid-root Workspace recovery"));
-            }
-            return queued;
+        if (old != null && WorkspacePassBlurRolloverPolicy.isolate(
+                bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE,
+                old.rootSurface != null && old.rootSurface.isValid(),
+                replacement != null && replacement.isValid(),
+                RootPassBlurEndpointBridge.sameGeneration(old, replacement))) {
+            // A destroyed old root cannot acknowledge native detach. Quarantine it and
+            // create a separate producer for the new Workspace generation.
+            return scheduleInvalidRootWorkspaceIsolation(old, epoch, reason);
         }
         PassBlurDetachCoordinator.retire(old, () -> {
             if (binding == old) binding = null;
@@ -303,6 +302,26 @@ final class RootPassBlurBackend {
         // Completion is asynchronous; rollover remains pending until a new producer binds.
         // A permanent detach failure retains the old binding and its input BufferQueue.
         return true;
+    }
+
+    private boolean scheduleInvalidRootWorkspaceIsolation(
+            Miuix307PassBlurBridge.Binding old, long epoch, String reason) {
+        if (old == null || bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE
+                || !invalidRootIsolationQueued.compareAndSet(false, true)) {
+            return old != null && invalidRootIsolationQueued.get();
+        }
+        boolean posted = postToRenderThread(() -> {
+            try {
+                isolateInvalidWorkspaceRoot(old, epoch, reason);
+            } finally {
+                invalidRootIsolationQueued.set(false);
+            }
+        });
+        if (!posted) {
+            invalidRootIsolationQueued.set(false);
+            MainHook.log(TAG + " invalid-root isolation enqueue rejected reason=" + reason);
+        }
+        return posted;
     }
 
     /**
