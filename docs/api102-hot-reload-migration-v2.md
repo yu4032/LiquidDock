@@ -195,3 +195,30 @@ JVM tests or a successful CI build.
 - Verify root rebind and folder snapshot remain responsive after asynchronous detach;
   inspect the coordinator pending count for leaks, and test missing/delayed native
   callbacks and forced root invalidation on a real API102 framework.
+
+## Phase 6 regression: missing Workspace glass after ViewRoot rollover
+
+- Identified a recovery deadlock introduced by commit-gated native detach:
+  `RootPassBlurBackend.requestRebind()` previously waited for the previous
+  `SurfaceControl.Transaction` committed callback **before** creating the
+  replacement producer. A destroyed previous ViewRoot cannot submit a new
+  transaction; its callback may never arrive, leaving the recovery state
+  `rebindPending=true`, no new BufferQueue, and Workspace glass absent.
+- Added `WorkspacePassBlurRolloverPolicy`: only a **Workspace** owner with a
+  distinct, verified live replacement ViewRoot **and an invalid old root**
+  can isolate the old source. Other domains and valid roots retain the
+  strict native-commit-before-resource-release ordering.
+- Invalid-root recovery now quarantines the old `Binding`, Surface,
+  SurfaceTexture and OES texture without freeing them; a new GPU producer
+  is created separately so the Workspace can bind and present again.
+  An eventual compositor-committed callback releases the quarantined
+  resources on the render thread. No callback = retained orphan resource;
+  this is a deliberate fail-closed trade-off until device validation.
+- Rechecks the pending rollover when a new ViewRoot is discovered after the
+  initial request, and at bounded delays (300/1200ms) so a late invalidation
+  does not require another user gesture.
+- Shutdown does not destroy the EGL context while a quarantined producer
+  still awaits native acknowledgment. JVM tests assert recovery-state
+  transitions and guard against incorrectly isolating live/same-generation
+  producers.
+- No real-device confirmation yet, and `autoHotReload=false` remains unchanged.
