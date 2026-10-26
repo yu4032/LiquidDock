@@ -174,7 +174,10 @@ final class SecurityCenterGlassHook {
             // methods for compatibility only; attach/detach/root replacement now perform teardown.
             HookUtil.hook(sidebarLifecycle.show(), chain -> {
                 SecurityCenterGlassCoordinator live = currentCoordinator(contract);
-                if (live != null) live.cancelPanelExitFade();
+                if (live != null) {
+                    live.cancelPanelExitFade();
+                    live.onSidebarShowRequested();
+                }
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             });
             HookUtil.hook(sidebarLifecycle.hideImmediate(), chain ->

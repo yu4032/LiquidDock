@@ -353,7 +353,14 @@ final class SecurityCenterGlassCoordinator
     }
 
     // AIDL show/hide is not a material lifetime boundary. Carrier/root lifecycle owns teardown.
-    void onSidebarShowRequested() {}
+    void onSidebarShowRequested() {
+        // This vendor callback can originate on Binder. Do not mutate the root or
+        // its consumer policy until the Security Center UI looper owns the turn.
+        mainHandler.post(() -> {
+            SecurityCenterGlassSession live = session;
+            if (live != null && !live.isShutdown()) live.applyDeferredQualityOnShow();
+        });
+    }
     void onSidebarHideRequested(boolean animated) {}
 
     @Override

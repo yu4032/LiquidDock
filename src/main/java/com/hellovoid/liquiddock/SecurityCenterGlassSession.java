@@ -83,6 +83,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
     private volatile PrismalHighlightProfile highlightProfile;
     private volatile PrismalHighlightProfile inheritedHighlightProfile;
     private volatile float cornerRadiusOverrideDp = -1f;
+    private volatile int stagedCaptureScalePercent;
+    private volatile int stagedRenderFps;
+    private int appliedCaptureScalePercent;
+    private int appliedRenderFps;
 
     private volatile boolean shuttingDown;
     private final Object pipelineLock = new Object();
@@ -142,6 +146,8 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 ? appearance.renderFps
                 : glassConfig != null ? glassConfig.passBlurRenderFps
                         : PassBlurQualityPolicy.DEFAULT_RENDER_FPS;
+        stagedCaptureScalePercent = appliedCaptureScalePercent = scalePercent;
+        stagedRenderFps = appliedRenderFps = renderFps;
         sourceBackend = new RootPassBlurBackend(
                 root,
                 PassBlurBindRequest.securityCenter(root),
@@ -169,6 +175,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 SecurityCenterMaterialModePolicy.useShaderBlur());
         inheritedHighlightProfile = config.largeSurfaceHighlightProfile;
         applyAppearance(appearance);
+        stagedCaptureScalePercent = appearance != null
+                ? appearance.captureScalePercent : config.passBlurCaptureScalePercent;
+        stagedRenderFps = appearance != null
+                ? appearance.renderFps : config.passBlurRenderFps;
         FrameRequest request = frameRequest;
         View activeRoot = rootRef.get();
         if (request != null && activeRoot != null && activeRoot.isShown()) {
@@ -189,6 +199,24 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 ? appearance.highlightProfile : inheritedHighlightProfile;
         cornerRadiusOverrideDp = appearance != null
                 ? appearance.cornerRadiusOverrideDp : -1f;
+    }
+
+    /** Apply quality only when the Sidebar is shown, including a reused root/session. */
+    void applyDeferredQualityOnShow() {
+        if (shuttingDown || sourceBackend.isShutdown()) return;
+        int scale = stagedCaptureScalePercent;
+        int fps = stagedRenderFps;
+        if (scale == appliedCaptureScalePercent && fps == appliedRenderFps) return;
+        sourceBackend.setQuality(scale, fps);
+        appliedCaptureScalePercent = scale;
+        appliedRenderFps = fps;
+        cachedSourceFrame = null;
+        FrameRequest current = frameRequest;
+        View root = rootRef.get();
+        if (current != null && root != null && root.isShown()) {
+            requestFresh(current.generation, current.frameGeometry, current.sinks);
+        }
+        log("quality applied on Sidebar show scale=" + scale + " fps=" + fps);
     }
 
     boolean ownsRoot(View root) {
