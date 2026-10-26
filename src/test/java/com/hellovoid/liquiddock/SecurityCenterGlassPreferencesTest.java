@@ -73,7 +73,8 @@ public class SecurityCenterGlassPreferencesTest {
         v.put("third_party_glass.sidebar.highlight_sky_haze", false);
         ThirdPartyGlassAppearance a = appearance(v);
         assertFalse(a.highlightProfile.skyHaze);
-        assertTrue(a.highlightProfile.specular);
-        assertTrue(a.highlightProfile.caustics);
+        LiquidDockConfig.Glass global = LiquidDockConfig.from(new ConfigReader(v)).glass;
+        assertEquals(global.largeSurfaceHighlightProfile.specular, a.highlightProfile.specular);
+        assertEquals(global.largeSurfaceHighlightProfile.caustics, a.highlightProfile.caustics);
     }
 }
