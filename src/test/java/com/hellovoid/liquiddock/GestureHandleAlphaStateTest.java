@@ -111,4 +111,28 @@ public class GestureHandleAlphaStateTest {
         assertTrue(state.restoreAndClear((handle, alpha) -> true));
         assertEquals(0, state.trackedCount());
     }
+
+    @Test
+    public void reentrantHandleCaptureDuringNativeWriteDoesNotInvalidateIteration() {
+        GestureHandleAlphaState<Object> state = new GestureHandleAlphaState<>();
+        Object first = new Object();
+        Object second = new Object();
+        state.capture(first, 1f, (h, alpha) -> true);
+        List<Object> written = new ArrayList<>();
+        assertTrue(state.setHidden(true, (handle, alpha) -> {
+            written.add(handle);
+            if (handle == first) {
+                assertTrue(state.capture(second, 0.5f, (newHandle, newAlpha) -> {
+                    written.add(newHandle);
+                    assertEquals(0f, newAlpha, 0f);
+                    return true;
+                }));
+            }
+            return true;
+        }));
+        assertEquals(2, state.trackedCount());
+        assertEquals(2, written.size());
+        assertTrue(written.contains(first));
+        assertTrue(written.contains(second));
+    }
 }
