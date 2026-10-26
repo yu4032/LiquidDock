@@ -7,6 +7,7 @@ import android.view.View;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.ArrayList;
 
 /**
  * Minimal HyperOS 3.0.307 bridge that asks SurfaceFlinger PassBlur to render into a caller-owned
@@ -43,6 +44,8 @@ final class Miuix307PassBlurBridge {
         final PassBlurDomain domain;
         volatile boolean bound = true;
         volatile boolean updatesEnabled = true;
+        boolean detachPending;
+        final ArrayList<Runnable> detachCallbacks = new ArrayList<>();
         volatile boolean workspaceTransitionFrameSync;
         volatile long lastForceRefreshMs;
 
@@ -362,18 +365,25 @@ final class Miuix307PassBlurBridge {
     }
 
     /**
-     * Attempt a native producer detach. A true result means the root was valid and the
-     * transaction's apply() returned without throwing; it is not a SurfaceFlinger fence.
-     * Failure keeps the Binding live so the owning session can retry before releasing its
-     * producer Surface/SurfaceTexture. Do not clear authority claims on a failed detach.
+     * Asynchronously detach a native PassBlur producer. A true result means the committed
+     * callback has already confirmed detach (or the Binding was previously detached).
+     * Merely returning from Transaction.apply() is NOT success.
+     *
+     * addTransactionCommittedListener reports that SurfaceFlinger has committed the update;
+     * it does not certify that buffers have been released by all GPU consumers.
+     * The producer stays strongly owned by its session until this callback is received.
      */
-    static boolean tryUnbind(Binding binding) {
+    static boolean tryUnbind(Binding binding, Runnable onCommitted) {
         if (binding == null) return true;
         synchronized (binding) {
             if (!binding.bound) return true;
+            if (onCommitted != null && !binding.detachCallbacks.contains(onCommitted)) {
+                binding.detachCallbacks.add(onCommitted);
+            }
+            if (binding.detachPending) return false;
             try {
                 if (!binding.rootSurface.isValid()) {
-                    MainHook.log(TAG + " PassBlur unbind deferred: root invalid root="
+                    MainHook.log(TAG + " PassBlur detach unavailable: root invalid root="
                             + binding.rootName);
                     return false;
                 }
@@ -384,10 +394,33 @@ final class Miuix307PassBlurBridge {
                             Float.valueOf(binding.scale));
                     binding.setMiBlurWinExc.invoke(
                             transaction, binding.rootSurface, (Object) new String[0]);
+                    transaction.addTransactionCommittedListener(
+                            Runnable::run, () -> onDetachCommitted(binding));
+                    binding.detachPending = true;
                     transaction.apply();
                 }
-                // Release the vendor continuous-authority claims only AFTER native detach.
-                // If a release fails, retain the binding and retry the idempotent detach.
+                // The callback may already have run on another thread. Never claim success
+                // solely because apply returned.
+                return !binding.bound;
+            } catch (Throwable error) {
+                binding.detachPending = false;
+                try { MainHook.log(TAG + " PassBlur detach submit failed; binding retained: " + error); }
+                catch (Throwable ignored) {}
+                return false;
+            }
+        }
+    }
+
+    static boolean tryUnbind(Binding binding) {
+        return tryUnbind(binding, null);
+    }
+
+    private static void onDetachCommitted(Binding binding) {
+        ArrayList<Runnable> callbacks;
+        synchronized (binding) {
+            if (!binding.detachPending || !binding.bound) return;
+            try {
+                // Only release vendor-authority claims after compositor commit, never on submit.
                 if (binding.domain == PassBlurDomain.SECURITY_CENTER) {
                     SecurityCenterPassBlurContinuousAuthority.release(
                             binding.rootSurface, binding.producerSurface);
@@ -400,23 +433,27 @@ final class Miuix307PassBlurBridge {
                     MiuiSearchboxPassBlurContinuousAuthority.release(
                             binding.rootSurface, binding.producerSurface);
                 }
-                binding.bound = false;
-                binding.updatesEnabled = false;
-                try { MainHook.log(TAG + " PassBlur producer detach applied root=" + binding.rootName); }
-                catch (Throwable ignored) {}
-                return true;
             } catch (Throwable error) {
-                // Never report success or discard a retryable binding on transaction failure.
-                try { MainHook.log(TAG + " PassBlur unbind failed; binding retained: " + error); }
+                binding.detachPending = false;
+                try { MainHook.log(TAG + " PassBlur authority release failed; retained: " + error); }
                 catch (Throwable ignored) {}
-                return false;
+                return;
+            }
+            binding.bound = false;
+            binding.updatesEnabled = false;
+            binding.detachPending = false;
+            callbacks = new ArrayList<>(binding.detachCallbacks);
+            binding.detachCallbacks.clear();
+        }
+        try { MainHook.log(TAG + " PassBlur compositor detach committed root=" + binding.rootName); }
+        catch (Throwable ignored) {}
+        for (Runnable callback : callbacks) {
+            try { callback.run(); }
+            catch (Throwable error) {
+                try { MainHook.log(TAG + " PassBlur detach callback failed: " + error); }
+                catch (Throwable ignored) {}
             }
         }
-    }
-
-    /** Legacy call sites may ignore the result; Binding.bound still retains failure state. */
-    static void unbind(Binding binding) {
-        tryUnbind(binding);
     }
 
     static int surfaceLayerId(SurfaceControl surface) {
