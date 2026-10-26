@@ -214,9 +214,9 @@ JVM tests or a successful CI build.
   An eventual compositor-committed callback releases the quarantined
   resources on the render thread. No callback = retained orphan resource;
   this is a deliberate fail-closed trade-off until device validation.
-- Rechecks the pending rollover when a new ViewRoot is discovered after the
-  initial request, and at bounded delays (300/1200ms) so a late invalidation
-  does not require another user gesture.
+- Rechecks the pending rollover on existing ViewRoot reconciliation/rebind events
+  after the initial request. No delayed polling is introduced into the root PassBlur
+  backend, preserving the project's zero-copy/performance audit constraint.
 - Shutdown does not destroy the EGL context while a quarantined producer
   still awaits native acknowledgment. JVM tests assert recovery-state
   transitions and guard against incorrectly isolating live/same-generation
