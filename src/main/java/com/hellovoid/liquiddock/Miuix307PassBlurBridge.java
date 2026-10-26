@@ -251,39 +251,42 @@ final class Miuix307PassBlurBridge {
     }
 
     private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
-        if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
-        if (!force && binding.updatesEnabled == enabled) return;
-        if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
-            GboardPassBlurContinuousAuthority.setUpdatesEnabled(
-                    binding.rootSurface, enabled);
-        }
-        if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
-            MiuiSearchboxPassBlurContinuousAuthority.setUpdatesEnabled(
-                    binding.rootSurface, enabled);
-        }
-        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-            binding.setUpdateTextureFlag.invoke(
-                    transaction,
-                    binding.rootSurface,
-                    Boolean.valueOf(enabled),
-                    Float.valueOf(binding.scale));
-            if (!enabled
-                    && binding.domain == PassBlurDomain.GBOARD_FLOATING
-                    && binding.setForceRefresh != null) {
-                binding.setForceRefresh.invoke(
+        if (binding == null) return;
+        synchronized (binding) {
+    if (binding == null || !binding.bound || !binding.rootSurface.isValid()) return;
+            if (!force && binding.updatesEnabled == enabled) return;
+            if (binding.domain == PassBlurDomain.GBOARD_FLOATING) {
+                GboardPassBlurContinuousAuthority.setUpdatesEnabled(
+                        binding.rootSurface, enabled);
+            }
+            if (binding.domain == PassBlurDomain.MIUI_SEARCHBOX) {
+                MiuiSearchboxPassBlurContinuousAuthority.setUpdatesEnabled(
+                        binding.rootSurface, enabled);
+            }
+            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                binding.setUpdateTextureFlag.invoke(
                         transaction,
                         binding.rootSurface,
-                        Integer.valueOf(0));
-                binding.lastForceRefreshMs = 0L;
+                        Boolean.valueOf(enabled),
+                        Float.valueOf(binding.scale));
+                if (!enabled
+                        && binding.domain == PassBlurDomain.GBOARD_FLOATING
+                        && binding.setForceRefresh != null) {
+                    binding.setForceRefresh.invoke(
+                            transaction,
+                            binding.rootSurface,
+                            Integer.valueOf(0));
+                    binding.lastForceRefreshMs = 0L;
+                }
+                transaction.apply();
+                binding.updatesEnabled = enabled;
+                MainHook.log(TAG + " PassBlur producer updates=" + enabled
+                        + " force=" + force
+                        + " domain=" + binding.domain
+                        + " root=" + binding.rootName);
+            } catch (Throwable error) {
+                MainHook.log(TAG + " PassBlur update toggle failed: " + error);
             }
-            transaction.apply();
-            binding.updatesEnabled = enabled;
-            MainHook.log(TAG + " PassBlur producer updates=" + enabled
-                    + " force=" + force
-                    + " domain=" + binding.domain
-                    + " root=" + binding.rootName);
-        } catch (Throwable error) {
-            MainHook.log(TAG + " PassBlur update toggle failed: " + error);
         }
     }
 
@@ -294,61 +297,67 @@ final class Miuix307PassBlurBridge {
      * existing lease expires.
      */
     static void setWorkspaceTransitionFrameSync(Binding binding, boolean enabled) {
-        if (binding == null || !binding.bound
-                || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
-        binding.workspaceTransitionFrameSync = enabled;
-        if (enabled) {
-            renewForceRefresh(binding);
-            return;
-        }
-        if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) {
-            binding.lastForceRefreshMs = 0L;
-            return;
-        }
-        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-            binding.setForceRefresh.invoke(
-                    transaction,
-                    binding.rootSurface,
-                    Integer.valueOf(0));
-            transaction.apply();
-        } catch (Throwable error) {
-            long now = SystemClock.uptimeMillis();
-            if (now - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
-                lastForceRefreshErrorLogMs = now;
-                MainHook.log(WORKSPACE_FRAME_SYNC_TAG
-                        + " force refresh release failed: " + error);
+        if (binding == null) return;
+        synchronized (binding) {
+    if (binding == null || !binding.bound
+                    || binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) return;
+            binding.workspaceTransitionFrameSync = enabled;
+            if (enabled) {
+                renewForceRefresh(binding);
+                return;
             }
-        } finally {
-            binding.lastForceRefreshMs = 0L;
+            if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) {
+                binding.lastForceRefreshMs = 0L;
+                return;
+            }
+            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                binding.setForceRefresh.invoke(
+                        transaction,
+                        binding.rootSurface,
+                        Integer.valueOf(0));
+                transaction.apply();
+            } catch (Throwable error) {
+                long now = SystemClock.uptimeMillis();
+                if (now - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
+                    lastForceRefreshErrorLogMs = now;
+                    MainHook.log(WORKSPACE_FRAME_SYNC_TAG
+                            + " force refresh release failed: " + error);
+                }
+            } finally {
+                binding.lastForceRefreshMs = 0L;
+            }
         }
     }
 
     static void renewForceRefresh(Binding binding) {
-        if (binding == null || !binding.bound || !binding.updatesEnabled) return;
-        boolean dock = binding.domain == PassBlurDomain.DOCK;
-        boolean gboard = binding.domain == PassBlurDomain.GBOARD_FLOATING;
-        boolean workspace = binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
-                && binding.workspaceTransitionFrameSync;
-        if (!dock && !gboard && !workspace) return;
-        if (dock && !VisualRuntimeState.isDockFrameSyncEnabled()) return;
-        if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) return;
-        long now = SystemClock.uptimeMillis();
-        if (now - binding.lastForceRefreshMs < FORCE_REFRESH_MIN_INTERVAL_MS) return;
-        binding.lastForceRefreshMs = now;
-        try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
-            binding.setForceRefresh.invoke(
-                    transaction,
-                    binding.rootSurface,
-                    Integer.valueOf(FORCE_REFRESH_LEASE_MS));
-            transaction.apply();
-        } catch (Throwable error) {
-            long errorNow = SystemClock.uptimeMillis();
-            if (errorNow - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
-                lastForceRefreshErrorLogMs = errorNow;
-                String frameSyncTag = gboard ? GBOARD_FRAME_SYNC_TAG
-                        : workspace ? WORKSPACE_FRAME_SYNC_TAG : FRAME_SYNC_TAG;
-                MainHook.log(frameSyncTag
-                        + " force refresh renew failed: " + error);
+        if (binding == null) return;
+        synchronized (binding) {
+    if (binding == null || !binding.bound || !binding.updatesEnabled) return;
+            boolean dock = binding.domain == PassBlurDomain.DOCK;
+            boolean gboard = binding.domain == PassBlurDomain.GBOARD_FLOATING;
+            boolean workspace = binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
+                    && binding.workspaceTransitionFrameSync;
+            if (!dock && !gboard && !workspace) return;
+            if (dock && !VisualRuntimeState.isDockFrameSyncEnabled()) return;
+            if (binding.setForceRefresh == null || !binding.rootSurface.isValid()) return;
+            long now = SystemClock.uptimeMillis();
+            if (now - binding.lastForceRefreshMs < FORCE_REFRESH_MIN_INTERVAL_MS) return;
+            binding.lastForceRefreshMs = now;
+            try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+                binding.setForceRefresh.invoke(
+                        transaction,
+                        binding.rootSurface,
+                        Integer.valueOf(FORCE_REFRESH_LEASE_MS));
+                transaction.apply();
+            } catch (Throwable error) {
+                long errorNow = SystemClock.uptimeMillis();
+                if (errorNow - lastForceRefreshErrorLogMs >= FORCE_REFRESH_ERROR_LOG_MIN_MS) {
+                    lastForceRefreshErrorLogMs = errorNow;
+                    String frameSyncTag = gboard ? GBOARD_FRAME_SYNC_TAG
+                            : workspace ? WORKSPACE_FRAME_SYNC_TAG : FRAME_SYNC_TAG;
+                    MainHook.log(frameSyncTag
+                            + " force refresh renew failed: " + error);
+                }
             }
         }
     }
