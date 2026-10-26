@@ -55,6 +55,9 @@ final class Miuix307PassBlurBridge {
         volatile boolean bound = true;
         volatile boolean updatesEnabled = true;
         boolean detachPending;
+        boolean detachApplyReturned;
+        boolean detachSubmitFailed;
+        long detachSubmittedUptimeMs;
         boolean vendorClaimReleased;
         final ArrayList<Runnable> detachCallbacks = new ArrayList<>();
         volatile boolean workspaceTransitionFrameSync;
@@ -378,6 +381,20 @@ final class Miuix307PassBlurBridge {
         }
     }
 
+    static String detachState(Binding binding) {
+        if (binding == null) return "NO_BINDING";
+        synchronized (binding) {
+            if (!binding.bound) return "DETACHED";
+            if (!binding.rootSurface.isValid()) return "ROOT_INVALID";
+            if (binding.detachPending) {
+                return "WAITING_COMMIT(applyReturned=" + binding.detachApplyReturned
+                        + ",elapsedMs=" + (SystemClock.uptimeMillis() - binding.detachSubmittedUptimeMs)
+                        + ",layerId=" + binding.rootLayerId + ")";
+            }
+            return binding.detachSubmitFailed ? "SUBMIT_FAILED" : "BOUND";
+        }
+    }
+
     /**
      * Only a committed native detach permits producer destruction. A dead root permits
      * dropping its vendor override claim, NOT freeing a possibly in-flight BufferQueue.
@@ -401,6 +418,7 @@ final class Miuix307PassBlurBridge {
                     return false;
                 }
                 if (binding.detachPending) return false;
+                binding.detachSubmitFailed = false;
                 try (SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
                     MODULE_DETACH_ROOT.set(binding.rootSurface);
                     try {
@@ -416,7 +434,13 @@ final class Miuix307PassBlurBridge {
                     transaction.addTransactionCommittedListener(
                             Runnable::run, () -> onDetachCommitted(binding));
                     binding.detachPending = true;
+                    binding.detachSubmittedUptimeMs = SystemClock.uptimeMillis();
                     transaction.apply();
+                    binding.detachApplyReturned = true;
+                }
+                if (binding.domain == PassBlurDomain.SYSTEMUI_HANDLE_MENU) {
+                    MainHook.log(TAG + " PassBlur detach apply returned root=" + binding.rootName
+                            + " layerId=" + binding.rootLayerId + " state=" + detachState(binding));
                 }
                 // Dispatch errors after apply() must not clear detachPending. Native
                 // confirmation may still arrive even if the diagnostic Handler fails.
@@ -431,6 +455,10 @@ final class Miuix307PassBlurBridge {
                             }
                         }, DETACH_COMMIT_WARN_MS);
                         if (!posted) MainHook.log(TAG + " detach watchdog enqueue unavailable");
+                        else if (binding.domain == PassBlurDomain.SYSTEMUI_HANDLE_MENU) {
+                            MainHook.log(TAG + " PassBlur detach watchdog scheduled layerId="
+                                    + binding.rootLayerId);
+                        }
                     } catch (Throwable diagnosticError) {
                         try { MainHook.log(TAG + " detach watchdog failed: " + diagnosticError); }
                         catch (Throwable ignored) {}
@@ -439,6 +467,7 @@ final class Miuix307PassBlurBridge {
                 return !binding.bound;
             } catch (Throwable error) {
                 binding.detachPending = false;
+                binding.detachSubmitFailed = true;
                 try { MainHook.log(TAG + " PassBlur detach submit failed; binding retained: " + error); }
                 catch (Throwable ignored) {}
                 return false;
