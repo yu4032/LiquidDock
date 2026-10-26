@@ -394,7 +394,8 @@ final class Miuix307PassBlurBridge {
                 }
                 binding.bound = false;
                 binding.updatesEnabled = false;
-                MainHook.log(TAG + " PassBlur producer detach applied root=" + binding.rootName);
+                try { MainHook.log(TAG + " PassBlur producer detach applied root=" + binding.rootName); }
+                catch (Throwable ignored) {}
                 return true;
             } catch (Throwable error) {
                 // Never report success or discard a retryable binding on transaction failure.
