@@ -24,6 +24,10 @@ import com.hellovoid.prismal.PrismalRenderer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 /**
  * Dedicated zero-copy PassBlur -> Prismal pipeline for HyperOS' app-caption Handle Menu.
@@ -40,6 +44,12 @@ final class SystemUiHandleMenuPrismalSession {
     }
 
     private static final String TAG = "[DC][SystemUiHandleMenuPrismal]";
+    private static final int MAX_AUTOMATIC_UNBIND_ATTEMPTS = 3;
+    private static final long UNBIND_RETRY_DELAY_MS = 80L;
+    // Strong references are intentional only while teardown is blocked: never silently lose
+    // the producer/SurfaceTexture after an unconfirmed native detach or rejected queue post.
+    private static final Set<SystemUiHandleMenuPrismalSession> BLOCKED_TEARDOWNS =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -100,6 +110,7 @@ final class SystemUiHandleMenuPrismalSession {
     private int compositeCropRectLocation = -1;
 
     private Miuix307PassBlurBridge.Binding sourceBinding;
+    private final HandleMenuTeardownGate teardownGate = new HandleMenuTeardownGate();
 
     SystemUiHandleMenuPrismalSession(
             View host,
@@ -179,6 +190,7 @@ final class SystemUiHandleMenuPrismalSession {
 
     void start(int width, int height) {
         if (shuttingDown) return;
+        retryBlockedTeardowns();
         this.width = Math.max(1, width);
         this.height = Math.max(1, height);
         renderHandler.post(() -> {
@@ -275,34 +287,85 @@ final class SystemUiHandleMenuPrismalSession {
         }
     }
 
+    /**
+     * Failed teardown sessions are kept strongly reachable and can be retried when another
+     * HandleMenu session starts. This is a diagnostic fail-closed ledger, not a reload gate.
+     */
+    static int blockedTeardownCount() {
+        synchronized (BLOCKED_TEARDOWNS) {
+            return BLOCKED_TEARDOWNS.size();
+        }
+    }
+
+    static void retryBlockedTeardowns() {
+        ArrayList<SystemUiHandleMenuPrismalSession> blocked;
+        synchronized (BLOCKED_TEARDOWNS) {
+            blocked = new ArrayList<>(BLOCKED_TEARDOWNS);
+        }
+        for (SystemUiHandleMenuPrismalSession session : blocked) {
+            session.requestTeardownRetry();
+        }
+    }
+
+    private void markTeardownBlocked() {
+        synchronized (BLOCKED_TEARDOWNS) {
+            BLOCKED_TEARDOWNS.add(this);
+        }
+    }
+
+    private void clearTeardownBlocked() {
+        synchronized (BLOCKED_TEARDOWNS) {
+            BLOCKED_TEARDOWNS.remove(this);
+        }
+    }
+
     synchronized void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
-        // The PassBlur producer is owned by SystemUI's main-thread ViewRoot. Previously its
-        // unbind and the EGL/SurfaceTexture destruction were posted to independent loopers:
-        // the renderer could destroy the producer Surface before ViewRoot had unbound it.
-        // Chain these operations: main-thread unbind -> render-thread release -> quit.
+        // Serialize main-thread native producer detach before render-thread EGL destruction.
+        // Never release the producer if native detach is unconfirmed.
+        requestTeardownRetry();
+    }
+
+    private void requestTeardownRetry() {
         if (Looper.myLooper() == mainHandler.getLooper()) {
             unbindThenReleaseOnMain();
             return;
         }
         try {
             if (!mainHandler.post(this::unbindThenReleaseOnMain)) {
-                log("main-thread unbind rejected; retaining render resources (not reload-safe)");
+                markTeardownBlocked();
+                log("main-thread unbind enqueue rejected; retaining producer and EGL");
             }
         } catch (Throwable error) {
-            log("main-thread unbind enqueue failed; retaining render resources: " + error);
+            markTeardownBlocked();
+            log("main-thread unbind enqueue failed; retaining producer and EGL: " + error);
         }
     }
 
     private void unbindThenReleaseOnMain() {
-        try {
-            unbindSource();
-        } catch (Throwable error) {
-            // unbindSource logs its own native failures. We still release our EGL resources
-            // on their owning render thread; a failed producer detach blocks full hot reload.
-            log("ViewRoot producer unbind failed during shutdown: " + error);
+        if (!shuttingDown) return;
+        if (!teardownGate.attemptDetach(this::unbindSource)) {
+            markTeardownBlocked();
+            int failed = teardownGate.failedDetachAttempts();
+            log("ViewRoot producer detach unconfirmed attempt=" + failed
+                    + "; retaining producer SurfaceTexture and EGL");
+            if (failed < MAX_AUTOMATIC_UNBIND_ATTEMPTS) {
+                try {
+                    if (!mainHandler.postDelayed(
+                            this::unbindThenReleaseOnMain, UNBIND_RETRY_DELAY_MS)) {
+                        log("native detach retry enqueue rejected; teardown remains blocked");
+                    }
+                } catch (Throwable error) {
+                    log("native detach retry enqueue failed: " + error);
+                }
+            }
+            return;
         }
+
+        // The checked transaction was applied (not necessarily acknowledged by a compositor
+        // fence). Only now may the render thread destroy the bound producer and EGL objects.
+        if (!teardownGate.claimRenderRelease()) return;
         try {
             if (!renderHandler.post(() -> {
                 try {
@@ -323,10 +386,16 @@ final class SystemUiHandleMenuPrismalSession {
                     catch (Throwable error) { log("render thread shutdown failed: " + error); }
                 }
             })) {
-                log("render cleanup rejected after unbind; EGL teardown incomplete");
+                teardownGate.renderPostRejected();
+                markTeardownBlocked();
+                log("render cleanup rejected after detach; retaining incomplete teardown");
+            } else {
+                clearTeardownBlocked();
             }
         } catch (Throwable error) {
-            log("render cleanup enqueue failed after unbind: " + error);
+            teardownGate.renderPostRejected();
+            markTeardownBlocked();
+            log("render cleanup enqueue failed after detach: " + error);
         }
     }
 
@@ -342,7 +411,13 @@ final class SystemUiHandleMenuPrismalSession {
                 return;
             }
             if (!RootPassBlurEndpointBridge.sameGeneration(next, sourceEndpoint)) {
-                Miuix307PassBlurBridge.unbind(next);
+                // Retain even a generation-mismatched binding until native detach succeeds.
+                // Previously a failed one-off unbind discarded the only reference.
+                sourceBinding = next;
+                sourceBound = true;
+                if (!unbindSource()) {
+                    log("generation-mismatched producer detach deferred to shutdown");
+                }
                 fail(new IllegalStateException("ViewRoot generation changed during bind"));
                 return;
             }
@@ -353,16 +428,19 @@ final class SystemUiHandleMenuPrismalSession {
         }
     }
 
-    private void unbindSource() {
-        if (!sourceBound && sourceBinding == null) return;
-        sourceBound = false;
+    private boolean unbindSource() {
         Miuix307PassBlurBridge.Binding current = sourceBinding;
-        sourceBinding = null;
-        try {
-            Miuix307PassBlurBridge.unbind(current);
-        } catch (Throwable error) {
-            log("ViewRoot producer unbind failed: " + error);
+        if (current == null) {
+            sourceBound = false;
+            return true;
         }
+        if (!Miuix307PassBlurBridge.tryUnbind(current)) {
+            // Keep both the binding and its GPU producer live until a later successful retry.
+            return false;
+        }
+        sourceBinding = null;
+        sourceBound = false;
+        return true;
     }
 
     private void ensureSource() {
