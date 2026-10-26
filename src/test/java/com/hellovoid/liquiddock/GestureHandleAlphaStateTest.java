@@ -92,4 +92,23 @@ public class GestureHandleAlphaStateTest {
         assertEquals(1, retried.size());
         assertEquals(0f, retried.get(0), 0f);
     }
+
+    @Test
+    public void throwingNativeWriterDoesNotBlockOtherHandleRestores() {
+        GestureHandleAlphaState<Object> state = new GestureHandleAlphaState<>();
+        Object bad = new Object();
+        Object good = new Object();
+        state.capture(bad, 0.2f, (h, alpha) -> true);
+        state.capture(good, 0.8f, (h, alpha) -> true);
+        List<Object> attempted = new ArrayList<>();
+        assertFalse(state.restoreAndClear((handle, alpha) -> {
+            attempted.add(handle);
+            if (handle == bad) throw new IllegalStateException("native surface destroyed");
+            return true;
+        }));
+        assertEquals(2, attempted.size());
+        assertEquals(1, state.trackedCount());
+        assertTrue(state.restoreAndClear((handle, alpha) -> true));
+        assertEquals(0, state.trackedCount());
+    }
 }
