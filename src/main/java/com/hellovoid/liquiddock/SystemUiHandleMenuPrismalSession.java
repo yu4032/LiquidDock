@@ -182,6 +182,9 @@ final class SystemUiHandleMenuPrismalSession {
         this.width = Math.max(1, width);
         this.height = Math.max(1, height);
         renderHandler.post(() -> {
+            // shutdown can win after start() has passed its initial guard but before this
+            // queued work executes. Never recreate EGL after teardown has been scheduled.
+            if (shuttingDown) return;
             try {
                 ensureEgl();
                 ensureSource();
@@ -252,7 +255,7 @@ final class SystemUiHandleMenuPrismalSession {
         });
     }
 
-    void shutdown() {
+    synchronized void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
         // The PassBlur producer is owned by SystemUI's main-thread ViewRoot. Previously its
