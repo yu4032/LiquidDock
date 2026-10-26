@@ -71,3 +71,40 @@ CI green is insufficient to claim device support; real API 102 verification rema
 - Hook registry rollback diagnostics are best-effort; a logging failure must not interrupt
   reverse-order unhook of other handles.
 - These are targeted race/error-path corrections; no new hot-reload capability is claimed.
+
+## Phase 4: reversible gesture alpha + ordered HandleMenu teardown (experimental)
+
+- `GestureHandleAlphaState` tracks the latest **vendor-requested** alpha with weak keys.
+  New native handles captured during an already-hidden HOME/RECENTS scene are immediately
+  hidden; a failed alpha write is retried even if the scene flag does not change.
+- `SystemUiGestureHandleFadeHook` now holds `Api102HookDomain` read-side leases for
+  all native hook post-effects, including dynamically discovered listeners and alpha writes.
+  The owner-scoped `stopForFutureReload()` disarms preference callbacks, drains/unhooks its
+  domain, restores native alpha, and retains failed restores for retry. It is **not called**
+  from `ModuleMain` and does **not** imply process-level hot-reload safety.
+- `SystemUiHandleMenuPrismalSession.shutdown()` now orders native ViewRoot PassBlur
+  producer unbinding on the main looper **before** EGL/SurfaceTexture/Surface destruction
+  on the render looper. Previously independent posts could race and destroy a still-bound
+  producer. This remains asynchronous, best-effort cleanup: a failed native unbind, rejected
+  handler post or incomplete GL release is not yet surfaced to a process-wide owner gate.
+- The PR workflow display name and debug APK artifact are now labeled API102. The
+  workflow filename remains `.github/workflows/api101-build.yml` for historical continuity.
+- Pure-JVM `GestureHandleAlphaStateTest` covers late handle capture, vendor writes,
+  retryable native restore, and retry of failed visibility writes.
+
+### Remaining blockers and device checks
+
+1. Do **not** invoke gesture teardown from the module reload callback until every SystemUI
+   owner (HandleMenu, keyguard, global SurfaceControl hooks, glass config listeners) is
+   drained and independently reversible.
+2. Verify native gesture alpha across HOME, RECENTS, Overview, a second NavigationBar
+   instance, and preference changes. Confirm the latest vendor alpha is restored after
+   owner teardown, not an assumed default of 1.0.
+3. Exercise HandleMenu open/close, Prismal first-frame failure, root detach, rapid menu
+   replacement and renderer failure; inspect producer unbind and EGL resource counts on
+   an API102 device. A successful JVM/R8 build does not validate GPU/native teardown.
+4. Explicitly account for `SystemUiHandleMenuSurfaceAnimationAuthority`'s global
+   `SurfaceControl.Transaction.setAlpha` hook and all active/pending view bindings before
+   considering process-wide reload. No process-wide cleanup contract exists yet.
+
+`autoHotReload=false` and Draft PR status remain unchanged pending device evidence.
