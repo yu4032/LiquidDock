@@ -71,7 +71,7 @@ public class MainHook {
         // the Dock, legacy/fallback customization hooks remain uninstalled.
         boolean zeroCopyOwned = false;
         if (config.glass.enabled) {
-            zeroCopyOwned = Miuix307MaterialPipeline.install(classLoader, config);
+            zeroCopyOwned = MiuixMaterialPipeline.install(classLoader, config);
             if (zeroCopyOwned) {
                 log("[DC] MiuiX 307 zero-copy material active");
             } else {

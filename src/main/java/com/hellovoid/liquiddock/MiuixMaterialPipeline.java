@@ -17,7 +17,7 @@ import java.lang.reflect.Modifier;
  * Keep the live vendor background as the authoritative visual shell while LiquidDock composes
  * Prismal inside it; vendor compositor blur is explicitly suppressed.
  */
-final class Miuix307MaterialPipeline {
+final class MiuixMaterialPipeline {
     static final String BACKGROUND_CLASS =
             "com.miui.home.launcher.hotseats.HotSeatsListContentMiuiXBlurBackground";
     static final String THEMED_BACKGROUND_CLASS =
@@ -40,7 +40,7 @@ final class Miuix307MaterialPipeline {
     // Log only once while one vendor instance is still in its startup placeholder geometry.
     private static WeakReference<View> geometryDeferredLoggedFor = new WeakReference<>(null);
 
-    private Miuix307MaterialPipeline() {}
+    private MiuixMaterialPipeline() {}
 
     static boolean isInstalled() {
         return installed;
