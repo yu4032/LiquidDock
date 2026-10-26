@@ -125,7 +125,7 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
     options(Page.SecurityCenterSidebar, "安全中心玻璃")
     options(Page.SidebarEdge, "继承全局背景", "玻璃模糊", "色调", "不透明度",
         "圆角", "采样比例", "渲染帧率", "天空雾光", "焦散高光", "按压辉光",
-        "恢复默认（背景）", "恢复默认（光照）", "恢复默认（全部）")
+        "恢复默认（背景）", "恢复默认（高光）", "恢复默认（全部）")
     options(Page.About, "诊断日志")
 
     val scopedPages = listOf(Page.GboardAll, Page.ShortcutPopupAll, Page.HandleMenuAll, Page.DialogAll)
@@ -144,7 +144,9 @@ internal fun settingsSearchCatalog(context: Context): List<SettingsSearchItem> =
         "阴影柔和半径", "基础垂直偏移", "方向光响应",
         "阴影不透明度", "阴影红", "阴影绿", "阴影蓝",
     )
-    (listOf(Page.GlassEdge) + scopeNames.keys).forEach { page ->
+    // Sidebar glass is not a shadow/stroke settings page; index those options
+    // under its separate SecurityCenterEdge destination instead.
+    (listOf(Page.GlassEdge) + scopeNames.keys.filter { it != Page.SidebarEdge }).forEach { page ->
         edgeTitles.forEach { title -> add(SettingsSearchItem(page, title, location(page))) }
     }
 }.distinctBy { Triple(it.page, it.title, it.key) }

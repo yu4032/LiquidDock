@@ -22,6 +22,14 @@ class SettingsSearchTest {
     }
 
     @Test
+    fun sidebarGlassNavigationStaysIndependentFromShadowSettings() {
+        assertEquals(R.string.page_sidebar_glass, Page.SidebarEdge.titleRes)
+        assertEquals(R.string.page_glass_edge, Page.SecurityCenterEdge.titleRes)
+        assertTrue(componentEntries.any { it.page == Page.SidebarEdge })
+        assertTrue(liquidEntries.any { it.page == Page.GlassEdge })
+    }
+
+    @Test
     fun blankQueryDoesNotFloodResults() {
         assertTrue(filterSettingsSearch(catalog, "  ").isEmpty())
     }
