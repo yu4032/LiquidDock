@@ -171,11 +171,17 @@ final class RootPassBlurBackend {
             }
             bindEpoch.incrementAndGet(); // Fence pending bind/retry callbacks.
             Miuix307PassBlurBridge.Binding old = binding;
-            binding = null;
-            Miuix307PassBlurBridge.unbind(old);
-            releaseInputProducerEndpointOnRenderThread(true);
-            MainHook.log(TAG + " one-shot folder producer retired; GPU snapshot retained");
-            if (onRetired != null) mainHandler.post(onRetired);
+            PassBlurDetachCoordinator.retire(old, () -> {
+                if (binding == old) binding = null;
+                if (!postToRenderThread(() -> {
+                    releaseInputProducerEndpointOnRenderThread(true);
+                    MainHook.log(TAG
+                            + " one-shot folder producer retired after compositor commit");
+                    if (onRetired != null) mainHandler.post(onRetired);
+                })) {
+                    MainHook.log(TAG + " folder producer render cleanup enqueue rejected");
+                }
+            });
         });
     }
 
@@ -223,28 +229,33 @@ final class RootPassBlurBackend {
         }
         long epoch = bindEpoch.incrementAndGet();
         Miuix307PassBlurBridge.Binding old = binding;
-        binding = null;
-        if (decision.clearFrameworkBinding) Miuix307PassBlurBridge.unbind(old);
-        boolean queued = postToRenderThread(() -> {
-            try {
-                if (shuttingDown || epoch != bindEpoch.get()) return;
-                releaseInputProducerEndpointOnRenderThread(false);
-                if (shuttingDown || epoch != bindEpoch.get()) return;
-                createInputProducer();
-                ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
-                if (recreated.requestBind) mainHandler.post(() -> bindProducerWhenReady(0));
-                MainHook.log(TAG + " producer recreated reason=" + reason
-                        + " domain=" + bindRequest.domain());
-            } catch (Throwable error) {
+        PassBlurDetachCoordinator.retire(old, () -> {
+            if (binding == old) binding = null;
+            if (shuttingDown || epoch != bindEpoch.get()) return;
+            boolean queued = postToRenderThread(() -> {
+                try {
+                    if (shuttingDown || epoch != bindEpoch.get()) return;
+                    releaseInputProducerEndpointOnRenderThread(false);
+                    if (shuttingDown || epoch != bindEpoch.get()) return;
+                    createInputProducer();
+                    ZeroCopyProducerRecoveryState.Decision recreated = state.onProducerRecreated();
+                    if (recreated.requestBind) mainHandler.post(() -> bindProducerWhenReady(0));
+                    MainHook.log(TAG + " producer recreated after detach commit reason=" + reason
+                            + " domain=" + bindRequest.domain());
+                } catch (Throwable error) {
+                    state.onRecreateFailed();
+                    notifyTerminalFailure(error);
+                }
+            });
+            if (!queued) {
                 state.onRecreateFailed();
-                notifyTerminalFailure(error);
+                notifyTerminalFailure(
+                        new IllegalStateException("render queue rejected rebind after detach"));
             }
         });
-        if (!queued) {
-            state.onRecreateFailed();
-            notifyTerminalFailure(new IllegalStateException("render queue rejected rebind"));
-        }
-        return queued;
+        // Completion is asynchronous; rollover remains pending until a new producer binds.
+        // A permanent detach failure retains the old binding and its input BufferQueue.
+        return true;
     }
 
     boolean attachRolloverCompletion(
@@ -493,12 +504,20 @@ final class RootPassBlurBackend {
         state.onShutdown();
         completeRolloverCompletions(false, "shutdown");
         Miuix307PassBlurBridge.Binding old = binding;
-        binding = null;
-        Miuix307PassBlurBridge.unbind(old);
-        if (renderThread.isAlive()) {
-            try { renderHandler.post(this::releaseGl); } catch (Throwable ignored) {}
-            renderThread.quitSafely();
-        }
+        PassBlurDetachCoordinator.retire(old, () -> {
+            if (binding == old) binding = null;
+            if (renderThread.isAlive()) {
+                try {
+                    if (renderHandler.post(this::releaseGl)) {
+                        renderThread.quitSafely();
+                    } else {
+                        MainHook.log(TAG + " render shutdown enqueue rejected; GL kept alive");
+                    }
+                } catch (Throwable error) {
+                    MainHook.log(TAG + " render shutdown enqueue failed: " + error);
+                }
+            }
+        });
     }
 
     private void ensureBoundAndRefresh(long generation) {
@@ -767,11 +786,13 @@ final class RootPassBlurBackend {
             return;
         }
         if (!RootPassBlurEndpointBridge.sameGeneration(next, endpoint)) {
-            Miuix307PassBlurBridge.unbind(next);
-            // The producer endpoint is still valid. Only the ViewRoot generation raced while
-            // binding, so stay inside the accepted rollover and retry against the next frame's
-            // authoritative endpoint instead of issuing a nested rebind that recovery rejects.
-            retryBind(attempt, true);
+            // Keep the only reference to a generation-mismatched binding until confirmed
+            // detach; a pending transaction must not race a new native bind on this producer.
+            binding = next;
+            PassBlurDetachCoordinator.retire(next, () -> {
+                if (binding == next) binding = null;
+                if (!shuttingDown && epoch == bindEpoch.get()) retryBind(attempt, true);
+            });
             return;
         }
         binding = next;
