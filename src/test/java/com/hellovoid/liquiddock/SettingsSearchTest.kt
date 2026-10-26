@@ -12,6 +12,16 @@ class SettingsSearchTest {
     )
 
     @Test
+    fun sidebarAndSecurityCenterBothResolveToUnifiedSettingsPage() {
+        val items = listOf(
+            SettingsSearchItem(Page.SidebarEdge, "侧边栏 / 安全中心", "独立玻璃背景与光照"),
+            SettingsSearchItem(Page.SidebarEdge, "模糊强度", "侧边栏背景"),
+        )
+        assertEquals(Page.SidebarEdge, filterSettingsSearch(items, "侧边栏").first().page)
+        assertEquals(Page.SidebarEdge, filterSettingsSearch(items, "安全中心").first().page)
+    }
+
+    @Test
     fun blankQueryDoesNotFloodResults() {
         assertTrue(filterSettingsSearch(catalog, "  ").isEmpty())
     }
