@@ -306,13 +306,17 @@ final class RootPassBlurBackend {
 
     private boolean scheduleInvalidRootWorkspaceIsolation(
             Miuix307PassBlurBridge.Binding old, long epoch, String reason) {
-        if (old == null || bindRequest.domain() != PassBlurDomain.LAUNCHER_WORKSPACE
-                || !invalidRootIsolationQueued.compareAndSet(false, true)) {
-            return old != null && invalidRootIsolationQueued.get();
-        }
+        RootPassBlurEndpointBridge.Endpoint replacement =
+                RootPassBlurEndpointBridge.inspect(rootRef.get());
+        if (old == null || !WorkspacePassBlurRolloverPolicy.isolate(
+                bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE,
+                old.rootSurface != null && old.rootSurface.isValid(),
+                replacement != null && replacement.isValid(),
+                RootPassBlurEndpointBridge.sameGeneration(old, replacement))) return false;
+        if (!invalidRootIsolationQueued.compareAndSet(false, true)) return true;
         boolean posted = postToRenderThread(() -> {
             try {
-                isolateInvalidWorkspaceRoot(old, epoch, reason);
+                isolateInvalidWorkspaceRoot(old, epoch, reason, replacement);
             } finally {
                 invalidRootIsolationQueued.set(false);
             }
@@ -330,10 +334,13 @@ final class RootPassBlurBackend {
      * detach instead of locking the replacement Workspace behind that impossible callback.
      */
     private void isolateInvalidWorkspaceRoot(
-            Miuix307PassBlurBridge.Binding old, long epoch, String reason) {
+            Miuix307PassBlurBridge.Binding old, long epoch, String reason,
+            RootPassBlurEndpointBridge.Endpoint replacement) {
         requireRenderThread();
         if (shuttingDown || epoch != bindEpoch.get() || binding != old) return;
-        if (old == null || old.rootSurface.isValid()
+        if (old == null || old.rootSurface.isValid() || replacement == null
+                || !replacement.isValid()
+                || RootPassBlurEndpointBridge.sameGeneration(old, replacement)
                 || old.producerSurface != inputProducerSurface
                 || inputSurfaceTexture == null || oesTexture == 0) {
             // Root recovered before the queued isolation. Do not free/reuse the old producer;
