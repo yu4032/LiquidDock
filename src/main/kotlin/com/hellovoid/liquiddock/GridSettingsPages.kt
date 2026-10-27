@@ -10,18 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigSchema
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Text
 
@@ -245,93 +244,3 @@ internal fun GridBasicsPage(
         }
     }
 }
-
-@Composable
-internal fun GridLandscapePage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val customGrid = prefs.getBoolean(
-        ConfigSchema.Grid.ENABLED.name(),
-        ConfigSchema.Grid.ENABLED.uiDefault(),
-    )
-    val landscapeSpecs = gridSpecs.filter {
-        it.key.startsWith("grid_landscape") || it.key == "indicator_landscape_y"
-    }
-    DenseSettingsList(
-        padding,
-        stringResource(R.string.page_grid_landscape),
-        "调整横屏桌面的间距与页面指示器位置。",
-    ) {
-        val enabled = masterEnabled && customGrid
-        item(key = "landscape-position-title") { SmallTitle("工作区位置") }
-        groupedIntSettings(landscapeSpecs.filterNot {
-            it.key == ConfigSchema.Grid.LANDSCAPE_ROW_GAP.name() ||
-                it.key == ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y.name()
-        }, prefs, enabled)
-        item(key = "landscape-gap-title") { SmallTitle("图标行间距") }
-        groupedIntSettings(landscapeSpecs.filter {
-            it.key == ConfigSchema.Grid.LANDSCAPE_ROW_GAP.name()
-        }, prefs, enabled)
-        item(key = "landscape-indicator-title") { SmallTitle("页面指示器") }
-        groupedIntSettings(landscapeSpecs.filter {
-            it.key == ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y.name()
-        }, prefs, enabled)
-    }
-}
-
-@Composable
-internal fun GridPortraitPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val customGrid = prefs.getBoolean(
-        ConfigSchema.Grid.ENABLED.name(),
-        ConfigSchema.Grid.ENABLED.uiDefault(),
-    )
-    val portraitSpecs = gridSpecs.filter {
-        it.key.startsWith("grid_portrait") || it.key == "indicator_portrait_y"
-    }
-    DenseSettingsList(
-        padding,
-        stringResource(R.string.page_grid_portrait),
-        "调整竖屏桌面的间距与页面指示器位置。",
-    ) {
-        val enabled = masterEnabled && customGrid
-        item(key = "portrait-position-title") { SmallTitle("工作区位置") }
-        groupedIntSettings(portraitSpecs.filterNot {
-            it.key == ConfigSchema.Grid.PORTRAIT_ROW_GAP.name() ||
-                it.key == ConfigSchema.Grid.PORTRAIT_INDICATOR_Y.name()
-        }, prefs, enabled)
-        item(key = "portrait-gap-title") { SmallTitle("图标行间距") }
-        groupedIntSettings(portraitSpecs.filter {
-            it.key == ConfigSchema.Grid.PORTRAIT_ROW_GAP.name()
-        }, prefs, enabled)
-        item(key = "portrait-indicator-title") { SmallTitle("页面指示器") }
-        groupedIntSettings(portraitSpecs.filter {
-            it.key == ConfigSchema.Grid.PORTRAIT_INDICATOR_Y.name()
-        }, prefs, enabled)
-    }
-}
-
-@Composable
-internal fun GridSplitPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val customGrid = prefs.getBoolean(
-        ConfigSchema.Grid.ENABLED.name(),
-        ConfigSchema.Grid.ENABLED.uiDefault(),
-    )
-    SettingsList(
-        padding,
-        stringResource(R.string.page_grid_split),
-        "分屏使用系统 pane 作为边界，只在这里调整额外距离。",
-    ) {
-        splitGridSpecs.forEach { IntSetting(prefs, it, masterEnabled && customGrid) }
-    }
-}
-

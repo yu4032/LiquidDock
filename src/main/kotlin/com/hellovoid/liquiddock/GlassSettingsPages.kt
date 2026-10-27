@@ -6,12 +6,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -100,101 +99,6 @@ internal fun LiquidPage(
                         fontSize = 12.sp,
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun LiquidSpecPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-    summary: String,
-    groups: List<LiquidSpecGroup>,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    DenseSettingsList(
-        padding = padding,
-        title = "",
-        summary = summary,
-    ) {
-        groupedLiquidSettings(groups, prefs, masterEnabled && liquidEnabled)
-    }
-}
-
-
-@Composable
-internal fun LiquidLightingPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    val enabled = masterEnabled && liquidEnabled
-    DenseSettingsList(
-        padding = padding,
-        title = stringResource(R.string.page_liquid_lighting),
-        summary = "调节焦散、菲涅尔反射与光源方向，并集中调整 OS4 边缘反射和方向光。",
-    ) {
-        groupedLiquidSettings(liquidLightingGroups + liquidOs4Groups, prefs, enabled)
-    }
-}
-
-@Composable
-internal fun LiquidSamplingPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    DenseSettingsList(
-        padding,
-        stringResource(R.string.page_liquid_sampling),
-        "调整背景缩放、PassBlur 渲染分辨率与实时刷新上限。采样保护区由渲染器自动计算。",
-    ) {
-        groupedLiquidSettings(liquidSamplingGroups, prefs, masterEnabled && liquidEnabled)
-        item(key = "sampling-performance-title") { SmallTitle("实时背景采样与帧同步") }
-        item(key = passBlurCaptureScaleSpec.key) {
-            SettingsCard {
-                IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
-            }
-        }
-        item(key = passBlurRenderFpsSpec.key) {
-            SettingsCard {
-                IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidEnabled)
-            }
-        }
-        item(key = ConfigSchema.Dock.FRAME_SYNC.name()) {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Dock.FRAME_SYNC,
-                    stringResource(R.string.dock_frame_sync),
-                    stringResource(R.string.dock_frame_sync_summary),
-                    masterEnabled && liquidEnabled,
-                )
-            }
-        }
-        item(key = "sampling-debug-title") { SmallTitle("调试显示") }
-        item(key = ConfigSchema.Glass.PRISMAL_SHOW_NORMALS.name()) {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
-                    "OS4 法线与方向光可视化",
-                    "内部显示玻璃表面法线，边缘显示 OS4 反射使用的 SDF 法线；亮度反映 OS4 方向光，不包含背景反射纹理",
-                    masterEnabled && liquidEnabled,
-                )
             }
         }
     }
@@ -534,67 +438,6 @@ internal fun GlassFoldersPage(
 }
 
 @Composable
-internal fun GlassMenusPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-    open: (Page) -> Unit,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    DenseSettingsList(
-        padding,
-        stringResource(R.string.page_glass_menus),
-        "菜单与弹窗按组件设置，系统级壁纸修复独立放置。",
-    ) {
-        item(key = "menus-heading") { SmallTitle("菜单与弹窗") }
-        item(key = "menus-handle") {
-            SettingsCard {
-                ArrowPreference(
-                    title = stringResource(R.string.page_handle_menu),
-                    summary = "应用顶部控制器的菜单玻璃、颜色、模糊与独立光学参数",
-                    enabled = masterEnabled && liquidEnabled,
-                    onClick = { open(Page.HandleMenuCustomization) },
-                )
-            }
-        }
-        item(key = "menus-shortcut") {
-            SettingsCard {
-                ArrowPreference(
-                    title = stringResource(R.string.page_shortcut_popup),
-                    summary = "长按快捷菜单的玻璃、深色模式、模糊、颜色及独立光学参数",
-                    enabled = masterEnabled && liquidEnabled,
-                    onClick = { open(Page.ShortcutPopupCustomization) },
-                )
-            }
-        }
-        item(key = "menus-dialog") {
-            SettingsCard {
-                ArrowPreference(
-                    title = stringResource(R.string.page_dialog_customization),
-                    summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
-                    enabled = masterEnabled && liquidEnabled,
-                    onClick = { open(Page.DialogCustomization) },
-                )
-            }
-        }
-        item(key = "menus-flicker-heading") { SmallTitle("系统兼容性") }
-        item(key = "menus-flicker") {
-            SettingsCard {
-                BooleanSetting(
-                    prefs, ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
-                    "壁纸闪烁修复",
-                    "仅在壁纸闪烁时开启；需要为 LiquidDock 启用 System Framework（system）作用域并重启设备",
-                    masterEnabled && liquidEnabled,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 internal fun LauncherHighlightsPage(
     padding: PaddingValues,
     open: (Page) -> Unit,
@@ -638,4 +481,3 @@ internal fun LauncherHighlightTogglePage(
         }
     }
 }
-
