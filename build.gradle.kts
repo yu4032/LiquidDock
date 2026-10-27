@@ -12,6 +12,7 @@ android {
         applicationId = "com.hellovoid.liquiddock"
         minSdk = 33
         targetSdk = 37
+        testInstrumentationRunner = "com.hellovoid.liquiddock.SettingsSearchInstrumentation"
         versionCode = 37
         versionName = "2.7.5"
     }

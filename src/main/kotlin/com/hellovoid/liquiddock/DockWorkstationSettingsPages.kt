@@ -9,9 +9,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -98,79 +98,6 @@ internal fun DockPage(
 }
 
 @Composable
-internal fun DockBehaviorPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val dockEnabled = prefs.getBoolean(
-        ConfigSchema.Dock.ENABLED.name(),
-        ConfigSchema.Dock.ENABLED.uiDefault(),
-    )
-    var resizeAnimation by remember {
-        mutableStateOf(
-            prefs.getBoolean(
-                ConfigSchema.Dock.RESIZE_ANIMATION.name(),
-                ConfigSchema.Dock.RESIZE_ANIMATION.uiDefault(),
-            ),
-        )
-    }
-    SettingsList(
-        padding,
-        stringResource(R.string.page_dock_behavior),
-        "管理 Dock 功能入口与尺寸变化动画。",
-    ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS,
-            "隐藏 Dock 最近任务图标",
-            "直接过滤 Dock 推荐的最近任务，不影响固定图标与系统多任务界面；重启桌面生效",
-            masterEnabled,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Dock.HIDE_MIRROR_SHORTCUT,
-            "隐藏手机互联图标",
-            "仅隐藏 Dock 入口，不修改系统互联开关或设备连接状态",
-            masterEnabled,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Dock.RESIZE_ANIMATION,
-            stringResource(R.string.dock_resize_animation),
-            stringResource(R.string.dock_resize_animation_summary),
-            masterEnabled && dockEnabled,
-        ) { resizeAnimation = it }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION,
-            stringResource(R.string.dock_smooth_resize_animation),
-            stringResource(R.string.dock_smooth_resize_animation_summary),
-            masterEnabled && dockEnabled && !resizeAnimation,
-        )
-    }
-}
-
-@Composable
-internal fun DockGeometryPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val dockEnabled = prefs.getBoolean(
-        ConfigSchema.Dock.ENABLED.name(),
-        ConfigSchema.Dock.ENABLED.uiDefault(),
-    )
-    DenseSettingsList(
-        padding,
-        stringResource(R.string.page_dock_geometry),
-        "调整 Dock 的尺寸、位置、圆角与图标间距。",
-    ) {
-        groupedIntSettings(dockSpecs, prefs, masterEnabled && dockEnabled)
-    }
-}
-
-@Composable
 internal fun DividerPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
     val legacyDefault = remember { hasLegacyDividerConfig(prefs) }
     var enabled by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Divider.ENABLED.name(), legacyDefault)) }
@@ -250,88 +177,3 @@ internal fun WorkstationPage(
         }
     }
 }
-
-@Composable
-internal fun WorkstationDockPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val enabled = prefs.getBoolean(
-        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
-        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault(),
-    )
-    DenseSettingsList(
-        padding = padding,
-        title = "",
-        summary = "调整工作台 Dock 的外观与图标位置。",
-    ) {
-        item(key = "workstation-taskbar-mode") {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Workstation.TASKBAR_MODE,
-                    "任务栏模式",
-                    "保留工作台 Dock 的原生位置及飞入、飞出动画，将液态玻璃或原生背景扩展为任务栏样式，不再自动下移。可使用整体垂直平移移动背景和图标，或分别设置横竖屏图标垂直偏移。",
-                    masterEnabled && enabled,
-                )
-            }
-        }
-        items(workstationDockSpecs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && enabled)
-            }
-        }
-    }
-}
-
-@Composable
-internal fun WorkstationSpecPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-    specs: List<IntSpec>,
-    summary: String,
-) {
-    val enabled = prefs.getBoolean(
-        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
-        ConfigSchema.Workstation.DOCK_CUSTOMIZATION.uiDefault(),
-    )
-    DenseSettingsList(
-        padding = padding,
-        title = "",
-        summary = summary,
-    ) {
-        items(specs, key = { it.key }) { spec ->
-            SettingsCard {
-                IntSetting(prefs, spec, masterEnabled && enabled)
-            }
-        }
-    }
-}
-
-@Composable
-internal fun RecentsPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
-    SettingsList(
-        padding,
-        stringResource(R.string.page_recents),
-        stringResource(R.string.recents_header_summary),
-    ) {
-        IntSetting(prefs, recentsBlurSpec, masterEnabled)
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM,
-            "禁用壁纸缩放",
-            "阻止桌面/多任务切换时系统壁纸的缩放目标，保留壁纸平移及其他过渡；首次安装该功能需重启桌面，之后切换即时生效",
-            masterEnabled,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING,
-            "取消壁纸压暗",
-            "取消多任务壁纸与转场的额外压暗，保留原生模糊、缩放和动画；下次切换起生效，无需重启桌面",
-            masterEnabled,
-        )
-    }
-}
-

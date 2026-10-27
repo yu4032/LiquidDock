@@ -121,7 +121,11 @@ private fun LiquidDockSettings(
     val root = isRootPage(page)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    val searchCatalog = remember(activity) { settingsSearchCatalog(activity) }
+    val declaredPages = remember(activity) { declaredSettingsPages(activity::getString) }
+    val searchCatalog = remember(activity) { settingsSearchCatalog(activity::getString, declaredPages) }
+    var searchFocusKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchFocusPage by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchFocusSequence by rememberSaveable { mutableStateOf(0) }
 
     fun closeSearch() {
         searchOpen = false
@@ -152,12 +156,14 @@ private fun LiquidDockSettings(
     }
 
     fun navigateTo(target: Page) {
+        searchFocusKey = null
         if (target == page) return
         navigationStack = ArrayList(navigationStack).apply { add(page.name) }
         page = target
     }
 
     fun navigateBack() {
+        searchFocusKey = null
         val previous = navigationStack.lastOrNull()
             ?.let { runCatching { Page.valueOf(it) }.getOrNull() }
         navigationStack = ArrayList(navigationStack.dropLast(1))
@@ -165,6 +171,7 @@ private fun LiquidDockSettings(
     }
 
     fun selectRoot(target: Page) {
+        searchFocusKey = null
         navigationStack = arrayListOf()
         page = target
     }
@@ -191,7 +198,7 @@ private fun LiquidDockSettings(
     }
 
     ModernSettingsScaffold(
-        title = if (searchOpen) "搜索设置" else stringResource(page.titleRes),
+        title = if (searchOpen) "搜索设置" else declaredPages[page]?.title ?: stringResource(page.titleRes),
         glassEnabled = uiGlassEnabled,
         showBack = searchOpen || !root,
         backLabel = stringResource(R.string.action_back),
@@ -300,6 +307,9 @@ private fun LiquidDockSettings(
                     onSelect = { item ->
                         closeSearch()
                         navigateTo(item.page)
+                        searchFocusKey = item.key
+                        searchFocusPage = item.page.name
+                        searchFocusSequence++
                     },
                 )
             } else {
@@ -327,7 +337,13 @@ private fun LiquidDockSettings(
                     },
                     label = "settings-page",
                 ) { target ->
-                when (target) {
+                val meta = declaredPages[target]
+                if (meta != null) DeclaredSettingsPage(
+                    padding, meta, prefs, masterEnabled,
+                    searchFocusKey?.takeIf { searchFocusPage == target.name }?.let {
+                        SettingsFocusRequest(target, it, searchFocusSequence)
+                    }, ::navigateTo,
+                ) else when (target) {
                     Page.Home -> HomePage(
                         padding,
                         prefs,
@@ -361,101 +377,24 @@ private fun LiquidDockSettings(
 
                     Page.Grid -> GridPage(padding, prefs, masterEnabled, ::navigateTo)
                     Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled)
-                    Page.GridLandscape -> GridLandscapePage(padding, prefs, masterEnabled)
-                    Page.GridPortrait -> GridPortraitPage(padding, prefs, masterEnabled)
-                    Page.GridSplit -> GridSplitPage(padding, prefs, masterEnabled)
 
                     Page.Dock -> DockPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.DockBehavior -> DockBehaviorPage(padding, prefs, masterEnabled)
-                    Page.DockGeometry -> DockGeometryPage(padding, prefs, masterEnabled)
+
                     Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
                     Page.Divider -> DividerPage(padding, prefs, masterEnabled)
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.WorkstationDock -> WorkstationDockPage(padding, prefs, masterEnabled)
-                    Page.WorkstationAppsLandscape -> WorkstationSpecPage(
-                        padding, prefs, masterEnabled, workstationAppsLandscapeSpecs,
-                        "所有应用横屏布局参数",
-                    )
-                    Page.WorkstationAppsPortrait -> WorkstationSpecPage(
-                        padding, prefs, masterEnabled, workstationAppsPortraitSpecs,
-                        "所有应用竖屏布局参数",
-                    )
-                    Page.Recents -> RecentsPage(padding, prefs, masterEnabled)
 
                     Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.LiquidMaterial -> LiquidSpecPage(
-                        padding,
-                        prefs,
-                        masterEnabled,
-                        "控制玻璃主体的基础材质感",
-                        liquidMaterialGroups,
-                    )
-                    Page.LiquidRefraction -> LiquidSpecPage(
-                        padding,
-                        prefs,
-                        masterEnabled,
-                        "折射形状、位移、边缘衰减与表面几何",
-                        liquidRefractionGroups,
-                    )
-                    Page.LiquidColor -> LiquidSpecPage(
-                        padding,
-                        prefs,
-                        masterEnabled,
-                        "底色、色散与背景鲜艳度",
-                        liquidColorGroups,
-                    )
-                    Page.LiquidLighting -> LiquidLightingPage(padding, prefs, masterEnabled)
-                    Page.GlassEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.GLOBAL,
-                        open = ::navigateTo,
-                    )
-                    Page.DockEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.DOCK,
-                    )
-                    Page.IconEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.ICON,
-                    )
-                    Page.WidgetEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.WIDGET,
-                    )
-                    Page.FolderEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.FOLDER,
-                    )
-                    Page.PopupEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.POPUP,
-                    )
-                    Page.HandleMenuEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.HANDLE_MENU,
-                    )
-                    Page.DialogEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.DIALOG,
-                    )
-                    Page.GboardEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.GBOARD,
-                    )
-                    Page.SearchboxEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.SEARCHBOX,
-                    )
+
                     Page.SidebarEdge -> SidebarGlassSettingsPage(
                         padding, prefs, masterEnabled,
                     )
-                    Page.SecurityCenterEdge -> GlassEdgeSettingsPage(
-                        padding, prefs, masterEnabled, GlassEdgeEffects.SECURITY_CENTER,
-                    )
-                    Page.LiquidShadow -> LiquidSpecPage(
-                        padding,
-                        prefs,
-                        masterEnabled,
-                        "玻璃内部阴影颜色与柔和程度",
-                        liquidShadowGroups,
-                    )
-                    Page.LiquidSampling -> LiquidSamplingPage(padding, prefs, masterEnabled)
 
                     Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
                     Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
                     Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
                     Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.GlassMenus -> GlassMenusPage(padding, prefs, masterEnabled, ::navigateTo)
+
                     Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage(
                         padding, prefs, masterEnabled,
                         onOpenAll = { navigateTo(Page.HandleMenuAll) },
@@ -509,11 +448,7 @@ private fun LiquidDockSettings(
                         masterEnabled = masterEnabled,
                     )
                     Page.Animation -> AnimationPage(padding, ::navigateTo)
-                    Page.AnimationWorkspace -> AnimationWorkspacePage(padding, prefs, masterEnabled)
-                    Page.AnimationInteraction -> AnimationInteractionPage(padding, prefs, masterEnabled)
-                    Page.AnimationPopups -> AnimationPopupsPage(padding, prefs, masterEnabled)
-                    Page.AnimationSystem -> AnimationSystemPage(padding, prefs, masterEnabled)
-                    Page.AnimationGui -> AnimationGuiPage(padding, prefs, masterEnabled)
+
                     Page.ThemePalette -> SettingsUiPalettePage(
                         padding = padding,
                         selected = selectedPalette,
@@ -521,6 +456,7 @@ private fun LiquidDockSettings(
                     )
                     Page.Data -> DataPage(padding, activity)
                     Page.About -> AboutPage(padding, activity, prefs)
+                    else -> error("Missing settings declaration for $target")
                 }
                 }
             }
