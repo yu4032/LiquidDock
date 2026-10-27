@@ -37,9 +37,10 @@ final class LauncherMamlBackgroundRuleExecutor {
                 readIntField(itemInfo, "configSpanY", -1));
         WidgetBackgroundRule rule = RULES.match(identity);
         String identityText = describe(identity);
+        String widgetLabel = LauncherWidgetComponentDiscovery.resolveWidgetLabel(itemInfo, host);
 
         if (root != null) {
-            LauncherWidgetComponentDiscovery.scanMaml(host, identity, root);
+            LauncherWidgetComponentDiscovery.scanMaml(host, identity, root, widgetLabel);
         }
 
         if (rule == null) {

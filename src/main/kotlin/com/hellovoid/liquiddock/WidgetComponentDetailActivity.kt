@@ -385,7 +385,7 @@ private fun WidgetExactNodePage(
                             SwitchPreference(
                                 checked = key in selected,
                                 onCheckedChange = { checked -> onSelectionChanged(descriptor, checked) },
-                                title = if (whiteMode) "白化 · ${descriptor.name.ifEmpty { "(无资源 ID)" }}"
+                                title = if (whiteMode) "白化 · ${descriptor.elementTitle()}"
                                     else exactNodeTitle(descriptor),
                                 summary = exactNodeSummary(descriptor),
                             )
@@ -420,10 +420,15 @@ private fun componentTypeTitle(type: String): String = when (type) {
     else -> "其他"
 }
 
+private fun WidgetComponentStore.Descriptor.elementTitle(): String {
+    if (name.isNotEmpty()) return name
+    val type = componentTypeTitle(componentType)
+    val ordinal = if (renderOrdinal >= 0) " #$renderOrdinal" else ""
+    return "$type$ordinal"
+}
+
 private fun exactNodeTitle(descriptor: WidgetComponentStore.Descriptor): String {
-    val name = descriptor.name.ifEmpty {
-        if (descriptor.isMaml()) "(匿名元素)" else "(无资源 ID)"
-    }
+    val name = descriptor.elementTitle()
     val actionTitle = when (descriptor.action) {
         WidgetComponentStore.ACTION_CLEAR_BACKGROUND -> "移除背景 · $name"
         WidgetComponentStore.ACTION_CLEAR_IMAGE -> "移除图像 · $name"
