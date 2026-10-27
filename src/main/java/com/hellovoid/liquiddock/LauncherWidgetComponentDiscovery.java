@@ -54,13 +54,14 @@ final class LauncherWidgetComponentDiscovery {
         }
 
         String provider = providerIdentity(host);
+        String widgetName = widgetLabel(host);
         ArrayList<WidgetComponentStore.Descriptor> descriptors = new ArrayList<>();
         int[] renderOrdinal = {0};
         float rootArea = viewArea(content);
         if (!(rootArea > 0f)) rootArea = viewArea(host);
         // Root path 0 may itself own the visual background. It is selectable for property-level
         // background/image actions, but never for the destructive whole-node hide action.
-        scanNode(content, provider, "0", false, new HashSet<>(), descriptors,
+        scanNode(content, provider, widgetName, "0", false, new HashSet<>(), descriptors,
                 renderOrdinal, 0, rootArea);
 
         if (!descriptors.isEmpty()) {
@@ -75,10 +76,11 @@ final class LauncherWidgetComponentDiscovery {
         WidgetComponentStore.acknowledgeDiscoveryRequest(host.getContext());
     }
 
-    static void scanMaml(View host, WidgetBackgroundIdentity identity, Object root) {
+    static void scanMaml(
+            View host, WidgetBackgroundIdentity identity, Object root, String widgetLabel) {
         if (host == null || identity == null || root == null) return;
         KNOWN_HOSTS.put(host, Boolean.TRUE);
-        KNOWN_MAML.put(host, new MamlTarget(identity, root));
+        KNOWN_MAML.put(host, new MamlTarget(identity, root, widgetLabel));
         LauncherManualDiscoveryBridge.ensureRegistered(host.getContext());
         if (!WidgetComponentStore.discoveryRequested()) return;
         synchronized (DUMPED_MAML_ROOTS) {
@@ -97,7 +99,7 @@ final class LauncherWidgetComponentDiscovery {
         if (innerGroup != null) {
             Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
             int[] renderOrdinal = {0};
-            scanMamlRenderChildren(root, host, identity, innerGroup, "render", 0,
+            scanMamlRenderChildren(root, host, identity, widgetLabel, innerGroup, "render", 0,
                     rootArea, renderOrdinal, visited, renderMetadata, descriptors);
         }
 
@@ -123,7 +125,8 @@ final class LauncherWidgetComponentDiscovery {
                         + " hierarchyPath=mElements/" + name
                         + metadataLog(metadata));
                 WidgetComponentStore.Descriptor descriptor =
-                        WidgetComponentStore.mamlDescriptor(identity, name, className);
+                        WidgetComponentStore.mamlDescriptor(
+                                identity, name, className, widgetLabel);
                 if (descriptor != null && metadata != null) {
                     descriptor = metadata.enrich(descriptor);
                 }
@@ -156,7 +159,7 @@ final class LauncherWidgetComponentDiscovery {
             MamlTarget target = entry.getValue();
             Object root = target == null ? null : target.root.get();
             if (host != null && target != null && root != null) {
-                scanMaml(host, target.identity, root);
+                scanMaml(host, target.identity, root, target.label);
             }
         }
     }
@@ -165,6 +168,7 @@ final class LauncherWidgetComponentDiscovery {
             Object root,
             View host,
             WidgetBackgroundIdentity identity,
+            String widgetLabel,
             Object group,
             String parentPath,
             int depth,
@@ -194,6 +198,7 @@ final class LauncherWidgetComponentDiscovery {
             if (namedTarget != element) {
                 MainHook.log(TAG
                         + " source=maml-render"
+                        + " widget=" + safe(widgetLabel)
                         + " provider=" + safe(identity.appPackage)
                         + " productId=" + safe(identity.productId)
                         + " name=" + safe(name)
@@ -202,19 +207,61 @@ final class LauncherWidgetComponentDiscovery {
                         + metadataLog(metadata));
                 WidgetComponentStore.Descriptor descriptor =
                         WidgetComponentStore.mamlRenderDescriptor(
-                                identity, name, className, hierarchyPath);
+                                identity, name, className, hierarchyPath, widgetLabel);
                 if (descriptor != null) descriptors.add(metadata.enrich(descriptor));
             }
 
             // ElementGroup subclasses expose their actual children through mElements. Other
             // ScreenElements simply stop here because the reflected field is unavailable.
-            scanMamlRenderChildren(root, host, identity, element, hierarchyPath, depth + 1,
-                    rootArea, renderOrdinal, visited, renderMetadata, descriptors);
+            scanMamlRenderChildren(root, host, identity, widgetLabel, element, hierarchyPath,
+                    depth + 1, rootArea, renderOrdinal, visited, renderMetadata, descriptors);
+        }
+    }
+
+    /** Human-readable widget provider label shown by the launcher's widget picker. */
+    private static String widgetLabel(View host) {
+        try {
+            if (host instanceof AppWidgetHostView) {
+                AppWidgetProviderInfo info = ((AppWidgetHostView) host).getAppWidgetInfo();
+                if (info != null) {
+                    CharSequence label = info.loadLabel(host.getContext().getPackageManager());
+                    if (label != null && label.length() > 0) return label.toString().trim();
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
+
+    /** Title shown by the widget picker: ItemInfo.mTitle / mLabel, then the app label. */
+    static String resolveWidgetLabel(Object itemInfo, View host) {
+        String title = readText(itemInfo, "mTitle");
+        if (title.isEmpty()) title = readText(itemInfo, "mLabel");
+        if (!title.isEmpty()) return title;
+        String label = appLabel(host, readStringField(itemInfo, "appPackage"));
+        return label.isEmpty() ? widgetLabel(host) : label;
+    }
+
+    private static String readText(Object target, String field) {
+        Object value = readField(target, field);
+        if (value instanceof CharSequence) return value.toString().trim();
+        return "";
+    }
+
+    private static String appLabel(View host, String packageName) {
+        if (host == null || packageName == null || packageName.isEmpty()) return "";
+        try {
+            android.content.pm.PackageManager pm = host.getContext().getPackageManager();
+            return pm.getApplicationLabel(
+                    pm.getApplicationInfo(packageName, 0)).toString().trim();
+        } catch (Throwable ignored) {
+            return "";
         }
     }
 
     private static void scanNode(
-            View view, String provider, String hierarchyPath, boolean allowWholeNodeHide,
+            View view, String provider, String widgetName, String hierarchyPath,
+            boolean allowWholeNodeHide,
             Set<String> published, ArrayList<WidgetComponentStore.Descriptor> descriptors,
             int[] renderOrdinal, int depth, float rootArea) {
         if (view == null) return;
@@ -235,17 +282,17 @@ final class LauncherWidgetComponentDiscovery {
                 + metadataLog(metadata));
 
         if (hasBackground) {
-            collectRemoteAction(provider, WidgetComponentStore.ACTION_CLEAR_BACKGROUND,
+            collectRemoteAction(provider, widgetName, WidgetComponentStore.ACTION_CLEAR_BACKGROUND,
                     resourceName, className, hierarchyPath, WidgetComponentStore.TYPE_BACKGROUND,
                     metadata, published, descriptors);
         }
         if (hasImage) {
-            collectRemoteAction(provider, WidgetComponentStore.ACTION_CLEAR_IMAGE,
+            collectRemoteAction(provider, widgetName, WidgetComponentStore.ACTION_CLEAR_IMAGE,
                     resourceName, className, hierarchyPath, WidgetComponentStore.TYPE_IMAGE,
                     metadata, published, descriptors);
         }
         if (allowWholeNodeHide) {
-            collectRemoteAction(provider, WidgetComponentStore.ACTION_HIDE_VIEW,
+            collectRemoteAction(provider, widgetName, WidgetComponentStore.ACTION_HIDE_VIEW,
                     resourceName, className, hierarchyPath, classifyWholeNode(view),
                     metadata, published, descriptors);
         }
@@ -255,14 +302,15 @@ final class LauncherWidgetComponentDiscovery {
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
             if (child != null) {
-                scanNode(child, provider, hierarchyPath + "/" + i, true, published, descriptors,
-                        renderOrdinal, depth + 1, rootArea);
+                scanNode(child, provider, widgetName, hierarchyPath + "/" + i, true, published,
+                        descriptors, renderOrdinal, depth + 1, rootArea);
             }
         }
     }
 
     private static void collectRemoteAction(
             String provider,
+            String widgetName,
             String action,
             String resourceName,
             String className,
@@ -274,7 +322,8 @@ final class LauncherWidgetComponentDiscovery {
         String key = action + '\t' + hierarchyPath + '\t' + className + '\t' + resourceName;
         if (!published.add(key)) return;
         WidgetComponentStore.Descriptor descriptor = WidgetComponentStore.remoteDescriptor(
-                provider, action, resourceName, className, hierarchyPath, componentType);
+                provider, action, resourceName, className, hierarchyPath, componentType,
+                widgetName);
         if (descriptor != null) descriptors.add(metadata.enrich(descriptor));
     }
 
@@ -412,10 +461,12 @@ final class LauncherWidgetComponentDiscovery {
     private static final class MamlTarget {
         final WidgetBackgroundIdentity identity;
         final WeakReference<Object> root;
+        final String label;
 
-        MamlTarget(WidgetBackgroundIdentity identity, Object root) {
+        MamlTarget(WidgetBackgroundIdentity identity, Object root, String label) {
             this.identity = identity;
             this.root = new WeakReference<>(root);
+            this.label = label == null ? "" : label;
         }
     }
 

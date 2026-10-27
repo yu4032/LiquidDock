@@ -96,20 +96,38 @@ public final class WidgetComponentStore {
             String className,
             String hierarchyPath,
             String componentType) {
+        return remoteDescriptor(provider, action, resourceName, className, hierarchyPath,
+                componentType, "");
+    }
+
+    static Descriptor remoteDescriptor(
+            String provider,
+            String action,
+            String resourceName,
+            String className,
+            String hierarchyPath,
+            String componentType,
+            String label) {
         if (blank(provider) || blank(action) || blank(className)
                 || blank(hierarchyPath) || blank(componentType) || unsafe(resourceName)) return null;
         return new Descriptor(
-                REMOTE_V2, provider, action, safe(resourceName), className, "",
+                REMOTE_V2, provider, action, safe(resourceName), className, label,
                 hierarchyPath, componentType);
     }
 
     static Descriptor mamlDescriptor(
             WidgetBackgroundIdentity identity, String elementName, String className) {
+        return mamlDescriptor(identity, elementName, className, "");
+    }
+
+    static Descriptor mamlDescriptor(
+            WidgetBackgroundIdentity identity, String elementName, String className,
+            String label) {
         if (identity == null || blank(identity.productId)
                 || blank(elementName) || blank(className)) return null;
         return new Descriptor(
                 MAML, identity.productId, ACTION_HIDE_VIEW, elementName, className,
-                identity.appPackage == null ? "" : identity.appPackage,
+                label == null ? "" : label,
                 "mElements/" + elementName, classifyMamlType(className));
     }
 
@@ -122,11 +140,20 @@ public final class WidgetComponentStore {
             String elementName,
             String className,
             String hierarchyPath) {
+        return mamlRenderDescriptor(identity, elementName, className, hierarchyPath, "");
+    }
+
+    static Descriptor mamlRenderDescriptor(
+            WidgetBackgroundIdentity identity,
+            String elementName,
+            String className,
+            String hierarchyPath,
+            String label) {
         if (identity == null || blank(identity.productId) || unsafe(elementName)
                 || blank(className) || blank(hierarchyPath)) return null;
         return new Descriptor(
                 MAML_V2, identity.productId, ACTION_HIDE_VIEW, safe(elementName), className,
-                identity.appPackage == null ? "" : identity.appPackage,
+                label == null ? "" : label,
                 hierarchyPath, classifyMamlType(className));
     }
 
@@ -369,7 +396,7 @@ public final class WidgetComponentStore {
         }
 
         public String displayOwner() {
-            return label.isEmpty() ? owner : label + " · " + owner;
+            return label.isEmpty() ? owner : label;
         }
 
         @Override public boolean equals(Object other) {
