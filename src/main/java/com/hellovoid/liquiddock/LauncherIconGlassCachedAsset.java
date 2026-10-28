@@ -83,21 +83,36 @@ final class LauncherIconGlassCachedAsset {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                         if (!(owner instanceof View) || !GlassRuntimeState.isAnyIconEnabled())
                             return result;
-                        View proxy = (View) owner;
+                        try {
+                            cacheViewBitmap((View) owner, background);
+                        } catch (Throwable error) {
+                            logFailureOnce("View2", error);
+                        }
+                        return result;
+                    });
+            return true;
+        } catch (Throwable error) {
+            MainHook.log(TAG + " View2 setup unavailable: " + error);
+            return false;
+        }
+    }
+
+    private static void cacheViewBitmap(View proxy, Field background) throws Exception {
+                        Object owner = proxy;
                         HookUtil.InvocationResult<Object> target =
                                 HookUtil.tryInvoke(owner, "getAnimTarget");
                         View source = target.succeeded() && target.value() instanceof View
                                 ? (View) target.value() : null;
                         MaskSpec mask = fromSource(source);
-                        if (mask == null) return result;
+                        if (mask == null) return;
                         Object image = background.get(owner);
                         // Preserve live/app-specific and layered adaptive icon animation.
                         if (!(image instanceof BitmapDrawable) || image instanceof Animatable)
-                            return result;
+                            return;
                         BitmapDrawable original = (BitmapDrawable) image;
                         int w = proxy.getWidth();
                         int h = proxy.getHeight();
-                        if (w <= 0 || h <= 0 || w > 512 || h > 512) return result;
+                        if (w <= 0 || h <= 0 || w > 512 || h > 512) return;
                         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
                         Canvas canvas = new Canvas(bitmap);
                         canvas.clipPath(mask.path(w, h));
@@ -111,14 +126,7 @@ final class LauncherIconGlassCachedAsset {
                         BitmapDrawable clipped = new BitmapDrawable(proxy.getResources(), bitmap);
                         clipped.setBounds(saved);
                         background.set(owner, clipped);
-                        MainHook.log(TAG + " View2 bitmap prepared");
-                        return result;
-                    });
-            return true;
-        } catch (Throwable error) {
-            MainHook.log(TAG + " View2 setup unavailable: " + error);
-            return false;
-        }
+                        logPreparedOnce("View2");
     }
 
     /**
@@ -157,13 +165,19 @@ final class LauncherIconGlassCachedAsset {
                     new Class<?>[]{int.class}), chain -> {
                 Object owner = chain.getThisObject();
                 MaskSpec spec = LAYER_REQUESTS.remove(owner);
-                if (spec == null) return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                try {
-                    RectF bounds = (RectF) validRect.get(owner);
-                    if (bounds != null && bounds.width() > 0f && bounds.height() > 0f) {
-                        DRAW_MASK.set(spec.path(bounds.width(), bounds.height()));
+                if (spec != null && GlassRuntimeState.isAnyIconEnabled()) {
+                    try {
+                        RectF bounds = (RectF) validRect.get(owner);
+                        if (bounds != null && bounds.width() > 0f && bounds.height() > 0f
+                                && bounds.width() <= 1024f && bounds.height() <= 1024f) {
+                            DRAW_MASK.set(spec.path(bounds.width(), bounds.height()));
+                        }
+                    } catch (Throwable error) {
+                        logFailureOnce("Layer2", error);
                     }
-                    // The original draw() writes one icon buffer, with all adaptive layers.
+                }
+                try {
+                    // The original draw() writes one cached icon buffer.
                     return chain.proceed(chain.getArgs().toArray(new Object[0]));
                 } finally {
                     DRAW_MASK.remove();
@@ -186,6 +200,7 @@ final class LauncherIconGlassCachedAsset {
                 }
                 args[3] = clipped;
                 // Only runs while the actual native Surface buffer is being populated.
+                logPreparedOnce("Layer2");
                 return chain.proceed(args);
             });
             return true;
@@ -224,6 +239,20 @@ final class LauncherIconGlassCachedAsset {
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
         @Override public int getIntrinsicWidth() { return delegate.getIntrinsicWidth(); }
         @Override public int getIntrinsicHeight() { return delegate.getIntrinsicHeight(); }
+    }
+
+    private static final java.util.HashSet<String> LOGGED = new java.util.HashSet<>();
+    private static void logPreparedOnce(String path) {
+        synchronized (LOGGED) {
+            if (LOGGED.add("prepared-" + path))
+                MainHook.log(TAG + " " + path + " cached alpha mask active");
+        }
+    }
+    private static void logFailureOnce(String path, Throwable error) {
+        synchronized (LOGGED) {
+            if (LOGGED.add("failed-" + path))
+                MainHook.log(TAG + " " + path + " skipped: " + error);
+        }
     }
 
     private LauncherIconGlassCachedAsset() {}
