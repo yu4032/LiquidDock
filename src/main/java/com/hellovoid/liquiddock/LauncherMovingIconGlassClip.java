@@ -127,8 +127,7 @@ final class LauncherMovingIconGlassClip {
     }
 
     private static float workstationRadiusDp() {
-        LiquidDockConfig.Workstation current = LiveGlassConfigState.currentWorkstation();
-        return current != null ? current.dockIconGlassCornerRadius : 0f;
+        return LauncherIconGlassClip.workstationRadiusDp();
     }
 
     private static float contentScale(View source, View content) {
