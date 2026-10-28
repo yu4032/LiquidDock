@@ -479,6 +479,10 @@ final class MiuixLauncherStaticGlassHook {
             View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View v) {
                     scheduleBind(v, kind, glassConfig, 0);
+                    if (kind == LauncherGlassDragState.Kind.ICON) {
+                        // A detached page can miss an icon radius/config refresh.
+                        LauncherIconGlassClip.refreshHost(v);
+                    }
                 }
                 @Override public void onViewDetachedFromWindow(View v) {
                     DockGlassItemRegistry.unregister(v);
