@@ -7,6 +7,8 @@ import android.graphics.Rect;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Animatable;
+import android.graphics.drawable.ColorDrawable;
 import android.view.View;
 import android.widget.TextView;
 
@@ -14,6 +16,8 @@ import com.hellovoid.prismal.PrismalContinuousCorners;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.WeakHashMap;
 
 /**
@@ -26,6 +30,7 @@ final class LauncherIconGlassClip {
     private static final WeakHashMap<TextView, Cache> CACHE = new WeakHashMap<>();
     private static volatile LiquidDockConfig.Glass glass;
     private static volatile float workstationRadiusDp;
+    private static final HashSet<String> SOURCE_LOGGED = new HashSet<>();
 
     private static final class Cache {
         WeakReference<Drawable> original = new WeakReference<>(null);
@@ -162,11 +167,15 @@ final class LauncherIconGlassClip {
 
                 // The OEM transparent placeholder is installed during app transitions.
                 // Replacing it would change the identity-based visibility contract.
-                if (!eligible(host) || !safeStaticDrawable(original)) return result;
+                if (!eligible(host)) return result;
+                if (!safeStaticDrawable(original, 0)) {
+                    logSourceOnce(original, "skip");
+                    return result;
+                }
                 try {
                     installCachedDrawable(host, original);
                 } catch (Throwable error) {
-                    MainHook.log(TAG + " cache failed: " + error);
+                    logSourceOnce(original, "error: " + error);
                 }
                 return result;
             });
@@ -199,14 +208,66 @@ final class LauncherIconGlassClip {
         return node != null && node.kind() == LauncherGlassDragState.Kind.ICON;
     }
 
-    private static boolean safeStaticDrawable(Drawable drawable) {
-        // OEM Fancy/Badge/LayerAdaptiveIcon drawables may be animated, share
-        // mutable layers, or paint a live badge. Never rasterize these.
-        if (drawable.getClass() == BitmapDrawable.class) return true;
-        if (drawable.getClass() != AdaptiveIconDrawable.class) return false;
-        AdaptiveIconDrawable adaptive = (AdaptiveIconDrawable) drawable;
-        return !(adaptive.getForeground() instanceof android.graphics.drawable.Animatable)
-                && !(adaptive.getBackground() instanceof android.graphics.drawable.Animatable);
+    /**
+     * Xiaomi's icon cache returns LayerAdaptiveIconDrawable/BadgeDrawable as well
+     * as framework bitmaps. An exact-class whitelist silently disabled clipping
+     * for most OS3 icons. Check the content instead; never freeze live layers.
+     */
+    private static boolean safeStaticDrawable(Drawable drawable, int depth) {
+        if (drawable == null || depth > 4 || drawable instanceof Animatable
+                || drawable.getClass() == ColorDrawable.class) return false;
+        String name = drawable.getClass().getName();
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("fancy") || lower.contains("maml")
+                || lower.contains("lottie") || lower.contains("animated")
+                || lower.contains("dynamic")) return false;
+
+        if (name.equals("com.miui.home.launcher.graphics.drawable.BadgeDrawable")) {
+            // Work-profile badges are static decorations, but their image
+            // source must not secretly be a live MAML/Fancy drawable.
+            HookUtil.InvocationResult<Object> back =
+                    HookUtil.tryInvoke(drawable, "getBackDrawable");
+            HookUtil.InvocationResult<Object> badge =
+                    HookUtil.tryInvoke(drawable, "getBadgeDrawable");
+            return back.succeeded() && back.value() instanceof Drawable
+                    && safeStaticDrawable((Drawable) back.value(), depth + 1)
+                    && (!badge.succeeded() || badge.value() == null
+                        || badge.value() instanceof Drawable
+                        && safeStaticDrawable((Drawable) badge.value(), depth + 1));
+        }
+        if (name.equals("com.miui.home.launcher.graphics.drawable.LayerAdaptiveIconDrawable")) {
+            HookUtil.InvocationResult<Object> background =
+                    HookUtil.tryInvoke(drawable, "getBackgroundLayer");
+            HookUtil.InvocationResult<Object> foreground =
+                    HookUtil.tryInvoke(drawable, "getForegroundLayers");
+            if (!background.succeeded() || !foreground.succeeded()
+                    || !(foreground.value() instanceof List<?>)) return false;
+            if (background.value() != null
+                    && !safeLayer(background.value(), depth + 1)) return false;
+            for (Object layer : (List<?>) foreground.value())
+                if (!safeLayer(layer, depth + 1)) return false;
+            return true;
+        }
+        // Other ordinary non-animated Drawables can be snapshotted once.
+        // The OEM original stays alive for native app-return/drag animations.
+        return true;
+    }
+
+    private static boolean safeLayer(Object layer, int depth) {
+        if (layer == null) return true;
+        HookUtil.InvocationResult<Object> current =
+                HookUtil.tryInvoke(layer, "getCurrentShowDrawable");
+        return current.succeeded() && current.value() instanceof Drawable
+                && safeStaticDrawable((Drawable) current.value(), depth + 1);
+    }
+
+    private static void logSourceOnce(Drawable source, String status) {
+        String key = status + ":" + source.getClass().getName();
+        synchronized (SOURCE_LOGGED) {
+            if (SOURCE_LOGGED.add(key)) {
+                MainHook.log(TAG + " " + status + " source=" + source.getClass().getName());
+            }
+        }
     }
 
     private static void installCachedDrawable(TextView host, Drawable original) {
@@ -297,6 +358,7 @@ final class LauncherIconGlassClip {
                 config.continuousCorners, config, host,
                 dock, workstationMode, iconSize);
         replaceDisplayOnly(host, baked);
+        logSourceOnce(original, "baked");
     }
 
     private static void replaceDisplayOnly(TextView host, BitmapDrawable drawable) {
