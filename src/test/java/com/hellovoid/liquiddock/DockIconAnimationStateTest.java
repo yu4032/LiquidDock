@@ -131,4 +131,16 @@ public class DockIconAnimationStateTest {
         assertFalse(state.observeHomeReturnProgress(icon, Float.POSITIVE_INFINITY));
         assertEquals(0f, state.sample(icon).opacity, 0f);
     }
+    @Test public void proxyActiveQueryMatchesOwnershipWithoutAllocatingGeometrySample() {
+        DockIconAnimationState state = new DockIconAnimationState();
+        Object icon = new Object();
+        assertFalse(state.isProxyActive(icon));
+        assertTrue(state.holdProxyHidden(icon));
+        assertTrue(state.isProxyActive(icon));
+        assertTrue(state.updateProxyGeometry(icon, new float[]{1f, 2f, 10f, 12f}));
+        assertTrue(state.isProxyActive(icon));
+        assertTrue(state.endProxyGeometry(icon));
+        assertFalse(state.isProxyActive(icon));
+    }
+
 }
