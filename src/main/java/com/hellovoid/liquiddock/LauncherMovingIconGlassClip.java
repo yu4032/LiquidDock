@@ -83,12 +83,12 @@ final class LauncherMovingIconGlassClip {
     private LauncherMovingIconGlassClip() {}
 
     static void bindDrag(View drag, float[] visualBounds, GlassComponentStyle style,
-                         LiquidDockConfig.Glass config) {
+                         LiquidDockConfig.Glass config, float nativeRadiusPx) {
         if (drag == null || visualBounds == null || visualBounds.length != 4
                 || style == null || !style.enabled || config == null
                 || !GlassRuntimeState.isIconEnabled()) return;
         bind(drag, visualBounds, style, config.continuousCorners,
-                iconDrawable(drag), 1f);
+                iconDrawable(drag), 1f, nativeRadiusPx);
     }
 
     /** Only the native *draw-icon* owner is clipped; application screenshots are untouched. */
@@ -123,7 +123,7 @@ final class LauncherMovingIconGlassClip {
         bind(content, new float[]{content.getPaddingLeft(), content.getPaddingTop(),
                         content.getWidth() - content.getPaddingRight(),
                         content.getHeight() - content.getPaddingBottom()},
-                style, config.continuousCorners, iconDrawable(source), scale);
+                style, config.continuousCorners, iconDrawable(source), scale, Float.NaN);
     }
 
     private static float workstationRadiusDp() {
@@ -173,7 +173,8 @@ final class LauncherMovingIconGlassClip {
     }
 
     private static void bind(View view, float[] bounds, GlassComponentStyle style,
-                             boolean continuous, Drawable drawable, float scale) {
+                             boolean continuous, Drawable drawable, float scale,
+                             float nativeRadiusPx) {
         if (view.getWidth() <= 0 || view.getHeight() <= 0) return;
         float density = view.getResources().getDisplayMetrics().density;
         float sizeOffset = style.sizeOffsetDp * density * scale;
@@ -184,9 +185,12 @@ final class LauncherMovingIconGlassClip {
                 bounds[0], bounds[1], bounds[2], bounds[3], sizeOffset);
         float radius = style.cornerRadiusDp > 0f
                 ? style.cornerRadiusDp * density * scale
-                : LauncherGlassIconShapeResolver.resolveAutoRadius(drawable,
-                        expanded[2] - expanded[0], expanded[3] - expanded[1],
-                        Math.min(expanded[2] - expanded[0], expanded[3] - expanded[1]) * .22f);
+                : Float.isFinite(nativeRadiusPx) && nativeRadiusPx > 0f
+                        ? nativeRadiusPx * scale
+                        : LauncherGlassIconShapeResolver.resolveAutoRadius(drawable,
+                                expanded[2] - expanded[0], expanded[3] - expanded[1],
+                                Math.min(expanded[2] - expanded[0],
+                                        expanded[3] - expanded[1]) * .22f);
         LauncherIconGlassClipGeometry.Result shape = LauncherIconGlassClipGeometry.resolve(
                 bounds[0], bounds[1], bounds[2], bounds[3],
                 sizeOffset, radius, radius);
