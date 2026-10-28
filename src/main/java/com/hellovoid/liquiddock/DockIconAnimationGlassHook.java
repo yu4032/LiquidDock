@@ -32,7 +32,7 @@ final class DockIconAnimationGlassHook {
         if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
             return false;
         }
-        LauncherIconGlassMotionClip.prepare(classLoader);
+        LauncherIconGlassCachedAsset.install(classLoader);
         boolean shortcut = installShortcutVisibilityHook(classLoader);
         boolean backStop = installBackAnimStopHandoffGuard(classLoader);
         boolean finish = installFloatingViewFinishHandoffHook(classLoader);
@@ -187,13 +187,6 @@ final class DockIconAnimationGlassHook {
                                                 proxyAlpha, drawIcon)
                                         : LauncherGlassProxyVisibility.isView2Visible(
                                                 proxyAlpha, drawIcon);
-                                if (drawIcon && args[4] instanceof Number) {
-                                    LauncherIconGlassMotionClip.apply(
-                                            chain.getThisObject(), result, dockTarget,
-                                            useRotationRect, (RectF) args[1],
-                                            progress, ((Number) args[4]).floatValue(),
-                                            closeToHome);
-                                }
                                 boolean publishProxyGeometry =
                                         LauncherGlassProxyVisibility.shouldPublishGeometry(
                                                 closeToHome, proxyVisible);
