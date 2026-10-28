@@ -34,8 +34,8 @@ final class LauncherIconGlassClip {
             // vertical seam at the old icon edge, especially after dropping into Dock.
             // The label lies below this row, and ShortcutIcon's separate badge drawing
             // stays outside the hooked TextView.onDraw() call.
-            cutout.addRect(-1f, Math.max(0f, top - 1f), width + 1f,
-                    bottom + 1f, Path.Direction.CW);
+            float[] row = LauncherIconGlassClipGeometry.iconRow(width, top, bottom);
+            cutout.addRect(row[0], row[1], row[2], row[3], Path.Direction.CW);
             Path shape = new Path();
             LauncherIconGlassShapePath.build(shape, gl, gt, gr, gb, radius, c);
             cutout.op(shape, Path.Op.DIFFERENCE);
