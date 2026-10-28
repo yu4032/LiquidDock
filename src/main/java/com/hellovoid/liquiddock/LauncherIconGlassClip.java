@@ -2,11 +2,9 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Canvas;
 import android.graphics.Path;
-import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.TextView;
-import com.hellovoid.prismal.PrismalContinuousCorners;
 import java.util.WeakHashMap;
 
 /** Clips only the icon part of TextView's draw, leaving Launcher badges and labels alone. */
@@ -39,16 +37,7 @@ final class LauncherIconGlassClip {
             cutout.addRect(-1f, Math.max(0f, top - 1f), width + 1f,
                     bottom + 1f, Path.Direction.CW);
             Path shape = new Path();
-            if (c) {
-                float[] points = PrismalContinuousCorners.contour(gr-gl, gb-gt, radius);
-                if (points.length >= 2) {
-                    shape.moveTo(gl + points[0], gt + points[1]);
-                    for (int n=2; n<points.length; n+=2) shape.lineTo(gl+points[n], gt+points[n+1]);
-                    shape.close();
-                }
-            } else {
-                shape.addRoundRect(new RectF(gl, gt, gr, gb), radius, radius, Path.Direction.CW);
-            }
+            LauncherIconGlassShapePath.build(shape, gl, gt, gr, gb, radius, c);
             cutout.op(shape, Path.Op.DIFFERENCE);
         }
     }
