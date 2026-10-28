@@ -142,7 +142,11 @@ final class LauncherMovingIconGlassClip {
         // Prefer an actual image owner. The outer FloatingIconView2 can be a
         // fullscreen overlay and clipping it would also cut the app screenshot.
         if (proxy instanceof ViewGroup) {
-            View image = findImageChild((ViewGroup) proxy);
+            LauncherGlassIconGeometry.Bounds bounds =
+                    LauncherGlassIconGeometry.resolve(source);
+            View image = bounds != null
+                    ? findImageChild((ViewGroup) proxy, bounds.width(), bounds.height())
+                    : null;
             if (image != null) return image;
         }
         LauncherGlassIconGeometry.Bounds sourceIcon = LauncherGlassIconGeometry.resolve(source);
@@ -152,13 +156,16 @@ final class LauncherMovingIconGlassClip {
         return proxy;
     }
 
-    private static View findImageChild(ViewGroup parent) {
+    private static View findImageChild(ViewGroup parent, float iconWidth,
+                                       float iconHeight) {
         for (int i = 0; i < parent.getChildCount(); i++) {
             View child = parent.getChildAt(i);
             if (child instanceof ImageView && ((ImageView) child).getDrawable() != null
-                    && child.getWidth() > 0 && child.getHeight() > 0) return child;
+                    && child.getWidth() > 0 && child.getHeight() > 0
+                    && child.getWidth() <= iconWidth * 2.5f
+                    && child.getHeight() <= iconHeight * 2.5f) return child;
             if (child instanceof ViewGroup) {
-                View found = findImageChild((ViewGroup) child);
+                View found = findImageChild((ViewGroup) child, iconWidth, iconHeight);
                 if (found != null) return found;
             }
         }
