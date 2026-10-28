@@ -16,5 +16,11 @@ final class LauncherIconGlassClipGeometry {
         return new Result(b[0], b[1], b[2], b[3],
                 LauncherGlassBoundsPolicy.capRadius(radius, b[2] - b[0], b[3] - b[1]));
     }
+    /** Convert glass geometry to the cached top Drawable's pixel space. */
+    static Result localize(Result shape, float iconLeft, float iconTop) {
+        return new Result(shape.left - iconLeft, shape.top - iconTop,
+                shape.right - iconLeft, shape.bottom - iconTop, shape.radius);
+    }
+
     private LauncherIconGlassClipGeometry() {}
 }
