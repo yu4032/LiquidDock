@@ -16,14 +16,10 @@ final class LauncherIconGlassClipGeometry {
         return new Result(b[0], b[1], b[2], b[3],
                 LauncherGlassBoundsPolicy.capRadius(radius, b[2] - b[0], b[3] - b[1]));
     }
-    /**
-     * TextView's icon drawable can paint shadow/edge pixels beyond all four
-     * reported bounds. Leave a two-pixel guard band around the graphic so the
-     * subtractive mask cannot leave a straight top/bottom/side seam.
-     */
-    static float[] cutoutRow(float viewWidth, float iconTop, float iconBottom) {
-        return new float[]{-2f, Math.max(0f, iconTop - 2f),
-                Math.max(0f, viewWidth) + 2f, iconBottom + 2f};
+    /** Convert glass geometry to the cached top Drawable's pixel space. */
+    static Result localize(Result shape, float iconLeft, float iconTop) {
+        return new Result(shape.left - iconLeft, shape.top - iconTop,
+                shape.right - iconLeft, shape.bottom - iconTop, shape.radius);
     }
 
     private LauncherIconGlassClipGeometry() {}
