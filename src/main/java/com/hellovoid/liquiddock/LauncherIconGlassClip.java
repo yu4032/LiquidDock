@@ -222,6 +222,13 @@ final class LauncherIconGlassClip {
                 || lower.contains("lottie") || lower.contains("animated")
                 || lower.contains("dynamic")) return false;
 
+        if (drawable instanceof AdaptiveIconDrawable) {
+            AdaptiveIconDrawable adaptive = (AdaptiveIconDrawable) drawable;
+            return (adaptive.getForeground() == null
+                    || safeStaticDrawable(adaptive.getForeground(), depth + 1))
+                    && (adaptive.getBackground() == null
+                    || safeStaticDrawable(adaptive.getBackground(), depth + 1));
+        }
         if (name.equals("com.miui.home.launcher.graphics.drawable.BadgeDrawable")) {
             // Work-profile badges are static decorations, but their image
             // source must not secretly be a live MAML/Fancy drawable.
