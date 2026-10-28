@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Path;
 import android.graphics.RectF;
-import android.view.SurfaceControl;
 import android.view.View;
 
 import java.lang.reflect.Field;
@@ -19,8 +18,7 @@ final class LauncherIconGlassMotionClip {
     private static Field layerIcon;
     private static Field layerShader;
     private static Field layerValidRect;
-    private static Field surfaceCompatControl;
-    private static Method transactionGetter;
+    private static Method setCornerRadius;
     private static boolean viewReady;
     private static boolean layerReady;
 
@@ -48,9 +46,8 @@ final class LauncherIconGlassMotionClip {
             layerIcon = HookUtil.findField(layerClass, "mFloatingIconSurfaceControl");
             layerShader = HookUtil.findField(layerClass, "mFloatingIconShaderSurfaceControl");
             layerValidRect = HookUtil.findField(layerClass, "mValidIconRectF");
-            surfaceCompatControl = HookUtil.findField(wrapperClass, "mSurfaceControl");
-            transactionGetter = HookUtil.findMethodExact(
-                    transactionClass, "getTransaction", new Class<?>[0]);
+            setCornerRadius = HookUtil.findMethodExact(transactionClass,
+                    "setCornerRadius", new Class<?>[]{wrapperClass, float.class});
             layerReady = true;
         } catch (Throwable error) {
             MainHook.log(TAG + " Layer2 SurfaceControl unavailable: " + error);
@@ -117,29 +114,19 @@ final class LauncherIconGlassMotionClip {
                     rect.width(), rect.height(), valid.width(), valid.height());
             float localRadius = LauncherIconGlassMotionPolicy.localRadius(radiusScreen, scale);
             if (!Float.isFinite(localRadius)) return;
-            Object value = transactionGetter.invoke(result);
-            if (!(value instanceof SurfaceControl.Transaction)) return;
-            SurfaceControl.Transaction txn = (SurfaceControl.Transaction) value;
-            Object mainWrapper = layerIcon.get(owner);
-            SurfaceControl main = asSurface(mainWrapper);
-            if (main == null || !main.isValid()) return;
-            // Override in the *same pending transaction* that the OEM returns.
-            // No extra apply(), no inter-frame Surface round-trip and no new timer.
-            txn.setCornerRadius(main, localRadius);
-            SurfaceControl shader = asSurface(layerShader.get(owner));
-            if (shader != null && shader.isValid()) {
-                txn.setCornerRadius(shader, localRadius);
+            Object main = layerIcon.get(owner);
+            if (main == null) return;
+            // Call Xiaomi's exact TransactionCompat.setCornerRadius() overload;
+            // do not use hidden Android framework API stubs or apply a new transaction.
+            setCornerRadius.invoke(result, main, localRadius);
+            Object shader = layerShader.get(owner);
+            if (shader != null) {
+                setCornerRadius.invoke(result, shader, localRadius);
             }
             logAppliedOnce("Layer2");
         } catch (Throwable error) {
             logOnce("Layer2", error);
         }
-    }
-
-    private static SurfaceControl asSurface(Object wrapper) throws IllegalAccessException {
-        if (wrapper == null) return null;
-        Object value = surfaceCompatControl.get(wrapper);
-        return value instanceof SurfaceControl ? (SurfaceControl) value : null;
     }
 
     private static final java.util.HashSet<String> LOGGED = new java.util.HashSet<>();
