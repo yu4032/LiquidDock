@@ -33,23 +33,39 @@ final class LauncherIconGlassClip {
         float width, height, left, top, right, bottom, radius;
         boolean continuous;
         float offsetDp, cornerDp;
+        int hostWidth, hostHeight, baseIconSize, bitmapGeneration;
+        int paddingTop, paddingLeft, paddingRight;
+        boolean dock, workstationMode;
+        float workstationRadius, density;
 
-        boolean matches(Drawable drawable, LauncherIconGlassClipGeometry.Result shape,
-                        float width, float height, boolean continuous,
-                        LiquidDockConfig.Glass config) {
-            return original.get() == drawable && display.get() != null
-                    && this.width == width && this.height == height
-                    && this.left == shape.left && this.top == shape.top
-                    && this.right == shape.right && this.bottom == shape.bottom
-                    && this.radius == shape.radius && this.continuous == continuous
-                    && this.offsetDp == config.iconStyle.sizeOffsetDp
-                    && this.cornerDp == config.iconStyle.cornerRadiusDp;
+        boolean matchesBinding(TextView host, Drawable source,
+                               LiquidDockConfig.Glass latest, boolean dock,
+                               boolean workstationMode, int iconSize) {
+            if (original.get() != source || display.get() == null
+                    || this.dock != dock || this.workstationMode != workstationMode
+                    || (dock && this.workstationRadius != workstationRadiusDp)
+                    || this.baseIconSize != iconSize
+                    || this.hostWidth != host.getWidth()
+                    || this.hostHeight != host.getHeight()
+                    || this.paddingTop != host.getPaddingTop()
+                    || this.paddingLeft != host.getCompoundPaddingLeft()
+                    || this.paddingRight != host.getCompoundPaddingRight()
+                    || this.density != host.getResources().getDisplayMetrics().density
+                    || this.offsetDp != latest.iconStyle.sizeOffsetDp
+                    || this.cornerDp != latest.iconStyle.cornerRadiusDp
+                    || this.continuous != latest.continuousCorners) return false;
+            if (source instanceof BitmapDrawable) {
+                Bitmap bitmap = ((BitmapDrawable) source).getBitmap();
+                return bitmap != null && bitmapGeneration == bitmap.getGenerationId();
+            }
+            return true;
         }
 
         void set(Drawable original, BitmapDrawable display,
                  LauncherIconGlassClipGeometry.Result shape,
                  float width, float height, boolean continuous,
-                 LiquidDockConfig.Glass config) {
+                 LiquidDockConfig.Glass config, TextView host,
+                 boolean dock, boolean workstationMode, int iconSize) {
             this.original = new WeakReference<>(original);
             this.display = new WeakReference<>(display);
             this.left = shape.left;
@@ -62,6 +78,19 @@ final class LauncherIconGlassClip {
             this.continuous = continuous;
             this.offsetDp = config.iconStyle.sizeOffsetDp;
             this.cornerDp = config.iconStyle.cornerRadiusDp;
+            this.hostWidth = host.getWidth();
+            this.hostHeight = host.getHeight();
+            this.paddingTop = host.getPaddingTop();
+            this.paddingLeft = host.getCompoundPaddingLeft();
+            this.paddingRight = host.getCompoundPaddingRight();
+            this.density = host.getResources().getDisplayMetrics().density;
+            this.dock = dock;
+            this.workstationMode = workstationMode;
+            this.workstationRadius = workstationRadiusDp;
+            this.baseIconSize = iconSize;
+            Bitmap bitmap = original instanceof BitmapDrawable
+                    ? ((BitmapDrawable) original).getBitmap() : null;
+            this.bitmapGeneration = bitmap != null ? bitmap.getGenerationId() : -1;
         }
     }
 
@@ -181,20 +210,36 @@ final class LauncherIconGlassClip {
     }
 
     private static void installCachedDrawable(TextView host, Drawable original) {
+        LiquidDockConfig.Glass config = glass;
+        if (config == null) return;
+        boolean dock = DockGlassItemRegistry.contains(host);
+        boolean workstationMode = dock && MainHook.isWorkstationMode();
+        HookUtil.InvocationResult<Object> iconSizeResult =
+                HookUtil.tryInvoke(host, "getIconSize");
+        int iconSize = iconSizeResult.succeeded() && iconSizeResult.value() instanceof Number
+                ? ((Number) iconSizeResult.value()).intValue() : 0;
+        Cache cache = CACHE.get(host);
+        if (cache != null && cache.matchesBinding(host, original, config,
+                dock, workstationMode, iconSize)) {
+            BitmapDrawable existing = cache.display.get();
+            if (existing != null) {
+                existing.setBounds(original.getBounds());
+                replaceDisplayOnly(host, existing);
+            }
+            return;
+        }
+
         Rect bounds = original.getBounds();
         int width = bounds.width();
         int height = bounds.height();
         if (width <= 0 || height <= 0 || width > 512 || height > 512) return;
         LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(host);
-        LiquidDockConfig.Glass config = glass;
-        if (icon == null || config == null) return;
-
+        if (icon == null) return;
         float density = host.getResources().getDisplayMetrics().density;
-        boolean dock = DockGlassItemRegistry.contains(host);
         float radiusDp = config.iconStyle.cornerRadiusDp;
         if (dock) {
             radiusDp = WorkstationDockIconRadiusPolicy.resolve(
-                    radiusDp, workstationRadiusDp, density, MainHook.isWorkstationMode());
+                    radiusDp, workstationRadiusDp, density, workstationMode);
         }
         float min = Math.min(icon.width(), icon.height());
         float nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
@@ -214,14 +259,7 @@ final class LauncherIconGlassClip {
         // top compound Drawable's own local coordinate system.
         LauncherIconGlassClipGeometry.Result local =
                 LauncherIconGlassClipGeometry.localize(shape, icon.left, icon.top);
-        Cache cache = CACHE.get(host);
-        if (cache != null && cache.matches(original, local, width, height,
-                config.continuousCorners, config)) {
-            BitmapDrawable existing = cache.display.get();
-            if (existing != null) replaceDisplayOnly(host, existing);
-            return;
-        }
-
+        // This branch runs only when a source, silhouette, or geometry changed.
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         Path outline = new Path();
@@ -256,7 +294,8 @@ final class LauncherIconGlassClip {
             CACHE.put(host, cache);
         }
         cache.set(original, baked, local, width, height,
-                config.continuousCorners, config);
+                config.continuousCorners, config, host,
+                dock, workstationMode, iconSize);
         replaceDisplayOnly(host, baked);
     }
 
