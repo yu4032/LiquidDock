@@ -105,6 +105,10 @@ final class LauncherIconGlassClip {
                 if (config == null || !GlassRuntimeState.isAnyIconEnabled()
                         || (!dock && (node == null || node.kind() != LauncherGlassDragState.Kind.ICON)))
                     return chain.proceed(args);
+                // The native FloatingIcon owns the moving pixels while its proxy is active.
+                // The stationary source is hidden and need not pay for a GPU clip every frame.
+                if (dock ? DockGlassItemRegistry.animationSample(view).proxyActive
+                        : node.isLaunchProxyActive()) return chain.proceed(args);
                 LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(view);
                 if (icon == null) return chain.proceed(args);
                 LauncherIconGlassClipGeometry.Result shape = resolveShape(view, config, icon, dock);
