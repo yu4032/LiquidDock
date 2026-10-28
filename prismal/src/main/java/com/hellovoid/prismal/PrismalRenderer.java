@@ -249,7 +249,10 @@ public final class PrismalRenderer implements AutoCloseable {
     public void reblurPreparedBackdrop(PrismalParams params) {
         if (!backdropPrepared) throw new IllegalStateException("No prepared backdrop to reblur");
         PrismalParams effective = params != null ? params : PrismalParams.builder().build();
-        renderBlur(effective, blurFramebufferV);
+        float requestedSigma = blurSigma(effective);
+        if (PrismalBlurReusePolicy.needsReblur(cachedBlurSigma, requestedSigma)) {
+            renderBlur(effective, blurFramebufferV);
+        }
         glassFrameBegun = false;
         glassDrawCount = 0;
     }
@@ -548,6 +551,9 @@ public final class PrismalRenderer implements AutoCloseable {
                         PrismalComponentGateShader.apply(
                                 PrismalOpticalEdgeShader.apply(
                                         PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
+                // The baseline program stays untouched: on Mali, this branch hurts the
+                // smaller baseline shader while helping the decorated programs.
+                fragment = PrismalInteriorFastPath.apply(fragment);
                 fragment = PrismalEdgeDecorationShader.apply(fragment);
                 String vertex = PrismalRasterGuardShader.applyWithEdgeGuard(
                         PrismalShaderSources.VERTEX);
@@ -649,11 +655,13 @@ public final class PrismalRenderer implements AutoCloseable {
         unbindInterleavedQuad(sourcePositionLocation, sourceUvLocation);
     }
 
+    private float blurSigma(PrismalParams p) {
+        return PrismalBlurReusePolicy.sigma(p.blurRadiusPx, renderWidth, renderHeight,
+                width, height, BLUR_FBO_SCALE);
+    }
+
     private void renderBlur(PrismalParams p, int verticalFramebuffer) {
-        float scaleX = renderWidth / (float) Math.max(1, width);
-        float scaleY = renderHeight / (float) Math.max(1, height);
-        float physicalScale = Math.max(0.0001f, Math.min(scaleX, scaleY));
-        float sigma = Math.max(p.blurRadiusPx * physicalScale * BLUR_FBO_SCALE, 0.5f);
+        float sigma = blurSigma(p);
         boolean updateTexelSize = cachedBlurWidth != blurWidth || cachedBlurHeight != blurHeight;
         boolean updateSigma = Float.compare(cachedBlurSigma, sigma) != 0;
         if (updateSigma && optimizedGaussianBlur) gaussianKernel.update(sigma);

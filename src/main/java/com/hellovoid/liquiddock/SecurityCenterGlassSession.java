@@ -541,12 +541,10 @@ final class SecurityCenterGlassSession implements RootPassBlurBackend.Consumer {
                 PrismalHighlightProfile nodeHighlights = isVendorApps
                         ? vendorHighlights : sidebarHighlights;
                 sourceBackend.makePbufferCurrent();
-                // A shared source texture is safe, but Gaussian blur is parameter-dependent.
-                // Do not let a sidebar-only blur override affect the vendor All Apps node.
-                if (isVendorApps && Float.compare(
-                        sidebarParams.blurRadiusPx, vendorParams.blurRadiusPx) != 0) {
-                    prismalRenderer.reblurPreparedBackdrop(vendorParams);
-                }
+                // The same prepared source serves every sink. Select the current node's
+                // actual kernel; the renderer reuses an identical blur without another pass.
+                // This also restores sidebar blur when an All Apps sink precedes it.
+                prismalRenderer.reblurPreparedBackdrop(nodeParams);
                 prismalRenderer.beginGlassFrame();
                 prismalRenderer.setEdgeDecoration(
                         GlassEdgeEffects.current(GlassEdgeEffects.SECURITY_CENTER), 1f);

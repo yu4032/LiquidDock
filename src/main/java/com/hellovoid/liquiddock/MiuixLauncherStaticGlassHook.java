@@ -27,6 +27,21 @@ final class MiuixLauncherStaticGlassHook {
 
     static void onLiveGlassConfigChanged(LiquidDockConfig.Glass config) {
         installedGlassConfig = config;
+        LauncherIconGlassClip.configure(config);
+        invalidateIconHosts();
+    }
+
+    static void onWorkstationConfigChanged(LiquidDockConfig.Workstation config) {
+        LauncherIconGlassClip.workstation(config);
+        invalidateIconHosts();
+    }
+
+    static void onWorkstationModeChanged() { invalidateIconHosts(); }
+
+    private static void invalidateIconHosts() {
+        for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
+            if (isIconHost(host)) host.invalidate();
+        }
     }
 
     static void onRuntimeGlassDisabled() {
@@ -40,6 +55,7 @@ final class MiuixLauncherStaticGlassHook {
             DockGlassItemRegistry.unregister(host);
             LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
             if (node != null) node.dispose();
+            if (isIconHost(host)) host.invalidate();
         }
         BOOTSTRAP_OBSERVERS.clear();
     }
@@ -71,6 +87,7 @@ final class MiuixLauncherStaticGlassHook {
         DockGlassItemRegistry.unregister(host);
         LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
         if (node != null && node.kind() == LauncherGlassDragState.Kind.ICON) node.dispose();
+        host.invalidate();
     }
 
     /** Rebind observed widget hosts immediately after a live enable (no new Hook install). */
@@ -119,6 +136,9 @@ final class MiuixLauncherStaticGlassHook {
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         installedGlassConfig = glassConfig;
+        LauncherIconGlassClip.configure(glassConfig);
+        LauncherIconGlassClip.workstation(runtimeConfig.workstation);
+        LauncherIconGlassClip.install(classLoader);
         // Observe native self-blur writes before constructing/binding widget hosts.
         LauncherWidgetNativeViewBlurGate.install(classLoader);
         boolean any = false;
@@ -514,6 +534,7 @@ final class MiuixLauncherStaticGlassHook {
         if (node == null || node.kind() != kind) {
             float radius = resolveCornerRadius(host, kind);
             node = LauncherGlassStaticNode.attachToMaterial(host, kind, radius, glassConfig);
+            if (kind == LauncherGlassDragState.Kind.ICON) host.invalidate();
         } else {
             node.requestLifecycleRefresh();
         }
