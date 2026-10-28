@@ -20,4 +20,20 @@ public class LauncherIconGlassClipGeometryTest {
         assertEquals(110f, shape.right, 0f);
         assertEquals(22f, shape.radius, 0f);
     }
+    @Test public void fullDrawableRowRemovesLateralSeamWithoutClippingLabel() {
+        // A 100px icon inside a 160px ShortcutIcon may paint at x < 30 or x > 130.
+        float[] row = LauncherIconGlassClipGeometry.cutoutRow(160f, 12f, 112f);
+        assertArrayEquals(new float[]{-1f, 12f, 161f, 112f}, row, 0f);
+        assertTrue(row[0] < 30f);
+        assertTrue(row[2] > 130f);
+        // Only the icon row is clipped; the text label begins below its bottom.
+        assertEquals(112f, row[3], 0f);
+    }
+
+    @Test public void resizingDockInvalidatesFullRowWidth() {
+        float[] before = LauncherIconGlassClipGeometry.cutoutRow(128f, 0f, 100f);
+        float[] after = LauncherIconGlassClipGeometry.cutoutRow(160f, 0f, 100f);
+        assertEquals(129f, before[2], 0f);
+        assertEquals(161f, after[2], 0f);
+    }
 }
