@@ -17,11 +17,13 @@ final class LauncherIconGlassClipGeometry {
                 LauncherGlassBoundsPolicy.capRadius(radius, b[2] - b[0], b[3] - b[1]));
     }
     /**
-     * Clear stray pixels across the drawable row, including those outside the
-     * nominal icon rectangle. Never include the label below this row.
+     * TextView's icon drawable can paint shadow/edge pixels beyond all four
+     * reported bounds. Leave a two-pixel guard band around the graphic so the
+     * subtractive mask cannot leave a straight top/bottom/side seam.
      */
     static float[] cutoutRow(float viewWidth, float iconTop, float iconBottom) {
-        return new float[]{-1f, iconTop, Math.max(0f, viewWidth) + 1f, iconBottom};
+        return new float[]{-2f, Math.max(0f, iconTop - 2f),
+                Math.max(0f, viewWidth) + 2f, iconBottom + 2f};
     }
 
     private LauncherIconGlassClipGeometry() {}
