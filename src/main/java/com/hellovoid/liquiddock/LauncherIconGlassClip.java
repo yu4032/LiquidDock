@@ -15,6 +15,7 @@ import android.widget.TextView;
 import com.hellovoid.prismal.PrismalContinuousCorners;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -153,25 +154,28 @@ final class LauncherIconGlassClip {
         try {
             Class<?> shortcut = Class.forName("com.miui.home.launcher.ShortcutIcon", false, loader);
 
-            // OEM Launcher 4.50: applyIconDrawable() is used by bind, measure,
-            // setIconVisibility(0) and animation handoff. Never touch mIconDrawable.
-            HookUtil.hook(HookUtil.findMethodExact(shortcut, "applyIconDrawable",
-                    new Class<?>[]{Drawable.class}), chain -> {
+            // Launcher 4.50 dispatches updateIconDrawable() on initial binds,
+            // re-measure, icon replacement and our explicit post-registration
+            // refresh. Its private applyIconDrawable() may be ART-inlined,
+            // so never depend on a hook at that private call site.
+            Field source = HookUtil.findField(shortcut, "mIconDrawable");
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "updateIconDrawable",
+                    new Class<?>[0]), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                bakeBoundSource(chain.getThisObject(), source);
+                return result;
+            });
+
+            // Native launch/return uses setIconVisibility() to replace the
+            // displayed icon with an identity-sensitive transparent placeholder
+            // or restore the original. Re-bake only at the restoration edge.
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "setIconVisibility",
+                    new Class<?>[]{int.class}), chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
-                if (!(chain.getThisObject() instanceof TextView)) return result;
-                TextView host = (TextView) chain.getThisObject();
-                Drawable original = args.length == 1 && args[0] instanceof Drawable
-                        ? (Drawable) args[0] : null;
-                if (original == null) return result;
-
-                // The OEM transparent placeholder is installed during app transitions.
-                // Replacing it would change the identity-based visibility contract.
-                if (!eligible(host)) return result;
-                try {
-                    installCachedDrawable(host, original);
-                } catch (Throwable error) {
-                    logSourceOnce(original, "error: " + error);
+                if (args.length == 1 && args[0] instanceof Integer
+                        && ((Integer) args[0]) == 0) {
+                    bakeBoundSource(chain.getThisObject(), source);
                 }
                 return result;
             });
@@ -191,9 +195,27 @@ final class LauncherIconGlassClip {
                 }
                 return result;
             });
-            MainHook.log(TAG + " baked resource hooks installed (no onDraw clipping)");
+            MainHook.log(TAG + " public OEM bind/visibility hooks installed; no onDraw clipping");
         } catch (Throwable error) {
             MainHook.log(TAG + " unavailable: " + error);
+        }
+    }
+
+    private static void bakeBoundSource(Object owner, Field source) {
+        if (!(owner instanceof TextView)) return;
+        TextView host = (TextView) owner;
+        if (!eligible(host)) return;
+        try {
+            // getIconVisibility() is defined by OEM as identity against its
+            // transparent placeholder; do not disturb a hidden icon.
+            HookUtil.InvocationResult<Object> visible =
+                    HookUtil.tryInvoke(owner, "getIconVisibility");
+            if (!visible.succeeded() || !(visible.value() instanceof Number)
+                    || ((Number) visible.value()).intValue() != 0) return;
+            Drawable original = (Drawable) source.get(owner);
+            if (original != null) installCachedDrawable(host, original);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " source bind failed: " + error);
         }
     }
 
