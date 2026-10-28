@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 final class LauncherIconGlassMotionClip {
     private static final String TAG = "[DC][IconMotionClip]";
     private static Field viewClip;
+    private static Field viewShadeClip;
     private static Field layerIcon;
     private static Field layerShader;
     private static Field layerValidRect;
@@ -30,6 +31,7 @@ final class LauncherIconGlassMotionClip {
             Class<?> viewClass = Class.forName(
                     "com.miui.home.recents.views.FloatingIconView2", false, loader);
             viewClip = HookUtil.findField(viewClass, "mClipPath");
+            viewShadeClip = HookUtil.findField(viewClass, "mShadeClipPath");
             viewReady = true;
         } catch (Throwable error) {
             MainHook.log(TAG + " View2 clip unavailable: " + error);
@@ -88,6 +90,17 @@ final class LauncherIconGlassMotionClip {
                     bounds.right, bounds.bottom, capped, config.continuousCorners);
             // OEM drawBackground/drawForeground both clip directly against mClipPath.
             // The next update() resets the same Path, so no persistent OEM state is held.
+            Path shade = (Path) viewShadeClip.get(proxy);
+            if (shade != null && !shade.isEmpty()) {
+                RectF shadeBounds = new RectF();
+                shade.computeBounds(shadeBounds, true);
+                float shadeRadius = LauncherGlassBoundsPolicy.capRadius(
+                        localRadius, shadeBounds.width(), shadeBounds.height());
+                LauncherIconGlassShapePath.build(shade, shadeBounds.left, shadeBounds.top,
+                        shadeBounds.right, shadeBounds.bottom, shadeRadius,
+                        config.continuousCorners);
+            }
+            logAppliedOnce("View2");
             proxy.invalidate();
         } catch (Throwable error) {
             logOnce("View2", error);
@@ -117,6 +130,7 @@ final class LauncherIconGlassMotionClip {
             if (shader != null && shader.isValid()) {
                 txn.setCornerRadius(shader, localRadius);
             }
+            logAppliedOnce("Layer2");
         } catch (Throwable error) {
             logOnce("Layer2", error);
         }
@@ -129,6 +143,13 @@ final class LauncherIconGlassMotionClip {
     }
 
     private static final java.util.HashSet<String> LOGGED = new java.util.HashSet<>();
+    private static void logAppliedOnce(String name) {
+        synchronized (LOGGED) {
+            if (LOGGED.add("applied-" + name)) {
+                MainHook.log(TAG + " " + name + " native animated clip active");
+            }
+        }
+    }
     private static void logOnce(String name, Throwable error) {
         synchronized (LOGGED) {
             if (LOGGED.add(name)) MainHook.log(TAG + " " + name + " failed: " + error);
