@@ -215,7 +215,7 @@ final class LauncherIconGlassClip {
      */
     private static boolean safeStaticDrawable(Drawable drawable, int depth) {
         if (drawable == null || depth > 4 || drawable instanceof Animatable
-                || drawable.getClass() == ColorDrawable.class) return false;
+                || (depth == 0 && drawable.getClass() == ColorDrawable.class)) return false;
         String name = drawable.getClass().getName();
         String lower = name.toLowerCase(java.util.Locale.ROOT);
         if (lower.contains("fancy") || lower.contains("maml")
@@ -229,11 +229,11 @@ final class LauncherIconGlassClip {
                     HookUtil.tryInvoke(drawable, "getBackDrawable");
             HookUtil.InvocationResult<Object> badge =
                     HookUtil.tryInvoke(drawable, "getBadgeDrawable");
-            return back.succeeded() && back.value() instanceof Drawable
-                    && safeStaticDrawable((Drawable) back.value(), depth + 1)
-                    && (!badge.succeeded() || badge.value() == null
-                        || badge.value() instanceof Drawable
-                        && safeStaticDrawable((Drawable) badge.value(), depth + 1));
+            if (!back.succeeded() || !(back.value() instanceof Drawable)
+                    || !safeStaticDrawable((Drawable) back.value(), depth + 1)) return false;
+            return !badge.succeeded() || badge.value() == null
+                    || badge.value() instanceof Drawable
+                    && safeStaticDrawable((Drawable) badge.value(), depth + 1);
         }
         if (name.equals("com.miui.home.launcher.graphics.drawable.LayerAdaptiveIconDrawable")) {
             HookUtil.InvocationResult<Object> background =
@@ -293,9 +293,15 @@ final class LauncherIconGlassClip {
         Rect bounds = original.getBounds();
         int width = bounds.width();
         int height = bounds.height();
-        if (width <= 0 || height <= 0 || width > 512 || height > 512) return;
+        if (width <= 0 || height <= 0 || width > 512 || height > 512) {
+            logSourceOnce(original, "skip-bounds " + width + "x" + height);
+            return;
+        }
         LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(host);
-        if (icon == null) return;
+        if (icon == null) {
+            logSourceOnce(original, "skip-geometry");
+            return;
+        }
         float density = host.getResources().getDisplayMetrics().density;
         float radiusDp = config.iconStyle.cornerRadiusDp;
         if (dock) {
