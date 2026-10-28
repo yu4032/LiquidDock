@@ -139,7 +139,7 @@ final class MiuixLauncherStaticGlassHook {
         LauncherIconGlassClip.configure(glassConfig);
         LauncherIconGlassClip.workstation(runtimeConfig.workstation);
         LauncherIconGlassClip.install(classLoader);
-        LauncherIconGlassMotionClip.prepare(classLoader);
+        LauncherIconGlassCachedAsset.install(classLoader);
         // Observe native self-blur writes before constructing/binding widget hosts.
         LauncherWidgetNativeViewBlurGate.install(classLoader);
         boolean any = false;
@@ -254,7 +254,6 @@ final class MiuixLauncherStaticGlassHook {
             HookUtil.hookMethod(classLoader, className, "update",
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
-                        View animatedIconSource = null;
                         // Launcher 4.50 WindowElement and FastLaunchWindowElement both pass
                         // (animType != CLOSE_TO_HOME) as the second boolean in this overload.
                         if (GlassRuntimeState.isIconEnabled()
@@ -269,14 +268,10 @@ final class MiuixLauncherStaticGlassHook {
                                 LauncherGlassStaticNode node =
                                         LauncherGlassStaticNode.find((View) target);
                                 if (node != null && args[2] instanceof Number) {
-                                    animatedIconSource = (View) target;
                                     if ((Boolean) args[6]) {
                                         // A running return can be retargeted into a new launch.
                                         node.resetHomeReturnFade();
-                                        Object result = chain.proceed(args);
-                                        return applyWorkspaceIconMotion(
-                                                owner, result, animatedIconSource,
-                                                useRotationRect, args);
+                                        return chain.proceed(args);
                                     }
                                     if (args[3] instanceof Number) {
                                         node.updateHomeReturnProgress(((Number) args[3]).floatValue());
@@ -328,9 +323,7 @@ final class MiuixLauncherStaticGlassHook {
                                 }
                             }
                         }
-                        Object result = chain.proceed(args);
-                        return applyWorkspaceIconMotion(chain.getThisObject(), result,
-                                animatedIconSource, useRotationRect, args);
+                        return chain.proceed(args);
                     }, RectF.class, RectF.class,
                     float.class, float.class, float.class,
                     boolean.class, boolean.class, boolean.class,
@@ -340,31 +333,6 @@ final class MiuixLauncherStaticGlassHook {
             MainHook.log(TAG + " final floating proxy geometry hook unavailable class="
                     + className + ": " + error);
         }
-    }
-
-    private static Object applyWorkspaceIconMotion(Object owner, Object result,
-            View source, boolean layer2, Object[] args) {
-        if (source == null || args.length != 10
-                || !(args[3] instanceof Number) || !(args[4] instanceof Number)
-                || !(args[6] instanceof Boolean)) return result;
-        boolean drawIcon;
-        if (layer2) {
-            try {
-                // Layer2.isDrawIcon() is unconditional; the real flag owns its Surface.
-                drawIcon = HookUtil.getBooleanField(owner, "mIsDrawIcon");
-            } catch (Throwable error) {
-                return result;
-            }
-        } else {
-            HookUtil.InvocationResult<Object> visible = HookUtil.tryInvoke(owner, "isDrawIcon");
-            drawIcon = visible.succeeded() && Boolean.TRUE.equals(visible.value());
-        }
-        if (drawIcon) {
-            LauncherIconGlassMotionClip.apply(owner, result, source, layer2,
-                    (RectF) args[1], ((Number) args[3]).floatValue(),
-                    ((Number) args[4]).floatValue(), !((Boolean) args[6]));
-        }
-        return result;
     }
 
     private static void installWorkspaceResumeReconcileHook(
