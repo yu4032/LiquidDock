@@ -71,6 +71,10 @@ final class DockGlassItemRegistry {
             Miuix307ZeroCopyRenderer.requestDockProgressRefresh();
         }
     }
+    static synchronized boolean isProxyActive(View view) {
+        return ANIMATION.isProxyActive(view);
+    }
+
     static synchronized DockIconAnimationState.Sample animationSample(View view) {
         return ANIMATION.sample(view);
     }
