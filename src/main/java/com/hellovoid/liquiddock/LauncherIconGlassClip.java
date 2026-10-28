@@ -17,8 +17,10 @@ import com.hellovoid.prismal.PrismalContinuousCorners;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
@@ -28,20 +30,21 @@ import java.util.WeakHashMap;
  */
 final class LauncherIconGlassClip {
     private static final String TAG = "[DC][IconGlassClip]";
-    private static final WeakHashMap<TextView, Cache> CACHE = new WeakHashMap<>();
+    private static final Map<TextView, Cache> CACHE = Collections.synchronizedMap(new WeakHashMap<>());
     private static volatile LiquidDockConfig.Glass glass;
     private static volatile float workstationRadiusDp;
     private static final HashSet<String> SOURCE_LOGGED = new HashSet<>();
 
     private static final class Cache {
-        WeakReference<Drawable> original = new WeakReference<>(null);
-        WeakReference<BitmapDrawable> display = new WeakReference<>(null);
+        volatile WeakReference<Drawable> original = new WeakReference<>(null);
+        volatile WeakReference<BitmapDrawable> display = new WeakReference<>(null);
         float width, height, left, top, right, bottom, radius;
         boolean continuous;
         float offsetDp, cornerDp;
         int hostWidth, hostHeight, baseIconSize, bitmapGeneration;
         int paddingTop, paddingLeft, paddingRight;
-        boolean dock, workstationMode;
+        volatile boolean dock;
+        boolean workstationMode;
         float workstationRadius, density;
 
         boolean matchesBinding(TextView host, Drawable source,
@@ -125,7 +128,9 @@ final class LauncherIconGlassClip {
 
     /** Called only on settings/policy changes, not on any animation frame. */
     static void refreshAll() {
-        for (TextView host : new ArrayList<>(CACHE.keySet())) {
+        List<TextView> hosts;
+        synchronized (CACHE) { hosts = new ArrayList<>(CACHE.keySet()); }
+        for (TextView host : hosts) {
             if (host == null) continue;
             Cache cache = CACHE.get(host);
             if (cache == null) continue;
@@ -159,6 +164,16 @@ final class LauncherIconGlassClip {
             // refresh. Its private applyIconDrawable() may be ART-inlined,
             // so never depend on a hook at that private call site.
             Field source = HookUtil.findField(shortcut, "mIconDrawable");
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "getContentDrawable",
+                    new Class<?>[0]), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                return animationDrawable(chain.getThisObject(), result, false);
+            });
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "getIconDrawable",
+                    new Class<?>[0]), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                return animationDrawable(chain.getThisObject(), result, true);
+            });
             HookUtil.hook(HookUtil.findMethodExact(shortcut, "updateIconDrawable",
                     new Class<?>[0]), chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
@@ -166,15 +181,14 @@ final class LauncherIconGlassClip {
                 return result;
             });
 
-            // Native launch/return uses setIconVisibility() to replace the
-            // displayed icon with an identity-sensitive transparent placeholder
-            // or restore the original. Re-bake only at the restoration edge.
+            // OEM uses 0 for the real drawable and 4 for its transparent placeholder.
+            // Re-bake only when the original is restored.
             HookUtil.hook(HookUtil.findMethodExact(shortcut, "setIconVisibility",
                     new Class<?>[]{int.class}), chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
                 if (args.length == 1 && args[0] instanceof Integer
-                        && ((Integer) args[0]) == 0) {
+                        && LauncherIconAnimationClipPolicy.isOemIconVisible((Integer) args[0])) {
                     bakeBoundSource(chain.getThisObject(), source);
                 }
                 return result;
@@ -201,6 +215,25 @@ final class LauncherIconGlassClip {
         }
     }
 
+    private static Object animationDrawable(Object owner, Object original, boolean refresh) {
+        if (!(owner instanceof TextView) || !(original instanceof Drawable)
+                || !GlassRuntimeState.isAnyIconEnabled()) return original;
+        Cache cache = CACHE.get((TextView) owner);
+        BitmapDrawable display = cache != null ? cache.display.get() : null;
+        if (display == null || cache.original.get() != original
+                || (cache.dock ? !DockGlassItemRegistry.contains((View) owner)
+                        : !GlassRuntimeState.isIconEnabled())) return original;
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        if (!(refresh ? LauncherIconAnimationClipPolicy.isFloatingIconRefresh(stack)
+                : LauncherIconAnimationClipPolicy.isFloatingIconInit(stack))) return original;
+        Drawable.ConstantState state = display.getConstantState();
+        if (state == null) return original;
+        Drawable animationIcon = state.newDrawable(((TextView) owner).getResources()).mutate();
+        animationIcon.setBounds(display.getBounds());
+        logSourceOnce((Drawable) original, refresh ? "animation-refresh-baked" : "animation-baked");
+        return animationIcon;
+    }
+
     private static void bakeBoundSource(Object owner, Field source) {
         if (!(owner instanceof TextView)) return;
         TextView host = (TextView) owner;
@@ -211,7 +244,8 @@ final class LauncherIconGlassClip {
             HookUtil.InvocationResult<Object> visible =
                     HookUtil.tryInvoke(owner, "getIconVisibility");
             if (!visible.succeeded() || !(visible.value() instanceof Number)
-                    || ((Number) visible.value()).intValue() != 0) return;
+                    || !LauncherIconAnimationClipPolicy.isOemIconVisible(
+                            ((Number) visible.value()).intValue())) return;
             Drawable original = (Drawable) source.get(owner);
             if (original != null) installCachedDrawable(host, original);
         } catch (Throwable error) {
