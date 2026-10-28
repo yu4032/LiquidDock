@@ -20,4 +20,17 @@ public class LauncherIconGlassClipGeometryTest {
         assertEquals(110f, shape.right, 0f);
         assertEquals(22f, shape.radius, 0f);
     }
+
+    @Test public void clipBandCoversFullIconRowIncludingPixelsOutsideDrawableBounds() {
+        float[] row = LauncherIconGlassClipGeometry.iconRow(160f, 18f, 122f);
+        assertArrayEquals(new float[]{-1f, 17f, 161f, 123f}, row, 0f);
+        // The mask extends beyond both lateral icon edges. Labels below the
+        // compound drawable are not part of the mask.
+        assertTrue(row[0] < 20f);
+        assertTrue(row[2] > 140f);
+    }
+    @Test public void clipBandRemainsValidWhenIconStartsAtTopOfView() {
+        float[] row = LauncherIconGlassClipGeometry.iconRow(120f, 0f, 80f);
+        assertArrayEquals(new float[]{-1f, 0f, 121f, 81f}, row, 0f);
+    }
 }
