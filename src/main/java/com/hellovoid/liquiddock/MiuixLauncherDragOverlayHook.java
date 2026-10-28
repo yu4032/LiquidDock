@@ -151,6 +151,7 @@ final class MiuixLauncherDragOverlayHook {
 
     static void onRuntimeIconGlassDisabled() {
         releaseNodeKind(LauncherGlassNodeKind.ICON);
+        LauncherMovingIconGlassClip.releaseAll();
     }
 
     private static void releaseNodeKind(LauncherGlassNodeKind nodeKind) {
@@ -197,6 +198,10 @@ final class MiuixLauncherDragOverlayHook {
         }
         if (resolved.staticSink != null) resolved.staticSink.setSuppressedByDrag(true);
         ACTIVE.put(child, new DragRecord(resolved.source, resolved.staticSink, resolved.nodeKind));
+        if (resolved.nodeKind == LauncherGlassNodeKind.ICON) {
+            LauncherMovingIconGlassClip.bindDrag(child, resolved.visualBounds,
+                    resolved.style, glassConfig);
+        }
         MainHook.log(TAG + " begin kind=" + resolved.kind
                 + " child=" + child.getClass().getSimpleName());
     }
@@ -211,6 +216,9 @@ final class MiuixLauncherDragOverlayHook {
 
     private static void releaseRecord(View dragView, DragRecord record) {
         if (record == null) return;
+        if (record.nodeKind == LauncherGlassNodeKind.ICON) {
+            LauncherMovingIconGlassClip.release(dragView);
+        }
         View source = record.sourceRef.get();
         LauncherGlassDragOverlay.end(source, dragView);
         LauncherGlassStaticNode staticSink = record.staticSinkRef.get();
