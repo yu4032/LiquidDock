@@ -29,7 +29,7 @@ final class LauncherIconGlassClip {
 
     private static final class Cache {
         WeakReference<Drawable> original = new WeakReference<>(null);
-        BitmapDrawable display;
+        WeakReference<BitmapDrawable> display = new WeakReference<>(null);
         float width, height, left, top, right, bottom, radius;
         boolean continuous;
         LiquidDockConfig.Glass config;
@@ -37,7 +37,7 @@ final class LauncherIconGlassClip {
         boolean matches(Drawable drawable, LauncherIconGlassClipGeometry.Result shape,
                         float width, float height, boolean continuous,
                         LiquidDockConfig.Glass config) {
-            return original.get() == drawable && display != null
+            return original.get() == drawable && display.get() != null
                     && this.width == width && this.height == height
                     && this.left == shape.left && this.top == shape.top
                     && this.right == shape.right && this.bottom == shape.bottom
@@ -50,7 +50,7 @@ final class LauncherIconGlassClip {
                  float width, float height, boolean continuous,
                  LiquidDockConfig.Glass config) {
             this.original = new WeakReference<>(original);
-            this.display = display;
+            this.display = new WeakReference<>(display);
             this.left = shape.left;
             this.top = shape.top;
             this.right = shape.right;
@@ -137,11 +137,11 @@ final class LauncherIconGlassClip {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 TextView host = (TextView) chain.getThisObject();
                 Cache cache = CACHE.get(host);
-                if (cache != null && cache.display != null
-                        && host.getCompoundDrawables()[1] == cache.display) {
+                BitmapDrawable baked = cache != null ? cache.display.get() : null;
+                if (baked != null && host.getCompoundDrawables()[1] == baked) {
                     Drawable nativeDrawable = cache.original.get();
                     if (nativeDrawable != null)
-                        cache.display.setBounds(nativeDrawable.getBounds());
+                        baked.setBounds(nativeDrawable.getBounds());
                 }
                 return result;
             });
@@ -161,8 +161,11 @@ final class LauncherIconGlassClip {
     private static boolean safeStaticDrawable(Drawable drawable) {
         // OEM Fancy/Badge/LayerAdaptiveIcon drawables may be animated, share
         // mutable layers, or paint a live badge. Never rasterize these.
-        return drawable.getClass() == BitmapDrawable.class
-                || drawable.getClass() == AdaptiveIconDrawable.class;
+        if (drawable.getClass() == BitmapDrawable.class) return true;
+        if (drawable.getClass() != AdaptiveIconDrawable.class) return false;
+        AdaptiveIconDrawable adaptive = (AdaptiveIconDrawable) drawable;
+        return !(adaptive.getForeground() instanceof android.graphics.drawable.Animatable)
+                && !(adaptive.getBackground() instanceof android.graphics.drawable.Animatable);
     }
 
     private static void installCachedDrawable(TextView host, Drawable original) {
@@ -203,7 +206,8 @@ final class LauncherIconGlassClip {
         Cache cache = CACHE.get(host);
         if (cache != null && cache.matches(original, local, width, height,
                 config.continuousCorners, config)) {
-            replaceDisplayOnly(host, cache.display);
+            BitmapDrawable existing = cache.display.get();
+            if (existing != null) replaceDisplayOnly(host, existing);
             return;
         }
 
@@ -224,13 +228,15 @@ final class LauncherIconGlassClip {
         }
         canvas.clipPath(outline);
 
-        // ConstantState supplies a separate renderer, avoiding changes to the
-        // original Drawable bounds/callback used by the native Launcher.
-        Drawable.ConstantState state = original.getConstantState();
-        if (state == null) return;
-        Drawable renderer = state.newDrawable(host.getResources()).mutate();
-        renderer.setBounds(0, 0, width, height);
-        renderer.draw(canvas);
+        // One-time draw with the existing OEM tint/filter and native bounds.
+        // No BitmapDrawable/AdaptiveIconDrawable state is modified.
+        int save = canvas.save();
+        try {
+            canvas.translate(-bounds.left, -bounds.top);
+            original.draw(canvas);
+        } finally {
+            canvas.restoreToCount(save);
+        }
 
         BitmapDrawable baked = new BitmapDrawable(host.getResources(), bitmap);
         baked.setBounds(bounds);
