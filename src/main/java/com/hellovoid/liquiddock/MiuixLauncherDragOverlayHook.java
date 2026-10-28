@@ -200,7 +200,7 @@ final class MiuixLauncherDragOverlayHook {
         ACTIVE.put(child, new DragRecord(resolved.source, resolved.staticSink, resolved.nodeKind));
         if (resolved.nodeKind == LauncherGlassNodeKind.ICON) {
             LauncherMovingIconGlassClip.bindDrag(child, resolved.visualBounds,
-                    resolved.style, glassConfig);
+                    resolved.style, glassConfig, resolved.cornerRadiusPx);
         }
         MainHook.log(TAG + " begin kind=" + resolved.kind
                 + " child=" + child.getClass().getSimpleName());
