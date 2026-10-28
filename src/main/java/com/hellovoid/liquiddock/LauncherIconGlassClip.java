@@ -53,32 +53,32 @@ final class LauncherIconGlassClip {
         return node != null && node.kind() == LauncherGlassDragState.Kind.ICON;
     }
 
-    /** This is the same radius and footprint as the stationary icon's mask. */
+    /** Same footprint and corner radius as the stationary icon's mask. */
     static LauncherIconGlassClipGeometry.Result resolveShape(View view,
             LiquidDockConfig.Glass config, LauncherGlassIconGeometry.Bounds icon,
             boolean dock) {
-        if (view == null || config == null || icon == null) return null;
-    float density = view.getResources().getDisplayMetrics().density;
-    float radiusDp = config.iconStyle.cornerRadiusDp;
-    if (dock) radiusDp = WorkstationDockIconRadiusPolicy.resolve(radiusDp,
-    workstationRadiusDp, density, MainHook.isWorkstationMode());
-    Drawable[] drawables = view.getCompoundDrawables();
-    Drawable drawable = drawables.length > 1 ? drawables[1] : null;
-    float min = Math.min(icon.width(), icon.height());
-    float nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
-    drawable, min, min, min * .22f);
-    if (dock && radiusDp <= 0f) {
-    float[] b = LauncherGlassBoundsPolicy.apply(icon.left, icon.top, icon.right,
-    icon.bottom, config.iconStyle.sizeOffsetDp * density);
-    float width = b[2] - b[0], height = b[3] - b[1];
-    nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
-    drawable, width, height, Math.min(width, height) * .22f);
-    }
-    LauncherIconGlassClipGeometry.Result shape = LauncherIconGlassClipGeometry.resolve(
-    icon.left, icon.top, icon.right, icon.bottom,
-    config.iconStyle.sizeOffsetDp * density, radiusDp * density, nativeRadius);
-
-        return shape;
+        if (!(view instanceof TextView) || config == null || icon == null) return null;
+        float density = view.getResources().getDisplayMetrics().density;
+        float radiusDp = config.iconStyle.cornerRadiusDp;
+        if (dock) {
+            radiusDp = WorkstationDockIconRadiusPolicy.resolve(radiusDp,
+                    workstationRadiusDp, density, MainHook.isWorkstationMode());
+        }
+        Drawable[] drawables = ((TextView) view).getCompoundDrawables();
+        Drawable drawable = drawables.length > 1 ? drawables[1] : null;
+        float min = Math.min(icon.width(), icon.height());
+        float nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
+                drawable, min, min, min * .22f);
+        if (dock && radiusDp <= 0f) {
+            float[] b = LauncherGlassBoundsPolicy.apply(icon.left, icon.top, icon.right,
+                    icon.bottom, config.iconStyle.sizeOffsetDp * density);
+            float width = b[2] - b[0], height = b[3] - b[1];
+            nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
+                    drawable, width, height, Math.min(width, height) * .22f);
+        }
+        return LauncherIconGlassClipGeometry.resolve(
+                icon.left, icon.top, icon.right, icon.bottom,
+                config.iconStyle.sizeOffsetDp * density, radiusDp * density, nativeRadius);
     }
 
     static float targetRadiusPx(View source) {
