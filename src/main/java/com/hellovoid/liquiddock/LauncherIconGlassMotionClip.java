@@ -21,10 +21,13 @@ final class LauncherIconGlassMotionClip {
     private static Method setCornerRadius;
     private static boolean viewReady;
     private static boolean layerReady;
+    private static boolean prepared;
 
     private LauncherIconGlassMotionClip() {}
 
-    static void prepare(ClassLoader loader) {
+    static synchronized void prepare(ClassLoader loader) {
+        if (prepared) return;
+        prepared = true;
         try {
             Class<?> viewClass = Class.forName(
                     "com.miui.home.recents.views.FloatingIconView2", false, loader);
