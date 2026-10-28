@@ -1,9 +1,12 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Canvas;
+import android.graphics.Rect;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.AdaptiveIconDrawable;
 import android.view.View;
 import android.widget.TextView;
 import com.hellovoid.prismal.PrismalContinuousCorners;
@@ -18,6 +21,77 @@ final class LauncherIconGlassClip {
         float left, top, right, bottom, gl, gt, gr, gb, radius, viewWidth;
         boolean continuous;
         final Path cutout = new Path();
+
+        // Geometry of regular immutable icon artwork is stable between view draws.
+        // In particular, avoid allocating Outline + Rect in resolveAutoRadius().
+        Drawable sourceDrawable;
+        LiquidDockConfig.Glass sourceConfig;
+        int sourceHostHeight, sourceScrollX, sourceScrollY, sourcePaddingTop;
+        int sourceCompoundLeft, sourceCompoundRight;
+        int sourceDrawableLeft, sourceDrawableTop, sourceDrawableRight, sourceDrawableBottom;
+        int sourceIntrinsicWidth, sourceIntrinsicHeight;
+        float sourceDensity, sourceWorkstationRadius;
+        boolean sourceDock, sourceWorkstationMode;
+        boolean sourceValid;
+
+        boolean matchesSource(TextView view, Drawable drawable,
+                              LiquidDockConfig.Glass config, boolean dock,
+                              boolean workstationMode, float workstationRadius) {
+            // Fancy/animated OEM Drawable implementations can mutate their
+            // outline without changing identity or bounds; don't cache those.
+            if (!sourceValid || !simpleDrawable(drawable)
+                    || drawable != sourceDrawable || config != sourceConfig
+                    || dock != sourceDock
+                    || (dock && (workstationMode != sourceWorkstationMode
+                        || workstationRadius != sourceWorkstationRadius))
+                    || view.getWidth() != viewWidth || view.getHeight() != sourceHostHeight
+                    || view.getScrollX() != sourceScrollX || view.getScrollY() != sourceScrollY
+                    || view.getPaddingTop() != sourcePaddingTop
+                    || view.getCompoundPaddingLeft() != sourceCompoundLeft
+                    || view.getCompoundPaddingRight() != sourceCompoundRight
+                    || view.getResources().getDisplayMetrics().density != sourceDensity) {
+                return false;
+            }
+            Rect b = drawable.getBounds();
+            return b.left == sourceDrawableLeft && b.top == sourceDrawableTop
+                    && b.right == sourceDrawableRight && b.bottom == sourceDrawableBottom
+                    && drawable.getIntrinsicWidth() == sourceIntrinsicWidth
+                    && drawable.getIntrinsicHeight() == sourceIntrinsicHeight;
+        }
+
+        void rememberSource(TextView view, Drawable drawable,
+                            LiquidDockConfig.Glass config, boolean dock,
+                            boolean workstationMode, float workstationRadius) {
+            sourceValid = simpleDrawable(drawable);
+            if (!sourceValid) return;
+            sourceDrawable = drawable;
+            sourceConfig = config;
+            sourceDock = dock;
+            sourceWorkstationMode = workstationMode;
+            sourceWorkstationRadius = workstationRadius;
+            sourceHostHeight = view.getHeight();
+            sourceScrollX = view.getScrollX();
+            sourceScrollY = view.getScrollY();
+            sourcePaddingTop = view.getPaddingTop();
+            sourceCompoundLeft = view.getCompoundPaddingLeft();
+            sourceCompoundRight = view.getCompoundPaddingRight();
+            sourceDensity = view.getResources().getDisplayMetrics().density;
+            Rect b = drawable.getBounds();
+            sourceDrawableLeft = b.left;
+            sourceDrawableTop = b.top;
+            sourceDrawableRight = b.right;
+            sourceDrawableBottom = b.bottom;
+            sourceIntrinsicWidth = drawable.getIntrinsicWidth();
+            sourceIntrinsicHeight = drawable.getIntrinsicHeight();
+        }
+
+        private static boolean simpleDrawable(Drawable drawable) {
+            // Only framework bitmaps and framework adaptive masks are known to
+            // have geometry independent of runtime animated content.
+            return drawable instanceof BitmapDrawable
+                    || drawable instanceof AdaptiveIconDrawable;
+        }
+
         boolean matches(LauncherGlassIconGeometry.Bounds i, LauncherIconGlassClipGeometry.Result g,
                         boolean c, float width) {
             return viewWidth == width && left == i.left && top == i.top && right == i.right && bottom == i.bottom
@@ -65,31 +139,43 @@ final class LauncherIconGlassClip {
                 if (config == null || !GlassRuntimeState.isAnyIconEnabled()
                         || (!dock && (node == null || node.kind() != LauncherGlassDragState.Kind.ICON)))
                     return chain.proceed(args);
-                LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(view);
-                if (icon == null) return chain.proceed(args);
-                float density = view.getResources().getDisplayMetrics().density;
-                float radiusDp = config.iconStyle.cornerRadiusDp;
-                if (dock) radiusDp = WorkstationDockIconRadiusPolicy.resolve(radiusDp,
-                        workstationRadiusDp, density, MainHook.isWorkstationMode());
                 Drawable[] drawables = view.getCompoundDrawables();
                 Drawable drawable = drawables.length > 1 ? drawables[1] : null;
-                float min = Math.min(icon.width(), icon.height());
-                float nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
-                        drawable, min, min, min * .22f);
-                if (dock && radiusDp <= 0f) {
-                    float[] b = LauncherGlassBoundsPolicy.apply(icon.left, icon.top, icon.right,
-                            icon.bottom, config.iconStyle.sizeOffsetDp * density);
-                    float width = b[2] - b[0], height = b[3] - b[1];
-                    nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
-                            drawable, width, height, Math.min(width, height) * .22f);
-                }
-                LauncherIconGlassClipGeometry.Result shape = LauncherIconGlassClipGeometry.resolve(
-                        icon.left, icon.top, icon.right, icon.bottom,
-                        config.iconStyle.sizeOffsetDp * density, radiusDp * density, nativeRadius);
                 Cache cache = CACHE.get(view);
-                if (cache == null) { cache = new Cache(); CACHE.put(view, cache); }
-                if (!cache.matches(icon, shape, config.continuousCorners, view.getWidth()))
-                    cache.update(icon, shape, config.continuousCorners, view.getWidth());
+                boolean workstationMode = dock && MainHook.isWorkstationMode();
+                if (cache == null || !cache.matchesSource(view, drawable, config,
+                        dock, workstationMode, workstationRadiusDp)) {
+                    LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(view);
+                    if (icon == null) return chain.proceed(args);
+                    float density = view.getResources().getDisplayMetrics().density;
+                    float radiusDp = config.iconStyle.cornerRadiusDp;
+                    if (dock) radiusDp = WorkstationDockIconRadiusPolicy.resolve(radiusDp,
+                            workstationRadiusDp, density, workstationMode);
+                    float min = Math.min(icon.width(), icon.height());
+                    float nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
+                            drawable, min, min, min * .22f);
+                    if (dock && radiusDp <= 0f) {
+                        float[] bounds = LauncherGlassBoundsPolicy.apply(icon.left, icon.top,
+                                icon.right, icon.bottom, config.iconStyle.sizeOffsetDp * density);
+                        float width = bounds[2] - bounds[0], height = bounds[3] - bounds[1];
+                        nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
+                                drawable, width, height, Math.min(width, height) * .22f);
+                    }
+                    LauncherIconGlassClipGeometry.Result shape =
+                            LauncherIconGlassClipGeometry.resolve(
+                                    icon.left, icon.top, icon.right, icon.bottom,
+                                    config.iconStyle.sizeOffsetDp * density,
+                                    radiusDp * density, nativeRadius);
+                    if (cache == null) {
+                        cache = new Cache();
+                        CACHE.put(view, cache);
+                    }
+                    if (!cache.matches(icon, shape, config.continuousCorners, view.getWidth())) {
+                        cache.update(icon, shape, config.continuousCorners, view.getWidth());
+                    }
+                    cache.rememberSource(view, drawable, config, dock,
+                            workstationMode, workstationRadiusDp);
+                }
                 Canvas canvas = (Canvas) args[0];
                 int save = canvas.save();
                 try {
