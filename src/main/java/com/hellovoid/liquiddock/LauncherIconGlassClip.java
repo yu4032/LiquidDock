@@ -15,21 +15,23 @@ final class LauncherIconGlassClip {
     private static volatile LiquidDockConfig.Glass glass;
     private static volatile float workstationRadiusDp;
     private static final class Cache {
-        float left, top, right, bottom, gl, gt, gr, gb, radius;
+        float left, top, right, bottom, gl, gt, gr, gb, radius, viewWidth;
         boolean continuous;
         final Path cutout = new Path();
         boolean matches(LauncherGlassIconGeometry.Bounds i, LauncherIconGlassClipGeometry.Result g,
-                        boolean c) {
-            return left == i.left && top == i.top && right == i.right && bottom == i.bottom
+                        boolean c, float width) {
+            return viewWidth == width && left == i.left && top == i.top && right == i.right && bottom == i.bottom
                     && gl == g.left && gt == g.top && gr == g.right && gb == g.bottom
                     && radius == g.radius && continuous == c;
         }
         void update(LauncherGlassIconGeometry.Bounds i, LauncherIconGlassClipGeometry.Result g,
-                    boolean c) {
+                    boolean c, float width) {
+            viewWidth = width;
             left=i.left; top=i.top; right=i.right; bottom=i.bottom;
             gl=g.left; gt=g.top; gr=g.right; gb=g.bottom; radius=g.radius; continuous=c;
             cutout.reset();
-            cutout.addRect(left, top, right, bottom, Path.Direction.CW);
+            float[] row = LauncherIconGlassClipGeometry.cutoutRow(width, top, bottom);
+            cutout.addRect(row[0], row[1], row[2], row[3], Path.Direction.CW);
             Path shape = new Path();
             if (c) {
                 float[] points = PrismalContinuousCorners.contour(gr-gl, gb-gt, radius);
@@ -86,8 +88,8 @@ final class LauncherIconGlassClip {
                         config.iconStyle.sizeOffsetDp * density, radiusDp * density, nativeRadius);
                 Cache cache = CACHE.get(view);
                 if (cache == null) { cache = new Cache(); CACHE.put(view, cache); }
-                if (!cache.matches(icon, shape, config.continuousCorners))
-                    cache.update(icon, shape, config.continuousCorners);
+                if (!cache.matches(icon, shape, config.continuousCorners, view.getWidth()))
+                    cache.update(icon, shape, config.continuousCorners, view.getWidth());
                 Canvas canvas = (Canvas) args[0];
                 int save = canvas.save();
                 try {
