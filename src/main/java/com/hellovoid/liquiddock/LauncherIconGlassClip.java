@@ -215,7 +215,11 @@ final class LauncherIconGlassClip {
             Drawable original = (Drawable) source.get(owner);
             if (original != null) installCachedDrawable(host, original);
         } catch (Throwable error) {
-            MainHook.log(TAG + " source bind failed: " + error);
+            synchronized (SOURCE_LOGGED) {
+                String key = "binding-error:" + error.getClass().getName();
+                if (SOURCE_LOGGED.add(key))
+                    MainHook.log(TAG + " source bind failed: " + error);
+            }
         }
     }
 
