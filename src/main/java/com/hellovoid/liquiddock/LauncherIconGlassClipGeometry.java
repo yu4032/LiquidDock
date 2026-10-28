@@ -16,5 +16,13 @@ final class LauncherIconGlassClipGeometry {
         return new Result(b[0], b[1], b[2], b[3],
                 LauncherGlassBoundsPolicy.capRadius(radius, b[2] - b[0], b[3] - b[1]));
     }
+    /**
+     * Clear stray pixels across the drawable row, including those outside the
+     * nominal icon rectangle. Never include the label below this row.
+     */
+    static float[] cutoutRow(float viewWidth, float iconTop, float iconBottom) {
+        return new float[]{-1f, iconTop, Math.max(0f, viewWidth) + 1f, iconBottom};
+    }
+
     private LauncherIconGlassClipGeometry() {}
 }
