@@ -280,6 +280,7 @@ final class LiveGlassConfigState {
             }
             if (workstationChanged) {
                 lastWorkstation = workstation;
+                MiuixLauncherStaticGlassHook.onWorkstationConfigChanged(next.workstation);
                 WorkstationDockCustomizationHook.applyLiveConfig(next.workstation);
                 WorkstationDockGeometryHook.applyLiveConfig(next.workstation);
                 MainHook.log(TAG + " workstation Dock geometry updated");
