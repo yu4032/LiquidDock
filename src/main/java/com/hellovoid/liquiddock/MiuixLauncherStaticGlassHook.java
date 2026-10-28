@@ -139,6 +139,7 @@ final class MiuixLauncherStaticGlassHook {
         LauncherIconGlassClip.configure(glassConfig);
         LauncherIconGlassClip.workstation(runtimeConfig.workstation);
         LauncherIconGlassClip.install(classLoader);
+        LauncherIconGlassMotionClip.prepare(classLoader);
         // Observe native self-blur writes before constructing/binding widget hosts.
         LauncherWidgetNativeViewBlurGate.install(classLoader);
         boolean any = false;
