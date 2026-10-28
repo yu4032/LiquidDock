@@ -36,7 +36,10 @@ final class MiuixLauncherStaticGlassHook {
         invalidateIconHosts();
     }
 
-    static void onWorkstationModeChanged() { invalidateIconHosts(); }
+    static void onWorkstationModeChanged() {
+        LauncherIconGlassClip.refreshAll();
+        invalidateIconHosts();
+    }
 
     private static void invalidateIconHosts() {
         for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
@@ -58,6 +61,7 @@ final class MiuixLauncherStaticGlassHook {
             if (isIconHost(host)) host.invalidate();
         }
         BOOTSTRAP_OBSERVERS.clear();
+        LauncherIconGlassClip.refreshAll();
     }
 
     static void onRuntimeIconGlassDisabled() {
@@ -87,6 +91,7 @@ final class MiuixLauncherStaticGlassHook {
         DockGlassItemRegistry.unregister(host);
         LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
         if (node != null && node.kind() == LauncherGlassDragState.Kind.ICON) node.dispose();
+        LauncherIconGlassClip.refreshHost(host);
         host.invalidate();
     }
 
@@ -515,7 +520,10 @@ final class MiuixLauncherStaticGlassHook {
         if (kind == LauncherGlassDragState.Kind.ICON
                 && domain == LauncherGlassHierarchy.Domain.DOCK) {
             if (node != null) node.dispose();
-            DockGlassItemRegistry.register(host);
+            if (!DockGlassItemRegistry.contains(host)) {
+                DockGlassItemRegistry.register(host);
+                LauncherIconGlassClip.refreshHost(host);
+            }
             return;
         }
         DockGlassItemRegistry.unregister(host);
@@ -534,7 +542,10 @@ final class MiuixLauncherStaticGlassHook {
         if (node == null || node.kind() != kind) {
             float radius = resolveCornerRadius(host, kind);
             node = LauncherGlassStaticNode.attachToMaterial(host, kind, radius, glassConfig);
-            if (kind == LauncherGlassDragState.Kind.ICON) host.invalidate();
+            if (kind == LauncherGlassDragState.Kind.ICON) {
+                LauncherIconGlassClip.refreshHost(host);
+                host.invalidate();
+            }
         } else {
             node.requestLifecycleRefresh();
         }
