@@ -32,7 +32,7 @@ final class LauncherIconGlassClip {
         WeakReference<BitmapDrawable> display = new WeakReference<>(null);
         float width, height, left, top, right, bottom, radius;
         boolean continuous;
-        LiquidDockConfig.Glass config;
+        float offsetDp, cornerDp;
 
         boolean matches(Drawable drawable, LauncherIconGlassClipGeometry.Result shape,
                         float width, float height, boolean continuous,
@@ -42,7 +42,8 @@ final class LauncherIconGlassClip {
                     && this.left == shape.left && this.top == shape.top
                     && this.right == shape.right && this.bottom == shape.bottom
                     && this.radius == shape.radius && this.continuous == continuous
-                    && this.config == config;
+                    && this.offsetDp == config.iconStyle.sizeOffsetDp
+                    && this.cornerDp == config.iconStyle.cornerRadiusDp;
         }
 
         void set(Drawable original, BitmapDrawable display,
@@ -59,14 +60,25 @@ final class LauncherIconGlassClip {
             this.width = width;
             this.height = height;
             this.continuous = continuous;
-            this.config = config;
+            this.offsetDp = config.iconStyle.sizeOffsetDp;
+            this.cornerDp = config.iconStyle.cornerRadiusDp;
         }
     }
 
     static void configure(LiquidDockConfig.Glass config) {
-        if (glass == config) return;
+        LiquidDockConfig.Glass previous = glass;
         glass = config;
+        if (sameGeometry(previous, config)) return;
         refreshAll();
+    }
+
+    private static boolean sameGeometry(LiquidDockConfig.Glass before,
+                                        LiquidDockConfig.Glass after) {
+        if (before == after) return true;
+        if (before == null || after == null) return false;
+        return before.continuousCorners == after.continuousCorners
+                && before.iconStyle.sizeOffsetDp == after.iconStyle.sizeOffsetDp
+                && before.iconStyle.cornerRadiusDp == after.iconStyle.cornerRadiusDp;
     }
 
     static void workstation(LiquidDockConfig.Workstation config) {
@@ -82,7 +94,7 @@ final class LauncherIconGlassClip {
             if (host == null) continue;
             Cache cache = CACHE.get(host);
             if (cache == null) continue;
-            cache.config = null; // force fresh resource on the next native binding
+            cache.offsetDp = Float.NaN; // invalidate geometry-only cache
             host.post(() -> {
                 if (host.isAttachedToWindow()) {
                     HookUtil.tryInvoke(host, "updateIconDrawable");
@@ -94,7 +106,7 @@ final class LauncherIconGlassClip {
     static void refreshHost(View host) {
         if (host instanceof TextView) {
             Cache cache = CACHE.get((TextView) host);
-            if (cache != null) cache.config = null;
+            if (cache != null) cache.offsetDp = Float.NaN;
             host.post(() -> {
                 if (host.isAttachedToWindow()) {
                     HookUtil.tryInvoke(host, "updateIconDrawable");
