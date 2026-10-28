@@ -15,21 +15,29 @@ final class LauncherIconGlassClip {
     private static volatile LiquidDockConfig.Glass glass;
     private static volatile float workstationRadiusDp;
     private static final class Cache {
-        float left, top, right, bottom, gl, gt, gr, gb, radius;
+        float left, top, right, bottom, gl, gt, gr, gb, radius, hostWidth;
         boolean continuous;
         final Path cutout = new Path();
         boolean matches(LauncherGlassIconGeometry.Bounds i, LauncherIconGlassClipGeometry.Result g,
-                        boolean c) {
+                        boolean c, float width) {
             return left == i.left && top == i.top && right == i.right && bottom == i.bottom
                     && gl == g.left && gt == g.top && gr == g.right && gb == g.bottom
-                    && radius == g.radius && continuous == c;
+                    && radius == g.radius && continuous == c && hostWidth == width;
         }
         void update(LauncherGlassIconGeometry.Bounds i, LauncherIconGlassClipGeometry.Result g,
-                    boolean c) {
+                    boolean c, float width) {
             left=i.left; top=i.top; right=i.right; bottom=i.bottom;
             gl=g.left; gt=g.top; gr=g.right; gb=g.bottom; radius=g.radius; continuous=c;
+            hostWidth = width;
             cutout.reset();
-            cutout.addRect(left, top, right, bottom, Path.Direction.CW);
+            // TextView's compound drawable may render outside its reported bounds (shadow,
+            // mask, OEM edge pixels). Subtract the glass from the entire icon row rather
+            // than only from the nominal drawable rectangle: the latter leaves a straight
+            // vertical seam at the old icon edge, especially after dropping into Dock.
+            // The label lies below this row, and ShortcutIcon's separate badge drawing
+            // stays outside the hooked TextView.onDraw() call.
+            cutout.addRect(-1f, Math.max(0f, top - 1f), width + 1f,
+                    bottom + 1f, Path.Direction.CW);
             Path shape = new Path();
             if (c) {
                 float[] points = PrismalContinuousCorners.contour(gr-gl, gb-gt, radius);
@@ -86,8 +94,8 @@ final class LauncherIconGlassClip {
                         config.iconStyle.sizeOffsetDp * density, radiusDp * density, nativeRadius);
                 Cache cache = CACHE.get(view);
                 if (cache == null) { cache = new Cache(); CACHE.put(view, cache); }
-                if (!cache.matches(icon, shape, config.continuousCorners))
-                    cache.update(icon, shape, config.continuousCorners);
+                if (!cache.matches(icon, shape, config.continuousCorners, view.getWidth()))
+                    cache.update(icon, shape, config.continuousCorners, view.getWidth());
                 Canvas canvas = (Canvas) args[0];
                 int save = canvas.save();
                 try {
