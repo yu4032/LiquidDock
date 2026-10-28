@@ -16,5 +16,10 @@ final class LauncherIconGlassClipGeometry {
         return new Result(b[0], b[1], b[2], b[3],
                 LauncherGlassBoundsPolicy.capRadius(radius, b[2] - b[0], b[3] - b[1]));
     }
+    /** Clip any drawable bleed to either side of the icon, without touching text below. */
+    static float[] iconRow(float viewWidth, float iconTop, float iconBottom) {
+        return new float[]{-1f, Math.max(0f, iconTop - 1f),
+                Math.max(0f, viewWidth) + 1f, iconBottom + 1f};
+    }
     private LauncherIconGlassClipGeometry() {}
 }
