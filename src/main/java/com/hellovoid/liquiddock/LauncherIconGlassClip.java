@@ -45,6 +45,7 @@ final class LauncherIconGlassClip {
     static void workstation(LiquidDockConfig.Workstation config) {
         workstationRadiusDp = config != null ? config.dockIconGlassCornerRadius : 0f;
     }
+    static float workstationRadiusDp() { return workstationRadiusDp; }
     static void install(ClassLoader loader) {
         try {
             Class<?> shortcutClass = Class.forName("com.miui.home.launcher.ShortcutIcon", false, loader);
