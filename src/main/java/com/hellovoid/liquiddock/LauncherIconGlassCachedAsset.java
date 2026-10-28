@@ -2,7 +2,6 @@ package com.hellovoid.liquiddock;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
@@ -98,35 +97,34 @@ final class LauncherIconGlassCachedAsset {
     }
 
     private static void cacheViewBitmap(View proxy, Field background) throws Exception {
-                        Object owner = proxy;
-                        HookUtil.InvocationResult<Object> target =
-                                HookUtil.tryInvoke(owner, "getAnimTarget");
-                        View source = target.succeeded() && target.value() instanceof View
-                                ? (View) target.value() : null;
-                        MaskSpec mask = fromSource(source);
-                        if (mask == null) return;
-                        Object image = background.get(owner);
-                        // Preserve live/app-specific and layered adaptive icon animation.
-                        if (!(image instanceof BitmapDrawable) || image instanceof Animatable)
-                            return;
-                        BitmapDrawable original = (BitmapDrawable) image;
-                        int w = proxy.getWidth();
-                        int h = proxy.getHeight();
-                        if (w <= 0 || h <= 0 || w > 512 || h > 512) return;
-                        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-                        Canvas canvas = new Canvas(bitmap);
-                        canvas.clipPath(mask.path(w, h));
-                        Rect saved = new Rect(original.getBounds());
-                        try {
-                            original.setBounds(0, 0, w, h);
-                            original.draw(canvas);
-                        } finally {
-                            original.setBounds(saved);
-                        }
-                        BitmapDrawable clipped = new BitmapDrawable(proxy.getResources(), bitmap);
-                        clipped.setBounds(saved);
-                        background.set(owner, clipped);
-                        logPreparedOnce("View2");
+        HookUtil.InvocationResult<Object> target = HookUtil.tryInvoke(proxy, "getAnimTarget");
+        View source = target.succeeded() && target.value() instanceof View
+                ? (View) target.value() : null;
+        MaskSpec mask = fromSource(source);
+        if (mask == null) return;
+
+        Object image = background.get(proxy);
+        // Do not rasterize live/fancy or adaptive animation layers.
+        if (!(image instanceof BitmapDrawable) || image instanceof Animatable) return;
+        BitmapDrawable original = (BitmapDrawable) image;
+        int w = proxy.getWidth();
+        int h = proxy.getHeight();
+        if (w <= 0 || h <= 0 || w > 512 || h > 512) return;
+
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.clipPath(mask.path(w, h));
+        Rect saved = new Rect(original.getBounds());
+        try {
+            original.setBounds(0, 0, w, h);
+            original.draw(canvas);
+        } finally {
+            original.setBounds(saved);
+        }
+        BitmapDrawable clipped = new BitmapDrawable(proxy.getResources(), bitmap);
+        clipped.setBounds(saved);
+        background.set(proxy, clipped);
+        logPreparedOnce("View2");
     }
 
     /**
