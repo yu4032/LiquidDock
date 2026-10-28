@@ -244,13 +244,6 @@ final class LauncherIconGlassClip {
                 || lower.contains("lottie") || lower.contains("animated")
                 || lower.contains("dynamic")) return false;
 
-        if (drawable instanceof AdaptiveIconDrawable) {
-            AdaptiveIconDrawable adaptive = (AdaptiveIconDrawable) drawable;
-            return (adaptive.getForeground() == null
-                    || safeStaticDrawable(adaptive.getForeground(), depth + 1))
-                    && (adaptive.getBackground() == null
-                    || safeStaticDrawable(adaptive.getBackground(), depth + 1));
-        }
         if (name.equals("com.miui.home.launcher.graphics.drawable.BadgeDrawable")) {
             // Work-profile badges are static decorations, but their image
             // source must not secretly be a live MAML/Fancy drawable.
@@ -276,6 +269,13 @@ final class LauncherIconGlassClip {
             for (Object layer : (List<?>) foreground.value())
                 if (!safeLayer(layer, depth + 1)) return false;
             return true;
+        }
+        if (drawable instanceof AdaptiveIconDrawable) {
+            AdaptiveIconDrawable adaptive = (AdaptiveIconDrawable) drawable;
+            return (adaptive.getForeground() == null
+                    || safeStaticDrawable(adaptive.getForeground(), depth + 1))
+                    && (adaptive.getBackground() == null
+                    || safeStaticDrawable(adaptive.getBackground(), depth + 1));
         }
         // Other ordinary non-animated Drawables can be snapshotted once.
         // The OEM original stays alive for native app-return/drag animations.
