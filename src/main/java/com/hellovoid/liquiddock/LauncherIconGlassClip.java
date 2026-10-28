@@ -168,10 +168,6 @@ final class LauncherIconGlassClip {
                 // The OEM transparent placeholder is installed during app transitions.
                 // Replacing it would change the identity-based visibility contract.
                 if (!eligible(host)) return result;
-                if (!safeStaticDrawable(original, 0)) {
-                    logSourceOnce(original, "skip");
-                    return result;
-                }
                 try {
                     installCachedDrawable(host, original);
                 } catch (Throwable error) {
@@ -294,6 +290,13 @@ final class LauncherIconGlassClip {
                 existing.setBounds(original.getBounds());
                 replaceDisplayOnly(host, existing);
             }
+            return;
+        }
+
+        // Only classify the OEM layer graph when the source/geometry changes.
+        // A hot repeat bind reuses the cached bitmap above without reflection.
+        if (!safeStaticDrawable(original, 0)) {
+            logSourceOnce(original, "skip");
             return;
         }
 
