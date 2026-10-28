@@ -200,9 +200,8 @@ final class LauncherIconGlassClip {
 
         // Translate the unchanged static glass outline from TextView to the
         // top compound Drawable's own local coordinate system.
-        LauncherIconGlassClipGeometry.Result local = new LauncherIconGlassClipGeometry.Result(
-                shape.left - icon.left, shape.top - icon.top,
-                shape.right - icon.left, shape.bottom - icon.top, shape.radius);
+        LauncherIconGlassClipGeometry.Result local =
+                LauncherIconGlassClipGeometry.localize(shape, icon.left, icon.top);
         Cache cache = CACHE.get(host);
         if (cache != null && cache.matches(original, local, width, height,
                 config.continuousCorners, config)) {
