@@ -108,6 +108,11 @@ final class DockIconAnimationState {
         return changed;
     }
 
+    synchronized boolean isProxyActive(Object icon) {
+        Record record = icon != null ? states.get(icon) : null;
+        return record != null && record.visualOwner.isLaunchProxyActive();
+    }
+
     synchronized Sample sample(Object icon) {
         Record record = icon != null ? states.get(icon) : null;
         if (record == null) return VISIBLE_SAMPLE;
