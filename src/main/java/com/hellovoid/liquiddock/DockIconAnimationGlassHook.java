@@ -32,6 +32,7 @@ final class DockIconAnimationGlassHook {
         if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
             return false;
         }
+        LauncherIconGlassMotionClip.prepare(classLoader);
         boolean shortcut = installShortcutVisibilityHook(classLoader);
         boolean backStop = installBackAnimStopHandoffGuard(classLoader);
         boolean finish = installFloatingViewFinishHandoffHook(classLoader);
@@ -124,7 +125,6 @@ final class DockIconAnimationGlassHook {
 
                         Object result = chain.proceed(args);
                         DockGlassItemRegistry.endProxyGeometry(target);
-                        LauncherMovingIconGlassClip.releaseFloating(proxy);
                         forgetProxyTarget(proxy);
                         return result;
                     }, boolean.class);
@@ -161,11 +161,6 @@ final class DockIconAnimationGlassHook {
                             HookUtil.InvocationResult<Object> targetResult =
                                     HookUtil.tryInvoke(chain.getThisObject(), "getAnimTarget");
                             Object target = targetResult.succeeded() ? targetResult.value() : null;
-                            if (!useRotationRect && proxy != null
-                                    && (!(target instanceof View)
-                                    || !LauncherGlassHierarchy.isDock((View) target))) {
-                                LauncherMovingIconGlassClip.releaseFloating(proxy);
-                            }
                             if (target instanceof View
                                     && LauncherGlassHierarchy.isDock((View) target)) {
                                 View dockTarget = (View) target;
@@ -192,11 +187,12 @@ final class DockIconAnimationGlassHook {
                                                 proxyAlpha, drawIcon)
                                         : LauncherGlassProxyVisibility.isView2Visible(
                                                 proxyAlpha, drawIcon);
-                                if (!useRotationRect && proxy != null) {
-                                    // Clip the actual native icon visual, not the app screenshot.
-                                    // The native update() transform supplies the easing each frame.
-                                    LauncherMovingIconGlassClip.bindFloating(
-                                            proxy, dockTarget, drawIcon && proxyVisible);
+                                if (drawIcon && args[4] instanceof Number) {
+                                    LauncherIconGlassMotionClip.apply(
+                                            chain.getThisObject(), result, dockTarget,
+                                            useRotationRect, (RectF) args[1],
+                                            progress, ((Number) args[4]).floatValue(),
+                                            closeToHome);
                                 }
                                 boolean publishProxyGeometry =
                                         LauncherGlassProxyVisibility.shouldPublishGeometry(
@@ -300,7 +296,6 @@ final class DockIconAnimationGlassHook {
         }
         forgetPending(pending);
         DockGlassItemRegistry.endProxyGeometry(pending.source);
-        LauncherMovingIconGlassClip.releaseFloating(pending.proxy);
         forgetProxyTarget(pending.proxy);
 
         try {
