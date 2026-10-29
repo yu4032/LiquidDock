@@ -157,6 +157,9 @@ internal fun GlassIconsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    val nativeEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false,
+    )
     var iconGlass by remember {
         mutableStateOf(
             prefs.getBoolean(
@@ -191,7 +194,7 @@ internal fun GlassIconsPage(
                     ConfigSchema.Glass.ICON_GLASS,
                     "图标玻璃",
                     "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
-                    masterEnabled && liquidEnabled,
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 ) { iconGlass = it }
                 ModernListDivider()
                 BooleanSetting(
@@ -199,7 +202,7 @@ internal fun GlassIconsPage(
                     ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
                     "仅 Dock 功能图标玻璃",
                     "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
-                    masterEnabled && liquidEnabled,
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 ) { functionalDockIconGlass = it }
                 ModernListDivider()
                 BooleanSetting(
@@ -207,7 +210,7 @@ internal fun GlassIconsPage(
                     ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
                     "多任务操作按钮玻璃",
                     "使用液态玻璃替换清除全部和设备互联胶囊背景；采样未就绪时保持透明，不回退原生模糊",
-                    masterEnabled && liquidEnabled,
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 )
             }
         }
@@ -223,7 +226,8 @@ internal fun GlassIconsPage(
                 IntSetting(
                     prefs,
                     iconCornerRadiusSpec,
-                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+                    masterEnabled && (liquidEnabled || nativeEnabled) &&
+                        (iconGlass || functionalDockIconGlass),
                 )
             }
         }
@@ -233,7 +237,7 @@ internal fun GlassIconsPage(
                 ArrowPreference(
                     stringResource(R.string.launcher_highlights_entry),
                     summary = stringResource(R.string.launcher_highlights_entry_summary),
-                    enabled = masterEnabled && liquidEnabled,
+                    enabled = masterEnabled && (liquidEnabled || nativeEnabled),
                     onClick = { open(Page.LauncherHighlights) },
                 )
             }
@@ -243,7 +247,7 @@ internal fun GlassIconsPage(
                 ArrowPreference(
                     title = "阴影",
                     summary = "独立设置 Prismal 外阴影与边缘描边",
-                    enabled = masterEnabled && liquidEnabled,
+                    enabled = masterEnabled && (liquidEnabled || nativeEnabled),
                     onClick = { open(Page.IconEdge) },
                 )
             }

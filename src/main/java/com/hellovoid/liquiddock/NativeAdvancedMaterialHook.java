@@ -9,7 +9,6 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
-import android.widget.TextView;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.prismal.PrismalContinuousCorners;
@@ -43,6 +42,7 @@ final class NativeAdvancedMaterialHook {
     private static boolean capsuleEnabled;
     private static boolean continuousCorners;
     private static int blurRadius;
+    private static volatile float iconCornerRadiusDp;
     private static WeakReference<ViewGroup> recentsRoot = new WeakReference<>(null);
     private static SharedPreferences prefs;
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
@@ -61,6 +61,7 @@ final class NativeAdvancedMaterialHook {
         functionalIconEnabled = config.glass.functionalDockIconEnabled;
         capsuleEnabled = config.glass.recentsCapsuleEnabled;
         continuousCorners = config.glass.continuousCorners;
+        iconCornerRadiusDp = config.glass.iconStyle.cornerRadiusDp;
         blurRadius = ConfigReader.load().i(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(),
                 ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.runtimeFallback());
         installPreferences();
@@ -79,7 +80,8 @@ final class NativeAdvancedMaterialHook {
                     && !key.equals(ConfigSchema.Glass.ICON_GLASS.name())
                     && !key.equals(ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name())
                     && !key.equals(ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.name())
-                    && !key.equals(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name())) return;
+                    && !key.equals(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name())
+                    && !key.equals(ConfigSchema.Glass.ICON_CORNER_RADIUS.name())) return;
             // Read all keys as one snapshot. Advanced material always loses to master-off;
             // it always wins over an imported contradictory liquid_glass=true.
             enabled = changed.getBoolean(ConfigSchema.Core.ENABLED.name(), true)
@@ -91,6 +93,7 @@ final class NativeAdvancedMaterialHook {
             capsuleEnabled = changed.getBoolean(
                     ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.name(), true);
             blurRadius = changed.getInt(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(), 80);
+            iconCornerRadiusDp = LiquidDockConfig.load().glass.iconStyle.cornerRadiusDp;
             View root = recentsRoot.get();
             if (root != null) root.post(NativeAdvancedMaterialHook::refreshOwners);
             else for (View view : new java.util.ArrayList<>(ICON_WATCHERS.keySet())) {
@@ -306,7 +309,7 @@ final class NativeAdvancedMaterialHook {
                 }
                 bounds.set(Math.round(b.left), Math.round(b.top),
                         Math.round(b.right), Math.round(b.bottom));
-                float requested = LiquidDockConfig.load().glass.iconStyle.cornerRadiusDp;
+                float requested = iconCornerRadiusDp;
                 float density = view.getResources().getDisplayMetrics().density;
                 cornerRadius = requested > 0f ? requested * density :
                         Math.min(bounds.width(), bounds.height()) * .22f;

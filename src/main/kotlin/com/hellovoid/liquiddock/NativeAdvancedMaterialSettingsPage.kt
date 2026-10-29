@@ -64,7 +64,7 @@ internal fun NativeAdvancedMaterialSettingsPage(
         item(key = "native-material-components") {
             ModernFeatureCard(
                 title = "组件与圆角",
-                summary = "复用图标、小组件、文件夹的既有设置；系统原有材质参数不强制覆写",
+                summary = "复用图标和多任务按钮开关及圆角；小组件、文件夹保留系统自身的高级材质",
                 onClick = { open(Page.GlassComponents) },
                 modifier = Modifier.padding(horizontal = 14.dp),
             )
