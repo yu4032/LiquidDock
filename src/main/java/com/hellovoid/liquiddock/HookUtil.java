@@ -134,15 +134,22 @@ public final class HookUtil {
             new java.util.concurrent.atomic.AtomicLong();
 
     private static String registrationSite() {
-        for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
+        return registrationSite(Thread.currentThread().getStackTrace());
+    }
+
+    /** Package-private for the ART-frame regression test: filter a captured stack, not a live one. */
+    static String registrationSite(StackTraceElement[] stack) {
+        for (StackTraceElement frame : stack) {
             String owner = frame.getClassName();
+            // ART walks its own frames first (dalvik.system.VMStack#getThreadStackTrace) and those
+            // carry no line number. Returning on the first line-less frame collapsed every hook in
+            // every process onto one synthetic site, so site-scoped replacement never engaged.
             if (owner.equals(HookUtil.class.getName())
-                    || owner.equals(Thread.class.getName())) continue;
-            if (frame.getLineNumber() > 0) {
-                return owner + '#' + frame.getMethodName() + ':' + frame.getLineNumber();
-            }
-            return owner + '#' + frame.getMethodName() + ":unknown:"
-                    + UNLOCATED_SITE.incrementAndGet();
+                    || owner.equals(Thread.class.getName())
+                    || owner.startsWith("dalvik.system.")) continue;
+            int line = frame.getLineNumber();
+            if (line <= 0) continue;
+            return owner + '#' + frame.getMethodName() + ':' + line;
         }
         return "unknown:" + UNLOCATED_SITE.incrementAndGet();
     }
