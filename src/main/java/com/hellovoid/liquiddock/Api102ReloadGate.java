@@ -27,6 +27,16 @@ final class Api102ReloadGate {
         return true;
     }
 
+    /**
+     * For a process whose every owner has already been retired. The caller must prove
+     * no owned hooks, external listeners, native sessions or live Views remain.
+     */
+    synchronized boolean beginRetiredOwnerHandoff() {
+        if (state != State.OWNED) return false;
+        state = State.HANDOFF;
+        return true;
+    }
+
     /** Roll back a failed saved-state transfer without admitting a concurrent install. */
     synchronized void abortHandoff() {
         if (state == State.HANDOFF) state = State.PRE_INSTALL;
