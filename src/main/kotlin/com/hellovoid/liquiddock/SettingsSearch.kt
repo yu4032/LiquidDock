@@ -53,8 +53,7 @@ internal fun settingsSearchCatalog(
     }
 }
 
-
-/** Search entries for custom glass pages, derived from their existing rendered descriptors. */
+/** Search entries for custom settings pages, derived from their existing rendered descriptors. */
 internal data class CustomGlassSearchRow(val key: String, val title: String, val summary: String)
 
 internal val expandedFolderSearchSpecs: List<IntSpec> = listOf(
@@ -176,7 +175,6 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
     }
     return rows
 }
- 
 
 /**
  * Position of a real lazy-list Cell for each indexed control on the fixed-size

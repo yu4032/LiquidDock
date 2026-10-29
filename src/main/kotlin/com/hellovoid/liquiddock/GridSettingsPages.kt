@@ -26,8 +26,8 @@ import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.SmallTitle
 
-// Pure source relocation: keeps the widget 4×2 preflight, in-flight cancellation,
-// stale reply rejection and large warning dialog inside their existing GridBasicsPage.
+// Grid basics uses the shared semantic Cell layout. The original widget 4×2
+// preflight, in-flight cancellation and stale reply protection stay in this page.
 @Composable
 internal fun GridPage(
     padding: PaddingValues,
@@ -132,7 +132,13 @@ internal fun GridBasicsPage(
         padding,
         stringResource(R.string.page_grid_basics),
         "调整网格行列数、图标大小与小组件宽度。",
-        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GridBasics, it.key) },
+        focusItemIndex = searchFocus?.let {
+            customDenseFocusIndex(Page.GridBasics, it.key)?.let { index ->
+                // The in-flight status card is inserted ahead of widget layout.
+                if (gridCheckPending && it.key == ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name())
+                    index + 1 else index
+            }
+        },
         focusSequence = searchFocus?.sequence,
     ) {
         item(key = "grid-icon-heading") { SmallTitle("图标大小") }
@@ -170,7 +176,7 @@ internal fun GridBasicsPage(
         }
         items(gridDimensionSpecs, key = { it.key }) { spec ->
             SettingsCard {
-                    IntSetting(
+                IntSetting(
                     prefs,
                     spec,
                     masterEnabled && customGrid && !gridCheckPending,
@@ -220,7 +226,7 @@ internal fun GridBasicsPage(
                             }
                         }
                     },
-            )
+                )
             }
         }
         if (gridCheckPending) {
