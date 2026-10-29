@@ -343,7 +343,16 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> OPEN_FOLDER_THICKNESS = integer(
                 "open_folder_glass_thickness", 18, 18, 18, 1, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> OPEN_FOLDER_TINT_ALPHA = integer(
-                "open_folder_glass_tint_alpha", 35, 35, 35, 0, 160, ConfigKey.ExportMode.ALWAYS);
+                "open_folder_glass_tint_alpha", 35, 35, 35, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        // -1 inherits the current global solid fill; 0..255 independently overrides it.
+        public static final ConfigKey<Integer> OPEN_FOLDER_BASE_COLOR_RED = integer(
+                "open_folder_base_color_r", -1, -1, -1, -1, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_BASE_COLOR_GREEN = integer(
+                "open_folder_base_color_g", -1, -1, -1, -1, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_BASE_COLOR_BLUE = integer(
+                "open_folder_base_color_b", -1, -1, -1, -1, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_BASE_COLOR_ALPHA = integer(
+                "open_folder_base_color_alpha", -1, -1, -1, -1, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> LARGE_FOLDER_NATIVE_OUTLINE = bool(
                 "large_folder_native_outline", true, true, true, ConfigKey.ExportMode.ALWAYS);
         // Opt-in only: repair marked, database-backed 2x2 folders on custom
@@ -367,7 +376,16 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> CHROMATIC = integer(
                 "liquid_chromatic", 26, 26, 2, 0, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_ALPHA = integer(
-                "liquid_tint_alpha", 35, 35, 38, 0, 160, ConfigKey.ExportMode.ALWAYS);
+                "liquid_tint_alpha", 35, 35, 38, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        // Independent opaque fill. Default alpha=0 preserves every existing glass appearance.
+        public static final ConfigKey<Integer> BASE_COLOR_RED = integer(
+                "liquid_base_color_r", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> BASE_COLOR_GREEN = integer(
+                "liquid_base_color_g", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> BASE_COLOR_BLUE = integer(
+                "liquid_base_color_b", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> BASE_COLOR_ALPHA = integer(
+                "liquid_base_color_alpha", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_FPS = integer(
                 "liquid_capture_power_limit_fps", 20, 20, 20, 5, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_STOP_DELAY = integer(
@@ -666,10 +684,14 @@ public final class ConfigSchema {
                 Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
                 Glass.OPEN_FOLDER_GLASS, Glass.OPEN_FOLDER_BLUR, Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT,
                 Glass.OPEN_FOLDER_IOR, Glass.OPEN_FOLDER_THICKNESS, Glass.OPEN_FOLDER_TINT_ALPHA,
+                Glass.OPEN_FOLDER_BASE_COLOR_RED, Glass.OPEN_FOLDER_BASE_COLOR_GREEN,
+                Glass.OPEN_FOLDER_BASE_COLOR_BLUE, Glass.OPEN_FOLDER_BASE_COLOR_ALPHA,
                 Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
                 Glass.BLUR_MODE,
                 Glass.BLUR, Glass.CHROMATIC,
-                Glass.TINT_ALPHA, Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY,
+                Glass.TINT_ALPHA, Glass.BASE_COLOR_RED, Glass.BASE_COLOR_GREEN,
+                Glass.BASE_COLOR_BLUE, Glass.BASE_COLOR_ALPHA,
+                Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY,
                 Glass.THICKNESS,
                 Glass.IOR, Glass.NORMAL_STRENGTH, Glass.DOME, Glass.LENS_REFRACTION,
                 Glass.CAPTURE_SCALE, Glass.PASSBLUR_CAPTURE_SCALE,

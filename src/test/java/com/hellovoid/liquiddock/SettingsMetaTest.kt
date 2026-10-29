@@ -20,12 +20,115 @@ class SettingsMetaTest {
     @Test fun optionCatalogContainsOnlyDeclaredRowsWithResolvablePositions() {
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
         catalog.filter { it.key != null }.forEach { item ->
-            val meta = pages.getValue(item.page)
-            val row = meta.blocks[meta.indexOfKey(item.key!!)] as SettingsBlock.Row
-            assertEquals(row.title, item.title)
+            val declared = pages[item.page]
+            if (declared != null) {
+                val row = declared.blocks[declared.indexOfKey(item.key!!)] as SettingsBlock.Row
+                assertEquals(row.title, item.title)
+            } else {
+                val row = customGlassSearchRows(item.page).single { it.key == item.key }
+                assertEquals(row.title, item.title)
+            }
         }
         assertFalse(catalog.any { it.title == "iOS 玻璃效果" })
-        assertFalse(catalog.any { it.page == Page.GlassFolders && it.key != null })
+        assertTrue(catalog.any { it.page == Page.GlassFolders &&
+            it.key == openFolderBaseColorAlphaSpec.key })
+        assertTrue(catalog.any { it.page == Page.ShortcutPopupAll &&
+            it.key == com.hellovoid.liquiddock.ScopedGlassOptics.key(
+                com.hellovoid.liquiddock.ScopedGlassOptics.POPUP,
+                com.hellovoid.liquiddock.config.ConfigSchema.Glass.BASE_COLOR_ALPHA) })
+    }
+
+    @Test fun allScopedGlassRowsAreIndexedUsingTheirRenderedPreferenceKeys() {
+        val scopes = mapOf(
+            Page.HandleMenuAll to ScopedGlassOptics.HANDLE_MENU,
+            Page.ShortcutPopupAll to ScopedGlassOptics.POPUP,
+            Page.DialogAll to ScopedGlassOptics.DIALOG,
+            Page.GboardAll to ScopedGlassOptics.GBOARD,
+        )
+        val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
+        scopes.forEach { (page, scope) ->
+            val entries = customGlassSearchRows(page)
+            assertEquals(entries.size, entries.map { it.key }.toSet().size)
+            assertEquals(basicScopeSpecs(scope).size + scopedOpticalDescriptors.size, entries.size)
+            assertEquals(entries.map { it.key }.toSet(),
+                catalog.filter { it.page == page && it.key != null }.map { it.key }.toSet())
+            assertTrue("must include solid fill", entries.any {
+                it.key == ScopedGlassOptics.key(scope,
+                    com.hellovoid.liquiddock.config.ConfigSchema.Glass.BASE_COLOR_ALPHA)
+            })
+        }
+        assertEquals(folderGlassFocusCell.keys,
+            customGlassSearchRows(Page.GlassFolders).map { it.key }.toSet())
+    }
+
+    @Test fun folderCellOrderAndSearchFocusUseTypedSharedIds() {
+        assertEquals(FolderGlassCell.entries.map { it.id }, folderGlassCellOrder)
+        assertEquals(folderGlassCellOrder.size, folderGlassCellOrder.toSet().size)
+        assertEquals(customGlassSearchRows(Page.GlassFolders).map { it.key }.toSet(),
+            folderGlassFocusCell.keys)
+        folderGlassFocusCell.values.forEach { assertTrue(it in folderGlassCellOrder) }
+        assertEquals(FolderGlassCell.OPEN_FILL_ALPHA.id,
+            folderGlassFocusCell.getValue(openFolderBaseColorAlphaSpec.key))
+    }
+
+    @Test fun fixedCustomComponentPagesIndexAllTheirRenderedStaticControls() {
+        val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
+        for (page in listOf(Page.GlassIcons, Page.GlassWidgets, Page.Stroke,
+                Page.Shadow, Page.Divider)) {
+            val rows = customGlassSearchRows(page)
+            assertTrue(rows.isNotEmpty())
+            assertEquals(rows.size, rows.map { it.key }.toSet().size)
+            assertEquals(rows.map { it.key }.toSet(),
+                catalog.filter { it.page == page && it.key != null }.map { it.key }.toSet())
+            rows.forEach {
+                assertTrue("No focus Cell for ${page.name}/${it.key}",
+                    customDenseFocusIndex(page, it.key) != null)
+            }
+        }
+        assertEquals(strokeSpecs.size + 3, customGlassSearchRows(Page.Stroke).size)
+        assertEquals(shadowSpecs.size + 2, customGlassSearchRows(Page.Shadow).size)
+        assertEquals(dividerSpecs.size + 1, customGlassSearchRows(Page.Divider).size)
+    }
+
+    @Test fun gridBasicsHasSemanticCellsAndDoesNotLoseItsPreflightControls() {
+        val rows = customGlassSearchRows(Page.GridBasics)
+        val expected = setOf(
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
+            launcher450IconSizeSpec.key,
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.ENABLED.name(),
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name(),
+        ) + gridDimensionSpecs.map { it.key }
+        assertEquals(expected, rows.map { it.key }.toSet())
+        rows.forEach { assertTrue(customDenseFocusIndex(Page.GridBasics, it.key) != null) }
+    }
+
+    @Test fun customMenuAndKeyboardPagesSearchActualOriginalControls() {
+        for (page in listOf(Page.ShortcutPopupCustomization, Page.HandleMenuCustomization,
+                Page.DialogCustomization, Page.Gboard)) {
+            val rows = customGlassSearchRows(page)
+            assertTrue(rows.isNotEmpty())
+            assertEquals(rows.size, rows.map { it.key }.toSet().size)
+            rows.forEach { assertTrue("Missing GUI cell for ${page.name}/${it.key}",
+                customDenseFocusIndex(page, it.key) != null) }
+        }
+    }
+
+    @Test fun tintAndSolidColorSearchFindTheirOwningPages() {
+        val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
+        val tint = filterSettingsSearch(catalog, "染色")
+        assertTrue(tint.any { it.page == Page.LiquidColor && it.key ==
+            com.hellovoid.liquiddock.config.ConfigSchema.Glass.TINT_ALPHA.name() })
+        val base = filterSettingsSearch(catalog, "底色透明度")
+        assertTrue(base.any { it.page == Page.LiquidColor && it.key ==
+            com.hellovoid.liquiddock.config.ConfigSchema.Glass.BASE_COLOR_ALPHA.name() })
+        val folder = filterSettingsSearch(catalog, "底色 文件夹")
+        assertTrue(folder.any { it.page == Page.GlassFolders })
+        for (target in listOf(Page.ShortcutPopupAll, Page.HandleMenuAll, Page.DialogAll,
+                Page.GboardAll)) {
+            val rows = catalog.filter { it.page == target && it.key != null }
+            assertTrue(rows.any { "染色" in it.title })
+            assertTrue(rows.any { "底色" in it.title })
+        }
     }
 
     @Test fun canonicalParentsDoNotDependOnOverviewShortcutOrder() {

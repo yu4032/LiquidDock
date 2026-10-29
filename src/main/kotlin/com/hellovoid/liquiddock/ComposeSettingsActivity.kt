@@ -376,12 +376,15 @@ private fun LiquidDockSettings(
                     )
 
                     Page.Grid -> GridPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled)
+                    Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GridBasics.name }
+                            ?.let { SettingsFocusRequest(Page.GridBasics, it, searchFocusSequence) })
 
                     Page.Dock -> DockPage(padding, prefs, masterEnabled, ::navigateTo)
 
                     Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
-                    Page.Divider -> DividerPage(padding, prefs, masterEnabled)
+                    Page.Divider -> DividerPage(padding, prefs, masterEnabled, searchFocusKey?.takeIf { searchFocusPage == Page.Divider.name }
+                            ?.let { SettingsFocusRequest(Page.Divider, it, searchFocusSequence) })
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
 
                     Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
@@ -391,33 +394,55 @@ private fun LiquidDockSettings(
                     )
 
                     Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
-                    Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GlassIcons.name }
+                            ?.let { SettingsFocusRequest(Page.GlassIcons, it, searchFocusSequence) })
+                    Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GlassWidgets.name }
+                            ?.let { SettingsFocusRequest(Page.GlassWidgets, it, searchFocusSequence) })
+                    Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled,
+                        ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GlassFolders.name }
+                            ?.let { SettingsFocusRequest(Page.GlassFolders, it, searchFocusSequence) })
 
                     Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage(
                         padding, prefs, masterEnabled,
                         onOpenAll = { navigateTo(Page.HandleMenuAll) },
                         onOpenEdge = { navigateTo(Page.HandleMenuEdge) },
+                        searchFocus = searchFocusKey?.takeIf {
+                            searchFocusPage == Page.HandleMenuCustomization.name
+                        }?.let { SettingsFocusRequest(Page.HandleMenuCustomization, it, searchFocusSequence) },
                     )
                     Page.HandleMenuAll -> ScopedGlassSettingsPage(
                         padding, prefs, masterEnabled, ScopedGlassOptics.HANDLE_MENU, "应用顶部菜单",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.HandleMenuAll.name }
+                            ?.let { SettingsFocusRequest(Page.HandleMenuAll, it, searchFocusSequence) },
                     )
                     Page.ShortcutPopupCustomization -> ShortcutPopupGlassSettingsPage(
                         padding, prefs, masterEnabled,
                         onOpenAll = { navigateTo(Page.ShortcutPopupAll) },
                         onOpenEdge = { navigateTo(Page.PopupEdge) },
+                        searchFocus = searchFocusKey?.takeIf {
+                            searchFocusPage == Page.ShortcutPopupCustomization.name
+                        }?.let { SettingsFocusRequest(Page.ShortcutPopupCustomization, it, searchFocusSequence) },
                     )
                     Page.ShortcutPopupAll -> ScopedGlassSettingsPage(
                         padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.ShortcutPopupAll.name }
+                            ?.let { SettingsFocusRequest(Page.ShortcutPopupAll, it, searchFocusSequence) },
                     )
                     Page.DialogCustomization -> DialogGlassSettingsPage(
                     padding, prefs, masterEnabled,
                     onOpenAll = { navigateTo(Page.DialogAll) },
                     onOpenEdge = { navigateTo(Page.DialogEdge) },
+                    searchFocus = searchFocusKey?.takeIf {
+                        searchFocusPage == Page.DialogCustomization.name
+                    }?.let { SettingsFocusRequest(Page.DialogCustomization, it, searchFocusSequence) },
                 )
                 Page.DialogAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.DialogAll.name }
+                            ?.let { SettingsFocusRequest(Page.DialogAll, it, searchFocusSequence) },
                 )
                     Page.ThirdPartyApps -> ThirdPartyAppsPage(
                         padding = padding,
@@ -427,9 +452,13 @@ private fun LiquidDockSettings(
                     )
                     Page.Gboard -> GboardSettingsPage(
                     padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.GboardAll) },
+                    searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.Gboard.name }
+                        ?.let { SettingsFocusRequest(Page.Gboard, it, searchFocusSequence) },
                 )
                 Page.GboardAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.GBOARD, "Gboard",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.GboardAll.name }
+                            ?.let { SettingsFocusRequest(Page.GboardAll, it, searchFocusSequence) },
                 )
                     Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                     Page.LauncherHighlights -> LauncherHighlightsPage(padding, ::navigateTo)
@@ -439,8 +468,11 @@ private fun LiquidDockSettings(
                     Page.LauncherHighlightsLarge -> LauncherHighlightTogglePage(
                         padding, prefs, masterEnabled, compact = false,
                     )
-                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
-                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled, searchFocusKey?.takeIf { searchFocusPage == Page.Stroke.name }
+                            ?.let { SettingsFocusRequest(Page.Stroke, it, searchFocusSequence) })
+                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.Shadow.name }
+                            ?.let { SettingsFocusRequest(Page.Shadow, it, searchFocusSequence) })
 
                     Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
                         padding = padding,

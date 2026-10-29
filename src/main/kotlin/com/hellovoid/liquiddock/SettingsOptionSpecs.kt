@@ -83,10 +83,14 @@ internal fun optionSummary(key: String): String = when (key) {
     "liquid_dome" -> "控制玻璃表面的凸起程度"
     "liquid_lens_refraction" -> "边缘透镜折射位移增益；实际强度同时受 IOR 影响，0 关闭透镜位移，其他光学效果仍保留"
     "liquid_chromatic" -> "控制红、绿、蓝通道分离形成的色散强度"
-    "liquid_tint_alpha" -> "玻璃颜色乘色强度"
-    "liquid_tint_r" -> "玻璃颜色 · 红"
-    "liquid_tint_g" -> "玻璃颜色 · 绿"
-    "liquid_tint_b" -> "玻璃颜色 · 蓝"
+    "liquid_tint_alpha" -> "改变背景色调，通常保留原有纹理"
+    "liquid_tint_r" -> "调整染色的红色分量"
+    "liquid_tint_g" -> "调整染色的绿色分量"
+    "liquid_tint_b" -> "调整染色的蓝色分量"
+    "liquid_base_color_r" -> "设置纯色底色的红色分量"
+    "liquid_base_color_g" -> "设置纯色底色的绿色分量"
+    "liquid_base_color_b" -> "设置纯色底色的蓝色分量"
+    "liquid_base_color_alpha" -> "纯色覆盖背景：0 不覆盖，255 完全覆盖"
     "liquid_highlight_width" -> "控制边缘反射与高光带宽度"
     "liquid_depth_effect" -> "控制圆角处折射方向向中心偏转；直边不变，0 为关闭"
     "liquid_brightness" -> "整体输出亮度"
@@ -253,7 +257,15 @@ internal val openFolderBlurSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BLUR, "
 internal val openFolderNativeBlurSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT, "展开文件夹 · 外部原生模糊", "%", summary = "调整文件夹外壁纸的系统模糊，独立于玻璃内模糊；下次打开文件夹或多任务返回时生效")
 internal val openFolderIorSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_IOR, "展开文件夹 · 折射率", "×100", summary = "100 = 1.00（不折射），155 = 1.55")
 internal val openFolderThicknessSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_THICKNESS, "展开文件夹 · 玻璃厚度", "dp")
-internal val openFolderTintSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA, "展开文件夹 · 染色透明度", "", summary = "0 = 完全透明，160 = 较强染色；颜色继承全局玻璃颜色")
+internal val openFolderTintSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA, "展开文件夹 · 染色强度", "", summary = "改变背景色调，通常保留纹理；颜色继承全局")
+internal val openFolderBaseColorRedSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_RED,
+    "展开文件夹 · 底色红", "", summary = "−1 继承全局；设置纯色底色的红色分量")
+internal val openFolderBaseColorGreenSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_GREEN,
+    "展开文件夹 · 底色绿", "", summary = "−1 继承全局；设置纯色底色的绿色分量")
+internal val openFolderBaseColorBlueSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_BLUE,
+    "展开文件夹 · 底色蓝", "", summary = "−1 继承全局；设置纯色底色的蓝色分量")
+internal val openFolderBaseColorAlphaSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_ALPHA,
+    "展开文件夹 · 底色透明度", "", summary = "−1 继承全局；0 不覆盖，255 完全覆盖背景")
 internal val largeFolderPreviewIconScaleSpec = IntSpec(
     ConfigSchema.Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
     "2×2 文件夹内图标大小",
@@ -282,10 +294,14 @@ internal val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.LENS_REFRACTION, "透镜折射倍率", "×"),
     IntSpec(ConfigSchema.Glass.DEPTH_EFFECT, "透镜中心偏转", "%"),
     IntSpec(ConfigSchema.Glass.CHROMATIC, "色散强度", ""),
-    IntSpec(ConfigSchema.Glass.TINT_ALPHA, "玻璃底色透明度", ""),
-    IntSpec(ConfigSchema.Glass.TINT_RED, "底色 · 红", ""),
-    IntSpec(ConfigSchema.Glass.TINT_GREEN, "底色 · 绿", ""),
-    IntSpec(ConfigSchema.Glass.TINT_BLUE, "底色 · 蓝", ""),
+    IntSpec(ConfigSchema.Glass.TINT_ALPHA, "染色强度", ""),
+    IntSpec(ConfigSchema.Glass.TINT_RED, "染色 · 红", ""),
+    IntSpec(ConfigSchema.Glass.TINT_GREEN, "染色 · 绿", ""),
+    IntSpec(ConfigSchema.Glass.TINT_BLUE, "染色 · 蓝", ""),
+    IntSpec(ConfigSchema.Glass.BASE_COLOR_RED, "底色 · 红", ""),
+    IntSpec(ConfigSchema.Glass.BASE_COLOR_GREEN, "底色 · 绿", ""),
+    IntSpec(ConfigSchema.Glass.BASE_COLOR_BLUE, "底色 · 蓝", ""),
+    IntSpec(ConfigSchema.Glass.BASE_COLOR_ALPHA, "底色透明度", ""),
     IntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, "玻璃边缘厚度", "%"),
     IntSpec(ConfigSchema.Glass.BRIGHTNESS, "亮度", "%"),
     IntSpec(ConfigSchema.Glass.CAUSTICS, "焦散强度", "%"),
@@ -366,6 +382,10 @@ internal val liquidColorSpecs = liquidSpecsFor(
     ConfigSchema.Glass.TINT_RED,
     ConfigSchema.Glass.TINT_GREEN,
     ConfigSchema.Glass.TINT_BLUE,
+    ConfigSchema.Glass.BASE_COLOR_RED,
+    ConfigSchema.Glass.BASE_COLOR_GREEN,
+    ConfigSchema.Glass.BASE_COLOR_BLUE,
+    ConfigSchema.Glass.BASE_COLOR_ALPHA,
     ConfigSchema.Glass.PRISMAL_DISPERSION_R,
     ConfigSchema.Glass.PRISMAL_DISPERSION_B,
     ConfigSchema.Glass.PRISMAL_VIBRANCY,
@@ -430,10 +450,13 @@ internal val liquidRefractionGroups = listOf(
         ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING),
 )
 internal val liquidColorGroups = listOf(
-    liquidGroup("玻璃底色", ConfigSchema.Glass.TINT_RED,
+    liquidGroup("玻璃染色（保留纹理）", ConfigSchema.Glass.TINT_RED,
         ConfigSchema.Glass.TINT_GREEN, ConfigSchema.Glass.TINT_BLUE),
-    liquidGroup("透明度与色彩表现", ConfigSchema.Glass.TINT_ALPHA,
+    liquidGroup("染色强度与饱和度", ConfigSchema.Glass.TINT_ALPHA,
         ConfigSchema.Glass.PRISMAL_VIBRANCY),
+    liquidGroup("玻璃底色（纯色覆盖）", ConfigSchema.Glass.BASE_COLOR_RED,
+        ConfigSchema.Glass.BASE_COLOR_GREEN, ConfigSchema.Glass.BASE_COLOR_BLUE),
+    liquidGroup("底色透明度", ConfigSchema.Glass.BASE_COLOR_ALPHA),
     liquidGroup("色散", ConfigSchema.Glass.CHROMATIC,
         ConfigSchema.Glass.PRISMAL_DISPERSION_R, ConfigSchema.Glass.PRISMAL_DISPERSION_B),
 )

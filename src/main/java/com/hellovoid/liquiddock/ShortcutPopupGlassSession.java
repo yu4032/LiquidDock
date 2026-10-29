@@ -215,6 +215,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                         ConfigSchema.Glass.OPEN_FOLDER_THICKNESS.runtimeFallback()),
                 preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.name(),
                         ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.runtimeFallback()),
+                preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_RED.name(), -1),
+                preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_GREEN.name(), -1),
+                preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_BLUE.name(), -1),
+                preferences.getInt(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_ALPHA.name(), -1),
                 density);
     }
 

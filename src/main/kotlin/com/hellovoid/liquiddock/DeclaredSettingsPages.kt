@@ -27,7 +27,7 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     }
     page(Page.LiquidMaterial, "控制玻璃主体的基础材质感", groups(liquidMaterialGroups), glass)
     page(Page.LiquidRefraction, "折射形状、位移、边缘衰减与表面几何", groups(liquidRefractionGroups), glass)
-    page(Page.LiquidColor, "底色、色散与背景鲜艳度", groups(liquidColorGroups), glass)
+    page(Page.LiquidColor, "染色保留背景纹理，底色可纯色覆盖；另可调整色散与饱和度", groups(liquidColorGroups), glass)
     page(Page.LiquidShadow, "玻璃内部阴影颜色与柔和程度", groups(liquidShadowGroups), glass)
     page(Page.LiquidLighting, "调节焦散、菲涅尔反射与光源方向，并集中调整 OS4 边缘反射和方向光。",
         groups(liquidLightingGroups + liquidOs4Groups), glass)

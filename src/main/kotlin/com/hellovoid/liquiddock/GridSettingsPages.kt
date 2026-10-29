@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -23,9 +24,10 @@ import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.SmallTitle
 
-// Pure source relocation: keeps the widget 4×2 preflight, in-flight cancellation,
-// stale reply rejection and large warning dialog inside their existing GridBasicsPage.
+// Grid basics uses the shared semantic Cell layout. The original widget 4×2
+// preflight, in-flight cancellation and stale reply protection stay in this page.
 @Composable
 internal fun GridPage(
     padding: PaddingValues,
@@ -95,6 +97,7 @@ internal fun GridBasicsPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val context = LocalContext.current
     var gridCheckPending by remember { mutableStateOf(false) }
@@ -125,97 +128,131 @@ internal fun GridBasicsPage(
             ),
         )
     }
-    SettingsList(
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_grid_basics),
         "调整网格行列数、图标大小与小组件宽度。",
+        focusItemIndex = searchFocus?.let {
+            customDenseFocusIndex(Page.GridBasics, it.key)?.let { index ->
+                // The in-flight status card is inserted ahead of widget layout.
+                if (gridCheckPending && it.key == ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name())
+                    index + 1 else index
+            }
+        },
+        focusSequence = searchFocus?.sequence,
     ) {
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Grid.ICON_SIZE_ENABLED,
-            "自定义图标大小",
-            "工作区、Dock、小文件夹、文件夹内图标与工作台 App 页；重启桌面后生效",
-            masterEnabled,
-        ) { iconSizeEnabled = it }
-        IntSetting(
-            prefs,
-            launcher450IconSizeSpec,
-            masterEnabled && iconSizeEnabled,
-        )
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Grid.ENABLED,
-            "自由主界面网格",
-            "控制自定义行列数是否参与布局；重启桌面后生效",
-            masterEnabled,
-        ) { customGrid = it }
-        gridDimensionSpecs.forEach { spec ->
-            IntSetting(
-                prefs,
-                spec,
-                masterEnabled && customGrid && !gridCheckPending,
-                steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context)),
-                // Safe grid stops persist as their label changes. A transition
-                // below 4 must still wait for Launcher widget preflight on release.
-                previewWriteAllowed = { proposed ->
-                    !GridWidget4x2PreflightPolicy.needsCheck(
-                        prefs.getInt(spec.key, spec.default), proposed.roundToInt(),
-                    )
-                },
-                beforeSave = { proposed, commit ->
-                    val current = prefs.getInt(spec.key, spec.default)
-                    val target = proposed.roundToInt()
-                    if (!GridWidget4x2PreflightPolicy.needsCheck(current, target)) {
-                        commit()
-                    } else if (!gridCheckPending) {
-                        gridCheckPending = true
-                        val token = prefs.getString(
-                            WidgetComponentStore.DISCOVERY_TOKEN_KEY, "",
-                        ).orEmpty()
-                        gridCheck[0] = GridWidget4x2PreflightClient.start(
-                            context, token,
-                        ) { status ->
-                            gridCheckPending = false
-                            gridCheck[0] = null
-                            when (status) {
-                                GridWidget4x2PreflightClient.CLEAR -> {
-                                    // A concurrent config change invalidates this check.
-                                    if (prefs.getInt(spec.key, spec.default) == current &&
-                                        prefs.getBoolean(
-                                            ConfigSchema.Core.ENABLED.name(),
-                                            ConfigSchema.Core.ENABLED.uiDefault(),
-                                        ) && prefs.getBoolean(
-                                            ConfigSchema.Grid.ENABLED.name(),
-                                            ConfigSchema.Grid.ENABLED.uiDefault(),
-                                        )
-                                    ) {
-                                        commit()
+        item(key = "grid-icon-heading") { SmallTitle("图标大小") }
+        item(key = "grid-icon-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.ICON_SIZE_ENABLED,
+                    "自定义图标大小",
+                    "工作区、Dock、小文件夹、文件夹内图标与工作台 App 页；重启桌面后生效",
+                    masterEnabled,
+                ) { iconSizeEnabled = it }
+            }
+        }
+        item(key = "grid-icon-size") {
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    launcher450IconSizeSpec,
+                    masterEnabled && iconSizeEnabled,
+                )
+            }
+        }
+        item(key = "grid-dimensions-heading") { SmallTitle("自由主界面网格") }
+        item(key = "grid-dimensions-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.ENABLED,
+                    "自由主界面网格",
+                    "控制自定义行列数是否参与布局；重启桌面后生效",
+                    masterEnabled,
+                ) { customGrid = it }
+            }
+        }
+        items(gridDimensionSpecs, key = { it.key }) { spec ->
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    spec,
+                    masterEnabled && customGrid && !gridCheckPending,
+                    steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context)),
+                    // Safe grid stops persist as their label changes. A transition
+                    // below 4 must still wait for Launcher widget preflight on release.
+                    previewWriteAllowed = { proposed ->
+                        !GridWidget4x2PreflightPolicy.needsCheck(
+                            prefs.getInt(spec.key, spec.default), proposed.roundToInt(),
+                        )
+                    },
+                    beforeSave = { proposed, commit ->
+                        val current = prefs.getInt(spec.key, spec.default)
+                        val target = proposed.roundToInt()
+                        if (!GridWidget4x2PreflightPolicy.needsCheck(current, target)) {
+                            commit()
+                        } else if (!gridCheckPending) {
+                            gridCheckPending = true
+                            val token = prefs.getString(
+                                WidgetComponentStore.DISCOVERY_TOKEN_KEY, "",
+                            ).orEmpty()
+                            gridCheck[0] = GridWidget4x2PreflightClient.start(
+                                context, token,
+                            ) { status ->
+                                gridCheckPending = false
+                                gridCheck[0] = null
+                                when (status) {
+                                    GridWidget4x2PreflightClient.CLEAR -> {
+                                        // A concurrent config change invalidates this check.
+                                        if (prefs.getInt(spec.key, spec.default) == current &&
+                                            prefs.getBoolean(
+                                                ConfigSchema.Core.ENABLED.name(),
+                                                ConfigSchema.Core.ENABLED.uiDefault(),
+                                            ) && prefs.getBoolean(
+                                                ConfigSchema.Grid.ENABLED.name(),
+                                                ConfigSchema.Grid.ENABLED.uiDefault(),
+                                            )
+                                        ) {
+                                            commit()
+                                        }
                                     }
+                                    GridWidget4x2PreflightClient.BLOCKED ->
+                                        gridWarning = "检测到桌面存在 4×2 小组件。行数或列数不能降低到 4 以下，请先调整或移除对应小组件。本次修改未保存。"
+                                    else ->
+                                        gridWarning = "无法确认桌面是否存在 4×2 小组件。请保持桌面进程运行，确认 LSPosed 服务可用后重试。本次修改未保存。"
                                 }
-                                GridWidget4x2PreflightClient.BLOCKED ->
-                                    gridWarning = "检测到桌面存在 4×2 小组件。行数或列数不能降低到 4 以下，请先调整或移除对应小组件。本次修改未保存。"
-                                else ->
-                                    gridWarning = "无法确认桌面是否存在 4×2 小组件。请保持桌面进程运行，确认 LSPosed 服务可用后重试。本次修改未保存。"
                             }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
         if (gridCheckPending) {
-            Text(
-                "正在检查桌面 4×2 小组件，确认安全前不会保存行列数……",
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                fontSize = 13.sp,
-            )
+            item(key = "grid-preflight") {
+                SettingsCard {
+                    Text(
+                        "正在检查桌面 4×2 小组件，确认安全前不会保存行列数……",
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        fontSize = 13.sp,
+                    )
+                }
+            }
         }
-        BooleanSetting(
-            prefs,
-            ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
-            "小组件随水平边距拉伸",
-            "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
-            masterEnabled && customGrid,
-        )
+
+        item(key = "grid-widget-stretch-heading") { SmallTitle("小组件布局") }
+        item(key = "grid-widget-stretch") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
+                    "小组件随水平边距拉伸",
+                    "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
+                    masterEnabled && customGrid,
+                )
+            }
+        }
     }
     AnimatedSettingsWindowDialog(
         show = gridWarning != null,

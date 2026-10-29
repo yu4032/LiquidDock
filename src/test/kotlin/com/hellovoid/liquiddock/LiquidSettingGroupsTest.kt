@@ -23,7 +23,8 @@ class LiquidSettingGroupsTest {
     @Test fun colorChannelsAndDispersionNeverShareACell() {
         val groups = liquidColorGroups
         assertEquals(
-            listOf("玻璃底色", "透明度与色彩表现", "色散"),
+            listOf("玻璃染色（保留纹理）", "染色强度与饱和度",
+                "玻璃底色（纯色覆盖）", "底色透明度", "色散"),
             groups.map { it.title },
         )
         assertEquals(
@@ -36,10 +37,17 @@ class LiquidSettingGroupsTest {
             groups[1].specs.map { it.config },
         )
         assertEquals(
+            listOf(ConfigSchema.Glass.BASE_COLOR_RED, ConfigSchema.Glass.BASE_COLOR_GREEN,
+                ConfigSchema.Glass.BASE_COLOR_BLUE),
+            groups[2].specs.map { it.config },
+        )
+        assertEquals(listOf(ConfigSchema.Glass.BASE_COLOR_ALPHA),
+            groups[3].specs.map { it.config })
+        assertEquals(
             listOf(ConfigSchema.Glass.CHROMATIC,
                 ConfigSchema.Glass.PRISMAL_DISPERSION_R,
                 ConfigSchema.Glass.PRISMAL_DISPERSION_B),
-            groups[2].specs.map { it.config },
+            groups[4].specs.map { it.config },
         )
         assertFalse(groups[0].specs.any { it.config == ConfigSchema.Glass.CHROMATIC })
     }

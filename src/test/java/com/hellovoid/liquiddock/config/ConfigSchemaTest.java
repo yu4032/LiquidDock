@@ -194,13 +194,29 @@ public class ConfigSchemaTest {
         assertComposeIntSpec(ConfigSchema.Glass.LENS_REFRACTION, 1, 0, 8);
         assertComposeIntSpec(ConfigSchema.Glass.DEPTH_EFFECT, 0, 0, 100);
         assertComposeIntSpec(ConfigSchema.Glass.CHROMATIC, 26, 0, 40);
-        assertComposeIntSpec(ConfigSchema.Glass.TINT_ALPHA, 35, 0, 160);
+        assertComposeIntSpec(ConfigSchema.Glass.TINT_ALPHA, 35, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.TINT_RED, 0, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.TINT_GREEN, 0, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.TINT_BLUE, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.BASE_COLOR_RED, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.BASE_COLOR_GREEN, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.BASE_COLOR_BLUE, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.BASE_COLOR_ALPHA, 0, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_RED, -1, -1, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_GREEN, -1, -1, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_BLUE, -1, -1, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_ALPHA, -1, -1, 255);
         assertComposeIntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, 100, 50, 300);
         assertComposeIntSpec(ConfigSchema.Glass.BRIGHTNESS, 108, 50, 200);
         assertComposeIntSpec(ConfigSchema.Glass.CAUSTICS, 28, 0, 100);
+    }
+
+    @Test
+    public void glassTintAlphaSupportsFullEightBitRangeWithoutChangingDefaults() {
+        assertComposeIntSpec(ConfigSchema.Glass.TINT_ALPHA, 35, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA, 35, 0, 255);
+        assertEquals(Integer.valueOf(35), ConfigSchema.Glass.TINT_ALPHA.runtimeFallback());
+        assertEquals(Integer.valueOf(35), ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.runtimeFallback());
     }
 
     @Test

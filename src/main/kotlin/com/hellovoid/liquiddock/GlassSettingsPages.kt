@@ -123,6 +123,7 @@ internal fun GlassIconsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -151,6 +152,8 @@ internal fun GlassIconsPage(
         padding,
         stringResource(R.string.page_glass_icons),
         "调整桌面图标、Dock 功能图标与多任务胶囊玻璃。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GlassIcons, it.key) },
+        focusSequence = searchFocus?.sequence,
     ) {
         item(key = "icons-glass-title") { SmallTitle("图标玻璃开关") }
         item(key = "icons-glass-toggles") {
@@ -226,6 +229,7 @@ internal fun GlassWidgetsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -243,6 +247,8 @@ internal fun GlassWidgetsPage(
         padding,
         stringResource(R.string.page_glass_widgets),
         "小组件玻璃、内容适配与独立外观分开调整。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GlassWidgets, it.key) },
+        focusSequence = searchFocus?.sequence,
     ) {
         item(key = "widget-function-heading") { SmallTitle("玻璃与内容适配") }
         item(key = "widget-enabled") {
@@ -295,12 +301,58 @@ internal fun GlassWidgetsPage(
     }
 }
 
+
+/** Stable existing folder cell positions; multiple sliders in one cell share one target. */
+internal enum class FolderGlassCell(val id: String) {
+    SMALL_HEADING("folder-small-heading"),
+    SMALL_ENABLED("folder-small-enabled"),
+    SMALL_GEOMETRY("folder-small-geometry"),
+    LARGE_HEADING("folder-large-heading"),
+    LARGE_ENABLED("folder-large-enabled"),
+    LARGE_GEOMETRY("folder-large-geometry"),
+    LARGE_PREVIEW("folder-large-preview"),
+    LARGE_NATIVE_OUTLINE("folder-large-native-outline"),
+    LARGE_MINGOU_COMPAT("folder-large-mingou-compat"),
+    OPEN_HEADING("folder-open-heading"),
+    OPEN_ENABLED("folder-open-enabled"),
+    OPEN_BLUR("folder-open-blur"),
+    OPEN_OPTICS("folder-open-optics"),
+    OPEN_FILL_HEADING("folder-open-fill-heading"),
+    OPEN_FILL_RGB("folder-open-fill-rgb"),
+    OPEN_FILL_ALPHA("folder-open-fill-alpha"),
+    SHADOW_HEADING("folder-shadow-heading"),
+    SHADOW("folder-shadow");
+}
+internal val folderGlassCellOrder: List<String> = FolderGlassCell.entries.map { it.id }
+internal val folderGlassFocusCell: Map<String, String> = mapOf(
+    ConfigSchema.Glass.SMALL_FOLDER_GLASS.name() to FolderGlassCell.SMALL_ENABLED.id,
+    smallFolderSizeOffsetSpec.key to FolderGlassCell.SMALL_GEOMETRY.id,
+    smallFolderCornerRadiusSpec.key to FolderGlassCell.SMALL_GEOMETRY.id,
+    ConfigSchema.Glass.LARGE_FOLDER_GLASS.name() to FolderGlassCell.LARGE_ENABLED.id,
+    largeFolderSizeOffsetSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
+    largeFolderCornerRadiusSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
+    largeFolderPreviewIconScaleSpec.key to FolderGlassCell.LARGE_PREVIEW.id,
+    ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE.name() to FolderGlassCell.LARGE_NATIVE_OUTLINE.id,
+    ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT.name() to FolderGlassCell.LARGE_MINGOU_COMPAT.id,
+    ConfigSchema.Glass.OPEN_FOLDER_GLASS.name() to FolderGlassCell.OPEN_ENABLED.id,
+    openFolderBlurSpec.key to FolderGlassCell.OPEN_BLUR.id,
+    openFolderNativeBlurSpec.key to FolderGlassCell.OPEN_BLUR.id,
+    openFolderIorSpec.key to FolderGlassCell.OPEN_OPTICS.id,
+    openFolderThicknessSpec.key to FolderGlassCell.OPEN_OPTICS.id,
+    openFolderTintSpec.key to FolderGlassCell.OPEN_OPTICS.id,
+    openFolderBaseColorRedSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
+    openFolderBaseColorGreenSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
+    openFolderBaseColorBlueSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
+    openFolderBaseColorAlphaSpec.key to FolderGlassCell.OPEN_FILL_ALPHA.id
+)
+
 @Composable
 internal fun GlassFoldersPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -334,9 +386,12 @@ internal fun GlassFoldersPage(
         padding,
         stringResource(R.string.page_glass_folders),
         "小文件夹、大文件夹和展开文件夹分别调整，不混用背景与几何参数。",
+        focusItemIndex = searchFocus?.key?.let(folderGlassFocusCell::get)
+            ?.let(folderGlassCellOrder::indexOf)?.takeIf { it >= 0 }?.plus(1),
+        focusSequence = searchFocus?.sequence,
     ) {
-        item(key = "folder-small-heading") { SmallTitle("小文件夹") }
-        item(key = "folder-small-enabled") {
+        item(key = FolderGlassCell.SMALL_HEADING.id) { SmallTitle("小文件夹") }
+        item(key = FolderGlassCell.SMALL_ENABLED.id) {
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS,
@@ -345,15 +400,15 @@ internal fun GlassFoldersPage(
                 ) { smallFolderGlass = it }
             }
         }
-        item(key = "folder-small-geometry") {
+        item(key = FolderGlassCell.SMALL_GEOMETRY.id) {
             SettingsCard {
                 IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidEnabled && smallFolderGlass)
                 ModernListDivider()
                 IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidEnabled && smallFolderGlass)
             }
         }
-        item(key = "folder-large-heading") { SmallTitle("大文件夹") }
-        item(key = "folder-large-enabled") {
+        item(key = FolderGlassCell.LARGE_HEADING.id) { SmallTitle("大文件夹") }
+        item(key = FolderGlassCell.LARGE_ENABLED.id) {
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.LARGE_FOLDER_GLASS,
@@ -362,19 +417,19 @@ internal fun GlassFoldersPage(
                 ) { largeFolderGlass = it }
             }
         }
-        item(key = "folder-large-geometry") {
+        item(key = FolderGlassCell.LARGE_GEOMETRY.id) {
             SettingsCard {
                 IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
                 ModernListDivider()
                 IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
             }
         }
-        item(key = "folder-large-preview") {
+        item(key = FolderGlassCell.LARGE_PREVIEW.id) {
             SettingsCard {
                 IntSetting(prefs, largeFolderPreviewIconScaleSpec, masterEnabled)
             }
         }
-        item(key = "folder-large-native-outline") {
+        item(key = FolderGlassCell.LARGE_NATIVE_OUTLINE.id) {
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,
@@ -384,7 +439,7 @@ internal fun GlassFoldersPage(
                 )
             }
         }
-        item(key = "folder-large-mingou-compat") {
+        item(key = FolderGlassCell.LARGE_MINGOU_COMPAT.id) {
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT,
@@ -394,8 +449,8 @@ internal fun GlassFoldersPage(
                 )
             }
         }
-        item(key = "folder-open-heading") { SmallTitle("展开文件夹") }
-        item(key = "folder-open-enabled") {
+        item(key = FolderGlassCell.OPEN_HEADING.id) { SmallTitle("展开文件夹") }
+        item(key = FolderGlassCell.OPEN_ENABLED.id) {
             SettingsCard {
                 // FolderCling background is independent of the desktop preview;
                 // its first Hook installation still requires a Launcher restart.
@@ -407,14 +462,14 @@ internal fun GlassFoldersPage(
                 ) { openFolderGlass = it }
             }
         }
-        item(key = "folder-open-blur") {
+        item(key = FolderGlassCell.OPEN_BLUR.id) {
             SettingsCard {
                 IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
                 ModernListDivider()
                 IntSetting(prefs, openFolderNativeBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
             }
         }
-        item(key = "folder-open-optics") {
+        item(key = FolderGlassCell.OPEN_OPTICS.id) {
             SettingsCard {
                 IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled && openFolderGlass)
                 ModernListDivider()
@@ -423,8 +478,23 @@ internal fun GlassFoldersPage(
                 IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
             }
         }
-        item(key = "folder-shadow-heading") { SmallTitle("玻璃阴影") }
-        item(key = "folder-shadow") {
+        item(key = FolderGlassCell.OPEN_FILL_HEADING.id) { SmallTitle("展开文件夹 · 底色（纯色覆盖）") }
+        item(key = FolderGlassCell.OPEN_FILL_RGB.id) {
+            SettingsCard {
+                IntSetting(prefs, openFolderBaseColorRedSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderBaseColorGreenSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderBaseColorBlueSpec, masterEnabled && liquidEnabled && openFolderGlass)
+            }
+        }
+        item(key = FolderGlassCell.OPEN_FILL_ALPHA.id) {
+            SettingsCard {
+                IntSetting(prefs, openFolderBaseColorAlphaSpec, masterEnabled && liquidEnabled && openFolderGlass)
+            }
+        }
+        item(key = FolderGlassCell.SHADOW_HEADING.id) { SmallTitle("玻璃阴影") }
+        item(key = FolderGlassCell.SHADOW.id) {
             SettingsCard {
                 ArrowPreference(
                     title = "阴影",
