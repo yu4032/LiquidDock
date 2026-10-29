@@ -1,6 +1,6 @@
 # Changelog
 
-> 本文件按版本记录当时的变化，历史条目不会为追随当前实现而改写。当前行为请以 `main` 生产源码和 [README.md](README.md)、[FEATURES.md](FEATURES.md)、[ARCHITECTURE.md](ARCHITECTURE.md)、[HOOKS.md](HOOKS.md) 为准。
+> 历史变更按对应版本保留；当前功能与使用方式见 [README.md](README.md) 和 [FEATURES.md](FEATURES.md)。
 
 ## Unreleased
 
@@ -10,7 +10,7 @@
 
 ### LSPosed API 102 与资源回收
 
-- 迁移至 libxposed API 102，完善按调用位置区分的 Hook 所有权与原子替换，并修正 ART 栈帧识别；此机制不等同于 SystemUI 热重载。[#465](https://github.com/yu4032/LiquidDock/pull/465)、[#474](https://github.com/yu4032/LiquidDock/pull/474)
+- 迁移至 libxposed API 102，按调用位置维护 Hook 所有权与原子替换，并修正 ART 栈帧识别；APK 更新后重启作用域加载新代码。[#465](https://github.com/yu4032/LiquidDock/pull/465)、[#474](https://github.com/yu4032/LiquidDock/pull/474)
 - 修复桌面快捷菜单及拖拽浮层关闭时，PassBlur 生产端窗口过早释放造成的 EGL 资源滞留；等待合成器确认解绑后再销毁相关资源。[#474](https://github.com/yu4032/LiquidDock/pull/474)、[#476](https://github.com/yu4032/LiquidDock/pull/476)
 
 ### 玻璃材质与图标
@@ -28,7 +28,7 @@
 
 - 本次只更新 `main` 源码版本为 `2.7.6`（`versionCode 38`），未创建正式 Release、版本标签或签名发布包。
 - 使用兼容 libxposed API 102 的 LSPosed 环境；升级后需要时重启桌面及相关作用域，以使新增 Hook 生效。
-- 新底色默认透明，不自动覆盖已有染色参数。真机上的显示效果仍应结合目标机型验收。
+- 新底色默认透明，已有染色配置继续生效；可按设备与壁纸组合调整底色。
 
 ## v2.7.5（2026-10-25）
 

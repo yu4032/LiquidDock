@@ -1,6 +1,6 @@
 # LiquidDock Workstation Divider
 
-本文档记录工作台 Dock 分隔线行为（上次专项核验：2026-10-03）。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。分隔线行为以生产代码和测试为准。
+本文件说明工作台 Dock 分隔线的设置、几何与恢复规则，按当前 `main` 实现整理。
 
 Divider 是独立的视觉设置，不拥有 Workstation Dock 长度、图标位置、All Apps 布局或玻璃 source。
 

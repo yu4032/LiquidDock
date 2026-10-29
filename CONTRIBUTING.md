@@ -1,6 +1,6 @@
 # Contributing
 
-本文档面向 LiquidDock 的开发流程。当前源码版本为 **2.7.6（versionCode 38）**，上一正式版本为 **2.7.5**（2.7.6 尚未发布）。生产源码、设置页、`ConfigSchema`、构建配置是事实来源；`docs/superpowers/*` 是历史记录。当前未完成事项见 [TODO.md](TODO.md)，维护性核验见 [docs/maintainability-audit-20261010.md](docs/maintainability-audit-20261010.md)。
+本文件说明 LiquidDock 开发流程与工程约定。当前源码版本为 **v2.7.6（versionCode 38）**，最新正式 Release 为 **v2.7.5**。配置与构建以生产源码、`ConfigSchema` 和 Gradle 文件为依据。
 
 ## 1. Build baseline
 
@@ -20,7 +20,7 @@
 ./gradlew assembleDebug --stacktrace
 ```
 
-Debug 与 Release 都启用 optimization/R8。不要假设 debug APK 保留原始类名；CI debug build 本身就是 shrinker regression gate。
+Debug 和 Release 均开启 optimization/R8；CI Debug 构建用于覆盖混淆与 shrinker 回归检查。
 
 `assembleRelease` 生成 unsigned APK；正式 Release 签名与构建分开执行，详见 [签名说明](docs/release-signing.md)。Debug 使用公开测试 key，不能作为正式发布身份。私有 keystore 和密码不得放入公开源码目录、提交或日志。
 
@@ -46,7 +46,7 @@ Debug 与 Release 都启用 optimization/R8。不要假设 debug APK 保留原�
 - 安装与作用域；
 - 用户可见限制。
 
-不要把内部 Hook 名、R8 事故、PassBlur pipeline 或调试过程塞进 README。
+README 聚焦功能、使用、设置和兼容范围；Hook、R8 与 PassBlur 机制分别写入技术文档。
 
 ### 当前技术文档
 
