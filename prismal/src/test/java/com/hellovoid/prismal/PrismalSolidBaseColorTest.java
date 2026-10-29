@@ -34,7 +34,10 @@ public final class PrismalSolidBaseColorTest {
     }
 
     @Test public void baselineAndDecoratedShadersEachApplySolidFillExactlyOnce() {
-        String base = PrismalOpticalEdgeShader.apply(PrismalShaderSources.FRAGMENT);
+        String base = PrismalOs4InvariantShader.apply(
+                PrismalComponentGateShader.apply(
+                        PrismalOpticalEdgeShader.apply(
+                                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
         assertTrue(base.contains("color = mix(color, color * u_glassColor.rgb, u_glassColor.a);"));
         assertEquals(1, count(base, "color = mix(color, u_baseColor.rgb, u_baseColor.a);"));
         String decorated = PrismalEdgeDecorationShader.apply(base);
