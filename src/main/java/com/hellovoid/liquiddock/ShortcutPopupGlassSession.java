@@ -412,7 +412,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.onShutdownComplete(onShutdownComplete);
         if (shuttingDown) return;
         shuttingDown = true;
-        boolean queued = sourceBackend.postToRenderThread(() -> {
+        boolean queued = sourceBackend.postShutdownToRenderThread(() -> {
             releaseOutput(output);
             output = null;
             if (prismalRenderer != null) {
