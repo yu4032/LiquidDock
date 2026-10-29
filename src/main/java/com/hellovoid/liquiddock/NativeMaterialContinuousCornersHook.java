@@ -140,7 +140,11 @@ final class NativeMaterialContinuousCornersHook {
         }
         if (!continuousCorners) return;
         ViewOutlineProvider original = material.getOutlineProvider();
-        if (original == null || original instanceof ContinuousOutline) return;
+        if (original instanceof ContinuousOutline) return;
+        if (original == null && material.getBackground() != null) {
+            original = (view, outline) -> view.getBackground().getOutline(outline);
+        }
+        if (original == null) return;
         // No clipToOutline(true): widget text and icons must not be clipped by a new owner.
         // Existing OEM clipToOutline and MiUI blur flags are deliberately untouched.
         material.setOutlineProvider(new ContinuousOutline(original));

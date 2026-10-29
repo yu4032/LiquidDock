@@ -83,7 +83,8 @@ public final class ModuleMain extends XposedModule {
                 // Install once regardless of initial preference. The hook's runtime gate
                 // stays inert until the user enables caption-menu glass.
                 SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(configReader, runtimeConfig);
-                if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
+                if (runtimeConfig.glass.advancedMaterialEnabled
+                        || SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
                     SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
                 } else {
                     Api101Bridge.log(

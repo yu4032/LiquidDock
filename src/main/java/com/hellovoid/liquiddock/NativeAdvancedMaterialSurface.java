@@ -103,7 +103,8 @@ final class NativeAdvancedMaterialSurface {
                 blurRadius = appearance.radiusPx;
                 MiBlurBridge.setPassWindowBlurRadius(target, blurRadius);
             }
-            appearance.applyVendor(target);
+            if (blurOwned) appearance.updateOwned(target);
+            else appearance.applyVendor(target);
         }
 
         void release(View target) {

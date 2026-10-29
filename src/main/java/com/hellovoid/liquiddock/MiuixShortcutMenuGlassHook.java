@@ -62,7 +62,7 @@ final class MiuixShortcutMenuGlassHook {
                 if (owner instanceof View) {
                     View ownerView = (View) owner;
                     View launcherRoot = ownerView.getRootView();
-                    if (itemInfo != null && popupGlassEnabled) {
+                    if (itemInfo != null && popupGlassEnabled && GlassRuntimeState.isEnabled()) {
                         ShortcutPopupGlassCoordinator.prepareIfNeeded(
                                 ownerView, launcherRoot, glassConfig);
                     }

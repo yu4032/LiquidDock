@@ -31,7 +31,8 @@ final class GboardNativeAdvancedMaterial {
                 existing.blurRadius = blurRadius;
                 MiBlurBridge.setPassWindowBlurRadius(plate, blurRadius);
             }
-            plate.invalidateOutline();
+            // Existing native material geometry follows View layout automatically.
+            // Re-invalidating its outline on every keyboard layout adds compositor work.
             return;
         }
         // Stock mode on some Gboard builds already owns native pass-window blur.

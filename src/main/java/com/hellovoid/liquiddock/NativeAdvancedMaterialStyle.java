@@ -64,8 +64,16 @@ final class NativeAdvancedMaterialStyle {
     /** Do not disturb the native background mode or radius of an OEM-owned view. */
     void applyVendor(View view) {
         if (view == null) return;
+        // OEM blends are not overwritten when there is no custom color.
         ArrayList<Point> colors = blendColors();
         if (colors != null) MiBlurBridge.setPassWindowBlurBlendColors(view, colors);
+        applyShadow(view);
+    }
+
+    /** Our own native material has no OEM blend to preserve; alpha=0 clears our color. */
+    void updateOwned(View view) {
+        if (view == null) return;
+        MiBlurBridge.setPassWindowBlurBlendColors(view, blendColors());
         applyShadow(view);
     }
 
