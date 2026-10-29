@@ -102,6 +102,17 @@ class SettingsMetaTest {
         rows.forEach { assertTrue(customDenseFocusIndex(Page.GridBasics, it.key) != null) }
     }
 
+    @Test fun customMenuAndKeyboardPagesSearchActualOriginalControls() {
+        for (page in listOf(Page.ShortcutPopupCustomization, Page.HandleMenuCustomization,
+                Page.DialogCustomization, Page.Gboard)) {
+            val rows = customGlassSearchRows(page)
+            assertTrue(rows.isNotEmpty())
+            assertEquals(rows.size, rows.map { it.key }.toSet().size)
+            rows.forEach { assertTrue("Missing GUI cell for ${page.name}/${it.key}",
+                customDenseFocusIndex(page, it.key) != null) }
+        }
+    }
+
     @Test fun tintAndSolidColorSearchFindTheirOwningPages() {
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
         val tint = filterSettingsSearch(catalog, "染色")

@@ -409,6 +409,9 @@ private fun LiquidDockSettings(
                         padding, prefs, masterEnabled,
                         onOpenAll = { navigateTo(Page.HandleMenuAll) },
                         onOpenEdge = { navigateTo(Page.HandleMenuEdge) },
+                        searchFocus = searchFocusKey?.takeIf {
+                            searchFocusPage == Page.HandleMenuCustomization.name
+                        }?.let { SettingsFocusRequest(Page.HandleMenuCustomization, it, searchFocusSequence) },
                     )
                     Page.HandleMenuAll -> ScopedGlassSettingsPage(
                         padding, prefs, masterEnabled, ScopedGlassOptics.HANDLE_MENU, "应用顶部菜单",
@@ -419,6 +422,9 @@ private fun LiquidDockSettings(
                         padding, prefs, masterEnabled,
                         onOpenAll = { navigateTo(Page.ShortcutPopupAll) },
                         onOpenEdge = { navigateTo(Page.PopupEdge) },
+                        searchFocus = searchFocusKey?.takeIf {
+                            searchFocusPage == Page.ShortcutPopupCustomization.name
+                        }?.let { SettingsFocusRequest(Page.ShortcutPopupCustomization, it, searchFocusSequence) },
                     )
                     Page.ShortcutPopupAll -> ScopedGlassSettingsPage(
                         padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
@@ -429,6 +435,9 @@ private fun LiquidDockSettings(
                     padding, prefs, masterEnabled,
                     onOpenAll = { navigateTo(Page.DialogAll) },
                     onOpenEdge = { navigateTo(Page.DialogEdge) },
+                    searchFocus = searchFocusKey?.takeIf {
+                        searchFocusPage == Page.DialogCustomization.name
+                    }?.let { SettingsFocusRequest(Page.DialogCustomization, it, searchFocusSequence) },
                 )
                 Page.DialogAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
@@ -443,6 +452,8 @@ private fun LiquidDockSettings(
                     )
                     Page.Gboard -> GboardSettingsPage(
                     padding, prefs, masterEnabled, onOpenAll = { navigateTo(Page.GboardAll) },
+                    searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.Gboard.name }
+                        ?.let { SettingsFocusRequest(Page.Gboard, it, searchFocusSequence) },
                 )
                 Page.GboardAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.GBOARD, "Gboard",

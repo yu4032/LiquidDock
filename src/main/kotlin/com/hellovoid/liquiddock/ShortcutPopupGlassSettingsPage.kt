@@ -26,8 +26,9 @@ internal fun ShortcutPopupGlassSettingsPage(
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
     onOpenEdge: () -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) = ScopedMenuGlassSettingsPage(
-    padding, prefs, masterEnabled, onOpenAll, onOpenEdge,
+    padding, prefs, masterEnabled, onOpenAll, onOpenEdge, searchFocus,
     scope = ScopedGlassOptics.POPUP,
     titleRes = R.string.page_shortcut_popup,
     description = "独立调整桌面长按快捷菜单的玻璃外观；未单独设置的参数继承全局液态玻璃。",
@@ -45,8 +46,9 @@ internal fun HandleMenuGlassSettingsPage(
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
     onOpenEdge: () -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) = ScopedMenuGlassSettingsPage(
-    padding, prefs, masterEnabled, onOpenAll, onOpenEdge,
+    padding, prefs, masterEnabled, onOpenAll, onOpenEdge, searchFocus,
     scope = ScopedGlassOptics.HANDLE_MENU,
     titleRes = R.string.page_handle_menu,
     description = "独立调整应用顶部控制器弹出菜单的玻璃；未单独设置的参数继承全局液态玻璃。",
@@ -64,6 +66,7 @@ private fun ScopedMenuGlassSettingsPage(
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
     onOpenEdge: () -> Unit,
+    searchFocus: SettingsFocusRequest?,
     scope: String,
     titleRes: Int,
     description: String,
@@ -129,7 +132,15 @@ private fun ScopedMenuGlassSettingsPage(
         )
     }
 
+    val page = if (scope == ScopedGlassOptics.POPUP)
+        Page.ShortcutPopupCustomization else Page.HandleMenuCustomization
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(searchFocus?.sequence, searchFocus?.key) {
+        val index = searchFocus?.key?.let { customDenseFocusIndex(page, it) }
+        if (index != null) listState.animateScrollToItem(index)
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = padding,
         verticalArrangement = Arrangement.spacedBy(8.dp),

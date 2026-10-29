@@ -75,6 +75,7 @@ internal fun GboardSettingsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     onOpenAll: () -> Unit = {},
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -174,7 +175,13 @@ internal fun GboardSettingsPage(
         appearanceGeneration++
     }
 
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(searchFocus?.sequence, searchFocus?.key) {
+        val index = searchFocus?.key?.let { customDenseFocusIndex(Page.Gboard, it) }
+        if (index != null) listState.animateScrollToItem(index)
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = padding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
