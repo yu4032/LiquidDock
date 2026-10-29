@@ -127,7 +127,7 @@ internal fun SearchboxSettingsPage(
             }
         }
         item { SmallTitle("玻璃染色（保留背景纹理）") }
-        item {
+        item(key = "searchbox-color-rgb") {
             GboardSettingsCard {
                 GboardValueSlider(
                     key = MiuiSearchboxGlassPreferences.TINT_RED_KEY,
@@ -156,6 +156,10 @@ internal fun SearchboxSettingsPage(
                     enabled = controlsEnabled,
                     max = 255,
                 )
+            }
+        }
+        item(key = "searchbox-color-alpha") {
+            GboardSettingsCard {
                 GboardValueSlider(
                     key = MiuiSearchboxGlassPreferences.TINT_ALPHA_KEY,
                     title = "染色强度",
