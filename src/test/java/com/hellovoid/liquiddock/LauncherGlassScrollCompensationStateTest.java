@@ -58,13 +58,13 @@ public class LauncherGlassScrollCompensationStateTest {
     }
 
     @Test
-    public void uiPreDrawCoalescesMultipleScrollMutations() {
+    public void rapidMutationsExposeLatestImmutableScrollSnapshot() {
         LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
-        assertFalse(state.consumeUiRedraw());
         state.onScrollMutation(100, 120);
+        LauncherGlassScrollProjectionState.Snapshot first = state.snapshot();
         state.onScrollMutation(120, 150);
-        assertTrue(state.consumeUiRedraw());
-        assertFalse(state.consumeUiRedraw());
+        assertFalse(state.isCurrent(first));
+        assertEquals(480f, first.projectCenterX(500f, 100, true), 0.001f);
         assertEquals(450f, state.snapshot().projectCenterX(500f, 100, true), 0.001f);
     }
 
@@ -91,17 +91,15 @@ public class LauncherGlassScrollCompensationStateTest {
         state.reset();
 
         assertFalse(state.isCurrent(old));
-        assertFalse(state.consumeUiRedraw());
         assertEquals(500f, state.snapshot().projectCenterX(500f, 100, true), 0.001f);
     }
 
     @Test
-    public void unchangedScrollDoesNotScheduleOrSupersedeAFrame() {
+    public void unchangedScrollDoesNotSupersedeAFrame() {
         LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
         LauncherGlassScrollProjectionState.Snapshot frame = state.snapshot();
         state.onScrollMutation(100, 100);
         assertTrue(state.isCurrent(frame));
-        assertFalse(state.consumeUiRedraw());
     }
 
 }
