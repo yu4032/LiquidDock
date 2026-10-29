@@ -6,6 +6,30 @@
 
 暂无新增条目。
 
+## v2.7.6（2026-10-29；版本号已更新，尚未发布）
+
+### LSPosed API 102 与资源回收
+
+- 迁移至 libxposed API 102，完善按调用位置区分的 Hook 所有权与原子替换，并修正 ART 栈帧识别；此机制不等同于 SystemUI 热重载。[#465](https://github.com/yu4032/LiquidDock/pull/465)、[#474](https://github.com/yu4032/LiquidDock/pull/474)
+- 修复桌面快捷菜单及拖拽浮层关闭时，PassBlur 生产端窗口过早释放造成的 EGL 资源滞留；等待合成器确认解绑后再销毁相关资源。[#474](https://github.com/yu4032/LiquidDock/pull/474)、[#476](https://github.com/yu4032/LiquidDock/pull/476)
+
+### 玻璃材质与图标
+
+- 玻璃「染色」与「底色」拆分为独立效果：原乘法染色保留背景纹理，新增可调 RGBA 的纯色底色覆盖；新底色默认透明，原配置继续有效。展开文件夹也可独立覆盖或继承全局底色。[#477](https://github.com/yu4032/LiquidDock/pull/477)
+- 将染色强度的上限由 160 扩展至 255，澄清其与底色覆盖透明度的区别；同步 HyperOS 和 Prismal 的主要着色路径。[#477](https://github.com/yu4032/LiquidDock/pull/477)
+- 为玻璃图标增加轮廓裁剪，修复边缘残线并改善应用动画期间的裁剪一致性。[#469](https://github.com/yu4032/LiquidDock/pull/469)、[#472](https://github.com/yu4032/LiquidDock/pull/472)
+
+### 设置与兼容性
+
+- 统一玻璃、文件夹、菜单、弹窗、键盘、网格等设置页的语义分组及搜索定位；参数级搜索使用真实配置键，保留动态内容页面和独立 Activity 的专用入口。[#468](https://github.com/yu4032/LiquidDock/pull/468)、[#477](https://github.com/yu4032/LiquidDock/pull/477)
+- 小组件隐藏选择器使用易读标题，而不再仅显示内部标识。[#467](https://github.com/yu4032/LiquidDock/pull/467)
+
+### 升级提醒
+
+- 本次只更新 `main` 源码版本为 `2.7.6`（`versionCode 38`），未创建正式 Release、版本标签或签名发布包。
+- 使用兼容 libxposed API 102 的 LSPosed 环境；升级后需要时重启桌面及相关作用域，以使新增 Hook 生效。
+- 新底色默认透明，不自动覆盖已有染色参数。真机上的显示效果仍应结合目标机型验收。
+
 ## v2.7.5（2026-10-25）
 
 ### 玻璃圆角

@@ -1,6 +1,6 @@
 # Contributing
 
-本文档面向 LiquidDock 的开发流程。当前源码版本为 **2.7.5（versionCode 37）**，上一正式版本为 **2.7.4**。生产源码、设置页、`ConfigSchema`、构建配置是事实来源；`docs/superpowers/*` 是历史记录。当前未完成事项见 [TODO.md](TODO.md)，维护性核验见 [docs/maintainability-audit-20261010.md](docs/maintainability-audit-20261010.md)。
+本文档面向 LiquidDock 的开发流程。当前源码版本为 **2.7.6（versionCode 38）**，上一正式版本为 **2.7.5**（2.7.6 尚未发布）。生产源码、设置页、`ConfigSchema`、构建配置是事实来源；`docs/superpowers/*` 是历史记录。当前未完成事项见 [TODO.md](TODO.md)，维护性核验见 [docs/maintainability-audit-20261010.md](docs/maintainability-audit-20261010.md)。
 
 ## 1. Build baseline
 
@@ -11,7 +11,7 @@
 - JDK 17；
 - Gradle 9.6.1；
 - Android Gradle Plugin 9.3.0；
-- libxposed API 101。
+- libxposed API 102。
 
 本地最低验证：
 

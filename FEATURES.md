@@ -1,6 +1,6 @@
 # LiquidDock 功能手册
 
-本文档说明 LiquidDock 功能。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。2.7.4 变更见 [CHANGELOG.md](CHANGELOG.md)；具体行为以设置页源码和相关测试为准，维护任务见 [TODO.md](TODO.md)。
+本文档说明 LiquidDock 功能。本文档的功能清单最初按 **v2.7.4** 整理；之后的版本变化见 [CHANGELOG.md](CHANGELOG.md)；具体行为以设置页源码和相关测试为准，维护任务见 [TODO.md](TODO.md)。
 
 ## 1. 首次使用与默认配置
 

@@ -1,6 +1,6 @@
 # LiquidDock Architecture
 
-本文档记录 LiquidDock 生产架构（原逐项核验于 2026-10-03）。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。具体 Hook 时序以源码和测试为准；当前架构技术债见 [TODO.md](TODO.md) 与 [2026-10-10 可维护性审计](docs/maintainability-audit-20261010.md)。历史 `docs/superpowers/*` 是阶段性记录。
+本文档记录 LiquidDock 生产架构（原逐项核验于 2026-10-03）。本文件的架构清单最初按 **v2.7.4** 整理；当前构建版本见 [build.gradle.kts](build.gradle.kts)，后续修改以当前源码和测试为准。具体 Hook 时序以源码和测试为准；当前架构技术债见 [TODO.md](TODO.md) 与 [2026-10-10 可维护性审计](docs/maintainability-audit-20261010.md)。历史 `docs/superpowers/*` 是阶段性记录。
 
 当前新增边界：
 
@@ -18,7 +18,7 @@ Launcher:       com.miui.home release-4.50.x.x
 SystemUI:       com.android.systemui
 SecurityCenter: com.miui.securitycenter:ui
 Third party:    Gboard / MIUI Searchbox
-Hook API:       libxposed API 101
+Hook API:       libxposed API 102
 Renderer:       PassBlur + OES/GLES + Prismal
 Build:          JDK 17 / Gradle 9.6.1 / AGP 9.3.0
 Optimization:   Debug 与 Release 均启用

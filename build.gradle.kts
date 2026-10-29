@@ -13,8 +13,8 @@ android {
         minSdk = 33
         targetSdk = 37
         testInstrumentationRunner = "com.hellovoid.liquiddock.SettingsSearchInstrumentation"
-        versionCode = 37
-        versionName = "2.7.5"
+        versionCode = 38
+        versionName = "2.7.6"
     }
 
     signingConfigs {

@@ -205,7 +205,7 @@ Gboard 支持悬浮键盘玻璃、相关工具栏玻璃，以及独立颜色和�
 | --- | --- |
 | HyperOS | 主要面向 3.0.307 及以上平板版本，不适配 OS 4 |
 | 系统桌面 | `com.miui.home` release-4.50.x.x |
-| LSPosed | 支持 libxposed API 101 的版本 |
+| LSPosed | 支持 libxposed API 102 的版本 |
 
 系统桌面、SystemUI、安全中心、Gboard 或系统搜索更新后，对应功能可能需要重新适配。
 

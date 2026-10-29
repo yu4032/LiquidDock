@@ -1,6 +1,6 @@
 # Deprecated Source / Historical Architecture
 
-本文档记录已退役的架构（上次专项核验：2026-10-03）。当前源码版本为 **2.7.5（versionCode 37）**，上一正式版本为 **2.7.4**。各项退役状态以生产源码为准。
+本文档记录已退役的架构（上次专项核验：2026-10-03）。本文档是退役架构的历史核验记录；当前源码版本以 [build.gradle.kts](../build.gradle.kts) 为准。各项退役状态以生产源码为准。
 
 ## 1. 已退役的 1.x backdrop 架构
 

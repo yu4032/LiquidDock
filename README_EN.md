@@ -207,7 +207,7 @@ Main development and verification environment:
 | --- | --- |
 | HyperOS | Mainly tablet builds based on 3.0.307 and newer; **HyperOS 4 is not supported** |
 | System Launcher | `com.miui.home` release-4.50.x.x |
-| LSPosed | A version supporting libxposed API 101 |
+| LSPosed | A version supporting libxposed API 102 |
 
 Updates to System Launcher, SystemUI, Security Center, Gboard, or System Search may require the corresponding integration to be adapted again.
 
