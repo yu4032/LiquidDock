@@ -123,6 +123,7 @@ internal fun GlassIconsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -151,6 +152,8 @@ internal fun GlassIconsPage(
         padding,
         stringResource(R.string.page_glass_icons),
         "调整桌面图标、Dock 功能图标与多任务胶囊玻璃。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GlassIcons, it.key) },
+        focusSequence = searchFocus?.sequence,
     ) {
         item(key = "icons-glass-title") { SmallTitle("图标玻璃开关") }
         item(key = "icons-glass-toggles") {
@@ -226,6 +229,7 @@ internal fun GlassWidgetsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -243,6 +247,8 @@ internal fun GlassWidgetsPage(
         padding,
         stringResource(R.string.page_glass_widgets),
         "小组件玻璃、内容适配与独立外观分开调整。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GlassWidgets, it.key) },
+        focusSequence = searchFocus?.sequence,
     ) {
         item(key = "widget-function-heading") { SmallTitle("玻璃与内容适配") }
         item(key = "widget-enabled") {

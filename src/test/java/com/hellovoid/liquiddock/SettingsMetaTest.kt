@@ -71,6 +71,25 @@ class SettingsMetaTest {
             folderGlassFocusCell.getValue(openFolderBaseColorAlphaSpec.key))
     }
 
+    @Test fun fixedCustomComponentPagesIndexAllTheirRenderedStaticControls() {
+        val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
+        for (page in listOf(Page.GlassIcons, Page.GlassWidgets, Page.Stroke,
+                Page.Shadow, Page.Divider)) {
+            val rows = customGlassSearchRows(page)
+            assertTrue(rows.isNotEmpty())
+            assertEquals(rows.size, rows.map { it.key }.toSet().size)
+            assertEquals(rows.map { it.key }.toSet(),
+                catalog.filter { it.page == page && it.key != null }.map { it.key }.toSet())
+            rows.forEach {
+                assertTrue("No focus Cell for ${page.name}/${it.key}",
+                    customDenseFocusIndex(page, it.key) != null)
+            }
+        }
+        assertEquals(strokeSpecs.size + 3, customGlassSearchRows(Page.Stroke).size)
+        assertEquals(shadowSpecs.size + 2, customGlassSearchRows(Page.Shadow).size)
+        assertEquals(dividerSpecs.size + 1, customGlassSearchRows(Page.Divider).size)
+    }
+
     @Test fun tintAndSolidColorSearchFindTheirOwningPages() {
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
         val tint = filterSettingsSearch(catalog, "染色")

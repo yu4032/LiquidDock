@@ -381,7 +381,8 @@ private fun LiquidDockSettings(
                     Page.Dock -> DockPage(padding, prefs, masterEnabled, ::navigateTo)
 
                     Page.DockRecentBlacklist -> DockRecentBlacklistPage(padding, activity, prefs, masterEnabled)
-                    Page.Divider -> DividerPage(padding, prefs, masterEnabled)
+                    Page.Divider -> DividerPage(padding, prefs, masterEnabled, searchFocusKey?.takeIf { searchFocusPage == Page.Divider.name }
+                            ?.let { SettingsFocusRequest(Page.Divider, it, searchFocusSequence) })
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
 
                     Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
@@ -391,8 +392,12 @@ private fun LiquidDockSettings(
                     )
 
                     Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
-                    Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GlassIcons.name }
+                            ?.let { SettingsFocusRequest(Page.GlassIcons, it, searchFocusSequence) })
+                    Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GlassWidgets.name }
+                            ?.let { SettingsFocusRequest(Page.GlassWidgets, it, searchFocusSequence) })
                     Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled,
                         ::navigateTo,
                         searchFocusKey?.takeIf { searchFocusPage == Page.GlassFolders.name }
@@ -450,8 +455,11 @@ private fun LiquidDockSettings(
                     Page.LauncherHighlightsLarge -> LauncherHighlightTogglePage(
                         padding, prefs, masterEnabled, compact = false,
                     )
-                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled)
-                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled, searchFocusKey?.takeIf { searchFocusPage == Page.Stroke.name }
+                            ?.let { SettingsFocusRequest(Page.Stroke, it, searchFocusSequence) })
+                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.Shadow.name }
+                            ?.let { SettingsFocusRequest(Page.Shadow, it, searchFocusSequence) })
 
                     Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
                         padding = padding,

@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock
 
 import android.content.Context
+import com.hellovoid.liquiddock.config.ConfigSchema
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -87,7 +88,81 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             CustomGlassSearchRow(spec.key, spec.title, spec.summary)
         }
     }
-    return emptyList()
+
+    fun toggle(config: com.hellovoid.liquiddock.config.ConfigKey<Boolean>, title: String) =
+        CustomGlassSearchRow(config.name(), title, "")
+    fun number(spec: IntSpec) = CustomGlassSearchRow(spec.key, spec.title, spec.summary)
+    val rows = when (page) {
+        Page.GlassIcons -> listOf(
+            toggle(ConfigSchema.Glass.ICON_GLASS, "图标玻璃"),
+            toggle(ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS, "仅 Dock 功能图标玻璃"),
+            toggle(ConfigSchema.Glass.RECENTS_CAPSULE_GLASS, "多任务操作按钮玻璃"),
+            number(iconSizeOffsetSpec), number(iconCornerRadiusSpec),
+        )
+        Page.GlassWidgets -> listOf(
+            toggle(ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃"),
+            toggle(ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配"),
+            number(widgetSizeOffsetSpec), number(widgetCornerRadiusSpec),
+        )
+        Page.Divider -> listOf(toggle(ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线")) +
+            dividerSpecs.map(::number)
+        Page.Stroke -> listOf(
+            toggle(ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边"),
+            toggle(ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线"),
+            toggle(ConfigSchema.Dock.FILL_DIFF, "Fill-Diff 描边"),
+        ) + strokeSpecs.map(::number)
+        Page.Shadow -> listOf(
+            toggle(ConfigSchema.Dock.SHADOW_ENABLED, "Dock 原生阴影"),
+            toggle(ConfigSchema.Dock.STROKE_SHADOW, "原生描边阴影"),
+        ) + shadowSpecs.map(::number)
+        else -> emptyList()
+    }
+    return rows
+}
+ 
+
+/**
+ * Position of a real lazy-list Cell for each indexed control on the fixed-size
+ * component pages. The three-control Cell remains a single visual group.
+ */
+internal fun customDenseFocusIndex(page: Page, key: String): Int? {
+    val index = when (page) {
+        Page.GlassIcons -> when (key) {
+            ConfigSchema.Glass.ICON_GLASS.name(),
+            ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
+            ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.name() -> 2
+            iconSizeOffsetSpec.key, iconCornerRadiusSpec.key -> 4
+            else -> -1
+        }
+        Page.GlassWidgets -> when (key) {
+            ConfigSchema.Glass.WIDGET_GLASS.name() -> 2
+            ConfigSchema.Glass.WIDGET_DARK_CONTENT.name() -> 3
+            widgetSizeOffsetSpec.key, widgetCornerRadiusSpec.key -> 5
+            else -> -1
+        }
+        Page.Divider -> if (key == ConfigSchema.Divider.ENABLED.name()) 0
+            else dividerSpecs.indexOfFirst { it.key == key }.takeIf { it >= 0 }?.plus(1) ?: -1
+        Page.Stroke -> when (key) {
+            ConfigSchema.Dock.STROKE_ENABLED.name() -> 0
+            ConfigSchema.Dock.SQUIRCLE.name() -> 1
+            ConfigSchema.Dock.FILL_DIFF.name() -> 2
+            else -> {
+                val background = strokeSpecs.filter { it.section == IntSection.StrokeBackground }
+                val geometry = strokeSpecs.filter { it.section == IntSection.StrokeGeometry }
+                val b = background.indexOfFirst { it.key == key }
+                if (b >= 0) 4 + b else geometry.indexOfFirst { it.key == key }
+                    .takeIf { it >= 0 }?.plus(5 + background.size) ?: -1
+            }
+        }
+        Page.Shadow -> when (key) {
+            ConfigSchema.Dock.SHADOW_ENABLED.name() -> 1
+            ConfigSchema.Dock.STROKE_SHADOW.name() -> 3
+            else -> shadowSpecs.indexOfFirst { it.key == key }
+                .takeIf { it >= 0 }?.plus(4) ?: -1
+        }
+        else -> -1
+    }
+    return index.takeIf { it >= 0 }
 }
 
 internal fun filterSettingsSearch(

@@ -98,10 +98,13 @@ internal fun DockPage(
 }
 
 @Composable
-internal fun DividerPage(padding: PaddingValues, prefs: SharedPreferences, masterEnabled: Boolean) {
+internal fun DividerPage(padding: PaddingValues, prefs: SharedPreferences,
+                         masterEnabled: Boolean, searchFocus: SettingsFocusRequest? = null) {
     val legacyDefault = remember { hasLegacyDividerConfig(prefs) }
     var enabled by remember { mutableStateOf(prefs.getBoolean(ConfigSchema.Divider.ENABLED.name(), legacyDefault)) }
-    DenseSettingsList(padding, stringResource(R.string.page_divider)) {
+    DenseSettingsList(padding, stringResource(R.string.page_divider),
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.Divider, it.key) },
+        focusSequence = searchFocus?.sequence) {
         item(key = "divider-enabled") {
             SettingsCard {
                 BooleanSetting(prefs, ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线", "独立于 Dock 尺寸、模糊和单位开关；宽度与偏移固定使用 dp", masterEnabled, default = legacyDefault) {
