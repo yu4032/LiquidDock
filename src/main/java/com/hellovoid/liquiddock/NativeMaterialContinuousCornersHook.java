@@ -126,23 +126,28 @@ final class NativeMaterialContinuousCornersHook {
     }
 
     static void applyTo(View material) {
-        // May run in Searchbox/SystemUI where Launcher-only initializer hooks
-        // were never installed. The corner preference is still process-global.
+        // Searchbox/SystemUI never register Launcher-only initializer hooks.
         continuousCorners = NativeMaterialMode.continuousCorners();
+        advancedMaterial = NativeMaterialMode.isEnabled();
         apply(material);
     }
 
     private static void apply(View material) {
         if (material == null || MiuixGlassHook.isBoundTo(material)
                 || LauncherGlassStaticNode.find(material) != null) return;
-        if (advancedMaterial || NativeMaterialMode.isEnabled()) {
+        if (advancedMaterial) {
             NativeAdvancedMaterialStyle.get().applyVendor(material);
         }
         if (!continuousCorners) return;
         ViewOutlineProvider original = material.getOutlineProvider();
         if (original instanceof ContinuousOutline) return;
         if (original == null && material.getBackground() != null) {
-            original = (view, outline) -> view.getBackground().getOutline(outline);
+            original = new ViewOutlineProvider() {
+                @Override public void getOutline(View view, Outline outline) {
+                    if (view.getBackground() != null) view.getBackground().getOutline(outline);
+                    else outline.setEmpty();
+                }
+            };
         }
         if (original == null) return;
         // No clipToOutline(true): widget text and icons must not be clipped by a new owner.

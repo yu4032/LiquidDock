@@ -99,10 +99,22 @@ final class NativeAdvancedMaterialHook {
             NativeAdvancedMaterialStyle.update(ConfigReader.load());
             blurRadius = NativeAdvancedMaterialStyle.get().radiusPx;
             iconCornerRadiusDp = LiquidDockConfig.load().glass.iconStyle.cornerRadiusDp;
+            boolean geometryChanged = ConfigSchema.Glass.ICON_CORNER_RADIUS.name().equals(key)
+                    || ConfigSchema.Glass.CONTINUOUS_CORNERS.name().equals(key);
             View root = recentsRoot.get();
-            if (root != null) root.post(NativeAdvancedMaterialHook::refreshOwners);
-            else for (View view : new java.util.ArrayList<>(ICON_WATCHERS.keySet())) {
-                if (view != null) view.post(() -> refresh(view, false));
+            Runnable update = () -> {
+                refreshOwners();
+                if (geometryChanged) {
+                    for (View view : new java.util.ArrayList<>(OWNERS.keySet())) {
+                        if (view != null) view.invalidateOutline();
+                    }
+                }
+            };
+            if (root != null) root.post(update);
+            else {
+                View icon = ICON_WATCHERS.isEmpty() ? null
+                        : ICON_WATCHERS.keySet().iterator().next();
+                if (icon != null) icon.post(update);
             }
         };
         prefs.registerOnSharedPreferenceChangeListener(listener);
