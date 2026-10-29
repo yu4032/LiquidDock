@@ -206,12 +206,13 @@ final class SystemUiGestureHandleFadeHook {
         }
     }
 
-    private static void ensureHandleAlphaHook(Class<?> handleClass) {
-        if (handleClass == null || !HOOKED_HANDLE_CLASSES.add(handleClass)) return;
+    private static synchronized void ensureHandleAlphaHook(Class<?> handleClass) {
+        if (handleClass == null) return;
+        boolean firstInstall = HOOKED_HANDLE_CLASSES.add(handleClass);
         try {
             Method setAlpha = HookUtil.findMethodExact(
                     handleClass, "setAlpha", new Class<?>[]{float.class, boolean.class});
-            DOMAIN.hookDynamic(setAlpha, chain -> {
+            io.github.libxposed.api.XposedInterface.Hooker hooker = chain -> {
                 Object owner = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 if (!Boolean.TRUE.equals(OWN_ALPHA_WRITE.get())
@@ -221,10 +222,19 @@ final class SystemUiGestureHandleFadeHook {
                             ALPHA.onVendorAlpha(owner, ((Number) args[0]).floatValue()));
                 }
                 return chain.proceed(args);
-            });
-
+            };
+            if (firstInstall) {
+                DOMAIN.hookDynamic(setAlpha, hooker);
+            } else {
+                // NavigationBar can be re-created without changing its HomeHandle class.
+                // Refresh only the callback using API 102's atomic replacement, retaining
+                // the original Hook id/priority and avoiding a duplicate interception chain.
+                DOMAIN.replaceActive(setAlpha, hooker);
+            }
         } catch (Throwable error) {
-            HOOKED_HANDLE_CLASSES.remove(handleClass);
+            // A failed replace still leaves the previous valid callback and handle installed.
+            // Only an unsuccessful first installation may discard the class marker.
+            if (firstInstall) HOOKED_HANDLE_CLASSES.remove(handleClass);
             Api101Bridge.log(TAG + " native alpha authority unavailable class="
                     + handleClass.getName(), error);
         }
