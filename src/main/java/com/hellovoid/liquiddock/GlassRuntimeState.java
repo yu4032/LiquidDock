@@ -43,7 +43,8 @@ final class GlassRuntimeState {
         largeFolderEnabled = initialLargeFolderEnabled;
         if (nextPrefs == null) return;
         listener = (sharedPreferences, key) -> {
-            if (key != null && !ConfigSchema.Glass.ENABLED.name().equals(key)
+            if (key != null && !ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name().equals(key)
+                    && !ConfigSchema.Glass.ENABLED.name().equals(key)
                     && !ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.ICON_GLASS.name().equals(key)
                     && !ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name().equals(key)
@@ -55,7 +56,10 @@ final class GlassRuntimeState {
             boolean nextEnabled = sharedPreferences.getBoolean(ConfigSchema.Core.ENABLED.name(),
                     ConfigSchema.Core.ENABLED.runtimeFallback())
                     && sharedPreferences.getBoolean(ConfigSchema.Glass.ENABLED.name(),
-                    ConfigSchema.Glass.ENABLED.runtimeFallback());
+                    ConfigSchema.Glass.ENABLED.runtimeFallback())
+                    && MaterialModePolicy.liquidEnabled(true, sharedPreferences.getBoolean(
+                    ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(),
+                    ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.runtimeFallback()));
             boolean nextIconEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Glass.ICON_GLASS.name(),
                     ConfigSchema.Glass.ICON_GLASS.runtimeFallback());

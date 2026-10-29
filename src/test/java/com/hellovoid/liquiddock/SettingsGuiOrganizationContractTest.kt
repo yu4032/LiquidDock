@@ -22,7 +22,7 @@ class SettingsGuiOrganizationContractTest {
     private val customRoutes = setOf(
         Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub, Page.ThemePalette,
         Page.Grid, Page.GridBasics, Page.Dock, Page.DockRecentBlacklist,
-        Page.Divider, Page.Workstation, Page.Liquid, Page.SidebarEdge,
+        Page.Divider, Page.Workstation, Page.Liquid, Page.AdvancedMaterial, Page.SidebarEdge,
         Page.GlassComponents, Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
         Page.HandleMenuCustomization, Page.HandleMenuAll,
         Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
@@ -46,6 +46,7 @@ class SettingsGuiOrganizationContractTest {
 
     @Test fun allStaticCustomGlassRowsAreIndexedWithoutPhantomPreferences() {
         val customSearchPages = setOf(
+            Page.AdvancedMaterial, Page.Liquid,
             Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
             Page.HandleMenuAll, Page.ShortcutPopupAll, Page.DialogAll, Page.GboardAll,
             Page.HandleMenuCustomization, Page.ShortcutPopupCustomization,

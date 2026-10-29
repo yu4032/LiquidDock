@@ -85,6 +85,31 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         }
         return basics + optics
     }
+    if (page == Page.AdvancedMaterial) {
+        return listOf(
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(),
+                "启用高级材质", "与液态玻璃互斥"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(),
+                "图标与多任务原生模糊", "仅影响新增的原生材质背景"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR.name(),
+                "覆盖系统材质模糊强度", "保留系统默认或写入自定义模糊值"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED.name(), "染色红", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN.name(), "染色绿", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE.name(), "染色蓝", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_ALPHA.name(), "染色透明度", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_RED.name(), "底色红", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_GREEN.name(), "底色绿", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_BLUE.name(), "底色蓝", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_ALPHA.name(), "底色透明度", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_SHADOW_ALPHA.name(), "阴影透明度", "原生高级材质"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_SHADOW_RADIUS.name(), "阴影柔和半径", "原生高级材质"),
+        )
+    }
+    if (page == Page.Liquid) {
+        return listOf(CustomGlassSearchRow(
+            ConfigSchema.Glass.CONTINUOUS_CORNERS.name(), "iOS 风格连续圆角",
+            "液态玻璃与系统原高级材质 Dock、小组件、文件夹"))
+    }
     if (page == Page.GlassFolders) {
         val toggles = listOf(
             CustomGlassSearchRow(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), "小文件夹玻璃", ""),
@@ -182,6 +207,23 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
  */
 internal fun customDenseFocusIndex(page: Page, key: String): Int? {
     val index = when (page) {
+        Page.AdvancedMaterial -> when (key) {
+            ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name() -> 2
+            ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name() -> 4
+            ConfigSchema.Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR.name() -> 4
+            ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED.name() -> 6
+            ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN.name() -> 6
+            ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE.name() -> 6
+            ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_ALPHA.name() -> 6
+            ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_RED.name() -> 8
+            ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_GREEN.name() -> 8
+            ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_BLUE.name() -> 8
+            ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_ALPHA.name() -> 8
+            ConfigSchema.Glass.ADVANCED_MATERIAL_SHADOW_ALPHA.name() -> 10
+            ConfigSchema.Glass.ADVANCED_MATERIAL_SHADOW_RADIUS.name() -> 10
+            else -> -1
+        }
+        Page.Liquid -> if (key == ConfigSchema.Glass.CONTINUOUS_CORNERS.name()) 2 else -1
         Page.ShortcutPopupCustomization, Page.HandleMenuCustomization -> {
             val popup = page == Page.ShortcutPopupCustomization
             val scope = if (popup) ScopedGlassOptics.POPUP else ScopedGlassOptics.HANDLE_MENU

@@ -216,6 +216,47 @@ public final class ConfigSchema {
     }
 
     public static final class Glass {
+        /** Mutually exclusive with liquid_glass. Native mode wins for imported conflicting profiles. */
+        public static final ConfigKey<Boolean> ADVANCED_MATERIAL_ENABLED = bool(
+                "native_advanced_material_enabled", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
+        /** Native background blur for icon graphics and Recents capsules, not OEM widget parameters. */
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_BLUR = integer(
+                "native_advanced_material_blur", 80, 80, 80, 0, 400,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_TINT_RED = integer(
+                "native_advanced_material_r", 255, 255, 255, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_TINT_GREEN = integer(
+                "native_advanced_material_g", 255, 255, 255, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_TINT_BLUE = integer(
+                "native_advanced_material_b", 255, 255, 255, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_TINT_ALPHA = integer(
+                "native_advanced_material_alpha", 0, 0, 0, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_FILL_RED = integer(
+                "native_advanced_material_fill_r", 255, 255, 255, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_FILL_GREEN = integer(
+                "native_advanced_material_fill_g", 255, 255, 255, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_FILL_BLUE = integer(
+                "native_advanced_material_fill_b", 255, 255, 255, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_FILL_ALPHA = integer(
+                "native_advanced_material_fill_alpha", 0, 0, 0, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_SHADOW_ALPHA = integer(
+                "native_advanced_material_shadow_alpha", 0, 0, 0, 0, 255,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_SHADOW_RADIUS = integer(
+                "native_advanced_material_shadow_radius", 5, 5, 5, 0, 48,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR = bool(
+                "native_advanced_material_override_vendor_blur", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> CONTINUOUS_CORNERS = bool(
                 "liquid_continuous_corners", false, false, false, ConfigKey.ExportMode.ALWAYS);
         // Whole-silhouette cast shadow and optically lit SDF contour are distinct
@@ -664,7 +705,18 @@ public final class ConfigSchema {
                 Glass.BACKLIT_ENABLED, Glass.BACKLIT_WIDTH,
                 Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS,
                 Glass.BACKLIT_EXTENT);
-        add(keys, Glass.ENABLED, Glass.CONTINUOUS_CORNERS, Glass.WALLPAPER_FLICKER_FIX,
+        add(keys, Glass.ENABLED, Glass.ADVANCED_MATERIAL_ENABLED,
+                Glass.ADVANCED_MATERIAL_BLUR, Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR,
+                Glass.ADVANCED_MATERIAL_TINT_RED,
+                Glass.ADVANCED_MATERIAL_TINT_GREEN,
+                Glass.ADVANCED_MATERIAL_TINT_BLUE,
+                Glass.ADVANCED_MATERIAL_TINT_ALPHA,
+                Glass.ADVANCED_MATERIAL_FILL_RED,
+                Glass.ADVANCED_MATERIAL_FILL_GREEN,
+                Glass.ADVANCED_MATERIAL_FILL_BLUE,
+                Glass.ADVANCED_MATERIAL_FILL_ALPHA,
+                Glass.ADVANCED_MATERIAL_SHADOW_ALPHA,
+                Glass.ADVANCED_MATERIAL_SHADOW_RADIUS, Glass.CONTINUOUS_CORNERS, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
                 Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_CORNER_RADIUS,

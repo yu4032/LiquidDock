@@ -98,6 +98,12 @@ final class GboardHandwritingCapsuleGlassHook {
         LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
         GboardGlassPreferences.Appearance liveAppearance =
                 GboardGlassPreferences.resolve(liveReader, liveConfig.glass);
+        if (liveConfig.enabled && liveConfig.glass.advancedMaterialEnabled
+                && liveAppearance.enabled) {
+            GboardHandwritingCapsuleGlassCoordinator.onHidden(host);
+            NativeAdvancedMaterialSurface.bind(host, liveConfig.glass.continuousCorners);
+            return;
+        }
         if (!liveConfig.enabled || !liveConfig.glass.enabled || !liveAppearance.enabled) {
             GboardHandwritingCapsuleGlassCoordinator.onHidden(host);
             return;

@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,7 +29,13 @@ internal fun LiquidPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(searchFocus?.sequence) {
+        val index = searchFocus?.let { customDenseFocusIndex(Page.Liquid, it.key) }
+        if (index != null) listState.scrollToItem(index)
+    }
     val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
     var liquidGlass by remember(liquidRevision) {
         mutableStateOf(
@@ -38,6 +46,7 @@ internal fun LiquidPage(
         )
     }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = padding.calculateTopPadding() + 8.dp,
@@ -53,13 +62,24 @@ internal fun LiquidPage(
         }
         item {
             SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.ENABLED,
-                    stringResource(R.string.liquid_enable),
-                    stringResource(R.string.liquid_enable_summary),
-                    masterEnabled,
-                ) { liquidGlass = it }
+                val otherRevision = LocalSettingsPreferenceRevisions.current[
+                    ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name()] ?: 0
+                val otherEnabled = remember(otherRevision) {
+                    prefs.getBoolean(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false)
+                }
+                SwitchPreference(
+                    checked = liquidGlass && !otherEnabled,
+                    onCheckedChange = { next ->
+                        prefs.edit()
+                            .putBoolean(ConfigSchema.Glass.ENABLED.name(), next)
+                            .putBoolean(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false)
+                            .apply()
+                        liquidGlass = next
+                    },
+                    title = stringResource(R.string.liquid_enable),
+                    summary = "与高级材质互斥；切换渲染管线后需重启相应应用",
+                    enabled = masterEnabled,
+                )
             }
         }
         item(key = "continuous-glass-corners") {
@@ -67,11 +87,19 @@ internal fun LiquidPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.CONTINUOUS_CORNERS,
-                    "iPadOS 风格连续圆角",
-                    "替换所有液态玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
-                    masterEnabled && liquidGlass,
+                    "iOS 风格连续圆角",
+                    "统一液态玻璃及系统原高级材质 Dock、小组件、文件夹的圆角；保留原生模糊与动画，重启桌面生效",
+                    masterEnabled,
                 )
             }
+        }
+        item(key = "native-material-link") {
+            ModernFeatureCard(
+                title = stringResource(R.string.page_native_advanced_material),
+                summary = "使用 HyperOS 原高级材质替代自绘液态玻璃；图标与多任务按钮使用系统模糊",
+                onClick = { open(Page.AdvancedMaterial) },
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
         }
         liquidEntries.forEach { entry ->
             item {
@@ -129,6 +157,9 @@ internal fun GlassIconsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    val nativeEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false,
+    )
     var iconGlass by remember {
         mutableStateOf(
             prefs.getBoolean(
@@ -162,8 +193,8 @@ internal fun GlassIconsPage(
                     prefs,
                     ConfigSchema.Glass.ICON_GLASS,
                     "图标玻璃",
-                    "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
-                    masterEnabled && liquidEnabled,
+                    "桌面与 Dock 图标的玻璃或原生材质；0 圆角为 Auto",
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 ) { iconGlass = it }
                 ModernListDivider()
                 BooleanSetting(
@@ -171,15 +202,15 @@ internal fun GlassIconsPage(
                     ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
                     "仅 Dock 功能图标玻璃",
                     "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
-                    masterEnabled && liquidEnabled,
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 ) { functionalDockIconGlass = it }
                 ModernListDivider()
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
                     "多任务操作按钮玻璃",
-                    "使用液态玻璃替换清除全部和设备互联胶囊背景；采样未就绪时保持透明，不回退原生模糊",
-                    masterEnabled && liquidEnabled,
+                    "液态玻璃使用 Prismal；高级材质使用系统模糊。仅影响清除全部和设备互联胶囊背景",
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 )
             }
         }
@@ -195,7 +226,8 @@ internal fun GlassIconsPage(
                 IntSetting(
                     prefs,
                     iconCornerRadiusSpec,
-                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+                    masterEnabled && (liquidEnabled || nativeEnabled) &&
+                        (iconGlass || functionalDockIconGlass),
                 )
             }
         }
@@ -235,6 +267,9 @@ internal fun GlassWidgetsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    val nativeEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false,
+    )
     var widgetGlass by remember {
         mutableStateOf(
             prefs.getBoolean(
@@ -254,9 +289,11 @@ internal fun GlassWidgetsPage(
         item(key = "widget-enabled") {
             SettingsCard {
                 BooleanSetting(
-                    prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃",
-                    "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容",
-                    masterEnabled && liquidEnabled,
+                    prefs, ConfigSchema.Glass.WIDGET_GLASS,
+                    if (nativeEnabled) "小组件部件管理" else "小部件玻璃",
+                    if (nativeEnabled) "保留 HyperOS 原生背景，允许按所选规则隐藏 RemoteViews / MAML 部件"
+                    else "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容",
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 ) { widgetGlass = it }
             }
         }
@@ -293,7 +330,7 @@ internal fun GlassWidgetsPage(
                 ArrowPreference(
                     stringResource(R.string.widget_components_entry),
                     summary = stringResource(R.string.widget_components_entry_summary),
-                    enabled = masterEnabled && liquidEnabled && widgetGlass,
+                    enabled = masterEnabled && (liquidEnabled || nativeEnabled) && widgetGlass,
                     onClick = { open(Page.WidgetComponents) },
                 )
             }

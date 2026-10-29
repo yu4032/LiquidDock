@@ -387,7 +387,13 @@ private fun LiquidDockSettings(
                             ?.let { SettingsFocusRequest(Page.Divider, it, searchFocusSequence) })
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
 
-                    Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.AdvancedMaterial -> NativeAdvancedMaterialSettingsPage(
+                        padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.AdvancedMaterial.name }
+                            ?.let { SettingsFocusRequest(Page.AdvancedMaterial, it, searchFocusSequence) })
+                    Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.Liquid.name }
+                            ?.let { SettingsFocusRequest(Page.Liquid, it, searchFocusSequence) })
 
                     Page.SidebarEdge -> SidebarGlassSettingsPage(
                         padding, prefs, masterEnabled,

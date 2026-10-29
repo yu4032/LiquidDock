@@ -78,11 +78,13 @@ public final class ModuleMain extends XposedModule {
                 SystemUiKeyguardGoneSource.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
                 GlassEdgeEffects.refresh(configReader);
+                NativeAdvancedMaterialStyle.update(configReader);
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 // Install once regardless of initial preference. The hook's runtime gate
                 // stays inert until the user enables caption-menu glass.
                 SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(configReader, runtimeConfig);
-                if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
+                if (runtimeConfig.glass.advancedMaterialEnabled
+                        || SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
                     SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
                 } else {
                     Api101Bridge.log(
@@ -101,6 +103,7 @@ public final class ModuleMain extends XposedModule {
                 if (classLoader == null) return;
                 ConfigReader configReader = ConfigReader.load();
                 GlassEdgeEffects.refresh(configReader);
+                NativeAdvancedMaterialStyle.update(configReader);
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 AnimationRuntimeState.configure(runtimeConfig.animation);
                 // Native Sidebar bridge also owns the vendor-handle glass entry.
@@ -156,6 +159,7 @@ public final class ModuleMain extends XposedModule {
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             GlassEdgeEffects.refresh(configReader);
+                NativeAdvancedMaterialStyle.update(configReader);
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
             // Independent opt-in compatibility: its own preference is the sole
             // activation switch, not the global glass/feature master toggle.
@@ -204,6 +208,12 @@ public final class ModuleMain extends XposedModule {
                 Launcher450SideSlideHoldHook.install(classLoader);
             }
             Launcher450DockFunctionalIconRegistry.install(classLoader);
+            NativeAdvancedMaterialHook.install(classLoader, runtimeConfig);
+            NativeWidgetComponentsHook.install(classLoader, runtimeConfig);
+            // The OEM material silhouette is independent of Liquid Glass replacement.
+            NativeMaterialContinuousCornersHook.install(
+                    classLoader, runtimeConfig.enabled && (runtimeConfig.glass.continuousCorners
+                        || runtimeConfig.glass.advancedMaterialEnabled));
             new MainHook().install(classLoader);
 
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);

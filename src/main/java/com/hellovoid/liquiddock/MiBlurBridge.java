@@ -191,6 +191,19 @@ final class MiBlurBridge {
         }
     }
 
+    /** Change native blend colors without changing OEM blur enable/mode/radius. */
+    static boolean setPassWindowBlurBlendColors(View view, ArrayList<Point> colors) {
+        if (!PASS_BLUR_AVAILABLE || view == null) return false;
+        try {
+            if (colors == null || colors.isEmpty()) CLEAR_MI_BACKGROUND_BLEND_COLOR.invoke(view);
+            else SET_MI_BACKGROUND_BLEND_COLORS.invoke(view, new ArrayList<>(colors));
+            return true;
+        } catch (Throwable error) {
+            MainHook.log("[DC][NativeMaterial] background blend unavailable: " + error);
+            return false;
+        }
+    }
+
     static void clearPassWindowBlur(View view) {
         if (!PASS_BLUR_AVAILABLE || view == null) return;
         try {

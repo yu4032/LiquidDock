@@ -42,7 +42,8 @@ final class MiuixShortcutMenuGlassHook {
 
     static boolean install(ClassLoader classLoader, LiquidDockConfig runtimeConfig) {
         if (installed) return true;
-        if (runtimeConfig == null || !runtimeConfig.enabled || !runtimeConfig.glass.enabled) {
+        if (runtimeConfig == null || !runtimeConfig.enabled
+                || (!runtimeConfig.glass.enabled && !runtimeConfig.glass.advancedMaterialEnabled)) {
             return false;
         }
         onLivePreferences(ConfigReader.load());
@@ -50,8 +51,10 @@ final class MiuixShortcutMenuGlassHook {
         // Runtime gates keep them inert until the GUI enables either feature.
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         try {
-            installEarlyWorkspaceCaptureHook(classLoader, glassConfig);
-            installEarlyDockCaptureHook(classLoader, glassConfig);
+            if (runtimeConfig.glass.enabled) {
+                installEarlyWorkspaceCaptureHook(classLoader, glassConfig);
+                installEarlyDockCaptureHook(classLoader, glassConfig);
+            }
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU_LAYER, "setRequestingItemInfo", chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object itemInfo = args.length > 0 ? args[0] : null;
@@ -59,7 +62,7 @@ final class MiuixShortcutMenuGlassHook {
                 if (owner instanceof View) {
                     View ownerView = (View) owner;
                     View launcherRoot = ownerView.getRootView();
-                    if (itemInfo != null && popupGlassEnabled) {
+                    if (itemInfo != null && popupGlassEnabled && GlassRuntimeState.isEnabled()) {
                         ShortcutPopupGlassCoordinator.prepareIfNeeded(
                                 ownerView, launcherRoot, glassConfig);
                     }
@@ -190,6 +193,12 @@ final class MiuixShortcutMenuGlassHook {
             if (darkModeEnabled) {
                 ShortcutMenuDarkModeController.attach(contentView);
             }
+            LiquidDockConfig current = LiquidDockConfig.from(ConfigReader.load());
+            if (current.enabled && current.glass.advancedMaterialEnabled && popupGlassEnabled) {
+                NativeAdvancedMaterialSurface.bind(
+                        contentView, current.glass.continuousCorners, ScopedGlassOptics.POPUP);
+                return;
+            }
             if (!popupGlassEnabled || !GlassRuntimeState.isEnabled()) return;
             boolean bound = ShortcutPopupGlassCoordinator.bindPopup(
                     (View) decorObject, (View) popupObject, contentView);
@@ -209,6 +218,10 @@ final class MiuixShortcutMenuGlassHook {
             if (decorObject instanceof View) {
                 ShortcutPopupGlassCoordinator.releasePopupIfDetached(
                         (View) decorObject, popupObject instanceof View ? (View) popupObject : null);
+                if (popupObject instanceof View && !((View) popupObject).isAttachedToWindow()) {
+                    View content = visibleContentRef.get();
+                    NativeAdvancedMaterialSurface.release(content);
+                }
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " dismiss cleanup deferred: " + error);

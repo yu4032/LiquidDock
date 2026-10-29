@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="page_native_advanced_material">高级材质</string>
     <string name="app_name">LiquidDock</string>
     <string name="action_back">Back</string>
     <string name="page_grid">Home screen layout</string>

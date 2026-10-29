@@ -80,10 +80,13 @@ private fun ScopedMenuGlassSettingsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    val nativeEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false,
+    )
     var menuEnabled by remember(scope) {
         mutableStateOf(prefs.getBoolean(toggleKey.name(), toggleKey.uiDefault()))
     }
-    val controlsEnabled = masterEnabled && liquidEnabled && menuEnabled
+    val controlsEnabled = masterEnabled && (liquidEnabled || nativeEnabled) && menuEnabled
     var resetGeneration by remember(scope) { mutableIntStateOf(0) }
     var appearanceRevision by remember(scope) { mutableIntStateOf(0) }
 
@@ -159,7 +162,7 @@ private fun ScopedMenuGlassSettingsPage(
                     toggleKey,
                     toggleTitle,
                     toggleDescription,
-                    masterEnabled && liquidEnabled,
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 ) { menuEnabled = it }
                 if (scope == ScopedGlassOptics.POPUP) {
                     ModernListDivider()
@@ -168,7 +171,7 @@ private fun ScopedMenuGlassSettingsPage(
                         ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT,
                         "快捷菜单深色模式适配",
                         "文字与单色图标适配为浅色；保留彩色应用图标",
-                        masterEnabled && liquidEnabled,
+                        masterEnabled && (liquidEnabled || nativeEnabled),
                     )
                 }
             }
@@ -219,7 +222,7 @@ private fun ScopedMenuGlassSettingsPage(
                 ArrowPreference(
                     title = "阴影",
                     summary = "Prismal 外阴影与光学描边可独立调节",
-                    enabled = controlsEnabled,
+                    enabled = controlsEnabled && liquidEnabled,
                     onClick = onOpenEdge,
                 )
             }
