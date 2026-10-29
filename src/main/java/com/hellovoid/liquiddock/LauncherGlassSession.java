@@ -103,6 +103,20 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
+    /** Atomic UI-published geometry: GL never walks per-node frames from different pre-draws. */
+    private static final class StaticSceneSnapshot {
+        static final StaticSceneSnapshot EMPTY =
+                new StaticSceneSnapshot(new StaticNodeState[0]);
+        final StaticNodeState[] nodes;
+        final StaticGeometryFrame[] frames;
+
+        StaticSceneSnapshot(StaticNodeState[] nodes) {
+            this.nodes = nodes;
+            frames = new StaticGeometryFrame[nodes.length];
+            for (int i = 0; i < nodes.length; i++) frames[i] = nodes[i].frame;
+        }
+    }
+
     private static final class OutputState {
         final Surface surface;
         EGLSurface eglSurface = EGL14.EGL_NO_SURFACE;
@@ -140,6 +154,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             Collections.synchronizedMap(new WeakHashMap<>());
     private volatile NodeState[] nodeStateSnapshot = new NodeState[0];
     private volatile StaticNodeState[] staticNodeStateSnapshot = new StaticNodeState[0];
+    private volatile StaticSceneSnapshot publishedStaticScene = StaticSceneSnapshot.EMPTY;
+    // GL-thread diagnostic: omitted stale buffers must not replace a newer scroll frame.
+    private long staleStaticSwapDrops;
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
     private final LauncherGlassOutputRenderState outputRenderState =
@@ -435,6 +452,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         staticNodes.values().toArray(new StaticNodeState[0]);
             }
         }
+        publishStaticSceneSnapshot();
         syncSceneOnUiThread();
         requestStaticRedraw();
     }
@@ -446,6 +464,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             staticNodeStateSnapshot =
                     staticNodes.values().toArray(new StaticNodeState[0]);
         }
+        publishStaticSceneSnapshot();
         requestStaticRedraw();
     }
 
@@ -559,8 +578,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
         if (shuttingDown || beforeScrollX == afterScrollX) return;
+        // ScreenView.scrollTo may run before its native frame traversal. Record only;
+        // pre-draw submits the same scroll revision as the Launcher content.
         workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
-        requestStaticRedraw();
     }
 
     void resetWorkspaceScrollProjection() {
@@ -688,11 +708,24 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void scheduleOutputRender(boolean staticDirty, boolean dragDirty) {
+        scheduleOutputRender(staticDirty, dragDirty, false);
+    }
+
+    private void scheduleOutputRender(
+            boolean staticDirty, boolean dragDirty, boolean fromUiPreDraw) {
         if (shuttingDown || folderFrameFrozen) return;
-        if (outputRenderState.request(staticDirty, dragDirty)
-                && !postOutputRenderAfterUi()) {
-            outputRenderState.onPostRejected();
+        if (outputRenderState.request(staticDirty, dragDirty)) {
+            // The UI traversal has already published its complete scene. Do not add
+            // a second main-thread turn to a Workspace paging frame.
+            boolean posted = fromUiPreDraw
+                    ? postRender(this::drainOutputRenderWork)
+                    : postOutputRenderAfterUi();
+            if (!posted) outputRenderState.onPostRejected();
         }
+    }
+
+    private void publishStaticSceneSnapshot() {
+        publishedStaticScene = new StaticSceneSnapshot(staticNodeStateSnapshot);
     }
 
     private boolean postOutputRenderAfterUi() {
@@ -722,7 +755,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
 
         if (outputRenderState.finishQueuedRender()
-                && !postOutputRenderAfterUi()) {
+                && !postRender(this::drainOutputRenderWork)) {
             outputRenderState.onPostRejected();
         }
     }
@@ -959,7 +992,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     WorkstationProducerPolicy.shouldUseSingleFramePulse(MainHook.isWorkstationMode()));
             return;
         }
-        if (staticChanged || dragChanged) scheduleOutputRender(staticChanged, dragChanged);
+        if (staticChanged) publishStaticSceneSnapshot();
+        boolean scrollChanged = workspaceScrollProjection.consumeUiRedraw();
+        if (staticChanged || dragChanged || scrollChanged) {
+            scheduleOutputRender(staticChanged || scrollChanged, dragChanged, scrollChanged);
+        }
     }
 
     private boolean prepareStaticRootCaptureTransform(View root) {
@@ -1330,7 +1367,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // limits expensive shading to occupied glass bounds.
         sourceBackend.makeCurrent(output.eglSurface);
         prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
-        StaticNodeState[] snapshot = staticNodeStateSnapshot;
+        StaticSceneSnapshot scene = publishedStaticScene;
+        LauncherGlassScrollProjectionState.Snapshot scrollFrame =
+                workspaceScrollProjection.snapshot();
         // Scope snapshots and display density are frame constants; resolving
         // them once avoids N repeated resources/Map lookups per draw cycle.
         View root = rootRef.get();
@@ -1339,16 +1378,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         PrismalEdgeDecoration iconShadow = GlassEdgeEffects.current(GlassEdgeEffects.ICON);
         PrismalEdgeDecoration widgetShadow = GlassEdgeEffects.current(GlassEdgeEffects.WIDGET);
         PrismalEdgeDecoration folderShadow = GlassEdgeEffects.current(GlassEdgeEffects.FOLDER);
-        for (StaticNodeState state : snapshot) {
+        for (int i = 0; i < scene.nodes.length; i++) {
+            StaticNodeState state = scene.nodes[i];
             LauncherGlassStaticNode node = state.nodeRef.get();
-            StaticGeometryFrame frame = state.frame;
+            StaticGeometryFrame frame = scene.frames[i];
             LauncherGlassGeometry.Snapshot geometry = frame != null ? frame.geometry : null;
             if (node == null || geometry == null) continue;
             // Invisible nodes must not consume an expensive GLES2 shader draw.
             // Their previous output is already removed by the scene clear.
             float visibleAlpha = node.visibilityAlpha();
             if (visibleAlpha <= 0f) continue;
-            float projectedCenterX = workspaceScrollProjection.projectCenterX(
+            float projectedCenterX = scrollFrame.projectCenterX(
                     geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
             PrismalGeometry prismalGeometry = resolveStaticPrismalGeometry(
                     state, frame, geometry, projectedCenterX);
@@ -1361,6 +1401,16 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.setEdgeDecoration(material, density);
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, visibleAlpha);
+        }
+        // A newer native scroll or geometry publication arrived while GL was drawing.
+        // Discard this obsolete back buffer rather than letting it overtake newer icons.
+        // The existing queued-work owner will render the latest UI pre-draw snapshot.
+        if (!workspaceScrollProjection.isCurrent(scrollFrame)
+                || publishedStaticScene != scene) {
+            if (Trace.isEnabled() && workspaceSource) {
+                Trace.setCounter("LD.Workspace.StaleStaticSwapDrops", ++staleStaticSwapDrops);
+            }
+            return;
         }
         sourceBackend.swapBuffers(output.eglSurface);
     }
