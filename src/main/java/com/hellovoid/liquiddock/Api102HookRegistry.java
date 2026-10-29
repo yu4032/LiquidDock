@@ -123,6 +123,26 @@ final class Api102HookRegistry {
         return unnamedHandles.size();
     }
 
+    /** Detach every anonymous HookUtil interception in reverse registration order.
+     * A failed unhook stays in the ledger and blocks generation handoff.
+     * Named owner domains must have stopped separately before this is called.
+     */
+    synchronized boolean releaseUnidentifiedForReload() {
+        boolean complete = true;
+        for (int i = unnamedHandles.size() - 1; i >= 0; i--) {
+            XposedInterface.HookHandle handle = unnamedHandles.get(i);
+            try {
+                handle.unhook();
+                unnamedHandles.remove(i);
+            } catch (Throwable error) {
+                complete = false;
+                try { Api101Bridge.log("[DC][API102] anonymous unhook failed", error); }
+                catch (Throwable ignored) {}
+            }
+        }
+        return complete;
+    }
+
     synchronized void trackUnidentified(XposedInterface.HookHandle handle) {
         if (handle == null) throw new IllegalArgumentException("HookHandle");
         unnamedHandles.add(handle);
