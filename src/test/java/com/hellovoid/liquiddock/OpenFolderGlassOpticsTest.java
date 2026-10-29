@@ -13,6 +13,7 @@ public class OpenFolderGlassOpticsTest {
         assertEquals(40f, result.glassThicknessPx, 0.0001f);
         assertEquals(80f / 255f, result.tintA, 0.0001f);
         assertEquals(base.causticIntensity, result.causticIntensity, 0.0001f);
+        assertEquals(base.baseColorA, result.baseColorA, 0.0001f);
         assertEquals(base.blurRadiusPx, PrismalParams.builder(base).build().blurRadiusPx, 0.0001f);
     }
     @Test public void folderMaterialMustRemainStableAcrossNativeClose() {
