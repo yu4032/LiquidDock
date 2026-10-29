@@ -12,7 +12,7 @@ public class LauncherGlassScrollCompensationStateTest {
         LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
         state.onScrollMutation(100, 140);
 
-        assertEquals(460f, state.projectCenterX(500f, 100, true), 0.001f);
+        assertEquals(460f, state.snapshot().projectCenterX(500f, 100, true), 0.001f);
     }
 
     @Test
@@ -20,7 +20,7 @@ public class LauncherGlassScrollCompensationStateTest {
         LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
         state.onScrollMutation(100, 140);
 
-        assertEquals(500f, state.projectCenterX(500f, 140, true), 0.001f);
+        assertEquals(500f, state.snapshot().projectCenterX(500f, 140, true), 0.001f);
     }
 
     @Test
@@ -29,7 +29,7 @@ public class LauncherGlassScrollCompensationStateTest {
         state.onScrollMutation(100, 140);
         state.onScrollMutation(140, 160);
 
-        assertEquals(480f, state.projectCenterX(500f, 140, true), 0.001f);
+        assertEquals(480f, state.snapshot().projectCenterX(500f, 140, true), 0.001f);
     }
 
     @Test
@@ -37,7 +37,7 @@ public class LauncherGlassScrollCompensationStateTest {
         LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
         state.onScrollMutation(140, 100);
 
-        assertEquals(540f, state.projectCenterX(500f, 140, true), 0.001f);
+        assertEquals(540f, state.snapshot().projectCenterX(500f, 140, true), 0.001f);
     }
 
     @Test
@@ -45,7 +45,7 @@ public class LauncherGlassScrollCompensationStateTest {
         LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
         state.onScrollMutation(100, 140);
 
-        assertEquals(460f, state.projectCenterX(500f, 0, false), 0.001f);
+        assertEquals(460f, state.snapshot().projectCenterX(500f, 0, false), 0.001f);
     }
 
     @Test
@@ -54,7 +54,7 @@ public class LauncherGlassScrollCompensationStateTest {
         state.onScrollMutation(100, 140);
         state.reset();
 
-        assertEquals(500f, state.projectCenterX(500f, 100, true), 0.001f);
+        assertEquals(500f, state.snapshot().projectCenterX(500f, 100, true), 0.001f);
     }
 
     @Test
@@ -101,5 +101,4 @@ public class LauncherGlassScrollCompensationStateTest {
         state.onScrollMutation(100, 100);
         assertTrue(state.isCurrent(frame));
     }
-
 }
