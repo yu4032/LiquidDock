@@ -49,7 +49,7 @@ final class MiuiSearchboxGlassHook {
                 if (activity == null || activity.isFinishing()) continue;
                 NativeAdvancedMaterialSurface.decorateVendor(
                         resolveBackground(activity, observedBackgroundClass),
-                        config.glass.continuousCorners);
+                        config.glass.continuousCorners, ScopedGlassOptics.SEARCHBOX);
             }
         }
         if (enabled && observedBackgroundClass != null && observedBlurEnabledMethod != null) {

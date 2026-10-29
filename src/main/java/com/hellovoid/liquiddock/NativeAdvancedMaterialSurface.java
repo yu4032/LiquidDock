@@ -24,6 +24,10 @@ final class NativeAdvancedMaterialSurface {
     private NativeAdvancedMaterialSurface() {}
 
     static void bind(View target, boolean continuous) {
+        bind(target, continuous, null);
+    }
+
+    static void bind(View target, boolean continuous, String scope) {
         if (target == null) return;
         Lease existing = LEASES.get(target);
         if (existing != null) {
@@ -39,21 +43,25 @@ final class NativeAdvancedMaterialSurface {
                         int oldLeft, int oldTop, int oldRight, int oldBottom) {
                     if (right <= left || bottom <= top) return;
                     view.removeOnLayoutChangeListener(this);
-                    bind(view, continuous);
+                    bind(view, continuous, scope);
                 }
             });
             return;
         }
-        Lease state = new Lease(target, continuous);
+        Lease state = new Lease(target, continuous, scope);
         if (!state.acquire(target)) return;
         LEASES.put(target, state);
     }
 
     /** Vendor backdrop already owns blur; apply only optional native visual parameters. */
     static void decorateVendor(View view, boolean continuous) {
+        decorateVendor(view, continuous, null);
+    }
+
+    static void decorateVendor(View view, boolean continuous, String scope) {
         if (view == null) return;
         if (continuous) NativeMaterialContinuousCornersHook.applyTo(view);
-        NativeAdvancedMaterialStyle.get().applyVendor(view);
+        NativeAdvancedMaterialStyle.forScope(scope).applyVendor(view);
     }
 
     static void release(View target) {
@@ -67,14 +75,16 @@ final class NativeAdvancedMaterialSurface {
         final Drawable originalBackground;
         final ViewOutlineProvider outline;
         final boolean continuous;
+        final String scope;
         boolean blurOwned;
         int blurRadius;
 
-        Lease(View target, boolean continuous) {
+        Lease(View target, boolean continuous, String scope) {
             this.continuous = continuous;
+            this.scope = scope;
             originalOutline = target.getOutlineProvider();
             originalBackground = target.getBackground();
-            outline = new RoundedOutline(continuous, originalOutline);
+            outline = new RoundedOutline(continuous, originalOutline, scope);
         }
 
         boolean acquire(View target) {
@@ -82,7 +92,7 @@ final class NativeAdvancedMaterialSurface {
             Boolean vendorBlur = MiBlurBridge.getPassWindowBlurEnabled(target);
             blurOwned = !Boolean.TRUE.equals(vendorBlur);
             if (blurOwned) {
-                NativeAdvancedMaterialStyle appearance = NativeAdvancedMaterialStyle.get();
+                NativeAdvancedMaterialStyle appearance = NativeAdvancedMaterialStyle.forScope(scope);
                 if (!MiBlurBridge.applyPassWindowBlur(
                         target, appearance.radiusPx, appearance.blendColors())) return false;
                 blurRadius = appearance.radiusPx;
@@ -92,13 +102,13 @@ final class NativeAdvancedMaterialSurface {
                 target.setOutlineProvider(outline);
                 target.invalidateOutline();
             }
-            NativeAdvancedMaterialStyle.get().applyVendor(target);
+            NativeAdvancedMaterialStyle.forScope(scope).applyVendor(target);
             target.addOnAttachStateChangeListener(this);
             return true;
         }
 
         void refresh(View target) {
-            NativeAdvancedMaterialStyle appearance = NativeAdvancedMaterialStyle.get();
+            NativeAdvancedMaterialStyle appearance = NativeAdvancedMaterialStyle.forScope(scope);
             if (blurOwned && blurRadius != appearance.radiusPx) {
                 blurRadius = appearance.radiusPx;
                 MiBlurBridge.setPassWindowBlurRadius(target, blurRadius);
@@ -128,13 +138,15 @@ final class NativeAdvancedMaterialSurface {
     private static final class RoundedOutline extends ViewOutlineProvider {
         private final boolean continuous;
         private final ViewOutlineProvider original;
+        private final String scope;
         private final Path path = new Path();
         private int width = -1, height = -1;
         private float lastRadius = Float.NaN;
 
-        RoundedOutline(boolean continuous, ViewOutlineProvider original) {
+        RoundedOutline(boolean continuous, ViewOutlineProvider original, String scope) {
             this.continuous = continuous;
             this.original = original;
+            this.scope = scope;
         }
 
         @Override public void getOutline(View view, Outline out) {
@@ -147,6 +159,16 @@ final class NativeAdvancedMaterialSurface {
                     original.getOutline(view, nativeOutline);
                     if (nativeOutline.getRadius() > 0f) radius = nativeOutline.getRadius();
                 } catch (Throwable ignored) {}
+            }
+            if (scope != null && ScopedGlassOptics.isMenuScope(scope)) {
+                ConfigReader r = ConfigReader.load();
+                float custom = GlassComponentCorners.readDp(r,
+                        ScopedGlassOptics.POPUP.equals(scope)
+                                ? com.hellovoid.liquiddock.config.ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS
+                                : com.hellovoid.liquiddock.config.ConfigSchema.Glass.HANDLE_MENU_CORNER_RADIUS);
+                if (custom >= 0f) {
+                    radius = custom * view.getResources().getDisplayMetrics().density;
+                }
             }
             radius = Math.min(radius, Math.min(w, h) * .5f);
             if (!continuous) { out.setRoundRect(0, 0, w, h, radius); return; }

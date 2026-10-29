@@ -196,7 +196,7 @@ final class MiuixShortcutMenuGlassHook {
             LiquidDockConfig current = LiquidDockConfig.from(ConfigReader.load());
             if (current.enabled && current.glass.advancedMaterialEnabled && popupGlassEnabled) {
                 NativeAdvancedMaterialSurface.bind(
-                        contentView, current.glass.continuousCorners);
+                        contentView, current.glass.continuousCorners, ScopedGlassOptics.POPUP);
                 return;
             }
             if (!popupGlassEnabled || !GlassRuntimeState.isEnabled()) return;

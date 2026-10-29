@@ -116,11 +116,13 @@ final class SystemUiHandleMenuGlassHook {
                             if (menuRoot != null) {
                                 float nativeRadius = HandleMenuSurfaceCornerLease.nativeRadius(
                                         ((Number) args[4]).floatValue(), Boolean.TRUE.equals(args[7]));
-                                if (NativeMaterialMode.isEnabled()) {
+                                if (NativeMaterialMode.isEnabled() && ConfigReader.load().b(
+                                        com.hellovoid.liquiddock.config.ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name(),
+                                        false)) {
                                     NativeAdvancedMaterialSurface.bind(
                                             resolveGlassTarget(menuRoot) != null
                                                     ? resolveGlassTarget(menuRoot) : menuRoot,
-                                            NativeMaterialMode.continuousCorners());
+                                            NativeMaterialMode.continuousCorners(), ScopedGlassOptics.HANDLE_MENU);
                                 } else {
                                     observeMenu(menuRoot, menuSurface, true, nativeRadius);
                                 }
@@ -154,11 +156,13 @@ final class SystemUiHandleMenuGlassHook {
                         try {
                             if (target && result instanceof View) {
                                 View root = (View) result;
-                                if (NativeMaterialMode.isEnabled()) {
+                                if (NativeMaterialMode.isEnabled() && ConfigReader.load().b(
+                                        com.hellovoid.liquiddock.config.ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS.name(),
+                                        false)) {
                                     NativeAdvancedMaterialSurface.bind(
                                             resolveGlassTarget(root) != null
                                                     ? resolveGlassTarget(root) : root,
-                                            NativeMaterialMode.continuousCorners());
+                                            NativeMaterialMode.continuousCorners(), ScopedGlassOptics.HANDLE_MENU);
                                 } else {
                                     observeMenu(root, null, false, Float.NaN);
                                 }

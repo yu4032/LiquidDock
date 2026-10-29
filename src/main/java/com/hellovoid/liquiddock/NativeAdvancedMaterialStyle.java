@@ -5,6 +5,7 @@ import android.graphics.Point;
 import android.view.View;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
+import com.hellovoid.liquiddock.config.ConfigKey;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -17,14 +18,27 @@ final class NativeAdvancedMaterialStyle {
     private static Method shadowMethod;
 
     private NativeAdvancedMaterialStyle(ConfigReader reader) {
-        radiusPx = reader.i(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(), 80);
+        this(reader, null);
+    }
+
+    private NativeAdvancedMaterialStyle(ConfigReader reader, String scope) {
+        int globalRadius = reader.i(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(), 80);
+        String scopedBlurKey = scope != null
+                ? ScopedGlassOptics.key(scope, ConfigSchema.Glass.BLUR) : null;
+        radiusPx = scopedBlurKey != null && reader.has(scopedBlurKey)
+                ? Math.max(0, Math.min(400, Math.round(reader.f(scopedBlurKey, globalRadius))))
+                : globalRadius;
         overrideVendorBlur = reader.b(
                 ConfigSchema.Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR.name(), false);
-        tintColor = color(reader,
-                ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED.name(),
-                ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN.name(),
-                ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE.name(),
-                ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_ALPHA.name());
+        int red = scopedChannel(reader, scope, ConfigSchema.Glass.TINT_RED,
+                ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED);
+        int green = scopedChannel(reader, scope, ConfigSchema.Glass.TINT_GREEN,
+                ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN);
+        int blue = scopedChannel(reader, scope, ConfigSchema.Glass.TINT_BLUE,
+                ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE);
+        int alpha = scopedChannel(reader, scope, ConfigSchema.Glass.TINT_ALPHA,
+                ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_ALPHA);
+        tintColor = Color.argb(clamp(alpha), clamp(red), clamp(green), clamp(blue));
         fillColor = color(reader,
                 ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_RED.name(),
                 ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_GREEN.name(),
@@ -38,6 +52,18 @@ final class NativeAdvancedMaterialStyle {
 
     static void update(ConfigReader prefs) {
         current = new NativeAdvancedMaterialStyle(prefs);
+    }
+
+    static NativeAdvancedMaterialStyle forScope(String scope) {
+        return scope != null ? new NativeAdvancedMaterialStyle(ConfigReader.load(), scope) : get();
+    }
+
+    private static int scopedChannel(ConfigReader reader, String scope,
+            ConfigKey<Integer> scoped, ConfigKey<Integer> nativeGlobal) {
+        String key = scope != null ? ScopedGlassOptics.key(scope, scoped) : null;
+        return key != null && reader.has(key)
+                ? reader.i(key, nativeGlobal.runtimeFallback())
+                : reader.i(nativeGlobal.name(), nativeGlobal.runtimeFallback());
     }
 
     static NativeAdvancedMaterialStyle get() {
