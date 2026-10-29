@@ -71,10 +71,6 @@ final class Api102HookRegistry {
     // executable. Repeated registration of that *same* slot replaces rather than stacking.
     private final Map<SiteKey, XposedInterface.HookHandle> siteHandles = new LinkedHashMap<>();
     private long nextSiteId;
-    // Compatibility ledger for genuinely unnamed handles. HookUtil registrations now use
-    // named site slots; this list does not participate in automatic replacement.
-    private final List<XposedInterface.HookHandle> unnamedHandles = new ArrayList<>();
-
     Api102HookRegistry(Installer installer) {
         this(installer, (executable, id, priority, callback) ->
                 Api101Bridge.module().hook(executable)
@@ -124,10 +120,6 @@ final class Api102HookRegistry {
 
     static int installedCount() {
         return PROCESS.count();
-    }
-
-    static void registerUnidentified(XposedInterface.HookHandle handle) {
-        PROCESS.trackUnidentified(handle);
     }
 
     static XposedInterface.HookHandle hookSite(Executable executable, String site,
@@ -222,16 +214,7 @@ final class Api102HookRegistry {
     }
 
     synchronized int count() {
-        return handles.size() + siteHandles.size() + unnamedHandles.size();
-    }
-
-    synchronized int unidentifiedCount() {
-        return unnamedHandles.size();
-    }
-
-    synchronized void trackUnidentified(XposedInterface.HookHandle handle) {
-        if (handle == null) throw new IllegalArgumentException("HookHandle");
-        unnamedHandles.add(handle);
+        return handles.size() + siteHandles.size();
     }
 
     synchronized List<String> idSnapshot() {

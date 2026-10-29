@@ -1,6 +1,6 @@
 # API 102 atomic Hook replacement (no hot reload)
 
-This branch starts at `main`. It **does not enable or implement SystemUI hot reload**.
+This implementation **does not enable or implement SystemUI hot reload**.
 `META-INF/xposed/module.prop` retains `autoHotReload=false`; module APK upgrades
 still require normal target-process restarts to load new code.
 
@@ -34,11 +34,12 @@ Source: https://libxposed.github.io/api/io/github/libxposed/api/XposedInterface.
 - Unrelated registration sites hooking the same Method stay separate; no flattening
   of multi-hook chains. Existing named `Api102HookDomain` hooks remain owner-scoped.
 - Site lookup uses the caller frame at hook-registration time, not at invocation time.
-  If source line metadata is unavailable, the invocation receives a unique slot rather
-  than accidentally replacing someone else's Hook. Exact-name registration-site IDs
-  are process-local; there is no cross-generation handoff.
-- No changes to callback priorities, EGL, PassBlur, GPU resources, app settings,
-  the SystemUI process lifecycle, or `ModuleMain` callbacks.
+  ART's line-less `dalvik.system.VMStack` frames are skipped before reading the real
+  registration site. If no located caller exists, a unique slot avoids replacing
+  an unrelated hook. Site identities are process-local, not transferable between APKs.
+- The separate, device-verified shortcut-popup/drag PassBlur source-window lifetime
+  fix is integrated into the same PR; see `transient-passblur-detach-ownership.md`.
+  It does not change hook priorities, hot-reload settings or ModuleMain callbacks.
 
 ## Validation
 
@@ -48,6 +49,9 @@ count, no unhook gap, retaining old handle after a failed replacement, and
 unhooking **only the latest** handle on owner shutdown. Shared-registry tests cover
 independent multi-hooks on the same target, constructor hooks, priority separation,
 repeated same-site replacement and replacing one class without touching another.
+Five additional tests feed ART-shaped stack traces to the source-site resolver.
+An R8 release device run confirmed 207 located registrations and 0 unlocated
+registrations after the ART frame fix; initial startup does not exercise replacement.
 
 Device acceptance (API 102 framework): recreate the SystemUI navigation bar,
 re-enter HOME/RECENTS, and confirm the native gesture handle alpha still

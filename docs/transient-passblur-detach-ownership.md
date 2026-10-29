@@ -48,7 +48,7 @@ times cannot restore an already-destroyed root.
 OPEN_FOLDER still uses its existing explicit one-shot producer retire path and
 per-folder shutdown behavior. The module hot-reload policy remains unchanged.
 
-## Validation plan
+## Regression validation
 
 1. Install the R8 build, restart Launcher, confirm debug log is enabled.
 2. Record `pidof com.miui.home`, `dumpsys meminfo com.miui.home`, and
@@ -65,7 +65,7 @@ per-folder shutdown behavior. The module hot-reload policy remains unchanged.
    must not be removed early. Test a failed `eglCreateContext` before or during
    shutdown: teardown must still reach backend shutdown without re-initializing EGL.
 
-**Not yet proven**: compositor commit timing on the actual HyperOS device. A
-successful build alone cannot confirm that this fixes the retention measured
-above. Keep this PR in Draft until per-domain commit counts and graphics mtrack
-have been measured.
+**Device outcome:** the original reporter confirmed the transient PassBlur leak
+fix on the affected device, and approved integrating it into PR #474. No
+post-fix per-domain counts or mtrack measurements were supplied in that
+confirmation; retain this checklist for future regression testing.

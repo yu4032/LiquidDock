@@ -190,7 +190,6 @@ public class Api102HookRegistryTest {
         assertEquals(Arrays.asList(50, 50, 100, 50), priorities);
         assertEquals(Arrays.asList(sameMethod, sameMethod, sameMethod, constructor), targets);
         assertEquals(4, new java.util.HashSet<>(ids).size());
-        assertTrue("all HookUtil hooks are named", registry.unidentifiedCount() == 0);
 
         registry.installSite(sameMethod, "FeatureA#install:31", 50,
                 chain -> chain.proceed());
@@ -234,28 +233,6 @@ public class Api102HookRegistryTest {
         registry.installSite(one, "shared#loop:12", 50, hooker);
         assertEquals(1, replacementCount.get());
         assertEquals(2, ids.size());
-    }
-
-    @Test
-    public void legacyMultiHooksRemainSeparateAndBlockHotReloadReadiness() throws Exception {
-        List<String> events = new ArrayList<>();
-        Api102HookRegistry registry = new Api102HookRegistry(
-                (method, id, callback) -> fakeHandle(id, events, false));
-        Method method = Target.class.getDeclaredMethod("observed", int.class);
-        // Legacy callers may install more than one callback for the same target.
-        registry.trackUnidentified(fakeHandle("legacy-first", events, false));
-        registry.trackUnidentified(fakeHandle("legacy-second", events, false));
-        assertEquals(2, registry.unidentifiedCount());
-        assertEquals(2, registry.count());
-        assertTrue(registry.idSnapshot().isEmpty());
-        registry.install(method, "identified", chain -> chain.proceed());
-        assertEquals(3, registry.count());
-        assertTrue(registry.rollback(List.of("identified")));
-        assertEquals(2, registry.count());
-        assertEquals(2, registry.unidentifiedCount());
-        assertEquals(List.of("identified"), events);
-        assertThrows(IllegalArgumentException.class,
-                () -> registry.trackUnidentified(null));
     }
 
     @Test

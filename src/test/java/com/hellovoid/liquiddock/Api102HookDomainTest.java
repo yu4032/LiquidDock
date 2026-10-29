@@ -221,12 +221,11 @@ public class Api102HookDomainTest {
     }
 
     @Test
-    public void blockedDomainDoesNotRemoveOtherOwnerOrLegacyHook() throws Exception {
+    public void stoppedDomainDoesNotRemoveOtherOwnerHook() throws Exception {
         List<String> events = new ArrayList<>();
         AtomicBoolean fail = new AtomicBoolean(false);
         Api102HookRegistry registry = new Api102HookRegistry(
                 (method, id, callback) -> handle(id, events, fail));
-        registry.trackUnidentified(handle("legacy", events, fail));
         Api102HookDomain a = new Api102HookDomain(registry, "domain.a");
         Api102HookDomain b = new Api102HookDomain(registry, "domain.b");
         Method m = Target.class.getDeclaredMethod("observed", int.class);
@@ -236,11 +235,11 @@ public class Api102HookDomainTest {
         b.begin();
         b.hook(m, chain -> chain.proceed());
         b.commit();
-        assertEquals(3, registry.count());
+        assertEquals(2, registry.count());
         assertTrue(a.stop());
         assertTrue(b.isActive());
-        assertEquals(2, registry.count());
+        assertEquals(1, registry.count());
         assertTrue(b.stop());
-        assertEquals(1, registry.count()); // legacy remains managed outside this domain
+        assertEquals(0, registry.count());
     }
 }
