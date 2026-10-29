@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -54,4 +56,52 @@ public class LauncherGlassScrollCompensationStateTest {
 
         assertEquals(500f, state.projectCenterX(500f, 100, true), 0.001f);
     }
+
+    @Test
+    public void uiPreDrawCoalescesMultipleScrollMutations() {
+        LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
+        assertFalse(state.consumeUiRedraw());
+        state.onScrollMutation(100, 120);
+        state.onScrollMutation(120, 150);
+        assertTrue(state.consumeUiRedraw());
+        assertFalse(state.consumeUiRedraw());
+        assertEquals(450f, state.snapshot().projectCenterX(500f, 100, true), 0.001f);
+    }
+
+    @Test
+    public void oneGlFrameCannotMixDifferentScrollRevisions() {
+        LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
+        state.onScrollMutation(100, 130);
+        LauncherGlassScrollProjectionState.Snapshot glFrame = state.snapshot();
+        assertTrue(state.isCurrent(glFrame));
+        assertEquals(470f, glFrame.projectCenterX(500f, 100, true), 0.001f);
+
+        state.onScrollMutation(130, 160);
+        // Every node keeps the original GL-frame projection, rather than reading 160.
+        assertEquals(470f, glFrame.projectCenterX(500f, 100, true), 0.001f);
+        assertFalse(state.isCurrent(glFrame));
+        assertEquals(440f, state.snapshot().projectCenterX(500f, 100, true), 0.001f);
+    }
+
+    @Test
+    public void resetInvalidatesAnInFlightGlFrame() {
+        LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
+        state.onScrollMutation(100, 140);
+        LauncherGlassScrollProjectionState.Snapshot old = state.snapshot();
+        state.reset();
+
+        assertFalse(state.isCurrent(old));
+        assertFalse(state.consumeUiRedraw());
+        assertEquals(500f, state.snapshot().projectCenterX(500f, 100, true), 0.001f);
+    }
+
+    @Test
+    public void unchangedScrollDoesNotScheduleOrSupersedeAFrame() {
+        LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
+        LauncherGlassScrollProjectionState.Snapshot frame = state.snapshot();
+        state.onScrollMutation(100, 100);
+        assertTrue(state.isCurrent(frame));
+        assertFalse(state.consumeUiRedraw());
+    }
+
 }
