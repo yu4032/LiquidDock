@@ -58,6 +58,13 @@ internal fun NativeAdvancedMaterialSettingsPage(
         item(key = "native-material-blur") {
             SettingsCard {
                 IntSetting(prefs, advancedMaterialBlurSpec, masterEnabled && nativeEnabled)
+                ModernListDivider()
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR,
+                    "覆盖系统材质模糊强度",
+                    "默认保留 Launcher 原生强度；开启后向支持的原生背景写入上方模糊值",
+                    masterEnabled && nativeEnabled,
+                )
             }
         }
         item(key = "native-material-tint-title") { SmallTitle("原生染色") }

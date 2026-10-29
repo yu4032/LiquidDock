@@ -215,6 +215,7 @@ public final class PresetManager {
         source.put("liquid_glass", Boolean.TRUE);
         source.put("native_advanced_material_enabled", Boolean.FALSE);
         source.put("native_advanced_material_blur", 80);
+        source.put("native_advanced_material_override_vendor_blur", Boolean.FALSE);
         source.put("native_advanced_material_r", 255);
         source.put("native_advanced_material_g", 255);
         source.put("native_advanced_material_b", 255);

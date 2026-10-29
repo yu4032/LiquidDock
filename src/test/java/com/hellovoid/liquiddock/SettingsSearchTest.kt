@@ -41,7 +41,7 @@ class SettingsSearchTest {
     @Test
     fun nativeMaterialSearchRowsHaveActualFocusCells() {
         val items = customGlassSearchRows(Page.AdvancedMaterial)
-        assertEquals(12, items.size)
+        assertEquals(13, items.size)
         assertTrue(items.any { it.key == com.hellovoid.liquiddock.config.ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name() })
         assertTrue(items.any { it.key == com.hellovoid.liquiddock.config.ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_ALPHA.name() })
         assertTrue(items.any { it.key == com.hellovoid.liquiddock.config.ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_ALPHA.name() })

@@ -13,10 +13,13 @@ import java.util.ArrayList;
 final class NativeAdvancedMaterialStyle {
     private static volatile NativeAdvancedMaterialStyle current;
     final int radiusPx, tintColor, fillColor, shadowColor, shadowRadiusDp;
+    final boolean overrideVendorBlur;
     private static Method shadowMethod;
 
     private NativeAdvancedMaterialStyle(ConfigReader reader) {
         radiusPx = reader.i(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(), 80);
+        overrideVendorBlur = reader.b(
+                ConfigSchema.Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR.name(), false);
         tintColor = color(reader,
                 ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED.name(),
                 ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN.name(),
@@ -65,6 +68,10 @@ final class NativeAdvancedMaterialStyle {
     void applyVendor(View view) {
         if (view == null) return;
         // OEM blends are not overwritten when there is no custom color.
+        // Opt-in radius override preserves the vendor default when untouched.
+        if (overrideVendorBlur && Boolean.TRUE.equals(MiBlurBridge.getPassWindowBlurEnabled(view))) {
+            MiBlurBridge.setPassWindowBlurRadius(view, radiusPx);
+        }
         ArrayList<Point> colors = blendColors();
         if (colors != null) MiBlurBridge.setPassWindowBlurBlendColors(view, colors);
         applyShadow(view);

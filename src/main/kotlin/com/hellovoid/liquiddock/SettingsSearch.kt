@@ -91,6 +91,8 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
                 "启用高级材质", "与液态玻璃互斥"),
             CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(),
                 "图标与多任务原生模糊", "仅影响新增的原生材质背景"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR.name(),
+                "覆盖系统材质模糊强度", "保留系统默认或写入自定义模糊值"),
             CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED.name(), "染色红", "原生高级材质"),
             CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN.name(), "染色绿", "原生高级材质"),
             CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE.name(), "染色蓝", "原生高级材质"),
@@ -208,6 +210,7 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
         Page.AdvancedMaterial -> when (key) {
             ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name() -> 2
             ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name() -> 4
+            ConfigSchema.Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR.name() -> 4
             ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED.name() -> 6
             ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN.name() -> 6
             ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE.name() -> 6

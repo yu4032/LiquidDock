@@ -267,6 +267,9 @@ internal fun GlassWidgetsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    val nativeEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false,
+    )
     var widgetGlass by remember {
         mutableStateOf(
             prefs.getBoolean(
@@ -286,9 +289,11 @@ internal fun GlassWidgetsPage(
         item(key = "widget-enabled") {
             SettingsCard {
                 BooleanSetting(
-                    prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃",
-                    "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容",
-                    masterEnabled && liquidEnabled,
+                    prefs, ConfigSchema.Glass.WIDGET_GLASS,
+                    if (nativeEnabled) "小组件部件管理" else "小部件玻璃",
+                    if (nativeEnabled) "保留 HyperOS 原生背景，允许按所选规则隐藏 RemoteViews / MAML 部件"
+                    else "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容",
+                    masterEnabled && (liquidEnabled || nativeEnabled),
                 ) { widgetGlass = it }
             }
         }
@@ -325,7 +330,7 @@ internal fun GlassWidgetsPage(
                 ArrowPreference(
                     stringResource(R.string.widget_components_entry),
                     summary = stringResource(R.string.widget_components_entry_summary),
-                    enabled = masterEnabled && liquidEnabled && widgetGlass,
+                    enabled = masterEnabled && (liquidEnabled || nativeEnabled) && widgetGlass,
                     onClick = { open(Page.WidgetComponents) },
                 )
             }
