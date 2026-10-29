@@ -942,6 +942,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
         }
 
+        // Source rebind and rotation may return before output scheduling. Publish the
+        // captured scene first so recovery renders use the same UI geometry revision.
+        if (staticChanged) publishStaticSceneSnapshot();
+
         // The root-wide TextureView is a sibling of Workspace, so it does not inherit the
         // native Recents fade. Apply it here, without waiting for GL redraw/swap of cached pixels.
         LauncherGlassStaticLayer.syncWorkspacePresentation(root, workspaceMaterial, launchProxyActive);
@@ -991,7 +995,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     WorkstationProducerPolicy.shouldUseSingleFramePulse(MainHook.isWorkstationMode()));
             return;
         }
-        if (staticChanged) publishStaticSceneSnapshot();
         if (staticChanged || dragChanged) {
             // Scroll-only redraws are already queued by the mutation hook.
             scheduleOutputRender(staticChanged, dragChanged, true);
