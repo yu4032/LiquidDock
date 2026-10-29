@@ -40,6 +40,13 @@ final class RootPassBlurBackend {
 
     private static final String TAG = "[DC][RootPassBlur]";
     private static final int MAX_BIND_RETRY_FRAMES = 24;
+    private static final AtomicLong NEXT_EGL_LIFETIME_ID = new AtomicLong();
+    private static final AtomicLong EGL_CONTEXT_CREATED = new AtomicLong();
+    private static final AtomicLong EGL_CONTEXT_DESTROYED = new AtomicLong();
+    private static final AtomicLong EGL_PBUFFER_CREATED = new AtomicLong();
+    private static final AtomicLong EGL_PBUFFER_DESTROYED = new AtomicLong();
+    private static final AtomicLong EGL_WINDOW_CREATED = new AtomicLong();
+    private static final AtomicLong EGL_WINDOW_DESTROYED = new AtomicLong();
     private static final float[] QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -47,6 +54,7 @@ final class RootPassBlurBackend {
              1f,  1f, 1f, 1f
     };
 
+    private final long eglLifetimeId = NEXT_EGL_LIFETIME_ID.incrementAndGet();
     private final WeakReference<View> rootRef;
     private final PassBlurBindRequest bindRequest;
     private final Consumer consumer;
@@ -154,6 +162,7 @@ final class RootPassBlurBackend {
                 ? renderThreadName : "LiquidDock-RootPassBlur-EGL";
         renderThread = new HandlerThread(threadName);
         renderThread.start();
+        logFolderEglLifetime("backend-created");
         renderHandler = new Handler(renderThread.getLooper());
         mainHandler = new Handler(authoritativeRoot.getContext().getMainLooper());
 
@@ -1160,6 +1169,22 @@ final class RootPassBlurBackend {
         eglContext = EGL14.EGL_NO_CONTEXT;
         eglDisplay = EGL14.EGL_NO_DISPLAY;
         eglConfig = null;
+    }
+
+    /** Debug-only OPEN_FOLDER lifecycle counters; calls are outside frame-hot paths. */
+    private boolean isFolderEglLifetime() {
+        return bindRequest.domain() == PassBlurDomain.OPEN_FOLDER;
+    }
+
+    void logFolderEglLifetime(String event) {
+        if (!isFolderEglLifetime() || !Api101Bridge.isDebugLoggingEnabled()) return;
+        Api101Bridge.log(TAG + " [EGL-LIFE] backend=" + eglLifetimeId
+                + " event=" + event
+                + " contexts=" + EGL_CONTEXT_CREATED.get() + "/" + EGL_CONTEXT_DESTROYED.get()
+                + " pbuffers=" + EGL_PBUFFER_CREATED.get() + "/" + EGL_PBUFFER_DESTROYED.get()
+                + " windows=" + EGL_WINDOW_CREATED.get() + "/" + EGL_WINDOW_DESTROYED.get()
+                + " pendingDetach=" + PassBlurDetachCoordinator.pendingCount()
+                + " shuttingDown=" + shuttingDown);
     }
 
     private void notifyTerminalFailure(Throwable error) {
