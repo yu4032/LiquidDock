@@ -196,7 +196,13 @@ final class MiuiSearchboxGlassHook {
                 Object owner = chain.getThisObject();
                 if (owner instanceof Activity) {
                     OBSERVED_ACTIVITIES.put((Activity) owner, Boolean.TRUE);
-                    attach((Activity) owner, backgroundClass, blurEnabledMethod);
+                    if (NativeMaterialMode.isEnabled()) {
+                        ViewGroup background = resolveBackground((Activity) owner, backgroundClass);
+                        NativeAdvancedMaterialSurface.decorateVendor(background,
+                                NativeMaterialMode.continuousCorners());
+                    } else {
+                        attach((Activity) owner, backgroundClass, blurEnabledMethod);
+                    }
                 }
                 return result;
             });
@@ -208,6 +214,11 @@ final class MiuiSearchboxGlassHook {
                 if (owner != null && owner.getClass() == activityClass) {
                     OBSERVED_ACTIVITIES.put((Activity) owner, Boolean.TRUE);
                     refreshActivity((Activity) owner, backgroundClass);
+                    if (NativeMaterialMode.isEnabled()) {
+                        ViewGroup background = resolveBackground((Activity) owner, backgroundClass);
+                        NativeAdvancedMaterialSurface.decorateVendor(background,
+                                NativeMaterialMode.continuousCorners());
+                    }
                 }
                 return result;
             });

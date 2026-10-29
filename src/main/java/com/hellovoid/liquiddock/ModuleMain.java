@@ -211,7 +211,8 @@ public final class ModuleMain extends XposedModule {
             NativeWidgetComponentsHook.install(classLoader, runtimeConfig);
             // The OEM material silhouette is independent of Liquid Glass replacement.
             NativeMaterialContinuousCornersHook.install(
-                    classLoader, runtimeConfig.enabled && runtimeConfig.glass.continuousCorners);
+                    classLoader, runtimeConfig.enabled && (runtimeConfig.glass.continuousCorners
+                        || runtimeConfig.glass.advancedMaterialEnabled));
             new MainHook().install(classLoader);
 
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);

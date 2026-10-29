@@ -116,7 +116,14 @@ final class SystemUiHandleMenuGlassHook {
                             if (menuRoot != null) {
                                 float nativeRadius = HandleMenuSurfaceCornerLease.nativeRadius(
                                         ((Number) args[4]).floatValue(), Boolean.TRUE.equals(args[7]));
-                                observeMenu(menuRoot, menuSurface, true, nativeRadius);
+                                if (NativeMaterialMode.isEnabled()) {
+                                    NativeAdvancedMaterialSurface.bind(
+                                            resolveGlassTarget(menuRoot) != null
+                                                    ? resolveGlassTarget(menuRoot) : menuRoot,
+                                            NativeMaterialMode.continuousCorners());
+                                } else {
+                                    observeMenu(menuRoot, menuSurface, true, nativeRadius);
+                                }
                             }
                         } catch (Throwable error) {
                             log("MIUI captionMenu observation failed; original result preserved: "
@@ -147,7 +154,14 @@ final class SystemUiHandleMenuGlassHook {
                         try {
                             if (target && result instanceof View) {
                                 View root = (View) result;
-                                observeMenu(root, null, false, Float.NaN);
+                                if (NativeMaterialMode.isEnabled()) {
+                                    NativeAdvancedMaterialSurface.bind(
+                                            resolveGlassTarget(root) != null
+                                                    ? resolveGlassTarget(root) : root,
+                                            NativeMaterialMode.continuousCorners());
+                                } else {
+                                    observeMenu(root, null, false, Float.NaN);
+                                }
                             }
                         } catch (Throwable error) {
                             log("AOSP HandleMenu observation failed; original result preserved: "

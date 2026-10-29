@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewOutlineProvider;
 
 import com.hellovoid.prismal.PrismalContinuousCorners;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 
 import java.lang.reflect.Method;
 import java.util.HashSet;
@@ -31,7 +32,8 @@ final class NativeMaterialContinuousCornersHook {
 
     static synchronized void install(ClassLoader loader, boolean enabled) {
         if (installed || loader == null) return;
-        continuousCorners = enabled;
+        continuousCorners = ConfigReader.load().b(ConfigSchema.Glass.CONTINUOUS_CORNERS.name(),
+                ConfigSchema.Glass.CONTINUOUS_CORNERS.runtimeFallback());
         if (!enabled) return; // This setting, like the Prismal shape, is restart-bound.
         int count = 0;
         try {
@@ -120,10 +122,17 @@ final class NativeMaterialContinuousCornersHook {
         return null;
     }
 
+    static void applyTo(View material) {
+        apply(material);
+    }
+
     private static void apply(View material) {
-        if (!continuousCorners || material == null
-                || MiuixGlassHook.isBoundTo(material)
+        if (material == null || MiuixGlassHook.isBoundTo(material)
                 || LauncherGlassStaticNode.find(material) != null) return;
+        if (ConfigReader.load().b(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false)) {
+            NativeAdvancedMaterialStyle.get().applyVendor(material);
+        }
+        if (!continuousCorners) return;
         ViewOutlineProvider original = material.getOutlineProvider();
         if (original == null || original instanceof ContinuousOutline) return;
         // No clipToOutline(true): widget text and icons must not be clipped by a new owner.
