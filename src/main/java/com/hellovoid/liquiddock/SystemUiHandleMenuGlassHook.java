@@ -40,11 +40,15 @@ final class SystemUiHandleMenuGlassHook {
     private static boolean installed;
     private static LiquidDockConfig.Glass glassConfig;
     private static volatile boolean liveEnabled;
+    // Any materialized menu may have a pending compositor/GPU release. Never hot-reload
+    // an old generation that has owned a caption menu, even after its View detaches.
+    private static boolean everOwnedMenu;
+    private static boolean retiredForReload;
 
     private SystemUiHandleMenuGlassHook() {}
 
-    static void onLiveGlassConfigChanged(ConfigReader reader, LiquidDockConfig config) {
-        if (config == null) return;
+    static synchronized void onLiveGlassConfigChanged(ConfigReader reader, LiquidDockConfig config) {
+        if (config == null || retiredForReload) return;
         liveEnabled = config.enabled && config.glass.enabled
                 && config.glass.systemUiHandleMenuEnabled;
         LiquidDockConfig.Glass resolved = ScopedGlassOptics.resolve(
@@ -179,13 +183,24 @@ final class SystemUiHandleMenuGlassHook {
         }
     }
 
-    private static void observeMenu(
+    /** No asynchronous View/PassBlur/EGL owner has ever been created in this generation. */
+    static synchronized boolean retireUnusedForHotReload() {
+        if (retiredForReload) return false;
+        if (everOwnedMenu || !PENDING.isEmpty() || !ACTIVE.isEmpty()
+                || SystemUiHandleMenuPrismalSession.blockedTeardownCount() != 0) return false;
+        retiredForReload = true;
+        liveEnabled = false;
+        return true;
+    }
+
+    private static synchronized void observeMenu(
             View root,
             SurfaceControl menuSurface,
             boolean trackNativeSurfaceAnimation,
             float nativeCornerRadiusPx) {
         LiquidDockConfig.Glass glass = glassConfig;
-        if (!liveEnabled || root == null || glass == null) return;
+        if (retiredForReload || !liveEnabled || root == null || glass == null) return;
+        everOwnedMenu = true;
 
         releaseRoot(root);
         PendingBinding pending = new PendingBinding(
