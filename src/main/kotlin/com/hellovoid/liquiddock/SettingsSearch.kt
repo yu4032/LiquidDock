@@ -92,7 +92,45 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
     fun toggle(config: com.hellovoid.liquiddock.config.ConfigKey<Boolean>, title: String) =
         CustomGlassSearchRow(config.name(), title, "")
     fun number(spec: IntSpec) = CustomGlassSearchRow(spec.key, spec.title, spec.summary)
+    fun row(key: String, title: String) = CustomGlassSearchRow(key, title, "")
+    fun appearance(scope: String): List<CustomGlassSearchRow> = listOf(
+        row(ScopedGlassOptics.key(scope, ConfigSchema.Glass.TINT_RED), "染色 · 红"),
+        row(ScopedGlassOptics.key(scope, ConfigSchema.Glass.TINT_GREEN), "染色 · 绿"),
+        row(ScopedGlassOptics.key(scope, ConfigSchema.Glass.TINT_BLUE), "染色 · 蓝"),
+        row(ScopedGlassOptics.key(scope, ConfigSchema.Glass.TINT_ALPHA), "染色强度"),
+        row(ScopedGlassOptics.key(scope, ConfigSchema.Glass.BLUR), "玻璃模糊"),
+    )
     val rows = when (page) {
+        Page.ShortcutPopupCustomization -> listOf(
+            toggle(ConfigSchema.Glass.SHORTCUT_POPUP_GLASS, "启用快捷菜单玻璃"),
+            toggle(ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT, "快捷菜单深色模式适配"),
+            row(ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS.name(), "菜单圆角"),
+        ) + appearance(ScopedGlassOptics.POPUP)
+        Page.HandleMenuCustomization -> listOf(
+            toggle(ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS, "启用应用顶部菜单玻璃"),
+            row(ConfigSchema.Glass.HANDLE_MENU_CORNER_RADIUS.name(), "菜单圆角"),
+        ) + appearance(ScopedGlassOptics.HANDLE_MENU)
+        Page.DialogCustomization -> listOf(
+            toggle(ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS, "启用桌面对话弹窗玻璃"),
+            toggle(ConfigSchema.Glass.DIALOG_DISABLE_DIMMING, "关闭对话时背景压暗"),
+            toggle(ConfigSchema.Glass.DIALOG_DARK_MODE, "对话框深色模式"),
+            row(ConfigSchema.Glass.DIALOG_CORNER_RADIUS.name(), "对话弹窗圆角"),
+            row(ConfigSchema.Glass.DIALOG_TINT_RED.name(), "染色 · 红"),
+            row(ConfigSchema.Glass.DIALOG_TINT_GREEN.name(), "染色 · 绿"),
+            row(ConfigSchema.Glass.DIALOG_TINT_BLUE.name(), "染色 · 蓝"),
+            row(ConfigSchema.Glass.DIALOG_TINT_ALPHA.name(), "染色强度"),
+            row(ConfigSchema.Glass.DIALOG_BLUR.name(), "对话背景模糊"),
+        )
+        Page.Gboard -> listOf(
+            row(GboardGlassPreferences.ENABLED_KEY, "启用悬浮键盘液态玻璃"),
+            row(GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY, "拖动后自动进入大小调整"),
+            row(GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY, "实时背景采样"),
+            row(GboardGlassPreferences.TINT_RED_KEY, "染色 · 红"),
+            row(GboardGlassPreferences.TINT_GREEN_KEY, "染色 · 绿"),
+            row(GboardGlassPreferences.TINT_BLUE_KEY, "染色 · 蓝"),
+            row(GboardGlassPreferences.TINT_ALPHA_KEY, "染色强度"),
+            row(GboardGlassPreferences.BLUR_KEY, "玻璃模糊"),
+        )
         Page.GridBasics -> listOf(
             toggle(ConfigSchema.Grid.ICON_SIZE_ENABLED, "自定义图标大小"),
             number(launcher450IconSizeSpec),
@@ -133,6 +171,46 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
  */
 internal fun customDenseFocusIndex(page: Page, key: String): Int? {
     val index = when (page) {
+        Page.ShortcutPopupCustomization, Page.HandleMenuCustomization -> {
+            val popup = page == Page.ShortcutPopupCustomization
+            val scope = if (popup) ScopedGlassOptics.POPUP else ScopedGlassOptics.HANDLE_MENU
+            when (key) {
+                (if (popup) ConfigSchema.Glass.SHORTCUT_POPUP_GLASS else
+                    ConfigSchema.Glass.SYSTEMUI_HANDLE_MENU_GLASS).name() -> 2
+                ConfigSchema.Glass.SHORTCUT_POPUP_DARK_TEXT.name() -> if (popup) 2 else -1
+                (if (popup) ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS else
+                    ConfigSchema.Glass.HANDLE_MENU_CORNER_RADIUS).name() -> 4
+                ScopedGlassOptics.key(scope, ConfigSchema.Glass.TINT_RED),
+                ScopedGlassOptics.key(scope, ConfigSchema.Glass.TINT_GREEN),
+                ScopedGlassOptics.key(scope, ConfigSchema.Glass.TINT_BLUE) -> 6
+                ScopedGlassOptics.key(scope, ConfigSchema.Glass.TINT_ALPHA) -> 7
+                ScopedGlassOptics.key(scope, ConfigSchema.Glass.BLUR) -> 9
+                else -> -1
+            }
+        }
+        Page.DialogCustomization -> when (key) {
+            ConfigSchema.Glass.UNINSTALL_DIALOG_GLASS.name(),
+            ConfigSchema.Glass.DIALOG_DISABLE_DIMMING.name(),
+            ConfigSchema.Glass.DIALOG_DARK_MODE.name() -> 2
+            ConfigSchema.Glass.DIALOG_CORNER_RADIUS.name() -> 4
+            ConfigSchema.Glass.DIALOG_TINT_RED.name(),
+            ConfigSchema.Glass.DIALOG_TINT_GREEN.name(),
+            ConfigSchema.Glass.DIALOG_TINT_BLUE.name() -> 6
+            ConfigSchema.Glass.DIALOG_TINT_ALPHA.name() -> 7
+            ConfigSchema.Glass.DIALOG_BLUR.name() -> 9
+            else -> -1
+        }
+        Page.Gboard -> when (key) {
+            GboardGlassPreferences.ENABLED_KEY,
+            GboardGlassPreferences.AUTO_RESIZE_AFTER_HANDLE_DRAG_KEY -> 2
+            GboardGlassPreferences.REALTIME_BACKGROUND_SAMPLING_KEY -> 4
+            GboardGlassPreferences.TINT_RED_KEY,
+            GboardGlassPreferences.TINT_GREEN_KEY,
+            GboardGlassPreferences.TINT_BLUE_KEY -> 6
+            GboardGlassPreferences.TINT_ALPHA_KEY -> 7
+            GboardGlassPreferences.BLUR_KEY -> 9
+            else -> -1
+        }
         Page.GridBasics -> when (key) {
             ConfigSchema.Grid.ICON_SIZE_ENABLED.name() -> 2
             launcher450IconSizeSpec.key -> 3
