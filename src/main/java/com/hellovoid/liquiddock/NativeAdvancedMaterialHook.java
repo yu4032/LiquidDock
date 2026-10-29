@@ -214,10 +214,9 @@ final class NativeAdvancedMaterialHook {
         boolean permitted = enabled && view.isAttachedToWindow()
                 && view.getWidth() > 0 && view.getHeight() > 0;
         if (!capsule) {
-            boolean dock = LauncherGlassHierarchy.classify(view)
-                    == LauncherGlassHierarchy.Domain.DOCK;
-            permitted &= LauncherGlassHierarchy.classify(view)
-                    != LauncherGlassHierarchy.Domain.OTHER;
+            LauncherGlassHierarchy.Domain domain = LauncherGlassHierarchy.classify(view);
+            boolean dock = domain == LauncherGlassHierarchy.Domain.DOCK;
+            permitted &= domain != LauncherGlassHierarchy.Domain.OTHER;
             permitted &= Launcher450DockFunctionalIconPolicy.shouldRender(
                     iconEnabled, functionalIconEnabled, dock,
                     Launcher450DockFunctionalIconRegistry.isFunctional(view));

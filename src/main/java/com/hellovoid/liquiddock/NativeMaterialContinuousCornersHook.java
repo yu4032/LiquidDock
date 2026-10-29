@@ -27,13 +27,16 @@ final class NativeMaterialContinuousCornersHook {
             "com.miui.home.launcher.hotseats.";
     private static boolean installed;
     private static boolean continuousCorners;
+    private static boolean advancedMaterial;
 
     private NativeMaterialContinuousCornersHook() {}
 
     static synchronized void install(ClassLoader loader, boolean enabled) {
         if (installed || loader == null) return;
-        continuousCorners = ConfigReader.load().b(ConfigSchema.Glass.CONTINUOUS_CORNERS.name(),
+        ConfigReader settings = ConfigReader.load();
+        continuousCorners = settings.b(ConfigSchema.Glass.CONTINUOUS_CORNERS.name(),
                 ConfigSchema.Glass.CONTINUOUS_CORNERS.runtimeFallback());
+        advancedMaterial = settings.b(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false);
         if (!enabled) return; // This setting, like the Prismal shape, is restart-bound.
         int count = 0;
         try {
@@ -123,13 +126,16 @@ final class NativeMaterialContinuousCornersHook {
     }
 
     static void applyTo(View material) {
+        // May run in Searchbox/SystemUI where Launcher-only initializer hooks
+        // were never installed. The corner preference is still process-global.
+        continuousCorners = NativeMaterialMode.continuousCorners();
         apply(material);
     }
 
     private static void apply(View material) {
         if (material == null || MiuixGlassHook.isBoundTo(material)
                 || LauncherGlassStaticNode.find(material) != null) return;
-        if (ConfigReader.load().b(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false)) {
+        if (advancedMaterial || NativeMaterialMode.isEnabled()) {
             NativeAdvancedMaterialStyle.get().applyVendor(material);
         }
         if (!continuousCorners) return;

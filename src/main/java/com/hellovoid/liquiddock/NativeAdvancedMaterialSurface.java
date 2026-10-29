@@ -31,7 +31,17 @@ final class NativeAdvancedMaterialSurface {
             return;
         }
         if (target.getWidth() <= 0 || target.getHeight() <= 0) {
-            target.post(() -> bind(target, continuous));
+            // A popup may not have measured yet. One-shot layout rendezvous, not a
+            // repost loop that can starve the UI thread before layout.
+            target.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                @Override public void onLayoutChange(View view,
+                        int left, int top, int right, int bottom,
+                        int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                    if (right <= left || bottom <= top) return;
+                    view.removeOnLayoutChangeListener(this);
+                    bind(view, continuous);
+                }
+            });
             return;
         }
         Lease state = new Lease(target, continuous);
@@ -64,7 +74,7 @@ final class NativeAdvancedMaterialSurface {
             this.continuous = continuous;
             originalOutline = target.getOutlineProvider();
             originalBackground = target.getBackground();
-            outline = new RoundedOutline(continuous);
+            outline = new RoundedOutline(continuous, originalOutline);
         }
 
         boolean acquire(View target) {
@@ -78,8 +88,10 @@ final class NativeAdvancedMaterialSurface {
                 blurRadius = appearance.radiusPx;
                 target.setBackground(null);
             }
-            target.setOutlineProvider(outline);
-            target.invalidateOutline();
+            if (continuous) {
+                target.setOutlineProvider(outline);
+                target.invalidateOutline();
+            }
             NativeAdvancedMaterialStyle.get().applyVendor(target);
             target.addOnAttachStateChangeListener(this);
             return true;
@@ -114,19 +126,33 @@ final class NativeAdvancedMaterialSurface {
 
     private static final class RoundedOutline extends ViewOutlineProvider {
         private final boolean continuous;
+        private final ViewOutlineProvider original;
         private final Path path = new Path();
         private int width = -1, height = -1;
+        private float lastRadius = Float.NaN;
 
-        RoundedOutline(boolean continuous) { this.continuous = continuous; }
+        RoundedOutline(boolean continuous, ViewOutlineProvider original) {
+            this.continuous = continuous;
+            this.original = original;
+        }
 
         @Override public void getOutline(View view, Outline out) {
             int w = view.getWidth(), h = view.getHeight();
             if (w <= 0 || h <= 0) { out.setEmpty(); return; }
             float radius = Math.min(w, h) * 0.22f;
+            if (original != null) {
+                try {
+                    Outline nativeOutline = new Outline();
+                    original.getOutline(view, nativeOutline);
+                    if (nativeOutline.getRadius() > 0f) radius = nativeOutline.getRadius();
+                } catch (Throwable ignored) {}
+            }
+            radius = Math.min(radius, Math.min(w, h) * .5f);
             if (!continuous) { out.setRoundRect(0, 0, w, h, radius); return; }
-            if (width != w || height != h) {
+            if (width != w || height != h || radius != lastRadius) {
                 width = w;
                 height = h;
+                lastRadius = radius;
                 path.rewind();
                 float[] points = PrismalContinuousCorners.contour(w, h, radius);
                 if (points.length < 8) { out.setRoundRect(0, 0, w, h, radius); return; }
