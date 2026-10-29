@@ -101,28 +101,50 @@ public final class HookUtil {
     // ── Hooking ──────────────────────────────────────────────────────
 
     /**
-     * A vendor Method can have several valid interceptors. Keep every returned handle without
-     * assigning a synthetic ID or changing its priority or callback order.
+     * All HookUtil owners share one API 102 registry. Each lexical registration site AND
+     * Executable is independently tracked, so two features hooking the same vendor Method
+     * never overwrite one another. Re-registering a site refreshes its callback atomically.
      */
     public static void hook(Method method, XposedInterface.Hooker callback) {
-        method.setAccessible(true);
-        Api102HookRegistry.registerUnidentified(
-                Api101Bridge.module().hook(method).intercept(callback));
+        hookAtSite(method, XposedInterface.PRIORITY_DEFAULT, callback);
     }
 
-    /** Hook constructors through the same ownership ledger. */
+    /** Constructor hooks use the same identity and replacement semantics. */
     public static void hook(Constructor<?> ctor, XposedInterface.Hooker callback) {
-        ctor.setAccessible(true);
-        Api102HookRegistry.registerUnidentified(
-                Api101Bridge.module().hook(ctor).intercept(callback));
+        hookAtSite(ctor, XposedInterface.PRIORITY_DEFAULT, callback);
     }
 
-    /** Preserve high-priority installation behavior while tracking the returned HookHandle. */
+    /** The priority becomes part of the slot identity and survives replacement. */
     public static void hookWithPriority(
             Method method, int priority, XposedInterface.Hooker callback) {
-        method.setAccessible(true);
-        Api102HookRegistry.registerUnidentified(
-                Api101Bridge.module().hook(method).setPriority(priority).intercept(callback));
+        hookAtSite(method, priority, callback);
+    }
+
+    private static void hookAtSite(
+            java.lang.reflect.Executable executable, int priority,
+            XposedInterface.Hooker callback) {
+        // Called only during installation, never for each intercepted invocation.
+        // Skip this utility's adapter frames to identify the real registration site.
+        // Fail closed on missing line information: without a reliable site, allocate a
+        // distinct slot rather than accidentally replacing another feature's hook.
+        Api102HookRegistry.hookSite(executable, registrationSite(), priority, callback);
+    }
+
+    private static final java.util.concurrent.atomic.AtomicLong UNLOCATED_SITE =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    private static String registrationSite() {
+        for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
+            String owner = frame.getClassName();
+            if (owner.equals(HookUtil.class.getName())
+                    || owner.equals(Thread.class.getName())) continue;
+            if (frame.getLineNumber() > 0) {
+                return owner + '#' + frame.getMethodName() + ':' + frame.getLineNumber();
+            }
+            return owner + '#' + frame.getMethodName() + ":unknown:"
+                    + UNLOCATED_SITE.incrementAndGet();
+        }
+        return "unknown:" + UNLOCATED_SITE.incrementAndGet();
     }
 
     /** Find + hook a declared method (exact class only; no superclass walk). */
