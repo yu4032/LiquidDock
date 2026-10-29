@@ -1,11 +1,11 @@
 # LiquidDock TODO FOR AGENT
 
-基准：**2026-10-10 `main` / HyperOS 3 平板 / Launcher 4.50 / libxposed API 101**。
+基准：**2026-10-29 `main` / v2.7.6 / HyperOS 3 / Launcher 4.50 / libxposed API 102**。
 
 Workspace 性能清单状态更新：**2026-10-18**；P0 静态几何复用已合并并实机验收，详见 [收尾报告](docs/perf/workspace-static-geometry-p0-20261018.md)。
 
 活跃清单只记录仍需代码、验证或设计决策的事项；完成与主动取消的项目在末尾分别归档。
-状态以**已经合并到 `main` 的代码**为准；未合并 PR 必须显式标注，不能提前算作完成。
+任务状态按 `main` 已合并的代码记录；开发中的 PR 单独标注。
 
 原则：
 
@@ -14,7 +14,7 @@ Workspace 性能清单状态更新：**2026-10-18**；P0 静态几何复用已�
 - 不以静态分析代替真机验证。
 - 删除配置键之前核对当前 GUI、运行时、预设和当前格式导入导出的真实消费链。
 - 配置层不再维护老用户迁移、历史别名回退或旧键与新键双写；旧键无须兼容。
-- API 101/102 的运行环境兼容属于 Hook 框架升级，不等同于配置数据迁移。
+- Hook API 升级与用户配置数据迁移分别追踪。
 
 ---
 
@@ -176,25 +176,11 @@ Workspace 性能清单状态更新：**2026-10-18**；P0 静态几何复用已�
 
 ## 9. libxposed API 102 migration
 
-**状态：待规划。**
+**状态：已合并。**
 
-当前基线：libxposed API 101。
+libxposed API 102 现已接入，Hook 按注册位置、目标 `Executable` 与优先级维护独立槽位，同一槽位重复注册时使用 `HookHandle.replaceHook()` 原子替换。ART 调用栈识别已适配。
 
-目标：评估并迁移到 API 102，同时保持 HyperOS / LSPosed 环境兼容。
-
-检查范围：
-
-- API 版本差异；
-- Hook 注册流程；
-- 回调生命周期；
-- reflection / classloader 行为；
-- 与现有 API 101 fallback 的兼容策略。
-
-要求：
-
-- 不为了版本升级改变现有 Hook 语义；
-- 保留 API 101 可运行路径直到 API 102 真机验证完成；
-- 使用 CI + 真机验证确认桌面、SystemUI、输入法等 Hook 范围无回归。
+实现见 [PR #465](https://github.com/yu4032/LiquidDock/pull/465)、[PR #474](https://github.com/yu4032/LiquidDock/pull/474) 和 [API 102 Hook 文档](docs/api102-atomic-hook-replacement.md)。
 
 ---
 
