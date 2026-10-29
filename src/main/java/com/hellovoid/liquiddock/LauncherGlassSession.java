@@ -1546,7 +1546,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             catch (Throwable ignored) {}
             LauncherGlassSessionRegistry.forget(root, this);
         }
-        boolean queued = sourceBackend.postToRenderThread(() -> {
+        boolean queued = sourceBackend.postShutdownToRenderThread(() -> {
             releaseLauncherGl();
             sourceBackend.shutdown();
         });
