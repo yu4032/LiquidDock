@@ -853,10 +853,18 @@ final class RootPassBlurBackend {
                 display, configs[0], EGL14.EGL_NO_CONTEXT,
                 new int[]{EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE}, 0);
         checkEgl("eglCreateContext", context != EGL14.EGL_NO_CONTEXT);
+        if (isFolderEglLifetime()) {
+            EGL_CONTEXT_CREATED.incrementAndGet();
+            logFolderEglLifetime("context-create");
+        }
         EGLSurface pbuffer = EGL14.eglCreatePbufferSurface(
                 display, configs[0],
                 new int[]{EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE}, 0);
         checkEgl("eglCreatePbufferSurface", pbuffer != EGL14.EGL_NO_SURFACE);
+        if (isFolderEglLifetime()) {
+            EGL_PBUFFER_CREATED.incrementAndGet();
+            logFolderEglLifetime("pbuffer-create");
+        }
         eglDisplay = display;
         eglConfig = configs[0];
         eglContext = context;
@@ -1169,10 +1177,26 @@ final class RootPassBlurBackend {
         }
         currentEglSurface = EGL14.EGL_NO_SURFACE;
         if (eglDisplay != EGL14.EGL_NO_DISPLAY && eglPbufferSurface != EGL14.EGL_NO_SURFACE) {
-            try { EGL14.eglDestroySurface(eglDisplay, eglPbufferSurface); } catch (Throwable ignored) {}
+            try {
+                boolean destroyed = EGL14.eglDestroySurface(eglDisplay, eglPbufferSurface);
+                if (isFolderEglLifetime()) {
+                    if (destroyed) EGL_PBUFFER_DESTROYED.incrementAndGet();
+                    logFolderEglLifetime(destroyed ? "pbuffer-destroy" : "pbuffer-destroy-failed");
+                }
+            } catch (Throwable error) {
+                logFolderEglLifetime("pbuffer-destroy-exception " + error);
+            }
         }
         if (eglDisplay != EGL14.EGL_NO_DISPLAY && eglContext != EGL14.EGL_NO_CONTEXT) {
-            try { EGL14.eglDestroyContext(eglDisplay, eglContext); } catch (Throwable ignored) {}
+            try {
+                boolean destroyed = EGL14.eglDestroyContext(eglDisplay, eglContext);
+                if (isFolderEglLifetime()) {
+                    if (destroyed) EGL_CONTEXT_DESTROYED.incrementAndGet();
+                    logFolderEglLifetime(destroyed ? "context-destroy" : "context-destroy-failed");
+                }
+            } catch (Throwable error) {
+                logFolderEglLifetime("context-destroy-exception " + error);
+            }
         }
         if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
             try { EGL14.eglTerminate(eglDisplay); } catch (Throwable ignored) {}
