@@ -23,7 +23,7 @@ final class NativeAdvancedMaterialStyle {
 
     private NativeAdvancedMaterialStyle(ConfigReader reader, String scope) {
         int globalRadius = reader.i(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(), 80);
-        String scopedBlurKey = scope != null
+        String scopedBlurKey = ScopedGlassOptics.isMenuScope(scope)
                 ? ScopedGlassOptics.key(scope, ConfigSchema.Glass.BLUR) : null;
         int scopedRadius = scopedBlurKey != null && reader.has(scopedBlurKey)
                 ? Math.max(0, Math.min(400, Math.round(reader.f(scopedBlurKey, globalRadius))))
@@ -70,7 +70,8 @@ final class NativeAdvancedMaterialStyle {
 
     private static int scopedChannel(ConfigReader reader, String scope,
             ConfigKey<Integer> scoped, ConfigKey<Integer> nativeGlobal) {
-        String key = scope != null ? ScopedGlassOptics.key(scope, scoped) : null;
+        String key = ScopedGlassOptics.isMenuScope(scope)
+                ? ScopedGlassOptics.key(scope, scoped) : null;
         return key != null && reader.has(key)
                 ? reader.i(key, nativeGlobal.runtimeFallback())
                 : reader.i(nativeGlobal.name(), nativeGlobal.runtimeFallback());
