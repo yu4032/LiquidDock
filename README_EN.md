@@ -62,9 +62,22 @@ LiquidDock is an LSPosed module for HyperOS 3 tablets. It lets you customize the
 
 </details>
 
+## What's new in v2.7.6
+
+- **Separate tint and solid fill:** Tint adjusts the background color while retaining texture; solid fill uses separate RGB and 0–255 opacity controls. Fill defaults to transparent, and expanded folders can override it.
+- **Glass-shaped icon clipping:** Preprocessed display assets preserve the glass outline during home-screen rendering and app-return animations.
+- **Settings organization and search:** Global, folder, menu, keyboard, and grid settings use feature-based groups. Search navigates to individual controls.
+- **API 102 and graphics cleanup:** libxposed API 102 provides atomic hook callback replacement; transient shortcut and drag glass follow compositor-aware EGL resource teardown.
+- **Readable widget part titles:** The widget component picker displays readable labels for background rules.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
+
 ## Main features
 
 ### Liquid Glass
+
+**Two independent color effects:** **Tint** multiplies the sampled backdrop color while retaining texture. **Solid fill** overlays the body with chosen RGB at 0–255 opacity (default 0). Full fill opacity covers the sampled texture; output transmittance and animation opacity remain separate.
+
 
 With the LiquidDock and Liquid Glass master switches enabled, LiquidDock can add a consistent glass appearance to the following surfaces. Icons, widgets, folders, Recents buttons, and other integrations also require their own feature switches:
 
@@ -81,9 +94,9 @@ With the LiquidDock and Liquid Glass master switches enabled, LiquidDock can add
 - the MIUI System Search main screen;
 - the Gboard floating keyboard and related toolbars.
 
-Blur, refraction, chromatic dispersion, tint, brightness, shadows, highlights, corner radii, and different highlight layers can be adjusted separately. The optical rim supports light-responsive bright/dark outlines and soft outer shadows. Dock, icons, widgets, folders, and supported menus can override or inherit Prismal outline and shadow settings. “OS4” names an optical effect here; it does not imply HyperOS 4 support.
+Glass materials support blur, refraction, dispersion, tint, solid fill, brightness, lighting, highlights, shadows, and corner radii. Outlines and soft shadows can inherit global parameters or use per-component settings.
 
-Most appearance changes take effect **immediately** when the relevant hook is already running. Installing a hook for the first time, or changing structural settings such as the grid, may still require restarting the corresponding scope.
+Loaded glass hooks support live material adjustments. Restart the relevant scope after first installing a hook or changing structural settings such as the grid.
 
 ### Home screen layout
 
@@ -97,7 +110,7 @@ Enable “Free Home Screen Grid” to choose **2–10 columns and 2–6 rows** i
 
 The previous placement restrictions on **2×1, 2×2, and 4×2 widgets** have also been removed, allowing these widgets to be placed at any grid position.
 
-When reducing the number of rows or columns, the settings app checks whether an existing **4×2 widget** would no longer fit. It warns you instead of saving an incompatible grid. Restart Launcher after changing the grid.
+When shrinking the grid, the app checks whether existing 4×2 widgets fit and prompts for adjustments when necessary. Restart Launcher after grid changes.
 
 An optional **80%–120% icon-size control** applies to supported home-screen, Dock, folder-preview, and Workstation All Apps icons; it does not uniformly resize the ordinary app drawer or search results.
 
@@ -113,7 +126,7 @@ Enable Dock customization to change its dimensions, position, and icon spacing. 
 - whole-Dock shadow and outline shadow;
 - divider.
 
-The phone-interconnect shortcut can be hidden without disabling the system interconnect feature or affecting its transfer icon.
+Hide the Dock's phone-interconnect shortcut independently of the system's interconnect and transfer features.
 
 A recent-app blacklist can prevent selected apps from appearing in the Dock's recent-app suggestions. **Dock → Behavior → Hide Dock recent-task icons** can instead hide the entire group of suggested recent-task icons. It is **off by default**, does not remove pinned Dock icons or change system Recents, and requires restarting Launcher.
 
@@ -121,25 +134,25 @@ A recent-app blacklist can prevent selected apps from appearing in the Dock's re
 
 ### Widgets and folders
 
-Widgets can use glass backgrounds, with dark-content adaptation for some widgets. In **Widget Component Management**, you can load the widgets currently on the home screen and select individual parts:
+Widgets support glass backgrounds and dark-content adaptation. In **Widget Component Management**, identify individual desktop widget parts by their **readable titles**:
 
 - **Hide background parts:** Select internal widget background areas to hide. These rules can be backed up and restored separately.
 - **Whiten parts for dark themes:** Turn selected RemoteViews text white, or display images as white shapes while preserving their original transparency.
 - **Avoid conflicting rules:** The same exact part cannot be both hidden and whitened. Whitening selections are stored separately and are not included in hiding-rule backups.
 
-Part-level whitening currently supports **RemoteViews TextView / ImageView**. Internally drawn MAML script elements are not supported. Restart Launcher after changing these selections.
+Precise whitening supports **RemoteViews TextView / ImageView**. MAML widgets use background-hiding and general material adaptation. Restart Launcher after modifying part rules.
 
 Small and large folders have separate glass switches, sizes, and corner-radius settings.
 
-Expanded folders can also use an independent Liquid Glass background while retaining the native opening and closing animations. Under **Appearance → Glass Components → Folders**, configure its switch, interior blur, refraction, thickness, tint, and native outside blur strength. The glass follows Recents and Dock transitions. Other home-screen glass elements can fade away over a separately adjustable duration when a folder opens, rather than disappearing abruptly. Restart Launcher after enabling or disabling expanded-folder glass.
+Expanded folders support independent Liquid Glass backgrounds with native opening and closing animations. Under **Appearance → Glass Components → Folders**, configure blur, refraction, thickness, tint, and **solid-fill RGB and opacity**. Set a fill channel to **−1** to inherit the global value or 0–255 to override it. Native blur and the fade duration of other glass elements can also be adjusted. Restart Launcher when first enabling expanded-folder glass.
 
 On Launcher 4.50, four-preview and nine-preview large folders support a real **2×2 home-screen footprint**. Enable real large folders and titles per folder in the launcher's native folder settings. Under **Appearance → Folders**, adjust preview icon size (**60%–110%, 100% by default**) and toggle the native outline. Preview icon sizing works independently of the glass switch.
 
-An optional compatibility switch for the modified Mingou Launcher is **off by default**. It only restores saved 2×2 folder footprints marked by LiquidDock, without automatically detecting the Launcher build.
+A separate modified Mingou Launcher compatibility switch (off by default) restores marked 2×2 large-folder footprints.
 
 ### Shortcut menus and dialogs
 
-The shortcut menu shown when long-pressing a home-screen icon can use a glass background, with an optional white-text-and-icon mode for dark themes. Its glass switch, blur, tint, and detailed optical parameters can be configured independently of the global glass appearance.
+The long-press shortcut menu supports a glass background, dark-theme text adaptation, and independent tint, solid fill, blur, and optical parameters. Global inheritance can be restored with one action.
 
 Launcher uninstall, remove, and second-confirmation dialogs can also use glass backgrounds, with controls for:
 
@@ -149,7 +162,7 @@ Launcher uninstall, remove, and second-confirmation dialogs can also use glass b
 - independent blur;
 - restoring inheritance from the global glass appearance.
 
-Dialogs also have an **All Parameters** page for finer optical settings such as refraction and highlights, independently of the global configuration.
+The dialog's **All Parameters** page includes refraction, highlights, and solid fill, with a one-tap reset to global inheritance.
 
 ### Recents and Workstation
 
@@ -176,9 +189,9 @@ Both glass integrations require the LiquidDock master switch, the Liquid Glass m
 
 ### MIUI System Search and Gboard
 
-MIUI System Search can replace its main-screen background with Liquid Glass. Tint and blur can be set independently, while **All Parameters** offers separate refraction, highlight, and other optical settings. Parameters without local overrides inherit the global settings. The module, glass, and corresponding third-party glass switches must be enabled.
+MIUI System Search supports an independent glass background, tint, and blur. **All Parameters** adds refraction, highlights, and solid-fill controls; unset parameters inherit the global configuration.
 
-Gboard supports glass for the floating keyboard and related toolbars, with independent tint and blur. **All Parameters** provides additional optical settings and a one-tap reset to global inheritance. The module, glass, and corresponding third-party glass switches must also be enabled. Whether dragging the bottom handle automatically enters resize mode is controlled separately and does not depend on the glass switch; the keyboard's bottom handle must be recognized for this to work.
+Gboard supports floating-keyboard and toolbar glass with independent tint, solid fill, blur, and optical settings. **All Parameters** restores global inheritance. A separate setting controls automatic resize after dragging the bottom handle.
 
 ### Configuration, animation, and backups
 
@@ -186,7 +199,7 @@ Animation timing can be adjusted for workspace visibility, **unlock-time workspa
 
 An optional **Hide gesture handle on Home/Recents** setting (off by default) hides the system gesture bar while those screens are shown, returning control to the system upon leaving. Its first-time hook installation requires restarting SystemUI.
 
-The settings app uses MIUIX and Prismal glass styling, with options grouped by feature. **Pull down on one of the four top-level pages to search** for settings pages and individual parameters, then navigate to the corresponding page. Sliders support continuous dragging, live values, and spring animations on release. You can also tap a value to enter it directly or use the plus, minus, and reset buttons. Settings dialogs have transition animations, and the bottom glass capsule supports swipe navigation with moving icon and text highlights.
+The settings app uses MIUIX and Prismal styling with feature-based groups. **Pull down on any of the four top-level pages to search** for tint, solid fill, corners, folders, grid, outlines, and shadows, then navigate to the corresponding settings cell. Sliders support live dragging, numeric entry, plus/minus, and reset actions; the bottom glass capsule supports swipe navigation.
 
 The **iOS Glass Effect** switch controls the settings app's appearance. The Restart Scopes dialog supports scrolling and multiple selections, independently of the desktop glass switches.
 
@@ -197,15 +210,15 @@ The settings app supports:
 - importing a JSON configuration;
 - separately backing up and restoring widget hiding rules.
 
-New installations use the project's built-in defaults. Upgrading does not overwrite saved settings with the entire default preset.
+New installations load the built-in defaults; upgrades retain saved user settings.
 
 ## Compatibility
 
-Main development and verification environment:
+Compatibility:
 
 | Item | Current range |
 | --- | --- |
-| HyperOS | Mainly tablet builds based on 3.0.307 and newer; **HyperOS 4 is not supported** |
+| HyperOS | HyperOS 3 tablet builds (3.0.307 and newer); HyperOS 4 integration is developed on a separate branch |
 | System Launcher | `com.miui.home` release-4.50.x.x |
 | LSPosed | A version supporting libxposed API 102 |
 
@@ -255,12 +268,11 @@ When opening an issue, please include:
 
 The plans, specs, and verification records under `docs/superpowers/` are historical development records, not descriptions of the current implementation.
 
-## Risk notice
+## Usage notes
 
-> [!WARNING]
-> LiquidDock changes how System Launcher, SystemUI, Security Center, and selected third-party apps are displayed. Updates to system components or apps may cause compatibility issues. Keep a working recovery method available before updating.
+LiquidDock uses LSPosed to customize Launcher, SystemUI, and selected applications. Back up the configuration and keep a recovery method available when updating.
 
-LiquidDock is a community project and is not affiliated with Xiaomi, LSPosed, or other related projects.
+LiquidDock is independently maintained by its community.
 
 ## Credits
 
