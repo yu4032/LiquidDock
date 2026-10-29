@@ -96,9 +96,11 @@ final class Api102HookRegistry {
     }
 
     /**
-     * API 102 primitive for a future generation handoff. A successful replaceHook returns the
-     * new live handle; keep the previous handle registered if replacement itself fails.
-     * This is intentionally not called by ModuleMain until process-owner teardown exists.
+     * API 102 in-process atomic callback replacement. The framework preserves the existing
+     * hook's id, priority and exception mode. Only the latest returned handle remains owned;
+     * a failed replacement must leave the previous handle untouched.
+     *
+     * This is independent of module hot reload and does not release Android/native resources.
      */
     synchronized XposedInterface.HookHandle replaceIdentified(
             String id, XposedInterface.Hooker next) {
