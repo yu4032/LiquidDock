@@ -29,6 +29,7 @@ internal fun ScopedGlassSettingsPage(
     masterEnabled: Boolean,
     scope: String,
     ownerName: String,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault(),
@@ -37,6 +38,26 @@ internal fun ScopedGlassSettingsPage(
     var resetGeneration by remember(scope) { mutableIntStateOf(0) }
     val basics = remember(scope) { basicScopeSpecs(scope) }
     val optics = scopedOpticalDescriptors
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val focus = searchFocus?.takeIf { it.key in customGlassSearchRows(it.page).map(CustomGlassSearchRow::key) }
+    // This is the same ordered sequence the LazyColumn below emits; only rows are focus targets.
+    val focusKeys = buildList {
+        add("scope-header"); add("scope-reset"); add("basic-blur-heading")
+        basics.take(1).forEach { add(it.key) }
+        add("basic-color-heading")
+        basics.drop(1).forEach { add(it.key) }
+        liquidAllGroups.forEach { group ->
+            val section = group.specs.filter { spec -> optics.any { it.config == spec.config } }
+            if (section.isNotEmpty()) {
+                add("optical-heading:${group.title}")
+                section.forEach { add(ScopedGlassOptics.key(scope, it.config)) }
+            }
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(searchFocus?.sequence, searchFocus?.key) {
+        val index = focusKeys.indexOf(focus?.key)
+        if (index >= 0) listState.animateScrollToItem(index)
+    }
     val normalsKey = ScopedGlassOptics.normalsKey(scope)
     val extras = when (scope) {
         ScopedGlassOptics.DIALOG, ScopedGlassOptics.POPUP, ScopedGlassOptics.HANDLE_MENU -> emptyList()
@@ -46,6 +67,7 @@ internal fun ScopedGlassSettingsPage(
     // These are separate rounded cells, not rows inside one shared card.
     // Keep a visible gap without changing each cell's surface or interaction.
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = padding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -135,7 +157,7 @@ internal fun ScopedGlassSettingsPage(
             if (section.isNotEmpty()) {
                 item(key = "optical-heading:${group.title}") { SmallTitle(group.title) }
                 section.forEach { d ->
-                    item(key = d.config.name()) {
+                    item(key = ScopedGlassOptics.key(scope, d.config)) {
                         SettingsCard {
                             val key = ScopedGlassOptics.key(scope, d.config)
                             ScopedGlassSlider(
@@ -310,14 +332,14 @@ private val profileHighlightSpecs = listOf(
     ProfileHighlightSpec("highlight_press_glow", "按压泛光", ConfigSchema.LauncherHighlight.LARGE_PRESS_GLOW),
 )
 
-private data class BasicScopeSpec(
+internal data class BasicScopeSpec(
     val key: String,
     val title: String,
     val fallback: ConfigKey<Int>,
     val unit: String,
 )
 
-private fun basicScopeSpecs(scope: String): List<BasicScopeSpec> {
+internal fun basicScopeSpecs(scope: String): List<BasicScopeSpec> {
     val names = when (scope) {
         ScopedGlassOptics.GBOARD -> listOf(
             GboardGlassPreferences.BLUR_KEY,

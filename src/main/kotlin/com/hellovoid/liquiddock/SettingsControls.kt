@@ -47,9 +47,18 @@ internal fun DenseSettingsList(
     padding: PaddingValues,
     title: String,
     summary: String? = null,
+    focusItemIndex: Int? = null,
+    focusSequence: Int? = null,
     content: LazyListScope.() -> Unit,
 ) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(focusSequence, focusItemIndex) {
+        if (focusItemIndex != null && focusItemIndex >= 0) {
+            listState.animateScrollToItem(focusItemIndex)
+        }
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = padding.calculateTopPadding() + 8.dp,

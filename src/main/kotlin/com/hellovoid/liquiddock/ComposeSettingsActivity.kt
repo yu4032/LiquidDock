@@ -393,7 +393,10 @@ private fun LiquidDockSettings(
                     Page.GlassComponents -> GlassComponentsPage(padding, ::navigateTo)
                     Page.GlassIcons -> GlassIconsPage(padding, prefs, masterEnabled, ::navigateTo)
                     Page.GlassWidgets -> GlassWidgetsPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.GlassFolders -> GlassFoldersPage(padding, prefs, masterEnabled,
+                        ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GlassFolders.name }
+                            ?.let { SettingsFocusRequest(Page.GlassFolders, it, searchFocusSequence) })
 
                     Page.HandleMenuCustomization -> HandleMenuGlassSettingsPage(
                         padding, prefs, masterEnabled,
@@ -402,6 +405,8 @@ private fun LiquidDockSettings(
                     )
                     Page.HandleMenuAll -> ScopedGlassSettingsPage(
                         padding, prefs, masterEnabled, ScopedGlassOptics.HANDLE_MENU, "应用顶部菜单",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.HandleMenuAll.name }
+                            ?.let { SettingsFocusRequest(Page.HandleMenuAll, it, searchFocusSequence) },
                     )
                     Page.ShortcutPopupCustomization -> ShortcutPopupGlassSettingsPage(
                         padding, prefs, masterEnabled,
@@ -410,6 +415,8 @@ private fun LiquidDockSettings(
                     )
                     Page.ShortcutPopupAll -> ScopedGlassSettingsPage(
                         padding, prefs, masterEnabled, ScopedGlassOptics.POPUP, "桌面快捷菜单",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.ShortcutPopupAll.name }
+                            ?.let { SettingsFocusRequest(Page.ShortcutPopupAll, it, searchFocusSequence) },
                     )
                     Page.DialogCustomization -> DialogGlassSettingsPage(
                     padding, prefs, masterEnabled,
@@ -418,6 +425,8 @@ private fun LiquidDockSettings(
                 )
                 Page.DialogAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.DIALOG, "桌面对话弹窗",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.DialogAll.name }
+                            ?.let { SettingsFocusRequest(Page.DialogAll, it, searchFocusSequence) },
                 )
                     Page.ThirdPartyApps -> ThirdPartyAppsPage(
                         padding = padding,
@@ -430,6 +439,8 @@ private fun LiquidDockSettings(
                 )
                 Page.GboardAll -> ScopedGlassSettingsPage(
                     padding, prefs, masterEnabled, ScopedGlassOptics.GBOARD, "Gboard",
+                        searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.GboardAll.name }
+                            ?.let { SettingsFocusRequest(Page.GboardAll, it, searchFocusSequence) },
                 )
                     Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
                     Page.LauncherHighlights -> LauncherHighlightsPage(padding, ::navigateTo)

@@ -25,7 +25,49 @@ class SettingsMetaTest {
             assertEquals(row.title, item.title)
         }
         assertFalse(catalog.any { it.title == "iOS 玻璃效果" })
-        assertFalse(catalog.any { it.page == Page.GlassFolders && it.key != null })
+        assertTrue(catalog.any { it.page == Page.GlassFolders &&
+            it.key == openFolderBaseColorAlphaSpec.key })
+        assertTrue(catalog.any { it.page == Page.ShortcutPopupAll &&
+            it.key == com.hellovoid.liquiddock.ScopedGlassOptics.key(
+                com.hellovoid.liquiddock.ScopedGlassOptics.POPUP,
+                com.hellovoid.liquiddock.config.ConfigSchema.Glass.BASE_COLOR_ALPHA) })
+    }
+
+    @Test fun allScopedGlassRowsAreIndexedUsingTheirRenderedPreferenceKeys() {
+        val scopes = mapOf(
+            Page.HandleMenuAll to ScopedGlassOptics.HANDLE_MENU,
+            Page.ShortcutPopupAll to ScopedGlassOptics.POPUP,
+            Page.DialogAll to ScopedGlassOptics.DIALOG,
+            Page.GboardAll to ScopedGlassOptics.GBOARD,
+        )
+        val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
+        scopes.forEach { (page, scope) ->
+            val entries = customGlassSearchRows(page)
+            assertEquals(entries.size, entries.map { it.key }.toSet().size)
+            assertEquals(basicScopeSpecs(scope).size + scopedOpticalDescriptors.size, entries.size)
+            assertEquals(entries.map { it.key }.toSet(),
+                catalog.filter { it.page == page && it.key != null }.map { it.key }.toSet())
+            assertTrue("must include solid fill", entries.any {
+                it.key == ScopedGlassOptics.key(scope,
+                    com.hellovoid.liquiddock.config.ConfigSchema.Glass.BASE_COLOR_ALPHA)
+            })
+        }
+        assertEquals(expandedFolderSearchSpecs.map(IntSpec::key).toSet(),
+            customGlassSearchRows(Page.GlassFolders).map { it.key }.toSet())
+    }
+
+    @Test fun folderCellOrderFollowsTheRealPageAndEverySearchRowHasATarget() {
+        // The source contract catches rows added without updating search focus positions.
+        val file = java.nio.file.Files.readString(java.nio.file.Path.of(
+            "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"))
+        val source = file.substringAfter("internal fun GlassFoldersPage(")
+            .substringBefore("internal fun LauncherHighlightsPage(")
+        val itemIds = Regex("""item\(key = "([^"]+)"\)""")
+            .findAll(source).map { it.groupValues[1] }.toList()
+        assertEquals(itemIds, folderGlassCellOrder)
+        assertEquals(expandedFolderSearchSpecs.map(IntSpec::key).toSet(),
+            folderGlassFocusCell.keys)
+        folderGlassFocusCell.values.forEach { assertTrue(it in itemIds) }
     }
 
     @Test fun tintAndSolidColorSearchFindTheirOwningPages() {

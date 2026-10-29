@@ -295,12 +295,47 @@ internal fun GlassWidgetsPage(
     }
 }
 
+
+/** Stable existing folder cell positions; multiple sliders in one cell share one target. */
+internal val folderGlassCellOrder = listOf(
+    "folder-small-heading",
+    "folder-small-enabled",
+    "folder-small-geometry",
+    "folder-large-heading",
+    "folder-large-enabled",
+    "folder-large-geometry",
+    "folder-large-preview",
+    "folder-large-native-outline",
+    "folder-large-mingou-compat",
+    "folder-open-heading",
+    "folder-open-enabled",
+    "folder-open-blur",
+    "folder-open-optics",
+    "folder-open-fill-heading",
+    "folder-open-fill-rgb",
+    "folder-open-fill-alpha",
+    "folder-shadow-heading",
+    "folder-shadow"
+)
+internal val folderGlassFocusCell: Map<String, String> = mapOf(
+    openFolderBlurSpec.key to "folder-open-blur",
+    openFolderNativeBlurSpec.key to "folder-open-blur",
+    openFolderIorSpec.key to "folder-open-optics",
+    openFolderThicknessSpec.key to "folder-open-optics",
+    openFolderTintSpec.key to "folder-open-optics",
+    openFolderBaseColorRedSpec.key to "folder-open-fill-rgb",
+    openFolderBaseColorGreenSpec.key to "folder-open-fill-rgb",
+    openFolderBaseColorBlueSpec.key to "folder-open-fill-rgb",
+    openFolderBaseColorAlphaSpec.key to "folder-open-fill-alpha"
+)
+
 @Composable
 internal fun GlassFoldersPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -334,6 +369,9 @@ internal fun GlassFoldersPage(
         padding,
         stringResource(R.string.page_glass_folders),
         "小文件夹、大文件夹和展开文件夹分别调整，不混用背景与几何参数。",
+        focusItemIndex = searchFocus?.key?.let(folderGlassFocusCell::get)
+            ?.let(folderGlassCellOrder::indexOf)?.takeIf { it >= 0 }?.plus(1),
+        focusSequence = searchFocus?.sequence,
     ) {
         item(key = "folder-small-heading") { SmallTitle("小文件夹") }
         item(key = "folder-small-enabled") {

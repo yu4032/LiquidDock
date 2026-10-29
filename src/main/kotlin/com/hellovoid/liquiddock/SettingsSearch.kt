@@ -37,20 +37,57 @@ internal fun settingsSearchCatalog(
     fun title(page: Page) = pages[page]?.title ?: text(page.titleRes)
     Page.entries.forEach { page ->
         val path = settingsPagePath(page).joinToString(" › ") { title(it) }
-        // Scoped pages use custom renderers rather than SettingsBlock.Row.
-        // Index their purposes at page level without pretending to focus a missing row.
-        val detail = when (page) {
-            Page.GlassFolders -> " · 展开文件夹染色保留纹理，底色纯色覆盖"
-            Page.HandleMenuAll, Page.ShortcutPopupAll, Page.DialogAll, Page.GboardAll ->
-                " · 染色保留纹理，底色纯色覆盖"
-            else -> ""
+        add(SettingsSearchItem(page, title(page), path))
+        // Custom pages reuse the exact ConfigKey/IntSpec catalog that renders their
+        // sliders. Only searchable rows with a real preference key are indexed.
+        customGlassSearchRows(page).forEach { row ->
+            add(SettingsSearchItem(page, row.title,
+                path + if (row.summary.isBlank()) "" else " · " + row.summary,
+                row.key))
         }
-        add(SettingsSearchItem(page, title(page), path + detail))
         pages[page]?.blocks?.filterIsInstance<SettingsBlock.Row>()?.forEach { row ->
             add(SettingsSearchItem(page, row.title,
                 path + if (row.summary.isBlank()) "" else " · " + row.summary, row.key))
         }
     }
+}
+
+
+/** Search entries for custom glass pages, derived from their existing rendered descriptors. */
+internal data class CustomGlassSearchRow(val key: String, val title: String, val summary: String)
+
+internal val expandedFolderSearchSpecs: List<IntSpec> = listOf(
+    openFolderBlurSpec, openFolderNativeBlurSpec, openFolderIorSpec,
+    openFolderThicknessSpec, openFolderTintSpec,
+    openFolderBaseColorRedSpec, openFolderBaseColorGreenSpec,
+    openFolderBaseColorBlueSpec, openFolderBaseColorAlphaSpec,
+)
+
+/** Custom page search never creates a focus key for an item not rendered by that page. */
+internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
+    val scope = when (page) {
+        Page.HandleMenuAll -> ScopedGlassOptics.HANDLE_MENU
+        Page.ShortcutPopupAll -> ScopedGlassOptics.POPUP
+        Page.DialogAll -> ScopedGlassOptics.DIALOG
+        Page.GboardAll -> ScopedGlassOptics.GBOARD
+        else -> null
+    }
+    if (scope != null) {
+        val basics = basicScopeSpecs(scope).map {
+            CustomGlassSearchRow(it.key, it.title, "独立设置；未修改时继承全局玻璃")
+        }
+        val optics = scopedOpticalDescriptors.map { descriptor ->
+            CustomGlassSearchRow(ScopedGlassOptics.key(scope, descriptor.config),
+                descriptor.title, descriptor.summary)
+        }
+        return basics + optics
+    }
+    if (page == Page.GlassFolders) {
+        return expandedFolderSearchSpecs.map { spec ->
+            CustomGlassSearchRow(spec.key, spec.title, spec.summary)
+        }
+    }
+    return emptyList()
 }
 
 internal fun filterSettingsSearch(
