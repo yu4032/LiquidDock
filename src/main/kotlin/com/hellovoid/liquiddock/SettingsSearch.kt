@@ -37,7 +37,15 @@ internal fun settingsSearchCatalog(
     fun title(page: Page) = pages[page]?.title ?: text(page.titleRes)
     Page.entries.forEach { page ->
         val path = settingsPagePath(page).joinToString(" › ") { title(it) }
-        add(SettingsSearchItem(page, title(page), path))
+        // Scoped pages use custom renderers rather than SettingsBlock.Row.
+        // Index their purposes at page level without pretending to focus a missing row.
+        val detail = when (page) {
+            Page.GlassFolders -> " · 展开文件夹染色保留纹理，底色纯色覆盖"
+            Page.HandleMenuAll, Page.ShortcutPopupAll, Page.DialogAll, Page.GboardAll ->
+                " · 染色保留纹理，底色纯色覆盖"
+            else -> ""
+        }
+        add(SettingsSearchItem(page, title(page), path + detail))
         pages[page]?.blocks?.filterIsInstance<SettingsBlock.Row>()?.forEach { row ->
             add(SettingsSearchItem(page, row.title,
                 path + if (row.summary.isBlank()) "" else " · " + row.summary, row.key))

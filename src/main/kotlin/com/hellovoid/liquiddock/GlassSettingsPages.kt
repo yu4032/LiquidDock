@@ -423,7 +423,7 @@ internal fun GlassFoldersPage(
                 IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
             }
         }
-        item(key = "folder-open-fill-heading") { SmallTitle("展开文件夹 · 底色覆盖") }
+        item(key = "folder-open-fill-heading") { SmallTitle("展开文件夹 · 底色（纯色覆盖）") }
         item(key = "folder-open-fill-rgb") {
             SettingsCard {
                 IntSetting(prefs, openFolderBaseColorRedSpec, masterEnabled && liquidEnabled && openFolderGlass)

@@ -23,7 +23,8 @@ class LiquidSettingGroupsTest {
     @Test fun colorChannelsAndDispersionNeverShareACell() {
         val groups = liquidColorGroups
         assertEquals(
-            listOf("玻璃染色", "染色与色彩表现", "玻璃底色", "底色覆盖", "色散"),
+            listOf("玻璃染色（保留纹理）", "染色强度与饱和度",
+                "玻璃底色（纯色覆盖）", "底色透明度", "色散"),
             groups.map { it.title },
         )
         assertEquals(

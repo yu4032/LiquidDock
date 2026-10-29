@@ -28,6 +28,24 @@ class SettingsMetaTest {
         assertFalse(catalog.any { it.page == Page.GlassFolders && it.key != null })
     }
 
+    @Test fun tintAndSolidColorSearchFindTheirOwningPages() {
+        val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
+        val tint = filterSettingsSearch(catalog, "染色")
+        assertTrue(tint.any { it.page == Page.LiquidColor && it.key ==
+            com.hellovoid.liquiddock.config.ConfigSchema.Glass.TINT_ALPHA.name() })
+        val base = filterSettingsSearch(catalog, "底色透明度")
+        assertTrue(base.any { it.page == Page.LiquidColor && it.key ==
+            com.hellovoid.liquiddock.config.ConfigSchema.Glass.BASE_COLOR_ALPHA.name() })
+        val folder = filterSettingsSearch(catalog, "底色 文件夹")
+        assertTrue(folder.any { it.page == Page.GlassFolders })
+        for (target in listOf(Page.ShortcutPopupAll, Page.HandleMenuAll, Page.DialogAll,
+                Page.GboardAll)) {
+            val pageItem = catalog.single { it.page == target && it.key == null }
+            assertTrue(pageItem.description.contains("染色"))
+            assertTrue(pageItem.description.contains("底色"))
+        }
+    }
+
     @Test fun canonicalParentsDoNotDependOnOverviewShortcutOrder() {
         assertEquals(Page.LayoutHub, canonicalSettingsParent(Page.Dock))
         assertEquals(Page.GlassHub, canonicalSettingsParent(Page.Liquid))

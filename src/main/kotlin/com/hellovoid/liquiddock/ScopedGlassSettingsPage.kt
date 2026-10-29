@@ -110,7 +110,7 @@ internal fun ScopedGlassSettingsPage(
                 }
             }
         }
-        item(key = "basic-color-heading") { SmallTitle("玻璃染色") }
+        item(key = "basic-color-heading") { SmallTitle("玻璃染色（保留纹理）") }
         basics.drop(1).forEach { b ->
             item(key = b.key) {
                 SettingsCard {
