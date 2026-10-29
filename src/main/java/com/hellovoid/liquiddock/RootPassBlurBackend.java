@@ -578,6 +578,33 @@ final class RootPassBlurBackend {
         return postRenderTask(runnable, true);
     }
 
+    /**
+     * Render-thread shutdown must never try to (re)allocate an EGL context in its
+     * guarded preamble. An earlier EGL_BAD_ALLOC would otherwise swallow the cleanup
+     * task itself and leave the native producer bound forever.
+     */
+    boolean postShutdownToRenderThread(Runnable cleanup) {
+        if (cleanup == null || shuttingDown || !renderThread.isAlive()) return false;
+        try {
+            return renderHandler.post(() -> {
+                try {
+                    if (eglDisplay != EGL14.EGL_NO_DISPLAY
+                            && eglContext != EGL14.EGL_NO_CONTEXT
+                            && eglPbufferSurface != EGL14.EGL_NO_SURFACE) {
+                        makePbufferCurrentUnchecked();
+                    }
+                    cleanup.run();
+                } catch (Throwable error) {
+                    MainHook.log(TAG + " render shutdown cleanup failed; retiring binding: " + error);
+                    shutdown();
+                }
+            });
+        } catch (Throwable error) {
+            MainHook.log(TAG + " render shutdown enqueue failed: " + error);
+            return false;
+        }
+    }
+
     private boolean postRenderTask(Runnable runnable, boolean urgent) {
         if (runnable == null || shuttingDown || !renderThread.isAlive()) return false;
         Runnable guarded = () -> {
