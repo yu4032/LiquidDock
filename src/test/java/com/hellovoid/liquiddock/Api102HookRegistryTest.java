@@ -158,6 +158,21 @@ public class Api102HookRegistryTest {
     }
 
     @Test
+    public void anonymousHooksReleaseInReverseOrderWithoutLosingFailures() {
+        List<String> events = new ArrayList<>();
+        Api102HookRegistry registry = new Api102HookRegistry(
+                (method, id, callback) -> fakeHandle(id, events, false));
+        registry.trackUnidentified(fakeHandle("first", events, false));
+        registry.trackUnidentified(fakeHandle("stuck", events, true));
+        registry.trackUnidentified(fakeHandle("last", events, false));
+        assertFalse(registry.releaseUnidentifiedForReload());
+        assertEquals(List.of("last", "stuck", "first"), events);
+        assertEquals(1, registry.count());
+        assertFalse(registry.releaseUnidentifiedForReload());
+        assertEquals(1, registry.unidentifiedCount());
+    }
+
+    @Test
     public void rollbackRunsInReverseOrderAndPreservesUnremovedHandles() throws Exception {
         List<String> events = new ArrayList<>();
         Api102HookRegistry registry = new Api102HookRegistry(
