@@ -193,7 +193,7 @@ internal fun GlassIconsPage(
                     prefs,
                     ConfigSchema.Glass.ICON_GLASS,
                     "图标玻璃",
-                    "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
+                    "桌面与 Dock 图标的玻璃或原生材质；0 圆角为 Auto",
                     masterEnabled && (liquidEnabled || nativeEnabled),
                 ) { iconGlass = it }
                 ModernListDivider()
@@ -209,7 +209,7 @@ internal fun GlassIconsPage(
                     prefs,
                     ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
                     "多任务操作按钮玻璃",
-                    "使用液态玻璃替换清除全部和设备互联胶囊背景；采样未就绪时保持透明，不回退原生模糊",
+                    "液态玻璃使用 Prismal；高级材质使用系统模糊。仅影响清除全部和设备互联胶囊背景",
                     masterEnabled && (liquidEnabled || nativeEnabled),
                 )
             }
@@ -237,7 +237,7 @@ internal fun GlassIconsPage(
                 ArrowPreference(
                     stringResource(R.string.launcher_highlights_entry),
                     summary = stringResource(R.string.launcher_highlights_entry_summary),
-                    enabled = masterEnabled && (liquidEnabled || nativeEnabled),
+                    enabled = masterEnabled && liquidEnabled,
                     onClick = { open(Page.LauncherHighlights) },
                 )
             }
@@ -247,7 +247,7 @@ internal fun GlassIconsPage(
                 ArrowPreference(
                     title = "阴影",
                     summary = "独立设置 Prismal 外阴影与边缘描边",
-                    enabled = masterEnabled && (liquidEnabled || nativeEnabled),
+                    enabled = masterEnabled && liquidEnabled,
                     onClick = { open(Page.IconEdge) },
                 )
             }
