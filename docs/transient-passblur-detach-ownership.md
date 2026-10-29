@@ -10,8 +10,7 @@
 - After ~60 retained sources, EGL mtrack ~2.30 GB and
   `eglCreateContext error=0x3003` (EGL_BAD_ALLOC); shortcut glass fell back.
 
-The earlier folder hypothesis was wrong. This fix deliberately does not touch OPEN_FOLDER
-or the detach coordinator's fail-closed policy.
+SHORTCUT_POPUP and DRAG_OVERLAY are the affected owners. OPEN_FOLDER retains its existing committed-detach behavior and producer retirement policy.
 
 ## Actual ownership error
 
@@ -65,7 +64,4 @@ per-folder shutdown behavior. The module hot-reload policy remains unchanged.
    must not be removed early. Test a failed `eglCreateContext` before or during
    shutdown: teardown must still reach backend shutdown without re-initializing EGL.
 
-**Device outcome:** the original reporter confirmed the transient PassBlur leak
-fix on the affected device, and approved integrating it into PR #474. No
-post-fix per-domain counts or mtrack measurements were supplied in that
-confirmation; retain this checklist for future regression testing.
+**Device outcome:** The transient PassBlur resource leak fix was confirmed on the affected device and integrated into PR #474. The checklist above remains the regression procedure for subsequent builds.

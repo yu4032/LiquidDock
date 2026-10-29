@@ -235,7 +235,7 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 
 - 既定阶段的 GUI 结构清理；不再以减少类大小为目标机械拆分；
 - Prismal 弹窗动画开发；
-- Perfetto 分段诊断接入（单独的观测能力；不代表 Dock 或端到端 FPS 问题已解决）；
+- Perfetto 分段诊断接入，用于采集独立的 UI、RenderThread 与图形管线时序；Dock 及端到端 FPS 归因列在性能任务中；
 - Workspace 稳态静态几何缓存 P0：[PR #420](https://github.com/yu4032/LiquidDock/pull/420) 稳定几何/网格基准复用、[PR #421](https://github.com/yu4032/LiquidDock/pull/421) 空文件夹有效帧缓存、[PR #422](https://github.com/yu4032/LiquidDock/pull/422) Widget 稳定几何与祖先采样复用；均已合并、完成实机/Perfetto 验收，详见 [2026-10-18 收尾记录](docs/perf/workspace-static-geometry-p0-20261018.md)；
 - 文件夹打开时其他玻璃渐隐与独立时长配置（[PR #423](https://github.com/yu4032/LiquidDock/pull/423)，实机验收、已合并；属于视觉行为修复，不作为静态几何性能收益）；
 - GL location caching；

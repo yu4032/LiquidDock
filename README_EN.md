@@ -112,7 +112,7 @@ The previous placement restrictions on **2×1, 2×2, and 4×2 widgets** have als
 
 When shrinking the grid, the app checks whether existing 4×2 widgets fit and prompts for adjustments when necessary. Restart Launcher after grid changes.
 
-An optional **80%–120% icon-size control** applies to supported home-screen, Dock, folder-preview, and Workstation All Apps icons; it does not uniformly resize the ordinary app drawer or search results.
+A separate **80%–120% icon-size control** adjusts supported home-screen, Dock, folder-preview, and Workstation All Apps icons; the ordinary app drawer and search results keep their native sizes.
 
 ### Dock
 
@@ -138,7 +138,7 @@ Widgets support glass backgrounds and dark-content adaptation. In **Widget Compo
 
 - **Hide background parts:** Select internal widget background areas to hide. These rules can be backed up and restored separately.
 - **Whiten parts for dark themes:** Turn selected RemoteViews text white, or display images as white shapes while preserving their original transparency.
-- **Avoid conflicting rules:** The same exact part cannot be both hidden and whitened. Whitening selections are stored separately and are not included in hiding-rule backups.
+- **Rule management:** Switch an individual component between hiding and whitening; each rule type is stored separately.
 
 Precise whitening supports **RemoteViews TextView / ImageView**. MAML widgets use background-hiding and general material adaptation. Restart Launcher after modifying part rules.
 

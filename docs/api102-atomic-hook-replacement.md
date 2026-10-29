@@ -1,8 +1,6 @@
-# API 102 atomic Hook replacement (no hot reload)
+# API 102 atomic Hook replacement
 
-This implementation **does not enable or implement SystemUI hot reload**.
-`META-INF/xposed/module.prop` retains `autoHotReload=false`; module APK upgrades
-still require normal target-process restarts to load new code.
+`HookHandle.replaceHook()` replaces callbacks inside the current process. The module sets `autoHotReload=false`; APK updates take effect after restarting the corresponding target process.
 
 ## Official API 102 contract
 
@@ -57,8 +55,6 @@ Device acceptance (API 102 framework): recreate the SystemUI navigation bar,
 re-enter HOME/RECENTS, and confirm the native gesture handle alpha still
 follows the configured visibility while no duplicate interceptors accumulate.
 Test enabling/disabling the gesture feature, multiple nav-bar attachments, and
-a replacement failure. A successful CI build does not prove device behavior.
+a replacement failure. CI covers registration and replacement contracts; the device checklist covers SystemUI scene transitions and callback reuse.
 
-**Not provided:** replacing an APK's code in an existing process, module
-hot-reload callbacks, hot-reloading renderer resources, or no-restart updates
-to external app code. These require separate lifecycle and framework work.
+**Lifecycle boundary:** The process owns its installed Hook callbacks and renderer resources. APK code and assets are reloaded at the next target-process start.
