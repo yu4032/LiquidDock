@@ -240,11 +240,7 @@ public final class ModuleMain extends XposedModule {
         }
     }
 
-    /**
-     * API 102 can only transfer an UNINITIALIZED generation. Package-ready callbacks are not
-     * replayed automatically, and owners of hooks, views, receivers and EGL cannot be detached.
-     * The module remains non-auto-reloadable until every owner has a verified teardown path.
-     */
+    /** API 102 handoff: SystemUI has a guarded owner retirement; all other scopes remain strict. */
     @Override
     public boolean onHotReloading(@NonNull HotReloadingParam param) {
         if (SYSTEM_UI_PACKAGE.equals(loadedProcessName)) {
@@ -265,50 +261,23 @@ public final class ModuleMain extends XposedModule {
     }
 
     /**
-     * Conservative SystemUI-only reload: if a caption menu has ever owned ViewRoot,
-     * PassBlur, SurfaceTexture or EGL resources, reject. This is intentionally not
-     * full graphics-session teardown, and does not enable reload for other scopes.
-     *
-     * Each successful stop is irreversible in this generation. A failed stop
-     * rejects reload and may require an ordinary SystemUI restart to restore a
-     * partially retired integration.
+     * Conservative SystemUI-only reload: live caption-menu graphics are not yet reversible.
+     * A failed retirement rejects the request and may require a normal SystemUI restart.
      */
     private boolean retireSystemUiForHotReload(HotReloadingParam param) {
-        if (getApiVersion() < 102
-                || !SystemUiHandleMenuSurfaceAnimationAuthority.isIdleForHotReload()) {
-            Api101Bridge.log("[DC][API102] SystemUI reload rejected: surface alpha listeners");
-            return false;
-        }
+        if (getApiVersion() < 102) return false;
         HookUtil.InvocationResult<Object> app =
                 HookUtil.tryInvokeActivityThreadCurrentApplication();
         if (!app.succeeded() || !(app.value() instanceof android.content.Context)) {
             Api101Bridge.log("[DC][API102] SystemUI reload rejected: no live application");
             return false;
         }
-        if (!SystemUiHandleMenuGlassHook.retireUnusedForHotReload()) {
-            Api101Bridge.log("[DC][API102] SystemUI reload rejected: caption GPU/View owner");
-            return false;
-        }
-        if (!ExternalGlassLiveConfigState.shutdownForFutureReload()
-                || !SystemUiKeyguardGoneSource.stopForFutureReload()
-                || !SystemUiGestureHandleFadeHook.stopForFutureReload()) {
-            Api101Bridge.log("[DC][API102] SystemUI reload rejected: owner cleanup incomplete");
-            return false;
-        }
-        Api102HookRegistry registry = Api102HookRegistry.processRegistry();
-        // Every identified handle belongs to an owner domain, already stopped above.
-        if (registry.installedCount() != registry.unidentifiedCount()
-                || !registry.releaseUnidentifiedForReload()
-                || registry.installedCount() != 0) {
-            Api101Bridge.log("[DC][API102] SystemUI reload rejected: residual HookHandles");
-            return false;
-        }
+        if (!retireSystemUiOwnersOnMainThread()) return false;
         if (!reloadGate.beginRetiredOwnerHandoff()) {
             Api101Bridge.log("[DC][API102] SystemUI reload rejected: owner gate");
             return false;
         }
         try {
-            // Only a loader-neutral String is allowed to cross the generation boundary.
             param.setSavedInstanceState("systemui-reload:" + loadedProcessName);
             return true;
         } catch (Throwable error) {
@@ -317,10 +286,63 @@ public final class ModuleMain extends XposedModule {
         }
     }
 
+    /**
+     * Gesture-handle alpha is a View-owned state: restore it on SystemUI's UI thread.
+     * The framework does not guarantee the thread of its hot-reload callback.
+     * Cancelling an unstarted task avoids a delayed teardown after rejection.
+     */
+    private static boolean retireSystemUiOwnersOnMainThread() {
+        android.os.Looper main = android.os.Looper.getMainLooper();
+        if (main == null) return false;
+        if (android.os.Looper.myLooper() == main) return retireSystemUiOwners();
+        java.util.concurrent.FutureTask<Boolean> task =
+                new java.util.concurrent.FutureTask<>(ModuleMain::retireSystemUiOwners);
+        android.os.Handler handler = new android.os.Handler(main);
+        if (!handler.post(task)) return false;
+        try {
+            return task.get(2L, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            task.cancel(false);
+            Api101Bridge.log("[DC][API102] SystemUI UI-thread retirement interrupted", interrupted);
+            return false;
+        } catch (Throwable error) {
+            task.cancel(false);
+            // If retirement already started, the old generation stays loaded because we
+            // reject this request. An ordinary scope restart restores feature ownership.
+            Api101Bridge.log("[DC][API102] SystemUI UI-thread retirement failed", error);
+            return false;
+        }
+    }
+
+    private static boolean retireSystemUiOwners() {
+        if (!SystemUiHandleMenuSurfaceAnimationAuthority.isIdleForHotReload()) {
+            Api101Bridge.log("[DC][API102] reload rejected: active surface alpha listeners");
+            return false;
+        }
+        if (!SystemUiHandleMenuGlassHook.retireUnusedForHotReload()) {
+            Api101Bridge.log("[DC][API102] reload rejected: used caption GPU/View owner");
+            return false;
+        }
+        if (!ExternalGlassLiveConfigState.shutdownForFutureReload()
+                || !SystemUiKeyguardGoneSource.stopForFutureReload()
+                || !SystemUiGestureHandleFadeHook.stopForFutureReload()) {
+            Api101Bridge.log("[DC][API102] reload rejected: owner cleanup incomplete");
+            return false;
+        }
+        Api102HookRegistry registry = Api102HookRegistry.processRegistry();
+        if (registry.installedCount() != registry.unidentifiedCount()
+                || !registry.releaseUnidentifiedForReload()
+                || registry.installedCount() != 0) {
+            Api101Bridge.log("[DC][API102] reload rejected: residual HookHandles");
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public void onHotReloaded(@NonNull HotReloadedParam param) {
-        // Only the no-owners path above can succeed. Never move a HookHandle, View, or closure
-        // across class loaders, and never try to replay onPackageReady manually.
+        // Never transfer old class-loader-owned Views, Hookers or listeners between generations.
         Api101Bridge.init(this);
         Object saved = param.getSavedInstanceState();
         if (("systemui-reload:" + SYSTEM_UI_PACKAGE).equals(saved)
@@ -344,7 +366,7 @@ public final class ModuleMain extends XposedModule {
                     throw new IllegalStateException("new generation owner gate closed");
                 }
                 installSystemUi(((android.content.Context) application.value()).getClassLoader());
-                Api101Bridge.log("[DC][API102] SystemUI hooks reinstalled in new generation");
+                Api101Bridge.log("[DC][API102] SystemUI integration bootstrap attempted in new generation");
             } catch (Throwable error) {
                 Api101Bridge.errorAlways("[DC][API102] SystemUI reload bootstrap failed", error);
             }
