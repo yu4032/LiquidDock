@@ -1,10 +1,38 @@
 package com.hellovoid.liquiddock;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 public class LauncherGlassScrollCompensationStateTest {
+    @Test
+    public void multipleScrollMutationsCoalesceIntoTheNextPreDraw() {
+        LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
+        assertFalse(state.consumeFrameMotion());
+
+        state.onScrollMutation(100, 140);
+        state.onScrollMutation(140, 160);
+        assertTrue(state.consumeFrameMotion());
+        assertFalse(state.consumeFrameMotion());
+        assertEquals(480f, state.projectCenterX(500f, 140, true), 0.001f);
+
+        state.onScrollMutation(160, 120);
+        assertTrue(state.consumeFrameMotion());
+    }
+
+    @Test
+    public void ignoredAndResetScrollDoNotProduceUnnecessaryOutput() {
+        LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
+        state.onScrollMutation(100, 100);
+        assertFalse(state.consumeFrameMotion());
+
+        state.onScrollMutation(100, 140);
+        state.reset();
+        assertFalse(state.consumeFrameMotion());
+    }
+
     @Test
     public void forwardScrollProjectsCapturedGeometryToLiveScroll() {
         LauncherGlassScrollProjectionState state = new LauncherGlassScrollProjectionState();
