@@ -31,7 +31,6 @@ final class LauncherGlassScrollProjectionState {
     private int initialAnchorScrollX;
     private int currentScrollX;
     private long revision;
-    private boolean pendingUiRedraw;
 
     synchronized void onScrollMutation(int beforeScrollX, int afterScrollX) {
         if (beforeScrollX == afterScrollX) return;
@@ -42,15 +41,6 @@ final class LauncherGlassScrollProjectionState {
         }
         currentScrollX = afterScrollX;
         revision++;
-        // UI PreDraw owns the matching native Workspace traversal. Do not submit
-        // a glass frame directly from the middle of ScreenView.scrollTo().
-        pendingUiRedraw = true;
-    }
-
-    synchronized boolean consumeUiRedraw() {
-        boolean changed = pendingUiRedraw;
-        pendingUiRedraw = false;
-        return changed;
     }
 
     synchronized Snapshot snapshot() {
@@ -72,6 +62,5 @@ final class LauncherGlassScrollProjectionState {
         initialAnchorScrollX = 0;
         currentScrollX = 0;
         revision++;
-        pendingUiRedraw = false;
     }
 }
