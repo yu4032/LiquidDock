@@ -51,12 +51,6 @@ final class LauncherGlassScrollProjectionState {
         return snapshot != null && snapshot.revision == revision;
     }
 
-    // Retained for callers and projection contract tests; rendering uses one snapshot per frame.
-    synchronized float projectCenterX(
-            float capturedCenterX, int capturedScrollX, boolean capturedScrollValid) {
-        return snapshot().projectCenterX(capturedCenterX, capturedScrollX, capturedScrollValid);
-    }
-
     synchronized void reset() {
         initialized = false;
         initialAnchorScrollX = 0;
