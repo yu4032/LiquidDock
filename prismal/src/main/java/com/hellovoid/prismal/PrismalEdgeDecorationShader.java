@@ -11,7 +11,8 @@ final class PrismalEdgeDecorationShader {
     private static final String PRECISION = "precision highp float;";
     private static final String BEFORE_DISCARD = "if (opacity < 0.001) discard;";
     private static final String FINAL =
-            "gl_FragColor = vec4(color, opacity * u_transmittance);";
+            "color = mix(color, u_baseColor.rgb, u_baseColor.a);\n"
+            + "    gl_FragColor = vec4(color, opacity * u_transmittance);";
 
     private PrismalEdgeDecorationShader() {}
 
@@ -332,6 +333,10 @@ final class PrismalEdgeDecorationShader {
                                 clamp(hold * 0.14 * u_backlitStrength
                                         * opticalDark, 0.0, 0.14));
                     }
+
+                    // A separate solid fill replaces the *glass body* after all sampled
+                    // optics are calculated, without swallowing independent glints/contours.
+                    ringShadedGlass = mix(ringShadedGlass, u_baseColor.rgb, u_baseColor.a);
 
                     // Preserve the native OS4 highlight. Source-over order:
                     // glass/ring -> independent INNER glint -> OUTER contour ->
