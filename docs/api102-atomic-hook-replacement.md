@@ -26,15 +26,28 @@ Source: https://libxposed.github.io/api/io/github/libxposed/api/XposedInterface.
   `NavigationBar` recaptures of the same native handle class, **replace the
   Hooker atomically** instead of skipping the already-hooked class or adding a
   duplicate callback. Scene state and vendor alpha bookkeeping stay unchanged.
-- No changes to other hooks, callback priorities, EGL, PassBlur, GPU resources,
-  app settings, the SystemUI process lifecycle, or `ModuleMain` callbacks.
+- All existing `HookUtil.hook`, constructor hooks, `hookWithPriority` and both
+  `hookMethod` variants now pass through the same API 102 registry. Each unique
+  source registration site, actual `Executable` (including its ClassLoader identity)
+  and priority gets an independent named hook slot; repeated registrations at that
+  exact site use `HookHandle.replaceHook()` rather than stacking another callback.
+- Unrelated registration sites hooking the same Method stay separate; no flattening
+  of multi-hook chains. Existing named `Api102HookDomain` hooks remain owner-scoped.
+- Site lookup uses the caller frame at hook-registration time, not at invocation time.
+  If source line metadata is unavailable, the invocation receives a unique slot rather
+  than accidentally replacing someone else's Hook. Exact-name registration-site IDs
+  are process-local; there is no cross-generation handoff.
+- No changes to callback priorities, EGL, PassBlur, GPU resources, app settings,
+  the SystemUI process lifecycle, or `ModuleMain` callbacks.
 
 ## Validation
 
 Run `./gradlew testDebugUnitTest assembleDebug`. JVM fake-handle tests verify:
 replacement only for an ACTIVE owner, absent method rejection, stable handle
 count, no unhook gap, retaining old handle after a failed replacement, and
-unhooking **only the latest** handle on owner shutdown.
+unhooking **only the latest** handle on owner shutdown. Shared-registry tests cover
+independent multi-hooks on the same target, constructor hooks, priority separation,
+repeated same-site replacement and replacing one class without touching another.
 
 Device acceptance (API 102 framework): recreate the SystemUI navigation bar,
 re-enter HOME/RECENTS, and confirm the native gesture handle alpha still
