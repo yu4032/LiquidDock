@@ -8,6 +8,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.ViewOutlineProvider;
 
 import com.hellovoid.liquiddock.config.ConfigSchema;
@@ -67,6 +68,7 @@ final class NativeAdvancedMaterialHook {
         installPreferences();
         installIcons(loader);
         installRecents(loader);
+        installWorkspacePageObserver(loader);
         installed = true;
     }
 
@@ -154,6 +156,52 @@ final class NativeAdvancedMaterialHook {
         if (view.isAttachedToWindow()) view.post(() -> refresh(view, false));
     }
 
+    /** Reconcile only when Launcher commits a new page, not on each 165 Hz scroll frame. */
+    private static void installWorkspacePageObserver(ClassLoader loader) {
+        try {
+            HookUtil.hookMethod(loader, "com.miui.home.launcher.Workspace",
+                    "setCurrentScreen", chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        View workspace = chain.getThisObject() instanceof View
+                                ? (View) chain.getThisObject() : null;
+                        if (workspace != null) workspace.post(NativeAdvancedMaterialHook::refreshOwners);
+                        return result;
+                    }, int.class);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " workspace page optimization unavailable: " + error);
+        }
+    }
+
+    /** Keep current and neighboring pages hot for a seamless horizontal swipe. */
+    private static boolean isNearCurrentPage(View icon) {
+        View workspace = LauncherGlassHierarchy.findWorkspaceRoot(icon);
+        if (!(workspace instanceof ViewGroup)) return true;
+        HookUtil.InvocationResult<Object> result =
+                HookUtil.tryInvoke(workspace, "getCurrentCellLayout");
+        Object current = result.succeeded() ? result.value() : null;
+        if (!(current instanceof View)) return true;
+        View page = null;
+        for (View v = icon; v != null;) {
+            if ("CellLayout".equals(v.getClass().getSimpleName())) {
+                page = v;
+                break;
+            }
+            ViewParent parent = v.getParent();
+            v = parent instanceof View ? (View) parent : null;
+        }
+        if (page == null) return true;
+        if (page == current) return true;
+        ViewParent parent = page.getParent();
+        if (!(parent instanceof ViewGroup) || parent != ((View) current).getParent()) {
+            return true; // Unknown OEM page topology: do not hide an icon.
+        }
+        ViewGroup pages = (ViewGroup) parent;
+        int currentIndex = pages.indexOfChild((View) current);
+        int pageIndex = pages.indexOfChild(page);
+        if (currentIndex < 0 || pageIndex < 0) return true;
+        return Math.abs(currentIndex - pageIndex) <= 1;
+    }
+
     private static void installRecents(ClassLoader loader) {
         try {
             HookUtil.hookMethod(loader, DECORATIONS, "findAndSetupViews", chain -> {
@@ -217,6 +265,9 @@ final class NativeAdvancedMaterialHook {
             LauncherGlassHierarchy.Domain domain = LauncherGlassHierarchy.classify(view);
             boolean dock = domain == LauncherGlassHierarchy.Domain.DOCK;
             permitted &= domain != LauncherGlassHierarchy.Domain.OTHER;
+            if (domain == LauncherGlassHierarchy.Domain.WORKSPACE) {
+                permitted &= isNearCurrentPage(view);
+            }
             permitted &= Launcher450DockFunctionalIconPolicy.shouldRender(
                     iconEnabled, functionalIconEnabled, dock,
                     Launcher450DockFunctionalIconRegistry.isFunctional(view));
