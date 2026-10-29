@@ -147,6 +147,16 @@ internal fun AboutPage(
                 )
             }
         }
+        item { SmallTitle("SystemUI 热重载（实验性）") }
+        item {
+            SettingsCard {
+                ArrowPreference(
+                    "热重载 SystemUI",
+                    summary = "API 102；仅在安装新版模块后、无顶部菜单图形资源时尝试。失败请使用重启作用域。",
+                    onClick = { SystemUiHotReloadRequest.request(activity) },
+                )
+            }
+        }
         item { SmallTitle("界面与运行框架") }
         item {
             SettingsCard {
