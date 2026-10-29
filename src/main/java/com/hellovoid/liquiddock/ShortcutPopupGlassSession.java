@@ -404,9 +404,15 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void shutdown() {
+        shutdown(null);
+    }
+
+    /** Source capture window remains attached until compositor detach + EGL release. */
+    void shutdown(Runnable onShutdownComplete) {
+        sourceBackend.onShutdownComplete(onShutdownComplete);
         if (shuttingDown) return;
         shuttingDown = true;
-        boolean queued = sourceBackend.postToRenderThread(() -> {
+        boolean queued = sourceBackend.postShutdownToRenderThread(() -> {
             releaseOutput(output);
             output = null;
             if (prismalRenderer != null) {

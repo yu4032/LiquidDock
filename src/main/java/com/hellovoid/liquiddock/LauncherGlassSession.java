@@ -1517,6 +1517,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void shutdown() {
+        shutdown(null);
+    }
+
+    /** Source capture window remains attached until compositor detach + EGL release. */
+    void shutdown(Runnable onShutdownComplete) {
+        sourceBackend.onShutdownComplete(onShutdownComplete);
         if (shuttingDown) return;
         MainHook.log(TAG + " shutdown " + debugLabel());
         RecentsCapsuleGlassSession child = recentsConsumer;
@@ -1540,7 +1546,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             catch (Throwable ignored) {}
             LauncherGlassSessionRegistry.forget(root, this);
         }
-        boolean queued = sourceBackend.postToRenderThread(() -> {
+        boolean queued = sourceBackend.postShutdownToRenderThread(() -> {
             releaseLauncherGl();
             sourceBackend.shutdown();
         });
