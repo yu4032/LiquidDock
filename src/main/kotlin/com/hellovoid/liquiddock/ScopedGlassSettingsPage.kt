@@ -110,7 +110,7 @@ internal fun ScopedGlassSettingsPage(
                 }
             }
         }
-        item(key = "basic-color-heading") { SmallTitle("玻璃底色与透明度") }
+        item(key = "basic-color-heading") { SmallTitle("玻璃染色") }
         basics.drop(1).forEach { b ->
             item(key = b.key) {
                 SettingsCard {
@@ -350,10 +350,10 @@ private fun basicScopeSpecs(scope: String): List<BasicScopeSpec> {
     return names.zip(
         listOf(
             Triple("玻璃模糊", ConfigSchema.Glass.BLUR, "px"),
-            Triple("底色 · 红", ConfigSchema.Glass.TINT_RED, ""),
-            Triple("底色 · 绿", ConfigSchema.Glass.TINT_GREEN, ""),
-            Triple("底色 · 蓝", ConfigSchema.Glass.TINT_BLUE, ""),
-            Triple("底色 · 透明度", ConfigSchema.Glass.TINT_ALPHA, ""),
+            Triple("染色 · 红", ConfigSchema.Glass.TINT_RED, ""),
+            Triple("染色 · 绿", ConfigSchema.Glass.TINT_GREEN, ""),
+            Triple("染色 · 蓝", ConfigSchema.Glass.TINT_BLUE, ""),
+            Triple("染色强度", ConfigSchema.Glass.TINT_ALPHA, ""),
         )
     ) { key, (name, config, unit) -> BasicScopeSpec(key, name, config, unit) }
 }
