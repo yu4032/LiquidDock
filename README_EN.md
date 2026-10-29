@@ -62,27 +62,14 @@ LiquidDock is an LSPosed module for HyperOS 3 tablets. It lets you customize the
 
 </details>
 
-## What's new in v2.7.6
-
-- **Separate tint and solid fill:** Tint adjusts the background color while retaining texture; solid fill uses separate RGB and 0–255 opacity controls. Fill defaults to transparent, and expanded folders can override it.
-- **Glass-shaped icon clipping:** Preprocessed display assets preserve the glass outline during home-screen rendering and app-return animations.
-- **Settings organization and search:** Global, folder, menu, keyboard, and grid settings use feature-based groups. Search navigates to individual controls.
-- **API 102 and graphics cleanup:** libxposed API 102 provides atomic hook callback replacement; transient shortcut and drag glass follow compositor-aware EGL resource teardown.
-- **Readable widget part titles:** The widget component picker displays readable labels for background rules.
-
-See [CHANGELOG.md](CHANGELOG.md) for the full history.
-
 ## Main features
 
 ### Liquid Glass
 
-**Two independent color effects:** **Tint** multiplies the sampled backdrop color while retaining texture. **Solid fill** overlays the body with chosen RGB at 0–255 opacity (default 0). Full fill opacity covers the sampled texture; output transmittance and animation opacity remain separate.
-
-
 With the LiquidDock and Liquid Glass master switches enabled, LiquidDock can add a consistent glass appearance to the following surfaces. Icons, widgets, folders, Recents buttons, and other integrations also require their own feature switches:
 
 - Dock;
-- home-screen icons and Dock function icons;
+- home-screen icons and Dock function icons, with glass-outline clipping;
 - widgets;
 - small and large folders;
 - icons, widgets, and folders while dragging;
@@ -94,7 +81,7 @@ With the LiquidDock and Liquid Glass master switches enabled, LiquidDock can add
 - the MIUI System Search main screen;
 - the Gboard floating keyboard and related toolbars.
 
-Glass materials support blur, refraction, dispersion, tint, solid fill, brightness, lighting, highlights, shadows, and corner radii. Outlines and soft shadows can inherit global parameters or use per-component settings.
+Glass materials support blur, refraction, dispersion, brightness, highlights, shadows, corner radii, and color. Tint adjusts the backdrop color, while solid fill provides a separate color overlay. Outlines and soft shadows can inherit global parameters or use per-component settings.
 
 Loaded glass hooks support live material adjustments. Restart the relevant scope after first installing a hook or changing structural settings such as the grid.
 
