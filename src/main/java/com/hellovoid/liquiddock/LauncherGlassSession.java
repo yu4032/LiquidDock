@@ -578,9 +578,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
         if (shuttingDown || beforeScrollX == afterScrollX) return;
-        // ScreenView.scrollTo may run before its native frame traversal. Record only;
-        // pre-draw submits the same scroll revision as the Launcher content.
         workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
+        // Paging has no source-frame dependency: submit latest scroll immediately.
+        // A single immutable scroll/geometry snapshot and stale-swap rejection keep
+        // this fast path from mixing revisions across nodes.
+        scheduleOutputRender(true, false, true);
     }
 
     void resetWorkspaceScrollProjection() {
@@ -712,12 +714,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void scheduleOutputRender(
-            boolean staticDirty, boolean dragDirty, boolean fromUiPreDraw) {
+            boolean staticDirty, boolean dragDirty, boolean immediate) {
         if (shuttingDown || folderFrameFrozen) return;
         if (outputRenderState.request(staticDirty, dragDirty)) {
-            // The UI traversal has already published its complete scene. Do not add
-            // a second main-thread turn to a Workspace paging frame.
-            boolean posted = fromUiPreDraw
+            // Scroll mutations and completed UI pre-draw traversals can enter GL
+            // directly; other updates still coalesce on the next main-thread turn.
+            boolean posted = immediate
                     ? postRender(this::drainOutputRenderWork)
                     : postOutputRenderAfterUi();
             if (!posted) outputRenderState.onPostRejected();
@@ -993,9 +995,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             return;
         }
         if (staticChanged) publishStaticSceneSnapshot();
-        boolean scrollChanged = workspaceScrollProjection.consumeUiRedraw();
-        if (staticChanged || dragChanged || scrollChanged) {
-            scheduleOutputRender(staticChanged || scrollChanged, dragChanged, scrollChanged);
+        if (staticChanged || dragChanged) {
+            // The scroll fast path already owns scroll-only redraws. Reposting them
+            // from pre-draw creates a second Swap for the same revision.
+            scheduleOutputRender(staticChanged, dragChanged, true);
         }
     }
 
