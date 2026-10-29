@@ -67,7 +67,7 @@ final class NativeMaterialContinuousCornersHook {
     private static int hookMaterialInitializer(
             Class<?> owner, String name, Class<?>[] parameters) {
         try {
-            Method method = owner.getMethod(name, parameters);
+            Method method = HookUtil.findMethodExact(owner, name, parameters);
             HookUtil.hook(method, chain -> {
                 Object[] args = chain.getArgs().toArray(new Object[0]);
                 Object result = chain.proceed(args);
