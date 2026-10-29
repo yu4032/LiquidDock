@@ -203,21 +203,13 @@ RemoteViews 的精确 TextView/ImageView 白化已实现并通过真机验证；
 
 # Validation queue
 
-## GUI PR integration and acceptance
+## GUI 组织与验收
 
-**状态：未完成；相关 PR 仍为 Open，尚未合并到 `main`。**
+**状态：统一设置分组与搜索已进入 `main`；实机视觉与搜索定位复查列入验收。**
 
-- [#319](https://github.com/yu4032/LiquidDock/pull/319)：数值输入、实时滑块与 Prismal stepper；需要对齐最新主线、解决合并状态并核验 CI / 真机。
-- [#320](https://github.com/yu4032/LiquidDock/pull/320)：Surface / Cell 结构拆分；当前以 #319 分支为 base，属叠加 PR，应先处理 #319 后再决定合并顺序。
-- #325 的滑块数值宽度修复**已合并**，不能替代 #319 / #320 的结构性验收。
-
-真机检查：
-
-- Prismal 背景；
-- 深色主题；
-- 弹窗动画；
-- 输入焦点；
-- 滑动性能。
+- [PR #477](https://github.com/yu4032/LiquidDock/pull/477) 已统一玻璃、文件夹、菜单、Gboard、网格、描边和阴影等设置的 Cell 分组、参数索引与跳转定位。
+- 早期 [#319](https://github.com/yu4032/LiquidDock/pull/319)、[#320](https://github.com/yu4032/LiquidDock/pull/320) 已关闭，未采用其独立分支合并路径；数值输入、实时滑块与页面组件以当前主线实现为准。
+- 实机复查重点：深色主题、玻璃卡片间距、搜索定位、数值输入焦点、长列表滑动与转场动画。
 
 ## Workspace performance validation
 

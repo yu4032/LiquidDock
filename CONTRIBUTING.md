@@ -282,7 +282,7 @@ Workstation 是组合路径。任何修改都要考虑：
 - wallpaper freshness；
 - normal-layout restore。
 
-单个 visual owner 能热恢复，不代表整个 Workstation structure 已支持完整 runtime uninstall。
+单个 visual owner 支持运行时恢复；工作台整体结构变更按 Launcher 生命周期重新加载。
 
 ## 16. SystemUI app-caption menu rules
 
