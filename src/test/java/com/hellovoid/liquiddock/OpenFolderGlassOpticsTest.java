@@ -33,6 +33,28 @@ public class OpenFolderGlassOpticsTest {
         assertEquals(0f, transparent.tintA, 0f);
     }
 
+    @Test public void folderSolidFillInheritsGlobalUntilIndividuallyOverridden() {
+        PrismalParams.Builder p = PrismalParams.builder();
+        p.baseColorR = .25f;
+        p.baseColorG = .50f;
+        p.baseColorB = .75f;
+        p.baseColorA = .4f;
+        PrismalParams global = p.build();
+        PrismalParams inherited = OpenFolderGlassOptics.apply(global, 6, 155, 18, 35,
+                -1, -1, -1, -1, 1f);
+        assertEquals(.25f, inherited.baseColorR, 0f);
+        assertEquals(.50f, inherited.baseColorG, 0f);
+        assertEquals(.75f, inherited.baseColorB, 0f);
+        assertEquals(.4f, inherited.baseColorA, 0f);
+        PrismalParams explicit = OpenFolderGlassOptics.apply(global, 6, 155, 18, 35,
+                255, 0, 100, 255, 1f);
+        assertEquals(1f, explicit.baseColorR, 0f);
+        assertEquals(0f, explicit.baseColorG, 0f);
+        assertEquals(100f / 255f, explicit.baseColorB, .0001f);
+        assertEquals(1f, explicit.baseColorA, 0f);
+        assertEquals(.4f, global.baseColorA, 0f);
+    }
+
     @Test public void folderOpticsClampToSchemaLimits() {
         PrismalParams params = OpenFolderGlassOptics.apply(PrismalParams.builder().build(),
                 -500, 9999, -4, 999, 1f);

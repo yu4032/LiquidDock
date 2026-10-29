@@ -258,6 +258,14 @@ internal val openFolderNativeBlurSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_N
 internal val openFolderIorSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_IOR, "展开文件夹 · 折射率", "×100", summary = "100 = 1.00（不折射），155 = 1.55")
 internal val openFolderThicknessSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_THICKNESS, "展开文件夹 · 玻璃厚度", "dp")
 internal val openFolderTintSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA, "展开文件夹 · 染色强度", "", summary = "0 = 无乘法染色，255 = 最大染色；颜色继承全局染色")
+internal val openFolderBaseColorRedSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_RED,
+    "展开文件夹 · 底色红", "", summary = "−1 继承全局底色；0–255 为独立色值")
+internal val openFolderBaseColorGreenSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_GREEN,
+    "展开文件夹 · 底色绿", "", summary = "−1 继承全局底色；0–255 为独立色值")
+internal val openFolderBaseColorBlueSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_BLUE,
+    "展开文件夹 · 底色蓝", "", summary = "−1 继承全局底色；0–255 为独立色值")
+internal val openFolderBaseColorAlphaSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_ALPHA,
+    "展开文件夹 · 底色透明度", "", summary = "−1 继承全局；0 无覆盖，255 不显示玻璃主体背后的壁纸纹理")
 internal val largeFolderPreviewIconScaleSpec = IntSpec(
     ConfigSchema.Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
     "2×2 文件夹内图标大小",

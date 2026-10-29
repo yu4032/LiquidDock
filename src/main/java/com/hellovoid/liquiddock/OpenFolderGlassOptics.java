@@ -17,6 +17,19 @@ final class OpenFolderGlassOptics {
         return b.build();
     }
 
+    static PrismalParams apply(PrismalParams base, int blurPx, int ior100,
+                               int thicknessDp, int tintAlpha,
+                               int fillRed, int fillGreen, int fillBlue, int fillAlpha,
+                               float density) {
+        PrismalParams original = apply(base, blurPx, ior100, thicknessDp, tintAlpha, density);
+        PrismalParams.Builder b = PrismalParams.builder(original);
+        if (fillRed >= 0) b.baseColorR = clamp(fillRed, 0, 255) / 255f;
+        if (fillGreen >= 0) b.baseColorG = clamp(fillGreen, 0, 255) / 255f;
+        if (fillBlue >= 0) b.baseColorB = clamp(fillBlue, 0, 255) / 255f;
+        if (fillAlpha >= 0) b.baseColorA = clamp(fillAlpha, 0, 255) / 255f;
+        return b.build();
+    }
+
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }

@@ -423,6 +423,21 @@ internal fun GlassFoldersPage(
                 IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
             }
         }
+        item(key = "folder-open-fill-heading") { SmallTitle("展开文件夹 · 底色覆盖") }
+        item(key = "folder-open-fill-rgb") {
+            SettingsCard {
+                IntSetting(prefs, openFolderBaseColorRedSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderBaseColorGreenSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderBaseColorBlueSpec, masterEnabled && liquidEnabled && openFolderGlass)
+            }
+        }
+        item(key = "folder-open-fill-alpha") {
+            SettingsCard {
+                IntSetting(prefs, openFolderBaseColorAlphaSpec, masterEnabled && liquidEnabled && openFolderGlass)
+            }
+        }
         item(key = "folder-shadow-heading") { SmallTitle("玻璃阴影") }
         item(key = "folder-shadow") {
             SettingsCard {
