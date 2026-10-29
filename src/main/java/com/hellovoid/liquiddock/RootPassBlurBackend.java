@@ -483,7 +483,9 @@ final class RootPassBlurBackend {
                             + retainedInputs.size());
                     return;
                 }
+                logFolderEglLifetime("releaseGl-begin");
                 releaseGl();
+                logFolderEglLifetime("releaseGl-end");
                 renderThread.quitSafely();
             });
         } catch (Throwable error) {
@@ -693,6 +695,10 @@ final class RootPassBlurBackend {
         EGLSurface result = EGL14.eglCreateWindowSurface(
                 eglDisplay, eglConfig, surface, new int[]{EGL14.EGL_NONE}, 0);
         checkEgl("eglCreateWindowSurface", result != EGL14.EGL_NO_SURFACE);
+        if (isFolderEglLifetime()) {
+            EGL_WINDOW_CREATED.incrementAndGet();
+            logFolderEglLifetime("window-create");
+        }
         return result;
     }
 
@@ -703,7 +709,11 @@ final class RootPassBlurBackend {
         if (currentEglSurface == surface && eglPbufferSurface != EGL14.EGL_NO_SURFACE) {
             makePbufferCurrentUnchecked();
         }
-        EGL14.eglDestroySurface(eglDisplay, surface);
+        boolean destroyed = EGL14.eglDestroySurface(eglDisplay, surface);
+        if (isFolderEglLifetime()) {
+            if (destroyed) EGL_WINDOW_DESTROYED.incrementAndGet();
+            logFolderEglLifetime(destroyed ? "window-destroy" : "window-destroy-failed");
+        }
     }
 
     void makeCurrent(EGLSurface surface) {
@@ -744,6 +754,7 @@ final class RootPassBlurBackend {
 
     void shutdown() {
         if (shuttingDown) return;
+        logFolderEglLifetime("backend-shutdown-request");
         shuttingDown = true;
         bindEpoch.incrementAndGet();
         state.onShutdown();
@@ -752,6 +763,7 @@ final class RootPassBlurBackend {
         PassBlurDetachCoordinator.retire(old, () -> {
             if (binding == old) binding = null;
             shutdownSourceDetached = true;
+            logFolderEglLifetime("backend-shutdown-detach-confirmed");
             scheduleShutdownGlCleanup();
         });
     }
