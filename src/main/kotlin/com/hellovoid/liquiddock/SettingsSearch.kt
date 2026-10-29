@@ -85,6 +85,11 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         }
         return basics + optics
     }
+    if (page == Page.Liquid) {
+        return listOf(CustomGlassSearchRow(
+            ConfigSchema.Glass.CONTINUOUS_CORNERS.name(), "iOS 风格连续圆角",
+            "液态玻璃与系统原高级材质 Dock、小组件、文件夹"))
+    }
     if (page == Page.GlassFolders) {
         val toggles = listOf(
             CustomGlassSearchRow(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), "小文件夹玻璃", ""),
@@ -182,6 +187,7 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
  */
 internal fun customDenseFocusIndex(page: Page, key: String): Int? {
     val index = when (page) {
+        Page.Liquid -> if (key == ConfigSchema.Glass.CONTINUOUS_CORNERS.name()) 2 else -1
         Page.ShortcutPopupCustomization, Page.HandleMenuCustomization -> {
             val popup = page == Page.ShortcutPopupCustomization
             val scope = if (popup) ScopedGlassOptics.POPUP else ScopedGlassOptics.HANDLE_MENU

@@ -30,6 +30,15 @@ class SettingsSearchTest {
     }
 
     @Test
+    fun iosCornersHasOneSearchableControlWithRealLiquidPageFocus() {
+        val rows = customGlassSearchRows(Page.Liquid).filter {
+            it.key == com.hellovoid.liquiddock.config.ConfigSchema.Glass.CONTINUOUS_CORNERS.name()
+        }
+        assertEquals(1, rows.size)
+        assertEquals(2, customDenseFocusIndex(Page.Liquid, rows.single().key))
+    }
+
+    @Test
     fun blankQueryDoesNotFloodResults() {
         assertTrue(filterSettingsSearch(catalog, "  ").isEmpty())
     }

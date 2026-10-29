@@ -67,9 +67,9 @@ internal fun LiquidPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.CONTINUOUS_CORNERS,
-                    "iPadOS 风格连续圆角",
-                    "替换所有液态玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
-                    masterEnabled && liquidGlass,
+                    "iOS 风格连续圆角",
+                    "统一液态玻璃及系统原高级材质 Dock、小组件、文件夹的圆角；保留原生模糊与动画，重启桌面生效",
+                    masterEnabled,
                 )
             }
         }
