@@ -1,6 +1,8 @@
 package com.hellovoid.liquiddock;
 
 import java.lang.reflect.Executable;
+import java.lang.reflect.Constructor;
+import java.util.Objects;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -23,20 +25,68 @@ final class Api102HookRegistry {
                 Method method, String id, XposedInterface.Hooker callback);
     }
 
+    /** The shared HookUtil entry point also covers constructors and custom priorities. */
+    interface SiteInstaller {
+        XposedInterface.HookHandle install(
+                Executable executable, String id, int priority, XposedInterface.Hooker callback);
+    }
+
+    /** One lexical installation point and one actual target are one replaceable interceptor. */
+    private static final class SiteKey {
+        final Executable executable;
+        final String site;
+        final int priority;
+
+        SiteKey(Executable executable, String site, int priority) {
+            this.executable = executable;
+            this.site = site;
+            this.priority = priority;
+        }
+
+        @Override public boolean equals(Object value) {
+            if (!(value instanceof SiteKey)) return false;
+            SiteKey other = (SiteKey) value;
+            return priority == other.priority
+                    && site.equals(other.site) && executable.equals(other.executable);
+        }
+
+        @Override public int hashCode() {
+            return Objects.hash(executable, site, priority);
+        }
+    }
+
     private static final Api102HookRegistry PROCESS = new Api102HookRegistry(
             (method, id, callback) -> Api101Bridge.module().hook(method)
                     .setId(id)
+                    .intercept(callback),
+            (executable, id, priority, callback) -> Api101Bridge.module().hook(executable)
+                    .setId(id)
+                    .setPriority(priority)
                     .intercept(callback));
 
     private final Installer installer;
+    private final SiteInstaller siteInstaller;
     private final Map<String, XposedInterface.HookHandle> handles = new LinkedHashMap<>();
+    // Each HookUtil installation site has its own slot, even if other sites hook the same
+    // executable. Repeated registration of that *same* slot replaces rather than stacking.
+    private final Map<SiteKey, XposedInterface.HookHandle> siteHandles = new LinkedHashMap<>();
+    private final Map<SiteKey, String> siteIds = new LinkedHashMap<>();
     // Existing HookUtil callers can install multiple callbacks on the same Method. Retain each
     // returned handle without assigning a fake ID or changing its installation semantics.
     private final List<XposedInterface.HookHandle> unnamedHandles = new ArrayList<>();
 
     Api102HookRegistry(Installer installer) {
-        if (installer == null) throw new IllegalArgumentException("installer");
+        this(installer, (executable, id, priority, callback) ->
+                Api101Bridge.module().hook(executable)
+                        .setId(id).setPriority(priority).intercept(callback));
+    }
+
+    Api102HookRegistry(Installer installer, SiteInstaller siteInstaller) {
+        if (installer == null || siteInstaller == null) {
+            throw new IllegalArgumentException("installer/siteInstaller");
+        }
         this.installer = installer;
+        this.siteInstaller = siteInstaller;
     }
 
     static Api102HookRegistry processRegistry() {
@@ -80,6 +130,61 @@ final class Api102HookRegistry {
         PROCESS.trackUnidentified(handle);
     }
 
+    static XposedInterface.HookHandle hookSite(Executable executable, String site,
+            int priority, XposedInterface.Hooker callback) {
+        return PROCESS.installSite(executable, site, priority, callback);
+    }
+
+    /**
+     * Process-wide API 102 replacement for all HookUtil call sites.
+     *
+     * Multiple independent call sites targeting the same Method retain separate callback
+     * slots and their original priorities. A subsequent registration at the same site
+     * atomically updates only its own slot; no gap or duplicate callback is introduced.
+     *
+     * Use the actual Executable as part of the identity: two class loaders can define
+     * distinct Methods with identical textual signatures.
+     */
+    synchronized XposedInterface.HookHandle installSite(
+            Executable executable, String site, int priority, XposedInterface.Hooker callback) {
+        if (executable == null || site == null || site.isBlank() || callback == null) {
+            throw new IllegalArgumentException("executable/site/callback");
+        }
+        SiteKey key = new SiteKey(executable, site, priority);
+        XposedInterface.HookHandle previous = siteHandles.get(key);
+        if (previous != null) {
+            XposedInterface.HookHandle replacement = previous.replaceHook(callback);
+            if (replacement == null) {
+                throw new IllegalStateException("null replacement HookHandle: " + site);
+            }
+            siteHandles.put(key, replacement);
+            return replacement;
+        }
+        executable.setAccessible(true);
+        // Site IDs are unique even for different ClassLoader identities with the same name.
+        // The ordinal is only a process-local discriminator: APK hot reload remains disabled.
+        String id = "liquiddock.site:" + site + ':' + stableSiteTarget(executable)
+                + ":p" + priority + ":n" + (siteIds.size() + 1);
+        XposedInterface.HookHandle handle = siteInstaller.install(
+                executable, id, priority, callback);
+        if (handle == null) throw new IllegalStateException("null HookHandle: " + id);
+        siteHandles.put(key, handle);
+        siteIds.put(key, id);
+        return handle;
+    }
+
+    private static String stableSiteTarget(Executable executable) {
+        StringBuilder builder = new StringBuilder(executable.getDeclaringClass().getName())
+                .append('#').append(executable instanceof Constructor ? "<init>" : executable.getName())
+                .append('(');
+        Class<?>[] types = executable.getParameterTypes();
+        for (int i = 0; i < types.length; i++) {
+            if (i > 0) builder.append(',');
+            builder.append(types[i].getName());
+        }
+        return builder.append(')').toString();
+    }
+
     synchronized XposedInterface.HookHandle install(
             Method method, String id, XposedInterface.Hooker callback) {
         if (method == null || callback == null || id == null || id.isBlank()) {
@@ -118,7 +223,7 @@ final class Api102HookRegistry {
     }
 
     synchronized int count() {
-        return handles.size() + unnamedHandles.size();
+        return handles.size() + siteHandles.size() + unnamedHandles.size();
     }
 
     synchronized int unidentifiedCount() {
