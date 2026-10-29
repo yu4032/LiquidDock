@@ -13,7 +13,7 @@ final class OpenFolderGlassOptics {
         b.blurRadiusPx = clamp(blurPx, 0, 60);
         b.ior = clamp(ior100, 100, 200) / 100f;
         b.glassThicknessPx = clamp(thicknessDp, 1, 60) * Math.max(0.1f, density);
-        b.tintA = clamp(tintAlpha, 0, 160) / 255f;
+        b.tintA = clamp(tintAlpha, 0, 255) / 255f;
         return b.build();
     }
 

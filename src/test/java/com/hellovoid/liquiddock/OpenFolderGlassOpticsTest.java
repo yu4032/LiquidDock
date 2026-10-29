@@ -24,12 +24,20 @@ public class OpenFolderGlassOpticsTest {
         assertEquals(125f / 255f, folder.tintA, .0001f);
         // Closing no longer runs a second gaussian pass at another radius.
     }
+    @Test public void folderTintAlphaCanReachFullyOpaqueWithoutChangingOtherOptics() {
+        PrismalParams base = PrismalParams.builder().build();
+        PrismalParams params = OpenFolderGlassOptics.apply(base, 6, 155, 18, 255, 1f);
+        assertEquals(1f, params.tintA, 0.0001f);
+        PrismalParams transparent = OpenFolderGlassOptics.apply(base, 6, 155, 18, 0, 1f);
+        assertEquals(0f, transparent.tintA, 0f);
+    }
+
     @Test public void folderOpticsClampToSchemaLimits() {
         PrismalParams params = OpenFolderGlassOptics.apply(PrismalParams.builder().build(),
                 -500, 9999, -4, 999, 1f);
         assertEquals(0f, params.blurRadiusPx, 0f);
         assertEquals(2f, params.ior, 0f);
         assertEquals(1f, params.glassThicknessPx, 0f);
-        assertEquals(160f / 255f, params.tintA, 0.0001f);
+        assertEquals(1f, params.tintA, 0.0001f);
     }
 }

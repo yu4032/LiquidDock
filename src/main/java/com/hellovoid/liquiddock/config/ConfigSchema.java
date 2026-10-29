@@ -343,7 +343,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> OPEN_FOLDER_THICKNESS = integer(
                 "open_folder_glass_thickness", 18, 18, 18, 1, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> OPEN_FOLDER_TINT_ALPHA = integer(
-                "open_folder_glass_tint_alpha", 35, 35, 35, 0, 160, ConfigKey.ExportMode.ALWAYS);
+                "open_folder_glass_tint_alpha", 35, 35, 35, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> LARGE_FOLDER_NATIVE_OUTLINE = bool(
                 "large_folder_native_outline", true, true, true, ConfigKey.ExportMode.ALWAYS);
         // Opt-in only: repair marked, database-backed 2x2 folders on custom
@@ -367,7 +367,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> CHROMATIC = integer(
                 "liquid_chromatic", 26, 26, 2, 0, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_ALPHA = integer(
-                "liquid_tint_alpha", 35, 35, 38, 0, 160, ConfigKey.ExportMode.ALWAYS);
+                "liquid_tint_alpha", 35, 35, 38, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_FPS = integer(
                 "liquid_capture_power_limit_fps", 20, 20, 20, 5, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_STOP_DELAY = integer(
