@@ -38,12 +38,17 @@ final class NativeMaterialContinuousCornersHook {
             Class<?> blur = Class.forName(BLUR_UTILS, false, loader);
             count += hookMaterialInitializer(blur, "setWidgetBlurIfSupported",
                     new Class<?>[]{View.class});
-            Class<?> maml = Class.forName("com.miui.maml.component.MamlView", false, loader);
-            count += hookMaterialInitializer(blur, "setMaMlBlurIfSupported",
-                    new Class<?>[]{maml, boolean.class});
             count += hookMaterialInitializer(blur, "setFolderIconBlur",
                     new Class<?>[]{View.class, int.class, int.class, int.class, int.class,
                             int.class, int.class, int.class, int.class, int.class, int.class});
+            try {
+                Class<?> maml = Class.forName(
+                        "com.miui.maml.component.MamlView", false, loader);
+                count += hookMaterialInitializer(blur, "setMaMlBlurIfSupported",
+                        new Class<?>[]{maml, boolean.class});
+            } catch (Throwable error) {
+                MainHook.log(TAG + " MAML material unavailable: " + error);
+            }
         } catch (Throwable error) {
             MainHook.log(TAG + " Launcher BlurUtilities unavailable: " + error);
         }
@@ -129,7 +134,6 @@ final class NativeMaterialContinuousCornersHook {
 
     private static final class ContinuousOutline extends ViewOutlineProvider {
         private final ViewOutlineProvider original;
-        private final Outline nativeOutline = new Outline();
         private final Rect nativeBounds = new Rect();
         private final RectF bounds = new RectF();
         private final Path path = new Path();

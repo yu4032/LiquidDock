@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,7 +29,13 @@ internal fun LiquidPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(searchFocus?.sequence) {
+        val index = searchFocus?.let { customDenseFocusIndex(Page.Liquid, it.key) }
+        if (index != null) listState.scrollToItem(index)
+    }
     val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
     var liquidGlass by remember(liquidRevision) {
         mutableStateOf(
@@ -38,6 +46,7 @@ internal fun LiquidPage(
         )
     }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = padding.calculateTopPadding() + 8.dp,
