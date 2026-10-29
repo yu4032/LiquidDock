@@ -253,6 +253,10 @@ public final class PresetManager {
         source.put("liquid_blur", 7.2d);
         source.put("liquid_chromatic", 9);
         source.put("liquid_tint_alpha", 0);
+        source.put(ConfigSchema.Glass.BASE_COLOR_RED.name(), 255);
+        source.put(ConfigSchema.Glass.BASE_COLOR_GREEN.name(), 255);
+        source.put(ConfigSchema.Glass.BASE_COLOR_BLUE.name(), 255);
+        source.put(ConfigSchema.Glass.BASE_COLOR_ALPHA.name(), 0);
         source.put("liquid_capture_power_limit_fps", 30);
         source.put("liquid_capture_stop_delay", 150);
         source.put("liquid_thickness", 18);
