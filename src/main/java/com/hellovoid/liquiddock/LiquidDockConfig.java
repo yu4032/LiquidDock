@@ -247,6 +247,7 @@ final class LiquidDockConfig {
                 os4DirectionalOppositeIntensity,
                 prismalLightDirX, prismalLightDirY, prismalShadowSoftness, prismalTransmittance,
                 prismalBackdropScaleX, prismalBackdropScaleY, prismalParallaxScale;
+        final int baseColorR, baseColorG, baseColorB, baseColorAlpha;
         final int tintAlpha, tintR, tintG, tintB,
                 prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;
         final int passBlurCaptureScalePercent, passBlurRenderFps;
@@ -322,6 +323,14 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.CHROMATIC.runtimeFallback());
             tintAlpha = channel(c.i(ConfigSchema.Glass.TINT_ALPHA.name(),
                     ConfigSchema.Glass.TINT_ALPHA.runtimeFallback()));
+            baseColorR = channel(c.i(ConfigSchema.Glass.BASE_COLOR_RED.name(),
+                    ConfigSchema.Glass.BASE_COLOR_RED.runtimeFallback()));
+            baseColorG = channel(c.i(ConfigSchema.Glass.BASE_COLOR_GREEN.name(),
+                    ConfigSchema.Glass.BASE_COLOR_GREEN.runtimeFallback()));
+            baseColorB = channel(c.i(ConfigSchema.Glass.BASE_COLOR_BLUE.name(),
+                    ConfigSchema.Glass.BASE_COLOR_BLUE.runtimeFallback()));
+            baseColorAlpha = channel(c.i(ConfigSchema.Glass.BASE_COLOR_ALPHA.name(),
+                    ConfigSchema.Glass.BASE_COLOR_ALPHA.runtimeFallback()));
             thickness = c.f(ConfigSchema.Glass.THICKNESS.name(),
                     ConfigSchema.Glass.THICKNESS.runtimeFallback());
             ior = c.i(ConfigSchema.Glass.IOR.name(), ConfigSchema.Glass.IOR.runtimeFallback()) / 100f;

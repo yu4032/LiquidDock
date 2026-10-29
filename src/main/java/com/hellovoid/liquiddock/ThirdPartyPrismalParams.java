@@ -48,6 +48,10 @@ final class ThirdPartyPrismalParams {
         b.tintG = appearance.tintG / 255f;
         b.tintB = appearance.tintB / 255f;
         b.tintA = appearance.tintAlpha / 255f;
+        b.baseColorR = base.baseColorR;
+        b.baseColorG = base.baseColorG;
+        b.baseColorB = base.baseColorB;
+        b.baseColorA = base.baseColorA;
         b.shadowR = base.shadowR;
         b.shadowG = base.shadowG;
         b.shadowB = base.shadowB;

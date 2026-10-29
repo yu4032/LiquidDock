@@ -51,6 +51,7 @@ final float chromaticAberration;
         final float tintG;
         final float tintB;
         final float tintA;
+        final float baseColorR, baseColorG, baseColorB, baseColorA;
         final float shadowR;
         final float shadowG;
         final float shadowB;
@@ -97,6 +98,7 @@ final float chromaticAberration;
                 float tintG,
                 float tintB,
                 float tintA,
+                float baseColorR, float baseColorG, float baseColorB, float baseColorA,
                 float shadowR,
                 float shadowG,
                 float shadowB,
@@ -140,6 +142,10 @@ final float chromaticAberration;
             this.tintG = tintG;
             this.tintB = tintB;
             this.tintA = tintA;
+            this.baseColorR = baseColorR;
+            this.baseColorG = baseColorG;
+            this.baseColorB = baseColorB;
+            this.baseColorA = baseColorA;
             this.shadowR = shadowR;
             this.shadowG = shadowG;
             this.shadowB = shadowB;
@@ -195,6 +201,7 @@ final float chromaticAberration;
                 0f,
                 1f,
                 35f / 255f,
+                1f, 1f, 1f, 0f,
                 1f,
                 1f,
                 1f,
@@ -252,6 +259,10 @@ final float chromaticAberration;
                 glass.tintG / 255f,
                 glass.tintB / 255f,
                 glass.tintAlpha / 255f,
+                glass.baseColorR / 255f,
+                glass.baseColorG / 255f,
+                glass.baseColorB / 255f,
+                glass.baseColorAlpha / 255f,
                 glass.prismalShadowR / 255f,
                 glass.prismalShadowG / 255f,
                 glass.prismalShadowB / 255f,
@@ -363,6 +374,8 @@ final float chromaticAberration;
         uniform1f(program, "u_fresnelReflect", p.fresnelReflect);
         uniform1f(program, "u_brightness", p.brightness);
         uniform4fRaw(program, "u_glassColor", p.tintR, p.tintG, p.tintB, p.tintA);
+        uniform4fRaw(program, "u_baseColor",
+                p.baseColorR, p.baseColorG, p.baseColorB, p.baseColorA);
         uniform1fOptional(program, "u_highlightWidth", p.highlightWidth);
 
         uniform2f(program, "u_lightDir", p.lightDirX, p.lightDirY);
