@@ -17,11 +17,17 @@ final class ExternalGlassLiveConfigState {
     private static SharedPreferences.OnSharedPreferenceChangeListener listener;
     private static Handler handler;
     private static String packageName;
+    private static boolean retiredForReload;
+    private static final Runnable DISPATCH_TASK = ExternalGlassLiveConfigState::dispatch;
 
     private ExternalGlassLiveConfigState() {}
 
     static synchronized void initialize(String targetPackage) {
+        if (retiredForReload) {
+            throw new IllegalStateException("retired config observer cannot reinitialize");
+        }
         if (remote != null && listener != null) {
+            // Do not drop a registered listener on failure; that would leak the old loader.
             remote.unregisterOnSharedPreferenceChangeListener(listener);
         }
         remote = Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP);
@@ -30,12 +36,46 @@ final class ExternalGlassLiveConfigState {
         PENDING.set(false);
         listener = (preferences, key) -> {
             if (!isRelevantKey(key)) return;
-            Handler main = handler;
-            if (main != null && PENDING.compareAndSet(false, true)) {
-                main.post(ExternalGlassLiveConfigState::dispatch);
+            synchronized (ExternalGlassLiveConfigState.class) {
+                if (retiredForReload) return;
+                Handler main = handler;
+                if (main != null && PENDING.compareAndSet(false, true)
+                        && !main.post(DISPATCH_TASK)) {
+                    PENDING.set(false);
+                }
             }
         };
         if (remote != null) remote.registerOnSharedPreferenceChangeListener(listener);
+    }
+
+    /**
+     * Disarm Binder listeners and remove queued main-thread callbacks before the old
+     * SystemUI module loader can be released. Never claim cleanup when unregister fails.
+     */
+    static synchronized boolean shutdownForFutureReload() {
+        retiredForReload = true;
+        if (handler != null) {
+            try {
+                handler.removeCallbacks(DISPATCH_TASK);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][API102] external config queue cleanup failed", error);
+                return false;
+            }
+        }
+        if (remote != null && listener != null) {
+            try {
+                remote.unregisterOnSharedPreferenceChangeListener(listener);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][API102] external config unregister failed", error);
+                return false;
+            }
+        }
+        remote = null;
+        listener = null;
+        handler = null;
+        packageName = null;
+        PENDING.set(false);
+        return true;
     }
 
     static boolean isRelevantKey(String key) {
@@ -48,8 +88,9 @@ final class ExternalGlassLiveConfigState {
                 || key.equals("liquiddock_enabled");
     }
 
-    private static void dispatch() {
+    private static synchronized void dispatch() {
         PENDING.set(false);
+        if (retiredForReload) return;
         String target = packageName;
         if (target == null) return;
         try {
