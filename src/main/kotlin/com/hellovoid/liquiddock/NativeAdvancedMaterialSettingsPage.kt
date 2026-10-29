@@ -60,6 +60,31 @@ internal fun NativeAdvancedMaterialSettingsPage(
                 IntSetting(prefs, advancedMaterialBlurSpec, masterEnabled && nativeEnabled)
             }
         }
+        item(key = "native-material-tint-title") { SmallTitle("原生染色") }
+        item(key = "native-material-tint") {
+            SettingsCard {
+                IntSetting(prefs, advancedMaterialTintRedSpec, masterEnabled && nativeEnabled)
+                IntSetting(prefs, advancedMaterialTintGreenSpec, masterEnabled && nativeEnabled)
+                IntSetting(prefs, advancedMaterialTintBlueSpec, masterEnabled && nativeEnabled)
+                IntSetting(prefs, advancedMaterialTintAlphaSpec, masterEnabled && nativeEnabled)
+            }
+        }
+        item(key = "native-material-fill-title") { SmallTitle("原生底色") }
+        item(key = "native-material-fill") {
+            SettingsCard {
+                IntSetting(prefs, advancedMaterialFillRedSpec, masterEnabled && nativeEnabled)
+                IntSetting(prefs, advancedMaterialFillGreenSpec, masterEnabled && nativeEnabled)
+                IntSetting(prefs, advancedMaterialFillBlueSpec, masterEnabled && nativeEnabled)
+                IntSetting(prefs, advancedMaterialFillAlphaSpec, masterEnabled && nativeEnabled)
+            }
+        }
+        item(key = "native-material-shadow-title") { SmallTitle("原生阴影") }
+        item(key = "native-material-shadow") {
+            SettingsCard {
+                IntSetting(prefs, advancedMaterialShadowAlphaSpec, masterEnabled && nativeEnabled)
+                IntSetting(prefs, advancedMaterialShadowRadiusSpec, masterEnabled && nativeEnabled)
+            }
+        }
         item(key = "native-material-components-title") { SmallTitle("组件设置") }
         item(key = "native-material-components") {
             ModernFeatureCard(

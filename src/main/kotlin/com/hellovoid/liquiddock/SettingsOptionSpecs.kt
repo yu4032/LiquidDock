@@ -246,9 +246,49 @@ internal val recentsBlurSpec = IntSpec(
     summary = "控制进入多任务界面后壁纸背景的系统模糊；保留系统过渡动画",
 )
 internal val iconSizeOffsetSpec = IntSpec(ConfigSchema.Glass.ICON_SIZE_OFFSET, "图标尺寸偏移", "dp/边")
+internal val advancedMaterialTintRedSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED, "染色红", "",
+    summary = "使用原生背景混合色，不改变折射与光学着色"
+)
+internal val advancedMaterialTintGreenSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN, "染色绿", "",
+    summary = "使用原生背景混合色，不改变折射与光学着色"
+)
+internal val advancedMaterialTintBlueSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE, "染色蓝", "",
+    summary = "使用原生背景混合色，不改变折射与光学着色"
+)
+internal val advancedMaterialTintAlphaSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_ALPHA, "染色透明度", "",
+    summary = "使用原生背景混合色，不改变折射与光学着色"
+)
+internal val advancedMaterialFillRedSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_RED, "底色红", "",
+    summary = "使用独立原生纯色覆盖，不修改颜色混合层"
+)
+internal val advancedMaterialFillGreenSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_GREEN, "底色绿", "",
+    summary = "使用独立原生纯色覆盖，不修改颜色混合层"
+)
+internal val advancedMaterialFillBlueSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_BLUE, "底色蓝", "",
+    summary = "使用独立原生纯色覆盖，不修改颜色混合层"
+)
+internal val advancedMaterialFillAlphaSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_ALPHA, "底色透明度", "",
+    summary = "使用独立原生纯色覆盖，不修改颜色混合层"
+)
+internal val advancedMaterialShadowAlphaSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_SHADOW_ALPHA, "阴影透明度", "",
+    summary = "系统支持时应用原生视图投影"
+)
+internal val advancedMaterialShadowRadiusSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_SHADOW_RADIUS, "阴影柔和半径", "dp",
+    summary = "系统支持时应用原生视图投影"
+)
 internal val advancedMaterialBlurSpec = IntSpec(
     ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR, "图标与多任务原生模糊", "px",
-    summary = "仅调整新增的图标和多任务按钮原生背景模糊；Dock、小组件与文件夹由 HyperOS 控制"
+    summary = "适用于新建的原生材质背景；已有系统材质保留自己的原生强度"
 )
 internal val iconCornerRadiusSpec = IntSpec(ConfigSchema.Glass.ICON_CORNER_RADIUS, "图标圆角", "dp")
 internal val widgetSizeOffsetSpec = IntSpec(ConfigSchema.Glass.WIDGET_SIZE_OFFSET, "小部件尺寸偏移", "dp/边")

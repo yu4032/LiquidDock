@@ -215,6 +215,16 @@ public final class PresetManager {
         source.put("liquid_glass", Boolean.TRUE);
         source.put("native_advanced_material_enabled", Boolean.FALSE);
         source.put("native_advanced_material_blur", 80);
+        source.put("native_advanced_material_r", 255);
+        source.put("native_advanced_material_g", 255);
+        source.put("native_advanced_material_b", 255);
+        source.put("native_advanced_material_alpha", 0);
+        source.put("native_advanced_material_fill_r", 255);
+        source.put("native_advanced_material_fill_g", 255);
+        source.put("native_advanced_material_fill_b", 255);
+        source.put("native_advanced_material_fill_alpha", 0);
+        source.put("native_advanced_material_shadow_alpha", 0);
+        source.put("native_advanced_material_shadow_radius", 5);
         source.put("liquid_wallpaper_flicker_fix", Boolean.FALSE);
         source.put("liquid_continuous_corners", Boolean.FALSE);
         source.put("liquid_security_center_glass", Boolean.FALSE);
