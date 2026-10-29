@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigSchema
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.SmallTitle
 
 // Pure source relocation: keeps the widget 4×2 preflight, in-flight cancellation,
 // stale reply rejection and large warning dialog inside their existing GridBasicsPage.
@@ -95,6 +97,7 @@ internal fun GridBasicsPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val context = LocalContext.current
     var gridCheckPending by remember { mutableStateOf(false) }
@@ -125,11 +128,16 @@ internal fun GridBasicsPage(
             ),
         )
     }
-    SettingsList(
+    DenseSettingsList(
         padding,
         stringResource(R.string.page_grid_basics),
         "调整网格行列数、图标大小与小组件宽度。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GridBasics, it.key) },
+        focusSequence = searchFocus?.sequence,
     ) {
+        item(key = "grid-icon-heading") { SmallTitle("图标大小") }
+        item(key = "grid-icon-enabled") {
+            SettingsCard {
         BooleanSetting(
             prefs,
             ConfigSchema.Grid.ICON_SIZE_ENABLED,
@@ -137,11 +145,20 @@ internal fun GridBasicsPage(
             "工作区、Dock、小文件夹、文件夹内图标与工作台 App 页；重启桌面后生效",
             masterEnabled,
         ) { iconSizeEnabled = it }
+            }
+        }
+        item(key = "grid-icon-size") {
+            SettingsCard {
         IntSetting(
             prefs,
             launcher450IconSizeSpec,
             masterEnabled && iconSizeEnabled,
         )
+            }
+        }
+        item(key = "grid-dimensions-heading") { SmallTitle("自由主界面网格") }
+        item(key = "grid-dimensions-enabled") {
+            SettingsCard {
         BooleanSetting(
             prefs,
             ConfigSchema.Grid.ENABLED,
@@ -149,8 +166,11 @@ internal fun GridBasicsPage(
             "控制自定义行列数是否参与布局；重启桌面后生效",
             masterEnabled,
         ) { customGrid = it }
-        gridDimensionSpecs.forEach { spec ->
-            IntSetting(
+            }
+        }
+        items(gridDimensionSpecs, key = { it.key }) { spec ->
+            SettingsCard {
+                IntSetting(
                 prefs,
                 spec,
                 masterEnabled && customGrid && !gridCheckPending,
@@ -201,14 +221,19 @@ internal fun GridBasicsPage(
                     }
                 },
             )
+            }
         }
         if (gridCheckPending) {
-            Text(
+            item(key = "grid-preflight") { SettingsCard { Text(
                 "正在检查桌面 4×2 小组件，确认安全前不会保存行列数……",
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
                 fontSize = 13.sp,
-            )
+            ) } }
         }
+
+        item(key = "grid-widget-stretch-heading") { SmallTitle("小组件布局") }
+        item(key = "grid-widget-stretch") {
+            SettingsCard {
         BooleanSetting(
             prefs,
             ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
@@ -216,6 +241,8 @@ internal fun GridBasicsPage(
             "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
             masterEnabled && customGrid,
         )
+            }
+        }
     }
     AnimatedSettingsWindowDialog(
         show = gridWarning != null,

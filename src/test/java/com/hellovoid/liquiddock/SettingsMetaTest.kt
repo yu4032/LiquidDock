@@ -90,6 +90,18 @@ class SettingsMetaTest {
         assertEquals(dividerSpecs.size + 1, customGlassSearchRows(Page.Divider).size)
     }
 
+    @Test fun gridBasicsHasSemanticCellsAndDoesNotLoseItsPreflightControls() {
+        val rows = customGlassSearchRows(Page.GridBasics)
+        val expected = setOf(
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
+            launcher450IconSizeSpec.key,
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.ENABLED.name(),
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name(),
+        ) + gridDimensionSpecs.map { it.key }
+        assertEquals(expected, rows.map { it.key }.toSet())
+        rows.forEach { assertTrue(customDenseFocusIndex(Page.GridBasics, it.key) != null) }
+    }
+
     @Test fun tintAndSolidColorSearchFindTheirOwningPages() {
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
         val tint = filterSettingsSearch(catalog, "染色")

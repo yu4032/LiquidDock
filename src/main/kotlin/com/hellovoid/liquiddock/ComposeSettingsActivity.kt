@@ -376,7 +376,9 @@ private fun LiquidDockSettings(
                     )
 
                     Page.Grid -> GridPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled)
+                    Page.GridBasics -> GridBasicsPage(padding, prefs, masterEnabled,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GridBasics.name }
+                            ?.let { SettingsFocusRequest(Page.GridBasics, it, searchFocusSequence) })
 
                     Page.Dock -> DockPage(padding, prefs, masterEnabled, ::navigateTo)
 
