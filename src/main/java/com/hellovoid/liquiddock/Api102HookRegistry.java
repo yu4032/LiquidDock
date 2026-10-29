@@ -12,8 +12,8 @@ import java.util.Map;
 import io.github.libxposed.api.XposedInterface;
 
 /**
- * API 102 hook ledger. Explicitly named hooks are eligible for future replacement;
- * legacy HookUtil/direct interceptors are counted but never implicitly replaced.
+ * API 102 hook ledger. Named owner-domain hooks and all HookUtil registration sites
+ * are tracked independently and support atomic replacement without duplicate callbacks.
  *
  * <p>Do not infer hot-reload readiness from this registry: native producers, listeners,
  * receivers and long-lived Android callbacks are not owned by this registry. No retained HookHandle
@@ -70,9 +70,9 @@ final class Api102HookRegistry {
     // Each HookUtil installation site has its own slot, even if other sites hook the same
     // executable. Repeated registration of that *same* slot replaces rather than stacking.
     private final Map<SiteKey, XposedInterface.HookHandle> siteHandles = new LinkedHashMap<>();
-    private final Map<SiteKey, String> siteIds = new LinkedHashMap<>();
-    // Existing HookUtil callers can install multiple callbacks on the same Method. Retain each
-    // returned handle without assigning a fake ID or changing its installation semantics.
+    private long nextSiteId;
+    // Compatibility ledger for genuinely unnamed handles. HookUtil registrations now use
+    // named site slots; this list does not participate in automatic replacement.
     private final List<XposedInterface.HookHandle> unnamedHandles = new ArrayList<>();
 
     Api102HookRegistry(Installer installer) {
@@ -164,12 +164,11 @@ final class Api102HookRegistry {
         // Site IDs are unique even for different ClassLoader identities with the same name.
         // The ordinal is only a process-local discriminator: APK hot reload remains disabled.
         String id = "liquiddock.site:" + site + ':' + stableSiteTarget(executable)
-                + ":p" + priority + ":n" + (siteIds.size() + 1);
+                + ":p" + priority + ":n" + (++nextSiteId);
         XposedInterface.HookHandle handle = siteInstaller.install(
                 executable, id, priority, callback);
         if (handle == null) throw new IllegalStateException("null HookHandle: " + id);
         siteHandles.put(key, handle);
-        siteIds.put(key, id);
         return handle;
     }
 
