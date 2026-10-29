@@ -406,7 +406,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown() {
         if (shuttingDown) return;
         shuttingDown = true;
+        sourceBackend.logFolderEglLifetime("session-shutdown-queue");
         boolean queued = sourceBackend.postToRenderThread(() -> {
+            sourceBackend.logFolderEglLifetime("session-shutdown-cleanup-running");
             releaseOutput(output);
             output = null;
             if (prismalRenderer != null) {
@@ -419,7 +421,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             compositeTextureLocation = compositeCropRectLocation = -1;
             sourceBackend.shutdown();
         });
-        if (!queued) sourceBackend.shutdown();
+        if (!queued) {
+            sourceBackend.logFolderEglLifetime("session-shutdown-enqueue-rejected");
+            sourceBackend.shutdown();
+        }
     }
 
     private void ensureGl() {
