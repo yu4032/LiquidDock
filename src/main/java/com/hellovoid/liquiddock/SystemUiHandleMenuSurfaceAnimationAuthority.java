@@ -59,6 +59,13 @@ final class SystemUiHandleMenuSurfaceAnimationAuthority {
         }
     }
 
+    /** All alpha listeners must be gone before the global transaction Hook is retired. */
+    static boolean isIdleForHotReload() {
+        synchronized (ALPHA_LISTENERS) {
+            return ALPHA_LISTENERS.isEmpty();
+        }
+    }
+
     static SurfaceControl windowSurface(Object controller) {
         if (controller == null) return null;
         HookUtil.InvocationResult<Object> result =
