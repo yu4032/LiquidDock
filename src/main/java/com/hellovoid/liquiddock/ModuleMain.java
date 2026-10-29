@@ -205,6 +205,7 @@ public final class ModuleMain extends XposedModule {
             }
             Launcher450DockFunctionalIconRegistry.install(classLoader);
             NativeAdvancedMaterialHook.install(classLoader, runtimeConfig);
+            NativeWidgetComponentsHook.install(classLoader, runtimeConfig);
             // The OEM material silhouette is independent of Liquid Glass replacement.
             NativeMaterialContinuousCornersHook.install(
                     classLoader, runtimeConfig.enabled && runtimeConfig.glass.continuousCorners);

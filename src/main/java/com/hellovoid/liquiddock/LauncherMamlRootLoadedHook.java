@@ -22,10 +22,15 @@ final class LauncherMamlRootLoadedHook {
                         Object owner = chain.getThisObject();
                         if (owner instanceof View
                                 && owner.getClass().getName().endsWith(".MaMlHostView")
-                                && GlassRuntimeState.isWidgetEnabled()
                                 && args.length > 1 && args[1] != null) {
-                            LauncherWidgetBackgroundController.claimLoadedMamlRoot(
-                                    (View) owner, args[1]);
+                            if (GlassRuntimeState.isWidgetEnabled()) {
+                                LauncherWidgetBackgroundController.claimLoadedMamlRoot(
+                                        (View) owner, args[1]);
+                            } else if (NativeWidgetComponentsHook.isEnabled()) {
+                                // Component selection is independent of Prismal's material claim.
+                                LauncherWidgetComponentSelectionExecutor.claimLoadedMamlRoot(
+                                        (View) owner, args[1]);
+                            }
                         }
                         return result;
                     }, android.content.Context.class, "com.miui.maml.ScreenElementRoot");
