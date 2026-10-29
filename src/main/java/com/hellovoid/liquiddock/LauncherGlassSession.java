@@ -103,7 +103,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    /** Atomic UI-published geometry: GL never walks per-node frames from different pre-draws. */
+    /** Static geometry frames published together after the UI traversal. */
     private static final class StaticSceneSnapshot {
         static final StaticSceneSnapshot EMPTY =
                 new StaticSceneSnapshot(new StaticNodeState[0]);
@@ -155,7 +155,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile NodeState[] nodeStateSnapshot = new NodeState[0];
     private volatile StaticNodeState[] staticNodeStateSnapshot = new StaticNodeState[0];
     private volatile StaticSceneSnapshot publishedStaticScene = StaticSceneSnapshot.EMPTY;
-    // GL-thread diagnostic: omitted stale buffers must not replace a newer scroll frame.
+    // GL-thread trace counter for superseded output frames.
     private long staleStaticSwapDrops;
     // Render-thread only. EGL surfaces are created through sourceBackend's shared EGL context.
     private final Map<LauncherGlassSinkView, OutputState> outputs = new WeakHashMap<>();
@@ -579,9 +579,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
         if (shuttingDown || beforeScrollX == afterScrollX) return;
         workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
-        // Paging has no source-frame dependency: submit latest scroll immediately.
-        // A single immutable scroll/geometry snapshot and stale-swap rejection keep
-        // this fast path from mixing revisions across nodes.
+        // Scroll geometry can redraw from the cached backdrop without a main-thread hop.
         scheduleOutputRender(true, false, true);
     }
 
@@ -717,8 +715,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             boolean staticDirty, boolean dragDirty, boolean immediate) {
         if (shuttingDown || folderFrameFrozen) return;
         if (outputRenderState.request(staticDirty, dragDirty)) {
-            // Scroll mutations and completed UI pre-draw traversals can enter GL
-            // directly; other updates still coalesce on the next main-thread turn.
+            // Scroll mutations and completed UI pre-draw traversals use the direct GL queue.
             boolean posted = immediate
                     ? postRender(this::drainOutputRenderWork)
                     : postOutputRenderAfterUi();
@@ -996,8 +993,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
         if (staticChanged) publishStaticSceneSnapshot();
         if (staticChanged || dragChanged) {
-            // The scroll fast path already owns scroll-only redraws. Reposting them
-            // from pre-draw creates a second Swap for the same revision.
+            // Scroll-only redraws are already queued by the mutation hook.
             scheduleOutputRender(staticChanged, dragChanged, true);
         }
     }
@@ -1405,9 +1401,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             prismalRenderer.drawGlass(
                     prismalGeometry, params, highlights, state.interaction, visibleAlpha);
         }
-        // A newer native scroll or geometry publication arrived while GL was drawing.
-        // Discard this obsolete back buffer rather than letting it overtake newer icons.
-        // The existing queued-work owner will render the latest UI pre-draw snapshot.
+        // A newer scroll or geometry revision supersedes this back buffer.
+        // Its mutation has already requested a fresh render.
         if (!workspaceScrollProjection.isCurrent(scrollFrame)
                 || publishedStaticScene != scene) {
             if (Trace.isEnabled() && workspaceSource) {
