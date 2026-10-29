@@ -246,6 +246,10 @@ internal val recentsBlurSpec = IntSpec(
     summary = "控制进入多任务界面后壁纸背景的系统模糊；保留系统过渡动画",
 )
 internal val iconSizeOffsetSpec = IntSpec(ConfigSchema.Glass.ICON_SIZE_OFFSET, "图标尺寸偏移", "dp/边")
+internal val advancedMaterialBlurSpec = IntSpec(
+    ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR, "图标与多任务原生模糊", "px",
+    summary = "仅调整新增的图标和多任务按钮原生背景模糊；Dock、小组件与文件夹由 HyperOS 控制"
+)
 internal val iconCornerRadiusSpec = IntSpec(ConfigSchema.Glass.ICON_CORNER_RADIUS, "图标圆角", "dp")
 internal val widgetSizeOffsetSpec = IntSpec(ConfigSchema.Glass.WIDGET_SIZE_OFFSET, "小部件尺寸偏移", "dp/边")
 internal val widgetCornerRadiusSpec = IntSpec(ConfigSchema.Glass.WIDGET_CORNER_RADIUS, "小部件圆角", "dp")

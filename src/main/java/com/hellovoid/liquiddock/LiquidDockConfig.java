@@ -226,7 +226,7 @@ final class LiquidDockConfig {
     }
 
     static final class Glass {
-        final boolean enabled, securityCenterEnabled, systemUiHandleMenuEnabled,
+        final boolean enabled, advancedMaterialEnabled, securityCenterEnabled, systemUiHandleMenuEnabled,
                 folderEnabled, openFolderEnabled, widgetEnabled, widgetDarkContent, iconEnabled,
                 functionalDockIconEnabled, recentsCapsuleEnabled;
         final GlassComponentStyle iconStyle;
@@ -259,7 +259,9 @@ final class LiquidDockConfig {
             handleMenuCornerRadiusDp = GlassComponentCorners.readDp(c, ConfigSchema.Glass.HANDLE_MENU_CORNER_RADIUS);
             continuousCorners = c.b(ConfigSchema.Glass.CONTINUOUS_CORNERS.name(),
                     ConfigSchema.Glass.CONTINUOUS_CORNERS.runtimeFallback());
-            enabled = c.b(ConfigSchema.Glass.ENABLED.name(),
+            advancedMaterialEnabled = c.b(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(),
+                    ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.runtimeFallback());
+            enabled = !advancedMaterialEnabled && c.b(ConfigSchema.Glass.ENABLED.name(),
                     ConfigSchema.Glass.ENABLED.runtimeFallback());
             securityCenterEnabled = c.b(ConfigSchema.Glass.SECURITY_CENTER_GLASS.name(),
                     ConfigSchema.Glass.SECURITY_CENTER_GLASS.runtimeFallback());

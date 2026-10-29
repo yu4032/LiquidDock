@@ -216,6 +216,14 @@ public final class ConfigSchema {
     }
 
     public static final class Glass {
+        /** Mutually exclusive with liquid_glass. Native mode wins for imported conflicting profiles. */
+        public static final ConfigKey<Boolean> ADVANCED_MATERIAL_ENABLED = bool(
+                "native_advanced_material_enabled", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
+        /** Native background blur for icon graphics and Recents capsules, not OEM widget parameters. */
+        public static final ConfigKey<Integer> ADVANCED_MATERIAL_BLUR = integer(
+                "native_advanced_material_blur", 80, 80, 80, 0, 400,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> CONTINUOUS_CORNERS = bool(
                 "liquid_continuous_corners", false, false, false, ConfigKey.ExportMode.ALWAYS);
         // Whole-silhouette cast shadow and optically lit SDF contour are distinct
@@ -664,7 +672,8 @@ public final class ConfigSchema {
                 Glass.BACKLIT_ENABLED, Glass.BACKLIT_WIDTH,
                 Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS,
                 Glass.BACKLIT_EXTENT);
-        add(keys, Glass.ENABLED, Glass.CONTINUOUS_CORNERS, Glass.WALLPAPER_FLICKER_FIX,
+        add(keys, Glass.ENABLED, Glass.ADVANCED_MATERIAL_ENABLED,
+                Glass.ADVANCED_MATERIAL_BLUR, Glass.CONTINUOUS_CORNERS, Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
                 Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_CORNER_RADIUS,

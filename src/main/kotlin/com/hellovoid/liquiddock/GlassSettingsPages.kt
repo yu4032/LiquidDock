@@ -62,13 +62,24 @@ internal fun LiquidPage(
         }
         item {
             SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.ENABLED,
-                    stringResource(R.string.liquid_enable),
-                    stringResource(R.string.liquid_enable_summary),
-                    masterEnabled,
-                ) { liquidGlass = it }
+                val otherRevision = LocalSettingsPreferenceRevisions.current[
+                    ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name()] ?: 0
+                val otherEnabled = remember(otherRevision) {
+                    prefs.getBoolean(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false)
+                }
+                SwitchPreference(
+                    checked = liquidGlass && !otherEnabled,
+                    onCheckedChange = { next ->
+                        prefs.edit()
+                            .putBoolean(ConfigSchema.Glass.ENABLED.name(), next)
+                            .putBoolean(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false)
+                            .apply()
+                        liquidGlass = next
+                    },
+                    title = stringResource(R.string.liquid_enable),
+                    summary = "与高级材质互斥；切换渲染管线后需重启相应应用",
+                    enabled = masterEnabled,
+                )
             }
         }
         item(key = "continuous-glass-corners") {
@@ -81,6 +92,14 @@ internal fun LiquidPage(
                     masterEnabled,
                 )
             }
+        }
+        item(key = "native-material-link") {
+            ModernFeatureCard(
+                title = stringResource(R.string.page_native_advanced_material),
+                summary = "使用 HyperOS 原高级材质替代自绘液态玻璃；图标与多任务按钮使用系统模糊",
+                onClick = { open(Page.AdvancedMaterial) },
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
         }
         liquidEntries.forEach { entry ->
             item {

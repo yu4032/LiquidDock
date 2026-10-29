@@ -85,6 +85,14 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         }
         return basics + optics
     }
+    if (page == Page.AdvancedMaterial) {
+        return listOf(
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(),
+                "启用高级材质", "与液态玻璃互斥"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(),
+                "图标与多任务原生模糊", "仅影响新增的原生材质背景"),
+        )
+    }
     if (page == Page.Liquid) {
         return listOf(CustomGlassSearchRow(
             ConfigSchema.Glass.CONTINUOUS_CORNERS.name(), "iOS 风格连续圆角",
@@ -187,6 +195,11 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
  */
 internal fun customDenseFocusIndex(page: Page, key: String): Int? {
     val index = when (page) {
+        Page.AdvancedMaterial -> when (key) {
+            ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name() -> 2
+            ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name() -> 4
+            else -> -1
+        }
         Page.Liquid -> if (key == ConfigSchema.Glass.CONTINUOUS_CORNERS.name()) 2 else -1
         Page.ShortcutPopupCustomization, Page.HandleMenuCustomization -> {
             val popup = page == Page.ShortcutPopupCustomization
