@@ -43,6 +43,15 @@ final class MiuiSearchboxGlassHook {
                 else state.session.applyLiveGlassConfig(config.glass, appearance);
             }
         }
+        if (config.enabled && config.glass.advancedMaterialEnabled
+                && observedBackgroundClass != null) {
+            for (Activity activity : new ArrayList<>(OBSERVED_ACTIVITIES.keySet())) {
+                if (activity == null || activity.isFinishing()) continue;
+                NativeAdvancedMaterialSurface.decorateVendor(
+                        resolveBackground(activity, observedBackgroundClass),
+                        config.glass.continuousCorners);
+            }
+        }
         if (enabled && observedBackgroundClass != null && observedBlurEnabledMethod != null) {
             for (Activity activity : new ArrayList<>(OBSERVED_ACTIVITIES.keySet())) {
                 if (activity != null && !activity.isFinishing()) {

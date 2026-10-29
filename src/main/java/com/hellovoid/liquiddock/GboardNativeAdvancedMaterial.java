@@ -47,6 +47,25 @@ final class GboardNativeAdvancedMaterial {
         plate.addOnAttachStateChangeListener(state.attachListener);
     }
 
+    static void onLiveConfigChanged(boolean enabled) {
+        for (View plate : new java.util.ArrayList<>(OWNERS.keySet())) {
+            if (plate == null) continue;
+            if (!enabled) {
+                release(plate);
+            } else {
+                State state = OWNERS.get(plate);
+                if (state != null) {
+                    NativeAdvancedMaterialStyle style = NativeAdvancedMaterialStyle.get();
+                    if (state.blurRadius != style.radiusPx) {
+                        MiBlurBridge.setPassWindowBlurRadius(plate, style.radiusPx);
+                        state.blurRadius = style.radiusPx;
+                    }
+                    style.updateOwned(plate);
+                }
+            }
+        }
+    }
+
     static void release(GboardFloatingStructureResolver.Structure structure) {
         if (structure != null) release(structure.stockBackground);
     }

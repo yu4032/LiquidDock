@@ -41,6 +41,7 @@ final class ExternalGlassLiveConfigState {
     static boolean isRelevantKey(String key) {
         return key == null
                 || key.startsWith("liquid_")
+                || key.startsWith("native_advanced_material_")
                 || key.startsWith("third_party_glass.")
                 || key.startsWith("animation_")
                 || key.startsWith("launcher_surface_component_")
@@ -55,9 +56,12 @@ final class ExternalGlassLiveConfigState {
         try {
             ConfigReader reader = ConfigReader.load();
             GlassEdgeEffects.refresh(reader);
+            NativeAdvancedMaterialStyle.update(reader);
             LiquidDockConfig config = LiquidDockConfig.from(reader);
             if ("com.google.android.inputmethod.latin".equals(target)) {
                 GboardFloatingGlassCoordinator.onLiveConfigChanged(reader, config);
+                GboardNativeAdvancedMaterial.onLiveConfigChanged(
+                        config.enabled && config.glass.advancedMaterialEnabled);
             } else if ("com.android.quicksearchbox".equals(target)) {
                 MiuiSearchboxGlassHook.onLiveConfigChanged(reader, config);
             } else if (SecurityCenterProcessPolicy.PACKAGE.equals(target)) {
