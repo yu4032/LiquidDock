@@ -57,14 +57,14 @@ class SettingsMetaTest {
                     com.hellovoid.liquiddock.config.ConfigSchema.Glass.BASE_COLOR_ALPHA)
             })
         }
-        assertEquals(expandedFolderSearchSpecs.map(IntSpec::key).toSet(),
+        assertEquals(folderGlassFocusCell.keys,
             customGlassSearchRows(Page.GlassFolders).map { it.key }.toSet())
     }
 
     @Test fun folderCellOrderAndSearchFocusUseTypedSharedIds() {
         assertEquals(FolderGlassCell.entries.map { it.id }, folderGlassCellOrder)
         assertEquals(folderGlassCellOrder.size, folderGlassCellOrder.toSet().size)
-        assertEquals(expandedFolderSearchSpecs.map(IntSpec::key).toSet(),
+        assertEquals(customGlassSearchRows(Page.GlassFolders).map { it.key }.toSet(),
             folderGlassFocusCell.keys)
         folderGlassFocusCell.values.forEach { assertTrue(it in folderGlassCellOrder) }
         assertEquals(FolderGlassCell.OPEN_FILL_ALPHA.id,

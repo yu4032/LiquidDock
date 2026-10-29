@@ -325,6 +325,16 @@ internal enum class FolderGlassCell(val id: String) {
 }
 internal val folderGlassCellOrder: List<String> = FolderGlassCell.entries.map { it.id }
 internal val folderGlassFocusCell: Map<String, String> = mapOf(
+    ConfigSchema.Glass.SMALL_FOLDER_GLASS.name() to FolderGlassCell.SMALL_ENABLED.id,
+    smallFolderSizeOffsetSpec.key to FolderGlassCell.SMALL_GEOMETRY.id,
+    smallFolderCornerRadiusSpec.key to FolderGlassCell.SMALL_GEOMETRY.id,
+    ConfigSchema.Glass.LARGE_FOLDER_GLASS.name() to FolderGlassCell.LARGE_ENABLED.id,
+    largeFolderSizeOffsetSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
+    largeFolderCornerRadiusSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
+    largeFolderPreviewIconScaleSpec.key to FolderGlassCell.LARGE_PREVIEW.id,
+    ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE.name() to FolderGlassCell.LARGE_NATIVE_OUTLINE.id,
+    ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT.name() to FolderGlassCell.LARGE_MINGOU_COMPAT.id,
+    ConfigSchema.Glass.OPEN_FOLDER_GLASS.name() to FolderGlassCell.OPEN_ENABLED.id,
     openFolderBlurSpec.key to FolderGlassCell.OPEN_BLUR.id,
     openFolderNativeBlurSpec.key to FolderGlassCell.OPEN_BLUR.id,
     openFolderIorSpec.key to FolderGlassCell.OPEN_OPTICS.id,

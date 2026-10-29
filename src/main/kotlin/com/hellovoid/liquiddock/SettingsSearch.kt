@@ -58,6 +58,9 @@ internal fun settingsSearchCatalog(
 internal data class CustomGlassSearchRow(val key: String, val title: String, val summary: String)
 
 internal val expandedFolderSearchSpecs: List<IntSpec> = listOf(
+    smallFolderSizeOffsetSpec, smallFolderCornerRadiusSpec,
+    largeFolderSizeOffsetSpec, largeFolderCornerRadiusSpec,
+    largeFolderPreviewIconScaleSpec,
     openFolderBlurSpec, openFolderNativeBlurSpec, openFolderIorSpec,
     openFolderThicknessSpec, openFolderTintSpec,
     openFolderBaseColorRedSpec, openFolderBaseColorGreenSpec,
@@ -84,7 +87,17 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         return basics + optics
     }
     if (page == Page.GlassFolders) {
-        return expandedFolderSearchSpecs.map { spec ->
+        val toggles = listOf(
+            CustomGlassSearchRow(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), "小文件夹玻璃", ""),
+            CustomGlassSearchRow(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), "大文件夹玻璃", ""),
+            CustomGlassSearchRow(ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE.name(),
+                "显示原生大文件夹描边", ""),
+            CustomGlassSearchRow(ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT.name(),
+                "绵狗修改版桌面适配", ""),
+            CustomGlassSearchRow(ConfigSchema.Glass.OPEN_FOLDER_GLASS.name(),
+                "展开文件夹玻璃背景", ""),
+        )
+        return toggles + expandedFolderSearchSpecs.map { spec ->
             CustomGlassSearchRow(spec.key, spec.title, spec.summary)
         }
     }
