@@ -25,9 +25,13 @@ final class NativeAdvancedMaterialStyle {
         int globalRadius = reader.i(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(), 80);
         String scopedBlurKey = scope != null
                 ? ScopedGlassOptics.key(scope, ConfigSchema.Glass.BLUR) : null;
-        radiusPx = scopedBlurKey != null && reader.has(scopedBlurKey)
+        int scopedRadius = scopedBlurKey != null && reader.has(scopedBlurKey)
                 ? Math.max(0, Math.min(400, Math.round(reader.f(scopedBlurKey, globalRadius))))
                 : globalRadius;
+        radiusPx = ScopedGlassOptics.GBOARD.equals(scope)
+                && reader.has(GboardGlassPreferences.BLUR_KEY)
+                ? Math.max(0, Math.min(400, reader.i(GboardGlassPreferences.BLUR_KEY, scopedRadius)))
+                : scopedRadius;
         overrideVendorBlur = reader.b(
                 ConfigSchema.Glass.ADVANCED_MATERIAL_OVERRIDE_NATIVE_BLUR.name(), false);
         int red = scopedChannel(reader, scope, ConfigSchema.Glass.TINT_RED,
@@ -38,6 +42,12 @@ final class NativeAdvancedMaterialStyle {
                 ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE);
         int alpha = scopedChannel(reader, scope, ConfigSchema.Glass.TINT_ALPHA,
                 ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_ALPHA);
+        if (ScopedGlassOptics.GBOARD.equals(scope)) {
+            red = reader.i(GboardGlassPreferences.TINT_RED_KEY, red);
+            green = reader.i(GboardGlassPreferences.TINT_GREEN_KEY, green);
+            blue = reader.i(GboardGlassPreferences.TINT_BLUE_KEY, blue);
+            alpha = reader.i(GboardGlassPreferences.TINT_ALPHA_KEY, alpha);
+        }
         tintColor = Color.argb(clamp(alpha), clamp(red), clamp(green), clamp(blue));
         fillColor = color(reader,
                 ConfigSchema.Glass.ADVANCED_MATERIAL_FILL_RED.name(),

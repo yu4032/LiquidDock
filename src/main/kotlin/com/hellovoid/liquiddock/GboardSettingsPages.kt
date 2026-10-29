@@ -109,7 +109,10 @@ internal fun GboardSettingsPage(
         )
     }
 
-    fun globalBlur(): Float = if (prefs.contains("${ConfigSchema.Glass.BLUR.name()}_tenths")) {
+    fun globalBlur(): Float = if (nativeEnabled) {
+        prefs.getInt(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(),
+            ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.uiDefault()).toFloat()
+    } else if (prefs.contains("${ConfigSchema.Glass.BLUR.name()}_tenths")) {
         prefs.getInt("${ConfigSchema.Glass.BLUR.name()}_tenths", 20) / 10f
     } else {
         prefs.getInt(ConfigSchema.Glass.BLUR.name(), ConfigSchema.Glass.BLUR.uiDefault()).toFloat()
@@ -153,6 +156,7 @@ internal fun GboardSettingsPage(
     }
     var appearanceGeneration by remember { mutableStateOf(0) }
     val controlsEnabled = masterEnabled && liquidEnabled && gboardEnabled
+    val appearanceEnabled = masterEnabled && (liquidEnabled || nativeEnabled) && gboardEnabled
     val hasAppearanceOverride = appearanceGeneration.let {
         prefs.contains(GboardGlassPreferences.BLUR_KEY) ||
             prefs.contains(GboardGlassPreferences.TINT_RED_KEY) ||
@@ -170,10 +174,14 @@ internal fun GboardSettingsPage(
             .remove(GboardGlassPreferences.TINT_ALPHA_KEY)
             .apply()
         blur = globalBlur()
-        tintR = globalChannel(ConfigSchema.Glass.TINT_RED.name(), ConfigSchema.Glass.TINT_RED.uiDefault())
-        tintG = globalChannel(ConfigSchema.Glass.TINT_GREEN.name(), ConfigSchema.Glass.TINT_GREEN.uiDefault())
-        tintB = globalChannel(ConfigSchema.Glass.TINT_BLUE.name(), ConfigSchema.Glass.TINT_BLUE.uiDefault())
-        tintAlpha = globalChannel(ConfigSchema.Glass.TINT_ALPHA.name(), ConfigSchema.Glass.TINT_ALPHA.uiDefault())
+        tintR = globalChannel(
+            if (nativeEnabled) ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_RED.name() else ConfigSchema.Glass.TINT_RED.name(), 255)
+        tintG = globalChannel(
+            if (nativeEnabled) ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_GREEN.name() else ConfigSchema.Glass.TINT_GREEN.name(), 255)
+        tintB = globalChannel(
+            if (nativeEnabled) ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_BLUE.name() else ConfigSchema.Glass.TINT_BLUE.name(), 255)
+        tintAlpha = globalChannel(
+            if (nativeEnabled) ConfigSchema.Glass.ADVANCED_MATERIAL_TINT_ALPHA.name() else ConfigSchema.Glass.TINT_ALPHA.name(), 0)
         appearanceGeneration++
     }
 
@@ -191,7 +199,7 @@ internal fun GboardSettingsPage(
         item {
             GboardPageHeader(
                 "Gboard",
-                "仅作用于 Gboard 悬浮键盘；颜色与模糊度未单独设置时继承全局液态玻璃。",
+                "仅作用于 Gboard 悬浮键盘；模糊与颜色未单独设置时继承当前全局材质。",
             )
         }
         item { SmallTitle("功能") }
@@ -251,7 +259,7 @@ internal fun GboardSettingsPage(
                     value = tintR,
                     onValueChange = { tintR = it },
                     prefs = prefs,
-                    enabled = controlsEnabled,
+                    enabled = appearanceEnabled,
                     max = 255,
                 )
                 GboardValueSlider(
@@ -260,7 +268,7 @@ internal fun GboardSettingsPage(
                     value = tintG,
                     onValueChange = { tintG = it },
                     prefs = prefs,
-                    enabled = controlsEnabled,
+                    enabled = appearanceEnabled,
                     max = 255,
                 )
                 GboardValueSlider(
@@ -269,7 +277,7 @@ internal fun GboardSettingsPage(
                     value = tintB,
                     onValueChange = { tintB = it },
                     prefs = prefs,
-                    enabled = controlsEnabled,
+                    enabled = appearanceEnabled,
                     max = 255,
                 )
             }
@@ -282,7 +290,7 @@ internal fun GboardSettingsPage(
                     value = tintAlpha,
                     onValueChange = { tintAlpha = it },
                     prefs = prefs,
-                    enabled = controlsEnabled,
+                    enabled = appearanceEnabled,
                     max = 255,
                 )
             }
@@ -296,7 +304,7 @@ internal fun GboardSettingsPage(
                     value = blur,
                     onValueChange = { blur = it },
                     prefs = prefs,
-                    enabled = controlsEnabled,
+                    enabled = appearanceEnabled,
                     max = 60,
                     unit = "px",
                 )
@@ -307,8 +315,8 @@ internal fun GboardSettingsPage(
             GboardSettingsCard {
                 ArrowPreference(
                     title = "恢复继承全局外观",
-                    summary = "删除 Gboard 的颜色与模糊度覆盖，重新跟随全局液态玻璃参数",
-                    enabled = controlsEnabled && hasAppearanceOverride,
+                    summary = "删除 Gboard 独立颜色与模糊设置，恢复继承当前材质全局参数",
+                    enabled = appearanceEnabled && hasAppearanceOverride,
                     onClick = { clearAppearanceOverrides() },
                 )
             }

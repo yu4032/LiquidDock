@@ -25,6 +25,9 @@ final class GboardNativeAdvancedMaterial {
         if (structure == null) return;
         View plate = structure.stockBackground;
         if (plate == null || !plate.isAttachedToWindow()) return;
+        NativeAdvancedMaterialStyle profile =
+                NativeAdvancedMaterialStyle.forScope(ScopedGlassOptics.GBOARD);
+        blurRadius = profile.radiusPx;
         State existing = OWNERS.get(plate);
         if (existing != null) {
             if (existing.blurRadius != blurRadius) {
@@ -39,7 +42,7 @@ final class GboardNativeAdvancedMaterial {
         if (Boolean.TRUE.equals(MiBlurBridge.getPassWindowBlurEnabled(plate))) return;
         State state = new State(plate, radius(plate, structure.keyboardArea), blurRadius, continuous);
         if (!MiBlurBridge.applyPassWindowBlur(
-                plate, blurRadius, NativeAdvancedMaterialStyle.get().blendColors())) return;
+                plate, blurRadius, profile.blendColors())) return;
         OWNERS.put(plate, state);
         plate.setOutlineProvider(state.provider);
         plate.setBackground(null);
@@ -55,7 +58,8 @@ final class GboardNativeAdvancedMaterial {
             } else {
                 State state = OWNERS.get(plate);
                 if (state != null) {
-                    NativeAdvancedMaterialStyle style = NativeAdvancedMaterialStyle.get();
+                    NativeAdvancedMaterialStyle style =
+                            NativeAdvancedMaterialStyle.forScope(ScopedGlassOptics.GBOARD);
                     if (state.blurRadius != style.radiusPx) {
                         MiBlurBridge.setPassWindowBlurRadius(plate, style.radiusPx);
                         state.blurRadius = style.radiusPx;
