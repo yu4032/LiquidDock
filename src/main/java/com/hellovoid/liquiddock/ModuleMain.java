@@ -61,37 +61,7 @@ public final class ModuleMain extends XposedModule {
             return;
         }
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
-            ClassLoader classLoader = param.getClassLoader();
-            if (classLoader == null) return;
-
-            // Gesture-handle ownership is independent from keyguard/glass integrations. Keep its
-            // bootstrap isolated so an unrelated SystemUI compatibility failure cannot suppress it.
-            try {
-                GestureHandleRuntimeState.initialize(
-                        Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP));
-                SystemUiGestureHandleFadeHook.install(classLoader);
-            } catch (Throwable error) {
-                Api101Bridge.log("[DC][GestureHandle] SystemUI bootstrap failed", error);
-            }
-
-            try {
-                SystemUiKeyguardGoneSource.install(classLoader);
-                ConfigReader configReader = ConfigReader.load();
-                GlassEdgeEffects.refresh(configReader);
-                LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
-                // Install once regardless of initial preference. The hook's runtime gate
-                // stays inert until the user enables caption-menu glass.
-                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(configReader, runtimeConfig);
-                if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
-                    SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
-                } else {
-                    Api101Bridge.log(
-                            "[DC][SystemUiHandleMenuGlass] surface animation authority unavailable; fail closed");
-                }
-                ExternalGlassLiveConfigState.initialize(packageName);
-            } catch (Throwable error) {
-                Api101Bridge.log("[DC] SystemUI integration init failed", error);
-            }
+            installSystemUi(param.getClassLoader());
             return;
         }
         if (SecurityCenterProcessPolicy.PACKAGE.equals(packageName)) {
@@ -224,6 +194,39 @@ public final class ModuleMain extends XposedModule {
         }
     }
 
+    /** Fresh installation and reload both use the same SystemUI integration sequence. */
+    private static void installSystemUi(ClassLoader classLoader) {
+        if (classLoader == null) return;
+            // Gesture-handle ownership is independent from keyguard/glass integrations. Keep its
+            // bootstrap isolated so an unrelated SystemUI compatibility failure cannot suppress it.
+            try {
+                GestureHandleRuntimeState.initialize(
+                        Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP));
+                SystemUiGestureHandleFadeHook.install(classLoader);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][GestureHandle] SystemUI bootstrap failed", error);
+            }
+
+            try {
+                SystemUiKeyguardGoneSource.install(classLoader);
+                ConfigReader configReader = ConfigReader.load();
+                GlassEdgeEffects.refresh(configReader);
+                LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
+                // Install once regardless of initial preference. The hook's runtime gate
+                // stays inert until the user enables caption-menu glass.
+                SystemUiHandleMenuGlassHook.onLiveGlassConfigChanged(configReader, runtimeConfig);
+                if (SystemUiHandleMenuSurfaceAnimationAuthority.install()) {
+                    SystemUiHandleMenuGlassHook.install(classLoader, runtimeConfig.glass);
+                } else {
+                    Api101Bridge.log(
+                            "[DC][SystemUiHandleMenuGlass] surface animation authority unavailable; fail closed");
+                }
+                ExternalGlassLiveConfigState.initialize(SYSTEM_UI_PACKAGE);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC] SystemUI integration init failed", error);
+            }
+    }
+
     /** First-install initialization, never reinterpretation of prior persisted keys. */
     private static void initializeCurrentProfileIfEmpty() {
         try {
@@ -244,6 +247,9 @@ public final class ModuleMain extends XposedModule {
      */
     @Override
     public boolean onHotReloading(@NonNull HotReloadingParam param) {
+        if (SYSTEM_UI_PACKAGE.equals(loadedProcessName)) {
+            return retireSystemUiForHotReload(param);
+        }
         if (Api102HookRegistry.installedCount() != 0 || !reloadGate.beginHandoff()) {
             Api101Bridge.log("[DC][API102] hot reload rejected: active process owners or HookHandles");
             return false;
@@ -258,12 +264,92 @@ public final class ModuleMain extends XposedModule {
         }
     }
 
+    /**
+     * Conservative SystemUI-only reload: if a caption menu has ever owned ViewRoot,
+     * PassBlur, SurfaceTexture or EGL resources, reject. This is intentionally not
+     * full graphics-session teardown, and does not enable reload for other scopes.
+     *
+     * Each successful stop is irreversible in this generation. A failed stop
+     * rejects reload and may require an ordinary SystemUI restart to restore a
+     * partially retired integration.
+     */
+    private boolean retireSystemUiForHotReload(HotReloadingParam param) {
+        if (getApiVersion() < 102
+                || !SystemUiHandleMenuSurfaceAnimationAuthority.isIdleForHotReload()) {
+            Api101Bridge.log("[DC][API102] SystemUI reload rejected: surface alpha listeners");
+            return false;
+        }
+        HookUtil.InvocationResult<Object> app =
+                HookUtil.tryInvokeActivityThreadCurrentApplication();
+        if (!app.succeeded() || !(app.value() instanceof android.content.Context)) {
+            Api101Bridge.log("[DC][API102] SystemUI reload rejected: no live application");
+            return false;
+        }
+        if (!SystemUiHandleMenuGlassHook.retireUnusedForHotReload()) {
+            Api101Bridge.log("[DC][API102] SystemUI reload rejected: caption GPU/View owner");
+            return false;
+        }
+        if (!ExternalGlassLiveConfigState.shutdownForFutureReload()
+                || !SystemUiKeyguardGoneSource.stopForFutureReload()
+                || !SystemUiGestureHandleFadeHook.stopForFutureReload()) {
+            Api101Bridge.log("[DC][API102] SystemUI reload rejected: owner cleanup incomplete");
+            return false;
+        }
+        Api102HookRegistry registry = Api102HookRegistry.processRegistry();
+        // Every identified handle belongs to an owner domain, already stopped above.
+        if (registry.installedCount() != registry.unidentifiedCount()
+                || !registry.releaseUnidentifiedForReload()
+                || registry.installedCount() != 0) {
+            Api101Bridge.log("[DC][API102] SystemUI reload rejected: residual HookHandles");
+            return false;
+        }
+        if (!reloadGate.beginRetiredOwnerHandoff()) {
+            Api101Bridge.log("[DC][API102] SystemUI reload rejected: owner gate");
+            return false;
+        }
+        try {
+            // Only a loader-neutral String is allowed to cross the generation boundary.
+            param.setSavedInstanceState("systemui-reload:" + loadedProcessName);
+            return true;
+        } catch (Throwable error) {
+            Api101Bridge.log("[DC][API102] SystemUI saved-state transfer failed", error);
+            return false;
+        }
+    }
+
     @Override
     public void onHotReloaded(@NonNull HotReloadedParam param) {
         // Only the no-owners path above can succeed. Never move a HookHandle, View, or closure
         // across class loaders, and never try to replay onPackageReady manually.
         Api101Bridge.init(this);
         Object saved = param.getSavedInstanceState();
+        if (("systemui-reload:" + SYSTEM_UI_PACKAGE).equals(saved)
+                && SYSTEM_UI_PACKAGE.equals(param.getProcessName())) {
+            loadedProcessName = SYSTEM_UI_PACKAGE;
+            refreshDebugLogging();
+            try {
+                // Old owners have already detached before returning true. These handles are
+                // idempotently unhooked as a defensive check, never transferred to new owners.
+                for (io.github.libxposed.api.XposedInterface.HookHandle handle
+                        : param.getOldHookHandles()) {
+                    handle.unhook();
+                }
+                HookUtil.InvocationResult<Object> application =
+                        HookUtil.tryInvokeActivityThreadCurrentApplication();
+                if (!application.succeeded()
+                        || !(application.value() instanceof android.content.Context)) {
+                    throw new IllegalStateException("SystemUI application unavailable on reload");
+                }
+                if (!reloadGate.enterOwnerLifecycle()) {
+                    throw new IllegalStateException("new generation owner gate closed");
+                }
+                installSystemUi(((android.content.Context) application.value()).getClassLoader());
+                Api101Bridge.log("[DC][API102] SystemUI hooks reinstalled in new generation");
+            } catch (Throwable error) {
+                Api101Bridge.errorAlways("[DC][API102] SystemUI reload bootstrap failed", error);
+            }
+            return;
+        }
         loadedProcessName = saved instanceof String ? (String) saved : null;
         refreshDebugLogging();
         Api101Bridge.log("[DC][API102] restored uninitialized process generation");
