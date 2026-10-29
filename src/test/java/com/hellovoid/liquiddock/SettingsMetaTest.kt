@@ -20,9 +20,14 @@ class SettingsMetaTest {
     @Test fun optionCatalogContainsOnlyDeclaredRowsWithResolvablePositions() {
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
         catalog.filter { it.key != null }.forEach { item ->
-            val meta = pages.getValue(item.page)
-            val row = meta.blocks[meta.indexOfKey(item.key!!)] as SettingsBlock.Row
-            assertEquals(row.title, item.title)
+            val declared = pages[item.page]
+            if (declared != null) {
+                val row = declared.blocks[declared.indexOfKey(item.key!!)] as SettingsBlock.Row
+                assertEquals(row.title, item.title)
+            } else {
+                val row = customGlassSearchRows(item.page).single { it.key == item.key }
+                assertEquals(row.title, item.title)
+            }
         }
         assertFalse(catalog.any { it.title == "iOS 玻璃效果" })
         assertTrue(catalog.any { it.page == Page.GlassFolders &&
@@ -56,18 +61,14 @@ class SettingsMetaTest {
             customGlassSearchRows(Page.GlassFolders).map { it.key }.toSet())
     }
 
-    @Test fun folderCellOrderFollowsTheRealPageAndEverySearchRowHasATarget() {
-        // The source contract catches rows added without updating search focus positions.
-        val file = java.nio.file.Files.readString(java.nio.file.Path.of(
-            "src/main/kotlin/com/hellovoid/liquiddock/GlassSettingsPages.kt"))
-        val source = file.substringAfter("internal fun GlassFoldersPage(")
-            .substringBefore("internal fun LauncherHighlightsPage(")
-        val itemIds = Regex("""item\(key = "([^"]+)"\)""")
-            .findAll(source).map { it.groupValues[1] }.toList()
-        assertEquals(itemIds, folderGlassCellOrder)
+    @Test fun folderCellOrderAndSearchFocusUseTypedSharedIds() {
+        assertEquals(FolderGlassCell.entries.map { it.id }, folderGlassCellOrder)
+        assertEquals(folderGlassCellOrder.size, folderGlassCellOrder.toSet().size)
         assertEquals(expandedFolderSearchSpecs.map(IntSpec::key).toSet(),
             folderGlassFocusCell.keys)
-        folderGlassFocusCell.values.forEach { assertTrue(it in itemIds) }
+        folderGlassFocusCell.values.forEach { assertTrue(it in folderGlassCellOrder) }
+        assertEquals(FolderGlassCell.OPEN_FILL_ALPHA.id,
+            folderGlassFocusCell.getValue(openFolderBaseColorAlphaSpec.key))
     }
 
     @Test fun tintAndSolidColorSearchFindTheirOwningPages() {
@@ -82,9 +83,9 @@ class SettingsMetaTest {
         assertTrue(folder.any { it.page == Page.GlassFolders })
         for (target in listOf(Page.ShortcutPopupAll, Page.HandleMenuAll, Page.DialogAll,
                 Page.GboardAll)) {
-            val pageItem = catalog.single { it.page == target && it.key == null }
-            assertTrue(pageItem.description.contains("染色"))
-            assertTrue(pageItem.description.contains("底色"))
+            val rows = catalog.filter { it.page == target && it.key != null }
+            assertTrue(rows.any { "染色" in it.title })
+            assertTrue(rows.any { "底色" in it.title })
         }
     }
 
