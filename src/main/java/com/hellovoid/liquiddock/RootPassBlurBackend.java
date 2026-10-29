@@ -81,6 +81,10 @@ final class RootPassBlurBackend {
     private volatile int maxTextureSize;
     /** Old, invalid ViewRoot generations are quarantined, never freed pre-commit. */
     private final ArrayList<RetiredInput> retainedInputs = new ArrayList<>();
+    // Source windows must remain attached until native detach AND GPU teardown complete.
+    // A callback is intentionally not dispatched on an unconfirmed detach.
+    private final ArrayList<Runnable> shutdownCompletionCallbacks = new ArrayList<>();
+    private boolean shutdownGlCompleted;
     private volatile boolean shutdownSourceDetached;
     private final AtomicBoolean shutdownGlScheduled = new AtomicBoolean();
     private final AtomicBoolean invalidRootIsolationQueued = new AtomicBoolean();
@@ -475,6 +479,7 @@ final class RootPassBlurBackend {
                     return;
                 }
                 releaseGl();
+                completeShutdownAfterGlRelease();
                 renderThread.quitSafely();
             });
         } catch (Throwable error) {
@@ -571,6 +576,33 @@ final class RootPassBlurBackend {
 
     boolean postUrgentToRenderThread(Runnable runnable) {
         return postRenderTask(runnable, true);
+    }
+
+    /**
+     * Render-thread shutdown must never try to (re)allocate an EGL context in its
+     * guarded preamble. An earlier EGL_BAD_ALLOC would otherwise swallow the cleanup
+     * task itself and leave the native producer bound forever.
+     */
+    boolean postShutdownToRenderThread(Runnable cleanup) {
+        if (cleanup == null || shuttingDown || !renderThread.isAlive()) return false;
+        try {
+            return renderHandler.post(() -> {
+                try {
+                    if (eglDisplay != EGL14.EGL_NO_DISPLAY
+                            && eglContext != EGL14.EGL_NO_CONTEXT
+                            && eglPbufferSurface != EGL14.EGL_NO_SURFACE) {
+                        makePbufferCurrentUnchecked();
+                    }
+                    cleanup.run();
+                } catch (Throwable error) {
+                    MainHook.log(TAG + " render shutdown cleanup failed; retiring binding: " + error);
+                    shutdown();
+                }
+            });
+        } catch (Throwable error) {
+            MainHook.log(TAG + " render shutdown enqueue failed: " + error);
+            return false;
+        }
     }
 
     private boolean postRenderTask(Runnable runnable, boolean urgent) {
@@ -731,6 +763,46 @@ final class RootPassBlurBackend {
 
     int maxTextureSize() {
         return maxTextureSize;
+    }
+
+    /**
+     * The owner can defer destroying its independent WindowManager capture root until the
+     * compositor has committed native detach and the render thread has released EGL.
+     * Never invoke the callback on an unconfirmed detach: SF may still sample its producer.
+     */
+    void onShutdownComplete(Runnable callback) {
+        if (callback == null) return;
+        boolean alreadyComplete;
+        synchronized (shutdownCompletionCallbacks) {
+            alreadyComplete = shutdownGlCompleted;
+            if (!alreadyComplete) shutdownCompletionCallbacks.add(callback);
+        }
+        if (alreadyComplete) dispatchShutdownCompletion(callback);
+    }
+
+    private void completeShutdownAfterGlRelease() {
+        ArrayList<Runnable> completed;
+        synchronized (shutdownCompletionCallbacks) {
+            shutdownGlCompleted = true;
+            completed = new ArrayList<>(shutdownCompletionCallbacks);
+            shutdownCompletionCallbacks.clear();
+        }
+        for (Runnable callback : completed) dispatchShutdownCompletion(callback);
+    }
+
+    private void dispatchShutdownCompletion(Runnable callback) {
+        try {
+            if (!mainHandler.post(() -> {
+                try { callback.run(); }
+                catch (Throwable error) {
+                    MainHook.log(TAG + " source window release after shutdown failed: " + error);
+                }
+            })) {
+                MainHook.log(TAG + " source window release dispatch rejected after GL shutdown");
+            }
+        } catch (Throwable error) {
+            MainHook.log(TAG + " source window release dispatch failed: " + error);
+        }
     }
 
     void shutdown() {

@@ -389,10 +389,13 @@ final class ShortcutPopupGlassCoordinator {
         if (layer != null) layer.dispose();
         ShortcutPopupGlassSession session = state.session;
         state.session = null;
-        if (session != null) session.shutdown();
         ShortcutPopupSourceOverlay source = state.sourceOverlay;
         state.sourceOverlay = null;
-        if (source != null) source.dispose();
+        // Removing this WindowManager root immediately invalidates the SurfaceControl before
+        // the async PassBlur detach Transaction can commit. Keep it attached until the backend
+        // confirms native detach and releases EGL; a failure stays owned, never unhooks early.
+        if (session != null) session.shutdown(source != null ? source::dispose : null);
+        else if (source != null) source.dispose();
         MainHook.log(TAG + " released reason=" + reason);
     }
 
