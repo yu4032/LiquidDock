@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
 
@@ -155,6 +156,68 @@ public class Api102HookDomainTest {
         assertEquals(List.of(id, Api102HookRegistry.stableId("systemui.gesture.handle", first)),
                 events);
         assertThrows(IllegalStateException.class, () -> domain.hookDynamic(next, callback));
+    }
+
+    private static XposedInterface.HookHandle replaceableHandle(
+            int generation, AtomicInteger replacements, List<Integer> unhooked,
+            AtomicBoolean failReplacement) {
+        return (XposedInterface.HookHandle) Proxy.newProxyInstance(
+                XposedInterface.HookHandle.class.getClassLoader(),
+                new Class<?>[] {XposedInterface.HookHandle.class},
+                (proxy, method, args) -> {
+                    if ("replaceHook".equals(method.getName())) {
+                        if (failReplacement.get()) {
+                            throw new IllegalStateException("injected replacement failure");
+                        }
+                        replacements.incrementAndGet();
+                        return replaceableHandle(generation + 1, replacements,
+                                unhooked, failReplacement);
+                    }
+                    if ("unhook".equals(method.getName())) unhooked.add(generation);
+                    return null;
+                });
+    }
+
+    @Test
+    public void activeOwnerReplacesOnlyItsHookWithoutReinstallOrUnhookGap() throws Exception {
+        AtomicInteger installations = new AtomicInteger();
+        AtomicInteger replacements = new AtomicInteger();
+        AtomicBoolean failReplacement = new AtomicBoolean(false);
+        List<Integer> unhooked = new ArrayList<>();
+        Api102HookRegistry registry = new Api102HookRegistry((method, id, callback) -> {
+            installations.incrementAndGet();
+            return replaceableHandle(0, replacements, unhooked, failReplacement);
+        });
+        Api102HookDomain domain = new Api102HookDomain(registry, "systemui.gesture.handle");
+        Method observed = Target.class.getDeclaredMethod("observed", int.class);
+        Method other = Target.class.getDeclaredMethod("observed", String.class);
+        XposedInterface.Hooker hooker = chain -> chain.proceed();
+
+        assertThrows(IllegalStateException.class, () -> domain.replaceActive(observed, hooker));
+        domain.begin();
+        domain.hook(observed, hooker);
+        assertThrows(IllegalStateException.class, () -> domain.replaceActive(observed, hooker));
+        domain.commit();
+        assertThrows(IllegalStateException.class, () -> domain.replaceActive(other, hooker));
+
+        domain.replaceActive(observed, chain -> chain.proceed());
+        domain.replaceActive(observed, chain -> chain.proceed());
+        assertEquals(1, installations.get());
+        assertEquals(2, replacements.get());
+        assertTrue(unhooked.isEmpty());
+        assertEquals(1, registry.count());
+        assertEquals(1, domain.ownedCount());
+
+        failReplacement.set(true);
+        assertThrows(IllegalStateException.class,
+                () -> domain.replaceActive(observed, chain -> chain.proceed()));
+        assertEquals(2, replacements.get());
+        assertEquals(1, registry.count());
+
+        assertTrue(domain.stop());
+        assertEquals(List.of(2), unhooked); // only the newest valid handle is retired
+        assertEquals(0, registry.count());
+        assertThrows(IllegalStateException.class, () -> domain.replaceActive(observed, hooker));
     }
 
     @Test
