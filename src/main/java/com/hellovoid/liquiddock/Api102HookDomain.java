@@ -72,6 +72,24 @@ final class Api102HookDomain {
         return id;
     }
 
+    /**
+     * Replace an already-owned ACTIVE hook in place, preserving its id and intercept order.
+     * Unlike stop() + hookDynamic(), this has no unhooked interval. The registry retains the
+     * previous handle on failure and stores the new one only after the framework succeeds.
+     *
+     * This updates a Java Hooker only; it does not replace Views, listeners or native resources.
+     */
+    synchronized void replaceActive(Method method, XposedInterface.Hooker callback) {
+        if (state != State.ACTIVE) {
+            throw new IllegalStateException("domain is not active: " + domainName);
+        }
+        String id = Api102HookRegistry.stableId(domainName, method);
+        if (!ids.contains(id)) {
+            throw new IllegalStateException("domain does not own hook: " + id);
+        }
+        registry.replaceIdentified(id, callback);
+    }
+
     synchronized void commit() {
         if (state != State.INSTALLING || ids.isEmpty()) {
             throw new IllegalStateException("empty or non-installing domain: " + domainName);
