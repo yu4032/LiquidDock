@@ -261,8 +261,9 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.CONTINUOUS_CORNERS.runtimeFallback());
             advancedMaterialEnabled = c.b(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(),
                     ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.runtimeFallback());
-            enabled = !advancedMaterialEnabled && c.b(ConfigSchema.Glass.ENABLED.name(),
-                    ConfigSchema.Glass.ENABLED.runtimeFallback());
+            enabled = MaterialModePolicy.liquidEnabled(
+                    c.b(ConfigSchema.Glass.ENABLED.name(),
+                            ConfigSchema.Glass.ENABLED.runtimeFallback()), advancedMaterialEnabled);
             securityCenterEnabled = c.b(ConfigSchema.Glass.SECURITY_CENTER_GLASS.name(),
                     ConfigSchema.Glass.SECURITY_CENTER_GLASS.runtimeFallback());
             systemUiHandleMenuEnabled = c.b(

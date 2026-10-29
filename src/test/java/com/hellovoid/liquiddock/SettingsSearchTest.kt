@@ -39,6 +39,17 @@ class SettingsSearchTest {
     }
 
     @Test
+    fun nativeMaterialSearchRowsHaveActualFocusCells() {
+        val items = customGlassSearchRows(Page.AdvancedMaterial)
+        assertEquals(2, items.size)
+        assertEquals(
+            setOf(com.hellovoid.liquiddock.config.ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(),
+                com.hellovoid.liquiddock.config.ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name()),
+            items.map { it.key }.toSet())
+        items.forEach { assertTrue(customDenseFocusIndex(Page.AdvancedMaterial, it.key) != null) }
+    }
+
+    @Test
     fun blankQueryDoesNotFloodResults() {
         assertTrue(filterSettingsSearch(catalog, "  ").isEmpty())
     }

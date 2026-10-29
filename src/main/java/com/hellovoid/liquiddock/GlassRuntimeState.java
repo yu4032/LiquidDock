@@ -57,9 +57,9 @@ final class GlassRuntimeState {
                     ConfigSchema.Core.ENABLED.runtimeFallback())
                     && sharedPreferences.getBoolean(ConfigSchema.Glass.ENABLED.name(),
                     ConfigSchema.Glass.ENABLED.runtimeFallback())
-                    && !sharedPreferences.getBoolean(
+                    && MaterialModePolicy.liquidEnabled(true, sharedPreferences.getBoolean(
                     ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(),
-                    ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.runtimeFallback());
+                    ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.runtimeFallback()));
             boolean nextIconEnabled = sharedPreferences.getBoolean(
                     ConfigSchema.Glass.ICON_GLASS.name(),
                     ConfigSchema.Glass.ICON_GLASS.runtimeFallback());
