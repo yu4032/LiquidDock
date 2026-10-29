@@ -173,7 +173,7 @@ private fun ScopedMenuGlassSettingsPage(
                 )
             }
         }
-        item(key = "shortcut-color-title") { SmallTitle("玻璃颜色") }
+        item(key = "shortcut-color-title") { SmallTitle("玻璃染色（保留背景纹理）") }
         item(key = "shortcut-color") {
             SettingsCard {
                 appearance(ConfigSchema.Glass.TINT_RED, "红")
@@ -183,7 +183,7 @@ private fun ScopedMenuGlassSettingsPage(
         }
         item(key = "shortcut-color-alpha") {
             SettingsCard {
-                appearance(ConfigSchema.Glass.TINT_ALPHA, "不透明度")
+                appearance(ConfigSchema.Glass.TINT_ALPHA, "染色强度")
             }
         }
         item(key = "shortcut-blur-title") { SmallTitle("模糊") }

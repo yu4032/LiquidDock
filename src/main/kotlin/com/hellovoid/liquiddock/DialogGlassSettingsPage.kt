@@ -204,7 +204,7 @@ internal fun DialogGlassSettingsPage(
                 )
             }
         }
-        item { SmallTitle("玻璃颜色") }
+        item { SmallTitle("玻璃染色（保留背景纹理）") }
         item {
             SettingsCard {
                 DialogAppearanceValueSlider(
@@ -240,7 +240,7 @@ internal fun DialogGlassSettingsPage(
             SettingsCard {
                 DialogAppearanceValueSlider(
                     key = ConfigSchema.Glass.DIALOG_TINT_ALPHA.name(),
-                    title = "不透明度",
+                    title = "染色强度",
                     value = tintAlpha,
                     onValueChange = { tintAlpha = it },
                     prefs = prefs,

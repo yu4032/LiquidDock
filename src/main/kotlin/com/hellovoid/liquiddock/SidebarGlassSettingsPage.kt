@@ -176,7 +176,7 @@ internal fun SidebarGlassSettingsPage(
             Triple("tint_r", "色调 R", ConfigSchema.Glass.TINT_RED),
             Triple("tint_g", "色调 G", ConfigSchema.Glass.TINT_GREEN),
             Triple("tint_b", "色调 B", ConfigSchema.Glass.TINT_BLUE),
-            Triple("tint_alpha", "透明度", ConfigSchema.Glass.TINT_ALPHA),
+            Triple("tint_alpha", "染色强度", ConfigSchema.Glass.TINT_ALPHA),
         )
         item {
             SettingsCard { backgroundValue("blur", "模糊强度", ConfigSchema.Glass.BLUR,
