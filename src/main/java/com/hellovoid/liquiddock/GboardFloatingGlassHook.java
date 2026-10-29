@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.view.ViewGroup;
+import com.hellovoid.liquiddock.config.ConfigSchema;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -71,6 +72,7 @@ final class GboardFloatingGlassHook {
         if (structure == null) return;
 
         if (!GboardFloatingStructureResolver.isFloatingGeometry(structure)) {
+            GboardNativeAdvancedMaterial.release(structure);
             GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
             return;
         }
@@ -81,6 +83,18 @@ final class GboardFloatingGlassHook {
         LiquidDockConfig liveConfig = LiquidDockConfig.from(liveReader);
         GboardGlassPreferences.Appearance liveAppearance =
                 GboardGlassPreferences.resolve(liveReader, liveConfig.glass);
+        if (liveConfig.enabled && liveConfig.glass.advancedMaterialEnabled
+                && liveAppearance.enabled) {
+            // The stock background plate already sits behind every keyboard key.
+            GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
+            GboardNativeAdvancedMaterial.bind(
+                    structure,
+                    liveReader.i(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(),
+                            ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.runtimeFallback()),
+                    liveConfig.glass.continuousCorners);
+            return;
+        }
+        GboardNativeAdvancedMaterial.release(structure);
         if (!liveConfig.enabled || !liveConfig.glass.enabled || !liveAppearance.enabled) {
             GboardFloatingGlassCoordinator.onHidden(structure.keyboardArea);
             return;

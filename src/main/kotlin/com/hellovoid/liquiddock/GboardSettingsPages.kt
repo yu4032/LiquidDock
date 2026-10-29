@@ -30,6 +30,7 @@ internal fun ThirdPartyAppsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    val nativeEnabled = prefs.getBoolean(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false)
     val context = LocalContext.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -60,8 +61,8 @@ internal fun ThirdPartyAppsPage(
             GboardSettingsCard {
                 ArrowPreference(
                     title = "Gboard",
-                    summary = "悬浮键盘液态玻璃、独立颜色与模糊度",
-                    enabled = masterEnabled && liquidEnabled,
+                    summary = "悬浮键盘的液态玻璃或系统原生模糊；独立色彩仅用于液态玻璃",
+                    enabled = masterEnabled && (liquidEnabled || nativeEnabled),
                     onClick = openGboard,
                 )
             }
@@ -81,6 +82,7 @@ internal fun GboardSettingsPage(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
     )
+    val nativeEnabled = prefs.getBoolean(ConfigSchema.Glass.ADVANCED_MATERIAL_ENABLED.name(), false)
     var gboardEnabled by remember {
         mutableStateOf(
             prefs.getBoolean(
@@ -201,9 +203,9 @@ internal fun GboardSettingsPage(
                         gboardEnabled = it
                         prefs.edit().putBoolean(GboardGlassPreferences.ENABLED_KEY, it).apply()
                     },
-                    title = "启用悬浮键盘液态玻璃",
-                    summary = "关闭后保留 Gboard 原生悬浮键盘材质；已保存的独立外观参数不会丢失",
-                    enabled = masterEnabled && liquidEnabled,
+                    title = "启用悬浮键盘材质",
+                    summary = "液态玻璃使用 Prismal，高级材质使用 HyperOS 系统模糊；关闭恢复 Gboard 原背景",
+                    enabled = masterEnabled && (liquidEnabled || nativeEnabled),
                 )
                 ModernListDivider()
                 SwitchPreference(
