@@ -26,7 +26,7 @@ Official references:
    `UP_TO_DATE` and `RELOADING` targets.
 5. The service asynchronously reports the result. A successful submission does
    **not** mean reload succeeded. Check framework log for
-   `[DC][API102] SystemUI hooks reinstalled in new generation`.
+   `[DC][API102] SystemUI integration bootstrap attempted in new generation`.
 
 ## Admission and retirement contract
 
@@ -36,7 +36,7 @@ The old SystemUI generation MUST:
   proxy for potentially pending PassBlur/GL/SurfaceTexture cleanup);
 - disarm and unregister the external Remote Preferences listener, drop queued
   config dispatch, and stop keyguard and gesture observer domains;
-- restore the latest vendor-requested gesture alpha where applicable;
+- restore the latest vendor-requested gesture alpha **on SystemUI main looper** where applicable, using a bounded main-thread retirement task;
 - detach all anonymous `HookUtil` handles, and verify the process registry is
   empty before granting the old-generation handoff;
 - pass only a loader-neutral `String` as saved state.
