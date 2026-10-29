@@ -37,7 +37,8 @@ final class GboardNativeAdvancedMaterial {
         // Stock mode on some Gboard builds already owns native pass-window blur.
         if (Boolean.TRUE.equals(MiBlurBridge.getPassWindowBlurEnabled(plate))) return;
         State state = new State(plate, radius(plate, structure.keyboardArea), blurRadius, continuous);
-        if (!MiBlurBridge.applyPassWindowBlur(plate, blurRadius)) return;
+        if (!MiBlurBridge.applyPassWindowBlur(
+                plate, blurRadius, NativeAdvancedMaterialStyle.get().blendColors())) return;
         OWNERS.put(plate, state);
         plate.setOutlineProvider(state.provider);
         plate.setBackground(null);

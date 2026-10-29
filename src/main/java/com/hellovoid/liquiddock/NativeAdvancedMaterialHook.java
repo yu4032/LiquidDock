@@ -62,8 +62,8 @@ final class NativeAdvancedMaterialHook {
         capsuleEnabled = config.glass.recentsCapsuleEnabled;
         continuousCorners = config.glass.continuousCorners;
         iconCornerRadiusDp = config.glass.iconStyle.cornerRadiusDp;
-        blurRadius = ConfigReader.load().i(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(),
-                ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.runtimeFallback());
+        NativeAdvancedMaterialStyle.update(ConfigReader.load());
+        blurRadius = NativeAdvancedMaterialStyle.get().radiusPx;
         installPreferences();
         installIcons(loader);
         installRecents(loader);
@@ -81,7 +81,9 @@ final class NativeAdvancedMaterialHook {
                     && !key.equals(ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name())
                     && !key.equals(ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.name())
                     && !key.equals(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name())
-                    && !key.equals(ConfigSchema.Glass.ICON_CORNER_RADIUS.name())) return;
+                    && !key.equals(ConfigSchema.Glass.ICON_CORNER_RADIUS.name())
+                    && !key.startsWith("native_advanced_material_")
+                    && !key.equals(ConfigSchema.Glass.CONTINUOUS_CORNERS.name())) return;
             // Read all keys as one snapshot. Advanced material always loses to master-off;
             // it always wins over an imported contradictory liquid_glass=true.
             enabled = changed.getBoolean(ConfigSchema.Core.ENABLED.name(), true)
@@ -92,7 +94,8 @@ final class NativeAdvancedMaterialHook {
                     ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(), false);
             capsuleEnabled = changed.getBoolean(
                     ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.name(), true);
-            blurRadius = changed.getInt(ConfigSchema.Glass.ADVANCED_MATERIAL_BLUR.name(), 80);
+            NativeAdvancedMaterialStyle.update(ConfigReader.load());
+            blurRadius = NativeAdvancedMaterialStyle.get().radiusPx;
             iconCornerRadiusDp = LiquidDockConfig.load().glass.iconStyle.cornerRadiusDp;
             View root = recentsRoot.get();
             if (root != null) root.post(NativeAdvancedMaterialHook::refreshOwners);
@@ -106,7 +109,10 @@ final class NativeAdvancedMaterialHook {
     private static void refreshOwners() {
         for (View view : new java.util.ArrayList<>(OWNERS.keySet())) {
             Owner state = OWNERS.get(view);
-            if (state != null) refresh(view, state.capsule);
+            if (state != null) {
+                refresh(view, state.capsule);
+                if (enabled) NativeAdvancedMaterialStyle.get().applyVendor(view);
+            }
         }
         ViewGroup root = recentsRoot.get();
         if (root != null) bindRecents(root);
@@ -229,8 +235,8 @@ final class NativeAdvancedMaterialHook {
                 owner.originalOutline = view.getOutlineProvider();
                 view.setOutlineProvider(owner.outline);
             }
-            owner.outline.invalidateGeometry();
-            view.invalidateOutline();
+            // The system moves already-composited View blur with its native transform.
+            // Avoid repeating expensive outline invalidation or contour generation.
             if (owner.radius != blurRadius) {
                 owner.radius = blurRadius;
                 MiBlurBridge.setPassWindowBlurRadius(view, blurRadius);
@@ -244,10 +250,12 @@ final class NativeAdvancedMaterialHook {
             return;
         }
         owner = new Owner(view, capsule);
-        if (!MiBlurBridge.applyPassWindowBlur(view, blurRadius)) return;
+        if (!MiBlurBridge.applyPassWindowBlur(
+                view, blurRadius, NativeAdvancedMaterialStyle.get().blendColors())) return;
         OWNERS.put(view, owner);
         view.setOutlineProvider(owner.outline);
         view.invalidateOutline();
+        NativeAdvancedMaterialStyle.get().applyVendor(view);
         if (capsule) view.setBackground(null);
     }
 

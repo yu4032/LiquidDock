@@ -78,6 +78,7 @@ public final class ModuleMain extends XposedModule {
                 SystemUiKeyguardGoneSource.install(classLoader);
                 ConfigReader configReader = ConfigReader.load();
                 GlassEdgeEffects.refresh(configReader);
+                NativeAdvancedMaterialStyle.update(configReader);
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 // Install once regardless of initial preference. The hook's runtime gate
                 // stays inert until the user enables caption-menu glass.
@@ -101,6 +102,7 @@ public final class ModuleMain extends XposedModule {
                 if (classLoader == null) return;
                 ConfigReader configReader = ConfigReader.load();
                 GlassEdgeEffects.refresh(configReader);
+                NativeAdvancedMaterialStyle.update(configReader);
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 AnimationRuntimeState.configure(runtimeConfig.animation);
                 // Native Sidebar bridge also owns the vendor-handle glass entry.
@@ -156,6 +158,7 @@ public final class ModuleMain extends XposedModule {
             ClassLoader classLoader = param.getClassLoader();
             ConfigReader configReader = ConfigReader.load();
             GlassEdgeEffects.refresh(configReader);
+                NativeAdvancedMaterialStyle.update(configReader);
             LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
             // Independent opt-in compatibility: its own preference is the sole
             // activation switch, not the global glass/feature master toggle.
