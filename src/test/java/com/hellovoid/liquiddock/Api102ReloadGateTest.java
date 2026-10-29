@@ -32,6 +32,15 @@ public class Api102ReloadGateTest {
         assertFalse(gate.beginHandoff());
     }
 
+    @Test public void retiredOwnerHandoffRequiresPriorOwnershipAndRejectsLaterLifecycle() {
+        Api102ReloadGate gate = new Api102ReloadGate();
+        assertFalse(gate.beginRetiredOwnerHandoff());
+        assertTrue(gate.enterOwnerLifecycle());
+        assertTrue(gate.beginRetiredOwnerHandoff());
+        assertFalse(gate.enterOwnerLifecycle());
+        assertFalse(gate.beginRetiredOwnerHandoff());
+    }
+
     @Test public void concurrentOwnerAndHandoffCannotBothWin() throws Exception {
         Api102ReloadGate gate = new Api102ReloadGate();
         CountDownLatch start = new CountDownLatch(1);
