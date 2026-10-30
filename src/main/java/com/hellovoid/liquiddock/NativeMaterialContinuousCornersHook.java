@@ -108,6 +108,10 @@ final class NativeMaterialContinuousCornersHook {
     }
 
     private static void observeDock(View view) {
+        // The system Dock is the startup visual fallback for the Prismal renderer.
+        // Leave its stock outline and compositor blur untouched while glass owns
+        // the intended output; the handoff now waits for a submitted GPU frame.
+        if (GlassRuntimeState.isEnabled()) return;
         DockState state = DOCKS.get(view);
         if (state != null) return;
         state = new DockState(view);
