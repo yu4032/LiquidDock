@@ -173,7 +173,14 @@ final class NativeMaterialContinuousCornersHook {
         float nativeRadius = MiuixFolderGlassHook.readMaterialRadius(view);
         if (background != null) {
             float drawableRadius = background.getCornerRadius();
-            if (background.getCornerRadii() != null) return; // Respect asymmetric OEM geometry.
+            float[] nativeRadii = background.getCornerRadii();
+            if (nativeRadii != null) {
+                // An all-zero OEM array is also a rectangular startup placeholder.
+                // Nonzero per-corner geometry belongs to Launcher and must be preserved.
+                for (float nativeCorner : nativeRadii) {
+                    if (nativeCorner > .5f) return;
+                }
+            }
             if (!(nativeRadius > .5f) && drawableRadius > .5f) nativeRadius = drawableRadius;
         }
         int materialWidth = nativeDimension(view, "mWidth", view.getWidth());
