@@ -39,6 +39,9 @@ final class NativeMaterialContinuousCornersHook {
         if (installed || !enabled || loader == null) return;
         continuous = ConfigReader.load().b(ConfigSchema.Glass.CONTINUOUS_CORNERS.name(),
                 ConfigSchema.Glass.CONTINUOUS_CORNERS.runtimeFallback());
+        // Stock native Dock has correct corners. Do not hook or alter its outline
+        // when the global iPadOS silhouette is not explicitly requested.
+        if (!continuous) return;
         Set<Method> radiusMethods = new HashSet<>();
         int count = hookDock(loader, HOTSEATS + "HotSeatsListContentMiuiXBlurBackground",
                 radiusMethods);
