@@ -6,28 +6,31 @@
 
 暂无新增条目。
 
-## v2.7.6（2026-10-29）
+## v2.7.6（待发布）
 
-### LSPosed API 102 与资源回收
+### 玻璃渲染与性能
 
-- 迁移至 libxposed API 102，按调用位置维护 Hook 所有权与原子替换，并修正 ART 栈帧识别；APK 更新后重启作用域加载新代码。[#465](https://github.com/yu4032/LiquidDock/pull/465)、[#474](https://github.com/yu4032/LiquidDock/pull/474)
-- 修复桌面快捷菜单及拖拽浮层关闭时，PassBlur 生产端窗口过早释放造成的 EGL 资源滞留；等待合成器确认解绑后再销毁相关资源。[#474](https://github.com/yu4032/LiquidDock/pull/474)、[#476](https://github.com/yu4032/LiquidDock/pull/476)
+- 改善工作区玻璃在桌面滑动时的跟手性：减少渲染任务的中间转发，使每帧使用一致的滚动位置与组件几何快照，并跳过已过期的画面，缓解玻璃滞后、闪跳和振颤。[#479](https://github.com/yu4032/LiquidDock/pull/479)
+- 优化玻璃平坦区域的着色计算，并在安全中心多个玻璃区域采用相同模糊参数时复用处理结果，减少不必要的 GPU 工作。[#469](https://github.com/yu4032/LiquidDock/pull/469)
+- 修复频繁打开、关闭桌面快捷菜单或拖拽浮层后，捕获窗口未及时释放导致 GPU 内存持续增长的问题；等待系统合成器确认解绑后再回收图形资源。[#474](https://github.com/yu4032/LiquidDock/pull/474)
 
-### 玻璃材质与图标
+### 图标玻璃与外观
 
-- 玻璃「染色」与「底色」拆分为独立效果：原乘法染色保留背景纹理，新增可调 RGBA 的纯色底色覆盖；新底色默认透明，原配置继续有效。展开文件夹也可独立覆盖或继承全局底色。[#477](https://github.com/yu4032/LiquidDock/pull/477)
-- 将染色强度的上限由 160 扩展至 255，澄清其与底色覆盖透明度的区别；同步 HyperOS 和 Prismal 的主要着色路径。[#477](https://github.com/yu4032/LiquidDock/pull/477)
-- 为玻璃图标增加轮廓裁剪，修复边缘残线并改善应用动画期间的裁剪一致性。[#469](https://github.com/yu4032/LiquidDock/pull/469)、[#472](https://github.com/yu4032/LiquidDock/pull/472)
+- 新增图标图形的玻璃轮廓裁剪，适配圆角及连续圆角，保留图标文字和角标。支持的静态图标在资源绑定时完成裁剪并复用缓存，避免动画期间逐帧重建裁剪路径。[#469](https://github.com/yu4032/LiquidDock/pull/469)、[#471](https://github.com/yu4032/LiquidDock/pull/471)
+- 修复部分图标拖入 Dock 后边缘残留直线，以及启动应用或返回桌面时图标短暂恢复原始方形的问题。[#471](https://github.com/yu4032/LiquidDock/pull/471)、[#472](https://github.com/yu4032/LiquidDock/pull/472)
+- 将玻璃「染色」和「底色」分为两种独立效果：染色保留背景纹理并调整色调，底色可使用自选 RGBA 纯色覆盖背景；染色强度上限扩展至 255。展开文件夹支持独立底色或继承全局配置。[#477](https://github.com/yu4032/LiquidDock/pull/477)
 
-### 设置与兼容性
+### 适配与设置
 
-- 统一玻璃、文件夹、菜单、弹窗、键盘、网格等设置页的语义分组及搜索定位；参数级搜索使用真实配置键，保留动态内容页面和独立 Activity 的专用入口。[#468](https://github.com/yu4032/LiquidDock/pull/468)、[#477](https://github.com/yu4032/LiquidDock/pull/477)
-- 小组件隐藏选择器使用易读标题，而不再仅显示内部标识。[#467](https://github.com/yu4032/LiquidDock/pull/467)
+- 迁移至 **libxposed API 102**，完善 Hook 注册、替换与资源生命周期管理，提升多场景切换时的稳定性。[#465](https://github.com/yu4032/LiquidDock/pull/465)、[#474](https://github.com/yu4032/LiquidDock/pull/474)
+- 完善安全中心侧边栏玻璃的原生材质恢复和独立外观设置，支持单独调整背景、光照、几何与渲染质量。[#465](https://github.com/yu4032/LiquidDock/pull/465)
+- 重新组织玻璃、Dock、网格、文件夹、弹窗及菜单等设置分组；设置搜索可定位到具体参数并高亮显示，改善过去只能跳转页面或定位错误的问题。[#468](https://github.com/yu4032/LiquidDock/pull/468)、[#477](https://github.com/yu4032/LiquidDock/pull/477)
+- 优化小组件部件管理：列表显示可识别的小组件名称，匿名部件改用类型和编号表示，方便选择隐藏或白化的目标。[#467](https://github.com/yu4032/LiquidDock/pull/467)
 
-### 升级提醒
+### 升级说明
 
-- 需要 LSPosed API 102,推荐使用 LSPosed 版本 v2.2.1；升级后需要时重启桌面及相关作用域，以使新增 Hook 生效。
-- 新底色默认透明，已有染色配置继续生效；可按设备与壁纸组合调整底色。
+- **本版要求 LSPosed 支持 API 102**，推荐使用 LSPosed v2.2.1。更新模块后，请重启系统桌面及已启用的其他作用域以加载新代码；本版不提供无需重启的模块热重载。
+- 新增纯色底色默认完全透明，原有染色配置保持生效；无需重新设置即可保持此前的玻璃外观。
 
 ## v2.7.5（2026-10-25）
 
