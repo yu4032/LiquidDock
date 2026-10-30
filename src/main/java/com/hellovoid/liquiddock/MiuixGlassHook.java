@@ -235,6 +235,8 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
 
         // The stock Dock is already rounded. Do not blank it before the first
         // successful Prismal EGL swap (the zero-copy producer may still be pending).
+        MainHook.log(TAG + " preserving OEM material pending first GPU frame; "
+                + dockBlurHierarchy(dockBg));
         float nativeRadius = readAndCacheRadius(dockBg);
         suppressVendorMaterialBody(dockBg, nativeRadius);
         int dockW = readDimension(dockBg, "mWidth", true);
@@ -311,6 +313,8 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
                     suppressVendorGpuBlur(dockBg);
                     suppressVendorMaterialBody(dockBg, readAndCacheRadius(dockBg));
                 }
+                MainHook.log(TAG + " first GPU frame committed; native handoff "
+                        + dockBlurHierarchy(dockBg));
                 // Reconcile the already-created OEM RenderNode as soon as
                 // the new Prismal shadow producer becomes truly active.
                 DockShadowOwnership.refreshVendorDockShadow();
@@ -331,6 +335,21 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         }
 
         host.postOnAnimation(() -> scheduleZeroCopyValidation(dockBg, host, frame + 1));
+    }
+
+    /** Bounded one-shot diagnostic: native Floating Dock blur can belong to an ancestor. */
+    private static String dockBlurHierarchy(View background) {
+        StringBuilder result = new StringBuilder();
+        View cursor = background;
+        for (int depth = 0; cursor != null && depth < 8; depth++) {
+            if (depth > 0) result.append(" <- ");
+            result.append(cursor.getClass().getSimpleName());
+            Boolean nativeBlur = MiBlurBridge.getPassWindowBlurEnabled(cursor);
+            if (nativeBlur != null) result.append("(passBlur=").append(nativeBlur).append(')');
+            Object parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return result.toString();
     }
 
     private static String inactiveVisualState(View dockBg) {
