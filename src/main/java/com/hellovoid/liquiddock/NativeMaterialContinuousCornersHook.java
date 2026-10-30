@@ -136,8 +136,8 @@ final class NativeMaterialContinuousCornersHook {
         if (MiuixGlassHook.isBoundTo(view) || LauncherGlassStaticNode.find(view) != null) return;
         if (view.getOutlineProvider() instanceof NativeOutline) return;
         ViewOutlineProvider original = view.getOutlineProvider();
-        state.original = original != null ? original : ViewOutlineProvider.BACKGROUND;
-        view.setOutlineProvider(new NativeOutline(state.original, state));
+        view.setOutlineProvider(new NativeOutline(
+                original != null ? original : ViewOutlineProvider.BACKGROUND, state));
         view.invalidateOutline();
     }
 
@@ -197,7 +197,6 @@ final class NativeMaterialContinuousCornersHook {
     }
 
     private static final class DockState {
-        ViewOutlineProvider original;
         boolean radiusCommitted;
     }
 
