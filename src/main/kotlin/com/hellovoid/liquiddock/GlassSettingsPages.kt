@@ -62,17 +62,6 @@ internal fun LiquidPage(
                 ) { liquidGlass = it }
             }
         }
-        item(key = "continuous-glass-corners") {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.CONTINUOUS_CORNERS,
-                    "iPadOS 风格连续圆角",
-                    "替换所有液态玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
-                    masterEnabled && liquidGlass,
-                )
-            }
-        }
         liquidEntries.forEach { entry ->
             item {
                 ModernFeatureCard(
@@ -99,6 +88,54 @@ internal fun LiquidPage(
                         fontSize = 12.sp,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AppearanceHubPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
+) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(searchFocus?.sequence) {
+        if (searchFocus?.key == ConfigSchema.Glass.CONTINUOUS_CORNERS.name()) {
+            listState.scrollToItem(1)
+        }
+    }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item { PageHeader("", "玻璃材质、组件样式、动画与第三方应用外观") }
+        item(key = "appearance-continuous-corners") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.CONTINUOUS_CORNERS,
+                    "iPadOS 风格连续圆角",
+                    "统一液态玻璃及原生 Dock、小组件、文件夹、胶囊与菜单的圆角轮廓；重启对应应用生效",
+                    masterEnabled,
+                )
+            }
+        }
+        glassEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
             }
         }
     }

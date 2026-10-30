@@ -46,7 +46,7 @@ class SettingsGuiOrganizationContractTest {
 
     @Test fun allStaticCustomGlassRowsAreIndexedWithoutPhantomPreferences() {
         val customSearchPages = setOf(
-            Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
+            Page.GlassHub, Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
             Page.HandleMenuAll, Page.ShortcutPopupAll, Page.DialogAll, Page.GboardAll,
             Page.HandleMenuCustomization, Page.ShortcutPopupCustomization,
             Page.DialogCustomization, Page.Gboard, Page.GridBasics,

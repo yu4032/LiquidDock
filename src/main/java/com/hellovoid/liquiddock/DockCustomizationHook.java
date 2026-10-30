@@ -68,6 +68,7 @@ final class DockCustomizationHook {
                         View view = (View) chain.getThisObject();
                         syncAll(view);
                         if (config.squircle
+                                && !NativeMaterialContinuousCornersHook.continuousEnabled()
                                 && VisualRuntimeState.isDockCustomizationEnabled()
                                 && !animating(view)) {
                             float radius = (Float) HookUtil.getField(view, "mCornerRadius");
