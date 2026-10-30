@@ -176,8 +176,10 @@ final class NativeMaterialContinuousCornersHook {
             if (background.getCornerRadii() != null) return; // Respect asymmetric OEM geometry.
             if (!(nativeRadius > .5f) && drawableRadius > .5f) nativeRadius = drawableRadius;
         }
+        int materialWidth = nativeDimension(view, "mWidth", view.getWidth());
+        int materialHeight = nativeDimension(view, "mHeight", view.getHeight());
         float radius = nativeRadius > .5f ? nativeRadius
-                : NativeDockCornerPolicy.provisionalRadius(view.getWidth(), view.getHeight(),
+                : NativeDockCornerPolicy.provisionalRadius(materialWidth, materialHeight,
                         WorkstationRuntimeState.isActive());
         if (!(radius > .5f) || !Float.isFinite(radius)) return;
         state.firstRadius = radius;
@@ -186,11 +188,29 @@ final class NativeMaterialContinuousCornersHook {
             background.setCornerRadius(radius);
             view.invalidateOutline();
             MainHook.log(TAG + " first native background radius initialized="
-                    + radius + " size=" + view.getWidth() + "x" + view.getHeight());
+                    + radius + " material=" + materialWidth + "x" + materialHeight);
         } else if (background == null) {
             MainHook.log(TAG + " first native background has no GradientDrawable; "
                     + "outline-only radius=" + radius);
         }
+    }
+
+    private static int nativeDimension(View view, String fieldName, int fallback) {
+        for (Class<?> c = view.getClass(); c != null; c = c.getSuperclass()) {
+            try {
+                Field field = c.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                Object value = field.get(view);
+                if (value instanceof Number && ((Number) value).intValue() > 0) {
+                    return ((Number) value).intValue();
+                }
+                break;
+            } catch (NoSuchFieldException ignored) {
+            } catch (Throwable error) {
+                break;
+            }
+        }
+        return fallback;
     }
 
     private static GradientDrawable nativeDrawable(View view) {
