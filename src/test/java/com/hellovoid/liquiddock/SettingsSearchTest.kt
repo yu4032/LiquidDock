@@ -30,6 +30,15 @@ class SettingsSearchTest {
     }
 
     @Test
+    fun globalContinuousCornersBelongsOnlyToAppearance() {
+        val key = com.hellovoid.liquiddock.config.ConfigSchema.Glass.CONTINUOUS_CORNERS.name()
+        val rows = customGlassSearchRows(Page.GlassHub).filter { it.key == key }
+        assertEquals(1, rows.size)
+        assertEquals(1, customDenseFocusIndex(Page.GlassHub, key))
+        assertTrue(customGlassSearchRows(Page.Liquid).none { it.key == key })
+    }
+
+    @Test
     fun blankQueryDoesNotFloodResults() {
         assertTrue(filterSettingsSearch(catalog, "  ").isEmpty())
     }
