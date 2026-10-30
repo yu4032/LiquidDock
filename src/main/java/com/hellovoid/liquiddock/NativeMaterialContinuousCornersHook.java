@@ -152,6 +152,10 @@ final class NativeMaterialContinuousCornersHook {
                     ensureOutline(target, current);
                 }
                 if (current.startupFrames < 3) {
+                    // BackgroundBlurDrawable creates an independent SF blur region;
+                    // the View Outline cannot round it. Initialize only a confirmed
+                    // rectangular startup region, never an already-rounded OEM one.
+                    String blurRegion = initializeNativeBlurCorners(target);
                     Outline shape = new Outline();
                     ViewOutlineProvider provider = target.getOutlineProvider();
                     if (provider != null) provider.getOutline(target, shape);
@@ -160,6 +164,7 @@ final class NativeMaterialContinuousCornersHook {
                             + " size=" + target.getWidth() + "x" + target.getHeight()
                             + " radius=" + MiuixFolderGlassHook.readMaterialRadius(target)
                             + " drawable=" + drawableName(target)
+                            + " blurRegion=" + blurRegion
                             + " clip=" + target.getClipToOutline()
                             + " canClip=" + shape.canClip()
                             + " shapeEmpty=" + shape.isEmpty()
@@ -176,6 +181,52 @@ final class NativeMaterialContinuousCornersHook {
         };
         state.probe = probe;
         observer.addOnPreDrawListener(probe);
+    }
+
+    /**
+     * The platform BackgroundBlurDrawable owns the region mask submitted to
+     * SurfaceFlinger, independently of View.clipToOutline. Read the actual four
+     * blur-region radii before intervening; an already rounded OEM region must pass.
+     *
+     * Only the first three native frames are inspected. OEM radius animations and
+     * later parameter updates continue through their original methods.
+     */
+    private static String initializeNativeBlurCorners(View view) {
+        Drawable drawable = view.getBackground();
+        if (drawable == null || !drawable.getClass().getSimpleName().equals("BackgroundBlurDrawable")) {
+            return "not-background-blur";
+        }
+        float[] corners = new float[4];
+        String[] fields = {
+                "mCornerRadiusTL", "mCornerRadiusTR", "mCornerRadiusBL", "mCornerRadiusBR"
+        };
+        try {
+            Class<?> type = drawable.getClass();
+            for (int i = 0; i < fields.length; i++) {
+                java.lang.reflect.Field f = type.getDeclaredField(fields[i]);
+                f.setAccessible(true);
+                corners[i] = f.getFloat(drawable);
+                if (!Float.isFinite(corners[i]) || corners[i] < 0f) return "invalid-radius";
+            }
+            String original = corners[0] + "," + corners[1] + ","
+                    + corners[2] + "," + corners[3];
+            if (WorkstationRuntimeState.isActive()) return original + ":taskbar";
+            for (float corner : corners) {
+                if (corner > .5f) return original + ":OEM-rounded";
+            }
+            // The OEM material is measured; an all-zero blur mask is the
+            // rectangular startup placeholder observed on the device.
+            android.graphics.Rect drawableBounds = drawable.getBounds();
+            int width = drawableBounds.width() > 0 ? drawableBounds.width() : view.getWidth();
+            int height = drawableBounds.height() > 0 ? drawableBounds.height() : view.getHeight();
+            float radius = NativeDockCornerPolicy.provisionalRadius(width, height, false);
+            if (!(radius > .5f) || !Float.isFinite(radius)) return original + ":unmeasured";
+            java.lang.reflect.Method setter = type.getMethod("setCornerRadius", float.class);
+            setter.invoke(drawable, radius);
+            return original + ":seeded=" + radius;
+        } catch (ReflectiveOperationException | SecurityException error) {
+            return "unavailable:" + error.getClass().getSimpleName();
+        }
     }
 
     private static String drawableName(View view) {
