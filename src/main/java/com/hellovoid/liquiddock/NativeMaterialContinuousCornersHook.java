@@ -124,6 +124,11 @@ final class NativeMaterialContinuousCornersHook {
         ensureOutline(view, state);
         view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View attached) {
+                // Prepare the SF blur mask as soon as the real drawable exists.
+                // The pre-draw probe handles later OEM drawable replacement.
+                if (attached.getWidth() > 0 && attached.getHeight() > 0) {
+                    initializeNativeBlurCorners(attached);
+                }
                 installFirstDrawProbe(attached);
             }
             @Override public void onViewDetachedFromWindow(View detached) {
@@ -224,7 +229,7 @@ final class NativeMaterialContinuousCornersHook {
             java.lang.reflect.Method setter = type.getMethod("setCornerRadius", float.class);
             setter.invoke(drawable, radius);
             return original + ":seeded=" + radius;
-        } catch (ReflectiveOperationException | SecurityException error) {
+        } catch (ReflectiveOperationException | RuntimeException error) {
             return "unavailable:" + error.getClass().getSimpleName();
         }
     }
