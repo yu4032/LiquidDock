@@ -215,6 +215,9 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
             return true;
         }
         if (!canInstallBeforeGeometry(dockBg)) return false;
+        // Only release after the handoff is actually eligible. Early setupViews
+        // callbacks can arrive before geometry and must keep the native clip.
+        NativeMaterialContinuousCornersHook.releaseToPrismal(dockBg);
         if (!hasReadyNativeGeometry(dockBg)) {
             MainHook.log(TAG + " installing Prismal host before final native geometry"
                     + " size=" + dockBg.getWidth() + "x" + dockBg.getHeight()
