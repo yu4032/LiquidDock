@@ -203,6 +203,9 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         // Restore native corner metadata before the replacement renderer snapshots its radius.
         WorkstationNativeTaskbarHook.refresh();
         ViewGroup materialHost = (ViewGroup) dockBg;
+        // Prismal overscan and exterior shadow must not be clipped by the startup
+        // native-material mask once this View changes visual owner.
+        NativeMaterialContinuousCornersHook.releaseToPrismal(dockBg);
         WorkstationDockGeometryHook.bindBackground(materialHost);
         boolean nativeVisualOwner = isNativeVisualOwner(dockBg);
 
