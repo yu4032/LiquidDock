@@ -216,8 +216,8 @@ final class NativeMaterialContinuousCornersHook {
             String original = corners[0] + "," + corners[1] + ","
                     + corners[2] + "," + corners[3];
             if (WorkstationRuntimeState.isActive()) return original + ":taskbar";
-            for (float corner : corners) {
-                if (corner > .5f) return original + ":OEM-rounded";
+            if (!NativeDockCornerPolicy.hasRectangularStartupCorners(corners)) {
+                return original + ":OEM-preserved";
             }
             // The OEM material is measured; an all-zero blur mask is the
             // rectangular startup placeholder observed on the device.
