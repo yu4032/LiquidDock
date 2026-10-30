@@ -137,7 +137,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
             (ViewGroup) background, attachedHost,
             config.glass, config.workstation, Math.round(config.glass.blur));
 
-    // Keep the OEM material until a real GPU buffer has been submitted.
+    if (isNativeVisualOwner(background)) suppressVendorGpuBlur(background);
     installVendorMaterialBodyPreserver(background);
     syncSize(background);
     syncGeometry(background, config);
@@ -186,7 +186,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
     }
 
     static int suppressCompatBackgroundBlurRadius(View dockBg, int requestedRadius) {
-        if (!GlassRuntimeState.isEnabled() || !isZeroCopyActive()) return requestedRadius;
+        if (!GlassRuntimeState.isEnabled()) return requestedRadius;
         if (dockBg == null || requestedRadius <= 0) return requestedRadius;
         if (!COMPAT_BACKGROUND_CLASS.equals(dockBg.getClass().getName())) return requestedRadius;
         if (compatBackgroundBlurLoggedFor.get() != dockBg) {
@@ -215,9 +215,6 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
             return true;
         }
         if (!canInstallBeforeGeometry(dockBg)) return false;
-        // Only release after the handoff is actually eligible. Early setupViews
-        // callbacks can arrive before geometry and must keep the native clip.
-        NativeMaterialContinuousCornersHook.releaseToPrismal(dockBg);
         if (!hasReadyNativeGeometry(dockBg)) {
             MainHook.log(TAG + " installing Prismal host before final native geometry"
                     + " size=" + dockBg.getWidth() + "x" + dockBg.getHeight()
@@ -233,10 +230,8 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         restoreVendorMaterialBody();
         clearTrackedViews();
 
-        // The stock Dock is already rounded. Do not blank it before the first
-        // successful Prismal EGL swap (the zero-copy producer may still be pending).
-        MainHook.log(TAG + " preserving OEM material pending first GPU frame; "
-                + dockBlurHierarchy(dockBg));
+        if (nativeVisualOwner) suppressVendorGpuBlur(dockBg);
+
         float nativeRadius = readAndCacheRadius(dockBg);
         suppressVendorMaterialBody(dockBg, nativeRadius);
         int dockW = readDimension(dockBg, "mWidth", true);
@@ -307,14 +302,6 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         if (Miuix307ZeroCopyRenderer.isActive()) {
             if (zeroCopyActiveLoggedFor.get() != dockBg) {
                 zeroCopyActiveLoggedFor = new WeakReference<>(dockBg);
-                // The EGL renderer has submitted a real frame. Only now retire
-                // the OEM body and compositor blur; never expose a blank shell.
-                if (isNativeVisualOwner(dockBg)) {
-                    suppressVendorGpuBlur(dockBg);
-                    suppressVendorMaterialBody(dockBg, readAndCacheRadius(dockBg));
-                }
-                MainHook.log(TAG + " first GPU frame committed; native handoff "
-                        + dockBlurHierarchy(dockBg));
                 // Reconcile the already-created OEM RenderNode as soon as
                 // the new Prismal shadow producer becomes truly active.
                 DockShadowOwnership.refreshVendorDockShadow();
@@ -337,24 +324,9 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         host.postOnAnimation(() -> scheduleZeroCopyValidation(dockBg, host, frame + 1));
     }
 
-    /** Bounded one-shot diagnostic: native Floating Dock blur can belong to an ancestor. */
-    private static String dockBlurHierarchy(View background) {
-        StringBuilder result = new StringBuilder();
-        View cursor = background;
-        for (int depth = 0; cursor != null && depth < 8; depth++) {
-            if (depth > 0) result.append(" <- ");
-            result.append(cursor.getClass().getSimpleName());
-            Boolean nativeBlur = MiBlurBridge.getPassWindowBlurEnabled(cursor);
-            if (nativeBlur != null) result.append("(passBlur=").append(nativeBlur).append(')');
-            Object parent = cursor.getParent();
-            cursor = parent instanceof View ? (View) parent : null;
-        }
-        return result.toString();
-    }
-
     private static String inactiveVisualState(View dockBg) {
         return shouldSuppressVendorMaterialBody(dockBg)
-                ? "Prismal active; native shell suppressed"
+                ? "glass remains transparent"
                 : "default vendor shell remains visible";
     }
 
@@ -403,14 +375,13 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
 
     static boolean ownsVendorBlurState(View view) {
         return GlassRuntimeState.isEnabled()
-                && isZeroCopyActive()
                 && view != null
                 && view == currentBackground()
                 && isNativeVisualOwner(view);
     }
 
     private static boolean shouldSuppressVendorMaterialBody(View dockBg) {
-        return isNativeVisualOwner(dockBg) && isZeroCopyActive();
+        return isNativeVisualOwner(dockBg);
     }
 
     static void suppressVendorGpuBlur(View dockBg) {
