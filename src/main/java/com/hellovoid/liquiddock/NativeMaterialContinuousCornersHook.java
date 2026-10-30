@@ -144,18 +144,26 @@ final class NativeMaterialContinuousCornersHook {
                         && !WorkstationRuntimeState.isActive()) {
                     ensureOutline(target, current);
                 }
-                if (!current.firstFrameChecked) {
-                    MainHook.log(TAG + " first-draw material="
-                            + target.getClass().getSimpleName()
+                if (current.startupFrames < 3) {
+                    Outline shape = new Outline();
+                    ViewOutlineProvider provider = target.getOutlineProvider();
+                    if (provider != null) provider.getOutline(target, shape);
+                    MainHook.log(TAG + " initial-frame=" + (++current.startupFrames)
+                            + " material=" + target.getClass().getSimpleName()
                             + " size=" + target.getWidth() + "x" + target.getHeight()
                             + " radius=" + MiuixFolderGlassHook.readMaterialRadius(target)
                             + " drawable=" + drawableName(target)
                             + " clip=" + target.getClipToOutline()
-                            + " outline=" + target.getOutlineProvider().getClass().getSimpleName()
+                            + " canClip=" + shape.canClip()
+                            + " shapeEmpty=" + shape.isEmpty()
+                            + " outline=" + (provider == null ? "none"
+                                    : provider.getClass().getSimpleName())
                             + " glassBound=" + MiuixGlassHook.isBoundTo(target));
-                    current.firstFrameChecked = true;
                 }
-                current.removeProbe(target);
+                if (current.startupFrames >= 3) {
+                    current.firstFrameChecked = true;
+                    current.removeProbe(target);
+                }
                 return true;
             }
         };
@@ -262,6 +270,7 @@ final class NativeMaterialContinuousCornersHook {
         ViewOutlineProvider originalOutline;
         NativeOutline ownedOutline;
         boolean firstFrameChecked;
+        int startupFrames;
         ViewTreeObserver.OnPreDrawListener probe;
 
         DockState(View view) {
