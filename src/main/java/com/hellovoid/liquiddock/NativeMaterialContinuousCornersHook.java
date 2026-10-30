@@ -15,6 +15,7 @@ import com.hellovoid.prismal.PrismalContinuousCorners;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -119,7 +120,14 @@ final class NativeMaterialContinuousCornersHook {
             @Override public void onViewAttachedToWindow(View attached) {
                 installFirstDrawProbe(attached);
             }
-            @Override public void onViewDetachedFromWindow(View detached) {}
+            @Override public void onViewDetachedFromWindow(View detached) {
+                DockState current = DOCKS.get(detached);
+                if (current != null && current.probe != null) {
+                    ViewTreeObserver tree = detached.getViewTreeObserver();
+                    if (tree.isAlive()) tree.removeOnPreDrawListener(current.probe);
+                    current.probe = null;
+                }
+            }
         });
         if (view.isAttachedToWindow()) installFirstDrawProbe(view);
         if (continuous) ensureOutline(view, state);
@@ -130,23 +138,26 @@ final class NativeMaterialContinuousCornersHook {
         if (state == null || state.firstFrameChecked || state.probe != null) return;
         ViewTreeObserver observer = view.getViewTreeObserver();
         if (!observer.isAlive()) return;
+        WeakReference<View> reference = new WeakReference<>(view);
         ViewTreeObserver.OnPreDrawListener probe = new ViewTreeObserver.OnPreDrawListener() {
             @Override public boolean onPreDraw() {
-                DockState current = DOCKS.get(view);
+                View target = reference.get();
+                if (target == null) return true;
+                DockState current = DOCKS.get(target);
                 if (current == null) return true;
                 if (WorkstationRuntimeState.isActive() || GlassRuntimeState.isEnabled()
-                        && MiuixGlassHook.isBoundTo(view)) {
+                        && MiuixGlassHook.isBoundTo(target)) {
                     current.firstFrameChecked = true;
-                } else if (view.getWidth() > 0 && view.getHeight() > 0) {
-                    synchronizeFirstDrawable(view, current);
+                } else if (target.getWidth() > 0 && target.getHeight() > 0) {
+                    synchronizeFirstDrawable(target, current);
                     current.firstFrameChecked = true;
                     if (continuous) {
-                        ensureOutline(view, current);
-                        view.invalidateOutline();
+                        ensureOutline(target, current);
+                        target.invalidateOutline();
                     }
                 }
                 if (current.firstFrameChecked) {
-                    ViewTreeObserver tree = view.getViewTreeObserver();
+                    ViewTreeObserver tree = target.getViewTreeObserver();
                     if (tree.isAlive()) tree.removeOnPreDrawListener(this);
                     current.probe = null;
                 }
@@ -290,7 +301,11 @@ final class NativeMaterialContinuousCornersHook {
             }
             float radius = output.getRadius();
             if (!(radius > .5f)) radius = MiuixFolderGlassHook.readMaterialRadius(view);
-            if (!(radius > .5f) && dock != null) radius = dock.firstRadius;
+            if (!(radius > .5f) && dock != null && !WorkstationRuntimeState.isActive()) {
+                radius = Float.isFinite(dock.firstRadius) ? dock.firstRadius
+                        : NativeDockCornerPolicy.provisionalRadius(
+                                bounds.width(), bounds.height(), false);
+            }
             if (!(radius > .5f) || !Float.isFinite(radius)) {
                 // A missing OEM radius is not an instruction to draw a rectangle.
                 // In particular, never replace a future taskbar outline with a zero-radius path.
