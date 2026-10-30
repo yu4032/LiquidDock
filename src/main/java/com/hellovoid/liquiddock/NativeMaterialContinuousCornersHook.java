@@ -198,9 +198,9 @@ final class NativeMaterialContinuousCornersHook {
         if (state == null) return;
         if (view.getOutlineProvider() == state.ownedOutline) {
             view.setOutlineProvider(state.originalOutline);
-        }
-        if (view.getClipToOutline() && !state.originalClip) {
-            view.setClipToOutline(false);
+            if (view.getClipToOutline() && !state.originalClip) {
+                view.setClipToOutline(false);
+            }
         }
         view.invalidateOutline();
     }
