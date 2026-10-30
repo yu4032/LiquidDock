@@ -204,6 +204,7 @@ public final class ModuleMain extends XposedModule {
                 Launcher450SideSlideHoldHook.install(classLoader);
             }
             Launcher450DockFunctionalIconRegistry.install(classLoader);
+            NativeMaterialContinuousCornersHook.install(classLoader, runtimeConfig.enabled);
             new MainHook().install(classLoader);
 
             MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
