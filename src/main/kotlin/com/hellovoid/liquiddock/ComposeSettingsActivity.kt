@@ -357,11 +357,10 @@ private fun LiquidDockSettings(
                         layoutEntries,
                         ::navigateTo,
                     )
-                    Page.GlassHub -> HubPage(
-                        padding,
-                        "玻璃材质、组件样式、动画与第三方应用外观",
-                        glassEntries,
-                        ::navigateTo,
+                    Page.GlassHub -> AppearanceHubPage(
+                        padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.GlassHub.name }
+                            ?.let { SettingsFocusRequest(Page.GlassHub, it, searchFocusSequence) },
                     )
                     Page.MoreHub -> MoreHubPage(
                         padding = padding,
