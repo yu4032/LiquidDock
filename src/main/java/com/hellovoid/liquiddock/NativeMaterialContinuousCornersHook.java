@@ -4,7 +4,6 @@ import android.graphics.Outline;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
@@ -13,7 +12,6 @@ import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.prismal.PrismalContinuousCorners;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
@@ -80,7 +78,7 @@ final class NativeMaterialContinuousCornersHook {
                             ? (View) chain.getThisObject() : null;
                     if (view != null) observeDock(view);
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                    if (view != null && continuous) {
+                    if (view != null) {
                         DockState state = DOCKS.get(view);
                         if (state != null && !WorkstationRuntimeState.isActive()) {
                             ensureOutline(view, state);
@@ -112,30 +110,26 @@ final class NativeMaterialContinuousCornersHook {
     private static void observeDock(View view) {
         DockState state = DOCKS.get(view);
         if (state != null) return;
-        state = new DockState();
+        state = new DockState(view);
         DOCKS.put(view, state);
-        // The constructor can finish before either size or OEM Drawable is initialized.
-        // The first pre-draw is the last safe boundary before rendering the visible frame.
+        // This is the material View itself, never HotSeats or an icon-containing ancestor.
+        // An OutlineProvider alone is metadata: the native RenderNode must be clipped.
+        ensureOutline(view, state);
         view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View attached) {
                 installFirstDrawProbe(attached);
             }
             @Override public void onViewDetachedFromWindow(View detached) {
                 DockState current = DOCKS.get(detached);
-                if (current != null && current.probe != null) {
-                    ViewTreeObserver tree = detached.getViewTreeObserver();
-                    if (tree.isAlive()) tree.removeOnPreDrawListener(current.probe);
-                    current.probe = null;
-                }
+                if (current != null) current.removeProbe(detached);
             }
         });
         if (view.isAttachedToWindow()) installFirstDrawProbe(view);
-        if (continuous) ensureOutline(view, state);
     }
 
     private static void installFirstDrawProbe(View view) {
         DockState state = DOCKS.get(view);
-        if (state == null || state.firstFrameChecked || state.probe != null) return;
+        if (state == null || state.probe != null || state.firstFrameChecked) return;
         ViewTreeObserver observer = view.getViewTreeObserver();
         if (!observer.isAlive()) return;
         WeakReference<View> reference = new WeakReference<>(view);
@@ -145,22 +139,23 @@ final class NativeMaterialContinuousCornersHook {
                 if (target == null) return true;
                 DockState current = DOCKS.get(target);
                 if (current == null) return true;
-                if (WorkstationRuntimeState.isActive() || GlassRuntimeState.isEnabled()
-                        && MiuixGlassHook.isBoundTo(target)) {
-                    current.firstFrameChecked = true;
-                } else if (target.getWidth() > 0 && target.getHeight() > 0) {
-                    synchronizeFirstDrawable(target, current);
-                    current.firstFrameChecked = true;
-                    if (continuous) {
-                        ensureOutline(target, current);
-                        target.invalidateOutline();
-                    }
+                if (target.getWidth() <= 0 || target.getHeight() <= 0) return true;
+                if (!MiuixGlassHook.isBoundTo(target)
+                        && !WorkstationRuntimeState.isActive()) {
+                    ensureOutline(target, current);
                 }
-                if (current.firstFrameChecked) {
-                    ViewTreeObserver tree = target.getViewTreeObserver();
-                    if (tree.isAlive()) tree.removeOnPreDrawListener(this);
-                    current.probe = null;
+                if (!current.firstFrameChecked) {
+                    MainHook.log(TAG + " first-draw material="
+                            + target.getClass().getSimpleName()
+                            + " size=" + target.getWidth() + "x" + target.getHeight()
+                            + " radius=" + MiuixFolderGlassHook.readMaterialRadius(target)
+                            + " drawable=" + drawableName(target)
+                            + " clip=" + target.getClipToOutline()
+                            + " outline=" + target.getOutlineProvider().getClass().getSimpleName()
+                            + " glassBound=" + MiuixGlassHook.isBoundTo(target));
+                    current.firstFrameChecked = true;
                 }
+                current.removeProbe(target);
                 return true;
             }
         };
@@ -168,83 +163,46 @@ final class NativeMaterialContinuousCornersHook {
         observer.addOnPreDrawListener(probe);
     }
 
-    private static void synchronizeFirstDrawable(View view, DockState state) {
-        GradientDrawable background = nativeDrawable(view);
-        float nativeRadius = MiuixFolderGlassHook.readMaterialRadius(view);
-        if (background != null) {
-            float drawableRadius = background.getCornerRadius();
-            float[] nativeRadii = background.getCornerRadii();
-            if (nativeRadii != null) {
-                // An all-zero OEM array is also a rectangular startup placeholder.
-                // Nonzero per-corner geometry belongs to Launcher and must be preserved.
-                for (float nativeCorner : nativeRadii) {
-                    if (nativeCorner > .5f) return;
-                }
-            }
-            if (!(nativeRadius > .5f) && drawableRadius > .5f) nativeRadius = drawableRadius;
-        }
-        int materialWidth = nativeDimension(view, "mWidth", view.getWidth());
-        int materialHeight = nativeDimension(view, "mHeight", view.getHeight());
-        float radius = nativeRadius > .5f ? nativeRadius
-                : NativeDockCornerPolicy.provisionalRadius(materialWidth, materialHeight,
-                        WorkstationRuntimeState.isActive());
-        if (!(radius > .5f) || !Float.isFinite(radius)) return;
-        state.firstRadius = radius;
-        if (background != null && background.getCornerRadius() <= .5f) {
-            background.mutate();
-            background.setCornerRadius(radius);
-            view.invalidateOutline();
-            MainHook.log(TAG + " first native background radius initialized="
-                    + radius + " material=" + materialWidth + "x" + materialHeight);
-        } else if (background == null) {
-            MainHook.log(TAG + " first native background has no GradientDrawable; "
-                    + "outline-only radius=" + radius);
-        }
-    }
-
-    private static int nativeDimension(View view, String fieldName, int fallback) {
-        for (Class<?> c = view.getClass(); c != null; c = c.getSuperclass()) {
-            try {
-                Field field = c.getDeclaredField(fieldName);
-                field.setAccessible(true);
-                Object value = field.get(view);
-                if (value instanceof Number && ((Number) value).intValue() > 0) {
-                    return ((Number) value).intValue();
-                }
-                break;
-            } catch (NoSuchFieldException ignored) {
-            } catch (Throwable error) {
-                break;
-            }
-        }
-        return fallback;
-    }
-
-    private static GradientDrawable nativeDrawable(View view) {
-        for (Class<?> c = view.getClass(); c != null; c = c.getSuperclass()) {
-            try {
-                Field field = c.getDeclaredField("mBackground");
-                field.setAccessible(true);
-                Object value = field.get(view);
-                if (value instanceof GradientDrawable) return (GradientDrawable) value;
-            } catch (NoSuchFieldException ignored) {
-            } catch (Throwable error) {
-                break;
-            }
-        }
+    private static String drawableName(View view) {
         Drawable background = view.getBackground();
-        return background instanceof GradientDrawable ? (GradientDrawable) background : null;
+        return background == null ? "none" : background.getClass().getSimpleName();
     }
 
+    /**
+     * Only the material View is clipped. The OEM controls the radius animation; the
+     * provider recomputes from its current mCornerRadius on every outline invalidation.
+     */
     private static void ensureOutline(View view, DockState state) {
-        // Stock mode must keep the native provider and its native animation untouched.
-        if (!continuous || WorkstationRuntimeState.isActive()
-                || MiuixGlassHook.isBoundTo(view)
-                || LauncherGlassStaticNode.find(view) != null) return;
-        if (view.getOutlineProvider() instanceof NativeOutline) return;
-        ViewOutlineProvider original = view.getOutlineProvider();
-        view.setOutlineProvider(new NativeOutline(
-                original != null ? original : ViewOutlineProvider.BACKGROUND, state));
+        if (MiuixGlassHook.isBoundTo(view) || LauncherGlassStaticNode.find(view) != null) {
+            releaseToPrismal(view);
+            return;
+        }
+        if (WorkstationRuntimeState.isActive()) return;
+        ViewOutlineProvider provider = view.getOutlineProvider();
+        if (provider != state.ownedOutline) {
+            // Vendor and taskbar remain able to replace their provider; never wrap
+            // the taskbar's temporary rectangular silhouette.
+            if (state.ownedOutline != null && provider != state.originalOutline) return;
+            state.originalOutline = provider;
+            state.ownedOutline = new NativeOutline(
+                    provider != null ? provider : ViewOutlineProvider.BACKGROUND, state);
+            view.setOutlineProvider(state.ownedOutline);
+        }
+        if (!view.getClipToOutline()) view.setClipToOutline(true);
+        view.invalidateOutline();
+    }
+
+    /** Release the exact material outline before the overscanned Prismal host is installed. */
+    static void releaseToPrismal(View view) {
+        if (view == null) return;
+        DockState state = DOCKS.get(view);
+        if (state == null) return;
+        if (view.getOutlineProvider() == state.ownedOutline) {
+            view.setOutlineProvider(state.originalOutline);
+        }
+        if (view.getClipToOutline() && !state.originalClip) {
+            view.setClipToOutline(false);
+        }
         view.invalidateOutline();
     }
 
@@ -301,9 +259,22 @@ final class NativeMaterialContinuousCornersHook {
     }
 
     private static final class DockState {
-        float firstRadius = Float.NaN;
+        final boolean originalClip;
+        ViewOutlineProvider originalOutline;
+        NativeOutline ownedOutline;
         boolean firstFrameChecked;
         ViewTreeObserver.OnPreDrawListener probe;
+
+        DockState(View view) {
+            originalClip = view.getClipToOutline();
+        }
+
+        void removeProbe(View view) {
+            if (probe == null) return;
+            ViewTreeObserver tree = view.getViewTreeObserver();
+            if (tree.isAlive()) tree.removeOnPreDrawListener(probe);
+            probe = null;
+        }
     }
 
     private static final class NativeOutline extends ViewOutlineProvider {
@@ -326,24 +297,26 @@ final class NativeMaterialContinuousCornersHook {
                         || view.getWidth() <= 0 || view.getHeight() <= 0) return;
                 bounds.set(0, 0, view.getWidth(), view.getHeight());
             }
-            float radius = output.getRadius();
-            if (!(radius > .5f)) radius = MiuixFolderGlassHook.readMaterialRadius(view);
-            if (!(radius > .5f) && dock != null) {
-                GradientDrawable nativeBackground = nativeDrawable(view);
-                if (nativeBackground != null) radius = nativeBackground.getCornerRadius();
-            }
-            if (!(radius > .5f) && dock != null && !WorkstationRuntimeState.isActive()) {
-                radius = Float.isFinite(dock.firstRadius) ? dock.firstRadius
-                        : NativeDockCornerPolicy.provisionalRadius(
-                                bounds.width(), bounds.height(), false);
-            }
-            if (!(radius > .5f) || !Float.isFinite(radius)) {
-                // A missing OEM radius is not an instruction to draw a rectangle.
-                // In particular, never replace a future taskbar outline with a zero-radius path.
+            // Native taskbar must be rectangular, even during mode transitions.
+            if (dock != null && WorkstationRuntimeState.isActive()) {
+                output.setRect(bounds);
                 return;
             }
+            float radius = MiuixFolderGlassHook.readMaterialRadius(view);
+            if (!(radius > .5f)) radius = output.getRadius();
+            if (!(radius > .5f) && dock != null) {
+                radius = NativeDockCornerPolicy.provisionalRadius(
+                        bounds.width(), bounds.height(), false);
+            }
+            if (!(radius > .5f) || !Float.isFinite(radius)) return;
             radius = Math.min(radius, .5f * Math.min(bounds.width(), bounds.height()));
             float alpha = output.getAlpha();
+            if (!continuous) {
+                // Preserve OEM round-rect geometry without a custom shader or any overlay.
+                output.setRoundRect(bounds, radius);
+                output.setAlpha(alpha);
+                return;
+            }
             if (!bounds.equals(cached) || cachedRadius != radius) {
                 float[] points = PrismalContinuousCorners.contour(
                         bounds.width(), bounds.height(), radius);
