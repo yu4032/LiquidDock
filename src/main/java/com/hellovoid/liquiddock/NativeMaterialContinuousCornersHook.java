@@ -180,9 +180,8 @@ final class NativeMaterialContinuousCornersHook {
         if (WorkstationRuntimeState.isActive()) return;
         ViewOutlineProvider provider = view.getOutlineProvider();
         if (provider != state.ownedOutline) {
-            // Vendor and taskbar remain able to replace their provider; never wrap
-            // the taskbar's temporary rectangular silhouette.
-            if (state.ownedOutline != null && provider != state.originalOutline) return;
+            // Workstation is excluded above. If OEM replaces its own outline on
+            // radius commit, wrap the new provider rather than leaving it rectangular.
             state.originalOutline = provider;
             state.ownedOutline = new NativeOutline(
                     provider != null ? provider : ViewOutlineProvider.BACKGROUND, state);
