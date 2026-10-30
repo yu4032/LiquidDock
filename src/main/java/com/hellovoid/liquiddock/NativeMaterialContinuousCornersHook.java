@@ -328,6 +328,10 @@ final class NativeMaterialContinuousCornersHook {
             }
             float radius = output.getRadius();
             if (!(radius > .5f)) radius = MiuixFolderGlassHook.readMaterialRadius(view);
+            if (!(radius > .5f) && dock != null) {
+                GradientDrawable nativeBackground = nativeDrawable(view);
+                if (nativeBackground != null) radius = nativeBackground.getCornerRadius();
+            }
             if (!(radius > .5f) && dock != null && !WorkstationRuntimeState.isActive()) {
                 radius = Float.isFinite(dock.firstRadius) ? dock.firstRadius
                         : NativeDockCornerPolicy.provisionalRadius(
