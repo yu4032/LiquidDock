@@ -33,6 +33,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private Surface outputSurface;
     private boolean disposed;
     private volatile boolean hwuiProbeActive;
+    private boolean launchProxyActive;
+    private boolean launchProxyReturning;
+    private float launchReturnAlpha = 1f;
     private final LauncherGlassHwuiProbeView hwuiProbe;
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
@@ -197,7 +200,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     /** UI pre-draw applies native opacity to the already cached output in the same traversal. */
     static float syncWorkspacePresentation(
-            View root, View material, boolean launchProxyActive) {
+            View root, View material, boolean launchProxyActive,
+            boolean launchProxyReturning, float returnProgress) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null) return 1f;
         View workspace = layer.workspaceRef.get();
@@ -217,6 +221,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         float alpha = frozenFolder ? 1f : workspace != null
                 ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
         layer.layerAlpha.setWorkspaceAlpha(alpha, launchProxyActive);
+        layer.launchProxyActive = launchProxyActive;
+        layer.launchProxyReturning = launchProxyActive && launchProxyReturning;
+        layer.launchReturnAlpha = !launchProxyActive ? 1f
+                : layer.launchProxyReturning ? smoothProgress(returnProgress) : 0f;
         layer.applyLayerAlpha();
         return alpha;
     }
@@ -331,13 +339,23 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     private void applyLayerAlpha() {
+        boolean hideDuringLaunch = launchProxyActive
+                && (!launchProxyReturning || launchReturnAlpha <= 0.001f);
+        float alpha = layerAlpha.alpha() * launchReturnAlpha;
         if (hwuiProbeActive && hwuiProbe != null) {
             setAlpha(0f);
-            hwuiProbe.setAlpha(layerAlpha.alpha());
+            hwuiProbe.setVisibility(hideDuringLaunch ? View.INVISIBLE : View.VISIBLE);
+            hwuiProbe.setAlpha(alpha);
         } else {
-            setAlpha(layerAlpha.alpha());
+            setAlpha(hideDuringLaunch ? 0f : alpha);
             if (hwuiProbe != null) hwuiProbe.setAlpha(0f);
         }
+    }
+
+    private static float smoothProgress(float progress) {
+        if (!Float.isFinite(progress)) return 0f;
+        float t = Math.max(0f, Math.min(1f, progress));
+        return t * t * (3f - 2f * t);
     }
 
     private void cancelSceneAnimation() {

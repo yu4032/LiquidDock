@@ -6,14 +6,24 @@ final class LauncherGlassVisualOwnerState {
     private boolean launchProxyActive;
     private float[] launchProxyRect;
     private float launchProxyAlpha = 1f;
+    private boolean launchProxyReturning;
+    private float launchProxyReturnProgress;
 
     /** Own the visual slot while MIUI's proxy exists but has not made its icon visible. */
     boolean holdLaunchProxyHidden() {
+        return holdLaunchProxyHidden(false, 0f);
+    }
+
+    boolean holdLaunchProxyHidden(boolean returning, float progress) {
+        float nextProgress = clamp(progress);
         boolean changed = !launchProxyActive || launchProxyRect != null
-                || launchProxyAlpha != 0f;
+                || launchProxyAlpha != 0f || launchProxyReturning != returning
+                || Math.abs(launchProxyReturnProgress - nextProgress) >= EPSILON;
         launchProxyActive = true;
         launchProxyRect = null;
         launchProxyAlpha = 0f;
+        launchProxyReturning = returning;
+        launchProxyReturnProgress = nextProgress;
         return changed;
     }
 
@@ -24,11 +34,19 @@ final class LauncherGlassVisualOwnerState {
 
     /** The final consumer's rectangle and opacity are one visual-owner sample. */
     boolean updateLaunchProxyRect(float[] rect, float alpha) {
+        return updateLaunchProxyRect(rect, alpha, false, 0f);
+    }
+
+    boolean updateLaunchProxyRect(
+            float[] rect, float alpha, boolean returning, float progress) {
         if (!valid(rect)) return false;
         boolean geometryChanged = !same(launchProxyRect, rect);
         float nextAlpha = Float.isFinite(alpha) ? clamp(alpha) : 0f;
+        float nextProgress = clamp(progress);
         boolean alphaChanged = Math.abs(launchProxyAlpha - nextAlpha) >= EPSILON;
-        boolean changed = !launchProxyActive || geometryChanged || alphaChanged;
+        boolean transitionChanged = launchProxyReturning != returning
+                || Math.abs(launchProxyReturnProgress - nextProgress) >= EPSILON;
+        boolean changed = !launchProxyActive || geometryChanged || alphaChanged || transitionChanged;
         if (!changed) return false;
         launchProxyActive = true;
         if (geometryChanged) launchProxyRect = rect.clone();
@@ -36,7 +54,17 @@ final class LauncherGlassVisualOwnerState {
         // to trigger redraw. Advancing it for every sub-EPSILON sample could suppress a
         // continuous fade forever when the proxy geometry itself remains stationary.
         launchProxyAlpha = nextAlpha;
+        launchProxyReturning = returning;
+        launchProxyReturnProgress = nextProgress;
         return true;
+    }
+
+    boolean matchesLaunchProxyVisual(float[] rect, float alpha) {
+        if (!launchProxyActive) return false;
+        boolean rectMatches = launchProxyRect == null
+                ? rect == null : same(launchProxyRect, rect);
+        float nextAlpha = Float.isFinite(alpha) ? clamp(alpha) : 0f;
+        return rectMatches && Math.abs(launchProxyAlpha - nextAlpha) < EPSILON;
     }
 
     boolean endLaunchProxy() {
@@ -44,10 +72,14 @@ final class LauncherGlassVisualOwnerState {
         launchProxyActive = false;
         launchProxyRect = null;
         launchProxyAlpha = 1f;
+        launchProxyReturning = false;
+        launchProxyReturnProgress = 0f;
         return true;
     }
 
     boolean isLaunchProxyActive() { return launchProxyActive; }
+    boolean isLaunchProxyReturning() { return launchProxyReturning; }
+    float launchProxyReturnProgress() { return launchProxyReturnProgress; }
 
     float alpha() { return launchProxyAlpha; }
 

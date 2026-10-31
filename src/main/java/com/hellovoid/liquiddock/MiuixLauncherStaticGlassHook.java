@@ -273,12 +273,8 @@ final class MiuixLauncherStaticGlassHook {
                                         LauncherGlassStaticNode.find((View) target);
                                 if (node != null && args[2] instanceof Number) {
                                     boolean closeToHome = !((Boolean) args[6]);
-                                    if (!closeToHome) {
-                                        // A running return can be retargeted into a new launch.
-                                        node.resetHomeReturnFade();
-                                    } else if (args[3] instanceof Number) {
-                                        node.updateHomeReturnProgress(((Number) args[3]).floatValue());
-                                    }
+                                    float transitionProgress = args[3] instanceof Number
+                                            ? ((Number) args[3]).floatValue() : 0f;
                                     float proxyAlpha = ((Number) args[2]).floatValue();
                                     boolean drawIcon;
                                     if (useRotationRect) {
@@ -304,7 +300,8 @@ final class MiuixLauncherStaticGlassHook {
                                             LauncherGlassProxyVisibility.shouldPublishGeometry(
                                                     closeToHome, proxyVisible);
                                     if (!publishProxyGeometry) {
-                                        if (node.holdLaunchProxyHidden()) {
+                                        if (node.holdLaunchProxyHidden(
+                                                closeToHome, transitionProgress)) {
                                             MainHook.log(TAG + " proxy owner hidden class="
                                                     + owner.getClass().getSimpleName()
                                                     + " target=" + target.getClass().getSimpleName()
@@ -325,7 +322,7 @@ final class MiuixLauncherStaticGlassHook {
                                         boolean firstVisible = node.updateLaunchProxyGeometry(
                                                 proxyRect.left, proxyRect.top,
                                                 proxyRect.right, proxyRect.bottom,
-                                                visualAlpha);
+                                                visualAlpha, closeToHome, transitionProgress);
                                         if (firstVisible) {
                                             MainHook.log(TAG + " proxy geometry visible class="
                                                     + owner.getClass().getSimpleName()

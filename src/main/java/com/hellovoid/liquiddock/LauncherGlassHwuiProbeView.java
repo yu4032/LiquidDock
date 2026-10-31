@@ -25,6 +25,7 @@ final class LauncherGlassHwuiProbeView extends View {
             "gl_FragColor\\s*=\\s*vec4\\((.*?)\\);", Pattern.DOTALL);
     private static volatile String baselineAgslSource;
     private static volatile String decoratedAgslSource;
+    private static volatile String motionDecoratedAgslSource;
 
     private final LauncherGlassSession session;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -32,6 +33,7 @@ final class LauncherGlassHwuiProbeView extends View {
     private Bitmap blurredBackdrop;
     private RuntimeShader baselineShader;
     private RuntimeShader decoratedShader;
+    private RuntimeShader motionDecoratedShader;
     private int backdropLogicalWidth;
     private int backdropLogicalHeight;
     private int backdropRotation = -1;
@@ -51,8 +53,9 @@ final class LauncherGlassHwuiProbeView extends View {
         setLayerType(View.LAYER_TYPE_HARDWARE, null);
     }
 
-    private static String buildAgslSource(boolean decorated) {
-        String source = PrismalRenderer.workspaceHwuiProbeFragmentSource(decorated);
+    private static String buildAgslSource(boolean decorated, boolean transitionMaterial) {
+        String source = PrismalRenderer.workspaceHwuiProbeFragmentSource(
+                decorated, transitionMaterial);
         source = source.replace("#extension GL_OES_standard_derivatives : enable", "");
         source = source.replace("precision highp float;", "");
         source = source.replace("uniform sampler2D u_backgroundTexture;",
@@ -95,22 +98,27 @@ final class LauncherGlassHwuiProbeView extends View {
                     + sampleCount);
         }
 
-        // The reconstructed-27 multi-tap helper was originally inside GLSL main and could read
-        // the varying directly. AGSL functions receive per-fragment values as parameters.
-        int sevenTapStart = source.indexOf("vec3 optical27SevenTap(");
-        int sevenTapEnd = sevenTapStart >= 0 ? source.indexOf("\n}", sevenTapStart) : -1;
-        if (sevenTapStart >= 0 && sevenTapEnd < 0) {
-            throw new IllegalStateException("Prismal AGSL seven-tap helper contract changed");
-        }
-        if (sevenTapStart >= 0) {
-            String sevenTap = source.substring(sevenTapStart, sevenTapEnd + 2)
-                    .replace("vec3 optical27SevenTap(vec2 offset, vec2 push, float pinch) {",
-                            "vec3 optical27SevenTap(vec2 offset, vec2 push, float pinch, vec2 screenUv) {")
+        // Reconstructed-27 helpers were originally inside GLSL main and could read the varying
+        // directly. AGSL functions receive per-fragment values as parameters.
+        String chromaHelperName = source.contains("vec3 optical27SevenTap(")
+                ? "optical27SevenTap" : null;
+        if (chromaHelperName != null) {
+            int helperStart = source.indexOf("vec3 " + chromaHelperName + "(");
+            int helperEnd = source.indexOf("\n}", helperStart);
+            if (helperEnd < 0) {
+                throw new IllegalStateException("Prismal AGSL chromatic helper contract changed");
+            }
+            String signature = "vec3 " + chromaHelperName
+                    + "(vec2 offset, vec2 push, float pinch) {";
+            String helper = source.substring(helperStart, helperEnd + 2)
+                    .replace(signature, "vec3 " + chromaHelperName
+                            + "(vec2 offset, vec2 push, float pinch, vec2 screenUv) {")
                     .replace("backdropUv(v_screenTexCoord,", "backdropUv(screenUv,");
-            source = source.substring(0, sevenTapStart) + sevenTap + source.substring(sevenTapEnd + 2);
+            source = source.substring(0, helperStart) + helper + source.substring(helperEnd + 2);
             source = source.replaceAll(
-                    "optical27SevenTap\\(baseOffset,\\s*chromaPush,\\s*pinchMix\\)",
-                    "optical27SevenTap(baseOffset, chromaPush, pinchMix, v_screenTexCoord)");
+                    Pattern.quote(chromaHelperName)
+                            + "\\(baseOffset,\\s*chromaPush,\\s*pinchMix\\)",
+                    chromaHelperName + "(baseOffset, chromaPush, pinchMix, v_screenTexCoord)");
         }
 
         source = replaceExactlyOnce(source, "uniform vec2  u_resolution;",
@@ -143,8 +151,9 @@ final class LauncherGlassHwuiProbeView extends View {
         StringBuffer returned = new StringBuffer(source.length());
         int outputCount = 0;
         while (outputs.find()) {
+            String premultiplied = premultipliedAgslComponents(outputs.group(1));
             outputs.appendReplacement(returned,
-                    Matcher.quoteReplacement("return half4(" + outputs.group(1) + ");"));
+                    Matcher.quoteReplacement("return half4(" + premultiplied + ");"));
             outputCount++;
         }
         outputs.appendTail(returned);
@@ -160,14 +169,46 @@ final class LauncherGlassHwuiProbeView extends View {
         return source;
     }
 
+    /** GLSL fragment outputs are straight-alpha; Skia RuntimeShader outputs must be premultiplied. */
+    private static String premultipliedAgslComponents(String vec4Arguments) {
+        int nesting = 0;
+        int separator = -1;
+        for (int i = 0; i < vec4Arguments.length(); i++) {
+            char c = vec4Arguments.charAt(i);
+            if (c == '(') nesting++;
+            else if (c == ')') nesting--;
+            else if (c == ',' && nesting == 0) {
+                separator = i;
+                break;
+            }
+        }
+        if (separator <= 0 || separator >= vec4Arguments.length() - 1) {
+            throw new IllegalStateException("Expected straight-alpha vec4 output: "
+                    + vec4Arguments);
+        }
+        String rgb = vec4Arguments.substring(0, separator).trim();
+        String alpha = vec4Arguments.substring(separator + 1).trim();
+        return "(" + rgb + ") * (" + alpha + "), " + alpha;
+    }
+
     private static String agslSource(boolean decorated) {
-        String source = decorated ? decoratedAgslSource : baselineAgslSource;
+        return agslSource(decorated, false);
+    }
+
+    private static String agslSource(boolean decorated, boolean transitionMaterial) {
+        if (transitionMaterial && !decorated) {
+            throw new IllegalArgumentException("transition material requires decoration");
+        }
+        String source = transitionMaterial ? motionDecoratedAgslSource
+                : decorated ? decoratedAgslSource : baselineAgslSource;
         if (source != null) return source;
         synchronized (LauncherGlassHwuiProbeView.class) {
-            source = decorated ? decoratedAgslSource : baselineAgslSource;
+            source = transitionMaterial ? motionDecoratedAgslSource
+                    : decorated ? decoratedAgslSource : baselineAgslSource;
             if (source == null) {
-                source = buildAgslSource(decorated);
-                if (decorated) decoratedAgslSource = source;
+                source = buildAgslSource(decorated, transitionMaterial);
+                if (transitionMaterial) motionDecoratedAgslSource = source;
+                else if (decorated) decoratedAgslSource = source;
                 else baselineAgslSource = source;
             }
         }
@@ -191,6 +232,12 @@ final class LauncherGlassHwuiProbeView extends View {
         try {
             RuntimeShader nextBaseline = new RuntimeShader(agslSource(false));
             RuntimeShader nextDecorated = new RuntimeShader(agslSource(true));
+            RuntimeShader nextMotionDecorated;
+            try {
+                nextMotionDecorated = new RuntimeShader(agslSource(true, true));
+            } catch (RuntimeException ignored) {
+                nextMotionDecorated = null;
+            }
             BitmapShader rawInput = new BitmapShader(
                     rawBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             BitmapShader blurInput = new BitmapShader(
@@ -200,6 +247,10 @@ final class LauncherGlassHwuiProbeView extends View {
             nextBaseline.setInputShader("u_blurredTexture", blurInput);
             nextDecorated.setInputShader("u_backgroundTexture", rawInput);
             nextDecorated.setInputShader("u_blurredTexture", blurInput);
+            if (nextMotionDecorated != null) {
+                nextMotionDecorated.setInputShader("u_backgroundTexture", rawInput);
+                nextMotionDecorated.setInputShader("u_blurredTexture", blurInput);
+            }
             nextBaseline.setFloatUniform("uProbeRawScale",
                     (float) rawBitmap.getWidth() / logicalWidth,
                     (float) rawBitmap.getHeight() / logicalHeight);
@@ -212,10 +263,19 @@ final class LauncherGlassHwuiProbeView extends View {
             nextDecorated.setFloatUniform("uProbeBlurScale",
                     (float) blurBitmap.getWidth() / logicalWidth,
                     (float) blurBitmap.getHeight() / logicalHeight);
+            if (nextMotionDecorated != null) {
+                nextMotionDecorated.setFloatUniform("uProbeRawScale",
+                        (float) rawBitmap.getWidth() / logicalWidth,
+                        (float) rawBitmap.getHeight() / logicalHeight);
+                nextMotionDecorated.setFloatUniform("uProbeBlurScale",
+                        (float) blurBitmap.getWidth() / logicalWidth,
+                        (float) blurBitmap.getHeight() / logicalHeight);
+            }
             backdrop = rawBitmap;
             blurredBackdrop = blurBitmap;
             baselineShader = nextBaseline;
             decoratedShader = nextDecorated;
+            motionDecoratedShader = nextMotionDecorated;
             backdropLogicalWidth = logicalWidth;
             backdropLogicalHeight = logicalHeight;
             backdropRotation = rotation;
@@ -233,6 +293,7 @@ final class LauncherGlassHwuiProbeView extends View {
     void clearBackdrops() {
         baselineShader = null;
         decoratedShader = null;
+        motionDecoratedShader = null;
         backdrop = null;
         blurredBackdrop = null;
         backdropLogicalWidth = 0;
@@ -245,6 +306,7 @@ final class LauncherGlassHwuiProbeView extends View {
         super.onDraw(canvas);
         RuntimeShader baseline = baselineShader;
         RuntimeShader decorated = decoratedShader;
+        RuntimeShader motionDecorated = motionDecoratedShader;
         if (backdrop == null || blurredBackdrop == null
                 || baseline == null || decorated == null) return;
         if (getWidth() != backdropLogicalWidth || getHeight() != backdropLogicalHeight) return;
@@ -252,7 +314,7 @@ final class LauncherGlassHwuiProbeView extends View {
         try {
             if (Trace.isEnabled()) Trace.beginSection("LD.Workspace.HWUIProbe.Draw");
             try {
-                session.drawHwuiProbe(canvas, paint, baseline, decorated);
+                session.drawHwuiProbe(canvas, paint, baseline, decorated, motionDecorated);
             } finally {
                 if (Trace.isEnabled()) Trace.endSection();
             }

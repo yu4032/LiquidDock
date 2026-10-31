@@ -44,7 +44,6 @@ final class LauncherGlassStaticNode {
     private ValueAnimator pressAnimator;
     private ValueAnimator visibilityAnimator;
     private volatile float visibilityAlpha;
-    private volatile float homeReturnAlpha = 1f;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
     private LauncherGlassStaticNode(
@@ -71,7 +70,6 @@ final class LauncherGlassStaticNode {
 
             @Override public void onViewDetachedFromWindow(View v) {
                 folderReturnState.clear();
-                homeReturnAlpha = 1f;
                 resetPressInteraction(false);
                 hideImmediately();
                 LauncherGlassSession live = session;
@@ -257,7 +255,7 @@ final class LauncherGlassStaticNode {
         animateVisibilityTo(!suppressionState.isSuppressed());
     }
 
-    float visibilityAlpha() { return visibilityAlpha * homeReturnAlpha; }
+    float visibilityAlpha() { return visibilityAlpha; }
 
     /**
      * Opacity for one Workspace glass draw, resolved from its current visual owner.
@@ -296,22 +294,6 @@ final class LauncherGlassStaticNode {
         return Math.max(0f, Math.min(1f, alpha));
     }
 
-    void updateHomeReturnProgress(float progress) {
-        if (disposed) return;
-        float alpha = LauncherGlassReturnFade.alpha(progress);
-        if (homeReturnAlpha == alpha) return;
-        homeReturnAlpha = alpha;
-        LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
-    }
-
-    void resetHomeReturnFade() {
-        if (homeReturnAlpha == 1f) return;
-        homeReturnAlpha = 1f;
-        LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
-    }
-
     /**
      * UI-only guard. Widgets still read their native span and grid-derived width
      * correction every pre-draw; only unchanged coordinate mapping is reused.
@@ -343,6 +325,8 @@ final class LauncherGlassStaticNode {
     }
 
     boolean isLaunchProxyActive() { return visualOwnerState.isLaunchProxyActive(); }
+    boolean isLaunchProxyReturning() { return visualOwnerState.isLaunchProxyReturning(); }
+    float launchProxyReturnProgress() { return visualOwnerState.launchProxyReturnProgress(); }
 
     boolean retainLastGeometryDuringFade() {
         return visibilityAlpha > 0.001f && suppressionState.isSuppressed();
@@ -381,14 +365,19 @@ final class LauncherGlassStaticNode {
     }
 
     boolean holdLaunchProxyHidden() {
+        return holdLaunchProxyHidden(false, 0f);
+    }
+
+    boolean holdLaunchProxyHidden(boolean returning, float progress) {
         if (disposed) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
-        if (!visualOwnerState.holdLaunchProxyHidden()) return false;
+        boolean visualChanged = !visualOwnerState.matchesLaunchProxyVisual(null, 0f);
+        if (!visualOwnerState.holdLaunchProxyHidden(returning, progress)) return false;
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
-        return true;
+        if (live != null && visualChanged) live.requestStaticRedraw();
+        return visualChanged;
     }
 
     boolean updateLaunchProxyGeometry(float left, float top, float right, float bottom) {
@@ -397,20 +386,27 @@ final class LauncherGlassStaticNode {
 
     boolean updateLaunchProxyGeometry(
             float left, float top, float right, float bottom, float alpha) {
+        return updateLaunchProxyGeometry(left, top, right, bottom, alpha, false, 0f);
+    }
+
+    boolean updateLaunchProxyGeometry(
+            float left, float top, float right, float bottom, float alpha,
+            boolean returning, float progress) {
         if (disposed) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
         boolean hadGeometry = visualOwnerState.copyLaunchProxyRect() != null;
+        float[] rect = new float[]{left, top, right, bottom};
+        boolean visualChanged = !visualOwnerState.matchesLaunchProxyVisual(rect, alpha);
         if (!visualOwnerState.updateLaunchProxyRect(
-                new float[]{left, top, right, bottom}, alpha)) return false;
+                rect, alpha, returning, progress)) return false;
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
+        if (live != null && visualChanged) live.requestStaticRedraw();
         return !hadGeometry;
     }
 
     void endLaunchProxy() {
-        resetHomeReturnFade();
         if (disposed || !visualOwnerState.endLaunchProxy()) return;
         invalidateVisualOwnerGeometry();
         requestLifecycleRefresh();
