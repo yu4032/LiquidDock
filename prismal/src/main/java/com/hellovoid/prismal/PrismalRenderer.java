@@ -36,7 +36,7 @@ public final class PrismalRenderer implements AutoCloseable {
         return workspaceHwuiProbeFragmentSource(decorated, false);
     }
 
-    /** Keep the fast decorated rim during motion and defer reconstructed-27 optics. */
+    /** Keep the reconstructed edge footprint during motion with a lower-cost three-tap path. */
     public static String workspaceHwuiProbeFragmentSource(
             boolean decorated, boolean transitionMaterial) {
         String source = PrismalOs4InvariantShader.apply(
@@ -46,7 +46,7 @@ public final class PrismalRenderer implements AutoCloseable {
         if (!decorated) return source;
         source = PrismalInteriorFastPath.apply(source);
         source = PrismalEdgeDecorationShader.apply(source);
-        if (transitionMaterial) return source;
+        if (transitionMaterial) return PrismalMotionMaterialShader.apply(source);
         return PrismalReconstructed27Shader.apply(source);
     }
 
@@ -603,11 +603,12 @@ public final class PrismalRenderer implements AutoCloseable {
                 // smaller baseline shader while helping the decorated programs.
                 String transitionFragment = PrismalEdgeDecorationShader.apply(
                         PrismalInteriorFastPath.apply(fragment));
+                String motionFragment = PrismalMotionMaterialShader.apply(transitionFragment);
                 String decoratedFragment = transitionFragment;
                 String vertex = PrismalRasterGuardShader.applyWithEdgeGuard(
                         PrismalShaderSources.VERTEX);
                 try {
-                    motionDecoratedGlassProgram = createProgram(vertex, transitionFragment);
+                    motionDecoratedGlassProgram = createProgram(vertex, motionFragment);
                 } catch (RuntimeException motionShaderRejected) {
                     android.util.Log.w("LiquidDock-Prismal",
                             "Workspace transition shader unavailable; using full material",
@@ -627,7 +628,9 @@ public final class PrismalRenderer implements AutoCloseable {
                             "Experimental reconstructed-27 shader unavailable; "
                                     + "retaining previous dual-band optics",
                             reconstructed27Rejected);
-                    decoratedGlassProgram = createProgram(vertex, decoratedFragment);
+                    String fallbackFragment = motionDecoratedGlassProgram != 0
+                            ? motionFragment : transitionFragment;
+                    decoratedGlassProgram = createProgram(vertex, fallbackFragment);
                     // Keep the simpler launch transition shader distinct from the
                     // compatibility-quality stable shader even when reconstructed-27 fails.
                     android.util.Log.i("LiquidDock-Prismal",
