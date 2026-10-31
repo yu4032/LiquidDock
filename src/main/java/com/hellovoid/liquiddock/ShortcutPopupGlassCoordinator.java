@@ -99,6 +99,18 @@ final class ShortcutPopupGlassCoordinator {
         releaseLocked("dock-early-touch-ended-unused");
     }
 
+    /**
+     * A drag-return alpha animation would redraw the Workspace glass every frame while the
+     * shortcut popup is entering. Keep the normal drag fade everywhere else, but let this
+     * short ownership handoff settle in one redraw.
+     */
+    static synchronized boolean shouldRestoreWorkspaceGlassImmediately(View root) {
+        State state = current;
+        return root != null && state != null && !state.released
+                && state.captureRootRef.get() == root
+                && (state.requestStarted || state.contentRef.get() != null);
+    }
+
     private static void prepareInternal(
             View captureRoot,
             LiquidDockConfig.Glass glassConfig,

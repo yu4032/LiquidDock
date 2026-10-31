@@ -258,7 +258,15 @@ final class LauncherGlassStaticNode {
     void setSuppressedByDrag(boolean suppressed) {
         if (disposed || !suppressionState.setDrag(suppressed)) return;
         if (suppressed) resetPressInteraction(false);
-        animateVisibilityTo(!suppressionState.isSuppressed());
+        boolean visible = !suppressionState.isSuppressed();
+        View material = materialRef.get();
+        View root = material != null ? material.getRootView() : null;
+        if (!suppressed
+                && ShortcutPopupGlassCoordinator.shouldRestoreWorkspaceGlassImmediately(root)) {
+            setVisibilityImmediately(visible);
+        } else {
+            animateVisibilityTo(visible);
+        }
     }
 
     float visibilityAlpha() { return visibilityAlpha; }
@@ -361,6 +369,16 @@ final class LauncherGlassStaticNode {
             if (live != null) live.requestStaticRedraw();
         });
         animator.start();
+    }
+
+    private void setVisibilityImmediately(boolean visible) {
+        if (disposed) return;
+        if (visibilityAnimator != null) {
+            visibilityAnimator.cancel();
+            visibilityAnimator = null;
+        }
+        visibilityAlpha = visible ? 1f : 0f;
+        requestLifecycleRefresh();
     }
 
     void hideImmediately() {
