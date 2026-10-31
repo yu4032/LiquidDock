@@ -180,6 +180,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private int hwuiProbeBackdropLogicalWidth = -1;
     private int hwuiProbeBackdropLogicalHeight = -1;
     private int hwuiProbeBackdropRotation = -1;
+    private long hwuiProbeBackdropWallpaperGeneration = -1L;
+    private boolean hwuiProbeBackdropWallpaperAuthoritative;
+    // GL produces immutable buffers; only the newest export may be installed on the UI thread.
+    private volatile long hwuiProbeExportSerial;
+    private volatile boolean hwuiProbeExportDirty = true;
     private boolean hwuiProbeSelectionLogged;
     private final float[] hwuiProbeInvariants = new float[10];
     private volatile boolean shuttingDown;
@@ -374,6 +379,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
         if (shuttingDown) return;
+        hwuiProbeExportDirty = true;
         applyGlassConfig(glassConfig);
         sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
         mainHandler.post(() -> {
@@ -393,6 +399,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         applyGlassConfig(glassConfig);
         if (qualityChanged) sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
         if (qualityChanged || blurChanged) {
+            hwuiProbeExportDirty = true;
             // Gaussian blur lives in the prepared backdrop, not only in final uniforms.
             // Request a new producer frame without replacing the EGL / PassBlur owner.
             View root = rootRef.get();
@@ -550,6 +557,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         wallpaperRequestedGeneration = -1L;
         wallpaperRequestedSceneGeneration = -1L;
         wallpaperRequestedAuthoritative = false;
+    }
+
+    private WallpaperFrameToken peekWallpaperFrameToken(long frameSceneGeneration) {
+        synchronized (this) {
+            if (wallpaperRequestedGeneration < 0L
+                    || wallpaperRequestedSceneGeneration != frameSceneGeneration) {
+                return WallpaperFrameToken.NONE;
+            }
+            return new WallpaperFrameToken(
+                    wallpaperRequestedGeneration, wallpaperRequestedAuthoritative);
+        }
     }
 
     private WallpaperFrameToken takeWallpaperFrameToken(long frameSceneGeneration) {
@@ -1328,16 +1346,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             // UI pre-draw owns rootWidth/rootHeight. Never regress them to capture-time
             // dimensions on this render-thread callback.
             sourceBackend.makePbufferCurrent();
-            boolean probeBackdropChanged = hwuiProbeBackdropLogicalWidth != frame.logicalWidth
+            WallpaperFrameToken pendingWallpaperFrame =
+                    peekWallpaperFrameToken(frame.generation);
+            boolean probeGeometryChanged = hwuiProbeBackdropLogicalWidth != frame.logicalWidth
                     || hwuiProbeBackdropLogicalHeight != frame.logicalHeight
                     || hwuiProbeBackdropRotation != frame.rotation;
-            if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && workspaceSource
-                    && probeBackdropChanged) {
-                hwuiProbeBackdropLogicalWidth = frame.logicalWidth;
-                hwuiProbeBackdropLogicalHeight = frame.logicalHeight;
-                hwuiProbeBackdropRotation = frame.rotation;
-                mainHandler.post(() -> LauncherGlassStaticLayer.markHwuiProbeBackdropPending(root));
-            }
+            boolean probeWallpaperChanged = pendingWallpaperFrame.generation >= 0L
+                    && (hwuiProbeBackdropWallpaperGeneration != pendingWallpaperFrame.generation
+                        || hwuiProbeBackdropWallpaperAuthoritative
+                                != pendingWallpaperFrame.authoritative);
+            boolean probeBackdropChanged = probeGeometryChanged
+                    || hwuiProbeExportDirty || probeWallpaperChanged;
             if (trace) Trace.beginSection("LD.Workspace.Backdrop");
             try {
                 prismalRenderer.prepareBackdrop(
@@ -1376,8 +1395,42 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     int logicalWidth = frame.logicalWidth;
                     int logicalHeight = frame.logicalHeight;
                     int rotation = frame.rotation;
-                    mainHandler.post(() -> LauncherGlassStaticLayer.publishHwuiProbeBackdrop(
-                            root, rawForUi, blurForUi, logicalWidth, logicalHeight, rotation));
+                    long sceneAtExport = frame.generation;
+                    long wallpaperAtExport = pendingWallpaperFrame.generation;
+                    long exportSerial = ++hwuiProbeExportSerial;
+                    if (probeGeometryChanged) {
+                        mainHandler.post(() -> {
+                            if (isCurrentHwuiProbeExport(root, sceneAtExport, exportSerial,
+                                    logicalWidth, logicalHeight, rotation, wallpaperAtExport)) {
+                                LauncherGlassStaticLayer.markHwuiProbeBackdropPending(root);
+                            }
+                        });
+                    }
+                    if (!mainHandler.post(() -> {
+                        if (!isCurrentHwuiProbeExport(root, sceneAtExport, exportSerial,
+                                logicalWidth, logicalHeight, rotation, wallpaperAtExport)) {
+                            rawForUi.recycle();
+                            blurForUi.recycle();
+                            if (hwuiProbeExportSerial == exportSerial) hwuiProbeExportDirty = true;
+                            return;
+                        }
+                        if (!LauncherGlassStaticLayer.publishHwuiProbeBackdrop(
+                                root, rawForUi, blurForUi,
+                                logicalWidth, logicalHeight, rotation)) {
+                            if (hwuiProbeExportSerial == exportSerial) hwuiProbeExportDirty = true;
+                        }
+                    })) {
+                        throw new IllegalStateException("HWUI backdrop publish queue rejected");
+                    }
+                    hwuiProbeBackdropLogicalWidth = logicalWidth;
+                    hwuiProbeBackdropLogicalHeight = logicalHeight;
+                    hwuiProbeBackdropRotation = rotation;
+                    if (wallpaperAtExport >= 0L) {
+                        hwuiProbeBackdropWallpaperGeneration = wallpaperAtExport;
+                        hwuiProbeBackdropWallpaperAuthoritative =
+                                pendingWallpaperFrame.authoritative;
+                    }
+                    hwuiProbeExportDirty = false;
                     MainHook.log(TAG + " HWUI probe backdrops exported raw="
                             + rawBitmap.getWidth() + "x" + rawBitmap.getHeight()
                             + " blur=" + blurredBitmap.getWidth() + "x" + blurredBitmap.getHeight()
@@ -1386,6 +1439,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                             + " generation=" + frame.generation
                             + " elapsedMs=" + ((System.nanoTime() - exportStartNs) / 1_000_000f));
                 } catch (Throwable exportError) {
+                    hwuiProbeExportDirty = true;
                     if (rawBitmap != null) rawBitmap.recycle();
                     if (blurredBitmap != null) blurredBitmap.recycle();
                     MainHook.log(TAG + " HWUI probe backdrop export failed: " + exportError);
@@ -1419,11 +1473,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         if (shuttingDown || rootRef.get() != root || !ownsRoot(root)
                                 || renderedGeneration != sceneGeneration
                                 || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
-                        if (pauseWorkspaceProducerWhenFresh
-                                && !transitionFrameSync.isActive()
+                        // Stop a HOME pulse only after a matching fresh OES frame was consumed.
+                        // A timed four-VSync pause could otherwise starve a slow producer.
+                        if (!transitionFrameSync.isActive()
                                 && !hasVisibleRecentsConsumer()
-                                && WorkstationProducerPolicy.shouldPauseSharedProducer(
-                                    true, MainHook.isWorkstationMode())) {
+                                && WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                                    MainHook.isWorkstationMode())) {
                             pauseWorkspaceProducerWhenFresh = false;
                             sourceBackend.setUpdatesEnabled(false,
                                     "workspace-settled-after-fresh");
@@ -1444,6 +1499,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         } finally {
             if (trace) Trace.endSection();
         }
+    }
+
+    /** Reject queued HWUI images from a stale scene, rotation or wallpaper generation. */
+    private boolean isCurrentHwuiProbeExport(
+            View root, long generation, long serial,
+            int width, int height, int rotation, long wallpaperGeneration) {
+        return !shuttingDown && !folderFrameFrozen
+                && rootRef.get() == root && root != null && root.isAttachedToWindow()
+                && generation == sceneGeneration && serial == hwuiProbeExportSerial
+                && width == rootWidth && height == rootHeight && rotation == configRotation
+                && (wallpaperGeneration < 0L
+                    || LauncherGlassSceneController.isWallpaperContentGenerationCurrent(
+                            root, wallpaperGeneration));
     }
 
     @Override
@@ -1923,6 +1991,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown(Runnable onShutdownComplete) {
         sourceBackend.onShutdownComplete(onShutdownComplete);
         if (shuttingDown) return;
+        hwuiProbeExportSerial++;
+        hwuiProbeExportDirty = true;
         MainHook.log(TAG + " shutdown " + debugLabel());
         RecentsCapsuleGlassSession child = recentsConsumer;
         recentsConsumer = null;
