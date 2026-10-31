@@ -176,7 +176,8 @@ class SettingsMetaTest {
         assertTrue(pages.getValue(Page.Recents).indexOfKey(
             com.hellovoid.liquiddock.config.ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM.name()) >= 0)
         val owners = mapOf(
-            Page.AnimationWorkspace to listOf(animationWorkspaceVisibilitySpec, animationUnlockGlassFadeSpec,
+            Page.AnimationWorkspace to listOf(animationAppReturnGlassFadeStartSpec, animationAppReturnGlassFadeDurationSpec,
+                animationWorkspaceVisibilitySpec, animationUnlockGlassFadeSpec,
                 animationFolderOpenGlassFadeSpec, animationDockResizeSpec),
             Page.AnimationInteraction to listOf(animationPressInSpec, animationPressOutSpec),
             Page.AnimationPopups to listOf(animationShortcutDismissSpec, animationSecurityCenterExitSpec),
