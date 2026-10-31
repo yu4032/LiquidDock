@@ -190,6 +190,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // hides it. Geometry is force-refreshed before output is resumed.
     private volatile boolean staticGlassOutputSuppressed;
     private volatile boolean staticGeometryRefreshPending;
+    private volatile boolean workspaceFirstOutputPresented;
+    private volatile boolean workspaceOutputRefreshPending;
+    private boolean workspaceRefreshAfterMotionPending;
     // All active Workspace animation sources share this lower-cost Prismal material tier.
     private volatile boolean workspaceMotionQualityActive;
     private final float[] hwuiProbeInvariants = new float[10];
@@ -528,7 +531,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
         clearWallpaperRequest();
         invalidateGeneration(generation);
+        prepareWorkspaceOutputRefresh("launcher-explicit-fresh-backdrop");
         mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
+    }
+
+    private void prepareWorkspaceOutputRefresh(String reason) {
+        if (shuttingDown || !workspaceSource || hasVisibleRecentsConsumer()) return;
+        workspaceOutputRefreshPending = true;
+        staticGlassOutputSuppressed = false;
+        staticGeometryRefreshPending = true;
+        hwuiProbeExportDirty = true;
+        sourceBackend.setUpdatesEnabled(true, reason);
     }
 
     boolean requestWallpaperBackdrop(
@@ -619,6 +632,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void suppressWorkspaceGlassOutput() {
         if (shuttingDown) return;
+        // Bootstrap and explicit scene recovery keep the layer transparent until a matching
+        // output is available. Pausing during either window would prevent the frame needed to
+        // open the visibility fence (or finish the requested refresh).
+        if (!workspaceFirstOutputPresented || workspaceOutputRefreshPending) return;
         if (!staticGlassOutputSuppressed) {
             staticGlassOutputSuppressed = true;
             staticGeometryRefreshPending = true;
@@ -1139,10 +1156,25 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                                     MainHook.isWorkstationMode()));
             return;
         }
+        boolean workspaceMotionActive = workspaceMotionQualityActive
+                || transitionFrameSync.isActive()
+                || LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
+        if (workspaceRefreshAfterMotionPending && !workspaceMotionActive) {
+            workspaceRefreshAfterMotionPending = false;
+            prepareWorkspaceOutputRefresh("launcher-glass-output-resume-settled");
+            sourceBackend.requestFresh(
+                    sceneGeneration,
+                    WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                            MainHook.isWorkstationMode()));
+        }
         if (wasStaticOutputSuppressed && workspaceSource) {
-            if (transitionFrameSync.isActive()) {
-                sourceBackend.setUpdatesEnabled(true, "launcher-glass-output-resume-transition");
+            if (workspaceMotionActive) {
+                // Reuse the immutable HWUI backdrop while the native icon returns. A fresh
+                // PassBlur frame plus Prismal preparation costs a full render budget and
+                // otherwise lands on the same frames as the app-to-home spring.
+                workspaceRefreshAfterMotionPending = true;
             } else {
+                prepareWorkspaceOutputRefresh("launcher-glass-output-resume");
                 sourceBackend.requestFresh(
                         sceneGeneration,
                         WorkstationProducerPolicy.shouldUseSingleFramePulse(
@@ -1589,9 +1621,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         if (shuttingDown || rootRef.get() != root || !ownsRoot(root)
                                 || renderedGeneration != sceneGeneration
                                 || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
+                        boolean hwuiOutputReady = BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
+                                && LauncherGlassStaticLayer.isHwuiProbeActive(root);
+                        boolean workspaceOutputReady = renderedStaticOutput || hwuiOutputReady;
+                        if (workspaceOutputReady) {
+                            workspaceFirstOutputPresented = true;
+                            workspaceOutputRefreshPending = false;
+                        }
                         // Stop a HOME pulse only after a matching fresh OES frame was consumed.
-                        // A timed four-VSync pause could otherwise starve a slow producer.
-                        if (!transitionFrameSync.isActive()
+                        // A timed four-VSync pause could otherwise starve a slow producer. If
+                        // the TextureView surface is not attached yet, leave the producer live;
+                        // onSurfaceTextureAvailable requests a new frame once it can be drawn.
+                        if (workspaceOutputReady && !transitionFrameSync.isActive()
                                 && !hasVisibleRecentsConsumer()
                                 && WorkstationProducerPolicy.shouldUseSingleFramePulse(
                                     MainHook.isWorkstationMode())) {
@@ -1599,7 +1640,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                             sourceBackend.setUpdatesEnabled(false,
                                     "workspace-settled-after-fresh");
                         }
-                        if (renderedStaticOutput) {
+                        if (workspaceOutputReady) {
                             LauncherGlassSceneController.onFreshFrameRendered(
                                     root,
                                     renderedGeneration,
