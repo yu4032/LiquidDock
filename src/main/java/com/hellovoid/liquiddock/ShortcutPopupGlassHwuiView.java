@@ -9,7 +9,7 @@ import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 import android.view.View;
 
-/** Draws the expanded-folder lens in the Launcher ViewRoot frame. */
+/** Draws cached popup/folder glass in the owning ViewRoot's HWUI frame. */
 final class ShortcutPopupGlassHwuiView extends View {
     private final ShortcutPopupGlassSession session;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -94,6 +94,10 @@ final class ShortcutPopupGlassHwuiView extends View {
         shader.setFloatUniform("uProbeBlurScale",
                 (float) blurBitmap.getWidth() / width,
                 (float) blurBitmap.getHeight() / height);
+        // This shared AGSL shader uses the uniform to zoom sample coordinates. Popup
+        // backdrops are already captured in their display scale, so keep their UV mapping
+        // neutral; leaving the uniform at its default zero clamps samples to texture corners.
+        shader.setFloatUniform("uProbeWallpaperScale", 1f);
     }
 
     void updateFrame(LauncherGlassGeometry.Snapshot next, float progress) {
@@ -119,13 +123,17 @@ final class ShortcutPopupGlassHwuiView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (backdrop == null || blurredBackdrop == null
-                || getWidth() != logicalWidth || getHeight() != logicalHeight) return;
+        if (backdrop == null || blurredBackdrop == null) return;
+        if ((getWidth() != logicalWidth || getHeight() != logicalHeight) && geometry != null) {
+            Runnable listener = failureListener;
+            if (listener != null) listener.run();
+            return;
+        }
         try {
-            boolean drew = session.drawFolderHwui(canvas, paint, geometry, openProgress,
+            boolean drew = session.drawHwui(canvas, paint, geometry, openProgress,
                     baselineShader, decoratedShader, motionDecoratedShader, invariants);
             if (drew) {
-                session.onFolderHwuiPresented();
+                session.onHwuiPresented();
             } else if (geometry != null) {
                 Runnable listener = failureListener;
                 if (listener != null) listener.run();

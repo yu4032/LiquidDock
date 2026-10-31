@@ -39,7 +39,7 @@ final class ShortcutPopupGlassLayer extends FrameLayout
         textureView.setSurfaceTextureListener(this);
         addView(textureView, matchParent());
 
-        if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && session.isFolderBackdrop()) {
+        if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE) {
             hwuiView = new ShortcutPopupGlassHwuiView(context, session);
             hwuiView.setVisibility(View.INVISIBLE);
             hwuiView.setFailureListener(this::fallbackToTextureView);
@@ -60,12 +60,14 @@ final class ShortcutPopupGlassLayer extends FrameLayout
     boolean setHwuiBackdrops(Bitmap raw, Bitmap blurred, int width, int height) {
         if (disposed || hwuiView == null) return false;
         if (!hwuiView.setBackdrops(raw, blurred, width, height)) {
-            fallbackToTextureView();
             return false;
         }
         hwuiReady = true;
         session.setHwuiOutputActive(true);
         hwuiView.setVisibility(View.VISIBLE);
+        MainHook.log("[DC][ShortcutPopupGlass] HWUI lens active raw="
+                + raw.getWidth() + "x" + raw.getHeight()
+                + " blur=" + blurred.getWidth() + "x" + blurred.getHeight());
         return true;
     }
 
@@ -77,6 +79,14 @@ final class ShortcutPopupGlassLayer extends FrameLayout
             if (Math.abs(getAlpha() - glassAlpha) > 0.001f) setAlpha(glassAlpha);
         }
         if (hwuiView != null) hwuiView.updateFrame(geometry, progress);
+    }
+
+    void updatePopupGeometry(LauncherGlassGeometry.Snapshot geometry) {
+        if (hwuiView != null) hwuiView.updateFrame(geometry, 1f);
+    }
+
+    void setMotionQualityActive(boolean active) {
+        if (hwuiView != null) hwuiView.invalidate();
     }
 
     void invalidateHwuiFrame() {

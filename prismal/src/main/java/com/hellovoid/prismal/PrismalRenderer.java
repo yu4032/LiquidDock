@@ -36,7 +36,7 @@ public final class PrismalRenderer implements AutoCloseable {
         return workspaceHwuiProbeFragmentSource(decorated, false);
     }
 
-    /** Keep core OS4 refraction during motion, omitting reconstructed and custom rim layers. */
+    /** Keep the fast decorated rim during motion and defer reconstructed-27 optics. */
     public static String workspaceHwuiProbeFragmentSource(
             boolean decorated, boolean transitionMaterial) {
         String source = PrismalOs4InvariantShader.apply(
@@ -45,8 +45,8 @@ public final class PrismalRenderer implements AutoCloseable {
                                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
         if (!decorated) return source;
         source = PrismalInteriorFastPath.apply(source);
-        if (transitionMaterial) return source;
         source = PrismalEdgeDecorationShader.apply(source);
+        if (transitionMaterial) return source;
         return PrismalReconstructed27Shader.apply(source);
     }
 
@@ -601,8 +601,9 @@ public final class PrismalRenderer implements AutoCloseable {
                                         PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
                 // The baseline program stays untouched: on Mali, this branch hurts the
                 // smaller baseline shader while helping the decorated programs.
-                String transitionFragment = PrismalInteriorFastPath.apply(fragment);
-                String decoratedFragment = PrismalEdgeDecorationShader.apply(transitionFragment);
+                String transitionFragment = PrismalEdgeDecorationShader.apply(
+                        PrismalInteriorFastPath.apply(fragment));
+                String decoratedFragment = transitionFragment;
                 String vertex = PrismalRasterGuardShader.applyWithEdgeGuard(
                         PrismalShaderSources.VERTEX);
                 try {
@@ -852,10 +853,9 @@ public final class PrismalRenderer implements AutoCloseable {
             cachedStaticParams = p;
         }
 
-        // Every animated node uses one backdrop sample instead of three chromatic taps and skips
-        // caustic lighting. This lowers the Prismal tier without compiling a program on motion.
-        uniform1f("u_chromaticAberration",
-                transientQualityActive ? 0f : Math.max(0f, p.chromaticAberration));
+        // Keep dispersion visible in motion; the fast interior and deferred reconstruction
+        // provide the motion savings while caustics are disabled.
+        uniform1f("u_chromaticAberration", Math.max(0f, p.chromaticAberration));
         uniform1f("u_causticIntensity",
                 transientQualityActive ? 0f : Math.max(0f, p.causticIntensity));
 

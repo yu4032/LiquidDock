@@ -27,7 +27,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private static final AtomicInteger HWUI_PROBE_SCROLL_MUTATIONS = new AtomicInteger();
     private static final DecelerateInterpolator APP_RETURN_INTERPOLATOR =
             new DecelerateInterpolator();
-
     private final WeakReference<View> rootRef;
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
     private final LauncherGlassSession session;
@@ -35,9 +34,11 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private Surface outputSurface;
     private boolean disposed;
     private volatile boolean hwuiProbeActive;
+    private volatile boolean hwuiProbeWallpaperScaleDirty;
     private boolean launchProxyActive;
     private boolean launchProxyReturning;
     private float launchReturnAlpha = 1f;
+    private boolean popupCaptureSuppressed;
     private final LauncherGlassHwuiProbeView hwuiProbe;
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
@@ -141,6 +142,12 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return layer != null && layer.hwuiProbeActive;
     }
 
+    static LauncherGlassHwuiProbeView.BackdropSnapshot snapshotHwuiProbeBackdrops(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null || !layer.hwuiProbeActive || layer.hwuiProbe == null) return null;
+        return layer.hwuiProbe.snapshotBackdrops();
+    }
+
     static boolean isWorkspaceGlassOutputHidden(View root) {
         LauncherGlassStaticLayer layer = find(root);
         return layer != null && layer.isOutputHidden();
@@ -155,6 +162,20 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         boolean hideDuringLaunch = launchProxyActive
                 && (!launchProxyReturning || launchReturnAlpha <= 0.001f);
         return hideDuringLaunch || layerAlpha.alpha() * launchReturnAlpha <= 0.001f;
+    }
+
+    /** Temporarily removes only Workspace glass from the popup's one-shot backdrop capture. */
+    static boolean setPopupCaptureSuppressed(View root, boolean suppressed) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null || layer.disposed) return false;
+        Runnable update = () -> {
+            if (layer.disposed || layer.popupCaptureSuppressed == suppressed) return;
+            layer.popupCaptureSuppressed = suppressed;
+            layer.applyLayerAlpha();
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) update.run();
+        else layer.mainHandler.post(update);
+        return true;
     }
 
     private boolean isMotionAnimationActive() {
@@ -172,8 +193,14 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     static boolean invalidateHwuiProbe(View root) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null) return false;
-        if (layer.isOutputHidden()) return true;
         if (!layer.hwuiProbeActive || layer.hwuiProbe == null) return false;
+        if (layer.isOutputHidden()) {
+            // App-launch glass is hidden. Remember the newest wallpaper transform and apply it
+            // when the return animation reveals the HWUI layer, without redrawing during launch.
+            layer.hwuiProbeWallpaperScaleDirty = true;
+            return true;
+        }
+        layer.hwuiProbeWallpaperScaleDirty = false;
         if (Looper.myLooper() == Looper.getMainLooper()) {
             layer.hwuiProbe.invalidate();
         } else {
@@ -193,7 +220,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     static boolean publishHwuiProbeBackdrop(
             View root, Bitmap rawBitmap, Bitmap blurredBitmap,
-            int logicalWidth, int logicalHeight, int rotation) {
+            int logicalWidth, int logicalHeight, int rotation,
+            float capturedWallpaperScale) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null || layer.hwuiProbe == null
                 || rawBitmap == null || blurredBitmap == null) {
@@ -202,12 +230,14 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             return false;
         }
         if (!layer.hwuiProbe.setBackdrops(
-                rawBitmap, blurredBitmap, logicalWidth, logicalHeight, rotation)) {
+                rawBitmap, blurredBitmap, logicalWidth, logicalHeight, rotation,
+                capturedWallpaperScale)) {
             rawBitmap.recycle();
             blurredBitmap.recycle();
             return false;
         }
         layer.hwuiProbeActive = true;
+        layer.hwuiProbeWallpaperScaleDirty = false;
         layer.applyLayerAlpha();
         MainHook.log("[DC][LauncherGlass] HWUI probe active; immutable PassBlur backdrop "
                 + rawBitmap.getWidth() + "x" + rawBitmap.getHeight()
@@ -235,7 +265,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return workspace.getScrollX();
     }
 
-    /** UI pre-draw syncs cached glass opacity with native Workspace and app-return progress. */
+    /** UI pre-draw applies native opacity to the cached output in the same traversal. */
     static float syncWorkspacePresentation(
             View root, View material, boolean launchProxyActive,
             boolean launchProxyReturning, float returnProgress) {
@@ -264,9 +294,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (layer.launchProxyReturning) {
             long now = SystemClock.uptimeMillis();
             float progress = clampProgress(returnProgress);
-            if (!wasReturning) {
-                layer.beginLaunchReturnCycle(progress, now);
-            }
+            if (!wasReturning) layer.beginLaunchReturnCycle(progress, now);
             double remainingMs = layer.estimateLaunchReturnRemainingMs(progress, now);
             if (!layer.launchReturnFadeStarted
                     && remainingMs <= AnimationRuntimeState
@@ -280,12 +308,12 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             layer.launchReturnLastProgress = 0f;
             layer.launchReturnAlpha = 0f;
         } else if (wasReturning) {
-            // The native proxy disappearing is the authoritative end when progress sampling
-            // never crossed the configured start threshold (for example, an interrupted spring).
+            // The native proxy disappearing is authoritative if progress never crossed the
+            // configured fade-start threshold (for example, when a spring is interrupted).
             if (!layer.launchReturnFadeStarted) layer.startLaunchReturnFade();
             else if (layer.launchReturnAnimator == null) layer.launchReturnAlpha = 1f;
-        } else {
-            if (layer.launchReturnAnimator == null) layer.launchReturnAlpha = 1f;
+        } else if (layer.launchReturnAnimator == null) {
+            layer.launchReturnAlpha = 1f;
         }
         layer.applyLayerAlpha();
         return alpha;
@@ -407,12 +435,17 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (hideDuringLaunch || alpha <= 0.001f) {
             session.suppressWorkspaceGlassOutput();
         }
+        float presentedAlpha = popupCaptureSuppressed || hideDuringLaunch ? 0f : alpha;
         if (hwuiProbeActive && hwuiProbe != null) {
             setAlpha(0f);
             hwuiProbe.setVisibility(hideDuringLaunch ? View.INVISIBLE : View.VISIBLE);
-            hwuiProbe.setAlpha(alpha);
+            hwuiProbe.setAlpha(presentedAlpha);
+            if (presentedAlpha > 0.001f && hwuiProbeWallpaperScaleDirty) {
+                hwuiProbeWallpaperScaleDirty = false;
+                hwuiProbe.invalidate();
+            }
         } else {
-            setAlpha(hideDuringLaunch ? 0f : alpha);
+            setAlpha(presentedAlpha);
             if (hwuiProbe != null) hwuiProbe.setAlpha(0f);
         }
     }
@@ -426,18 +459,11 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     private double estimateLaunchReturnRemainingMs(float progress, long nowMs) {
-        launchReturnLastProgress = Math.max(
-                launchReturnLastProgress, clampProgress(progress));
+        launchReturnLastProgress = Math.max(launchReturnLastProgress, clampProgress(progress));
         if (launchReturnLastProgress >= 0.999f) return 0d;
         long elapsedMs = Math.max(0L, nowMs - launchReturnStartedAtMs);
         float progressDelta = launchReturnLastProgress - launchReturnStartProgress;
-        if (elapsedMs <= 0L || progressDelta <= 0.001f) {
-            return Double.POSITIVE_INFINITY;
-        }
-
-        // Like unlock reveal scheduling, wait until the native transition's estimated remaining
-        // time reaches a configured lead-in. Unlike unlock, this transition exposes normalized
-        // progress rather than its spring constants, so estimate remaining time from observed rate.
+        if (elapsedMs <= 0L || progressDelta <= 0.001f) return Double.POSITIVE_INFINITY;
         double remainingMs = (elapsedMs / (double) progressDelta)
                 * (1d - launchReturnLastProgress);
         return Double.isFinite(remainingMs) ? Math.max(0d, remainingMs)

@@ -9,6 +9,7 @@ import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.os.Handler;
+import android.os.Looper;
 import android.view.Surface;
 import android.view.View;
 
@@ -35,6 +36,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             if (blurredBitmap != null) blurredBitmap.recycle();
         }
         default void onHwuiBackdropExportFailed(Throwable error) {}
+        default void onMotionQualityChanged(boolean active) {}
         void onPresented();
         void onFailure(Throwable error);
     }
@@ -69,14 +71,17 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     // Keep the wallpaper-only GPU snapshot as an optical input; the visible
     // OPEN_FOLDER output must never composite a second fullscreen background.
     private volatile float backdropOpacity;
-    private final LauncherGlassOutputRenderState folderRenderWork = new LauncherGlassOutputRenderState();
+    private final LauncherGlassOutputRenderState outputRenderWork = new LauncherGlassOutputRenderState();
     private final FloatBuffer quadBuffer;
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
     private volatile boolean folderOutputFrozen;
     private volatile boolean folderCloseGeometryActive;
     private volatile boolean hwuiOutputActive;
-    private boolean folderHwuiExportAttempted;
+    private boolean hwuiExportAttempted;
+    private volatile boolean sharedHwuiBackdropActive;
+    private volatile boolean popupMotionActive;
+    private boolean popupMotionPinned;
     // RootPassBlurBackend retains its normalized FBO after freezing popup updates.
     // Reuse that valid texture to re-blur the existing snapshot without recapturing
     // the now-visible menu or changing the PassBlur/EGL owner.
@@ -87,6 +92,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     private volatile LauncherGlassGeometry.Snapshot geometry;
     private volatile boolean shuttingDown;
+    private final Runnable popupMotionSettle;
     private volatile boolean backdropPrepared;
     private volatile boolean sourceFrozen;
     private volatile int logicalWidth;
@@ -124,6 +130,11 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             PassBlurDomain domain, PassBlurBindRequest folderCapture) {
         if (sourceRoot == null) throw new IllegalArgumentException("sourceRoot == null");
         folderBackdrop = domain == PassBlurDomain.OPEN_FOLDER;
+        popupMotionSettle = () -> {
+            if (!shuttingDown && !folderBackdrop && !popupMotionPinned) {
+                setPopupMotionActive(false);
+            }
+        };
         if (folderBackdrop && folderCapture == null) throw new IllegalArgumentException("Missing wallpaper capture request");
         sourceRootRef = new WeakReference<>(sourceRoot);
         this.listener = listener;
@@ -199,16 +210,20 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     if (folderBackdrop) {
                         prismalRenderer.reblurPreparedBackdrop(updated);
                         backdropRebuilt = true;
-                    } else prismalRenderer.prepareBackdrop(
-                            frozenNormalizedTexture, frozenPhysicalWidth, frozenPhysicalHeight,
-                            logicalWidth, logicalHeight, updated);
+                    } else {
+                        prismalRenderer.prepareBackdrop(
+                                frozenNormalizedTexture, frozenPhysicalWidth, frozenPhysicalHeight,
+                                logicalWidth, logicalHeight, updated);
+                        backdropRebuilt = true;
+                    }
                 } catch (Throwable error) {
                     MainHook.log(TAG + " live blur refresh failed: " + error);
                     return;
                 }
             }
-            if (folderBackdrop && hwuiOutputActive) {
-                if (backdropRebuilt) exportFolderHwuiBackdrops();
+            if (hwuiOutputActive) {
+                if (backdropRebuilt) exportHwuiBackdrops();
+                notifyHwuiInvalidated();
             } else {
                 renderCurrent();
             }
@@ -249,7 +264,19 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     boolean hasFrozenBackdrop() {
-        return !shuttingDown && backdropPrepared && sourceFrozen;
+        return !shuttingDown && backdropPrepared && (sourceFrozen || sharedHwuiBackdropActive);
+    }
+
+    boolean useSharedHwuiBackdrop(int width, int height) {
+        if (shuttingDown || folderBackdrop || !BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
+                || width <= 0 || height <= 0) return false;
+        logicalWidth = width;
+        logicalHeight = height;
+        backdropPrepared = true;
+        sourceFrozen = true;
+        sharedHwuiBackdropActive = true;
+        sourceBackend.setUpdatesEnabled(false, "shortcut-popup-shared-workspace-backdrop");
+        return true;
     }
 
     /** Re-present the preserved GPU snapshot after a temporary Recents cover.
@@ -257,7 +284,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
      */
     void requestCachedGlassRedraw() {
         if (!shuttingDown && backdropPrepared) {
-            sourceBackend.postToRenderThread(this::renderCurrent);
+            requestOutputRender();
         }
     }
 
@@ -266,7 +293,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         LauncherGlassGeometry.Snapshot old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
-        sourceBackend.postToRenderThread(this::renderCurrent);
+        if (!folderBackdrop) notePopupGeometryMotion();
+        if (!hwuiOutputActive) requestOutputRender();
     }
 
     void updateFolderFrame(LauncherGlassGeometry.Snapshot next, float nativeOpenProgress) {
@@ -280,33 +308,80 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         if (hwuiOutputActive) return;
         // Keep the TextureView fallback current until the immutable backdrop has
         // reached the same-frame HWUI view. Its one-slot queue coalesces busy GL work.
-        if (folderRenderWork.request(true, false)
-                && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
+        requestOutputRender();
     }
 
     void setHwuiOutputActive(boolean active) {
-        if (!folderBackdrop || shuttingDown) return;
+        if (shuttingDown) return;
+        boolean fallbackToCapture = !active && sharedHwuiBackdropActive;
         hwuiOutputActive = active;
+        if (fallbackToCapture) {
+            sharedHwuiBackdropActive = false;
+            sourceFrozen = false;
+            backdropPrepared = false;
+            logicalWidth = 0;
+            logicalHeight = 0;
+            sourceBackend.setUpdatesEnabled(true, "shortcut-popup-hwui-fallback");
+            requestInitialCapture();
+            return;
+        }
         if (!active && backdropPrepared && geometry != null) requestCachedGlassRedraw();
     }
 
-    boolean drawFolderHwui(
+    void beginPopupDismiss() {
+        if (folderBackdrop || shuttingDown) return;
+        popupMotionPinned = true;
+        mainHandler.removeCallbacks(popupMotionSettle);
+        setPopupMotionActive(true);
+    }
+
+    private void notePopupGeometryMotion() {
+        if (popupMotionPinned) return;
+        mainHandler.removeCallbacks(popupMotionSettle);
+        setPopupMotionActive(true);
+        mainHandler.postDelayed(popupMotionSettle, 120L);
+    }
+
+    private void setPopupMotionActive(boolean active) {
+        if (popupMotionActive == active) return;
+        popupMotionActive = active;
+        if (listener == null) return;
+        Runnable notify = () -> {
+            if (!shuttingDown && listener != null) listener.onMotionQualityChanged(active);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) notify.run();
+        else mainHandler.post(notify);
+        if (!folderBackdrop && !hwuiOutputActive && backdropPrepared && geometry != null) {
+            requestOutputRender();
+        }
+    }
+
+    private void notifyHwuiInvalidated() {
+        if (listener == null) return;
+        mainHandler.post(() -> {
+            if (!shuttingDown && listener != null) listener.onMotionQualityChanged(popupMotionActive);
+        });
+    }
+
+    boolean drawHwui(
             Canvas canvas, Paint paint,
             LauncherGlassGeometry.Snapshot frame, float openProgress,
             RuntimeShader baselineShader, RuntimeShader decoratedShader,
             RuntimeShader motionDecoratedShader, float[] invariants) {
-        if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || !folderBackdrop || shuttingDown
+        if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || shuttingDown
                 || canvas == null || paint == null || frame == null
                 || baselineShader == null || decoratedShader == null
                 || !canvas.isHardwareAccelerated()) return false;
         PrismalParams params = prismalParams;
         if (params == null || logicalWidth <= 0 || logicalHeight <= 0) return false;
 
-        PrismalEdgeDecoration decoration = GlassEdgeEffects.current(GlassEdgeEffects.FOLDER);
+        PrismalEdgeDecoration decoration = GlassEdgeEffects.current(
+                folderBackdrop ? GlassEdgeEffects.FOLDER : GlassEdgeEffects.POPUP);
         boolean decorated = decoration.hasBacklit() || decoration.hasShadow();
         // This variant contains the base Prismal material with its exact-zero
         // interior work skipped; it is useful even when edge decoration is off.
-        boolean transientMaterial = openProgress < 0.995f && motionDecoratedShader != null;
+        boolean transientMaterial = (folderBackdrop
+                ? openProgress < 0.995f : popupMotionActive) && motionDecoratedShader != null;
         RuntimeShader shader = transientMaterial ? motionDecoratedShader
                 : decorated ? decoratedShader : baselineShader;
         float density = sourceDensity;
@@ -323,7 +398,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 : PrismalHighlightProfile.ALL_ENABLED;
         LauncherGlassSession.setHwuiProbeMaterialUniforms(
                 shader, params, highlights, minDimension, invariants);
-        if (decorated && !transientMaterial) {
+        if (transientMaterial) {
+            // Keep the motion tier's cheaper interior without dropping its decorated
+            // edge shader or chromatic dispersion.
+            LauncherGlassSession.setHwuiProbeMotionQuality(shader);
+        }
+        if (decorated) {
             LauncherGlassSession.setHwuiProbeDecorationUniforms(
                     shader, decoration, density, minDimension);
         }
@@ -342,14 +422,23 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         return true;
     }
 
-    void onFolderHwuiPresented() {
-        if (folderBackdrop && hwuiOutputActive) signalPresented();
+    void onHwuiPresented() {
+        if (hwuiOutputActive) signalPresented();
     }
 
-    private void drainFolderFrame() {
-        if (folderRenderWork.consumeQueuedRender() != 0 && !shuttingDown) renderCurrent();
-        if (folderRenderWork.finishQueuedRender()
-                && !sourceBackend.postToRenderThread(this::drainFolderFrame)) folderRenderWork.onPostRejected();
+    private void requestOutputRender() {
+        if (outputRenderWork.request(true, false)
+                && !sourceBackend.postToRenderThread(this::drainOutputRender)) {
+            outputRenderWork.onPostRejected();
+        }
+    }
+
+    private void drainOutputRender() {
+        if (outputRenderWork.consumeQueuedRender() != 0 && !shuttingDown) renderCurrent();
+        if (outputRenderWork.finishQueuedRender()
+                && !sourceBackend.postToRenderThread(this::drainOutputRender)) {
+            outputRenderWork.onPostRejected();
+        }
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -403,6 +492,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || folderOutputFrozen || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
+        if (sharedHwuiBackdropActive) {
+            // The Workspace snapshot contains wallpaper only. Never replace it with the
+            // source overlay's composite, which can include the visible Workspace glass.
+            backend.setUpdatesEnabled(false, "shortcut-popup-shared-workspace-backdrop");
+            return;
+        }
         // The Launcher and Dock surfaces are excluded for OPEN_FOLDER, so a
         // late wallpaper frame cannot recursively contain FolderCling.
         if (folderBackdrop && sourceFrozen) return;
@@ -430,12 +525,12 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                     if (!shuttingDown && listener != null) listener.onBackdropReady();
                 });
             }
-            renderCurrent();
-            if (folderBackdrop && BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
-                    && !folderHwuiExportAttempted) {
-                folderHwuiExportAttempted = true;
-                exportFolderHwuiBackdrops();
+            outputRenderWork.consumeForSourceRender();
+            if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && !hwuiExportAttempted) {
+                hwuiExportAttempted = true;
+                exportHwuiBackdrops();
             }
+            renderCurrent();
         } catch (Throwable error) {
             notifyFailure(error);
         }
@@ -450,7 +545,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         LauncherGlassGeometry.Snapshot currentGeometry = geometry;
         OutputState currentOutput = output;
         if (shuttingDown || (folderOutputFrozen && !folderCloseGeometryActive)
-                || (folderBackdrop && hwuiOutputActive)
+                || hwuiOutputActive
                 || !backdropPrepared || currentGeometry == null
                 || currentOutput == null || currentOutput.eglSurface == EGL14.EGL_NO_SURFACE
                 || logicalWidth <= 0 || logicalHeight <= 0) return;
@@ -463,7 +558,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             sourceBackend.makePbufferCurrent();
             PrismalParams drawParams = prismalParams;
             prismalRenderer.setTransientQualityActive(
-                    folderBackdrop && backdropOpacity < 0.995f);
+                    folderBackdrop ? backdropOpacity < 0.995f : popupMotionActive);
             // The folder output is already a logical 1:1 full-root surface.
             // Render into its back buffer directly, avoiding an extra full-screen
             // RGBA target and copy while the native folder spring is running.
@@ -507,8 +602,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         });
     }
 
-    private void exportFolderHwuiBackdrops() {
-        if (!folderBackdrop || !BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
+    private void exportHwuiBackdrops() {
+        if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
                 || shuttingDown || !backdropPrepared || prismalRenderer == null) return;
         Bitmap rawBitmap = null;
         Bitmap blurredBitmap = null;
@@ -559,6 +654,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         sourceBackend.onShutdownComplete(onShutdownComplete);
         if (shuttingDown) return;
         shuttingDown = true;
+        mainHandler.removeCallbacks(popupMotionSettle);
         boolean queued = sourceBackend.postShutdownToRenderThread(() -> {
             releaseOutput(output);
             output = null;

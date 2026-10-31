@@ -200,6 +200,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean workspaceLaunchProxyReturning;
     private volatile boolean workspaceLayerMotionActive;
     private volatile boolean workspaceSourceMotionDeferred;
+    private volatile boolean workspacePopupMotionActive;
     // All active Workspace animation sources share this lower-cost Prismal material tier.
     private volatile boolean workspaceMotionQualityActive;
     private final float[] hwuiProbeInvariants = new float[10];
@@ -957,7 +958,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 LauncherGlassStaticNode node = state.nodeRef.get();
                 nodeAnimationActive |= node != null && node.isAnimationActive();
             }
-            boolean nextMotionQualityActive = nodeAnimationActive || transitionFrameSync.isActive()
+            boolean nextMotionQualityActive = workspaceNativeTransitionActive
+                    || workspaceLaunchProxyActive || nodeAnimationActive
+                    || workspacePopupMotionActive || transitionFrameSync.isActive()
                     || LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
             if (workspaceMotionQualityActive != nextMotionQualityActive) {
                 workspaceMotionQualityActive = nextMotionQualityActive;
@@ -1162,8 +1165,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             requestStaticGeometryRefresh();
         }
 
-        boolean nextMotionQualityActive = launchProxyActive || nodeAnimationActive
-                || geometryMotionChanged || dragChanged || transitionFrameSync.isActive()
+        boolean nextMotionQualityActive = workspaceNativeTransitionActive || launchProxyActive
+                || nodeAnimationActive || workspacePopupMotionActive || geometryMotionChanged
+                || dragChanged || transitionFrameSync.isActive()
                 || LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
         if (workspaceMotionQualityActive != nextMotionQualityActive) {
             workspaceMotionQualityActive = nextMotionQualityActive;
@@ -1284,6 +1288,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 transitionFrameSync.onNativeTransition(enabled),
                 root,
                 reason != null ? reason : "workspace-native-transition");
+    }
+
+    void setPopupMotionQualityActive(boolean active) {
+        if (shuttingDown || workspacePopupMotionActive == active) return;
+        workspacePopupMotionActive = active;
+        View root = rootRef.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
 
     void setUnlockTransitionFrameSyncEnabled(boolean enabled, String reason) {
@@ -1496,6 +1507,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || backend != sourceBackend || frame == null) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
+        // Anchor the exported bitmap to the wallpaper transform active when PassBlur latched
+        // this source frame. The HWUI shader can then follow later zoom updates without recapture.
+        final float wallpaperScaleAtFrame =
+                LauncherWallpaperZoomHook.currentWallpaperSurfaceScale();
         // The Recents child uses this OES frame on the same GL thread, with its own geometry.
         // Never reject its frame because Workspace static-output geometry is temporarily stale
         // or a HOME-only Prismal parameter is unavailable during the Recents transition.
@@ -1643,7 +1658,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         }
                         if (!LauncherGlassStaticLayer.publishHwuiProbeBackdrop(
                                 root, rawForUi, blurForUi,
-                                logicalWidth, logicalHeight, rotation)) {
+                                logicalWidth, logicalHeight, rotation,
+                                wallpaperScaleAtFrame)) {
                             if (hwuiProbeExportSerial == exportSerial) hwuiProbeExportDirty = true;
                         }
                     })) {
@@ -1816,7 +1832,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void drawHwuiProbe(Canvas canvas, Paint paint,
                        android.graphics.RuntimeShader baselineShader,
                        android.graphics.RuntimeShader decoratedShader,
-                       android.graphics.RuntimeShader motionDecoratedShader) {
+                       android.graphics.RuntimeShader motionDecoratedShader,
+                       float relativeWallpaperScale) {
         if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || shuttingDown || canvas == null
                 || paint == null || baselineShader == null || decoratedShader == null
                 || staticGlassOutputSuppressed || !canvas.isHardwareAccelerated()) return;
@@ -1825,6 +1842,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         StaticSceneSnapshot scene = publishedStaticScene;
         StaticNodeState[] snapshot = scene.nodes;
         if (snapshot.length == 0) return;
+        float sampleScale = Float.isFinite(relativeWallpaperScale)
+                && relativeWallpaperScale > 0f ? relativeWallpaperScale : 1f;
+        baselineShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
+        decoratedShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
+        if (motionDecoratedShader != null) {
+            motionDecoratedShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
+        }
         PrismalParams params = prismalParams != null ? prismalParams : PrismalParams.builder().build();
         float density = root.getResources().getDisplayMetrics().density;
         android.graphics.RuntimeShader activeShader = null;
@@ -1876,11 +1900,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             setHwuiProbeMaterialUniforms(shader, params, highlights,
                     minDimension, hwuiProbeInvariants);
             if (workspaceMotionQualityActive) {
-                // Match the GLES motion tier: skip red/blue backdrop taps and caustic lighting.
-                shader.setFloatUniform("u_chromaticAberration", 0f);
-                shader.setFloatUniform("u_causticIntensity", 0f);
+                // Keep edge decoration and chromatic dispersion; skip motion caustics only.
+                setHwuiProbeMotionQuality(shader);
             }
-            if (decorated && !transitionMaterial) {
+            if (decorated) {
                 setHwuiProbeDecorationUniforms(shader, decoration, density, minDimension);
             }
             PrismalInteractionState interaction = state.interaction;
@@ -1949,6 +1972,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 decoration.effectiveShadowOffsetYPx(density, minDimension));
         shader.setFloatUniform("u_castShadowColor",
                 decoration.shadowR, decoration.shadowG, decoration.shadowB, decoration.shadowA);
+    }
+
+    /** Match the Prismal motion tier shared by GLES and both HWUI glass outputs. */
+    static void setHwuiProbeMotionQuality(android.graphics.RuntimeShader shader) {
+        if (shader == null) return;
+        shader.setFloatUniform("u_causticIntensity", 0f);
     }
 
     static void setHwuiProbeMaterialUniforms(

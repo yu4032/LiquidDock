@@ -37,7 +37,25 @@ final class LauncherGlassHwuiProbeView extends View {
     private int backdropLogicalWidth;
     private int backdropLogicalHeight;
     private int backdropRotation = -1;
+    private float backdropWallpaperScale = 1f;
     private boolean drawFailureReported;
+
+    static final class BackdropSnapshot {
+        final Bitmap raw;
+        final Bitmap blurred;
+        final int logicalWidth;
+        final int logicalHeight;
+        final int rotation;
+
+        BackdropSnapshot(Bitmap raw, Bitmap blurred, int logicalWidth,
+                int logicalHeight, int rotation) {
+            this.raw = raw;
+            this.blurred = blurred;
+            this.logicalWidth = logicalWidth;
+            this.logicalHeight = logicalHeight;
+            this.rotation = rotation;
+        }
+    }
 
     LauncherGlassHwuiProbeView(Context context, LauncherGlassSession session) {
         super(context);
@@ -125,13 +143,16 @@ final class LauncherGlassHwuiProbeView extends View {
                 "uniform vec2  u_resolution;\n"
                         + "uniform vec2 uProbeRawScale;\n"
                         + "uniform vec2 uProbeBlurScale;\n"
+                        + "uniform float uProbeWallpaperScale;\n"
                         + "uniform vec4 uProbeBounds;\n"
                         + "vec4 sampleRaw(vec2 uv) {\n"
-                        + "    vec2 p = clamp(uv, vec2(0.0), vec2(1.0)) * u_resolution * uProbeRawScale;\n"
+                        + "    vec2 sampleUv = vec2(0.5) + (uv - vec2(0.5)) / max(uProbeWallpaperScale, 1e-4);\n"
+                        + "    vec2 p = clamp(sampleUv, vec2(0.0), vec2(1.0)) * u_resolution * uProbeRawScale;\n"
                         + "    return vec4(u_backgroundTexture.eval(p));\n"
                         + "}\n"
                         + "vec4 sampleBlurred(vec2 uv) {\n"
-                        + "    vec2 p = clamp(uv, vec2(0.0), vec2(1.0)) * u_resolution * uProbeBlurScale;\n"
+                        + "    vec2 sampleUv = vec2(0.5) + (uv - vec2(0.5)) / max(uProbeWallpaperScale, 1e-4);\n"
+                        + "    vec2 p = clamp(sampleUv, vec2(0.0), vec2(1.0)) * u_resolution * uProbeBlurScale;\n"
                         + "    return vec4(u_blurredTexture.eval(p));\n"
                         + "}");
 
@@ -223,7 +244,8 @@ final class LauncherGlassHwuiProbeView extends View {
 
     boolean setBackdrops(
             Bitmap rawBitmap, Bitmap blurBitmap,
-            int logicalWidth, int logicalHeight, int rotation) {
+            int logicalWidth, int logicalHeight, int rotation,
+            float capturedWallpaperScale) {
         if (rawBitmap == null || blurBitmap == null
                 || logicalWidth <= 0 || logicalHeight <= 0) return false;
         try {
@@ -254,12 +276,14 @@ final class LauncherGlassHwuiProbeView extends View {
             nextBaseline.setFloatUniform("uProbeBlurScale",
                     (float) blurBitmap.getWidth() / logicalWidth,
                     (float) blurBitmap.getHeight() / logicalHeight);
+            nextBaseline.setFloatUniform("uProbeWallpaperScale", 1f);
             nextDecorated.setFloatUniform("uProbeRawScale",
                     (float) rawBitmap.getWidth() / logicalWidth,
                     (float) rawBitmap.getHeight() / logicalHeight);
             nextDecorated.setFloatUniform("uProbeBlurScale",
                     (float) blurBitmap.getWidth() / logicalWidth,
                     (float) blurBitmap.getHeight() / logicalHeight);
+            nextDecorated.setFloatUniform("uProbeWallpaperScale", 1f);
             if (nextMotionDecorated != null) {
                 nextMotionDecorated.setFloatUniform("uProbeRawScale",
                         (float) rawBitmap.getWidth() / logicalWidth,
@@ -267,6 +291,7 @@ final class LauncherGlassHwuiProbeView extends View {
                 nextMotionDecorated.setFloatUniform("uProbeBlurScale",
                         (float) blurBitmap.getWidth() / logicalWidth,
                         (float) blurBitmap.getHeight() / logicalHeight);
+                nextMotionDecorated.setFloatUniform("uProbeWallpaperScale", 1f);
             }
             backdrop = rawBitmap;
             blurredBackdrop = blurBitmap;
@@ -276,6 +301,8 @@ final class LauncherGlassHwuiProbeView extends View {
             backdropLogicalWidth = logicalWidth;
             backdropLogicalHeight = logicalHeight;
             backdropRotation = rotation;
+            backdropWallpaperScale = Float.isFinite(capturedWallpaperScale)
+                    && capturedWallpaperScale > 0f ? capturedWallpaperScale : 1f;
             drawFailureReported = false;
             postInvalidateOnAnimation();
             return true;
@@ -284,6 +311,15 @@ final class LauncherGlassHwuiProbeView extends View {
             fail(error);
             return false;
         }
+    }
+
+    BackdropSnapshot snapshotBackdrops() {
+        Bitmap raw = backdrop;
+        Bitmap blurred = blurredBackdrop;
+        if (raw == null || blurred == null || raw.isRecycled() || blurred.isRecycled()
+                || backdropLogicalWidth <= 0 || backdropLogicalHeight <= 0) return null;
+        return new BackdropSnapshot(raw, blurred,
+                backdropLogicalWidth, backdropLogicalHeight, backdropRotation);
     }
 
     /** Drop Java/Skia inputs after detach. Let HWUI release in-flight GPU references safely. */
@@ -296,6 +332,7 @@ final class LauncherGlassHwuiProbeView extends View {
         backdropLogicalWidth = 0;
         backdropLogicalHeight = 0;
         backdropRotation = -1;
+        backdropWallpaperScale = 1f;
     }
 
     @Override
@@ -311,7 +348,10 @@ final class LauncherGlassHwuiProbeView extends View {
         try {
             if (Trace.isEnabled()) Trace.beginSection("LD.Workspace.HWUIProbe.Draw");
             try {
-                session.drawHwuiProbe(canvas, paint, baseline, decorated, motionDecorated);
+                float wallpaperScale = LauncherWallpaperZoomHook
+                        .relativeWallpaperSurfaceScale(backdropWallpaperScale);
+                session.drawHwuiProbe(
+                        canvas, paint, baseline, decorated, motionDecorated, wallpaperScale);
             } finally {
                 if (Trace.isEnabled()) Trace.endSection();
             }
