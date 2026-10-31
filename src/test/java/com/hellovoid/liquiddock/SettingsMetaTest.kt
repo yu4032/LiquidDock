@@ -178,7 +178,7 @@ class SettingsMetaTest {
         val owners = mapOf(
             Page.AnimationWorkspace to listOf(animationAppReturnGlassFadeStartSpec, animationAppReturnGlassFadeDurationSpec,
                 animationWorkspaceVisibilitySpec, animationUnlockGlassFadeSpec,
-                animationFolderOpenGlassFadeSpec, animationDockResizeSpec),
+                animationDockResizeSpec),
             Page.AnimationInteraction to listOf(animationPressInSpec, animationPressOutSpec),
             Page.AnimationPopups to listOf(animationShortcutDismissSpec, animationSecurityCenterExitSpec),
             Page.AnimationGui to listOf(animationSettingsPageSpec),

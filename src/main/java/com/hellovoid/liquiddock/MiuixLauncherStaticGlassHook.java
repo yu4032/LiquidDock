@@ -371,6 +371,7 @@ final class MiuixLauncherStaticGlassHook {
         View workspace = (View) value;
         workspace.postOnAnimation(() -> {
             if (!GlassRuntimeState.isEnabled() || !workspace.isAttachedToWindow()) return;
+            LauncherGlassStaticLayer.onLauncherResumed(workspace.getRootView());
             reconcileCurrentWorkspacePage(workspace, glassConfig);
             // Resume is not a source invalidation. The invalidate only schedules normal pre-draw
             // geometry reconciliation; Surface/wallpaper/rotation freshness stays with its owner.
