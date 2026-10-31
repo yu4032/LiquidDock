@@ -160,7 +160,6 @@ final class LiveGlassConfigState {
                     ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END.name(),
                     ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION.name(),
                     ConfigSchema.Animation.UNLOCK_GLASS_FADE.name(),
-                    ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name(),
                     ConfigSchema.Animation.PRESS_IN.name(),
                     ConfigSchema.Animation.PRESS_OUT.name(),
                     ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE.name(),
