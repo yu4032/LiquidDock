@@ -200,6 +200,12 @@ final class LauncherGlassSceneController {
         displayRotation = readDisplayRotation(root);
     }
 
+    static boolean isWallpaperContentGenerationCurrent(View root, long generation) {
+        LauncherGlassSceneController controller = findRoot(root);
+        return controller != null
+                && controller.wallpaperContentState.generation() == generation;
+    }
+
     static synchronized void applyLiveGlassConfigForRoot(
             View root, LiquidDockConfig.Glass glassConfig) {
         LauncherGlassSceneController controller = BY_ROOT.get(root);
