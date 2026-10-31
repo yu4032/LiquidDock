@@ -1708,7 +1708,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
     }
 
-    private static void setHwuiProbeDecorationUniforms(
+    static void setHwuiProbeDecorationUniforms(
             android.graphics.RuntimeShader shader,
             PrismalEdgeDecoration decoration,
             float density,
@@ -1727,7 +1727,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 decoration.shadowR, decoration.shadowG, decoration.shadowB, decoration.shadowA);
     }
 
-    private static void setHwuiProbeMaterialUniforms(
+    static void setHwuiProbeMaterialUniforms(
             android.graphics.RuntimeShader shader,
             PrismalParams p,
             PrismalHighlightProfile h,

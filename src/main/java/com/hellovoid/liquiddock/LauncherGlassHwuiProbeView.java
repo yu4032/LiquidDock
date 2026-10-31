@@ -191,11 +191,11 @@ final class LauncherGlassHwuiProbeView extends View {
         return "(" + rgb + ") * (" + alpha + "), " + alpha;
     }
 
-    private static String agslSource(boolean decorated) {
+    static String agslSource(boolean decorated) {
         return agslSource(decorated, false);
     }
 
-    private static String agslSource(boolean decorated, boolean transitionMaterial) {
+    static String agslSource(boolean decorated, boolean transitionMaterial) {
         if (transitionMaterial && !decorated) {
             throw new IllegalArgumentException("transition material requires decoration");
         }
