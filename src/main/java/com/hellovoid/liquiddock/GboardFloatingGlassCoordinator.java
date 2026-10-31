@@ -167,6 +167,11 @@ final class GboardFloatingGlassCoordinator {
                         state.popup.post(() -> GboardFloatingGlassCoordinator.onPresented(state));
                     }
 
+                    @Override public void onPresentationInvalidated() {
+                        state.popup.post(() -> GboardFloatingGlassCoordinator
+                                .onPresentationInvalidated(state));
+                    }
+
                     @Override public void onFailure(Throwable error) {
                         state.popup.post(() -> failClosed(state, "session failure", error));
                     }
@@ -319,6 +324,14 @@ final class GboardFloatingGlassCoordinator {
         state.stockHidden = true;
         state.outputPresented = true;
         state.presentedAtMs = SystemClock.uptimeMillis();
+    }
+
+    private static synchronized void onPresentationInvalidated(State state) {
+        if (state == null || state.released) return;
+        if (state.stockHidden) GboardStockVisualAuthority.release(state.structure);
+        state.stockHidden = false;
+        state.outputPresented = false;
+        state.presentedAtMs = 0L;
     }
 
     private static synchronized void failClosed(State state, String reason, Throwable error) {

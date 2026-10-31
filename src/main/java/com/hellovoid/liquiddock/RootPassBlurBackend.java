@@ -759,9 +759,9 @@ final class RootPassBlurBackend {
     }
 
     /**
-     * One-shot immutable export for the debug-only Workspace HWUI probe. The GL texture is copied
-     * into an AHardwareBuffer and completed before Bitmap/HWUI can observe it; this buffer is never
-     * written again, so the spike has no producer/consumer reuse race.
+     * One-shot immutable export for an HWUI glass output. The GL texture is copied into an
+     * AHardwareBuffer and completed before Bitmap/HWUI can observe it; this buffer is never
+     * written again, so the producer/consumer pair has no reuse race.
      */
     Bitmap copyNormalizedFrameToHardwareBitmap(RootPassBlurFrame frame) {
         requireRenderThread();
@@ -776,7 +776,7 @@ final class RootPassBlurBackend {
                 frame.normalizedTextureId, frame.physicalWidth, frame.physicalHeight);
     }
 
-    /** One-shot immutable export for a prepared Prismal texture used by the debug HWUI probe. */
+    /** One-shot immutable export for a prepared Prismal texture consumed by HWUI. */
     Bitmap copyTextureToHardwareBitmap(int sourceTextureId, int width, int height) {
         requireRenderThread();
         if (sourceTextureId <= 0 || width <= 0 || height <= 0) {
