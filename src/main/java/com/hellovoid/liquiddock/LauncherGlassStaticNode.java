@@ -259,6 +259,43 @@ final class LauncherGlassStaticNode {
 
     float visibilityAlpha() { return visibilityAlpha * homeReturnAlpha; }
 
+    /**
+     * Opacity for one Workspace glass draw, resolved from its current visual owner.
+     * The shared layer applies Workspace alpha unless a proxy owns a node; in that
+     * case ordinary nodes take that factor here while the proxy node uses proxy alpha.
+     */
+    float presentationAlpha(
+            View root, View workspace, float workspaceAlpha, boolean workspaceAlphaBypassed) {
+        if (disposed) return 0f;
+        float ownAlpha = visibilityAlpha();
+        if (!Float.isFinite(ownAlpha) || ownAlpha <= 0f) return 0f;
+
+        if (folderReturnState.isActive()) {
+            return ownAlpha * (workspaceAlphaBypassed ? clampAlpha(workspaceAlpha) : 1f);
+        }
+        if (visualOwnerState.isLaunchProxyActive()) {
+            return ownAlpha * visualOwnerState.alpha();
+        }
+
+        View material = materialRef.get();
+        if (material == null || root == null) return 0f;
+        float sourceAlpha;
+        if (workspace != null) {
+            sourceAlpha = LauncherGlassVisibility.alphaBelowAncestor(material, workspace, root);
+            if (workspaceAlphaBypassed) sourceAlpha *= clampAlpha(workspaceAlpha);
+        } else {
+            // Without a Workspace ancestor to split, this read already includes its alpha.
+            sourceAlpha = LauncherGlassVisibility.alphaBelowRoot(material, root);
+        }
+        float result = ownAlpha * sourceAlpha;
+        return Float.isFinite(result) ? clampAlpha(result) : 0f;
+    }
+
+    private static float clampAlpha(float alpha) {
+        if (!Float.isFinite(alpha)) return 0f;
+        return Math.max(0f, Math.min(1f, alpha));
+    }
+
     void updateHomeReturnProgress(float progress) {
         if (disposed) return;
         float alpha = LauncherGlassReturnFade.alpha(progress);
@@ -355,11 +392,16 @@ final class LauncherGlassStaticNode {
     }
 
     boolean updateLaunchProxyGeometry(float left, float top, float right, float bottom) {
+        return updateLaunchProxyGeometry(left, top, right, bottom, 1f);
+    }
+
+    boolean updateLaunchProxyGeometry(
+            float left, float top, float right, float bottom, float alpha) {
         if (disposed) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
         boolean hadGeometry = visualOwnerState.copyLaunchProxyRect() != null;
         if (!visualOwnerState.updateLaunchProxyRect(
-                new float[]{left, top, right, bottom})) return false;
+                new float[]{left, top, right, bottom}, alpha)) return false;
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;

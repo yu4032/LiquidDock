@@ -227,6 +227,14 @@ final class Miuix307PassBlurBridge {
     /** Workspace-only demand pulse. Dock keeps main's persistent continuous-on-bind mode. */
     static void requestSingleUpdate(Binding binding, View host) {
         if (binding == null || host == null || !binding.bound) return;
+        if (binding.domain != PassBlurDomain.LAUNCHER_WORKSPACE) {
+            // A non-Workspace consumer (notably active drag glass) owns a live backdrop lease.
+            // Treat accidental single-frame requests as continuous capture instead of freezing
+            // its already-prepared background.
+            resumeUpdates(binding);
+            host.postInvalidateOnAnimation();
+            return;
+        }
         if (PassBlurBindPolicy.requiresUnlockGate(binding.domain)
                 && LauncherGlassHomePresentationHook.isUnlockProducerBlocked()) {
             MainHook.log(TAG + " PassBlur Workspace single update blocked by unlock producer gate");
@@ -261,8 +269,10 @@ final class Miuix307PassBlurBridge {
     private static void schedulePauseUpdates(View host, Binding binding, int framesLeft) {
         if (host == null || binding == null || !binding.bound) return;
         if (framesLeft <= 0) {
-            if (WorkstationProducerPolicy.shouldPauseSharedProducer(
-                    true, MainHook.isWorkstationMode())) {
+            if (binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
+                    && WorkstationProducerPolicy.shouldPauseSharedProducer(
+                    true, MainHook.isWorkstationMode())
+                    && !binding.workspaceTransitionFrameSync) {
                 pauseUpdates(binding);
             }
             return;

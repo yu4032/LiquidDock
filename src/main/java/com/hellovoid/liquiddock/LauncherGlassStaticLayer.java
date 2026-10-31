@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Bitmap;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
@@ -16,12 +17,14 @@ import android.view.animation.DecelerateInterpolator;
 
 import java.lang.ref.WeakReference;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** One transparent static Launcher glass output for an entire stable Launcher root. */
 final class LauncherGlassStaticLayer extends TextureView implements TextureView.SurfaceTextureListener {
     private static final WeakHashMap<View, LauncherGlassStaticLayer> BY_ROOT = new WeakHashMap<>();
 
     private static final WeakHashMap<View, Long> UNLOCK_END_BY_ROOT = new WeakHashMap<>();
+    private static final AtomicInteger HWUI_PROBE_SCROLL_MUTATIONS = new AtomicInteger();
 
     private final WeakReference<View> rootRef;
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
@@ -29,6 +32,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final Handler mainHandler;
     private Surface outputSurface;
     private boolean disposed;
+    private volatile boolean hwuiProbeActive;
+    private final LauncherGlassHwuiProbeView hwuiProbe;
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
     private ValueAnimator motionAnimator;
@@ -40,6 +45,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         rootRef = new WeakReference<>(root);
         this.session = session;
         mainHandler = new Handler(context.getMainLooper());
+        hwuiProbe = BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
+                ? new LauncherGlassHwuiProbeView(context, session) : null;
         setOpaque(false);
         setVisibility(View.VISIBLE);
         setAlpha(0f);
@@ -73,6 +80,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         LauncherGlassStaticLayer layer = new LauncherGlassStaticLayer(root.getContext(), root, session);
         rootGroup.addView(layer, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (layer.hwuiProbe != null) {
+            rootGroup.addView(layer.hwuiProbe, 1, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
         BY_ROOT.put(root, layer);
         Long endAt = UNLOCK_END_BY_ROOT.get(root);
         if (endAt != null) layer.startMotionReveal(endAt);
@@ -99,7 +110,79 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         layer.workspaceRef = new WeakReference<>(workspace);
         // Do not translate the root-wide TextureView. Its pixels include the already sampled
         // backdrop, which belongs to root coordinates. Project only glass geometry in the session.
+        if (layer.hwuiProbe != null) layer.hwuiProbe.postInvalidateOnAnimation();
+        if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && android.os.Trace.isEnabled()) {
+            android.os.Trace.beginSection("LD.Workspace.HWUIProbe.ScrollMutation");
+            try {
+                android.os.Trace.setCounter("LD.Workspace.HWUIProbe.ScrollMutationCount",
+                        HWUI_PROBE_SCROLL_MUTATIONS.incrementAndGet());
+                android.os.Trace.setCounter("LD.Workspace.HWUIProbe.ScrollBeforeX", beforeScrollX);
+                android.os.Trace.setCounter("LD.Workspace.HWUIProbe.ScrollAfterX", afterScrollX);
+            } finally {
+                android.os.Trace.endSection();
+            }
+        }
         layer.session.onWorkspaceScrollMutation(beforeScrollX, afterScrollX);
+    }
+
+    static boolean isHwuiProbeActive(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        return layer != null && layer.hwuiProbeActive;
+    }
+
+    /** Invalidate the active in-window probe without queueing a redundant static GL frame. */
+    static boolean invalidateHwuiProbe(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null || !layer.hwuiProbeActive || layer.hwuiProbe == null) return false;
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            layer.hwuiProbe.invalidate();
+        } else {
+            layer.hwuiProbe.postInvalidateOnAnimation();
+        }
+        return true;
+    }
+
+    static void markHwuiProbeBackdropPending(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null || !layer.hwuiProbeActive) return;
+        layer.hwuiProbeActive = false;
+        layer.applyLayerAlpha();
+        layer.session.requestStaticRedraw();
+        MainHook.log("[DC][LauncherGlass] HWUI probe paused while backdrop geometry changes");
+    }
+
+    static void publishHwuiProbeBackdrop(
+            View root, Bitmap rawBitmap, Bitmap blurredBitmap,
+            int logicalWidth, int logicalHeight, int rotation) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null || layer.hwuiProbe == null
+                || rawBitmap == null || blurredBitmap == null) {
+            if (rawBitmap != null) rawBitmap.recycle();
+            if (blurredBitmap != null) blurredBitmap.recycle();
+            return;
+        }
+        if (!layer.hwuiProbe.setBackdrops(
+                rawBitmap, blurredBitmap, logicalWidth, logicalHeight, rotation)) {
+            rawBitmap.recycle();
+            blurredBitmap.recycle();
+            return;
+        }
+        layer.hwuiProbeActive = true;
+        layer.applyLayerAlpha();
+        MainHook.log("[DC][LauncherGlass] HWUI probe active; immutable PassBlur backdrop "
+                + rawBitmap.getWidth() + "x" + rawBitmap.getHeight()
+                + " blur=" + blurredBitmap.getWidth() + "x" + blurredBitmap.getHeight()
+                + " rotation=" + rotation);
+    }
+
+    static void failHwuiProbe(View root, LauncherGlassHwuiProbeView probe, Throwable error) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null || layer.hwuiProbe != probe) return;
+        layer.hwuiProbeActive = false;
+        layer.applyLayerAlpha();
+        MainHook.log("[DC][LauncherGlass] HWUI probe disabled; restored TextureView output: "
+                + error);
+        layer.session.requestStaticRedraw();
     }
 
     static Integer captureWorkspaceScrollAnchor(View root) {
@@ -112,9 +195,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     /** UI pre-draw applies native opacity to the already cached output in the same traversal. */
-    static void syncWorkspacePresentation(View root, View material, boolean launchProxyActive) {
+    static float syncWorkspacePresentation(
+            View root, View material, boolean launchProxyActive) {
         LauncherGlassStaticLayer layer = find(root);
-        if (layer == null) return;
+        if (layer == null) return 1f;
         View workspace = layer.workspaceRef.get();
         if (workspace == null || !workspace.isAttachedToWindow()
                 || workspace.getRootView() != root) {
@@ -133,6 +217,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
         layer.layerAlpha.setWorkspaceAlpha(alpha, launchProxyActive);
         layer.applyLayerAlpha();
+        return alpha;
     }
 
     static void onNativeUnlockStarted(View root, long expectedDurationMs) {
@@ -244,7 +329,15 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         animator.start();
     }
 
-    private void applyLayerAlpha() { setAlpha(layerAlpha.alpha()); }
+    private void applyLayerAlpha() {
+        if (hwuiProbeActive && hwuiProbe != null) {
+            setAlpha(0f);
+            hwuiProbe.setAlpha(layerAlpha.alpha());
+        } else {
+            setAlpha(layerAlpha.alpha());
+            if (hwuiProbe != null) hwuiProbe.setAlpha(0f);
+        }
+    }
 
     private void cancelSceneAnimation() {
         ValueAnimator previous = sceneAnimator;
@@ -269,6 +362,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (root != null) {
             root.removeOnAttachStateChangeListener(rootAttachListener);
             forget(root, this);
+        }
+        if (hwuiProbe != null && hwuiProbe.getParent() instanceof ViewGroup) {
+            ((ViewGroup) hwuiProbe.getParent()).removeView(hwuiProbe);
         }
         if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
     }

@@ -22,6 +22,32 @@ import java.util.Map;
 public final class PrismalRenderer implements AutoCloseable {
     private static final float BLUR_FBO_SCALE = 0.5f;
 
+    /**
+     * Debug probe source for the parallel Workspace HWUI output. This deliberately shares the
+     * same single-edge material and per-feature gates as the GLES renderer; only the backend
+     * that consumes the returned GLSL template differs.
+     */
+    public static String workspaceHwuiProbeFragmentSource() {
+        return workspaceHwuiProbeFragmentSource(false);
+    }
+
+    /** Match the GLES shader branch selected for a Workspace node with optional edge material. */
+    public static String workspaceHwuiProbeFragmentSource(boolean decorated) {
+        String source = PrismalOs4InvariantShader.apply(
+                PrismalComponentGateShader.apply(
+                        PrismalOpticalEdgeShader.apply(
+                                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
+        if (!decorated) return source;
+        source = PrismalInteriorFastPath.apply(source);
+        source = PrismalEdgeDecorationShader.apply(source);
+        return PrismalReconstructed27Shader.apply(source);
+    }
+
+    /** Keep HWUI's OS4 lighting uniforms numerically identical to the GLES renderer. */
+    public static void computeWorkspaceHwuiProbeInvariants(PrismalParams params, float[] out) {
+        PrismalOs4InvariantShader.compute(params, out);
+    }
+
     private static final float[] FULL_QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -446,6 +472,14 @@ public final class PrismalRenderer implements AutoCloseable {
     }
     /** Prepared screen-anchored blur, owned by this renderer and its current GL context. */
     public int preparedBlurTexture() { return backdropPrepared ? blurTextureV : 0; }
+    /** Prepared, orientation-normalized sharp backdrop used by every Prismal material sample. */
+    public int preparedSourceTexture() { return backdropPrepared ? sourceTexture : 0; }
+    /** Physical dimensions of the prepared sharp backdrop. */
+    public int preparedSourceWidth() { return backdropPrepared ? renderWidth : 0; }
+    public int preparedSourceHeight() { return backdropPrepared ? renderHeight : 0; }
+    /** Physical dimensions of the prepared blur texture, used by GPU-shared consumers. */
+    public int preparedBlurWidth() { return backdropPrepared ? blurWidth : 0; }
+    public int preparedBlurHeight() { return backdropPrepared ? blurHeight : 0; }
 
     public int framebufferWidth() { return width; }
     public int framebufferHeight() { return height; }

@@ -7,9 +7,9 @@ final class RootPassBlurBackendState {
 
     private long requestedGeneration = -1L;
     private long freshGeneration = -1L;
-    // Native bind starts continuous capture. Preserve an explicit Workspace pause
-    // across a delayed bind or endpoint rollover until a new consumer requests a frame.
-    private boolean captureUpdatesAllowed = true;
+    // Native bind starts continuous capture. Workspace must opt in with a freshness request or
+    // active motion, so a delayed bind/rollover cannot silently leave the idle desktop live.
+    private boolean captureUpdatesAllowed;
     private boolean shutdown;
     // Only the currently scheduled render epoch may abandon a pending rebind.
     private long rebindOwnerEpoch = -1L;

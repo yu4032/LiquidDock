@@ -272,12 +272,11 @@ final class MiuixLauncherStaticGlassHook {
                                 LauncherGlassStaticNode node =
                                         LauncherGlassStaticNode.find((View) target);
                                 if (node != null && args[2] instanceof Number) {
-                                    if ((Boolean) args[6]) {
+                                    boolean closeToHome = !((Boolean) args[6]);
+                                    if (!closeToHome) {
                                         // A running return can be retargeted into a new launch.
                                         node.resetHomeReturnFade();
-                                        return chain.proceed(args);
-                                    }
-                                    if (args[3] instanceof Number) {
+                                    } else if (args[3] instanceof Number) {
                                         node.updateHomeReturnProgress(((Number) args[3]).floatValue());
                                     }
                                     float proxyAlpha = ((Number) args[2]).floatValue();
@@ -301,7 +300,10 @@ final class MiuixLauncherStaticGlassHook {
                                                     proxyAlpha, drawIcon)
                                             : LauncherGlassProxyVisibility.isView2Visible(
                                                     proxyAlpha, drawIcon);
-                                    if (!proxyVisible) {
+                                    boolean publishProxyGeometry =
+                                            LauncherGlassProxyVisibility.shouldPublishGeometry(
+                                                    closeToHome, proxyVisible);
+                                    if (!publishProxyGeometry) {
                                         if (node.holdLaunchProxyHidden()) {
                                             MainHook.log(TAG + " proxy owner hidden class="
                                                     + owner.getClass().getSimpleName()
@@ -310,12 +312,20 @@ final class MiuixLauncherStaticGlassHook {
                                         }
                                     } else {
                                         // FloatingIconView2 draws iconRect; FloatingIconLayer2 places
-                                        // its SurfaceControl from rotationIconRect. Do not publish the
-                                        // task-sized morph rect until MIUI itself shows the icon proxy.
+                                        // its SurfaceControl from rotationIconRect. CLOSE_TO_HOME
+                                        // waits for drawable ownership; launch-away tracks its morph
+                                        // rect from the first update and gates opacity separately.
                                         RectF proxyRect = (RectF) args[useRotationRect ? 1 : 0];
+                                        // Launch-away Layer2 opacity is a continuous SurfaceControl
+                                        // value; View2's setAlpha is binary at the native visibility
+                                        // threshold. CLOSE_TO_HOME keeps the shared progress fade.
+                                        float visualAlpha = closeToHome ? 1f
+                                                : proxyVisible
+                                                ? (useRotationRect ? proxyAlpha : 1f) : 0f;
                                         boolean firstVisible = node.updateLaunchProxyGeometry(
                                                 proxyRect.left, proxyRect.top,
-                                                proxyRect.right, proxyRect.bottom);
+                                                proxyRect.right, proxyRect.bottom,
+                                                visualAlpha);
                                         if (firstVisible) {
                                             MainHook.log(TAG + " proxy geometry visible class="
                                                     + owner.getClass().getSimpleName()

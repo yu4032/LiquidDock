@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.0"
 }
 
+val workspaceGlassHwuiProbeEnabled = providers.gradleProperty("workspaceGlassHwuiProbe")
+    .map { it.toBoolean() }
+    .getOrElse(false)
+
 android {
     namespace = "com.hellovoid.liquiddock"
     compileSdk = 37
@@ -15,6 +19,10 @@ android {
         testInstrumentationRunner = "com.hellovoid.liquiddock.SettingsSearchInstrumentation"
         versionCode = 38
         versionName = "2.7.6"
+        buildConfigField(
+            "boolean",
+            "WORKSPACE_GLASS_HWUI_PROBE",
+            workspaceGlassHwuiProbeEnabled.toString())
     }
 
     signingConfigs {
@@ -46,7 +54,10 @@ android {
         }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     packaging {
         resources {
@@ -75,6 +86,7 @@ dependencies {
     implementation("androidx.preference:preference:1.2.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.graphics:graphics-core:1.0.4")
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
