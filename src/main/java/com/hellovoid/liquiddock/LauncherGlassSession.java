@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Launcher-specific consumer of one root-wide {@link RootPassBlurBackend}.
@@ -190,9 +191,15 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // hides it. Geometry is force-refreshed before output is resumed.
     private volatile boolean staticGlassOutputSuppressed;
     private volatile boolean staticGeometryRefreshPending;
+    private final AtomicLong staticGeometryRefreshSerial = new AtomicLong();
     private volatile boolean workspaceFirstOutputPresented;
     private volatile boolean workspaceOutputRefreshPending;
-    private boolean workspaceRefreshAfterMotionPending;
+    private volatile boolean workspaceRefreshAfterMotionPending;
+    private volatile boolean workspaceNativeTransitionActive;
+    private volatile boolean workspaceLaunchProxyActive;
+    private volatile boolean workspaceLaunchProxyReturning;
+    private volatile boolean workspaceLayerMotionActive;
+    private volatile boolean workspaceSourceMotionDeferred;
     // All active Workspace animation sources share this lower-cost Prismal material tier.
     private volatile boolean workspaceMotionQualityActive;
     private final float[] hwuiProbeInvariants = new float[10];
@@ -507,6 +514,41 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         requestStaticRedraw();
     }
 
+    void onStaticLaunchProxyStateChanged(
+            LauncherGlassStaticNode changedNode, boolean active, boolean returning) {
+        if (shuttingDown || changedNode == null) return;
+        boolean anyActive = false;
+        boolean anyReturning = false;
+        boolean foundChangedNode = false;
+        for (StaticNodeState state : staticNodeStateSnapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            if (node == null) continue;
+            if (node == changedNode) foundChangedNode = true;
+            if (!node.isLaunchProxyActive()) continue;
+            anyActive = true;
+            anyReturning |= node.isLaunchProxyReturning();
+        }
+        if (!foundChangedNode && active) {
+            anyActive = true;
+            anyReturning = returning;
+        }
+        boolean wasReturning = workspaceLaunchProxyReturning;
+        workspaceLaunchProxyActive = anyActive;
+        workspaceLaunchProxyReturning = anyReturning;
+        if (anyReturning || (wasReturning && !anyActive)) {
+            workspaceRefreshAfterMotionPending = true;
+        }
+        View root = rootRef.get();
+        workspaceLayerMotionActive =
+                LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
+        workspaceSourceMotionDeferred = workspaceNativeTransitionActive
+                || anyActive || workspaceLayerMotionActive;
+        if (anyActive) {
+            workspaceMotionQualityActive = true;
+            LauncherGlassStaticLayer.invalidateHwuiProbe(root);
+        }
+    }
+
     void requestLifecycleRefresh() {
         requestSceneRedraw();
     }
@@ -535,11 +577,22 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
     }
 
+    private synchronized void requestStaticGeometryRefresh() {
+        staticGeometryRefreshSerial.incrementAndGet();
+        staticGeometryRefreshPending = true;
+    }
+
+    private synchronized void consumeStaticGeometryRefresh(long expectedSerial) {
+        if (staticGeometryRefreshSerial.get() == expectedSerial) {
+            staticGeometryRefreshPending = false;
+        }
+    }
+
     private void prepareWorkspaceOutputRefresh(String reason) {
         if (shuttingDown || !workspaceSource || hasVisibleRecentsConsumer()) return;
         workspaceOutputRefreshPending = true;
         staticGlassOutputSuppressed = false;
-        staticGeometryRefreshPending = true;
+        requestStaticGeometryRefresh();
         hwuiProbeExportDirty = true;
         sourceBackend.setUpdatesEnabled(true, reason);
     }
@@ -638,7 +691,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (!workspaceFirstOutputPresented || workspaceOutputRefreshPending) return;
         if (!staticGlassOutputSuppressed) {
             staticGlassOutputSuppressed = true;
-            staticGeometryRefreshPending = true;
+            requestStaticGeometryRefresh();
             hwuiProbeExportDirty = true;
             if (workspaceSource && WorkstationProducerPolicy.shouldPauseSharedProducer(
                     true, MainHook.isWorkstationMode()) && !hasVisibleRecentsConsumer()) {
@@ -980,24 +1033,32 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         float workspaceAlpha = LauncherGlassStaticLayer.syncWorkspacePresentation(
                 root, workspaceMaterial, launchProxyActive, launchProxyReturning,
                 launchProxyReturnProgress);
+        workspaceLaunchProxyActive = launchProxyActive;
+        workspaceLaunchProxyReturning = launchProxyReturning;
+        workspaceLayerMotionActive =
+                LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
+        workspaceSourceMotionDeferred = workspaceNativeTransitionActive
+                || workspaceLaunchProxyActive || workspaceLayerMotionActive;
         boolean workspaceGlassHidden =
                 LauncherGlassStaticLayer.isWorkspaceGlassOutputHidden(root);
         if (workspaceGlassHidden) suppressWorkspaceGlassOutput();
         boolean wasStaticOutputSuppressed = staticGlassOutputSuppressed;
-        // Native WindowElement/Recents/unlock may animate independently of View properties.
-        // Keep their existing per-frame capture authority; only reuse genuinely stable nodes.
+        // Global scene barriers retain full recapture authority. Ordinary motion is observed by
+        // each node's View ancestry cache; the frame-sync lease changes quality/cadence without
+        // forcing every static node through transformMatrixToGlobal on every frame.
+        long staticRefreshSerial = staticGeometryRefreshSerial.get();
+        boolean staticRefreshRequested = staticGeometryRefreshPending;
         boolean forceStaticCapture = staticSnapshot.length > 0 && !workspaceGlassHidden
                 && (rootGeometryChanged || rotationSettlePending
-                || transitionFrameSync.isActive()
                 || LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
                 || LauncherGlassSceneController.isRecentsCoveredByVendor()
                 || LauncherGlassSceneController.isRecentsWallpaperSettlePendingForRoot(root)
-                || staticGeometryRefreshPending);
+                || staticRefreshRequested);
         if (tracing) Trace.beginSection("LD.Workspace.StaticNodes");
+        Integer workspaceScrollX = null;
+        boolean rootTransformPrepared = false;
+        boolean staticRootTransformValid = false;
         try {
-            Integer workspaceScrollX = null;
-            boolean rootTransformPrepared = false;
-            boolean staticRootTransformValid = false;
             if (!workspaceGlassHidden) for (StaticNodeState state : staticSnapshot) {
                 LauncherGlassStaticNode node = state.nodeRef.get();
                 if (node == null) continue;
@@ -1066,6 +1127,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 }
             }
         }
+        if (staticRefreshRequested && !workspaceGlassHidden && rootTransformPrepared
+                && staticRootTransformValid
+                && staticGeometryRefreshSerial.get() == staticRefreshSerial) {
+            // Consume a backdrop/visibility refresh after one successful full geometry pass.
+            // Leaving this latch set invalidates all 90 Workspace nodes on every later pre-draw.
+            consumeStaticGeometryRefresh(staticRefreshSerial);
+        }
 
         View workspaceRoot = LauncherGlassHierarchy.findWorkspaceRoot(workspaceMaterial);
         if (!workspaceGlassHidden) for (StaticNodeState state : staticSnapshot) {
@@ -1087,12 +1155,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (!workspaceGlassHidden && wasStaticOutputSuppressed) {
             // Force a full node recapture before showing the first post-transition frame. Fresh
             // backdrop work is requested below after root geometry has been reconciled.
-            staticGeometryRefreshPending = false;
             staticGlassOutputSuppressed = false;
             hwuiProbeExportDirty = true;
             staticChanged = true;
-        } else if (workspaceGlassHidden) {
-            staticGeometryRefreshPending = true;
+        } else if (workspaceGlassHidden && !staticGeometryRefreshPending) {
+            requestStaticGeometryRefresh();
         }
 
         boolean nextMotionQualityActive = launchProxyActive || nodeAnimationActive
@@ -1161,6 +1228,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 || LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
         if (workspaceRefreshAfterMotionPending && !workspaceMotionActive) {
             workspaceRefreshAfterMotionPending = false;
+            workspaceLaunchProxyReturning = false;
             prepareWorkspaceOutputRefresh("launcher-glass-output-resume-settled");
             sourceBackend.requestFresh(
                     sceneGeneration,
@@ -1202,6 +1270,15 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void setNativeTransitionFrameSyncEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
+        workspaceNativeTransitionActive = enabled;
+        workspaceSourceMotionDeferred = enabled
+                || workspaceLaunchProxyActive || workspaceLayerMotionActive;
+        if (enabled) {
+            // Select the reduced-cost material before the first transition draw, not after the
+            // next pre-draw happens to observe the native spring.
+            workspaceMotionQualityActive = true;
+            LauncherGlassStaticLayer.invalidateHwuiProbe(rootRef.get());
+        }
         View root = rootRef.get();
         applyTransitionFrameSync(
                 transitionFrameSync.onNativeTransition(enabled),
@@ -1429,6 +1506,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // HOME generation/rotation constraints are separate from the Recents GPU consumer.
         if (frame.generation != sceneGeneration || rotationSettlePending) return;
         if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
+
+        if (workspaceSource && workspaceSourceMotionDeferred
+                && LauncherGlassStaticLayer.isHwuiProbeActive(root)) {
+            // WindowElement/FloatingIcon transitions use the last immutable backdrop. The
+            // in-window HWUI probe continues sampling its current node geometry; preparing
+            // Prismal, exporting two HardwareBitmaps, and redrawing every GL node here would
+            // put a full-resolution pass on the same frames as the native spring.
+            if (workspaceLaunchProxyReturning || !staticGlassOutputSuppressed) {
+                workspaceRefreshAfterMotionPending = true;
+            }
+            hwuiProbeExportDirty = true;
+            return;
+        }
 
         PrismalParams params = prismalParams;
         if (params == null) return;

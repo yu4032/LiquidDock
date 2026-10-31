@@ -402,11 +402,16 @@ final class LauncherGlassStaticNode {
     boolean holdLaunchProxyHidden(boolean returning, float progress) {
         if (disposed) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
+        boolean wasReturning = visualOwnerState.isLaunchProxyReturning();
         boolean visualChanged = !visualOwnerState.matchesLaunchProxyVisual(null, 0f);
         if (!visualOwnerState.holdLaunchProxyHidden(returning, progress)) return false;
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
+        if (live != null && (!wasActive || wasReturning != visualOwnerState.isLaunchProxyReturning())) {
+            live.onStaticLaunchProxyStateChanged(this,
+                    true, visualOwnerState.isLaunchProxyReturning());
+        }
         if (live != null && visualChanged) live.requestStaticRedraw();
         return visualChanged;
     }
@@ -425,6 +430,7 @@ final class LauncherGlassStaticNode {
             boolean returning, float progress) {
         if (disposed) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
+        boolean wasReturning = visualOwnerState.isLaunchProxyReturning();
         boolean hadGeometry = visualOwnerState.copyLaunchProxyRect() != null;
         float[] rect = new float[]{left, top, right, bottom};
         boolean visualChanged = !visualOwnerState.matchesLaunchProxyVisual(rect, alpha);
@@ -433,6 +439,10 @@ final class LauncherGlassStaticNode {
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
+        if (live != null && (!wasActive || wasReturning != visualOwnerState.isLaunchProxyReturning())) {
+            live.onStaticLaunchProxyStateChanged(this,
+                    true, visualOwnerState.isLaunchProxyReturning());
+        }
         if (live != null && visualChanged) live.requestStaticRedraw();
         return !hadGeometry;
     }
@@ -440,6 +450,8 @@ final class LauncherGlassStaticNode {
     void endLaunchProxy() {
         if (disposed || !visualOwnerState.endLaunchProxy()) return;
         invalidateVisualOwnerGeometry();
+        LauncherGlassSession live = session;
+        if (live != null) live.onStaticLaunchProxyStateChanged(this, false, false);
         requestLifecycleRefresh();
     }
 
