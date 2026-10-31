@@ -35,7 +35,8 @@ final class LiquidDockConfig {
     }
 
     static final class Animation {
-        final int workspaceVisibilityMs, appReturnGlassFadeMs,
+        final int workspaceVisibilityMs, appReturnGlassFadeStartBeforeEndMs,
+                appReturnGlassFadeDurationMs,
                 unlockGlassFadeMs, folderOpenGlassFadeMs,
                 pressInMs, pressOutMs, dockResizeMs, shortcutPopupDismissFadeMs,
                 securityCenterExitFadeMs;
@@ -43,7 +44,10 @@ final class LiquidDockConfig {
 
         Animation(ConfigReader c) {
             workspaceVisibilityMs = duration(c, ConfigSchema.Animation.WORKSPACE_VISIBILITY);
-            appReturnGlassFadeMs = duration(c, ConfigSchema.Animation.APP_RETURN_GLASS_FADE);
+            appReturnGlassFadeStartBeforeEndMs = duration(
+                    c, ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END);
+            appReturnGlassFadeDurationMs = duration(
+                    c, ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION);
             unlockGlassFadeMs = duration(c, ConfigSchema.Animation.UNLOCK_GLASS_FADE);
             folderOpenGlassFadeMs = duration(c, ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE);
             pressInMs = duration(c, ConfigSchema.Animation.PRESS_IN);

@@ -77,7 +77,8 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     ))
     page(Page.AnimationWorkspace, "按工作区、应用返回和文件夹分别调整玻璃过渡时间。", listOf(
         SettingsBlock.Header("animation.workspace", "应用返回、工作区与文件夹"),
-        row(animationAppReturnGlassFadeSpec), row(animationWorkspaceVisibilitySpec),
+        row(animationAppReturnGlassFadeStartSpec), row(animationAppReturnGlassFadeDurationSpec),
+        row(animationWorkspaceVisibilitySpec),
         row(animationUnlockGlassFadeSpec), row(animationFolderOpenGlassFadeSpec),
         SettingsBlock.Header("animation.dock", "Dock 与图标"),
         row(animationDockResizeSpec, dock + listOf(ConfigSchema.Dock.RESIZE_ANIMATION to false, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION to true)),
