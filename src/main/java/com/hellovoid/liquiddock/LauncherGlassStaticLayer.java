@@ -151,7 +151,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         MainHook.log("[DC][LauncherGlass] HWUI probe paused while backdrop geometry changes");
     }
 
-    static void publishHwuiProbeBackdrop(
+    static boolean publishHwuiProbeBackdrop(
             View root, Bitmap rawBitmap, Bitmap blurredBitmap,
             int logicalWidth, int logicalHeight, int rotation) {
         LauncherGlassStaticLayer layer = find(root);
@@ -159,13 +159,13 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 || rawBitmap == null || blurredBitmap == null) {
             if (rawBitmap != null) rawBitmap.recycle();
             if (blurredBitmap != null) blurredBitmap.recycle();
-            return;
+            return false;
         }
         if (!layer.hwuiProbe.setBackdrops(
                 rawBitmap, blurredBitmap, logicalWidth, logicalHeight, rotation)) {
             rawBitmap.recycle();
             blurredBitmap.recycle();
-            return;
+            return false;
         }
         layer.hwuiProbeActive = true;
         layer.applyLayerAlpha();
@@ -173,6 +173,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 + rawBitmap.getWidth() + "x" + rawBitmap.getHeight()
                 + " blur=" + blurredBitmap.getWidth() + "x" + blurredBitmap.getHeight()
                 + " rotation=" + rotation);
+        return true;
     }
 
     static void failHwuiProbe(View root, LauncherGlassHwuiProbeView probe, Throwable error) {
@@ -363,8 +364,11 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             root.removeOnAttachStateChangeListener(rootAttachListener);
             forget(root, this);
         }
-        if (hwuiProbe != null && hwuiProbe.getParent() instanceof ViewGroup) {
-            ((ViewGroup) hwuiProbe.getParent()).removeView(hwuiProbe);
+        if (hwuiProbe != null) {
+            if (hwuiProbe.getParent() instanceof ViewGroup) {
+                ((ViewGroup) hwuiProbe.getParent()).removeView(hwuiProbe);
+            }
+            hwuiProbe.clearBackdrops();
         }
         if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
     }
