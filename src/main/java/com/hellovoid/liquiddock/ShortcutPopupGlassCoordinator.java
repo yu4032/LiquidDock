@@ -99,6 +99,18 @@ final class ShortcutPopupGlassCoordinator {
         releaseLocked("dock-early-touch-ended-unused");
     }
 
+    /**
+     * A drag-return alpha animation would redraw the Workspace glass every frame while the
+     * shortcut popup is entering. Keep the normal drag fade everywhere else, but let this
+     * short ownership handoff settle in one redraw.
+     */
+    static synchronized boolean shouldRestoreWorkspaceGlassImmediately(View root) {
+        State state = current;
+        return root != null && state != null && !state.released
+                && state.captureRootRef.get() == root
+                && (state.requestStarted || state.contentRef.get() != null);
+    }
+
     private static void prepareInternal(
             View captureRoot,
             LiquidDockConfig.Glass glassConfig,
@@ -114,11 +126,35 @@ final class ShortcutPopupGlassCoordinator {
                 || !captureRoot.isAttachedToWindow()) return;
         State state = new State(captureRoot, glassConfig, early, earlyOwner);
         current = state;
+        LauncherGlassHwuiProbeView.BackdropSnapshot sharedBackdrop =
+                LauncherGlassStaticLayer.snapshotHwuiProbeBackdrops(captureRoot);
+        if (sharedBackdrop != null) {
+            state.pendingRawBackdrop = sharedBackdrop.raw;
+            state.pendingBlurredBackdrop = sharedBackdrop.blurred;
+            state.pendingBackdropWidth = sharedBackdrop.logicalWidth;
+            state.pendingBackdropHeight = sharedBackdrop.logicalHeight;
+            state.pendingBackdropOwned = false;
+            state.sharedWorkspaceBackdrop = true;
+            MainHook.log(TAG + " reusing wallpaper-only Workspace HWUI backdrop logical="
+                    + sharedBackdrop.logicalWidth + "x" + sharedBackdrop.logicalHeight
+                    + " rotation=" + sharedBackdrop.rotation);
+        } else {
+            // Keep the legacy capture fallback free of recursive Workspace-glass pixels.
+            state.workspaceGlassCaptureSuppressed =
+                    LauncherGlassStaticLayer.setPopupCaptureSuppressed(captureRoot, true);
+        }
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
                 captureRoot,
                 new ShortcutPopupSourceOverlay.Listener() {
                     @Override public void onAttached(ShortcutPopupSourceOverlay attached) {
-                        startSession(state, attached);
+                        View root = state.captureRootRef.get();
+                        if (root == null) {
+                            startSession(state, attached);
+                        } else {
+                            // Commit the transparent Workspace glass frame before PassBlur
+                            // samples the screen beneath this source window.
+                            root.postOnAnimation(() -> startSession(state, attached));
+                        }
                     }
 
                     @Override public void onAttachFailed(Throwable error) {
@@ -137,6 +173,26 @@ final class ShortcutPopupGlassCoordinator {
                     sourceRoot,
                     state.glassConfig,
                     new ShortcutPopupGlassSession.Listener() {
+                        @Override public void onBackdropReady() {
+                            ShortcutPopupGlassCoordinator.onBackdropReady(state);
+                        }
+
+                        @Override public void onHwuiBackdropsReady(
+                                android.graphics.Bitmap rawBitmap,
+                                android.graphics.Bitmap blurredBitmap,
+                                int width, int height) {
+                            ShortcutPopupGlassCoordinator.onHwuiBackdropsReady(
+                                    state, rawBitmap, blurredBitmap, width, height);
+                        }
+
+                        @Override public void onHwuiBackdropExportFailed(Throwable error) {
+                            ShortcutPopupGlassCoordinator.onHwuiBackdropExportFailed(state, error);
+                        }
+
+                        @Override public void onMotionQualityChanged(boolean active) {
+                            ShortcutPopupGlassCoordinator.onMotionQualityChanged(state, active);
+                        }
+
                         @Override public void onPresented() {
                             ShortcutPopupGlassCoordinator.onPresented(state);
                         }
@@ -146,10 +202,88 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
-            state.session.requestInitialCapture();
+            if (state.sharedWorkspaceBackdrop
+                    && state.session.useSharedHwuiBackdrop(
+                            state.pendingBackdropWidth, state.pendingBackdropHeight)) {
+                MainHook.log(TAG + " popup using immutable Workspace backdrop; source capture skipped");
+            } else {
+                if (state.sharedWorkspaceBackdrop) {
+                    state.sharedWorkspaceBackdrop = false;
+                    View root = state.captureRootRef.get();
+                    state.workspaceGlassCaptureSuppressed =
+                            LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
+                }
+                state.session.requestInitialCapture();
+            }
             boolean outputReady = ensurePopupOutput(state);
             MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
         }
+    }
+
+    private static synchronized void onBackdropReady(State state) {
+        if (current != state || state.released) return;
+        restoreWorkspaceGlassAfterCapture(state);
+    }
+
+    private static synchronized void onHwuiBackdropsReady(
+            State state, android.graphics.Bitmap rawBitmap,
+            android.graphics.Bitmap blurredBitmap, int width, int height) {
+        if (current != state || state.released) {
+            if (rawBitmap != null) rawBitmap.recycle();
+            if (blurredBitmap != null) blurredBitmap.recycle();
+            return;
+        }
+        ShortcutPopupGlassLayer layer = state.layer;
+        if (layer == null) {
+            if (state.pendingBackdropOwned) {
+                if (state.pendingRawBackdrop != null) state.pendingRawBackdrop.recycle();
+                if (state.pendingBlurredBackdrop != null) state.pendingBlurredBackdrop.recycle();
+            }
+            state.pendingRawBackdrop = rawBitmap;
+            state.pendingBlurredBackdrop = blurredBitmap;
+            state.pendingBackdropWidth = width;
+            state.pendingBackdropHeight = height;
+            state.pendingBackdropOwned = true;
+            return;
+        }
+        if (!layer.setHwuiBackdrops(rawBitmap, blurredBitmap, width, height)) {
+            if (rawBitmap != null) rawBitmap.recycle();
+            if (blurredBitmap != null) blurredBitmap.recycle();
+            layer.fallbackToTextureView();
+        }
+    }
+
+    private static synchronized void onHwuiBackdropExportFailed(State state, Throwable error) {
+        if (current != state || state.released) return;
+        MainHook.log(TAG + " popup HWUI backdrop export failed; restoring GL output: " + error);
+        ShortcutPopupGlassLayer layer = state.layer;
+        if (layer != null) layer.fallbackToTextureView();
+        if (state.pendingRawBackdrop != null) {
+            if (state.pendingBackdropOwned) state.pendingRawBackdrop.recycle();
+            state.pendingRawBackdrop = null;
+        }
+        if (state.pendingBlurredBackdrop != null) {
+            if (state.pendingBackdropOwned) state.pendingBlurredBackdrop.recycle();
+            state.pendingBlurredBackdrop = null;
+        }
+        state.pendingBackdropOwned = false;
+    }
+
+    private static synchronized void onMotionQualityChanged(State state, boolean active) {
+        if (current != state || state.released) return;
+        View root = state.captureRootRef.get();
+        if (root != null) {
+            LauncherGlassSessionRegistry.setPopupMotionQualityForRoot(root, active);
+        }
+        ShortcutPopupGlassLayer layer = state.layer;
+        if (layer != null) layer.setMotionQualityActive(active);
+    }
+
+    private static void restoreWorkspaceGlassAfterCapture(State state) {
+        if (!state.workspaceGlassCaptureSuppressed) return;
+        state.workspaceGlassCaptureSuppressed = false;
+        View root = state.captureRootRef.get();
+        if (root != null) LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, false);
     }
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
@@ -221,6 +355,28 @@ final class ShortcutPopupGlassCoordinator {
         decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         state.layer = layer;
+        if (state.pendingRawBackdrop != null && state.pendingBlurredBackdrop != null) {
+            android.graphics.Bitmap raw = state.pendingRawBackdrop;
+            android.graphics.Bitmap blurred = state.pendingBlurredBackdrop;
+            state.pendingRawBackdrop = null;
+            state.pendingBlurredBackdrop = null;
+            if (!layer.setHwuiBackdrops(raw, blurred,
+                    state.pendingBackdropWidth, state.pendingBackdropHeight)) {
+                if (state.sharedWorkspaceBackdrop) {
+                    state.sharedWorkspaceBackdrop = false;
+                    View root = state.captureRootRef.get();
+                    state.workspaceGlassCaptureSuppressed =
+                            LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
+                }
+                if (state.pendingBackdropOwned) {
+                    raw.recycle();
+                    blurred.recycle();
+                }
+                state.pendingBackdropOwned = false;
+                layer.fallbackToTextureView();
+            }
+            state.pendingBackdropOwned = false;
+        }
         updateGeometry(state);
         MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
                 + " backdropReady=" + state.session.hasFrozenBackdrop());
@@ -282,7 +438,11 @@ final class ShortcutPopupGlassCoordinator {
                 decor.getWidth(), decor.getHeight(),
                 left, top, right, bottom,
                 localRadius * Math.max(0f, radiusScale));
-        if (geometry != null) session.updateGeometry(geometry);
+        if (geometry != null) {
+            session.updateGeometry(geometry);
+            ShortcutPopupGlassLayer layer = state.layer;
+            if (layer != null) layer.updatePopupGeometry(geometry);
+        }
     }
 
     private static void onPresented(State state) {
@@ -311,6 +471,7 @@ final class ShortcutPopupGlassCoordinator {
             MainHook.log(TAG + " dismiss fade owner check failed: " + error);
             return;
         }
+        if (state.session != null) state.session.beginPopupDismiss();
         ShortcutPopupGlassLayer layer = state.layer;
         if (layer != null) {
             layer.fadeOutFast();
@@ -370,6 +531,11 @@ final class ShortcutPopupGlassCoordinator {
         current = null;
         if (state == null || state.released) return;
         state.released = true;
+        restoreWorkspaceGlassAfterCapture(state);
+        View captureRoot = state.captureRootRef.get();
+        if (captureRoot != null) {
+            LauncherGlassSessionRegistry.setPopupMotionQualityForRoot(captureRoot, false);
+        }
         View popup = state.popupRef.get();
         if (popup != null && state.popupDetachListener != null) {
             try { popup.removeOnAttachStateChangeListener(state.popupDetachListener); }
@@ -387,6 +553,13 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupGlassLayer layer = state.layer;
         state.layer = null;
         if (layer != null) layer.dispose();
+        if (state.pendingBackdropOwned) {
+            if (state.pendingRawBackdrop != null) state.pendingRawBackdrop.recycle();
+            if (state.pendingBlurredBackdrop != null) state.pendingBlurredBackdrop.recycle();
+        }
+        state.pendingRawBackdrop = null;
+        state.pendingBlurredBackdrop = null;
+        state.pendingBackdropOwned = false;
         ShortcutPopupGlassSession session = state.session;
         state.session = null;
         ShortcutPopupSourceOverlay source = state.sourceOverlay;
@@ -421,10 +594,17 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupSourceOverlay sourceOverlay;
         ShortcutPopupGlassSession session;
         ShortcutPopupGlassLayer layer;
+        android.graphics.Bitmap pendingRawBackdrop;
+        android.graphics.Bitmap pendingBlurredBackdrop;
+        int pendingBackdropWidth;
+        int pendingBackdropHeight;
+        boolean pendingBackdropOwned;
+        boolean sharedWorkspaceBackdrop;
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         View.OnAttachStateChangeListener popupDetachListener;
         boolean requestStarted;
+        boolean workspaceGlassCaptureSuppressed;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
         boolean released;

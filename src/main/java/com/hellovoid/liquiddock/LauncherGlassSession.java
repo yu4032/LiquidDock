@@ -1,5 +1,9 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.Matrix;
 import android.opengl.EGL14;
 import android.opengl.EGLSurface;
@@ -15,6 +19,7 @@ import android.view.ViewTreeObserver;
 import com.hellovoid.prismal.PrismalEdgeDecoration;
 import com.hellovoid.prismal.PrismalGeometry;
 import com.hellovoid.prismal.PrismalHighlightProfile;
+import com.hellovoid.prismal.PrismalIorLensPolicy;
 import com.hellovoid.prismal.PrismalInteractionState;
 import com.hellovoid.prismal.PrismalParams;
 import com.hellovoid.prismal.PrismalRenderer;
@@ -30,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Launcher-specific consumer of one root-wide {@link RootPassBlurBackend}.
@@ -75,14 +81,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         final LauncherGlassGeometry.Snapshot geometry;
         final int workspaceScrollX;
         final boolean workspaceScrollValid;
+        final float outputAlpha;
 
         StaticGeometryFrame(
                 LauncherGlassGeometry.Snapshot geometry,
                 int workspaceScrollX,
-                boolean workspaceScrollValid) {
+                boolean workspaceScrollValid,
+                float outputAlpha) {
             this.geometry = geometry;
             this.workspaceScrollX = workspaceScrollX;
             this.workspaceScrollValid = workspaceScrollValid;
+            this.outputAlpha = outputAlpha;
         }
     }
 
@@ -166,6 +175,35 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     // Preserve last composed Workspace output while an expanded folder owns
     // its own frozen backdrop. No new GPU sample or scene redraw is permitted.
     private volatile boolean folderFrameFrozen;
+    // A transition may settle before its requested source generation has arrived. Keep the
+    // producer live until that frame is rendered, then return Workspace to its idle pause.
+    private boolean pauseWorkspaceProducerWhenFresh;
+    private int hwuiProbeBackdropLogicalWidth = -1;
+    private int hwuiProbeBackdropLogicalHeight = -1;
+    private int hwuiProbeBackdropRotation = -1;
+    private long hwuiProbeBackdropWallpaperGeneration = -1L;
+    private boolean hwuiProbeBackdropWallpaperAuthoritative;
+    // GL produces immutable buffers; only the newest export may be installed on the UI thread.
+    private volatile long hwuiProbeExportSerial;
+    private volatile boolean hwuiProbeExportDirty = true;
+    private boolean hwuiProbeSelectionLogged;
+    // Suppressed Workspace glass must not spend GL/HWUI time while the native transition fully
+    // hides it. Geometry is force-refreshed before output is resumed.
+    private volatile boolean staticGlassOutputSuppressed;
+    private volatile boolean staticGeometryRefreshPending;
+    private final AtomicLong staticGeometryRefreshSerial = new AtomicLong();
+    private volatile boolean workspaceFirstOutputPresented;
+    private volatile boolean workspaceOutputRefreshPending;
+    private volatile boolean workspaceRefreshAfterMotionPending;
+    private volatile boolean workspaceNativeTransitionActive;
+    private volatile boolean workspaceLaunchProxyActive;
+    private volatile boolean workspaceLaunchProxyReturning;
+    private volatile boolean workspaceLayerMotionActive;
+    private volatile boolean workspaceSourceMotionDeferred;
+    private volatile boolean workspacePopupMotionActive;
+    // All active Workspace animation sources share this lower-cost Prismal material tier.
+    private volatile boolean workspaceMotionQualityActive;
+    private final float[] hwuiProbeInvariants = new float[10];
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
     private volatile PrismalParams prismalParams;
@@ -211,6 +249,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private long uiPerfTotalNs;
     private long uiPerfMaxNs;
     private int uiPerfFrames;
+    private int hwuiProbeDrawsWindow;
     private long glPerfWindowStartNs;
     private long glPerfBackdropNs;
     private long glPerfSceneNs;
@@ -290,16 +329,11 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     private void reconcileSourceAfterRecentsConsumerGone(String reason) {
         if (shuttingDown || hasVisibleRecentsConsumer()) return;
-        View root = rootRef.get();
-        boolean covered = LauncherGlassSceneController.isRecentsCoveredByVendor()
-                || LauncherGlassSceneController.isCoveredForRoot(root);
-        boolean wallpaperSettle =
-                LauncherGlassSceneController.isRecentsWallpaperSettlePendingForRoot(root);
-        // During vendor Recents hide, HOME can still be gated by the wallpaper
-        // return spring even after the last capsule unsubscribes. Release the
-        // shared source lease without overriding Workstation's live policy.
+        // A visible Recents child keeps the source live. Once the final child exits, normal HOME
+        // returns to idle capture policy; Workstation deliberately keeps its source live.
         if (WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
-                folderFrameFrozen, covered, wallpaperSettle, MainHook.isWorkstationMode())) {
+                folderFrameFrozen, MainHook.isWorkstationMode())) {
+            pauseWorkspaceProducerWhenFresh = false;
             sourceBackend.setUpdatesEnabled(false, reason);
         }
     }
@@ -362,6 +396,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void setGlassConfig(LiquidDockConfig.Glass glassConfig) {
         if (shuttingDown) return;
+        hwuiProbeExportDirty = true;
         applyGlassConfig(glassConfig);
         sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
         mainHandler.post(() -> {
@@ -381,6 +416,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         applyGlassConfig(glassConfig);
         if (qualityChanged) sourceBackend.setQuality(passBlurCaptureScalePercent, passBlurRenderFps);
         if (qualityChanged || blurChanged) {
+            hwuiProbeExportDirty = true;
             // Gaussian blur lives in the prepared backdrop, not only in final uniforms.
             // Request a new producer frame without replacing the EGL / PassBlur owner.
             View root = rootRef.get();
@@ -479,6 +515,41 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         requestStaticRedraw();
     }
 
+    void onStaticLaunchProxyStateChanged(
+            LauncherGlassStaticNode changedNode, boolean active, boolean returning) {
+        if (shuttingDown || changedNode == null) return;
+        boolean anyActive = false;
+        boolean anyReturning = false;
+        boolean foundChangedNode = false;
+        for (StaticNodeState state : staticNodeStateSnapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            if (node == null) continue;
+            if (node == changedNode) foundChangedNode = true;
+            if (!node.isLaunchProxyActive()) continue;
+            anyActive = true;
+            anyReturning |= node.isLaunchProxyReturning();
+        }
+        if (!foundChangedNode && active) {
+            anyActive = true;
+            anyReturning = returning;
+        }
+        boolean wasReturning = workspaceLaunchProxyReturning;
+        workspaceLaunchProxyActive = anyActive;
+        workspaceLaunchProxyReturning = anyReturning;
+        if (anyReturning || (wasReturning && !anyActive)) {
+            workspaceRefreshAfterMotionPending = true;
+        }
+        View root = rootRef.get();
+        workspaceLayerMotionActive =
+                LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
+        workspaceSourceMotionDeferred = workspaceNativeTransitionActive
+                || anyActive || workspaceLayerMotionActive;
+        if (anyActive) {
+            workspaceMotionQualityActive = true;
+            LauncherGlassStaticLayer.invalidateHwuiProbe(root);
+        }
+    }
+
     void requestLifecycleRefresh() {
         requestSceneRedraw();
     }
@@ -503,7 +574,28 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
         clearWallpaperRequest();
         invalidateGeneration(generation);
+        prepareWorkspaceOutputRefresh("launcher-explicit-fresh-backdrop");
         mainHandler.post(() -> recoverFreshBackdropOnUi(generation, 0));
+    }
+
+    private synchronized void requestStaticGeometryRefresh() {
+        staticGeometryRefreshSerial.incrementAndGet();
+        staticGeometryRefreshPending = true;
+    }
+
+    private synchronized void consumeStaticGeometryRefresh(long expectedSerial) {
+        if (staticGeometryRefreshSerial.get() == expectedSerial) {
+            staticGeometryRefreshPending = false;
+        }
+    }
+
+    private void prepareWorkspaceOutputRefresh(String reason) {
+        if (shuttingDown || !workspaceSource || hasVisibleRecentsConsumer()) return;
+        workspaceOutputRefreshPending = true;
+        staticGlassOutputSuppressed = false;
+        requestStaticGeometryRefresh();
+        hwuiProbeExportDirty = true;
+        sourceBackend.setUpdatesEnabled(true, reason);
     }
 
     boolean requestWallpaperBackdrop(
@@ -517,7 +609,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
         sourceBackend.requestFresh(
                 requestedSceneGeneration,
-                WorkstationProducerPolicy.shouldUseSingleFramePulse(MainHook.isWorkstationMode()));
+                workspaceSource
+                        && WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                                MainHook.isWorkstationMode()));
         return true;
     }
 
@@ -536,6 +630,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         wallpaperRequestedGeneration = -1L;
         wallpaperRequestedSceneGeneration = -1L;
         wallpaperRequestedAuthoritative = false;
+    }
+
+    private WallpaperFrameToken peekWallpaperFrameToken(long frameSceneGeneration) {
+        synchronized (this) {
+            if (wallpaperRequestedGeneration < 0L
+                    || wallpaperRequestedSceneGeneration != frameSceneGeneration) {
+                return WallpaperFrameToken.NONE;
+            }
+            return new WallpaperFrameToken(
+                    wallpaperRequestedGeneration, wallpaperRequestedAuthoritative);
+        }
     }
 
     private WallpaperFrameToken takeWallpaperFrameToken(long frameSceneGeneration) {
@@ -573,12 +678,41 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void requestStaticRedraw() {
+        if (staticGlassOutputSuppressed) return;
+        View root = rootRef.get();
+        if (LauncherGlassStaticLayer.invalidateHwuiProbe(root)) return;
         scheduleOutputRender(true, false);
+    }
+
+    void suppressWorkspaceGlassOutput() {
+        if (shuttingDown) return;
+        // Bootstrap and explicit scene recovery keep the layer transparent until a matching
+        // output is available. Pausing during either window would prevent the frame needed to
+        // open the visibility fence (or finish the requested refresh).
+        if (!workspaceFirstOutputPresented || workspaceOutputRefreshPending) return;
+        if (!staticGlassOutputSuppressed) {
+            staticGlassOutputSuppressed = true;
+            requestStaticGeometryRefresh();
+            hwuiProbeExportDirty = true;
+            if (workspaceSource && WorkstationProducerPolicy.shouldPauseSharedProducer(
+                    true, MainHook.isWorkstationMode()) && !hasVisibleRecentsConsumer()) {
+                sourceBackend.setUpdatesEnabled(false, "launcher-glass-output-hidden");
+            }
+        }
     }
 
     void onWorkspaceScrollMutation(int beforeScrollX, int afterScrollX) {
         if (shuttingDown || beforeScrollX == afterScrollX) return;
         workspaceScrollProjection.onScrollMutation(beforeScrollX, afterScrollX);
+        View root = rootRef.get();
+        if (!staticGlassOutputSuppressed && !folderFrameFrozen
+                && !LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+            sourceBackend.setUpdatesEnabled(true, "launcher-workspace-scroll-motion");
+        }
+        applyTransitionFrameSync(
+                transitionFrameSync.onWorkspaceScrollMutation(), root,
+                "workspace-scroll-motion");
+        if (LauncherGlassStaticLayer.invalidateHwuiProbe(root)) return;
         // Scroll geometry can redraw from the cached backdrop without a main-thread hop.
         scheduleOutputRender(true, false, true);
     }
@@ -809,9 +943,31 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void syncSceneOnUiThreadInternal(boolean tracing) {
-        if (shuttingDown || folderFrameFrozen) return;
+        if (shuttingDown) return;
         View root = rootRef.get();
         if (root == null) return;
+        if (folderFrameFrozen) {
+            // Folder presentation intentionally freezes HOME geometry and backdrop work, but its
+            // layer fade still draws the cached HWUI material. Keep that draw on the motion tier.
+            boolean nodeAnimationActive = false;
+            for (NodeState state : nodeStateSnapshot) {
+                LauncherGlassSinkView sink = state.sinkRef.get();
+                nodeAnimationActive |= sink != null && sink.isPressAnimationActive();
+            }
+            for (StaticNodeState state : staticNodeStateSnapshot) {
+                LauncherGlassStaticNode node = state.nodeRef.get();
+                nodeAnimationActive |= node != null && node.isAnimationActive();
+            }
+            boolean nextMotionQualityActive = workspaceNativeTransitionActive
+                    || workspaceLaunchProxyActive || nodeAnimationActive
+                    || workspacePopupMotionActive || transitionFrameSync.isActive()
+                    || LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
+            if (workspaceMotionQualityActive != nextMotionQualityActive) {
+                workspaceMotionQualityActive = nextMotionQualityActive;
+                LauncherGlassStaticLayer.invalidateHwuiProbe(root);
+            }
+            return;
+        }
         int nextWidth = root.getWidth();
         int nextHeight = root.getHeight();
         boolean rootGeometryChanged = nextWidth > 0 && nextHeight > 0
@@ -823,12 +979,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (nextHeight > 0) rootHeight = nextHeight;
 
         NodeState[] dragSnapshot = nodeStateSnapshot;
+        boolean nodeAnimationActive = false;
         int dragGeometryReads = 0;
         if (tracing) Trace.beginSection("LD.Workspace.DragNodes");
         try {
             for (NodeState node : dragSnapshot) {
                 LauncherGlassSinkView sink = node.sinkRef.get();
                 if (sink == null) continue;
+                nodeAnimationActive |= sink.isPressAnimationActive();
                 boolean localChanged = sink.syncFromMaterial();
                 dragChanged |= localChanged;
                 if (!rootGeometryChanged && !localChanged && node.geometry != null) continue;
@@ -853,30 +1011,60 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         StaticNodeState[] staticSnapshot = staticNodeStateSnapshot;
         View workspaceMaterial = null;
         boolean launchProxyActive = false;
+        boolean launchProxyReturning = false;
+        float launchProxyReturnProgress = 0f;
         int staticGeometryReads = 0;
         int staticCacheHits = 0;
         int staticNullCacheHits = 0;
         int staticWidgetCacheHits = 0;
         widgetWidthFrame.reset();
         staticViewFrame.reset();
-        // Native WindowElement/Recents/unlock may animate independently of View properties.
-        // Keep their existing per-frame capture authority; only reuse genuinely stable nodes.
-        boolean forceStaticCapture = staticSnapshot.length > 0
+        for (StaticNodeState state : staticSnapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            if (node == null) continue;
+            if (workspaceMaterial == null) workspaceMaterial = node.materialHost();
+            nodeAnimationActive |= node.isAnimationActive();
+            if (node.isLaunchProxyActive()) {
+                launchProxyActive = true;
+                if (node.isLaunchProxyReturning()) {
+                    launchProxyReturning = true;
+                    launchProxyReturnProgress = Math.max(
+                            launchProxyReturnProgress, node.launchProxyReturnProgress());
+                }
+            }
+        }
+        float workspaceAlpha = LauncherGlassStaticLayer.syncWorkspacePresentation(
+                root, workspaceMaterial, launchProxyActive, launchProxyReturning,
+                launchProxyReturnProgress);
+        workspaceLaunchProxyActive = launchProxyActive;
+        workspaceLaunchProxyReturning = launchProxyReturning;
+        workspaceLayerMotionActive =
+                LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
+        workspaceSourceMotionDeferred = workspaceNativeTransitionActive
+                || workspaceLaunchProxyActive || workspaceLayerMotionActive;
+        boolean workspaceGlassHidden =
+                LauncherGlassStaticLayer.isWorkspaceGlassOutputHidden(root);
+        if (workspaceGlassHidden) suppressWorkspaceGlassOutput();
+        boolean wasStaticOutputSuppressed = staticGlassOutputSuppressed;
+        // Global scene barriers retain full recapture authority. Ordinary motion is observed by
+        // each node's View ancestry cache; the frame-sync lease changes quality/cadence without
+        // forcing every static node through transformMatrixToGlobal on every frame.
+        long staticRefreshSerial = staticGeometryRefreshSerial.get();
+        boolean staticRefreshRequested = staticGeometryRefreshPending;
+        boolean forceStaticCapture = staticSnapshot.length > 0 && !workspaceGlassHidden
                 && (rootGeometryChanged || rotationSettlePending
-                || transitionFrameSync.isActive()
                 || LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
                 || LauncherGlassSceneController.isRecentsCoveredByVendor()
-                || LauncherGlassSceneController.isRecentsWallpaperSettlePendingForRoot(root));
+                || LauncherGlassSceneController.isRecentsWallpaperSettlePendingForRoot(root)
+                || staticRefreshRequested);
         if (tracing) Trace.beginSection("LD.Workspace.StaticNodes");
+        Integer workspaceScrollX = null;
+        boolean rootTransformPrepared = false;
+        boolean staticRootTransformValid = false;
         try {
-            Integer workspaceScrollX = null;
-            boolean rootTransformPrepared = false;
-            boolean staticRootTransformValid = false;
-            for (StaticNodeState state : staticSnapshot) {
+            if (!workspaceGlassHidden) for (StaticNodeState state : staticSnapshot) {
                 LauncherGlassStaticNode node = state.nodeRef.get();
                 if (node == null) continue;
-                if (workspaceMaterial == null) workspaceMaterial = node.materialHost();
-                launchProxyActive |= node.isLaunchProxyActive();
                 if (forceStaticCapture) {
                     node.invalidateStaticGeometry();
                 } else if (node.canReuseStaticGeometry(root, widgetWidthFrame, staticViewFrame)
@@ -914,7 +1102,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         && !node.isLaunchProxyActive()) {
                     state.frame = new StaticGeometryFrame(null,
                             workspaceScrollX != null ? workspaceScrollX : 0,
-                            workspaceScrollX != null);
+                            workspaceScrollX != null, 0f);
                 }
                 if ((old == null) != (observed == null)
                         || (old != null && !old.sameAs(observed))) {
@@ -922,7 +1110,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                             ? workspaceScrollX : oldFrame != null ? oldFrame.workspaceScrollX : 0;
                     boolean anchorValid = workspaceScrollX != null
                             || (oldFrame != null && oldFrame.workspaceScrollValid);
-                    state.frame = new StaticGeometryFrame(observed, anchor, anchorValid);
+                    float oldAlpha = oldFrame != null ? oldFrame.outputAlpha : 0f;
+                    state.frame = new StaticGeometryFrame(observed, anchor, anchorValid, oldAlpha);
                     staticChanged = true;
                     geometryMotionChanged = true;
                 }
@@ -941,14 +1130,53 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 }
             }
         }
+        if (staticRefreshRequested && !workspaceGlassHidden && rootTransformPrepared
+                && staticRootTransformValid
+                && staticGeometryRefreshSerial.get() == staticRefreshSerial) {
+            // Consume a backdrop/visibility refresh after one successful full geometry pass.
+            // Leaving this latch set invalidates all 90 Workspace nodes on every later pre-draw.
+            consumeStaticGeometryRefresh(staticRefreshSerial);
+        }
+
+        View workspaceRoot = LauncherGlassHierarchy.findWorkspaceRoot(workspaceMaterial);
+        if (!workspaceGlassHidden) for (StaticNodeState state : staticSnapshot) {
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            if (node == null) continue;
+            float outputAlpha = node.presentationAlpha(
+                    root, workspaceRoot, workspaceAlpha, launchProxyActive);
+            StaticGeometryFrame oldFrame = state.frame;
+            if (oldFrame != null && Float.compare(oldFrame.outputAlpha, outputAlpha) == 0) {
+                continue;
+            }
+            state.frame = oldFrame == null
+                    ? new StaticGeometryFrame(null, 0, false, outputAlpha)
+                    : new StaticGeometryFrame(oldFrame.geometry, oldFrame.workspaceScrollX,
+                            oldFrame.workspaceScrollValid, outputAlpha);
+            staticChanged = true;
+        }
+
+        if (!workspaceGlassHidden && wasStaticOutputSuppressed) {
+            // Force a full node recapture before showing the first post-transition frame. Fresh
+            // backdrop work is requested below after root geometry has been reconciled.
+            staticGlassOutputSuppressed = false;
+            hwuiProbeExportDirty = true;
+            staticChanged = true;
+        } else if (workspaceGlassHidden && !staticGeometryRefreshPending) {
+            requestStaticGeometryRefresh();
+        }
+
+        boolean nextMotionQualityActive = workspaceNativeTransitionActive || launchProxyActive
+                || nodeAnimationActive || workspacePopupMotionActive || geometryMotionChanged
+                || dragChanged || transitionFrameSync.isActive()
+                || LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
+        if (workspaceMotionQualityActive != nextMotionQualityActive) {
+            workspaceMotionQualityActive = nextMotionQualityActive;
+            staticChanged = true;
+        }
 
         // Source rebind and rotation may return before output scheduling. Publish the
         // captured scene first so recovery renders use the same UI geometry revision.
         if (staticChanged) publishStaticSceneSnapshot();
-
-        // The root-wide TextureView is a sibling of Workspace, so it does not inherit the
-        // native Recents fade. Apply it here, without waiting for GL redraw/swap of cached pixels.
-        LauncherGlassStaticLayer.syncWorkspacePresentation(root, workspaceMaterial, launchProxyActive);
 
         if (geometryMotionChanged
                 && LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()
@@ -957,7 +1185,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             // freshness barrier remains pending until SystemUI GONE.
             LauncherGlassHomePresentationHook.onWorkspaceUnlockMotionStarted();
             setUnlockTransitionFrameSyncEnabled(true, "unlock-motion-hold");
-            sourceBackend.setUpdatesEnabled(true, "launcher-unlock-motion-live");
+            if (!staticGlassOutputSuppressed) {
+                sourceBackend.setUpdatesEnabled(true, "launcher-unlock-motion-live");
+            }
             MainHook.log("[DC][WorkspaceFrameSync] unlock producer gate opened; resume/rebind allowed; hold-until-GONE");
         }
         applyTransitionFrameSync(
@@ -992,12 +1222,45 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (rootGeometryChanged) {
             sourceBackend.requestFresh(
                     sceneGeneration,
-                    WorkstationProducerPolicy.shouldUseSingleFramePulse(MainHook.isWorkstationMode()));
+                    workspaceSource
+                            && WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                                    MainHook.isWorkstationMode()));
             return;
+        }
+        boolean workspaceMotionActive = workspaceMotionQualityActive
+                || transitionFrameSync.isActive()
+                || LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
+        if (workspaceRefreshAfterMotionPending && !workspaceMotionActive) {
+            workspaceRefreshAfterMotionPending = false;
+            workspaceLaunchProxyReturning = false;
+            prepareWorkspaceOutputRefresh("launcher-glass-output-resume-settled");
+            sourceBackend.requestFresh(
+                    sceneGeneration,
+                    WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                            MainHook.isWorkstationMode()));
+        }
+        if (wasStaticOutputSuppressed && workspaceSource) {
+            if (workspaceMotionActive) {
+                // Reuse the immutable HWUI backdrop while the native icon returns. A fresh
+                // PassBlur frame plus Prismal preparation costs a full render budget and
+                // otherwise lands on the same frames as the app-to-home spring.
+                workspaceRefreshAfterMotionPending = true;
+            } else {
+                prepareWorkspaceOutputRefresh("launcher-glass-output-resume");
+                sourceBackend.requestFresh(
+                        sceneGeneration,
+                        WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                                MainHook.isWorkstationMode()));
+            }
         }
         if (staticChanged || dragChanged) {
             // Scroll-only redraws are already queued by the mutation hook.
-            scheduleOutputRender(staticChanged, dragChanged, true);
+            boolean probeInvalidated = staticChanged
+                    && LauncherGlassStaticLayer.invalidateHwuiProbe(root);
+            boolean renderStatic = staticChanged && !probeInvalidated;
+            if (renderStatic || dragChanged) {
+                scheduleOutputRender(renderStatic, dragChanged, true);
+            }
         }
     }
 
@@ -1011,11 +1274,27 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void setNativeTransitionFrameSyncEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
+        workspaceNativeTransitionActive = enabled;
+        workspaceSourceMotionDeferred = enabled
+                || workspaceLaunchProxyActive || workspaceLayerMotionActive;
+        if (enabled) {
+            // Select the reduced-cost material before the first transition draw, not after the
+            // next pre-draw happens to observe the native spring.
+            workspaceMotionQualityActive = true;
+            LauncherGlassStaticLayer.invalidateHwuiProbe(rootRef.get());
+        }
         View root = rootRef.get();
         applyTransitionFrameSync(
                 transitionFrameSync.onNativeTransition(enabled),
                 root,
                 reason != null ? reason : "workspace-native-transition");
+    }
+
+    void setPopupMotionQualityActive(boolean active) {
+        if (shuttingDown || workspacePopupMotionActive == active) return;
+        workspacePopupMotionActive = active;
+        View root = rootRef.get();
+        if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
     }
 
     void setUnlockTransitionFrameSyncEnabled(boolean enabled, String reason) {
@@ -1036,9 +1315,23 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             WorkspaceTransitionFrameSyncState.Decision decision, View root, String reason) {
         if (decision == null) return;
         if (decision.enable) {
+            if (!staticGlassOutputSuppressed && !folderFrameFrozen
+                    && !LauncherGlassHomePresentationHook.isUnlockCaptureBlocked()) {
+                sourceBackend.setUpdatesEnabled(true, reason + "-live-capture");
+            }
             sourceBackend.setTransitionFrameSyncEnabled(true, reason);
         } else if (decision.disable) {
             sourceBackend.setTransitionFrameSyncEnabled(false, reason);
+            if (workspaceSource && WorkstationProducerPolicy.shouldPauseSharedProducer(
+                    true, MainHook.isWorkstationMode())
+                    && !hasVisibleRecentsConsumer()) {
+                if (sourceBackend.hasFreshFrame(sceneGeneration)) {
+                    pauseWorkspaceProducerWhenFresh = false;
+                    sourceBackend.setUpdatesEnabled(false, reason + "-settled");
+                } else {
+                    pauseWorkspaceProducerWhenFresh = true;
+                }
+            }
         }
 
         // Geometry-owned motion uses real pre-draw stability as its terminal boundary. Request
@@ -1061,12 +1354,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         MainHook.log("[DC][WorkspacePerf][UI] frames=" + uiPerfFrames
                 + " avgSyncUs=" + avgUs
                 + " maxSyncUs=" + (uiPerfMaxNs / 1_000L)
+                + " hwuiProbeDraws=" + hwuiProbeDrawsWindow
                 + " dragNodes=" + nodeStateSnapshot.length
                 + " staticNodes=" + staticNodeStateSnapshot.length);
         uiPerfWindowStartNs = now;
         uiPerfFrames = 0;
         uiPerfTotalNs = 0L;
         uiPerfMaxNs = 0L;
+        hwuiProbeDrawsWindow = 0;
+    }
+
+    void recordHwuiProbeDraw() {
+        hwuiProbeDrawsWindow++;
     }
 
     private void recordGlPerf(long backdropNs, long sceneNs, long totalNs) {
@@ -1120,7 +1419,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (generation != sceneGeneration) return;
         sourceBackend.requestFresh(
                 generation,
-                WorkstationProducerPolicy.shouldUseSingleFramePulse(MainHook.isWorkstationMode()));
+                workspaceSource
+                        && WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                                MainHook.isWorkstationMode()));
     }
 
     private void retryFreshBackdropRecovery(long generation, int attempt) {
@@ -1206,6 +1507,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown || backend != sourceBackend || frame == null) return;
         View root = rootRef.get();
         if (root == null || !root.isAttachedToWindow()) return;
+        // Anchor the exported bitmap to the wallpaper transform active when PassBlur latched
+        // this source frame. The HWUI shader can then follow later zoom updates without recapture.
+        final float wallpaperScaleAtFrame =
+                LauncherWallpaperZoomHook.currentWallpaperSurfaceScale();
         // The Recents child uses this OES frame on the same GL thread, with its own geometry.
         // Never reject its frame because Workspace static-output geometry is temporarily stale
         // or a HOME-only Prismal parameter is unavailable during the Recents transition.
@@ -1217,8 +1522,28 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (frame.generation != sceneGeneration || rotationSettlePending) return;
         if (LauncherGlassSceneController.isRecentsCoveredByVendor()) return;
 
+        if (workspaceSource && workspaceSourceMotionDeferred
+                && LauncherGlassStaticLayer.isHwuiProbeActive(root)) {
+            // WindowElement/FloatingIcon transitions use the last immutable backdrop. The
+            // in-window HWUI probe continues sampling its current node geometry; preparing
+            // Prismal, exporting two HardwareBitmaps, and redrawing every GL node here would
+            // put a full-resolution pass on the same frames as the native spring.
+            if (workspaceLaunchProxyReturning || !staticGlassOutputSuppressed) {
+                workspaceRefreshAfterMotionPending = true;
+            }
+            hwuiProbeExportDirty = true;
+            return;
+        }
+
         PrismalParams params = prismalParams;
         if (params == null) return;
+        if (staticGlassOutputSuppressed && outputs.isEmpty()) {
+            // The source can be shared with Recents (already notified above), but no HOME glass
+            // exists to consume this frame. Keep the HWUI backdrop dirty for the first visible
+            // frame and avoid normalization, blur, texture export, and static scene rendering.
+            hwuiProbeExportDirty = true;
+            return;
+        }
         OutputState currentOutput = staticOutput;
         int windowWidth = currentOutput != null ? currentOutput.width : 0;
         int windowHeight = currentOutput != null ? currentOutput.height : 0;
@@ -1258,6 +1583,17 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             // UI pre-draw owns rootWidth/rootHeight. Never regress them to capture-time
             // dimensions on this render-thread callback.
             sourceBackend.makePbufferCurrent();
+            WallpaperFrameToken pendingWallpaperFrame =
+                    peekWallpaperFrameToken(frame.generation);
+            boolean probeGeometryChanged = hwuiProbeBackdropLogicalWidth != frame.logicalWidth
+                    || hwuiProbeBackdropLogicalHeight != frame.logicalHeight
+                    || hwuiProbeBackdropRotation != frame.rotation;
+            boolean probeWallpaperChanged = pendingWallpaperFrame.generation >= 0L
+                    && (hwuiProbeBackdropWallpaperGeneration != pendingWallpaperFrame.generation
+                        || hwuiProbeBackdropWallpaperAuthoritative
+                                != pendingWallpaperFrame.authoritative);
+            boolean probeBackdropChanged = probeGeometryChanged
+                    || hwuiProbeExportDirty || probeWallpaperChanged;
             if (trace) Trace.beginSection("LD.Workspace.Backdrop");
             try {
                 prismalRenderer.prepareBackdrop(
@@ -1272,6 +1608,99 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             long backdropDoneNs = perf ? System.nanoTime() : 0L;
             backdropPrepared = true;
+            if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && workspaceSource
+                    && !staticGlassOutputSuppressed
+                    && probeBackdropChanged) {
+                long exportStartNs = System.nanoTime();
+                Bitmap rawBitmap = null;
+                Bitmap blurredBitmap = null;
+                if (trace) Trace.beginSection("LD.Workspace.HWUIBackdropExport");
+                try {
+                    // Export Prismal's prepared pair. Its source adapter normalizes the PassBlur
+                    // FBO orientation before both the Gaussian blur and the GLES material sample;
+                    // exporting frame.normalizedTextureId here bypassed that flip and inverted
+                    // the sharp texture relative to the blur.
+                    rawBitmap = backend.copyTextureToHardwareBitmap(
+                            prismalRenderer.preparedSourceTexture(),
+                            prismalRenderer.preparedSourceWidth(),
+                            prismalRenderer.preparedSourceHeight());
+                    blurredBitmap = backend.copyTextureToHardwareBitmap(
+                            prismalRenderer.preparedBlurTexture(),
+                            prismalRenderer.preparedBlurWidth(),
+                            prismalRenderer.preparedBlurHeight());
+                    Bitmap rawForUi = rawBitmap;
+                    Bitmap blurForUi = blurredBitmap;
+                    int logicalWidth = frame.logicalWidth;
+                    int logicalHeight = frame.logicalHeight;
+                    int rotation = frame.rotation;
+                    long sceneAtExport = frame.generation;
+                    long wallpaperAtExport = pendingWallpaperFrame.generation;
+                    long exportSerial = ++hwuiProbeExportSerial;
+                    // Publish callbacks can run on the UI thread before this GL method finishes.
+                    // Reset the dirty bit before enqueue, so a rejected publish cannot be
+                    // overwritten by a later render-thread assignment.
+                    hwuiProbeExportDirty = false;
+                    if (probeGeometryChanged) {
+                        mainHandler.post(() -> {
+                            if (isCurrentHwuiProbeExport(root, sceneAtExport, exportSerial,
+                                    logicalWidth, logicalHeight, rotation, wallpaperAtExport)) {
+                                LauncherGlassStaticLayer.markHwuiProbeBackdropPending(root);
+                            }
+                        });
+                    }
+                    if (!mainHandler.post(() -> {
+                        if (!isCurrentHwuiProbeExport(root, sceneAtExport, exportSerial,
+                                logicalWidth, logicalHeight, rotation, wallpaperAtExport)) {
+                            rawForUi.recycle();
+                            blurForUi.recycle();
+                            if (hwuiProbeExportSerial == exportSerial) hwuiProbeExportDirty = true;
+                            return;
+                        }
+                        if (!LauncherGlassStaticLayer.publishHwuiProbeBackdrop(
+                                root, rawForUi, blurForUi,
+                                logicalWidth, logicalHeight, rotation,
+                                wallpaperScaleAtFrame)) {
+                            if (hwuiProbeExportSerial == exportSerial) hwuiProbeExportDirty = true;
+                        }
+                    })) {
+                        throw new IllegalStateException("HWUI backdrop publish queue rejected");
+                    }
+                    hwuiProbeBackdropLogicalWidth = logicalWidth;
+                    hwuiProbeBackdropLogicalHeight = logicalHeight;
+                    hwuiProbeBackdropRotation = rotation;
+                    if (wallpaperAtExport >= 0L) {
+                        hwuiProbeBackdropWallpaperGeneration = wallpaperAtExport;
+                        hwuiProbeBackdropWallpaperAuthoritative =
+                                pendingWallpaperFrame.authoritative;
+                    }
+                    MainHook.log(TAG + " HWUI probe backdrops exported raw="
+                            + rawBitmap.getWidth() + "x" + rawBitmap.getHeight()
+                            + " blur=" + blurredBitmap.getWidth() + "x" + blurredBitmap.getHeight()
+                            + " logical=" + logicalWidth + "x" + logicalHeight
+                            + " rotation=" + rotation
+                            + " generation=" + frame.generation
+                            + " elapsedMs=" + ((System.nanoTime() - exportStartNs) / 1_000_000f));
+                } catch (Throwable exportError) {
+                    hwuiProbeExportDirty = true;
+                    if (rawBitmap != null) rawBitmap.recycle();
+                    if (blurredBitmap != null) blurredBitmap.recycle();
+                    // Do not keep displaying an obsolete HWUI wallpaper indefinitely when
+                    // its replacement could not be exported. The existing GL output remains
+                    // the fallback until a later valid source frame can be exported.
+                    long failedGeneration = frame.generation;
+                    mainHandler.post(() -> {
+                        if (!shuttingDown && rootRef.get() == root
+                                && sceneGeneration == failedGeneration) {
+                            LauncherGlassStaticLayer.markHwuiProbeBackdropPending(root);
+                        }
+                    });
+                    MainHook.log(TAG + " HWUI probe backdrop export failed: " + exportError);
+                } finally {
+                    if (trace) Trace.endSection();
+                }
+            } else if (staticGlassOutputSuppressed) {
+                hwuiProbeExportDirty = true;
+            }
             outputRenderState.consumeForSourceRender();
             renderOutputs(true, true);
             if (perf) {
@@ -1287,7 +1716,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             if (WorkstationProducerPolicy.shouldPauseAfterFrameConsumed(MainHook.isWorkstationMode())) {
                 sourceBackend.setUpdatesEnabled(false, "launcher-workstation-frame-consumed");
             }
-            if (renderedStaticOutput) {
+            if (workspaceSource) {
                 // Queue one render-thread turn after this callback. RootPassBlurBackend publishes
                 // freshness only after onFreshFrame returns, so the main-thread authority callback
                 // cannot race ahead of the production freshness state.
@@ -1298,11 +1727,32 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         if (shuttingDown || rootRef.get() != root || !ownsRoot(root)
                                 || renderedGeneration != sceneGeneration
                                 || !sourceBackend.hasFreshFrame(renderedGeneration)) return;
-                        LauncherGlassSceneController.onFreshFrameRendered(
-                                root,
-                                renderedGeneration,
-                                wallpaperFrame.generation,
-                                wallpaperFrame.authoritative);
+                        boolean hwuiOutputReady = BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
+                                && LauncherGlassStaticLayer.isHwuiProbeActive(root);
+                        boolean workspaceOutputReady = renderedStaticOutput || hwuiOutputReady;
+                        if (workspaceOutputReady) {
+                            workspaceFirstOutputPresented = true;
+                            workspaceOutputRefreshPending = false;
+                        }
+                        // Stop a HOME pulse only after a matching fresh OES frame was consumed.
+                        // A timed four-VSync pause could otherwise starve a slow producer. If
+                        // the TextureView surface is not attached yet, leave the producer live;
+                        // onSurfaceTextureAvailable requests a new frame once it can be drawn.
+                        if (workspaceOutputReady && !transitionFrameSync.isActive()
+                                && !hasVisibleRecentsConsumer()
+                                && WorkstationProducerPolicy.shouldUseSingleFramePulse(
+                                    MainHook.isWorkstationMode())) {
+                            pauseWorkspaceProducerWhenFresh = false;
+                            sourceBackend.setUpdatesEnabled(false,
+                                    "workspace-settled-after-fresh");
+                        }
+                        if (workspaceOutputReady) {
+                            LauncherGlassSceneController.onFreshFrameRendered(
+                                    root,
+                                    renderedGeneration,
+                                    wallpaperFrame.generation,
+                                    wallpaperFrame.authoritative);
+                        }
                     });
                 });
             }
@@ -1312,6 +1762,19 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         } finally {
             if (trace) Trace.endSection();
         }
+    }
+
+    /** Reject queued HWUI images from a stale scene, rotation or wallpaper generation. */
+    private boolean isCurrentHwuiProbeExport(
+            View root, long generation, long serial,
+            int width, int height, int rotation, long wallpaperGeneration) {
+        return !shuttingDown && !folderFrameFrozen && !staticGlassOutputSuppressed
+                && rootRef.get() == root && root != null && root.isAttachedToWindow()
+                && generation == sceneGeneration && serial == hwuiProbeExportSerial
+                && width == rootWidth && height == rootHeight && rotation == configRotation
+                && (wallpaperGeneration < 0L
+                    || LauncherGlassSceneController.isWallpaperContentGenerationCurrent(
+                            root, wallpaperGeneration));
     }
 
     @Override
@@ -1356,8 +1819,250 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (folderFrameFrozen) return;
         PrismalParams params = prismalParams;
         if (!backdropPrepared || params == null || rootWidth <= 0 || rootHeight <= 0) return;
-        if (renderStatic) renderStaticScene(params);
+        prismalRenderer.setTransientQualityActive(workspaceMotionQualityActive);
+        View root = rootRef.get();
+        if (renderStatic && !staticGlassOutputSuppressed
+                && !LauncherGlassStaticLayer.isHwuiProbeActive(root)) {
+            renderStaticScene(params);
+        }
         if (renderDrag) renderDragOutputs(params);
+    }
+
+    /** Draw all live Workspace glass nodes into the same root ViewRoot frame. */
+    void drawHwuiProbe(Canvas canvas, Paint paint,
+                       android.graphics.RuntimeShader baselineShader,
+                       android.graphics.RuntimeShader decoratedShader,
+                       android.graphics.RuntimeShader motionDecoratedShader,
+                       float relativeWallpaperScale) {
+        if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || shuttingDown || canvas == null
+                || paint == null || baselineShader == null || decoratedShader == null
+                || staticGlassOutputSuppressed || !canvas.isHardwareAccelerated()) return;
+        View root = rootRef.get();
+        if (root == null || !root.isAttachedToWindow()) return;
+        StaticSceneSnapshot scene = publishedStaticScene;
+        StaticNodeState[] snapshot = scene.nodes;
+        if (snapshot.length == 0) return;
+        float sampleScale = Float.isFinite(relativeWallpaperScale)
+                && relativeWallpaperScale > 0f ? relativeWallpaperScale : 1f;
+        baselineShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
+        decoratedShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
+        if (motionDecoratedShader != null) {
+            motionDecoratedShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
+        }
+        PrismalParams params = prismalParams != null ? prismalParams : PrismalParams.builder().build();
+        float density = root.getResources().getDisplayMetrics().density;
+        android.graphics.RuntimeShader activeShader = null;
+        int drawnNodes = 0;
+        int decoratedNodes = 0;
+        float lastCenterX = 0f;
+        float lastCenterY = 0f;
+        float lastWidth = 0f;
+        float lastHeight = 0f;
+        StringBuilder firstFrameNodes = hwuiProbeSelectionLogged ? null : new StringBuilder();
+        for (int i = 0; i < snapshot.length; i++) {
+            StaticNodeState state = snapshot[i];
+            LauncherGlassStaticNode node = state.nodeRef.get();
+            StaticGeometryFrame frame = scene.frames[i];
+            if (node == null || frame == null) continue;
+            float visibleAlpha = frame.outputAlpha;
+            if (visibleAlpha <= 0.001f) continue;
+            // preDraw already captured this node for this ViewRoot traversal. Reuse that exact
+            // snapshot so HWUI and the published scene share one geometry revision and matrix walk.
+            LauncherGlassGeometry.Snapshot geometry = frame.geometry;
+            if (geometry == null || geometry.width <= 0f || geometry.height <= 0f) continue;
+
+            PrismalHighlightProfile highlights = LauncherHighlightProfilePolicy.select(
+                    node.nodeKind(), launcherHighlightProfile, largeSurfaceHighlightProfile)
+                    .withOs4EdgeReplacingLegacyEdge();
+            PrismalEdgeDecoration decoration = GlassEdgeEffects.current(edgeScope(node.nodeKind()));
+            float minDimension = Math.min(geometry.width, geometry.height);
+            boolean decorated = decoration.hasBacklit() || decoration.hasShadow();
+            if (decorated) decoratedNodes++;
+            boolean transitionMaterial = decorated
+                    && workspaceMotionQualityActive && motionDecoratedShader != null;
+            android.graphics.RuntimeShader shader = transitionMaterial
+                    ? motionDecoratedShader : decorated ? decoratedShader : baselineShader;
+            if (shader != activeShader) {
+                paint.setShader(shader);
+                activeShader = shader;
+            }
+            float exteriorGuardPx = decorated
+                    ? decoration.extraGuardPx(density, minDimension) : 2f;
+
+            shader.setFloatUniform("u_resolution", (float) rootWidth, (float) rootHeight);
+            shader.setFloatUniform("u_glassSize", geometry.width, geometry.height);
+            shader.setFloatUniform("u_cornerRadii",
+                    geometry.cornerRadius, geometry.cornerRadius,
+                    geometry.cornerRadius, geometry.cornerRadius);
+            shader.setFloatUniform("uProbeBounds",
+                    geometry.left, geometry.top,
+                    geometry.left + geometry.width, geometry.top + geometry.height);
+            setHwuiProbeMaterialUniforms(shader, params, highlights,
+                    minDimension, hwuiProbeInvariants);
+            if (workspaceMotionQualityActive) {
+                // Keep edge decoration and chromatic dispersion; skip motion caustics only.
+                setHwuiProbeMotionQuality(shader);
+            }
+            if (decorated) {
+                setHwuiProbeDecorationUniforms(shader, decoration, density, minDimension);
+            }
+            PrismalInteractionState interaction = state.interaction;
+            if (interaction != null) {
+                shader.setFloatUniform("u_pressProgress", interaction.pressProgress);
+                shader.setFloatUniform("u_glowCenter",
+                        interaction.glowCenterX, interaction.glowCenterY);
+            }
+            paint.setAlpha(Math.round(255f * visibleAlpha));
+            canvas.drawRect(
+                    geometry.left - exteriorGuardPx,
+                    geometry.top - exteriorGuardPx,
+                    geometry.left + geometry.width + exteriorGuardPx,
+                    geometry.top + geometry.height + exteriorGuardPx,
+                    paint);
+
+            if (firstFrameNodes != null) {
+                if (firstFrameNodes.length() != 0) firstFrameNodes.append(',');
+                View material = node.materialHost();
+                firstFrameNodes.append(node.nodeKind()).append(':')
+                        .append(material != null ? material.getClass().getSimpleName() : "detached")
+                        .append('@').append(Math.round(geometry.left)).append(',')
+                        .append(Math.round(geometry.top));
+            }
+            drawnNodes++;
+            lastCenterX = geometry.centerX;
+            lastCenterY = geometry.centerY;
+            lastWidth = geometry.width;
+            lastHeight = geometry.height;
+        }
+        paint.setShader(null);
+        paint.setAlpha(255);
+        if (firstFrameNodes != null) {
+            MainHook.log(TAG + " HWUI probe drawing nodes=" + drawnNodes
+                    + " of=" + snapshot.length + " visible=" + firstFrameNodes);
+            android.util.Log.i("LiquidDock-HWUI", "drawing Workspace nodes=" + drawnNodes
+                    + "/" + snapshot.length + " decorated=" + decoratedNodes);
+            hwuiProbeSelectionLogged = true;
+        }
+        if (Trace.isEnabled()) {
+            Integer scrollX = LauncherGlassStaticLayer.captureWorkspaceScrollAnchor(root);
+            Trace.setCounter("LD.Workspace.HWUIProbe.Nodes", drawnNodes);
+            Trace.setCounter("LD.Workspace.HWUIProbe.CenterX", Math.round(lastCenterX));
+            Trace.setCounter("LD.Workspace.HWUIProbe.CenterY", Math.round(lastCenterY));
+            Trace.setCounter("LD.Workspace.HWUIProbe.Width", Math.round(lastWidth));
+            Trace.setCounter("LD.Workspace.HWUIProbe.Height", Math.round(lastHeight));
+            Trace.setCounter("LD.Workspace.HWUIProbe.ScrollX",
+                    scrollX != null ? scrollX : 0);
+        }
+    }
+
+    static void setHwuiProbeDecorationUniforms(
+            android.graphics.RuntimeShader shader,
+            PrismalEdgeDecoration decoration,
+            float density,
+            float minDimension) {
+        shader.setFloatUniform("u_backlitWidthPx", decoration.backlitWidthDp * density);
+        shader.setFloatUniform("u_backlitStrength", decoration.backlitStrength);
+        shader.setFloatUniform("u_backlitSideStart", decoration.backlitSideStart());
+        shader.setFloatUniform("u_backlitSideSpan", decoration.backlitSideSpan());
+        shader.setFloatUniform("u_backlitViewportInsetPx", decoration.inkViewportInsetPx);
+        shader.setFloatUniform("u_castShadowRadiusPx",
+                decoration.effectiveShadowRadiusPx(density, minDimension));
+        shader.setFloatUniform("u_castShadowLightFollow", decoration.shadowLightFollow);
+        shader.setFloatUniform("u_castShadowOffsetYPx",
+                decoration.effectiveShadowOffsetYPx(density, minDimension));
+        shader.setFloatUniform("u_castShadowColor",
+                decoration.shadowR, decoration.shadowG, decoration.shadowB, decoration.shadowA);
+    }
+
+    /** Match the Prismal motion tier shared by GLES and both HWUI glass outputs. */
+    static void setHwuiProbeMotionQuality(android.graphics.RuntimeShader shader) {
+        if (shader == null) return;
+        shader.setFloatUniform("u_causticIntensity", 0f);
+    }
+
+    static void setHwuiProbeMaterialUniforms(
+            android.graphics.RuntimeShader shader,
+            PrismalParams p,
+            PrismalHighlightProfile h,
+            float minGlassDimension,
+            float[] invariants) {
+        shader.setFloatUniform("u_refractionInset", p.refractionInsetPx);
+        shader.setFloatUniform("u_sminSmoothing", p.sminSmoothingPx);
+        shader.setFloatUniform("u_continuousCorners", p.continuousCorners ? 1f : 0f);
+        shader.setFloatUniform("u_edgeRefractionFalloff", p.edgeRefractionFalloff);
+        shader.setFloatUniform("u_ior", p.ior);
+        shader.setFloatUniform("u_glassThickness", p.glassThicknessPx);
+        shader.setFloatUniform("u_normalStrength", p.normalStrength);
+        shader.setFloatUniform("u_displacementScale", p.displacementScale);
+        shader.setFloatUniform("u_heightTransitionWidth", p.heightTransitionWidthPx);
+        shader.setFloatUniform("u_lensRefractionPx",
+                calculateLensRefractionPx(p, minGlassDimension));
+        shader.setFloatUniform("u_lensDepthEffect", p.lensDepthEffect);
+        shader.setFloatUniform("u_chromaticAberration", Math.max(0f, p.chromaticAberration));
+        shader.setFloatUniform("u_dispersionR", p.dispersionR);
+        shader.setFloatUniform("u_dispersionB", p.dispersionB);
+        shader.setFloatUniform("u_vibrancy", p.vibrancy);
+        shader.setFloatUniform("u_plainHighlight", p.plainHighlight);
+        shader.setFloatUniform("u_liquidDome", p.liquidDome);
+        shader.setFloatUniform("u_fresnelReflect", p.fresnelReflect);
+        shader.setFloatUniform("u_brightness", p.brightness);
+        shader.setFloatUniform("u_glassColor", p.tintR, p.tintG, p.tintB, p.tintA);
+        shader.setFloatUniform("u_baseColor",
+                p.baseColorR, p.baseColorG, p.baseColorB, p.baseColorA);
+        shader.setFloatUniform("u_highlightWidth", p.highlightWidth);
+        shader.setFloatUniform("u_os4EdgeWidthPx", p.os4EdgeWidthPx);
+        shader.setFloatUniform("u_os4ReflectOffsetPx", p.os4ReflectOffsetPx);
+        shader.setFloatUniform("u_os4ReflectionStrength", p.os4ReflectionStrength);
+        shader.setFloatUniform("u_os4ReflectionLighten", p.os4ReflectionLighten);
+        shader.setFloatUniform("u_os4DirectionalAngleRange", p.os4DirectionalAngleRange);
+        shader.setFloatUniform("u_os4DirectionalIntensity", p.os4DirectionalIntensity);
+        shader.setFloatUniform("u_os4DirectionalOppositeIntensity",
+                p.os4DirectionalOppositeIntensity);
+        shader.setFloatUniform("u_lightDir", p.lightDirX, p.lightDirY);
+        shader.setFloatUniform("u_specular", p.specular);
+        shader.setFloatUniform("u_shininess", p.shininess);
+        shader.setFloatUniform("u_rimStrength", p.rimStrength);
+        shader.setFloatUniform("u_shadowColor", p.shadowR, p.shadowG, p.shadowB, p.shadowA);
+        shader.setFloatUniform("u_shadowSoftness", p.shadowSoftness);
+        shader.setFloatUniform("u_causticIntensity", p.causticIntensity);
+        shader.setFloatUniform("u_transmittance", p.transmittance);
+        shader.setFloatUniform("u_backdropSampleScale", p.backdropScaleX, p.backdropScaleY);
+        shader.setFloatUniform("u_parallaxScale", p.parallaxScale);
+        shader.setFloatUniform("u_pressProgress", p.pressProgress);
+        shader.setFloatUniform("u_backdropPinch", p.backdropPinch);
+        shader.setFloatUniform("u_glowCenter", p.glowCenterX, p.glowCenterY);
+        shader.setFloatUniform("u_glowStrength", p.glowStrength);
+        shader.setIntUniform("u_showNormals", p.showNormals ? 1 : 0);
+        shader.setIntUniform("u_useBlurredTexture", 1);
+
+        PrismalRenderer.computeWorkspaceHwuiProbeInvariants(p, invariants);
+        shader.setFloatUniform("u_invariantLightPrimary",
+                invariants[0], invariants[1], invariants[2]);
+        shader.setFloatUniform("u_invariantLightXY", invariants[3], invariants[4]);
+        shader.setFloatUniform("u_invariantOs4LightDir",
+                invariants[5], invariants[6], invariants[7]);
+        shader.setFloatUniform("u_invariantFresnelR0", invariants[8]);
+        shader.setFloatUniform("u_invariantShadowExtent", invariants[9]);
+
+        shader.setFloatUniform("u_componentSkyHaze", h.skyHaze ? 1f : 0f);
+        shader.setFloatUniform("u_componentSpecular", h.specular ? 1f : 0f);
+        shader.setFloatUniform("u_componentLitRim", h.litRim ? 1f : 0f);
+        shader.setFloatUniform("u_componentOppositeRim", h.oppositeRim ? 1f : 0f);
+        shader.setFloatUniform("u_componentCornerRim", h.cornerRim ? 1f : 0f);
+        shader.setFloatUniform("u_componentFaceSheen", h.faceSheen ? 1f : 0f);
+        shader.setFloatUniform("u_componentPlainHighlight", h.plainHighlight ? 1f : 0f);
+        shader.setFloatUniform("u_componentCaustics", h.caustics ? 1f : 0f);
+        shader.setFloatUniform("u_componentPressGlow", h.pressGlow ? 1f : 0f);
+        shader.setFloatUniform("u_os4EdgeEnabled", h.os4Edge ? 1f : 0f);
+
+    }
+
+    private static float calculateLensRefractionPx(PrismalParams p, float minGlassDimension) {
+        float domeBoost = 1f + 0.55f * Math.max(0f, Math.min(2f, p.liquidDome));
+        float refractionHeight = p.heightTransitionWidthPx * domeBoost;
+        float lensPx = refractionHeight * 2f * p.displacementScale * p.lensRefractionScale
+                * PrismalIorLensPolicy.relativeBend(p.ior);
+        return Math.max(0f, Math.min(lensPx, Math.max(4f, minGlassDimension * 0.85f)));
     }
 
     private void renderStaticScene(PrismalParams params) {
@@ -1368,6 +2073,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         // renders directly into the native-resolution window. The Prismal node scissor
         // limits expensive shading to occupied glass bounds.
         sourceBackend.makeCurrent(output.eglSurface);
+        prismalRenderer.setTransientQualityActive(workspaceMotionQualityActive);
         prismalRenderer.beginGlassFrameOnSurface(output.width, output.height);
         StaticSceneSnapshot scene = publishedStaticScene;
         LauncherGlassScrollProjectionState.Snapshot scrollFrame =
@@ -1388,8 +2094,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             if (node == null || geometry == null) continue;
             // Invisible nodes must not consume an expensive GLES2 shader draw.
             // Their previous output is already removed by the scene clear.
-            float visibleAlpha = node.visibilityAlpha();
-            if (visibleAlpha <= 0f) continue;
+            float visibleAlpha = frame.outputAlpha;
+            if (visibleAlpha <= 0.001f) continue;
             float projectedCenterX = scrollFrame.projectCenterX(
                     geometry.centerX, frame.workspaceScrollX, frame.workspaceScrollValid);
             PrismalGeometry prismalGeometry = resolveStaticPrismalGeometry(
@@ -1575,6 +2281,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     void shutdown(Runnable onShutdownComplete) {
         sourceBackend.onShutdownComplete(onShutdownComplete);
         if (shuttingDown) return;
+        hwuiProbeExportSerial++;
+        hwuiProbeExportDirty = true;
         MainHook.log(TAG + " shutdown " + debugLabel());
         RecentsCapsuleGlassSession child = recentsConsumer;
         recentsConsumer = null;

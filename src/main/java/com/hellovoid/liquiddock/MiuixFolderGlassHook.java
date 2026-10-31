@@ -209,8 +209,9 @@ final class MiuixFolderGlassHook {
         // Workspace alpha as the ordinary icons. Dock keeps its own live
         // PassBlur producer and native FolderState throughout this transition.
         //
-        // The cached lens fades independently of the native background spring.
-        // Prepare the resident desktop material even for native close(false).
+        // Keep the resident desktop material ready for the close handoff. The
+        // expanded lens uses the native background spring when its geometry was
+        // observed; otherwise the existing short fade remains the fallback.
         if (OpenFolderGlassCoordinator.hasActiveSession()) {
             LauncherGlassSceneController.beginNativeFolderCloseForAll();
         }
@@ -384,12 +385,20 @@ final class MiuixFolderGlassHook {
         openedFolderSink = new WeakReference<>(null);
     }
 
-    static void onExpandedFolderFadeStarted(long serial, LauncherGlassGeometry.Snapshot geometry,
-                                            int width, int height) {
+    static void onExpandedFolderCloseStarted(long serial, LauncherGlassGeometry.Snapshot geometry,
+                                             int width, int height, boolean followNativeScale) {
         if (serial == 0L || OpenFolderGlassCoordinator.activeSessionSerial() != serial) return;
         LauncherGlassStaticNode sink = openedFolderSink.get();
-        if (sink != null) sink.beginFolderCloseReturn(geometry, width, height);
+        if (sink != null) {
+            sink.beginFolderCloseReturn(geometry, width, height, followNativeScale);
+        }
         releaseFrozenInputs();
+    }
+
+    static void onExpandedFolderCloseProgress(long serial, float openProgress) {
+        if (serial == 0L || OpenFolderGlassCoordinator.activeSessionSerial() != serial) return;
+        LauncherGlassStaticNode sink = openedFolderSink.get();
+        if (sink != null) sink.updateFolderCloseReturnProgress(openProgress);
     }
 
     /** Clear native ownership after completion, cancellation or timeout. */

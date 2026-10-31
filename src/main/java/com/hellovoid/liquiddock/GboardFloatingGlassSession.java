@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.opengl.EGL14;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.view.Surface;
 import android.view.View;
@@ -16,6 +17,7 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Zero-copy PassBlur -> Prismal pipeline with realtime or frozen one-frame sampling. */
 final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
@@ -26,6 +28,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     interface Listener {
         void onPresented();
+        void onPresentationInvalidated();
         void onFailure(Throwable error);
     }
 
@@ -66,7 +69,9 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private int qualityRenderFps;
     private final boolean realtimeBackgroundSampling;
     private final OutputMode outputMode;
+    private final boolean frozenHwuiPilot;
     private final Object renderQueueLock = new Object();
+    private final AtomicLong hwuiSnapshotRequestRevision = new AtomicLong();
 
     private volatile GboardFloatingGlassGeometry geometry;
     private GboardFloatingGlassGeometry lastRenderedGeometry;
@@ -76,10 +81,18 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean frozenCapturePending;
     private volatile boolean freezeAfterNextFrame;
     private volatile boolean frozenSamplingActive;
+    private volatile boolean hwuiOutputActive;
+    private volatile boolean textureFallbackActive;
+    private volatile boolean hwuiPermanentlyFailed;
+    private volatile boolean hwuiSnapshotPending;
+    private volatile boolean hwuiSnapshotExportInFlight;
     private volatile int logicalWidth;
     private volatile int logicalHeight;
+    private WeakReference<GboardFloatingGlassView> outputHostRef = new WeakReference<>(null);
+    private WeakReference<GboardFloatingGlassHwuiView> hwuiOutputRef = new WeakReference<>(null);
     private boolean presentationSignaled;
     private boolean failureSignaled;
+    private int staleSnapshotRejectCount;
     private boolean renderQueued;
     private boolean renderQueuedUrgent;
     private boolean renderDirty;
@@ -117,6 +130,8 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         this.listener = listener;
         this.realtimeBackgroundSampling = realtimeBackgroundSampling;
         this.outputMode = outputMode;
+        frozenHwuiPilot = !realtimeBackgroundSampling
+                && outputMode == OutputMode.FULLSCREEN_REGION;
         mainHandler = new Handler(root.getContext().getMainLooper());
         quadBuffer = ByteBuffer.allocateDirect(QUAD.length * Float.BYTES)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -160,6 +175,11 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         appliedBlur = appearance.blur;
         prismalParams = next;
         highlightProfile = appearance.highlightProfile;
+        if (frozenHwuiPilot) {
+            GboardFloatingGlassHwuiView target = hwuiOutputRef.get();
+            GboardFloatingGlassGeometry current = geometry;
+            if (target != null && current != null) publishHwuiScene(target, current);
+        }
         boolean qualityChanged = qualityScalePercent != appearance.captureScalePercent
                 || qualityRenderFps != appearance.renderFps;
         if (qualityChanged && realtimeBackgroundSampling) {
@@ -182,11 +202,17 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                             lastNormalizedTexture, lastPhysicalWidth, lastPhysicalHeight,
                             logicalWidth, logicalHeight, next);
                 } catch (Throwable error) {
-                    notifyFailure("live-blur", error);
+                    if (frozenHwuiPilot) activateTextureFallback(error);
+                    else notifyFailure("live-blur", error);
                     return;
                 }
             }
-            scheduleRender(false);
+            if (frozenHwuiPilot && blurChanged && backdropPrepared
+                    && !hwuiPermanentlyFailed) {
+                long requestRevision = requestHwuiSnapshotExport();
+                publishPreparedBackdrops(requestRevision);
+            }
+            if (!frozenHwuiPilot || textureFallbackActive) scheduleRender(false);
         });
         // Frozen producer: quality changes affect the next keyboard session; never invalidate
         // its retained normalized texture while the glass is still visible.
@@ -199,23 +225,21 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
             freezeAfterNextFrame = false;
             frozenSamplingActive = false;
         }
+        if (frozenHwuiPilot) {
+            markHwuiSnapshotPending();
+        }
         sourceBackend.requestFresh(GENERATION);
     }
 
     void freezeBackdropAfterSettle() {
         if (realtimeBackgroundSampling || shuttingDown
                 || frozenSamplingActive || frozenCapturePending) return;
-        freezeAfterNextFrame = true;
-        frozenCapturePending = true;
-        sourceBackend.requestFresh(GENERATION);
+        requestFrozenCaptureAndFreeze();
     }
 
     void requestFrozenMotionCapture() {
         if (realtimeBackgroundSampling || shuttingDown || frozenCapturePending) return;
-        frozenSamplingActive = false;
-        freezeAfterNextFrame = true;
-        frozenCapturePending = true;
-        sourceBackend.requestFresh(GENERATION);
+        requestFrozenCaptureAndFreeze();
     }
 
     void updateGeometry(GboardFloatingGlassGeometry next) {
@@ -223,12 +247,88 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
         GboardFloatingGlassGeometry old = geometry;
         if (old != null && old.sameAs(next)) return;
         geometry = next;
-        if (old == null
-                || old.rootWidth != next.rootWidth
-                || old.rootHeight != next.rootHeight) {
+        boolean rootSizeChanged = old != null
+                && (old.rootWidth != next.rootWidth || old.rootHeight != next.rootHeight);
+        if (old == null || rootSizeChanged) {
             sourceBackend.reconcileRoot();
         }
+        if (frozenHwuiPilot) {
+            GboardFloatingGlassView host = outputHostRef.get();
+            GboardFloatingGlassHwuiView target = hwuiOutputRef.get();
+            if (target != null) publishHwuiScene(target, next);
+            if (rootSizeChanged) {
+                boolean wasPresented = presentationSignaled;
+                presentationSignaled = false;
+                swapSucceeded = false;
+                hwuiOutputActive = false;
+                if (!hwuiPermanentlyFailed) textureFallbackActive = false;
+                if (host != null && !hwuiPermanentlyFailed) host.showPreparingOutput();
+                if (wasPresented && listener != null) {
+                    mainHandler.post(listener::onPresentationInvalidated);
+                }
+                requestFrozenCaptureAndFreeze();
+                return;
+            }
+            if (textureFallbackActive) scheduleRender(true);
+            return;
+        }
         scheduleRender(true);
+    }
+
+    boolean usesFrozenHwuiPilot() {
+        return frozenHwuiPilot;
+    }
+
+    void attachHwuiOutput(
+            GboardFloatingGlassView host, GboardFloatingGlassHwuiView hwuiView) {
+        if (!frozenHwuiPilot || shuttingDown) return;
+        outputHostRef = new WeakReference<>(host);
+        hwuiOutputRef = new WeakReference<>(hwuiView);
+        GboardFloatingGlassGeometry current = geometry;
+        if (current != null && hwuiView != null) publishHwuiScene(hwuiView, current);
+    }
+
+    void detachHwuiOutput(GboardFloatingGlassView host) {
+        GboardFloatingGlassView current = outputHostRef.get();
+        if (current != host) return;
+        outputHostRef.clear();
+        hwuiOutputRef.clear();
+        hwuiOutputActive = false;
+    }
+
+    private void publishHwuiScene(
+            GboardFloatingGlassHwuiView target, GboardFloatingGlassGeometry currentGeometry) {
+        View root = rootRef.get();
+        if (target == null || root == null || currentGeometry == null) return;
+        target.setScene(
+                currentGeometry,
+                prismalParams,
+                highlightProfile,
+                GlassEdgeEffects.current(GlassEdgeEffects.GBOARD),
+                root.getResources().getDisplayMetrics().density);
+    }
+
+    private void markHwuiSnapshotPending() {
+        hwuiSnapshotRequestRevision.incrementAndGet();
+        hwuiSnapshotPending = true;
+        hwuiSnapshotExportInFlight = false;
+    }
+
+    /** Starts one fresh capture and pauses producer updates after that frame is consumed. */
+    private void requestFrozenCaptureAndFreeze() {
+        if (realtimeBackgroundSampling || shuttingDown) return;
+        frozenSamplingActive = false;
+        freezeAfterNextFrame = true;
+        frozenCapturePending = true;
+        if (frozenHwuiPilot) markHwuiSnapshotPending();
+        sourceBackend.requestFresh(GENERATION);
+    }
+
+    private long requestHwuiSnapshotExport() {
+        markHwuiSnapshotPending();
+        long revision = hwuiSnapshotRequestRevision.get();
+        hwuiSnapshotExportInFlight = true;
+        return revision;
     }
 
     void attachOutput(Surface surface, int width, int height) {
@@ -281,15 +381,32 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
 
     /** Called on the UI thread only after TextureView consumed a swapped buffer. */
     void onOutputPresented() {
+        if (frozenHwuiPilot && !textureFallbackActive) return;
         if (shuttingDown || presentationSignaled || !swapSucceeded) return;
         presentationSignaled = true;
         if (listener != null) listener.onPresented();
+    }
+
+    /** Called on the UI thread after the frozen HWUI material has actually drawn. */
+    void onHwuiOutputPresented() {
+        if (shuttingDown || !frozenHwuiPilot || !hwuiOutputActive
+                || presentationSignaled) return;
+        presentationSignaled = true;
+        if (listener != null) listener.onPresented();
+    }
+
+    /** Switch to the established TextureView route if RuntimeShader/HWUI cannot draw. */
+    void onHwuiOutputFailure(Throwable error) {
+        activateTextureFallback(error);
     }
 
     @Override
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
+        if (frozenHwuiPilot && !hwuiPermanentlyFailed
+                && (!hwuiSnapshotPending || hwuiSnapshotExportInFlight)) return;
+        long snapshotRevision = hwuiSnapshotRequestRevision.get();
         if (!realtimeBackgroundSampling
                 && frozenSamplingActive
                 && !frozenCapturePending) {
@@ -318,10 +435,98 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
                 frozenSamplingActive = true;
                 sourceBackend.setUpdatesEnabled(false, "gboard-frozen-frame-consumed");
             }
-            scheduleRender(false);
+            if (frozenHwuiPilot && !hwuiPermanentlyFailed) {
+                if (snapshotRevision != hwuiSnapshotRequestRevision.get()) return;
+                hwuiSnapshotExportInFlight = true;
+                publishPreparedBackdrops(snapshotRevision);
+            } else {
+                scheduleRender(false);
+            }
         } catch (Throwable error) {
-            notifyFailure("fresh-frame", error);
+            if (frozenHwuiPilot) activateTextureFallback(error);
+            else notifyFailure("fresh-frame", error);
         }
+    }
+
+    /** Runs on the GL thread after prepareBackdrop; the exported buffers are never reused. */
+    private void publishPreparedBackdrops(long snapshotRevision) {
+        if (shuttingDown || !frozenHwuiPilot || hwuiPermanentlyFailed
+                || prismalRenderer == null || !backdropPrepared
+                || snapshotRevision != hwuiSnapshotRequestRevision.get()) return;
+        try {
+            Bitmap raw = sourceBackend.copyTextureToHardwareBitmap(
+                    prismalRenderer.preparedSourceTexture(),
+                    prismalRenderer.preparedSourceWidth(),
+                    prismalRenderer.preparedSourceHeight());
+            Bitmap blurred = sourceBackend.copyTextureToHardwareBitmap(
+                    prismalRenderer.preparedBlurTexture(),
+                    prismalRenderer.preparedBlurWidth(),
+                    prismalRenderer.preparedBlurHeight());
+            int snapshotWidth = logicalWidth;
+            int snapshotHeight = logicalHeight;
+            mainHandler.post(() -> {
+                if (shuttingDown || hwuiPermanentlyFailed
+                        || snapshotRevision != hwuiSnapshotRequestRevision.get()) return;
+                View root = rootRef.get();
+                GboardFloatingGlassGeometry current = geometry;
+                GboardFloatingGlassView host = outputHostRef.get();
+                GboardFloatingGlassHwuiView target = hwuiOutputRef.get();
+                if (root == null || host == null || target == null || current == null) return;
+                if (current.rootWidth != snapshotWidth || current.rootHeight != snapshotHeight
+                        || root.getWidth() != snapshotWidth || root.getHeight() != snapshotHeight) {
+                    // Never bind a texture prepared for a stale root-sized frame.
+                    hwuiSnapshotExportInFlight = false;
+                    sourceBackend.reconcileRoot();
+                    if (staleSnapshotRejectCount++ < 1) requestFrozenCaptureAndFreeze();
+                    else {
+                        hwuiSnapshotPending = false;
+                        sourceBackend.setUpdatesEnabled(false, "gboard-stale-hwui-snapshot");
+                    }
+                    return;
+                }
+                if (!target.setBackdrops(raw, blurred, snapshotWidth, snapshotHeight)) {
+                    hwuiSnapshotPending = false;
+                    hwuiSnapshotExportInFlight = false;
+                    activateTextureFallback(new IllegalStateException(
+                            "Gboard frozen HWUI rejected prepared backdrop"));
+                    return;
+                }
+                publishHwuiScene(target, current);
+                hwuiSnapshotPending = false;
+                hwuiSnapshotExportInFlight = false;
+                staleSnapshotRejectCount = 0;
+                hwuiOutputActive = true;
+                textureFallbackActive = false;
+                host.showHwuiOutput();
+            });
+        } catch (Throwable error) {
+            activateTextureFallback(error);
+        }
+    }
+
+    private void activateTextureFallback(Throwable error) {
+        if (shuttingDown || !frozenHwuiPilot || hwuiPermanentlyFailed) return;
+        hwuiPermanentlyFailed = true;
+        hwuiSnapshotPending = false;
+        hwuiSnapshotExportInFlight = false;
+        mainHandler.post(() -> {
+            if (shuttingDown) return;
+            boolean wasPresented = presentationSignaled;
+            presentationSignaled = false;
+            hwuiOutputActive = false;
+            textureFallbackActive = true;
+            swapSucceeded = false;
+            GboardFloatingGlassView host = outputHostRef.get();
+            if (host != null) host.showTextureFallback();
+            if (wasPresented && listener != null) listener.onPresentationInvalidated();
+            try {
+                Api101Bridge.log(TAG + " HWUI fallback to TextureView: "
+                        + failureSummary(error));
+            } catch (Throwable ignored) {}
+            sourceBackend.postToRenderThread(() -> {
+                if (!shuttingDown && backdropPrepared) renderCurrent();
+            });
+        });
     }
 
     @Override
@@ -413,6 +618,7 @@ final class GboardFloatingGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void renderCurrent() {
+        if (frozenHwuiPilot && (hwuiOutputActive || !textureFallbackActive)) return;
         GboardFloatingGlassGeometry currentGeometry = geometry;
         OutputState currentOutput = output;
         View root = rootRef.get();

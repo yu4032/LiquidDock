@@ -1,6 +1,9 @@
 package com.hellovoid.liquiddock;
 
+import android.graphics.Bitmap;
+import android.graphics.ColorSpace;
 import android.graphics.SurfaceTexture;
+import android.hardware.HardwareBuffer;
 import android.opengl.EGL14;
 import android.opengl.EGLConfig;
 import android.opengl.EGLContext;
@@ -13,6 +16,9 @@ import android.os.HandlerThread;
 import android.os.Trace;
 import android.view.Surface;
 import android.view.View;
+
+import androidx.opengl.EGLExt;
+import androidx.opengl.EGLImageKHR;
 
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
@@ -222,10 +228,16 @@ final class RootPassBlurBackend {
 
     void setUpdatesEnabled(boolean enabled, String reason) {
         if (shuttingDown || state.isCapturedSourceRetired()) return;
-        if (bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
-            state.setCaptureUpdatesAllowed(enabled);
-        }
         Miuix307PassBlurBridge.Binding current = binding;
+        boolean workspace = bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE;
+        if (workspace) {
+            boolean alreadyAllowed = state.captureUpdatesAllowed() == enabled;
+            boolean alreadyApplied = current == null || current.updatesEnabled == enabled;
+            if (alreadyAllowed && alreadyApplied) return;
+            state.setCaptureUpdatesAllowed(enabled);
+        } else if (current == null || current.updatesEnabled == enabled) {
+            return;
+        }
         if (current == null) return;
         if (enabled) Miuix307PassBlurBridge.resumeUpdates(current);
         else Miuix307PassBlurBridge.pauseUpdates(current);
@@ -746,6 +758,128 @@ final class RootPassBlurBackend {
         makePbufferCurrentUnchecked();
     }
 
+    /**
+     * One-shot immutable export for an HWUI glass output. The GL texture is copied into an
+     * AHardwareBuffer and completed before Bitmap/HWUI can observe it; this buffer is never
+     * written again, so the producer/consumer pair has no reuse race.
+     */
+    Bitmap copyNormalizedFrameToHardwareBitmap(RootPassBlurFrame frame) {
+        requireRenderThread();
+        if (frame == null || frame.normalizedTextureId == 0
+                || frame.normalizedTextureId != normalizedTexture
+                || normalizedFramebuffer == 0
+                || frame.physicalWidth != normalizedWidth
+                || frame.physicalHeight != normalizedHeight) {
+            throw new IllegalStateException("normalized frame is no longer current");
+        }
+        return copyTextureToHardwareBitmap(
+                frame.normalizedTextureId, frame.physicalWidth, frame.physicalHeight);
+    }
+
+    /** One-shot immutable export for a prepared Prismal texture consumed by HWUI. */
+    Bitmap copyTextureToHardwareBitmap(int sourceTextureId, int width, int height) {
+        requireRenderThread();
+        if (sourceTextureId <= 0 || width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("invalid probe texture dimensions");
+        }
+        makePbufferCurrentUnchecked();
+        HardwareBuffer buffer = null;
+        EGLImageKHR image = null;
+        int texture = 0;
+        int sourceFramebuffer = 0;
+        int destinationFramebuffer = 0;
+        int[] previousFramebuffer = new int[1];
+        int[] previousViewport = new int[4];
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, previousFramebuffer, 0);
+        GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, previousViewport, 0);
+        try {
+            buffer = HardwareBuffer.create(
+                    width,
+                    height,
+                    HardwareBuffer.RGBA_8888,
+                    1,
+                    HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
+                            | HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE);
+            if (buffer == null) throw new IllegalStateException("HardwareBuffer allocation returned null");
+            image = EGLExt.eglCreateImageFromHardwareBuffer(eglDisplay, buffer);
+            if (image == null) throw new IllegalStateException("EGLImage import returned null");
+
+            int[] handles = new int[1];
+            GLES20.glGenTextures(1, handles, 0);
+            texture = handles[0];
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+            EGLExt.glEGLImageTargetTexture2DOES(GLES20.GL_TEXTURE_2D, image);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
+                    GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
+                    GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
+                    GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
+                    GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+
+            GLES20.glGenFramebuffers(1, handles, 0);
+            destinationFramebuffer = handles[0];
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, destinationFramebuffer);
+            GLES20.glFramebufferTexture2D(
+                    GLES20.GL_FRAMEBUFFER,
+                    GLES20.GL_COLOR_ATTACHMENT0,
+                    GLES20.GL_TEXTURE_2D,
+                    texture,
+                    0);
+            int status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER);
+            if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
+                throw new IllegalStateException("HardwareBuffer FBO status=0x"
+                        + Integer.toHexString(status));
+            }
+
+            GLES20.glGenFramebuffers(1, handles, 0);
+            sourceFramebuffer = handles[0];
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, sourceFramebuffer);
+            GLES20.glFramebufferTexture2D(
+                    GLES20.GL_FRAMEBUFFER,
+                    GLES20.GL_COLOR_ATTACHMENT0,
+                    GLES20.GL_TEXTURE_2D,
+                    sourceTextureId,
+                    0);
+            status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER);
+            if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
+                throw new IllegalStateException("source texture FBO status=0x"
+                        + Integer.toHexString(status));
+            }
+
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
+            GLES20.glCopyTexSubImage2D(
+                    GLES20.GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+            GLES20.glFinish();
+            int error = GLES20.glGetError();
+            if (error != GLES20.GL_NO_ERROR) {
+                throw new IllegalStateException("HardwareBuffer copy GL error=0x"
+                        + Integer.toHexString(error));
+            }
+
+            Bitmap result = Bitmap.wrapHardwareBuffer(
+                    buffer, ColorSpace.get(ColorSpace.Named.SRGB));
+            if (result == null) throw new IllegalStateException("Bitmap.wrapHardwareBuffer returned null");
+            return result;
+        } finally {
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, previousFramebuffer[0]);
+            GLES20.glViewport(previousViewport[0], previousViewport[1],
+                    previousViewport[2], previousViewport[3]);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+            if (sourceFramebuffer != 0) {
+                GLES20.glDeleteFramebuffers(1, new int[]{sourceFramebuffer}, 0);
+            }
+            if (destinationFramebuffer != 0) {
+                GLES20.glDeleteFramebuffers(1, new int[]{destinationFramebuffer}, 0);
+            }
+            if (texture != 0) GLES20.glDeleteTextures(1, new int[]{texture}, 0);
+            if (image != null) EGLExt.eglDestroyImageKHR(eglDisplay, image);
+            if (buffer != null) buffer.close();
+        }
+    }
+
     void swapBuffers(EGLSurface surface) {
         requireRenderThread();
         boolean trace = Trace.isEnabled()
@@ -841,7 +975,8 @@ final class RootPassBlurBackend {
             Miuix307PassBlurBridge.pauseUpdates(current);
             return;
         }
-        if (requestedSingleFramePulse) {
+        if (requestedSingleFramePulse
+                && bindRequest.domain() == PassBlurDomain.LAUNCHER_WORKSPACE) {
             Miuix307PassBlurBridge.requestSingleUpdate(current, root);
         } else {
             Miuix307PassBlurBridge.resumeUpdates(current);

@@ -529,6 +529,18 @@ internal val animationWorkspaceVisibilitySpec = IntSpec(
     "ms",
     summary = "工作区玻璃淡入淡出时长；已加载的桌面 Hook 即时生效",
 )
+internal val animationAppReturnGlassFadeStartSpec = IntSpec(
+    ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END,
+    "退出应用 · 渐显开始提前量",
+    "ms",
+    summary = "控制原生返回动画结束前多久开始渐显；0 = 动画结束时开始，已加载的桌面 Hook 即时生效",
+)
+internal val animationAppReturnGlassFadeDurationSpec = IntSpec(
+    ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION,
+    "退出应用 · 渐显持续时间",
+    "ms",
+    summary = "控制玻璃从开始渐显到完全显示的时长；0 = 到达开始时机后立即显示，已加载的桌面 Hook 即时生效",
+)
 internal val animationUnlockGlassFadeSpec = IntSpec(
     ConfigSchema.Animation.UNLOCK_GLASS_FADE,
     "解锁时工作区玻璃渐显",

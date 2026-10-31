@@ -187,9 +187,9 @@ final class LauncherGlassHomePresentationHook {
     }
 
     private static void onLauncherSpringStarted(Object owner, Object animation) {
-        onLauncherNativeTransitionStarted(owner, animation, "spring-start");
         String animType = readAnimationType(animation);
         if (!isHomeCloseType(animType)) return;
+        onLauncherNativeTransitionStarted(owner, animation, "spring-start");
 
         LauncherHomeTransitionState.Decision decision =
                 HOME_STATE.onHomeAnimationStarted(owner, animation);
@@ -205,11 +205,11 @@ final class LauncherGlassHomePresentationHook {
 
     private static void onLauncherRunningAnimationAccepted(
             Object owner, Object animation, String animType) {
-        onLauncherNativeTransitionStarted(owner, animation, "spring-retarget");
         if (isHomeCloseType(animType)) {
             onLauncherSpringStarted(owner, animation);
             return;
         }
+        onLauncherNativeTransitionFinished(animation, "spring-retarget-away");
         releaseHomeBarrierOnMain(HOME_STATE.onAnimationRetargetedAway(owner, animation));
     }
 

@@ -29,6 +29,12 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> WORKSPACE_VISIBILITY = integer(
                 "animation_workspace_visibility_ms", 450, 450, 450, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> APP_RETURN_GLASS_FADE_START_BEFORE_END = integer(
+                "animation_app_return_glass_fade_ms", 600, 600, 600, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> APP_RETURN_GLASS_FADE_DURATION = integer(
+                "animation_app_return_glass_fade_duration_ms", 450, 450, 450, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
         // Unlock fly-in uses its own motion fade. The ordinary Workspace
         // visibility preset is intentionally 0ms and must not disable unlock.
         public static final ConfigKey<Integer> UNLOCK_GLASS_FADE = integer(
@@ -629,7 +635,10 @@ public final class ConfigSchema {
     private static List<ConfigKey<?>> createAll() {
         List<ConfigKey<?>> keys = new ArrayList<>();
         add(keys, Core.ENABLED);
-        add(keys, Animation.WORKSPACE_VISIBILITY, Animation.UNLOCK_GLASS_FADE,
+        add(keys, Animation.WORKSPACE_VISIBILITY,
+                Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END,
+                Animation.APP_RETURN_GLASS_FADE_DURATION,
+                Animation.UNLOCK_GLASS_FADE,
                 Animation.FOLDER_OPEN_GLASS_FADE,
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,

@@ -44,7 +44,6 @@ final class LauncherGlassStaticNode {
     private ValueAnimator pressAnimator;
     private ValueAnimator visibilityAnimator;
     private volatile float visibilityAlpha;
-    private volatile float homeReturnAlpha = 1f;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
     private LauncherGlassStaticNode(
@@ -71,7 +70,6 @@ final class LauncherGlassStaticNode {
 
             @Override public void onViewDetachedFromWindow(View v) {
                 folderReturnState.clear();
-                homeReturnAlpha = 1f;
                 resetPressInteraction(false);
                 hideImmediately();
                 LauncherGlassSession live = session;
@@ -240,10 +238,16 @@ final class LauncherGlassStaticNode {
         requestLifecycleRefresh();
     }
 
-    void beginFolderCloseReturn(LauncherGlassGeometry.Snapshot geometry, int width, int height) {
+    void beginFolderCloseReturn(LauncherGlassGeometry.Snapshot geometry, int width, int height,
+                                boolean followsNativeClose) {
         if (disposed) return;
-        folderReturnState.begin(geometry, width, height);
+        folderReturnState.begin(geometry, width, height, followsNativeClose);
         restoreFolderVisibilityImmediately();
+        requestLifecycleRefresh();
+    }
+
+    void updateFolderCloseReturnProgress(float openProgress) {
+        if (disposed || !folderReturnState.updateCloseProgress(openProgress)) return;
         requestLifecycleRefresh();
     }
 
@@ -254,25 +258,55 @@ final class LauncherGlassStaticNode {
     void setSuppressedByDrag(boolean suppressed) {
         if (disposed || !suppressionState.setDrag(suppressed)) return;
         if (suppressed) resetPressInteraction(false);
-        animateVisibilityTo(!suppressionState.isSuppressed());
+        boolean visible = !suppressionState.isSuppressed();
+        View material = materialRef.get();
+        View root = material != null ? material.getRootView() : null;
+        if (!suppressed
+                && ShortcutPopupGlassCoordinator.shouldRestoreWorkspaceGlassImmediately(root)) {
+            setVisibilityImmediately(visible);
+        } else {
+            animateVisibilityTo(visible);
+        }
     }
 
-    float visibilityAlpha() { return visibilityAlpha * homeReturnAlpha; }
+    float visibilityAlpha() { return visibilityAlpha; }
 
-    void updateHomeReturnProgress(float progress) {
-        if (disposed) return;
-        float alpha = LauncherGlassReturnFade.alpha(progress);
-        if (homeReturnAlpha == alpha) return;
-        homeReturnAlpha = alpha;
-        LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
+    /**
+     * Opacity for one Workspace glass draw, resolved from its current visual owner.
+     * The shared layer applies Workspace alpha unless a proxy owns a node; in that
+     * case ordinary nodes take that factor here while the proxy node uses proxy alpha.
+     */
+    float presentationAlpha(
+            View root, View workspace, float workspaceAlpha, boolean workspaceAlphaBypassed) {
+        if (disposed) return 0f;
+        float ownAlpha = visibilityAlpha();
+        if (!Float.isFinite(ownAlpha) || ownAlpha <= 0f) return 0f;
+
+        if (folderReturnState.isActive()) {
+            return ownAlpha * folderReturnState.alpha()
+                    * (workspaceAlphaBypassed ? clampAlpha(workspaceAlpha) : 1f);
+        }
+        if (visualOwnerState.isLaunchProxyActive()) {
+            return ownAlpha * visualOwnerState.alpha();
+        }
+
+        View material = materialRef.get();
+        if (material == null || root == null) return 0f;
+        float sourceAlpha;
+        if (workspace != null) {
+            sourceAlpha = LauncherGlassVisibility.alphaBelowAncestor(material, workspace, root);
+            if (workspaceAlphaBypassed) sourceAlpha *= clampAlpha(workspaceAlpha);
+        } else {
+            // Without a Workspace ancestor to split, this read already includes its alpha.
+            sourceAlpha = LauncherGlassVisibility.alphaBelowRoot(material, root);
+        }
+        float result = ownAlpha * sourceAlpha;
+        return Float.isFinite(result) ? clampAlpha(result) : 0f;
     }
 
-    void resetHomeReturnFade() {
-        if (homeReturnAlpha == 1f) return;
-        homeReturnAlpha = 1f;
-        LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
+    private static float clampAlpha(float alpha) {
+        if (!Float.isFinite(alpha)) return 0f;
+        return Math.max(0f, Math.min(1f, alpha));
     }
 
     /**
@@ -306,6 +340,14 @@ final class LauncherGlassStaticNode {
     }
 
     boolean isLaunchProxyActive() { return visualOwnerState.isLaunchProxyActive(); }
+    boolean isLaunchProxyReturning() { return visualOwnerState.isLaunchProxyReturning(); }
+    float launchProxyReturnProgress() { return visualOwnerState.launchProxyReturnProgress(); }
+
+    boolean isAnimationActive() {
+        return visualOwnerState.isLaunchProxyActive() || folderReturnState.isActive()
+                || (pressAnimator != null && pressAnimator.isStarted())
+                || (visibilityAnimator != null && visibilityAnimator.isStarted());
+    }
 
     boolean retainLastGeometryDuringFade() {
         return visibilityAlpha > 0.001f && suppressionState.isSuppressed();
@@ -335,6 +377,16 @@ final class LauncherGlassStaticNode {
         animator.start();
     }
 
+    private void setVisibilityImmediately(boolean visible) {
+        if (disposed) return;
+        if (visibilityAnimator != null) {
+            visibilityAnimator.cancel();
+            visibilityAnimator = null;
+        }
+        visibilityAlpha = visible ? 1f : 0f;
+        requestLifecycleRefresh();
+    }
+
     void hideImmediately() {
         if (visibilityAnimator != null) {
             visibilityAnimator.cancel();
@@ -344,33 +396,62 @@ final class LauncherGlassStaticNode {
     }
 
     boolean holdLaunchProxyHidden() {
+        return holdLaunchProxyHidden(false, 0f);
+    }
+
+    boolean holdLaunchProxyHidden(boolean returning, float progress) {
         if (disposed) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
-        if (!visualOwnerState.holdLaunchProxyHidden()) return false;
+        boolean wasReturning = visualOwnerState.isLaunchProxyReturning();
+        boolean visualChanged = !visualOwnerState.matchesLaunchProxyVisual(null, 0f);
+        if (!visualOwnerState.holdLaunchProxyHidden(returning, progress)) return false;
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
-        return true;
+        if (live != null && (!wasActive || wasReturning != visualOwnerState.isLaunchProxyReturning())) {
+            live.onStaticLaunchProxyStateChanged(this,
+                    true, visualOwnerState.isLaunchProxyReturning());
+        }
+        if (live != null && visualChanged) live.requestStaticRedraw();
+        return visualChanged;
     }
 
     boolean updateLaunchProxyGeometry(float left, float top, float right, float bottom) {
+        return updateLaunchProxyGeometry(left, top, right, bottom, 1f);
+    }
+
+    boolean updateLaunchProxyGeometry(
+            float left, float top, float right, float bottom, float alpha) {
+        return updateLaunchProxyGeometry(left, top, right, bottom, alpha, false, 0f);
+    }
+
+    boolean updateLaunchProxyGeometry(
+            float left, float top, float right, float bottom, float alpha,
+            boolean returning, float progress) {
         if (disposed) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
+        boolean wasReturning = visualOwnerState.isLaunchProxyReturning();
         boolean hadGeometry = visualOwnerState.copyLaunchProxyRect() != null;
+        float[] rect = new float[]{left, top, right, bottom};
+        boolean visualChanged = !visualOwnerState.matchesLaunchProxyVisual(rect, alpha);
         if (!visualOwnerState.updateLaunchProxyRect(
-                new float[]{left, top, right, bottom})) return false;
+                rect, alpha, returning, progress)) return false;
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
-        if (live != null) live.requestStaticRedraw();
+        if (live != null && (!wasActive || wasReturning != visualOwnerState.isLaunchProxyReturning())) {
+            live.onStaticLaunchProxyStateChanged(this,
+                    true, visualOwnerState.isLaunchProxyReturning());
+        }
+        if (live != null && visualChanged) live.requestStaticRedraw();
         return !hadGeometry;
     }
 
     void endLaunchProxy() {
-        resetHomeReturnFade();
         if (disposed || !visualOwnerState.endLaunchProxy()) return;
         invalidateVisualOwnerGeometry();
+        LauncherGlassSession live = session;
+        if (live != null) live.onStaticLaunchProxyStateChanged(this, false, false);
         requestLifecycleRefresh();
     }
 
@@ -463,9 +544,9 @@ final class LauncherGlassStaticNode {
         GlassComponentStyle style = componentStyle();
         if (disposed || material == null || root == null || sharedGlobalToRoot == null
                 || style == null || !style.enabled || visibilityAlpha <= 0.001f) return null;
-        // The OEM can keep its desktop background image transparent until a
-        // hidden closing spring ends. Our cached fade needs the desktop glass
-        // immediately, at its recorded desktop bounds rather than that image.
+        // The OEM can keep its desktop background image transparent until the
+        // closing spring ends. Keep the return glass at its recorded desktop
+        // bounds instead of following that temporarily hidden image.
         LauncherGlassGeometry.Snapshot returning = folderReturnState.geometryForRoot(rootWidth, rootHeight);
         if (returning != null) return returning;
         if (rootWidth <= 0 || rootHeight <= 0) return null;

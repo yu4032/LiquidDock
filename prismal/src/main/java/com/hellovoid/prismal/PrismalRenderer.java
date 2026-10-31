@@ -22,6 +22,39 @@ import java.util.Map;
 public final class PrismalRenderer implements AutoCloseable {
     private static final float BLUR_FBO_SCALE = 0.5f;
 
+    /**
+     * Debug probe source for the parallel Workspace HWUI output. This deliberately shares the
+     * same single-edge material and per-feature gates as the GLES renderer; only the backend
+     * that consumes the returned GLSL template differs.
+     */
+    public static String workspaceHwuiProbeFragmentSource() {
+        return workspaceHwuiProbeFragmentSource(false);
+    }
+
+    /** Match the GLES shader branch selected for a Workspace node with optional edge material. */
+    public static String workspaceHwuiProbeFragmentSource(boolean decorated) {
+        return workspaceHwuiProbeFragmentSource(decorated, false);
+    }
+
+    /** Keep the reconstructed edge footprint during motion with a lower-cost three-tap path. */
+    public static String workspaceHwuiProbeFragmentSource(
+            boolean decorated, boolean transitionMaterial) {
+        String source = PrismalOs4InvariantShader.apply(
+                PrismalComponentGateShader.apply(
+                        PrismalOpticalEdgeShader.apply(
+                                PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
+        if (!decorated) return source;
+        source = PrismalInteriorFastPath.apply(source);
+        source = PrismalEdgeDecorationShader.apply(source);
+        if (transitionMaterial) return PrismalMotionMaterialShader.apply(source);
+        return PrismalReconstructed27Shader.apply(source);
+    }
+
+    /** Keep HWUI's OS4 lighting uniforms numerically identical to the GLES renderer. */
+    public static void computeWorkspaceHwuiProbeInvariants(PrismalParams params, float[] out) {
+        PrismalOs4InvariantShader.compute(params, out);
+    }
+
     private static final float[] FULL_QUAD = new float[]{
             -1f, -1f, 0f, 0f,
              1f, -1f, 1f, 0f,
@@ -121,7 +154,9 @@ public final class PrismalRenderer implements AutoCloseable {
     // isolated, and allowed to fail without destroying the original material.
     private int baselineGlassProgram;
     private int decoratedGlassProgram;
+    private int motionDecoratedGlassProgram;
     private boolean decorationProgramUnavailable;
+    private boolean transientQualityActive;
     private PrismalEdgeDecoration lastUploadedEdge;
     private float lastUploadedEdgeDensity = Float.NaN;
     private float lastUploadedMinDimension = Float.NaN;
@@ -131,6 +166,11 @@ public final class PrismalRenderer implements AutoCloseable {
     public void setEdgeDecoration(PrismalEdgeDecoration style, float density) {
         edgeDecoration = style != null ? style : PrismalEdgeDecoration.NONE;
         edgeDensity = Float.isFinite(density) ? Math.max(0.1f, density) : 1f;
+    }
+
+    /** Reduce only decorated Workspace chromatic taps during a live launch/return proxy. */
+    public void setTransientQualityActive(boolean active) {
+        transientQualityActive = active;
     }
     private int sourceTexture;
     private int sourceFramebuffer;
@@ -446,6 +486,14 @@ public final class PrismalRenderer implements AutoCloseable {
     }
     /** Prepared screen-anchored blur, owned by this renderer and its current GL context. */
     public int preparedBlurTexture() { return backdropPrepared ? blurTextureV : 0; }
+    /** Prepared, orientation-normalized sharp backdrop used by every Prismal material sample. */
+    public int preparedSourceTexture() { return backdropPrepared ? sourceTexture : 0; }
+    /** Physical dimensions of the prepared sharp backdrop. */
+    public int preparedSourceWidth() { return backdropPrepared ? renderWidth : 0; }
+    public int preparedSourceHeight() { return backdropPrepared ? renderHeight : 0; }
+    /** Physical dimensions of the prepared blur texture, used by GPU-shared consumers. */
+    public int preparedBlurWidth() { return backdropPrepared ? blurWidth : 0; }
+    public int preparedBlurHeight() { return backdropPrepared ? blurHeight : 0; }
 
     public int framebufferWidth() { return width; }
     public int framebufferHeight() { return height; }
@@ -553,16 +601,25 @@ public final class PrismalRenderer implements AutoCloseable {
                                         PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT))));
                 // The baseline program stays untouched: on Mali, this branch hurts the
                 // smaller baseline shader while helping the decorated programs.
-                fragment = PrismalInteriorFastPath.apply(fragment);
-                fragment = PrismalEdgeDecorationShader.apply(fragment);
+                String transitionFragment = PrismalEdgeDecorationShader.apply(
+                        PrismalInteriorFastPath.apply(fragment));
+                String motionFragment = PrismalMotionMaterialShader.apply(transitionFragment);
+                String decoratedFragment = transitionFragment;
                 String vertex = PrismalRasterGuardShader.applyWithEdgeGuard(
                         PrismalShaderSources.VERTEX);
+                try {
+                    motionDecoratedGlassProgram = createProgram(vertex, motionFragment);
+                } catch (RuntimeException motionShaderRejected) {
+                    android.util.Log.w("LiquidDock-Prismal",
+                            "Workspace transition shader unavailable; using full material",
+                            motionShaderRejected);
+                }
                 // The full reconstruction is intentionally more expensive.
                 // If a Mali GLES2 compiler rejects it, fall back to the
                 // known smaller OPTICAL shader rather than losing BOTH the
                 // rim and cast shadow or dropping straight to plain glass.
                 try {
-                    String full27 = PrismalReconstructed27Shader.apply(fragment);
+                    String full27 = PrismalReconstructed27Shader.apply(decoratedFragment);
                     decoratedGlassProgram = createProgram(vertex, full27);
                     android.util.Log.i("LiquidDock-Prismal",
                             "Full reconstructed-27 optical stages ready");
@@ -571,9 +628,13 @@ public final class PrismalRenderer implements AutoCloseable {
                             "Experimental reconstructed-27 shader unavailable; "
                                     + "retaining previous dual-band optics",
                             reconstructed27Rejected);
-                    decoratedGlassProgram = createProgram(vertex, fragment);
+                    String fallbackFragment = motionDecoratedGlassProgram != 0
+                            ? motionFragment : transitionFragment;
+                    decoratedGlassProgram = createProgram(vertex, fallbackFragment);
+                    // Keep the simpler launch transition shader distinct from the
+                    // compatibility-quality stable shader even when reconstructed-27 fails.
                     android.util.Log.i("LiquidDock-Prismal",
-                            "In-pass SDF edge shader ready (compatibility fallback)");
+                            "In-pass SDF edge shader ready (stable compatibility fallback)");
                 }
             } catch (RuntimeException gpuRejectedShader) {
                 decorationProgramUnavailable = true;
@@ -581,8 +642,14 @@ public final class PrismalRenderer implements AutoCloseable {
                         "Optional edge shader failed; keeping original glass", gpuRejectedShader);
             }
         }
-        int selected = wantsDecorations && decoratedGlassProgram != 0
-                ? decoratedGlassProgram : baselineGlassProgram;
+        int selected = baselineGlassProgram;
+        if (wantsDecorations) {
+            if (transientQualityActive && motionDecoratedGlassProgram != 0) {
+                selected = motionDecoratedGlassProgram;
+            } else if (decoratedGlassProgram != 0) {
+                selected = decoratedGlassProgram;
+            }
+        }
         if (glassProgram != selected) {
             glassProgram = selected;
             glassPositionLocation = requireAttrib(glassProgram, "a_position");
@@ -601,7 +668,7 @@ public final class PrismalRenderer implements AutoCloseable {
             lastUploadedMinDimension = Float.NaN;
             lastUploadedGuard = Float.NaN;
         }
-        return selected == decoratedGlassProgram && selected != 0;
+        return selected == decoratedGlassProgram || selected == motionDecoratedGlassProgram;
     }
 
     private void ensureTargets(int nextWidth, int nextHeight) {
@@ -788,6 +855,12 @@ public final class PrismalRenderer implements AutoCloseable {
             uploadStaticGlassParams(p);
             cachedStaticParams = p;
         }
+
+        // Keep dispersion visible in motion; the fast interior and deferred reconstruction
+        // provide the motion savings while caustics are disabled.
+        uniform1f("u_chromaticAberration", Math.max(0f, p.chromaticAberration));
+        uniform1f("u_causticIntensity",
+                transientQualityActive ? 0f : Math.max(0f, p.causticIntensity));
 
         // Lens reach is the only optics value that depends on this node's dimensions.
         float minGlassDim = Math.min(g.glassWidth, g.glassHeight);
@@ -1069,8 +1142,14 @@ public final class PrismalRenderer implements AutoCloseable {
         if (blurVProgram != 0) GLES20.glDeleteProgram(blurVProgram);
         if (baselineGlassProgram != 0) GLES20.glDeleteProgram(baselineGlassProgram);
         if (decoratedGlassProgram != 0) GLES20.glDeleteProgram(decoratedGlassProgram);
+        if (motionDecoratedGlassProgram != 0
+                && motionDecoratedGlassProgram != decoratedGlassProgram) {
+            GLES20.glDeleteProgram(motionDecoratedGlassProgram);
+        }
         baselineGlassProgram = decoratedGlassProgram = glassProgram = 0;
+        motionDecoratedGlassProgram = 0;
         decorationProgramUnavailable = false;
+        transientQualityActive = false;
         sourceProgram = blurHProgram = blurVProgram = 0;
         sourcePositionLocation = sourceUvLocation = sourceTextureLocation = -1;
         blurHPositionLocation = blurHTextureLocation = blurHTexelSizeLocation
