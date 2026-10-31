@@ -74,6 +74,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile PrismalParams prismalParams;
     private volatile PrismalHighlightProfile highlightProfile;
     private volatile boolean folderOutputFrozen;
+    private volatile boolean folderCloseGeometryActive;
     private volatile boolean hwuiOutputActive;
     private boolean folderHwuiExportAttempted;
     // RootPassBlurBackend retains its normalized FBO after freezing popup updates.
@@ -216,10 +217,13 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
         // must not re-capture from behind its own now-visible overlay.
     }
 
-    /** Keep the last GPU buffer while the View performs its closing fade. */
-    void freezeFolderOutput() {
+    /** Freeze capture/config updates but keep cached-background geometry renders alive if the
+     * native folder close spring owns the visual transition.
+     */
+    void freezeFolderOutput(boolean keepCloseGeometryLive) {
         if (!folderBackdrop || shuttingDown) return;
         folderOutputFrozen = true;
+        folderCloseGeometryActive = keepCloseGeometryLive;
         sourceBackend.setUpdatesEnabled(false, "folder-cached-close");
     }
 
@@ -266,7 +270,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     void updateFolderFrame(LauncherGlassGeometry.Snapshot next, float nativeOpenProgress) {
-        if (shuttingDown || folderOutputFrozen || !folderBackdrop || next == null) return;
+        if (shuttingDown || (folderOutputFrozen && !folderCloseGeometryActive)
+                || !folderBackdrop || next == null) return;
         float opacity = OpenFolderBackdropPolicy.backdropOpacity(nativeOpenProgress);
         LauncherGlassGeometry.Snapshot old = geometry;
         if (old != null && old.sameAs(next) && Float.compare(opacity, backdropOpacity) == 0) return;
@@ -443,7 +448,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private void renderCurrent() {
         LauncherGlassGeometry.Snapshot currentGeometry = geometry;
         OutputState currentOutput = output;
-        if (shuttingDown || folderOutputFrozen || (folderBackdrop && hwuiOutputActive)
+        if (shuttingDown || (folderOutputFrozen && !folderCloseGeometryActive)
+                || (folderBackdrop && hwuiOutputActive)
                 || !backdropPrepared || currentGeometry == null
                 || currentOutput == null || currentOutput.eglSurface == EGL14.EGL_NO_SURFACE
                 || logicalWidth <= 0 || logicalHeight <= 0) return;

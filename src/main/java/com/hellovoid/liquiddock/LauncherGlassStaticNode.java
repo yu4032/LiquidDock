@@ -238,10 +238,16 @@ final class LauncherGlassStaticNode {
         requestLifecycleRefresh();
     }
 
-    void beginFolderCloseReturn(LauncherGlassGeometry.Snapshot geometry, int width, int height) {
+    void beginFolderCloseReturn(LauncherGlassGeometry.Snapshot geometry, int width, int height,
+                                boolean followsNativeClose) {
         if (disposed) return;
-        folderReturnState.begin(geometry, width, height);
+        folderReturnState.begin(geometry, width, height, followsNativeClose);
         restoreFolderVisibilityImmediately();
+        requestLifecycleRefresh();
+    }
+
+    void updateFolderCloseReturnProgress(float openProgress) {
+        if (disposed || !folderReturnState.updateCloseProgress(openProgress)) return;
         requestLifecycleRefresh();
     }
 
@@ -269,7 +275,8 @@ final class LauncherGlassStaticNode {
         if (!Float.isFinite(ownAlpha) || ownAlpha <= 0f) return 0f;
 
         if (folderReturnState.isActive()) {
-            return ownAlpha * (workspaceAlphaBypassed ? clampAlpha(workspaceAlpha) : 1f);
+            return ownAlpha * folderReturnState.alpha()
+                    * (workspaceAlphaBypassed ? clampAlpha(workspaceAlpha) : 1f);
         }
         if (visualOwnerState.isLaunchProxyActive()) {
             return ownAlpha * visualOwnerState.alpha();
@@ -501,9 +508,9 @@ final class LauncherGlassStaticNode {
         GlassComponentStyle style = componentStyle();
         if (disposed || material == null || root == null || sharedGlobalToRoot == null
                 || style == null || !style.enabled || visibilityAlpha <= 0.001f) return null;
-        // The OEM can keep its desktop background image transparent until a
-        // hidden closing spring ends. Our cached fade needs the desktop glass
-        // immediately, at its recorded desktop bounds rather than that image.
+        // The OEM can keep its desktop background image transparent until the
+        // closing spring ends. Keep the return glass at its recorded desktop
+        // bounds instead of following that temporarily hidden image.
         LauncherGlassGeometry.Snapshot returning = folderReturnState.geometryForRoot(rootWidth, rootHeight);
         if (returning != null) return returning;
         if (rootWidth <= 0 || rootHeight <= 0) return null;

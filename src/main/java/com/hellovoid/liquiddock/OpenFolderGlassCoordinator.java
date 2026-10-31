@@ -414,12 +414,13 @@ final class OpenFolderGlassCoordinator {
     static void onClosing(View folderCling, boolean animated) {
         State state = current;
         if (!matches(state, folderCling)) return;
-        boolean fade = state.layer != null && state.layer.getAlpha() > 0f;
+        boolean followNativeScale = animated && state.animationSpecReady && state.layer != null;
+        boolean fade = !followNativeScale && state.layer != null && state.layer.getAlpha() > 0f;
         if (Trace.isEnabled()) {
             Trace.setCounter("LD.Folder.NativeCloseSpring", animated ? 1 : 0);
             Trace.setCounter("LD.Folder.CachedFade", fade ? 1 : 0);
         }
-        state.close.begin(state.serial, animated, fade);
+        state.close.begin(state.serial, animated, fade || followNativeScale);
         OWNER.beginClose(state.serial);
         // Recents-return flags describe the earlier modal handoff, not the
         // newly accepted native CLOSE. Do not keep sync() in its Recents-only
@@ -431,12 +432,12 @@ final class OpenFolderGlassCoordinator {
         LauncherGlassGeometry.Snapshot endpoint = icon != null
                 ? LauncherGlassGeometry.resolveStatic(state.width, state.height,
                         icon.left, icon.top, icon.right, icon.bottom, icon.radius) : null;
-        MiuixFolderGlassHook.onExpandedFolderFadeStarted(
-                state.serial, endpoint, state.width, state.height);
-        if (state.session != null) state.session.freezeFolderOutput();
+        if (state.session != null) state.session.freezeFolderOutput(followNativeScale);
+        MiuixFolderGlassHook.onExpandedFolderCloseStarted(
+                state.serial, endpoint, state.width, state.height, followNativeScale);
         onClosingAnimationMaterialUpdated();
         if (fade) state.layer.fadeOutFolder(() -> onCachedCloseFadeFinished(state));
-        else onCachedCloseFadeFinished(state);
+        else if (!followNativeScale) onCachedCloseFadeFinished(state);
         View root = state.root.get();
         if (root != null) root.postDelayed(() -> {
             if (live(state) && state.motion.isClosing()) {
@@ -552,7 +553,6 @@ final class OpenFolderGlassCoordinator {
             if (Trace.isEnabled() && state.layer != null) {
                 Trace.setCounter("LD.Folder.OutputAlpha", Math.round(state.layer.getAlpha() * 1000f));
             }
-            return;
         }
         try {
             View root = state.root.get(), cling = state.cling.get(), folder = state.folder.get();
@@ -616,18 +616,28 @@ final class OpenFolderGlassCoordinator {
             if (target != null) state.expandedFrame = target;
             float observed = sampleNativeProgress(state, animImage);
             float amount = state.motion.sample(observed);
-            // One root-coordinate path for OPEN: no child-View
-            // layout-origin handoff, one-time offset or second animation.
+            // The same root-coordinate interpolation serves OPEN and CLOSE;
+            // native progress reverses it without a second glass animation.
             OpenFolderGlassGeometry.Frame frame = state.geometry.acceptProgress(
                     state.closedFrame, target, amount, state.width, state.height);
             if (frame == null) return;
+            if (state.motion.isClosing()) {
+                MiuixFolderGlassHook.onExpandedFolderCloseProgress(state.serial, amount);
+                if (amount <= 0.001f && !state.closeVisualFinishedSignaled) {
+                    state.closeVisualFinishedSignaled = true;
+                    root.post(() -> onCachedCloseFadeFinished(state));
+                }
+            }
             // Follow native Folme with the glass scene, without duplicating
             // each geometry sample into a separate backdrop-outline update.
             LauncherGlassGeometry.Snapshot folderGeometry = LauncherGlassGeometry.resolveStatic(
                     state.width, state.height, frame.left, frame.top,
                     frame.right, frame.bottom, frame.radius);
             state.session.updateFolderFrame(folderGeometry, amount);
-            if (state.layer != null) state.layer.updateFolderFrame(folderGeometry, amount);
+            if (state.layer != null) {
+                state.layer.updateFolderFrame(
+                        folderGeometry, amount, state.motion.isClosing());
+            }
         } catch (Throwable error) {
             MainHook.log(TAG + " geometry fallback: " + error);
             releaseAll();
@@ -899,6 +909,7 @@ final class OpenFolderGlassCoordinator {
         final OpenFolderMotionState motion = new OpenFolderMotionState();
         final FolderCloseCompletionGate close = new FolderCloseCompletionGate();
         boolean animationSpecReady;
+        boolean closeVisualFinishedSignaled;
         float nativeTargetX, nativeTargetY, nativeSourceWidth, nativeSourceHeight;
         float nativeTargetWidth, nativeTargetHeight, nativeExpandedScaleX = Float.NaN;
         final View.OnAttachStateChangeListener attachListener = new View.OnAttachStateChangeListener() {

@@ -69,7 +69,13 @@ final class ShortcutPopupGlassLayer extends FrameLayout
         return true;
     }
 
-    void updateFolderFrame(LauncherGlassGeometry.Snapshot geometry, float progress) {
+    void updateFolderFrame(
+            LauncherGlassGeometry.Snapshot geometry, float progress, boolean closing) {
+        if (closing) {
+            float sourceAlpha = LauncherGlassReturnFade.alpha(1f - progress);
+            float glassAlpha = 1f - sourceAlpha;
+            if (Math.abs(getAlpha() - glassAlpha) > 0.001f) setAlpha(glassAlpha);
+        }
         if (hwuiView != null) hwuiView.updateFrame(geometry, progress);
     }
 
