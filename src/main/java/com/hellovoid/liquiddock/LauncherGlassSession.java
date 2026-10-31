@@ -1398,6 +1398,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     long sceneAtExport = frame.generation;
                     long wallpaperAtExport = pendingWallpaperFrame.generation;
                     long exportSerial = ++hwuiProbeExportSerial;
+                    // Publish callbacks can run on the UI thread before this GL method finishes.
+                    // Reset the dirty bit before enqueue, so a rejected publish cannot be
+                    // overwritten by a later render-thread assignment.
+                    hwuiProbeExportDirty = false;
                     if (probeGeometryChanged) {
                         mainHandler.post(() -> {
                             if (isCurrentHwuiProbeExport(root, sceneAtExport, exportSerial,
@@ -1430,7 +1434,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         hwuiProbeBackdropWallpaperAuthoritative =
                                 pendingWallpaperFrame.authoritative;
                     }
-                    hwuiProbeExportDirty = false;
                     MainHook.log(TAG + " HWUI probe backdrops exported raw="
                             + rawBitmap.getWidth() + "x" + rawBitmap.getHeight()
                             + " blur=" + blurredBitmap.getWidth() + "x" + blurredBitmap.getHeight()
