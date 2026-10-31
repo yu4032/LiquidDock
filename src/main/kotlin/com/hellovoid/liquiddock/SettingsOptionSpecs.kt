@@ -533,7 +533,7 @@ internal val animationAppReturnGlassFadeSpec = IntSpec(
     ConfigSchema.Animation.APP_RETURN_GLASS_FADE,
     "退出应用 · 工作区玻璃渐显",
     "ms",
-    summary = "返回桌面时从原生退出动画开始渐显；时长独立于系统动画，0 = 立即显示；已加载的桌面 Hook 即时生效",
+    summary = "按原生返回进度在动画结束前开始渐显；此时长是结束前的渐显窗口，0 = 立即显示；已加载的桌面 Hook 即时生效",
 )
 internal val animationUnlockGlassFadeSpec = IntSpec(
     ConfigSchema.Animation.UNLOCK_GLASS_FADE,

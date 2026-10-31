@@ -900,6 +900,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         View workspaceMaterial = null;
         boolean launchProxyActive = false;
         boolean launchProxyReturning = false;
+        float launchProxyReturnProgress = 0f;
         int staticGeometryReads = 0;
         int staticCacheHits = 0;
         int staticNullCacheHits = 0;
@@ -927,6 +928,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     launchProxyActive = true;
                     if (node.isLaunchProxyReturning()) {
                         launchProxyReturning = true;
+                        launchProxyReturnProgress = Math.max(
+                                launchProxyReturnProgress, node.launchProxyReturnProgress());
                     }
                 }
                 if (forceStaticCapture) {
@@ -996,7 +999,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
 
         float workspaceAlpha = LauncherGlassStaticLayer.syncWorkspacePresentation(
-                root, workspaceMaterial, launchProxyActive, launchProxyReturning);
+                root, workspaceMaterial, launchProxyActive, launchProxyReturning,
+                launchProxyReturnProgress);
         View workspaceRoot = LauncherGlassHierarchy.findWorkspaceRoot(workspaceMaterial);
         for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();

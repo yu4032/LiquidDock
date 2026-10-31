@@ -25,6 +25,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     private static final WeakHashMap<View, Long> UNLOCK_END_BY_ROOT = new WeakHashMap<>();
     private static final AtomicInteger HWUI_PROBE_SCROLL_MUTATIONS = new AtomicInteger();
+    private static final DecelerateInterpolator APP_RETURN_INTERPOLATOR =
+            new DecelerateInterpolator();
 
     private final WeakReference<View> rootRef;
     private WeakReference<View> workspaceRef = new WeakReference<>(null);
@@ -40,7 +42,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
     private ValueAnimator motionAnimator;
-    private ValueAnimator launchReturnAnimator;
+    private long launchReturnStartedAtMs;
+    private float launchReturnStartProgress;
     private boolean folderOpeningFadeRunning;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
@@ -67,7 +70,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                     if (stableRoot == v && !v.isAttachedToWindow()) {
                         cancelSceneAnimation();
                         cancelMotionAnimation();
-                        cancelLaunchReturnReveal();
                         forget(stableRoot, LauncherGlassStaticLayer.this);
                     }
                 });
@@ -200,10 +202,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return workspace.getScrollX();
     }
 
-    /** UI pre-draw syncs native opacity while app-return reveal runs on the cached output. */
+    /** UI pre-draw syncs cached glass opacity with native Workspace and app-return progress. */
     static float syncWorkspacePresentation(
             View root, View material, boolean launchProxyActive,
-            boolean launchProxyReturning) {
+            boolean launchProxyReturning, float returnProgress) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null) return 1f;
         View workspace = layer.workspaceRef.get();
@@ -227,11 +229,24 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         layer.launchProxyActive = launchProxyActive;
         layer.launchProxyReturning = launchProxyActive && launchProxyReturning;
         if (layer.launchProxyReturning) {
-            if (!wasReturning) layer.startLaunchReturnReveal();
+            long now = SystemClock.uptimeMillis();
+            float progress = clampProgress(returnProgress);
+            if (!wasReturning) {
+                layer.launchReturnStartedAtMs = now;
+                layer.launchReturnStartProgress = progress;
+                layer.launchReturnAlpha = 0f;
+            }
+            layer.launchReturnAlpha = Math.max(layer.launchReturnAlpha,
+                    layer.launchReturnAlphaForProgress(
+                            progress, now,
+                            AnimationRuntimeState.appReturnGlassFadeDurationMs()));
         } else if (launchProxyActive) {
-            layer.cancelLaunchReturnReveal();
+            layer.launchReturnStartedAtMs = 0L;
+            layer.launchReturnStartProgress = 0f;
             layer.launchReturnAlpha = 0f;
-        } else if (layer.launchReturnAnimator == null) {
+        } else {
+            layer.launchReturnStartedAtMs = 0L;
+            layer.launchReturnStartProgress = 0f;
             layer.launchReturnAlpha = 1f;
         }
         layer.applyLayerAlpha();
@@ -361,38 +376,29 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         }
     }
 
-    private void startLaunchReturnReveal() {
-        cancelLaunchReturnReveal();
-        launchReturnAlpha = 0f;
-        long duration = AnimationRuntimeState.appReturnGlassFadeDurationMs();
-        if (duration <= 0L) {
-            launchReturnAlpha = 1f;
-            return;
-        }
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        launchReturnAnimator = animator;
-        animator.setDuration(duration);
-        animator.setInterpolator(new DecelerateInterpolator());
-        animator.addUpdateListener(value -> {
-            if (disposed || launchReturnAnimator != value) return;
-            launchReturnAlpha = (Float) value.getAnimatedValue();
-            applyLayerAlpha();
-        });
-        animator.addListener(new AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(Animator animation) {
-                if (launchReturnAnimator != animation) return;
-                launchReturnAnimator = null;
-                launchReturnAlpha = 1f;
-                applyLayerAlpha();
-            }
-        });
-        animator.start();
+    private float launchReturnAlphaForProgress(
+            float progress, long nowMs, long configuredFadeMs) {
+        if (configuredFadeMs <= 0L || progress >= 0.999f) return 1f;
+        long elapsedMs = Math.max(0L, nowMs - launchReturnStartedAtMs);
+        float progressDelta = progress - launchReturnStartProgress;
+        if (elapsedMs <= 0L || progressDelta <= 0.001f) return 0f;
+
+        // The Launcher supplies normalized native transition progress, but not its remaining
+        // wall-clock duration. Estimate the end time from elapsed/progress and use the configured
+        // duration as a trailing reveal window. This keeps geometry and alpha on the same pre-draw.
+        double estimatedTotalMs = elapsedMs / (double) progressDelta;
+        double remainingMs = estimatedTotalMs * (1d - progress);
+        if (!Double.isFinite(remainingMs) || remainingMs < 0d) return 0f;
+        double effectiveFadeMs = Math.min(configuredFadeMs, estimatedTotalMs);
+        if (effectiveFadeMs <= 0d || remainingMs >= effectiveFadeMs) return 0f;
+
+        float fraction = (float) (1d - remainingMs / effectiveFadeMs);
+        return APP_RETURN_INTERPOLATOR.getInterpolation(
+                Math.max(0f, Math.min(1f, fraction)));
     }
 
-    private void cancelLaunchReturnReveal() {
-        ValueAnimator previous = launchReturnAnimator;
-        launchReturnAnimator = null;
-        if (previous != null) previous.cancel();
+    private static float clampProgress(float progress) {
+        return Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
     }
 
     private void cancelSceneAnimation() {
@@ -414,7 +420,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         disposed = true;
         cancelSceneAnimation();
         cancelMotionAnimation();
-        cancelLaunchReturnReveal();
         View root = rootRef.get();
         if (root != null) {
             root.removeOnAttachStateChangeListener(rootAttachListener);
