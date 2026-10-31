@@ -64,6 +64,11 @@ final class ShortcutPopupGlassHwuiView extends View {
                     rawBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             BitmapShader blurInput = new BitmapShader(
                     blurBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+            // BitmapShader defaults to NEAREST as a RuntimeShader child, regardless of
+            // Paint.FILTER_BITMAP_FLAG. Explicit linear filtering is essential for the
+            // half-resolution prepared blur and subpixel refraction offsets.
+            rawInput.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
+            blurInput.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
             bindBackdrop(baselineShader, rawInput, blurInput, rawBitmap, blurBitmap, width, height);
             bindBackdrop(decoratedShader, rawInput, blurInput, rawBitmap, blurBitmap, width, height);
             if (motionDecoratedShader != null) {
