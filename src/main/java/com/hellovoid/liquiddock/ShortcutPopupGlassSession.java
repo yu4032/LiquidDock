@@ -304,8 +304,9 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
         PrismalEdgeDecoration decoration = GlassEdgeEffects.current(GlassEdgeEffects.FOLDER);
         boolean decorated = decoration.hasBacklit() || decoration.hasShadow();
-        boolean transientMaterial = decorated
-                && openProgress < 0.995f && motionDecoratedShader != null;
+        // This variant contains the base Prismal material with its exact-zero
+        // interior work skipped; it is useful even when edge decoration is off.
+        boolean transientMaterial = openProgress < 0.995f && motionDecoratedShader != null;
         RuntimeShader shader = transientMaterial ? motionDecoratedShader
                 : decorated ? decoratedShader : baselineShader;
         float density = sourceDensity;
@@ -461,6 +462,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             ensureGl();
             sourceBackend.makePbufferCurrent();
             PrismalParams drawParams = prismalParams;
+            prismalRenderer.setTransientQualityActive(
+                    folderBackdrop && backdropOpacity < 0.995f);
             // The folder output is already a logical 1:1 full-root surface.
             // Render into its back buffer directly, avoiding an extra full-screen
             // RGBA target and copy while the native folder spring is running.
