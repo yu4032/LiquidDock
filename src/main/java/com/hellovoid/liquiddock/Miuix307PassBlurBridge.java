@@ -25,7 +25,6 @@ final class Miuix307PassBlurBridge {
     private static final String FRAME_SYNC_TAG = "[DC][DockFrameSync]";
     private static final String GBOARD_FRAME_SYNC_TAG = "[DC][GboardFrameSync]";
     private static final String WORKSPACE_FRAME_SYNC_TAG = "[DC][WorkspaceFrameSync]";
-    private static final int INITIAL_UPDATE_FRAMES = 4;
     private static final int FORCE_REFRESH_LEASE_MS = 250;
     private static final long FORCE_REFRESH_MIN_INTERVAL_MS = 50L;
     private static final long FORCE_REFRESH_ERROR_LOG_MIN_MS = 5000L;
@@ -241,8 +240,9 @@ final class Miuix307PassBlurBridge {
             return;
         }
         setUpdatesEnabled(binding, true, false);
+        // The Session pauses ordinary Workspace capture after onFreshFrame has been
+        // acknowledged by RootPassBlurBackend, not after a guessed number of UI frames.
         host.postInvalidateOnAnimation();
-        schedulePauseUpdates(host, binding, INITIAL_UPDATE_FRAMES);
     }
 
     /** Persistent resume used by Dock and root-bound live-capture domains. */
@@ -264,20 +264,6 @@ final class Miuix307PassBlurBridge {
     static void pauseUpdates(Binding binding) {
         if (binding == null) return;
         setUpdatesEnabled(binding, false, false);
-    }
-
-    private static void schedulePauseUpdates(View host, Binding binding, int framesLeft) {
-        if (host == null || binding == null || !binding.bound) return;
-        if (framesLeft <= 0) {
-            if (binding.domain == PassBlurDomain.LAUNCHER_WORKSPACE
-                    && WorkstationProducerPolicy.shouldPauseSharedProducer(
-                    true, MainHook.isWorkstationMode())
-                    && !binding.workspaceTransitionFrameSync) {
-                pauseUpdates(binding);
-            }
-            return;
-        }
-        host.postOnAnimation(() -> schedulePauseUpdates(host, binding, framesLeft - 1));
     }
 
     private static void setUpdatesEnabled(Binding binding, boolean enabled, boolean force) {
