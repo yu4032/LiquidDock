@@ -229,6 +229,17 @@ final class LauncherGlassHwuiProbeView extends View {
         }
     }
 
+    /** Drop Java/Skia inputs after detach. Let HWUI release in-flight GPU references safely. */
+    void clearBackdrops() {
+        baselineShader = null;
+        decoratedShader = null;
+        backdrop = null;
+        blurredBackdrop = null;
+        backdropLogicalWidth = 0;
+        backdropLogicalHeight = 0;
+        backdropRotation = -1;
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
