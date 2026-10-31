@@ -141,6 +141,7 @@ public final class PresetManager {
         Map<String, Object> source = new LinkedHashMap<>();
         source.put("liquiddock_enabled", Boolean.TRUE);
         source.put("animation_workspace_visibility_ms", 0);
+        source.put(ConfigSchema.Animation.APP_RETURN_GLASS_FADE.name(), 600);
         // Distinct from ordinary Workspace reveal: retain the native unlock fade.
         source.put(ConfigSchema.Animation.UNLOCK_GLASS_FADE.name(), 450);
         // Folder opening has its own visual timing. The general Workspace

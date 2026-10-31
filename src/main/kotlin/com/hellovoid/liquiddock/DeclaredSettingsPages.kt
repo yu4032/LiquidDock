@@ -75,9 +75,10 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
         toggle(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING, "取消壁纸压暗",
             "取消多任务壁纸与转场的额外压暗，保留原生模糊、缩放和动画；下次切换起生效，无需重启桌面"),
     ))
-    page(Page.AnimationWorkspace, "按工作区和 Dock 分别调整玻璃过渡时间。", listOf(
-        SettingsBlock.Header("animation.workspace", "工作区与文件夹"),
-        row(animationWorkspaceVisibilitySpec), row(animationUnlockGlassFadeSpec), row(animationFolderOpenGlassFadeSpec),
+    page(Page.AnimationWorkspace, "按工作区、应用返回和文件夹分别调整玻璃过渡时间。", listOf(
+        SettingsBlock.Header("animation.workspace", "应用返回、工作区与文件夹"),
+        row(animationAppReturnGlassFadeSpec), row(animationWorkspaceVisibilitySpec),
+        row(animationUnlockGlassFadeSpec), row(animationFolderOpenGlassFadeSpec),
         SettingsBlock.Header("animation.dock", "Dock 与图标"),
         row(animationDockResizeSpec, dock + listOf(ConfigSchema.Dock.RESIZE_ANIMATION to false, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION to true)),
     ))

@@ -167,7 +167,7 @@ internal val highlightEntries = listOf(
 )
 
 internal val animationEntries = listOf(
-    HubEntry(Page.AnimationWorkspace, R.string.page_animation_workspace, "工作区显隐、Dock 恢复与尺寸变化"),
+    HubEntry(Page.AnimationWorkspace, R.string.page_animation_workspace, "应用返回渐显、工作区与文件夹玻璃、Dock 尺寸变化"),
     HubEntry(Page.AnimationInteraction, R.string.page_animation_interaction, "玻璃按压进入与释放"),
     HubEntry(Page.AnimationPopups, R.string.page_animation_popups, "快捷菜单与安全中心退出渐隐"),
     HubEntry(Page.AnimationSystem, R.string.page_animation_system, "系统手势手柄等界面联动"),

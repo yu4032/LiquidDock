@@ -40,6 +40,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
     private ValueAnimator motionAnimator;
+    private ValueAnimator launchReturnAnimator;
     private boolean folderOpeningFadeRunning;
     private final View.OnAttachStateChangeListener rootAttachListener;
 
@@ -66,6 +67,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                     if (stableRoot == v && !v.isAttachedToWindow()) {
                         cancelSceneAnimation();
                         cancelMotionAnimation();
+                        cancelLaunchReturnReveal();
                         forget(stableRoot, LauncherGlassStaticLayer.this);
                     }
                 });
@@ -198,10 +200,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return workspace.getScrollX();
     }
 
-    /** UI pre-draw applies native opacity to the already cached output in the same traversal. */
+    /** UI pre-draw syncs native opacity while app-return reveal runs on the cached output. */
     static float syncWorkspacePresentation(
             View root, View material, boolean launchProxyActive,
-            boolean launchProxyReturning, float returnProgress) {
+            boolean launchProxyReturning) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null) return 1f;
         View workspace = layer.workspaceRef.get();
@@ -220,11 +222,18 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 .isFolderBackdropFrozenForRoot(root);
         float alpha = frozenFolder ? 1f : workspace != null
                 ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
+        boolean wasReturning = layer.launchProxyActive && layer.launchProxyReturning;
         layer.layerAlpha.setWorkspaceAlpha(alpha, launchProxyActive);
         layer.launchProxyActive = launchProxyActive;
         layer.launchProxyReturning = launchProxyActive && launchProxyReturning;
-        layer.launchReturnAlpha = !launchProxyActive ? 1f
-                : layer.launchProxyReturning ? smoothProgress(returnProgress) : 0f;
+        if (layer.launchProxyReturning) {
+            if (!wasReturning) layer.startLaunchReturnReveal();
+        } else if (launchProxyActive) {
+            layer.cancelLaunchReturnReveal();
+            layer.launchReturnAlpha = 0f;
+        } else if (layer.launchReturnAnimator == null) {
+            layer.launchReturnAlpha = 1f;
+        }
         layer.applyLayerAlpha();
         return alpha;
     }
@@ -352,10 +361,38 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         }
     }
 
-    private static float smoothProgress(float progress) {
-        if (!Float.isFinite(progress)) return 0f;
-        float t = Math.max(0f, Math.min(1f, progress));
-        return t * t * (3f - 2f * t);
+    private void startLaunchReturnReveal() {
+        cancelLaunchReturnReveal();
+        launchReturnAlpha = 0f;
+        long duration = AnimationRuntimeState.appReturnGlassFadeDurationMs();
+        if (duration <= 0L) {
+            launchReturnAlpha = 1f;
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        launchReturnAnimator = animator;
+        animator.setDuration(duration);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(value -> {
+            if (disposed || launchReturnAnimator != value) return;
+            launchReturnAlpha = (Float) value.getAnimatedValue();
+            applyLayerAlpha();
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (launchReturnAnimator != animation) return;
+                launchReturnAnimator = null;
+                launchReturnAlpha = 1f;
+                applyLayerAlpha();
+            }
+        });
+        animator.start();
+    }
+
+    private void cancelLaunchReturnReveal() {
+        ValueAnimator previous = launchReturnAnimator;
+        launchReturnAnimator = null;
+        if (previous != null) previous.cancel();
     }
 
     private void cancelSceneAnimation() {
@@ -377,6 +414,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         disposed = true;
         cancelSceneAnimation();
         cancelMotionAnimation();
+        cancelLaunchReturnReveal();
         View root = rootRef.get();
         if (root != null) {
             root.removeOnAttachStateChangeListener(rootAttachListener);
