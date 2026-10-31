@@ -141,10 +141,39 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return layer != null && layer.hwuiProbeActive;
     }
 
+    static boolean isWorkspaceGlassOutputHidden(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        return layer != null && layer.isOutputHidden();
+    }
+
+    static boolean isWorkspaceMotionAnimationActive(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        return layer != null && layer.isMotionAnimationActive();
+    }
+
+    private boolean isOutputHidden() {
+        boolean hideDuringLaunch = launchProxyActive
+                && (!launchProxyReturning || launchReturnAlpha <= 0.001f);
+        return hideDuringLaunch || layerAlpha.alpha() * launchReturnAlpha <= 0.001f;
+    }
+
+    private boolean isMotionAnimationActive() {
+        return launchProxyActive || folderOpeningFadeRunning
+                || isAnimatorStarted(sceneAnimator)
+                || isAnimatorStarted(motionAnimator)
+                || isAnimatorStarted(launchReturnAnimator);
+    }
+
+    private static boolean isAnimatorStarted(ValueAnimator animator) {
+        return animator != null && animator.isStarted();
+    }
+
     /** Invalidate the active in-window probe without queueing a redundant static GL frame. */
     static boolean invalidateHwuiProbe(View root) {
         LauncherGlassStaticLayer layer = find(root);
-        if (layer == null || !layer.hwuiProbeActive || layer.hwuiProbe == null) return false;
+        if (layer == null) return false;
+        if (layer.isOutputHidden()) return true;
+        if (!layer.hwuiProbeActive || layer.hwuiProbe == null) return false;
         if (Looper.myLooper() == Looper.getMainLooper()) {
             layer.hwuiProbe.invalidate();
         } else {
@@ -375,6 +404,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         boolean hideDuringLaunch = launchProxyActive
                 && (!launchProxyReturning || launchReturnAlpha <= 0.001f);
         float alpha = layerAlpha.alpha() * launchReturnAlpha;
+        if (hideDuringLaunch || alpha <= 0.001f) {
+            session.suppressWorkspaceGlassOutput();
+        }
         if (hwuiProbeActive && hwuiProbe != null) {
             setAlpha(0f);
             hwuiProbe.setVisibility(hideDuringLaunch ? View.INVISIBLE : View.VISIBLE);

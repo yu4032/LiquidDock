@@ -343,6 +343,12 @@ final class LauncherGlassStaticNode {
     boolean isLaunchProxyReturning() { return visualOwnerState.isLaunchProxyReturning(); }
     float launchProxyReturnProgress() { return visualOwnerState.launchProxyReturnProgress(); }
 
+    boolean isAnimationActive() {
+        return visualOwnerState.isLaunchProxyActive() || folderReturnState.isActive()
+                || (pressAnimator != null && pressAnimator.isStarted())
+                || (visibilityAnimator != null && visibilityAnimator.isStarted());
+    }
+
     boolean retainLastGeometryDuringFade() {
         return visibilityAlpha > 0.001f && suppressionState.isSuppressed();
     }

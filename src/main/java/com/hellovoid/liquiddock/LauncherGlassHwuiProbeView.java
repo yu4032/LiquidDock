@@ -196,9 +196,6 @@ final class LauncherGlassHwuiProbeView extends View {
     }
 
     static String agslSource(boolean decorated, boolean transitionMaterial) {
-        if (transitionMaterial && !decorated) {
-            throw new IllegalArgumentException("transition material requires decoration");
-        }
         String source = transitionMaterial ? motionDecoratedAgslSource
                 : decorated ? decoratedAgslSource : baselineAgslSource;
         if (source != null) return source;

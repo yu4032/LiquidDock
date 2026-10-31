@@ -664,7 +664,7 @@ public final class PrismalRenderer implements AutoCloseable {
             lastUploadedMinDimension = Float.NaN;
             lastUploadedGuard = Float.NaN;
         }
-        return selected != baselineGlassProgram && selected != 0;
+        return selected == decoratedGlassProgram || selected == motionDecoratedGlassProgram;
     }
 
     private void ensureTargets(int nextWidth, int nextHeight) {
@@ -851,6 +851,13 @@ public final class PrismalRenderer implements AutoCloseable {
             uploadStaticGlassParams(p);
             cachedStaticParams = p;
         }
+
+        // Every animated node uses one backdrop sample instead of three chromatic taps and skips
+        // caustic lighting. This lowers the Prismal tier without compiling a program on motion.
+        uniform1f("u_chromaticAberration",
+                transientQualityActive ? 0f : Math.max(0f, p.chromaticAberration));
+        uniform1f("u_causticIntensity",
+                transientQualityActive ? 0f : Math.max(0f, p.causticIntensity));
 
         // Lens reach is the only optics value that depends on this node's dimensions.
         float minGlassDim = Math.min(g.glassWidth, g.glassHeight);
