@@ -1445,6 +1445,16 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     hwuiProbeExportDirty = true;
                     if (rawBitmap != null) rawBitmap.recycle();
                     if (blurredBitmap != null) blurredBitmap.recycle();
+                    // Do not keep displaying an obsolete HWUI wallpaper indefinitely when
+                    // its replacement could not be exported. The existing GL output remains
+                    // the fallback until a later valid source frame can be exported.
+                    long failedGeneration = frame.generation;
+                    mainHandler.post(() -> {
+                        if (!shuttingDown && rootRef.get() == root
+                                && sceneGeneration == failedGeneration) {
+                            LauncherGlassStaticLayer.markHwuiProbeBackdropPending(root);
+                        }
+                    });
                     MainHook.log(TAG + " HWUI probe backdrop export failed: " + exportError);
                 } finally {
                     if (trace) Trace.endSection();
