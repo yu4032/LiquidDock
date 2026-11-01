@@ -12,10 +12,9 @@ final class LauncherGlassLayerAlpha {
     void setMotionAlpha(float alpha) { motionAlpha = safeAlpha(alpha); }
 
     void setWorkspaceAlpha(float alpha, boolean launchProxyActive) {
-        // The root glass is independent of Workspace. With icon glass off there is no launch
-        // proxy to own the app-opening transition, so don't let Workspace's launch fade hide it.
-        workspaceAlpha = launchProxyActive || !GlassRuntimeState.isIconEnabled()
-                ? 1f : safeAlpha(alpha);
+        // FloatingIconView2 owns the icon outside Workspace while the source is hidden.
+        // Keep its existing presentation; its final-consumer geometry owns visibility.
+        workspaceAlpha = launchProxyActive ? 1f : safeAlpha(alpha);
     }
 
     boolean startMotionReveal(long durationMs) {
