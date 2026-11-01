@@ -79,7 +79,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean folderCloseGeometryActive;
     private volatile boolean hwuiOutputActive;
     private boolean hwuiExportAttempted;
-    private volatile boolean sharedHwuiBackdropActive;
     private volatile boolean popupMotionActive;
     private boolean popupMotionPinned;
     // RootPassBlurBackend retains its normalized FBO after freezing popup updates.
@@ -264,19 +263,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     boolean hasFrozenBackdrop() {
-        return !shuttingDown && backdropPrepared && (sourceFrozen || sharedHwuiBackdropActive);
-    }
-
-    boolean useSharedHwuiBackdrop(int width, int height) {
-        if (shuttingDown || folderBackdrop || !BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
-                || width <= 0 || height <= 0) return false;
-        logicalWidth = width;
-        logicalHeight = height;
-        backdropPrepared = true;
-        sourceFrozen = true;
-        sharedHwuiBackdropActive = true;
-        sourceBackend.setUpdatesEnabled(false, "shortcut-popup-shared-workspace-backdrop");
-        return true;
+        return !shuttingDown && backdropPrepared && sourceFrozen;
     }
 
     /** Re-present the preserved GPU snapshot after a temporary Recents cover.
@@ -313,18 +300,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
 
     void setHwuiOutputActive(boolean active) {
         if (shuttingDown) return;
-        boolean fallbackToCapture = !active && sharedHwuiBackdropActive;
         hwuiOutputActive = active;
-        if (fallbackToCapture) {
-            sharedHwuiBackdropActive = false;
-            sourceFrozen = false;
-            backdropPrepared = false;
-            logicalWidth = 0;
-            logicalHeight = 0;
-            sourceBackend.setUpdatesEnabled(true, "shortcut-popup-hwui-fallback");
-            requestInitialCapture();
-            return;
-        }
         if (!active && backdropPrepared && geometry != null) requestCachedGlassRedraw();
     }
 
@@ -492,12 +468,6 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || folderOutputFrozen || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
-        if (sharedHwuiBackdropActive) {
-            // The Workspace snapshot contains wallpaper only. Never replace it with the
-            // source overlay's composite, which can include the visible Workspace glass.
-            backend.setUpdatesEnabled(false, "shortcut-popup-shared-workspace-backdrop");
-            return;
-        }
         // The Launcher and Dock surfaces are excluded for OPEN_FOLDER, so a
         // late wallpaper frame cannot recursively contain FolderCling.
         if (folderBackdrop && sourceFrozen) return;
