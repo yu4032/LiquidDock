@@ -242,6 +242,13 @@ final class LauncherGlassHwuiProbeView extends View {
         return source.substring(0, first) + replacement + source.substring(first + expected.length());
     }
 
+    private static RuntimeShader workspaceShader(boolean decorated, boolean motion) {
+        // Workspace always replaces legacy edge families with OS4. Generic cached sources
+        // remain configurable for other consumers such as Gboard.
+        return new RuntimeShader(PrismalRenderer.specializeWorkspaceHwuiSource(
+                agslSource(decorated, motion)));
+    }
+
     boolean setBackdrops(
             Bitmap rawBitmap, Bitmap blurBitmap,
             int logicalWidth, int logicalHeight, int rotation,
@@ -249,13 +256,19 @@ final class LauncherGlassHwuiProbeView extends View {
         if (rawBitmap == null || blurBitmap == null
                 || logicalWidth <= 0 || logicalHeight <= 0) return false;
         try {
-            RuntimeShader nextBaseline = new RuntimeShader(agslSource(false));
-            RuntimeShader nextDecorated = new RuntimeShader(agslSource(true));
-            RuntimeShader nextMotionDecorated;
-            try {
-                nextMotionDecorated = new RuntimeShader(agslSource(true, true));
-            } catch (RuntimeException ignored) {
-                nextMotionDecorated = null;
+            RuntimeShader nextBaseline = baselineShader;
+            RuntimeShader nextDecorated = decoratedShader;
+            RuntimeShader nextMotionDecorated = motionDecoratedShader;
+            // Programs belong to this View, not to a captured wallpaper frame. Rebind the
+            // immutable image inputs below; clearBackdrops retires the programs on detach.
+            if (nextBaseline == null || nextDecorated == null) {
+                nextBaseline = workspaceShader(false, false);
+                nextDecorated = workspaceShader(true, false);
+                try {
+                    nextMotionDecorated = workspaceShader(true, true);
+                } catch (RuntimeException ignored) {
+                    nextMotionDecorated = null;
+                }
             }
             BitmapShader rawInput = new BitmapShader(
                     rawBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);

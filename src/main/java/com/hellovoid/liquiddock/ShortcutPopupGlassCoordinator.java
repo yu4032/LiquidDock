@@ -38,12 +38,16 @@ final class ShortcutPopupGlassCoordinator {
 
     static synchronized void prepareEarly(
             View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        // A wallpaper-only HWUI backdrop remains safe to sample after the menu request.
+        // Avoid adding a capture window and GL session to every ordinary app-icon tap.
+        if (LauncherGlassStaticLayer.isHwuiProbeActive(captureRoot)) return;
         prepareInternal(captureRoot, glassConfig, true, null, "early-prepare-replace");
     }
 
     static synchronized void prepareDockEarly(
             View dockMenuOwner, LiquidDockConfig.Glass glassConfig) {
         if (dockMenuOwner == null) return;
+        if (LauncherGlassStaticLayer.isHwuiProbeActive(dockMenuOwner.getRootView())) return;
         State state = current;
         if (state != null && !state.released && state.contentRef.get() != null) {
             return;
