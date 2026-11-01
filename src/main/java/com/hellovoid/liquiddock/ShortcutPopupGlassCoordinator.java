@@ -140,8 +140,7 @@ final class ShortcutPopupGlassCoordinator {
                     + " rotation=" + sharedBackdrop.rotation);
         } else {
             // Keep the legacy capture fallback free of recursive Workspace-glass pixels.
-            state.workspaceGlassCaptureSuppressed =
-                    LauncherGlassStaticLayer.setPopupCaptureSuppressed(captureRoot, true);
+            state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(captureRoot);
         }
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
                 captureRoot,
@@ -210,8 +209,7 @@ final class ShortcutPopupGlassCoordinator {
                 if (state.sharedWorkspaceBackdrop) {
                     state.sharedWorkspaceBackdrop = false;
                     View root = state.captureRootRef.get();
-                    state.workspaceGlassCaptureSuppressed =
-                            LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
+                    state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(root);
                 }
                 state.session.requestInitialCapture();
             }
@@ -284,6 +282,14 @@ final class ShortcutPopupGlassCoordinator {
         state.workspaceGlassCaptureSuppressed = false;
         View root = state.captureRootRef.get();
         if (root != null) LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, false);
+    }
+
+    private static boolean suppressWorkspaceGlassForCapture(View root) {
+        // Without icon-glass motion ownership, hiding the shared Workspace layer for the early
+        // popup screenshot is a visible one-frame blink on every press. The popup can sample the
+        // existing Workspace image in this mode; keep suppression only for icon-proxy launches.
+        return GlassRuntimeState.isIconEnabled()
+                && LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
     }
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
@@ -365,8 +371,7 @@ final class ShortcutPopupGlassCoordinator {
                 if (state.sharedWorkspaceBackdrop) {
                     state.sharedWorkspaceBackdrop = false;
                     View root = state.captureRootRef.get();
-                    state.workspaceGlassCaptureSuppressed =
-                            LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
+                    state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(root);
                 }
                 if (state.pendingBackdropOwned) {
                     raw.recycle();
