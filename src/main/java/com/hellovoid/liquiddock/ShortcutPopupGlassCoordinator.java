@@ -38,8 +38,8 @@ final class ShortcutPopupGlassCoordinator {
 
     static synchronized void prepareEarly(
             View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        // A wallpaper-only HWUI backdrop remains safe to sample after the menu request.
-        // Avoid adding a capture window and GL session to every ordinary app-icon tap.
+        // Start scene capture at the native menu request on the HWUI path, so ordinary
+        // app-icon taps do not create a capture window and GL session.
         if (LauncherGlassStaticLayer.isHwuiProbeActive(captureRoot)) return;
         prepareInternal(captureRoot, glassConfig, true, null, "early-prepare-replace");
     }
@@ -130,22 +130,9 @@ final class ShortcutPopupGlassCoordinator {
                 || !captureRoot.isAttachedToWindow()) return;
         State state = new State(captureRoot, glassConfig, early, earlyOwner);
         current = state;
-        LauncherGlassHwuiProbeView.BackdropSnapshot sharedBackdrop =
-                LauncherGlassStaticLayer.snapshotHwuiProbeBackdrops(captureRoot);
-        if (sharedBackdrop != null) {
-            state.pendingRawBackdrop = sharedBackdrop.raw;
-            state.pendingBlurredBackdrop = sharedBackdrop.blurred;
-            state.pendingBackdropWidth = sharedBackdrop.logicalWidth;
-            state.pendingBackdropHeight = sharedBackdrop.logicalHeight;
-            state.pendingBackdropOwned = false;
-            state.sharedWorkspaceBackdrop = true;
-            MainHook.log(TAG + " reusing wallpaper-only Workspace HWUI backdrop logical="
-                    + sharedBackdrop.logicalWidth + "x" + sharedBackdrop.logicalHeight
-                    + " rotation=" + sharedBackdrop.rotation);
-        } else {
-            // Keep the legacy capture fallback free of recursive Workspace-glass pixels.
-            state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(captureRoot);
-        }
+        // Popup glass needs the complete desktop scene, including icons and widgets.
+        // The Workspace HWUI backdrop is wallpaper-only and cannot supply that scene.
+        state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(captureRoot);
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
                 captureRoot,
                 new ShortcutPopupSourceOverlay.Listener() {
@@ -205,18 +192,7 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
-            if (state.sharedWorkspaceBackdrop
-                    && state.session.useSharedHwuiBackdrop(
-                            state.pendingBackdropWidth, state.pendingBackdropHeight)) {
-                MainHook.log(TAG + " popup using immutable Workspace backdrop; source capture skipped");
-            } else {
-                if (state.sharedWorkspaceBackdrop) {
-                    state.sharedWorkspaceBackdrop = false;
-                    View root = state.captureRootRef.get();
-                    state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(root);
-                }
-                state.session.requestInitialCapture();
-            }
+            state.session.requestInitialCapture();
             boolean outputReady = ensurePopupOutput(state);
             MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
         }
@@ -372,11 +348,6 @@ final class ShortcutPopupGlassCoordinator {
             state.pendingBlurredBackdrop = null;
             if (!layer.setHwuiBackdrops(raw, blurred,
                     state.pendingBackdropWidth, state.pendingBackdropHeight)) {
-                if (state.sharedWorkspaceBackdrop) {
-                    state.sharedWorkspaceBackdrop = false;
-                    View root = state.captureRootRef.get();
-                    state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(root);
-                }
                 if (state.pendingBackdropOwned) {
                     raw.recycle();
                     blurred.recycle();
@@ -608,7 +579,6 @@ final class ShortcutPopupGlassCoordinator {
         int pendingBackdropWidth;
         int pendingBackdropHeight;
         boolean pendingBackdropOwned;
-        boolean sharedWorkspaceBackdrop;
         ViewTreeObserver observer;
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         View.OnAttachStateChangeListener popupDetachListener;

@@ -150,12 +150,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         return layer != null && layer.hwuiProbeActive;
     }
 
-    static LauncherGlassHwuiProbeView.BackdropSnapshot snapshotHwuiProbeBackdrops(View root) {
-        LauncherGlassStaticLayer layer = find(root);
-        if (layer == null || !layer.hwuiProbeActive || layer.hwuiProbe == null) return null;
-        return layer.hwuiProbe.snapshotBackdrops();
-    }
-
     static boolean isWorkspaceGlassOutputHidden(View root) {
         LauncherGlassStaticLayer layer = find(root);
         return layer != null && layer.isOutputHidden();
