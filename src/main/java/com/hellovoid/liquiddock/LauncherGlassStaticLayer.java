@@ -167,10 +167,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     private boolean isOutputHidden() {
-        boolean hideDuringLaunch = GlassRuntimeState.isIconEnabled() && launchProxyActive
+        boolean hideDuringLaunch = launchProxyActive
                 && (!launchProxyReturning || launchReturnAlpha <= 0.001f);
-        return (GlassRuntimeState.isIconEnabled() && launchAwaySuppressionLatched)
-                || hideDuringLaunch
+        return launchAwaySuppressionLatched || hideDuringLaunch
                 || layerAlpha.alpha() * launchReturnAlpha <= 0.001f;
     }
 
@@ -304,10 +303,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 .isFolderBackdropFrozenForRoot(root);
         float alpha = frozenFolder ? 1f : workspace != null
                 ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
-        if (!GlassRuntimeState.isIconEnabled()) {
-            layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
-            layer.launchAwaySuppressionLatched = false;
-        }
         boolean wasReturning = layer.launchProxyActive && layer.launchProxyReturning;
         if (launchProxyReturning) {
             layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
@@ -444,10 +439,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     private void applyLayerAlpha() {
-        boolean hideDuringLaunch = GlassRuntimeState.isIconEnabled()
-                && (launchAwaySuppressionLatched
+        boolean hideDuringLaunch = launchAwaySuppressionLatched
                 || (launchProxyActive
-                    && (!launchProxyReturning || launchReturnAlpha <= 0.001f)));
+                    && (!launchProxyReturning || launchReturnAlpha <= 0.001f));
         float alpha = layerAlpha.alpha() * launchReturnAlpha;
         if (hideDuringLaunch || alpha <= 0.001f) {
             session.suppressWorkspaceGlassOutput();
