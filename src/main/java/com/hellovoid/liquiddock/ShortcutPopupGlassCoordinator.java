@@ -38,12 +38,16 @@ final class ShortcutPopupGlassCoordinator {
 
     static synchronized void prepareEarly(
             View captureRoot, LiquidDockConfig.Glass glassConfig) {
+        // A wallpaper-only HWUI backdrop remains safe to sample after the menu request.
+        // Avoid adding a capture window and GL session to every ordinary app-icon tap.
+        if (LauncherGlassStaticLayer.isHwuiProbeActive(captureRoot)) return;
         prepareInternal(captureRoot, glassConfig, true, null, "early-prepare-replace");
     }
 
     static synchronized void prepareDockEarly(
             View dockMenuOwner, LiquidDockConfig.Glass glassConfig) {
         if (dockMenuOwner == null) return;
+        if (LauncherGlassStaticLayer.isHwuiProbeActive(dockMenuOwner.getRootView())) return;
         State state = current;
         if (state != null && !state.released && state.contentRef.get() != null) {
             return;
@@ -140,8 +144,7 @@ final class ShortcutPopupGlassCoordinator {
                     + " rotation=" + sharedBackdrop.rotation);
         } else {
             // Keep the legacy capture fallback free of recursive Workspace-glass pixels.
-            state.workspaceGlassCaptureSuppressed =
-                    LauncherGlassStaticLayer.setPopupCaptureSuppressed(captureRoot, true);
+            state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(captureRoot);
         }
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
                 captureRoot,
@@ -210,8 +213,7 @@ final class ShortcutPopupGlassCoordinator {
                 if (state.sharedWorkspaceBackdrop) {
                     state.sharedWorkspaceBackdrop = false;
                     View root = state.captureRootRef.get();
-                    state.workspaceGlassCaptureSuppressed =
-                            LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
+                    state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(root);
                 }
                 state.session.requestInitialCapture();
             }
@@ -284,6 +286,14 @@ final class ShortcutPopupGlassCoordinator {
         state.workspaceGlassCaptureSuppressed = false;
         View root = state.captureRootRef.get();
         if (root != null) LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, false);
+    }
+
+    private static boolean suppressWorkspaceGlassForCapture(View root) {
+        // Without icon-glass motion ownership, hiding the shared Workspace layer for the early
+        // popup screenshot is a visible one-frame blink on every press. The popup can sample the
+        // existing Workspace image in this mode; keep suppression only for icon-proxy launches.
+        return GlassRuntimeState.isIconEnabled()
+                && LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
     }
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
@@ -365,8 +375,7 @@ final class ShortcutPopupGlassCoordinator {
                 if (state.sharedWorkspaceBackdrop) {
                     state.sharedWorkspaceBackdrop = false;
                     View root = state.captureRootRef.get();
-                    state.workspaceGlassCaptureSuppressed =
-                            LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
+                    state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(root);
                 }
                 if (state.pendingBackdropOwned) {
                     raw.recycle();

@@ -413,7 +413,10 @@ final class MiuixFolderGlassHook {
         }
         openedFolderOwner = new WeakReference<>(null);
         openedFolderSink = new WeakReference<>(null);
-        releaseFrozenInputs();
+        // This is GL/session cleanup, and may run on capture failure or a
+        // transient FolderCling detach while native OPEN is still active.
+        // Only native close/failure/master-disable boundaries may release the
+        // global Workspace cover.
     }
 
     private static void releaseFrozenInputs() {

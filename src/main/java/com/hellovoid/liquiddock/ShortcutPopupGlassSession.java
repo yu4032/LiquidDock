@@ -368,7 +368,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
             LauncherGlassGeometry.Snapshot frame, float openProgress,
             RuntimeShader baselineShader, RuntimeShader decoratedShader,
             RuntimeShader motionDecoratedShader, float[] invariants) {
-        if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || shuttingDown
+        if ((!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && !folderBackdrop) || shuttingDown
                 || canvas == null || paint == null || frame == null
                 || baselineShader == null || decoratedShader == null
                 || !canvas.isHardwareAccelerated()) return false;
@@ -526,7 +526,8 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
                 });
             }
             outputRenderWork.consumeForSourceRender();
-            if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && !hwuiExportAttempted) {
+            if ((BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || folderBackdrop)
+                    && !hwuiExportAttempted) {
                 hwuiExportAttempted = true;
                 exportHwuiBackdrops();
             }
@@ -603,7 +604,7 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     }
 
     private void exportHwuiBackdrops() {
-        if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
+        if ((!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && !folderBackdrop)
                 || shuttingDown || !backdropPrepared || prismalRenderer == null) return;
         Bitmap rawBitmap = null;
         Bitmap blurredBitmap = null;

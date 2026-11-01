@@ -37,7 +37,7 @@ final class LiquidDockConfig {
     static final class Animation {
         final int workspaceVisibilityMs, appReturnGlassFadeStartBeforeEndMs,
                 appReturnGlassFadeDurationMs,
-                unlockGlassFadeMs, folderOpenGlassFadeMs,
+                unlockGlassFadeMs,
                 pressInMs, pressOutMs, dockResizeMs, shortcutPopupDismissFadeMs,
                 securityCenterExitFadeMs;
         final boolean disableWallpaperZoom;
@@ -49,7 +49,6 @@ final class LiquidDockConfig {
             appReturnGlassFadeDurationMs = duration(
                     c, ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION);
             unlockGlassFadeMs = duration(c, ConfigSchema.Animation.UNLOCK_GLASS_FADE);
-            folderOpenGlassFadeMs = duration(c, ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE);
             pressInMs = duration(c, ConfigSchema.Animation.PRESS_IN);
             pressOutMs = duration(c, ConfigSchema.Animation.PRESS_OUT);
             dockResizeMs = duration(c, ConfigSchema.Animation.DOCK_RESIZE);

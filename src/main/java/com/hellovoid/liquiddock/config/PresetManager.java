@@ -145,8 +145,7 @@ public final class PresetManager {
         source.put(ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION.name(), 450);
         // Distinct from ordinary Workspace reveal: retain the native unlock fade.
         source.put(ConfigSchema.Animation.UNLOCK_GLASS_FADE.name(), 450);
-        // Folder opening has its own visual timing. The general Workspace
-        // visibility preset intentionally remains immediate.
+        // Legacy export compatibility; Workspace glass now hides immediately on folder open.
         source.put(ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name(), 180);
         source.put("animation_press_in_ms", 90);
         source.put("animation_press_out_ms", 160);

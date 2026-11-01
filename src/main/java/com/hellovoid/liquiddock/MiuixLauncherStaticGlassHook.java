@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.app.Activity;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -364,19 +365,36 @@ final class MiuixLauncherStaticGlassHook {
     private static void scheduleWorkspaceResumeReconcile(
             Object launcher, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || launcher == null) return;
-        HookUtil.InvocationResult<Object> workspaceResult =
-                HookUtil.tryInvoke(launcher, "getWorkspace");
-        Object value = workspaceResult.succeeded() ? workspaceResult.value() : null;
-        if (!(value instanceof View)) return;
-        View workspace = (View) value;
-        workspace.postOnAnimation(() -> {
-            if (!GlassRuntimeState.isEnabled() || !workspace.isAttachedToWindow()) return;
-            reconcileCurrentWorkspacePage(workspace, glassConfig);
+        View root = launcherDecorView(launcher);
+        if (root == null) return;
+        root.postOnAnimation(() -> {
+            if (!GlassRuntimeState.isEnabled() || !root.isAttachedToWindow()) return;
+            LauncherGlassStaticLayer.onLauncherResumed(root);
+            View workspace = findWorkspace(root);
+            if (workspace != null) reconcileCurrentWorkspacePage(workspace, glassConfig);
             // Resume is not a source invalidation. The invalidate only schedules normal pre-draw
             // geometry reconciliation; Surface/wallpaper/rotation freshness stays with its owner.
-            workspace.postInvalidateOnAnimation();
+            root.postInvalidateOnAnimation();
             MainHook.log(TAG + " Workspace HOME resume reconciled");
         });
+    }
+
+    private static View launcherDecorView(Object launcher) {
+        if (!(launcher instanceof Activity)) return null;
+        Activity activity = (Activity) launcher;
+        return activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
+    }
+
+    private static View findWorkspace(View view) {
+        if (view == null) return null;
+        if ("com.miui.home.launcher.Workspace".equals(view.getClass().getName())) return view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View workspace = findWorkspace(group.getChildAt(i));
+            if (workspace != null) return workspace;
+        }
+        return null;
     }
 
     private static void installWidgetBackgroundOwnershipHook(

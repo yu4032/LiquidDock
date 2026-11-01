@@ -11,12 +11,20 @@ import java.util.function.Predicate;
 
 /** Black-box accessibility regression: Unicode text enters without an ADB IME. */
 public final class SettingsSearchInstrumentation extends Instrumentation {
+    private boolean workspaceShaderReuse;
+
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
+        workspaceShaderReuse = arguments != null
+                && "workspaceShaderReuse".equals(arguments.getString("case"));
         start();
     }
 
     @Override public void onStart() {
+        if (workspaceShaderReuse) {
+            WorkspaceShaderReuseCheck.run(this);
+            return;
+        }
         Bundle result = new Bundle();
         try {
             // Xiaomi blocks background starts from an instrumented application UID;

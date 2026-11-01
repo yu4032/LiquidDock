@@ -37,6 +37,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private volatile boolean hwuiProbeWallpaperScaleDirty;
     private boolean launchProxyActive;
     private boolean launchProxyReturning;
+    private boolean launchAwaySuppressionLatched;
     private float launchReturnAlpha = 1f;
     private boolean popupCaptureSuppressed;
     private final LauncherGlassHwuiProbeView hwuiProbe;
@@ -48,14 +49,21 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private float launchReturnStartProgress;
     private float launchReturnLastProgress;
     private boolean launchReturnFadeStarted;
-    private boolean folderOpeningFadeRunning;
     private final View.OnAttachStateChangeListener rootAttachListener;
+    private final Runnable clearLaunchAwaySuppression;
 
     private LauncherGlassStaticLayer(Context context, View root, LauncherGlassSession session) {
         super(context);
         rootRef = new WeakReference<>(root);
         this.session = session;
         mainHandler = new Handler(context.getMainLooper());
+        clearLaunchAwaySuppression = () -> {
+            if (disposed || launchProxyReturning || !launchAwaySuppressionLatched) return;
+            launchAwaySuppressionLatched = false;
+            applyLayerAlpha();
+            View liveRoot = rootRef.get();
+            if (liveRoot != null) liveRoot.postInvalidateOnAnimation();
+        };
         hwuiProbe = BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
                 ? new LauncherGlassHwuiProbeView(context, session) : null;
         setOpaque(false);
@@ -161,7 +169,15 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private boolean isOutputHidden() {
         boolean hideDuringLaunch = launchProxyActive
                 && (!launchProxyReturning || launchReturnAlpha <= 0.001f);
-        return hideDuringLaunch || layerAlpha.alpha() * launchReturnAlpha <= 0.001f;
+        return launchAwaySuppressionLatched || hideDuringLaunch
+                || layerAlpha.alpha() * launchReturnAlpha <= 0.001f;
+    }
+
+    static void onLauncherResumed(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null || !layer.launchAwaySuppressionLatched) return;
+        layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
+        layer.mainHandler.postDelayed(layer.clearLaunchAwaySuppression, 220L);
     }
 
     /** Temporarily removes only Workspace glass from the popup's one-shot backdrop capture. */
@@ -179,7 +195,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     private boolean isMotionAnimationActive() {
-        return launchProxyActive || folderOpeningFadeRunning
+        return launchProxyActive
                 || isAnimatorStarted(sceneAnimator)
                 || isAnimatorStarted(motionAnimator)
                 || isAnimatorStarted(launchReturnAnimator);
@@ -288,6 +304,13 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         float alpha = frozenFolder ? 1f : workspace != null
                 ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
         boolean wasReturning = layer.launchProxyActive && layer.launchProxyReturning;
+        if (launchProxyReturning) {
+            layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
+            layer.launchAwaySuppressionLatched = false;
+        } else if (launchProxyActive && !layer.launchAwaySuppressionLatched) {
+            layer.launchAwaySuppressionLatched = true;
+            layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
+        }
         layer.layerAlpha.setWorkspaceAlpha(alpha, launchProxyActive);
         layer.launchProxyActive = launchProxyActive;
         layer.launchProxyReturning = launchProxyActive && launchProxyReturning;
@@ -374,16 +397,9 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 + " durationMs=" + duration);
     }
 
-    void setSceneVisible(
-            boolean visible, boolean fadeReveal, boolean immediateHide,
-            boolean folderOpeningFade) {
+    void setSceneVisible(boolean visible, boolean fadeReveal, boolean immediateHide) {
         if (disposed) return;
-        // Coverage notifications can reapply the same target in one native
-        // opening. Preserve the animator instead of restarting it each time.
-        if (folderOpeningFade && !immediateHide && folderOpeningFadeRunning
-                && sceneAnimator != null) return;
         cancelSceneAnimation();
-        folderOpeningFadeRunning = folderOpeningFade && !visible && !immediateHide;
         if (!visible && immediateHide) {
             layerAlpha.setSceneAlpha(0f);
             applyLayerAlpha();
@@ -394,16 +410,13 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             applyLayerAlpha();
             return;
         }
-        long fullDuration = folderOpeningFade && !visible
-                ? AnimationRuntimeState.folderOpenGlassFadeDurationMs()
-                : AnimationRuntimeState.workspaceVisibilityDurationMs();
         LauncherGlassVisibilityTransition.Plan plan =
                 LauncherGlassVisibilityTransition.plan(
-                        layerAlpha.sceneAlpha(), visible, fullDuration);
+                        layerAlpha.sceneAlpha(), visible,
+                        AnimationRuntimeState.workspaceVisibilityDurationMs());
         layerAlpha.setSceneAlpha(plan.startAlpha);
         applyLayerAlpha();
         if (plan.durationMs == 0L) {
-            folderOpeningFadeRunning = false;
             layerAlpha.setSceneAlpha(plan.targetAlpha);
             applyLayerAlpha();
             return;
@@ -419,18 +432,16 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
-                if (sceneAnimator == animation) {
-                    sceneAnimator = null;
-                    folderOpeningFadeRunning = false;
-                }
+                if (sceneAnimator == animation) sceneAnimator = null;
             }
         });
         animator.start();
     }
 
     private void applyLayerAlpha() {
-        boolean hideDuringLaunch = launchProxyActive
-                && (!launchProxyReturning || launchReturnAlpha <= 0.001f);
+        boolean hideDuringLaunch = launchAwaySuppressionLatched
+                || (launchProxyActive
+                    && (!launchProxyReturning || launchReturnAlpha <= 0.001f));
         float alpha = layerAlpha.alpha() * launchReturnAlpha;
         if (hideDuringLaunch || alpha <= 0.001f) {
             session.suppressWorkspaceGlassOutput();
@@ -512,7 +523,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private void cancelSceneAnimation() {
         ValueAnimator previous = sceneAnimator;
         sceneAnimator = null;
-        folderOpeningFadeRunning = false;
         if (previous != null) previous.cancel();
     }
 
@@ -526,6 +536,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (disposed) return;
         session.resetWorkspaceScrollProjection();
         disposed = true;
+        mainHandler.removeCallbacks(clearLaunchAwaySuppression);
         cancelSceneAnimation();
         cancelMotionAnimation();
         cancelLaunchReturnFade();

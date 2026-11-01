@@ -547,12 +547,6 @@ internal val animationUnlockGlassFadeSpec = IntSpec(
     "ms",
     summary = "跟随 Launcher 原生解锁飞入动画末尾渐显；0 = 立即显示，修改后下次解锁生效",
 )
-internal val animationFolderOpenGlassFadeSpec = IntSpec(
-    ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE,
-    "文件夹打开 · 其他玻璃渐隐",
-    "ms",
-    summary = "文件夹打开时其他文件夹与小组件玻璃的退场时长；0 = 立即隐藏，下次打开文件夹生效",
-)
 internal val animationDockResizeSpec = IntSpec(
     ConfigSchema.Animation.DOCK_RESIZE,
     "Dock 尺寸变化",

@@ -6,7 +6,7 @@ plugins {
 
 val workspaceGlassHwuiProbeEnabled = providers.gradleProperty("workspaceGlassHwuiProbe")
     .map { it.toBoolean() }
-    .getOrElse(false)
+    .getOrElse(true)
 
 android {
     namespace = "com.hellovoid.liquiddock"

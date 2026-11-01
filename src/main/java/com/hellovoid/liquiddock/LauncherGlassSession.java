@@ -1230,7 +1230,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         boolean workspaceMotionActive = workspaceMotionQualityActive
                 || transitionFrameSync.isActive()
                 || LauncherGlassStaticLayer.isWorkspaceMotionAnimationActive(root);
-        if (workspaceRefreshAfterMotionPending && !workspaceMotionActive) {
+        if (workspaceRefreshAfterMotionPending && !workspaceMotionActive
+                && !workspaceGlassHidden) {
             workspaceRefreshAfterMotionPending = false;
             workspaceLaunchProxyReturning = false;
             prepareWorkspaceOutputRefresh("launcher-glass-output-resume-settled");
@@ -1239,7 +1240,9 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                     WorkstationProducerPolicy.shouldUseSingleFramePulse(
                             MainHook.isWorkstationMode()));
         }
-        if (wasStaticOutputSuppressed && workspaceSource) {
+        // Suppression is not a resume edge until presentation is actually visible. Otherwise
+        // each hidden frame reopens capture, clears suppression and exports another backdrop.
+        if (wasStaticOutputSuppressed && !workspaceGlassHidden && workspaceSource) {
             if (workspaceMotionActive) {
                 // Reuse the immutable HWUI backdrop while the native icon returns. A fresh
                 // PassBlur frame plus Prismal preparation costs a full render budget and

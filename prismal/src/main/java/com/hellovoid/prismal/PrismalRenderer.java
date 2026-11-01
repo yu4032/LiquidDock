@@ -50,6 +50,15 @@ public final class PrismalRenderer implements AutoCloseable {
         return PrismalReconstructed27Shader.apply(source);
     }
 
+    /** Workspace uses OS4 replacement highlights and always samples the prepared blur. */
+    public static String specializeWorkspaceHwuiSource(String source) {
+        for (String family : new String[]{"Specular", "LitRim", "OppositeRim",
+                "CornerRim", "FaceSheen", "PlainHighlight"}) {
+            source = source.replace("u_component" + family + " > 0.5", "false");
+        }
+        return source.replace("u_useBlurredTexture == 1", "true");
+    }
+
     /** Keep HWUI's OS4 lighting uniforms numerically identical to the GLES renderer. */
     public static void computeWorkspaceHwuiProbeInvariants(PrismalParams params, float[] out) {
         PrismalOs4InvariantShader.compute(params, out);

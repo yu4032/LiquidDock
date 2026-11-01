@@ -39,7 +39,10 @@ final class ShortcutPopupGlassLayer extends FrameLayout
         textureView.setSurfaceTextureListener(this);
         addView(textureView, matchParent());
 
-        if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE) {
+        // Folder zoom follows Launcher pre-draw geometry. Render its cached
+        // backdrop in this ViewRoot even when the optional popup/Gboard HWUI
+        // pilot is disabled, avoiding a fullscreen EGL swap on every spring frame.
+        if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || session.isFolderBackdrop()) {
             hwuiView = new ShortcutPopupGlassHwuiView(context, session);
             hwuiView.setVisibility(View.INVISIBLE);
             hwuiView.setFailureListener(this::fallbackToTextureView);
