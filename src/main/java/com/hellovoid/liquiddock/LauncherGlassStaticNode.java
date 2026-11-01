@@ -286,7 +286,7 @@ final class LauncherGlassStaticNode {
             return ownAlpha * folderReturnState.alpha()
                     * (workspaceAlphaBypassed ? clampAlpha(workspaceAlpha) : 1f);
         }
-        if (visualOwnerState.isLaunchProxyActive()) {
+        if (isLaunchProxyActive()) {
             return ownAlpha * visualOwnerState.alpha();
         }
 
@@ -316,7 +316,7 @@ final class LauncherGlassStaticNode {
     boolean canReuseStaticGeometry(
             View root, HomeGridCellGeometryHook.WidgetWidthFrame widgetWidthFrame,
             LauncherGlassStaticGeometryCache.Frame staticViewFrame) {
-        if (disposed || folderReturnState.isActive() || visualOwnerState.isLaunchProxyActive()) {
+        if (disposed || folderReturnState.isActive() || isLaunchProxyActive()) {
             geometryCache.invalidate();
             return false;
         }
@@ -339,12 +339,18 @@ final class LauncherGlassStaticNode {
         geometryCache.invalidate();
     }
 
-    boolean isLaunchProxyActive() { return visualOwnerState.isLaunchProxyActive(); }
-    boolean isLaunchProxyReturning() { return visualOwnerState.isLaunchProxyReturning(); }
-    float launchProxyReturnProgress() { return visualOwnerState.launchProxyReturnProgress(); }
+    boolean isLaunchProxyActive() {
+        return visualOwnerState.isLaunchProxyActive() && componentStyle().enabled;
+    }
+    boolean isLaunchProxyReturning() {
+        return isLaunchProxyActive() && visualOwnerState.isLaunchProxyReturning();
+    }
+    float launchProxyReturnProgress() {
+        return isLaunchProxyReturning() ? visualOwnerState.launchProxyReturnProgress() : 0f;
+    }
 
     boolean isAnimationActive() {
-        return visualOwnerState.isLaunchProxyActive() || folderReturnState.isActive()
+        return isLaunchProxyActive() || folderReturnState.isActive()
                 || (pressAnimator != null && pressAnimator.isStarted())
                 || (visibilityAnimator != null && visibilityAnimator.isStarted());
     }
@@ -557,7 +563,7 @@ final class LauncherGlassStaticNode {
         float requestedRadius = style.cornerRadiusDp > 0f
                 ? style.cornerRadiusDp * density : nativeCornerRadiusPx;
 
-        if (visualOwnerState.isLaunchProxyActive()) {
+        if (isLaunchProxyActive()) {
             // While MIUI owns the icon with FloatingIconView2/FloatingIconLayer2, the source View
             // is not the visual geometry authority. A null proxy rect intentionally means the vendor
             // proxy exists but its icon is still hidden; never expand glass over the task-sized rect.

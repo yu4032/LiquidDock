@@ -227,7 +227,6 @@ final class MiuixLauncherStaticGlassHook {
                     chain -> {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object result = chain.proceed(args);
-                        if (!GlassRuntimeState.isIconEnabled()) return result;
                         Object owner = chain.getThisObject();
                         if (!(owner instanceof View) || args.length == 0
                                 || !(args[0] instanceof Number)) return result;
