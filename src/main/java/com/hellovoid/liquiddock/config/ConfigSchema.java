@@ -644,6 +644,8 @@ public final class ConfigSchema {
         List<ConfigKey<?>> keys = new ArrayList<>();
         add(keys, Core.ENABLED);
         add(keys, Animation.WORKSPACE_VISIBILITY,
+                Animation.HIDE_WORKSPACE_GLASS_DURING_APP,
+                Animation.HIDE_DOCK_ICONS_DURING_APP,
                 Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END,
                 Animation.APP_RETURN_GLASS_FADE_DURATION,
                 Animation.UNLOCK_GLASS_FADE,
