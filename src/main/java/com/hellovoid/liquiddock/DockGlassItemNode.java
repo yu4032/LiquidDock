@@ -19,6 +19,14 @@ final class DockGlassItemNode {
     DockIconAnimationState.Sample animationSample() {
         return DockGlassItemRegistry.animationSample(viewRef.get());
     }
+
+    /** The Dock TextureView already inherits HotSeats alpha; apply only the icon subtree. */
+    float nativePresentationAlpha(View dockRoot) {
+        View icon = viewRef.get();
+        return icon != null && dockRoot != null
+                ? LauncherGlassVisibility.alphaBelowAncestor(
+                        icon, dockRoot, icon.getRootView()) : 0f;
+    }
     boolean belongsTo(View dockRoot) {
         View cursor = viewRef.get();
         if (cursor == null || dockRoot == null || !cursor.isAttachedToWindow()) return false;
