@@ -1145,8 +1145,14 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (!workspaceGlassHidden) for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
+            // When the optional group hide is disabled, do not reapply the native
+            // Workspace alpha inside individual nodes: Launcher intentionally fades that
+            // ancestor during an app spring, even though the shared glass lives outside it.
+            // Ordinary icon subtree alpha and the active FloatingIcon proxy remain native.
+            boolean honorWorkspaceGroupAlpha = launchProxyActive
+                    && AnimationRuntimeState.hideWorkspaceGlassDuringApp();
             float outputAlpha = node.presentationAlpha(
-                    root, workspaceRoot, workspaceAlpha, launchProxyActive);
+                    root, workspaceRoot, workspaceAlpha, honorWorkspaceGroupAlpha);
             if (!node.isLaunchProxyActive()) outputAlpha *= backgroundGlassAlpha;
             StaticGeometryFrame oldFrame = state.frame;
             if (oldFrame != null && Float.compare(oldFrame.outputAlpha, outputAlpha) == 0) {
