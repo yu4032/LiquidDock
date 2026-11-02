@@ -613,6 +613,14 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             if (disposed || launchReturnAnimator != value) return;
             launchReturnAlpha = (Float) value.getAnimatedValue();
             applyLayerAlpha();
+            // A local FloatingIcon must remain visible, so background-only fading happens
+            // in the shared scene's node alpha rather than the TextureView alpha. Publish
+            // that alpha change on the next UI traversal; no geometry-cache invalidation.
+            if (localWorkspaceProxyActive
+                    && AnimationRuntimeState.hideWorkspaceGlassDuringApp()) {
+                View root = rootRef.get();
+                if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+            }
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
