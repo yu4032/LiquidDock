@@ -30,6 +30,20 @@ public class ConfigSchemaTest {
     }
 
     @Test
+    public void groupGlassHideSwitchesAreIndependentAndExported() {
+        ConfigKey<Boolean> dock = ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP;
+        ConfigKey<Boolean> workspace = ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP;
+        assertFalse(dock.name().equals(workspace.name()));
+        for (ConfigKey<Boolean> key : java.util.List.of(dock, workspace)) {
+            assertEquals(Boolean.TRUE, key.uiDefault());
+            assertEquals(Boolean.TRUE, key.runtimeFallback());
+            assertEquals(Boolean.TRUE, key.exportDefault());
+            assertEquals(ConfigKey.ExportMode.ALWAYS, key.exportMode());
+            assertTrue(ConfigSchema.all().contains(key));
+        }
+    }
+
+    @Test
     public void gestureHandleHomeRecentsFadeIsOptInAndExported() {
         ConfigKey<Boolean> key = ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS;
         assertEquals("animation_hide_gesture_handle_home_recents", key.name());
