@@ -282,6 +282,11 @@ final class LauncherGlassHomePresentationHook {
             if (HOME_STATE.isArmed()) return;
             Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
             LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
+            if (!homeSettled) {
+                // The gesture was retargeted back into launch; keep Workspace hidden if
+                // an app still owns its Dock icon.
+                LauncherGlassStaticLayer.onDockHomeRetargetedAway();
+            }
             if (homeSettled) {
                 // Only a completed HOME presentation can retire stale return proxies. Retargeting
                 // into app launch must keep its native hidden/proxy owner intact.
