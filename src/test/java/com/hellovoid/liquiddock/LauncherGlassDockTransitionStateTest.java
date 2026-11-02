@@ -109,6 +109,17 @@ public class LauncherGlassDockTransitionStateTest {
         state.onHomeSettled();
     }
 
+    @Test public void firstDockLaunchProxyCanPrecedeNativeHidden() {
+        LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
+        assertTrue(state.onProxyFrame(false, .2f));
+        assertTrue(state.sample().active);
+        assertFalse(state.sample().returning);
+        assertFalse("duplicate source hide must not reset proxy", state.onNativeHidden());
+        assertEquals(.2f, state.sample().progress, 0f);
+        state.onNativeVisible();
+        assertFalse(state.onProxyFrame(false, .5f));
+    }
+
     @Test public void newCycleAndInvalidProgressDoNotLeakOldVisibility() {
         LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
         state.onNativeHidden();
