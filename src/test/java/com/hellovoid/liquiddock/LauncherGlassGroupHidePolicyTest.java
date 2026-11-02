@@ -20,6 +20,9 @@ public class LauncherGlassGroupHidePolicyTest {
         assertEquals(.5f, LauncherGlassGroupHidePolicy.workspaceBackground(true,true,false,.5f),0f);
         assertEquals(1f, LauncherGlassGroupHidePolicy.workspaceBackground(false,true,true,0f),0f);
         assertEquals(1f, LauncherGlassGroupHidePolicy.workspaceBackground(true,false,true,0f),0f);
+        assertTrue(LauncherGlassGroupHidePolicy.honorWorkspaceAncestorAlpha(true,true));
+        assertFalse(LauncherGlassGroupHidePolicy.honorWorkspaceAncestorAlpha(false,true));
+        assertFalse(LauncherGlassGroupHidePolicy.honorWorkspaceAncestorAlpha(true,false));
     }
 
     @Test public void opacityPolicyGuardsInvalidSamples() {
