@@ -196,8 +196,15 @@ final class DockGlassCompositor {
                 cachedItem.uiFingerprint = uiFingerprint;
                 cachedItem.proxyFingerprint = proxyFingerprint;
             }
-            if (animationSample.opacity <= 0f || cachedItem.geometry == null) continue;
-            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, animationSample.opacity));
+            // Native ShortcutIcon and its container may fade independently from
+            // CLOSE_TO_HOME progress. The proxy owns visibility while the source is
+            // hidden, so do not apply the source's zero alpha to proxy geometry.
+            float outputAlpha = DockGlassIconOpacity.resolve(
+                    animationSample.opacity,
+                    animationSample.proxyActive ? 1f : item.nativePresentationAlpha(ownershipRoot),
+                    animationSample.proxyActive);
+            if (outputAlpha <= 0.001f || cachedItem.geometry == null) continue;
+            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, outputAlpha));
         }
         latestScene = new DockGlassSceneSnapshot(
                 out.toArray(new DockGlassSceneSnapshot.Item[0]));
