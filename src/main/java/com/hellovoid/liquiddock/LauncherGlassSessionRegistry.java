@@ -89,6 +89,9 @@ final class LauncherGlassSessionRegistry {
         for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
             if (session != null && !session.isShutdown()) session.setNativeAppReturnProgress(progress);
         }
+        // The FloatingIcon callback is shared by Dock and Workspace targets. Keep the Dock
+        // icon scene on the same native HOME progress even when there are no Workspace nodes.
+        Miuix307ZeroCopyRenderer.onNativeAppReturnProgress(progress);
     }
 
     /** Resume backgrounds held until the first authoritative native sample arrived. */
