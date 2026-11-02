@@ -59,9 +59,24 @@ final class LauncherHomeTransitionState {
         return Decision.release();
     }
 
-    synchronized void onSpringPhysicalTerminal(Object animation) {
-        if (animation == null || activeAnimation != animation) return;
+    /** Return the current cycle as a watchdog token only for the matching physical terminal. */
+    synchronized long onSpringPhysicalTerminal(Object animation) {
+        if (animation == null || activeAnimation != animation) return -1L;
         springPhysicallyActive = false;
+        return activeCycle;
+    }
+
+    /**
+     * Launcher can skip the WindowElement completion pair after a cancel or merge. A spring
+     * terminal alone is not authoritative: only a later bounded timeout may release it,
+     * and only if no new HOME cycle or spring restart has taken ownership meanwhile.
+     */
+    synchronized Decision onTerminalGraceExpired(long cycle) {
+        if (activeAnimation == null || cycle != activeCycle || springPhysicallyActive) {
+            return Decision.none();
+        }
+        clear();
+        return Decision.release();
     }
 
     synchronized void onOwnerFinishRequested(Object owner) {
