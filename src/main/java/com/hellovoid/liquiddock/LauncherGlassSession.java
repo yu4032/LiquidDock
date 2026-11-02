@@ -1141,11 +1141,13 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         }
 
         View workspaceRoot = LauncherGlassHierarchy.findWorkspaceRoot(workspaceMaterial);
+        float backgroundGlassAlpha = LauncherGlassStaticLayer.workspaceBackgroundNodeAlpha(root);
         if (!workspaceGlassHidden) for (StaticNodeState state : staticSnapshot) {
             LauncherGlassStaticNode node = state.nodeRef.get();
             if (node == null) continue;
             float outputAlpha = node.presentationAlpha(
                     root, workspaceRoot, workspaceAlpha, launchProxyActive);
+            if (!node.isLaunchProxyActive()) outputAlpha *= backgroundGlassAlpha;
             StaticGeometryFrame oldFrame = state.frame;
             if (oldFrame != null && Float.compare(oldFrame.outputAlpha, outputAlpha) == 0) {
                 continue;
