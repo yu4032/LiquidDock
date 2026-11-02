@@ -203,6 +203,8 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
     private volatile boolean workspacePopupMotionActive;
     // All active Workspace animation sources share this lower-cost Prismal material tier.
     private volatile boolean workspaceMotionQualityActive;
+    private float workspaceAppReturnProgress = Float.NaN;
+    private final WorkspaceAppMaterialQuality workspaceAppMaterial = new WorkspaceAppMaterialQuality();
     private final float[] hwuiProbeInvariants = new float[10];
     private volatile boolean shuttingDown;
     private volatile Runnable terminalFailureListener;
@@ -1173,6 +1175,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             workspaceMotionQualityActive = nextMotionQualityActive;
             staticChanged = true;
         }
+        float nativeProgress = Float.isFinite(workspaceAppReturnProgress)
+                ? workspaceAppReturnProgress : launchProxyReturnProgress;
+        if (workspaceAppMaterial.update(workspaceNativeTransitionActive || launchProxyReturning,
+                nextMotionQualityActive, nativeProgress)) staticChanged = true;
 
         // Source rebind and rotation may return before output scheduling. Publish the
         // captured scene first so recovery renders use the same UI geometry revision.
@@ -1277,6 +1283,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
 
     void setNativeTransitionFrameSyncEnabled(boolean enabled, String reason) {
         if (shuttingDown) return;
+        if (enabled && !workspaceNativeTransitionActive) {
+            workspaceAppReturnProgress = Float.NaN;
+            workspaceAppMaterial.begin();
+        }
         workspaceNativeTransitionActive = enabled;
         workspaceSourceMotionDeferred = enabled
                 || workspaceLaunchProxyActive || workspaceLayerMotionActive;
@@ -1298,6 +1308,12 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         workspacePopupMotionActive = active;
         View root = rootRef.get();
         if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+    }
+
+    void setNativeAppReturnProgress(float progress) {
+        if (workspaceNativeTransitionActive && Float.isFinite(progress)) {
+            workspaceAppReturnProgress = Math.max(0f, Math.min(1f, progress));
+        }
     }
 
     void setUnlockTransitionFrameSyncEnabled(boolean enabled, String reason) {
@@ -1848,7 +1864,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                        android.graphics.RuntimeShader baselineShader,
                        android.graphics.RuntimeShader decoratedShader,
                        android.graphics.RuntimeShader motionDecoratedShader,
-                       float[] wallpaperMapping) {
+                       float[] wallpaperMapping, LauncherGlassHwuiUniforms materialUniforms) {
         if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || shuttingDown || canvas == null
                 || paint == null || baselineShader == null || decoratedShader == null
                 || staticGlassOutputSuppressed || !canvas.isHardwareAccelerated()) return;
@@ -1857,10 +1873,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         StaticSceneSnapshot scene = publishedStaticScene;
         StaticNodeState[] snapshot = scene.nodes;
         if (snapshot.length == 0) return;
+        boolean appTransition = workspaceAppMaterial.usesTransitionProgram();
+        float detail = workspaceAppMaterial.currentDetail();
+        baselineShader.setFloatUniform("u_workspaceDetail", detail);
+        decoratedShader.setFloatUniform("u_workspaceDetail", detail);
         baselineShader.setFloatUniform("uProbeWallpaperTransform", wallpaperMapping);
         decoratedShader.setFloatUniform("uProbeWallpaperTransform", wallpaperMapping);
+        baselineShader.setFloatUniform("u_resolution", (float) rootWidth, (float) rootHeight);
+        decoratedShader.setFloatUniform("u_resolution", (float) rootWidth, (float) rootHeight);
         if (motionDecoratedShader != null) {
+            motionDecoratedShader.setFloatUniform("u_workspaceDetail", 1f);
             motionDecoratedShader.setFloatUniform("uProbeWallpaperTransform", wallpaperMapping);
+            motionDecoratedShader.setFloatUniform("u_resolution", (float) rootWidth, (float) rootHeight);
         }
         PrismalParams params = prismalParams != null ? prismalParams : PrismalParams.builder().build();
         float density = root.getResources().getDisplayMetrics().density;
@@ -1892,7 +1916,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             boolean decorated = decoration.hasBacklit() || decoration.hasShadow();
             if (decorated) decoratedNodes++;
             boolean transitionMaterial = decorated
-                    && workspaceMotionQualityActive && motionDecoratedShader != null;
+                    && !appTransition && workspaceMotionQualityActive && motionDecoratedShader != null;
             android.graphics.RuntimeShader shader = transitionMaterial
                     ? motionDecoratedShader : decorated ? decoratedShader : baselineShader;
             if (shader != activeShader) {
@@ -1902,7 +1926,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             float exteriorGuardPx = decorated
                     ? decoration.extraGuardPx(density, minDimension) : 2f;
 
-            shader.setFloatUniform("u_resolution", (float) rootWidth, (float) rootHeight);
             shader.setFloatUniform("u_glassSize", geometry.width, geometry.height);
             shader.setFloatUniform("u_cornerRadii",
                     geometry.cornerRadius, geometry.cornerRadius,
@@ -1910,20 +1933,16 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             shader.setFloatUniform("uProbeBounds",
                     geometry.left, geometry.top,
                     geometry.left + geometry.width, geometry.top + geometry.height);
-            setHwuiProbeMaterialUniforms(shader, params, highlights,
-                    minDimension, hwuiProbeInvariants);
-            if (workspaceMotionQualityActive) {
-                // Keep edge decoration and chromatic dispersion; skip motion caustics only.
-                setHwuiProbeMotionQuality(shader);
-            }
-            if (decorated) {
-                setHwuiProbeDecorationUniforms(shader, decoration, density, minDimension);
-            }
+            materialUniforms.bind(shader, params, highlights, decorated ? decoration : null,
+                    density, minDimension, workspaceMotionQualityActive && !appTransition, hwuiProbeInvariants);
             PrismalInteractionState interaction = state.interaction;
             if (interaction != null) {
                 shader.setFloatUniform("u_pressProgress", interaction.pressProgress);
                 shader.setFloatUniform("u_glowCenter",
                         interaction.glowCenterX, interaction.glowCenterY);
+            } else {
+                shader.setFloatUniform("u_pressProgress", params.pressProgress);
+                shader.setFloatUniform("u_glowCenter", params.glowCenterX, params.glowCenterY);
             }
             paint.setAlpha(Math.round(255f * visibleAlpha));
             canvas.drawRect(
@@ -1999,6 +2018,18 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             PrismalHighlightProfile h,
             float minGlassDimension,
             float[] invariants) {
+        setHwuiProbeOpticalUniforms(shader, p, invariants);
+        setHwuiProbeSizeUniforms(shader, p, minGlassDimension);
+        setHwuiProbeHighlightUniforms(shader, h);
+    }
+
+    static void setHwuiProbeSizeUniforms(android.graphics.RuntimeShader shader,
+            PrismalParams p, float minGlassDimension) {
+        shader.setFloatUniform("u_lensRefractionPx", calculateLensRefractionPx(p, minGlassDimension));
+    }
+
+    static void setHwuiProbeOpticalUniforms(android.graphics.RuntimeShader shader,
+            PrismalParams p, float[] invariants) {
         shader.setFloatUniform("u_refractionInset", p.refractionInsetPx);
         shader.setFloatUniform("u_sminSmoothing", p.sminSmoothingPx);
         shader.setFloatUniform("u_continuousCorners", p.continuousCorners ? 1f : 0f);
@@ -2008,8 +2039,6 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         shader.setFloatUniform("u_normalStrength", p.normalStrength);
         shader.setFloatUniform("u_displacementScale", p.displacementScale);
         shader.setFloatUniform("u_heightTransitionWidth", p.heightTransitionWidthPx);
-        shader.setFloatUniform("u_lensRefractionPx",
-                calculateLensRefractionPx(p, minGlassDimension));
         shader.setFloatUniform("u_lensDepthEffect", p.lensDepthEffect);
         shader.setFloatUniform("u_chromaticAberration", Math.max(0f, p.chromaticAberration));
         shader.setFloatUniform("u_dispersionR", p.dispersionR);
@@ -2056,7 +2085,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                 invariants[5], invariants[6], invariants[7]);
         shader.setFloatUniform("u_invariantFresnelR0", invariants[8]);
         shader.setFloatUniform("u_invariantShadowExtent", invariants[9]);
+    }
 
+    static void setHwuiProbeHighlightUniforms(android.graphics.RuntimeShader shader,
+            PrismalHighlightProfile h) {
         shader.setFloatUniform("u_componentSkyHaze", h.skyHaze ? 1f : 0f);
         shader.setFloatUniform("u_componentSpecular", h.specular ? 1f : 0f);
         shader.setFloatUniform("u_componentLitRim", h.litRim ? 1f : 0f);

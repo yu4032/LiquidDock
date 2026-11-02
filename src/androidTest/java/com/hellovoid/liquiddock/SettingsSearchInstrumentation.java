@@ -13,16 +13,40 @@ import java.util.function.Predicate;
 public final class SettingsSearchInstrumentation extends Instrumentation {
     private boolean workspaceShaderReuse;
     private boolean dockBackdrop;
+    private boolean workspaceGeometryCache;
+    private boolean workspaceMaterialUniforms;
+    private boolean workspaceMotionBody;
+    private boolean workspaceTransitionMaterial;
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
         workspaceShaderReuse = arguments != null
                 && "workspaceShaderReuse".equals(arguments.getString("case"));
         dockBackdrop = arguments != null && "dockBackdrop".equals(arguments.getString("case"));
+        workspaceGeometryCache = arguments != null && "workspaceGeometryCache".equals(arguments.getString("case"));
+        workspaceMaterialUniforms = arguments != null && "workspaceMaterialUniforms".equals(arguments.getString("case"));
+        workspaceMotionBody = arguments != null && "workspaceMotionBody".equals(arguments.getString("case"));
+        workspaceTransitionMaterial = arguments != null && "workspaceTransitionMaterial".equals(arguments.getString("case"));
         start();
     }
 
     @Override public void onStart() {
+        if (workspaceTransitionMaterial) {
+            WorkspaceTransitionMaterialCheck.run(this);
+            return;
+        }
+        if (workspaceMotionBody) {
+            WorkspaceMotionBodyCheck.run(this);
+            return;
+        }
+        if (workspaceMaterialUniforms) {
+            WorkspaceMaterialUniformCheck.run(this);
+            return;
+        }
+        if (workspaceGeometryCache) {
+            WorkspaceGeometryCacheCheck.run(this);
+            return;
+        }
         if (dockBackdrop) {
             DockBackdropCheck.run(this);
             return;
