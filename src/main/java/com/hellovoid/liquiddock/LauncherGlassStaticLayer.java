@@ -172,7 +172,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                     && (!launchProxyReturning || launchReturnAlpha <= 0.001f));
         // Keep the output drawable while its active Workspace proxy moves, even if the
         // other icons/widgets/folders are hidden. Only individual scene nodes are gated.
-        boolean hideWhole = hideGroup && !localWorkspaceProxyActive;
+        boolean hideWhole = LauncherGlassGroupHidePolicy.hideWholeWorkspaceOutput(
+                hideGroup, localWorkspaceProxyActive);
         return (hideWhole && hideDuringLaunch)
                 || layerAlpha.alpha()
                     * (hideWhole ? launchReturnAlpha : 1f) <= 0.001f;
@@ -251,20 +252,21 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     /** The Dock body remains present; this alpha is for ordinary, non-proxy icons only. */
     static float dockBackgroundIconAlpha(float nativeHomeAlpha) {
-        if (!AnimationRuntimeState.hideDockIconsDuringApp()) return 1f;
         LauncherGlassDockTransitionState.Sample dock = DOCK_TRANSITION.sample();
-        if (workspaceProxyLaunchingAway || (dock.active && !dock.returning)) return 0f;
-        return Float.isFinite(nativeHomeAlpha)
-                ? Math.max(0f, Math.min(1f, nativeHomeAlpha)) : 1f;
+        return LauncherGlassGroupHidePolicy.dockBackground(
+                AnimationRuntimeState.hideDockIconsDuringApp(),
+                workspaceProxyLaunchingAway, dock.active && !dock.returning, nativeHomeAlpha);
     }
 
     /** Only Workspace nodes without a live FloatingIcon proxy observe this alpha. */
     static float workspaceBackgroundNodeAlpha(View root) {
         LauncherGlassStaticLayer layer = find(root);
-        if (layer == null || !AnimationRuntimeState.hideWorkspaceGlassDuringApp()
-                || !layer.localWorkspaceProxyActive) return 1f;
-        if (layer.launchAwaySuppressionLatched || !layer.launchProxyReturning) return 0f;
-        return layer.launchReturnAlpha;
+        if (layer == null) return 1f;
+        return LauncherGlassGroupHidePolicy.workspaceBackground(
+                AnimationRuntimeState.hideWorkspaceGlassDuringApp(),
+                layer.localWorkspaceProxyActive,
+                layer.launchAwaySuppressionLatched || !layer.launchProxyReturning,
+                layer.launchReturnAlpha);
     }
 
     private static void invalidateForDockTransition(boolean changed) {
@@ -553,7 +555,8 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                     && (!launchProxyReturning || launchReturnAlpha <= 0.001f));
         // The moving Workspace icon is part of this shared GPU output: never blank its
         // entire TextureView. Its siblings are hidden per-node in the scene instead.
-        boolean hideWhole = hideGroup && !localWorkspaceProxyActive;
+        boolean hideWhole = LauncherGlassGroupHidePolicy.hideWholeWorkspaceOutput(
+                hideGroup, localWorkspaceProxyActive);
         float alpha = layerAlpha.alpha() * (hideWhole ? launchReturnAlpha : 1f);
         if ((hideWhole && hideDuringLaunch) || alpha <= 0.001f) {
             session.suppressWorkspaceGlassOutput();
