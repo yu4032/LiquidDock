@@ -23,7 +23,9 @@ final class DockGlassIconOpacity {
             boolean proxyActive, float homeSceneAlpha) {
         float local = resolve(transitionAlpha, nativeSourceAlpha, proxyActive);
         float scene = clamp(homeSceneAlpha);
-        return proxyActive ? Math.min(local, scene) : local * scene;
+        // The actively animated icon is never governed by the group-hide switch.
+        // Its own native source/geometry/return-progress alpha remains authoritative.
+        return proxyActive ? local : local * scene;
     }
 
     private static float clamp(float value) {
