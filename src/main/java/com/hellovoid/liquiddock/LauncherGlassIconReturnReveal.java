@@ -8,13 +8,17 @@ final class LauncherGlassIconReturnReveal {
     static final long MAX_FADE_MS = 220L;
 
     private boolean sourceRestored;
+    private boolean sourceHidden;
     private boolean returning;
     private float glassAlpha = 1f;
 
     /** A real native source hide starts a new cycle and retires the previous terminal marker. */
     void onNativeHidden() {
+        // Launcher may repeat the same concealment callback, or publish the first proxy
+        // frame slightly ahead of it. Neither event may erase an active HOME return.
+        if (sourceHidden && !sourceRestored) return;
+        sourceHidden = true;
         sourceRestored = false;
-        returning = false;
         glassAlpha = 0f;
     }
 
@@ -34,6 +38,7 @@ final class LauncherGlassIconReturnReveal {
     boolean onNativeVisible() {
         if (sourceRestored) return false;
         sourceRestored = true;
+        sourceHidden = false;
         boolean reveal = returning;
         returning = false;
         glassAlpha = reveal ? 0f : 1f;
@@ -54,6 +59,7 @@ final class LauncherGlassIconReturnReveal {
 
     void reset() {
         sourceRestored = false;
+        sourceHidden = false;
         returning = false;
         glassAlpha = 1f;
     }
