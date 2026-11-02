@@ -49,8 +49,8 @@ final class LauncherGlassDockTransitionState {
 
     synchronized boolean onNativeVisible() {
         if (returning && homeInProgress) return false;
-        if (!active && sourceRestored) return false;
-        boolean changed = active;
+        // Initial or repeated VISIBLE callbacks do not retire a proxy that hasn't begun.
+        if (!active) return false;
         active = false;
         returning = false;
         progress = 0f;
