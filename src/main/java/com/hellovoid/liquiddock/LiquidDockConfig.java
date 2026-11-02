@@ -41,8 +41,15 @@ final class LiquidDockConfig {
                 pressInMs, pressOutMs, dockResizeMs, shortcutPopupDismissFadeMs,
                 securityCenterExitFadeMs;
         final boolean disableWallpaperZoom;
+        final boolean hideWorkspaceGlassDuringApp, hideDockIconsDuringApp;
 
         Animation(ConfigReader c) {
+            hideWorkspaceGlassDuringApp = c.b(
+                    ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name(),
+                    ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.runtimeFallback());
+            hideDockIconsDuringApp = c.b(
+                    ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name(),
+                    ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.runtimeFallback());
             workspaceVisibilityMs = duration(c, ConfigSchema.Animation.WORKSPACE_VISIBILITY);
             appReturnGlassFadeStartBeforeEndMs = duration(
                     c, ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END);
