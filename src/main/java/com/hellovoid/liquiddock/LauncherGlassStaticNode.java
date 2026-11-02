@@ -147,6 +147,31 @@ final class LauncherGlassStaticNode {
         return node;
     }
 
+    /**
+     * HOME completion is an authoritative visual-owner terminal even if MIUI skipped the
+     * final FloatingIcon/ShortcutIcon callback. Do not touch launch-away proxies whose
+     * original source is still hidden by a newer app launch.
+     */
+    static void onHomePresentationSettledForAll() {
+        java.util.ArrayList<LauncherGlassStaticNode> stale = new java.util.ArrayList<>();
+        synchronized (BY_MATERIAL) {
+            for (WeakReference<LauncherGlassStaticNode> reference : BY_MATERIAL.values()) {
+                LauncherGlassStaticNode node = reference != null ? reference.get() : null;
+                if (node == null || node.disposed
+                        || node.nodeKind != LauncherGlassNodeKind.ICON
+                        || !node.visualOwnerState.isLaunchProxyActive()) continue;
+                View material = node.materialRef.get();
+                if (material == null || !material.isAttachedToWindow()) continue;
+                if (node.visualOwnerState.isLaunchProxyReturning()
+                        || LauncherGlassVisibility.alphaBelowRoot(
+                                material, material.getRootView()) > 0.001f) {
+                    stale.add(node);
+                }
+            }
+        }
+        for (LauncherGlassStaticNode node : stale) node.endLaunchProxy();
+    }
+
     static LauncherGlassStaticNode find(View materialHost) {
         if (materialHost == null) return null;
         WeakReference<LauncherGlassStaticNode> reference = BY_MATERIAL.get(materialHost);
