@@ -235,8 +235,14 @@ final class MiuixLauncherStaticGlassHook {
                         if (!LauncherGlassHierarchy.isWorkspace(host)) return result;
                         int visibility = ((Number) args[0]).intValue();
                         LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
-                        if (visibility == View.VISIBLE && node != null) {
-                            node.endLaunchProxy();
+                        if (node != null) {
+                            if (visibility == View.VISIBLE) {
+                                node.endLaunchProxy();
+                            } else {
+                                // A real source hide starts a new FloatingIcon cycle. It also
+                                // clears the terminal marker left by the previous return.
+                                node.onNativeLaunchHidden();
+                            }
                         }
                         return result;
                     }, int.class);
