@@ -176,7 +176,8 @@ class SettingsMetaTest {
         assertTrue(pages.getValue(Page.Recents).indexOfKey(
             com.hellovoid.liquiddock.config.ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM.name()) >= 0)
         val owners = mapOf(
-            Page.AnimationWorkspace to listOf(animationAppReturnGlassFadeStartSpec, animationAppReturnGlassFadeDurationSpec,
+            Page.AnimationWorkspace to listOf(
+                animationAppReturnGlassFadeStartSpec, animationAppReturnGlassFadeDurationSpec,
                 animationWorkspaceVisibilitySpec, animationUnlockGlassFadeSpec,
                 animationDockResizeSpec),
             Page.AnimationInteraction to listOf(animationPressInSpec, animationPressOutSpec),
@@ -184,7 +185,20 @@ class SettingsMetaTest {
             Page.AnimationGui to listOf(animationSettingsPageSpec),
         )
         owners.forEach { (page, specs) ->
-            assertEquals(specs.map { it.key }, pages.getValue(page).blocks.filterIsInstance<SettingsBlock.Row>().map { it.key })
+            assertEquals(specs.map { it.key }, pages.getValue(page).blocks
+                .filterIsInstance<SettingsBlock.Row>().filter { it.number != null }.map { it.key })
+        }
+        val animation = pages.getValue(Page.AnimationWorkspace).blocks
+            .filterIsInstance<SettingsBlock.Row>()
+        val expectedToggles = listOf(
+            com.hellovoid.liquiddock.config.ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP,
+            com.hellovoid.liquiddock.config.ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP,
+        )
+        assertEquals(expectedToggles.map { it.name() },
+            animation.filter { it.toggle != null }.map { it.key })
+        expectedToggles.forEach { option ->
+            assertEquals(Page.AnimationWorkspace,
+                catalog.single { it.key == option.name() }.page)
         }
     }
 

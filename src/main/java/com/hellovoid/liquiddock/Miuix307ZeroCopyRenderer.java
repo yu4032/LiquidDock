@@ -326,8 +326,13 @@ final class Miuix307ZeroCopyRenderer {
      * is used.
      */
     static void onHomeOpeningStarted() {
+        // Dock and Workspace may be hosted in different windows. A missing Dock renderer must
+        // not prevent the Launcher-wide animation owner from entering its HOME return phase.
+        LauncherGlassStaticLayer.onDockHomeOpeningStarted();
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
+        // The Dock body remains visible; only its icon scene follows HOME presentation.
+        gpuBackdrop.beginHomeIconReturn();
 
         final long serial = ++homeFreshnessSerial;
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
@@ -341,8 +346,10 @@ final class Miuix307ZeroCopyRenderer {
                 + " inputGenerationBaseline=" + inputGenerationBaseline);
     }
 
-    /** HOME FINISH never hides the Dock; refresh was already armed at HOME START. */
+    /** Release the icon-only HOME presentation even if no native progress frames arrived. */
     static void onHomeOpeningFinished() {
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        if (gpuBackdrop != null) gpuBackdrop.finishHomeIconReturn();
         if (homeFreshnessSerial <= 0L) return;
         HOME_FRESHNESS.onHomeFinished(homeFreshnessSerial);
         MainHook.log(TAG + " HOME finish observed without presentation barrier serial="
@@ -396,6 +403,11 @@ final class Miuix307ZeroCopyRenderer {
     static void requestDockProgressRefresh() {
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop != null) gpuBackdrop.requestDockProgressRefresh();
+    }
+
+    static void onNativeAppReturnProgress(float progress) {
+        Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
+        if (gpuBackdrop != null) gpuBackdrop.observeHomeIconReturn(progress);
     }
 
     static void clear() {

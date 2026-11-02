@@ -637,6 +637,10 @@ final class LauncherGlassSceneController {
             return;
         }
         if (isPresentationPending()) return;
+        // A native HOME handoff can leave the independent glass layer with an old alpha
+        // even though its retained scene is still valid. Reconcile actual visibility
+        // before choosing whether the content needs a fresh producer frame.
+        applyLayerVisibility();
         if (state.state() != State.COVERED && state.state() != State.DETACHED) {
             MainHook.log(TAG + " presentation settled reason=home"
                     + " generation=" + state.generation());

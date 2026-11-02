@@ -30,6 +30,7 @@ final class DockGlassCompositor {
     /** Prismal geometry is in physical framebuffer pixels, while optical widths are dp. */
     private final float pixelDensity;
     private final ArrayList<CachedItem> cached = new ArrayList<>();
+    private final DockGlassIconHomeVisibility homeVisibility = new DockGlassIconHomeVisibility();
     private long[] uiFingerprintScratch = new long[0];
     private long[] proxyFingerprintScratch = new long[0];
     private DockIconAnimationState.Sample[] animationSampleScratch =
@@ -66,6 +67,18 @@ final class DockGlassCompositor {
         workstationIconCornerRadiusDp = Math.max(0f, radiusDp);
         seenRevision = -1L;
         lastFingerprint = Long.MIN_VALUE;
+    }
+
+    boolean beginHomeReturn() {
+        return homeVisibility.begin();
+    }
+
+    boolean observeHomeReturn(float progress) {
+        return homeVisibility.observe(progress);
+    }
+
+    boolean finishHomeReturn() {
+        return homeVisibility.finish();
     }
 
     void invalidateUiScene() {
@@ -138,6 +151,9 @@ final class DockGlassCompositor {
             fingerprint = mix(fingerprint, Float.floatToIntBits(animationSample.opacity));
         }
         fingerprint = mix(fingerprint, outputFingerprint);
+        float homeIconAlpha = LauncherGlassStaticLayer.dockBackgroundIconAlpha(
+                homeVisibility.alpha());
+        fingerprint = mix(fingerprint, Float.floatToIntBits(homeIconAlpha));
 
         boolean geometryMappingChanged = framebufferWidth != lastW || framebufferHeight != lastH
                 || Float.compare(sampleInsetLeft, lastInsetL) != 0
@@ -196,8 +212,15 @@ final class DockGlassCompositor {
                 cachedItem.uiFingerprint = uiFingerprint;
                 cachedItem.proxyFingerprint = proxyFingerprint;
             }
-            if (animationSample.opacity <= 0f || cachedItem.geometry == null) continue;
-            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, animationSample.opacity));
+            // Native ShortcutIcon and its container may fade independently from
+            // CLOSE_TO_HOME progress. The proxy owns visibility while the source is
+            // hidden, so do not apply the source's zero alpha to proxy geometry.
+            float outputAlpha = DockGlassIconOpacity.resolve(
+                    animationSample.opacity,
+                    animationSample.proxyActive ? 1f : item.nativePresentationAlpha(ownershipRoot),
+                    animationSample.proxyActive, homeIconAlpha);
+            if (outputAlpha <= 0.001f || cachedItem.geometry == null) continue;
+            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, outputAlpha, animationSample.proxyActive));
         }
         latestScene = new DockGlassSceneSnapshot(
                 out.toArray(new DockGlassSceneSnapshot.Item[0]));
@@ -239,11 +262,15 @@ final class DockGlassCompositor {
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
-            renderer.drawGlass(new PrismalGeometry(framebufferWidth, framebufferHeight,
-                    geometry.centerX, geometry.centerY, geometry.width, geometry.height,
-                    geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
+            renderer.setTransientQualityActive(item.animating);
+            try {
+                renderer.drawGlass(new PrismalGeometry(framebufferWidth, framebufferHeight,
+                        geometry.centerX, geometry.centerY, geometry.width, geometry.height,
+                        geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
+            } finally {
+                renderer.setTransientQualityActive(false);
+            }
         }
-
         renderer.setEdgeDecoration(null, pixelDensity);
     }
 

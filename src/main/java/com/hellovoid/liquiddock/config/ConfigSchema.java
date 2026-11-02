@@ -26,6 +26,14 @@ public final class ConfigSchema {
     }
 
     public static final class Animation {
+        /** Hide background Workspace glass during app animations; animated icon is exempt. */
+        public static final ConfigKey<Boolean> HIDE_WORKSPACE_GLASS_DURING_APP = bool(
+                "animation_hide_workspace_glass_during_app", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
+        /** Hide non-target Dock icon glass during app animations, not the Dock body. */
+        public static final ConfigKey<Boolean> HIDE_DOCK_ICONS_DURING_APP = bool(
+                "animation_hide_dock_icons_during_app", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> WORKSPACE_VISIBILITY = integer(
                 "animation_workspace_visibility_ms", 450, 450, 450, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
@@ -636,6 +644,8 @@ public final class ConfigSchema {
         List<ConfigKey<?>> keys = new ArrayList<>();
         add(keys, Core.ENABLED);
         add(keys, Animation.WORKSPACE_VISIBILITY,
+                Animation.HIDE_WORKSPACE_GLASS_DURING_APP,
+                Animation.HIDE_DOCK_ICONS_DURING_APP,
                 Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END,
                 Animation.APP_RETURN_GLASS_FADE_DURATION,
                 Animation.UNLOCK_GLASS_FADE,

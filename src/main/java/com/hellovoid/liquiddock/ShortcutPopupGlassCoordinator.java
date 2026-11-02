@@ -130,9 +130,9 @@ final class ShortcutPopupGlassCoordinator {
                 || !captureRoot.isAttachedToWindow()) return;
         State state = new State(captureRoot, glassConfig, early, earlyOwner);
         current = state;
-        // Popup glass needs the complete desktop scene, including icons and widgets.
-        // The Workspace HWUI backdrop is wallpaper-only and cannot supply that scene.
-        state.workspaceGlassCaptureSuppressed = suppressWorkspaceGlassForCapture(captureRoot);
+        // Capture the already-visible desktop scene. Hiding the shared Workspace glass
+        // for a single popup screenshot produces a visible black/transparent flash. The
+        // popup's own dedicated source overlay handles capture independently.
         ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
                 captureRoot,
                 new ShortcutPopupSourceOverlay.Listener() {
@@ -141,8 +141,8 @@ final class ShortcutPopupGlassCoordinator {
                         if (root == null) {
                             startSession(state, attached);
                         } else {
-                            // Commit the transparent Workspace glass frame before PassBlur
-                            // samples the screen beneath this source window.
+                            // Let the overlay attach finish before PassBlur samples the
+                            // visible desktop, without toggling the Workspace output.
                             root.postOnAnimation(() -> startSession(state, attached));
                         }
                     }
@@ -164,7 +164,7 @@ final class ShortcutPopupGlassCoordinator {
                     state.glassConfig,
                     new ShortcutPopupGlassSession.Listener() {
                         @Override public void onBackdropReady() {
-                            ShortcutPopupGlassCoordinator.onBackdropReady(state);
+                            // No Workspace presentation change is required for popup capture.
                         }
 
                         @Override public void onHwuiBackdropsReady(
@@ -196,11 +196,6 @@ final class ShortcutPopupGlassCoordinator {
             boolean outputReady = ensurePopupOutput(state);
             MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
         }
-    }
-
-    private static synchronized void onBackdropReady(State state) {
-        if (current != state || state.released) return;
-        restoreWorkspaceGlassAfterCapture(state);
     }
 
     private static synchronized void onHwuiBackdropsReady(
@@ -255,21 +250,6 @@ final class ShortcutPopupGlassCoordinator {
         }
         ShortcutPopupGlassLayer layer = state.layer;
         if (layer != null) layer.setMotionQualityActive(active);
-    }
-
-    private static void restoreWorkspaceGlassAfterCapture(State state) {
-        if (!state.workspaceGlassCaptureSuppressed) return;
-        state.workspaceGlassCaptureSuppressed = false;
-        View root = state.captureRootRef.get();
-        if (root != null) LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, false);
-    }
-
-    private static boolean suppressWorkspaceGlassForCapture(View root) {
-        // Without icon-glass motion ownership, hiding the shared Workspace layer for the early
-        // popup screenshot is a visible one-frame blink on every press. The popup can sample the
-        // existing Workspace image in this mode; keep suppression only for icon-proxy launches.
-        return GlassRuntimeState.isIconEnabled()
-                && LauncherGlassStaticLayer.setPopupCaptureSuppressed(root, true);
     }
 
     static synchronized boolean bindPopup(View decorView, View popupView, View contentView) {
@@ -511,7 +491,6 @@ final class ShortcutPopupGlassCoordinator {
         current = null;
         if (state == null || state.released) return;
         state.released = true;
-        restoreWorkspaceGlassAfterCapture(state);
         View captureRoot = state.captureRootRef.get();
         if (captureRoot != null) {
             LauncherGlassSessionRegistry.setPopupMotionQualityForRoot(captureRoot, false);
@@ -583,7 +562,6 @@ final class ShortcutPopupGlassCoordinator {
         ViewTreeObserver.OnPreDrawListener preDrawListener;
         View.OnAttachStateChangeListener popupDetachListener;
         boolean requestStarted;
-        boolean workspaceGlassCaptureSuppressed;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
         boolean released;

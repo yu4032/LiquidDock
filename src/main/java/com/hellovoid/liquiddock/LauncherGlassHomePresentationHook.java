@@ -30,6 +30,9 @@ final class LauncherGlassHomePresentationHook {
             "com.miui.home.launcher.common.UnlockAnimationStateMachine";
     private static final String PREPARE = "PREPARE";
     private static final long UNLOCK_CAPTURE_FAIL_OPEN_MS = 2_000L;
+    // WindowElement may omit completion after a canceled/merged spring. Do not release during
+    // physical motion, and give the shell enough time to complete its own presentation handoff.
+    private static final long HOME_TERMINAL_RECOVERY_GRACE_MS = 2_000L;
 
     private static boolean installed;
     private static volatile long unlockBarrierSerial = -1L;
@@ -210,17 +213,26 @@ final class LauncherGlassHomePresentationHook {
             return;
         }
         onLauncherNativeTransitionFinished(animation, "spring-retarget-away");
-        releaseHomeBarrierOnMain(HOME_STATE.onAnimationRetargetedAway(owner, animation));
+        releaseHomeBarrierOnMain(HOME_STATE.onAnimationRetargetedAway(owner, animation), false);
     }
 
     private static void onLauncherSpringPhysicalTerminal(Object animation) {
         onLauncherNativeTransitionFinished(animation, "spring-terminal");
-        HOME_STATE.onSpringPhysicalTerminal(animation);
+        long cycle = HOME_STATE.onSpringPhysicalTerminal(animation);
+        if (cycle < 0L) return;
+        homeLifecycleHandler().postDelayed(() -> {
+            LauncherHomeTransitionState.Decision fallback =
+                    HOME_STATE.onTerminalGraceExpired(cycle);
+            if (!fallback.releaseBarrier) return;
+            MainHook.log(TAG + " HOME owner completion missing after native spring terminal;"
+                    + " recovered cycle=" + cycle);
+            releaseHomeBarrierOnMain(fallback, true);
+        }, HOME_TERMINAL_RECOVERY_GRACE_MS);
     }
 
     private static void onLauncherOwnerFinishCompleted(Object owner) {
         releaseNativeTransitionsForOwner(owner, "owner-finish-completed");
-        releaseHomeBarrierOnMain(HOME_STATE.onOwnerFinishCompleted(owner));
+        releaseHomeBarrierOnMain(HOME_STATE.onOwnerFinishCompleted(owner), true);
     }
 
     private static synchronized void onLauncherNativeTransitionStarted(
@@ -263,13 +275,24 @@ final class LauncherGlassHomePresentationHook {
     }
 
     private static void releaseHomeBarrierOnMain(
-            LauncherHomeTransitionState.Decision decision) {
+            LauncherHomeTransitionState.Decision decision, boolean homeSettled) {
         if (decision == null || !decision.releaseBarrier) return;
         postHomeLifecycleOnMain(() -> {
             // A newer HOME cycle may have started before an older terminal reached the UI queue.
             if (HOME_STATE.isArmed()) return;
             Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
             LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
+            if (!homeSettled) {
+                // The gesture was retargeted back into launch; keep Workspace hidden if
+                // an app still owns its Dock icon.
+                LauncherGlassStaticLayer.onDockHomeRetargetedAway();
+            }
+            if (homeSettled) {
+                // Only a completed HOME presentation can retire stale return proxies. Retargeting
+                // into app launch must keep its native hidden/proxy owner intact.
+                LauncherGlassStaticNode.onHomePresentationSettledForAll();
+                LauncherGlassStaticLayer.onHomePresentationSettledForAll();
+            }
             LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
         });
     }

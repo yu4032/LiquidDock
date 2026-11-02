@@ -25,6 +25,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
 
     private static final WeakHashMap<View, Long> UNLOCK_END_BY_ROOT = new WeakHashMap<>();
     private static final AtomicInteger HWUI_PROBE_SCROLL_MUTATIONS = new AtomicInteger();
+    // Dock icons can belong to another ViewRoot, but their launch must own Workspace presentation.
+    private static final LauncherGlassDockTransitionState DOCK_TRANSITION =
+            new LauncherGlassDockTransitionState();
+    private static volatile boolean workspaceProxyLaunchingAway;
     private static final DecelerateInterpolator APP_RETURN_INTERPOLATOR =
             new DecelerateInterpolator();
     private final WeakReference<View> rootRef;
@@ -37,9 +41,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     private volatile boolean hwuiProbeWallpaperScaleDirty;
     private boolean launchProxyActive;
     private boolean launchProxyReturning;
+    /** Unlike the cross-window Dock owner, this proxy can be drawn on our Workspace output. */
+    private boolean localWorkspaceProxyActive;
     private boolean launchAwaySuppressionLatched;
     private float launchReturnAlpha = 1f;
-    private boolean popupCaptureSuppressed;
     private final LauncherGlassHwuiProbeView hwuiProbe;
     private final LauncherGlassLayerAlpha layerAlpha = new LauncherGlassLayerAlpha();
     private ValueAnimator sceneAnimator;
@@ -161,10 +166,121 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     private boolean isOutputHidden() {
-        boolean hideDuringLaunch = launchProxyActive
-                && (!launchProxyReturning || launchReturnAlpha <= 0.001f);
-        return launchAwaySuppressionLatched || hideDuringLaunch
-                || layerAlpha.alpha() * launchReturnAlpha <= 0.001f;
+        boolean hideGroup = AnimationRuntimeState.hideWorkspaceGlassDuringApp();
+        boolean hideDuringLaunch = launchAwaySuppressionLatched
+                || (launchProxyActive
+                    && (!launchProxyReturning || launchReturnAlpha <= 0.001f));
+        // Keep the output drawable while its active Workspace proxy moves, even if the
+        // other icons/widgets/folders are hidden. Only individual scene nodes are gated.
+        boolean hideWhole = LauncherGlassGroupHidePolicy.hideWholeWorkspaceOutput(
+                hideGroup, localWorkspaceProxyActive);
+        return (hideWhole && hideDuringLaunch)
+                || layerAlpha.alpha()
+                    * (hideWhole ? launchReturnAlpha : 1f) <= 0.001f;
+    }
+
+    /**
+     * Recover a HOME layer whose last per-icon proxy or visibility callback was skipped.
+     * Normal returning glass retains its fade; only stale launch-away suppression is cleared.
+     * Must run on the Launcher UI thread after the authoritative HOME owner finishes.
+     */
+    static void onHomePresentationSettledForAll() {
+        DOCK_TRANSITION.onHomeSettled();
+        workspaceProxyLaunchingAway = false;
+        Miuix307ZeroCopyRenderer.requestDockProgressRefresh();
+        java.util.ArrayList<LauncherGlassStaticLayer> layers;
+        synchronized (LauncherGlassStaticLayer.class) {
+            layers = new java.util.ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassStaticLayer layer : layers) {
+            if (layer == null || layer.disposed) continue;
+            layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
+            layer.launchAwaySuppressionLatched = false;
+            boolean wasReturning = layer.launchProxyActive && layer.launchProxyReturning;
+            layer.launchProxyActive = false;
+            layer.launchProxyReturning = false;
+            layer.localWorkspaceProxyActive = false;
+            if (wasReturning && !layer.launchReturnFadeStarted) {
+                layer.startLaunchReturnFade();
+            } else if (layer.launchReturnAnimator == null) {
+                layer.launchReturnAlpha = 1f;
+            }
+            layer.applyLayerAlpha();
+            View root = layer.rootRef.get();
+            if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+        }
+    }
+
+    static void onDockNativeVisibilityChanged(boolean visible) {
+        boolean changed = visible ? DOCK_TRANSITION.onNativeVisible()
+                : DOCK_TRANSITION.onNativeHidden();
+        invalidateForDockTransition(changed);
+    }
+
+    static void onDockProxyFrame(boolean closeToHome, float progress) {
+        invalidateForDockTransition(DOCK_TRANSITION.onProxyFrame(closeToHome, progress));
+    }
+
+    static void onDockProxyReturnFinished() {
+        invalidateForDockTransition(DOCK_TRANSITION.onProxyReturnFinished());
+    }
+
+    static void onDockHomeOpeningStarted() {
+        invalidateForDockTransition(DOCK_TRANSITION.onHomeStarted());
+    }
+
+    static void onDockHomeReturnProgress(float progress) {
+        invalidateForDockTransition(DOCK_TRANSITION.onHomeProgress(progress));
+    }
+
+    static void onDockHomeRetargetedAway() {
+        invalidateForDockTransition(DOCK_TRANSITION.onHomeRetargetedAway());
+    }
+
+    static void onAnimationVisibilitySettingsChanged() {
+        java.util.ArrayList<LauncherGlassStaticLayer> layers;
+        synchronized (LauncherGlassStaticLayer.class) {
+            layers = new java.util.ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassStaticLayer layer : layers) {
+            if (layer == null || layer.disposed) continue;
+            layer.applyLayerAlpha();
+            View root = layer.rootRef.get();
+            if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+        }
+    }
+
+    /** The Dock body remains present; this alpha is for ordinary, non-proxy icons only. */
+    static float dockBackgroundIconAlpha(float nativeHomeAlpha) {
+        LauncherGlassDockTransitionState.Sample dock = DOCK_TRANSITION.sample();
+        return LauncherGlassGroupHidePolicy.dockBackground(
+                AnimationRuntimeState.hideDockIconsDuringApp(),
+                workspaceProxyLaunchingAway, dock.active && !dock.returning, nativeHomeAlpha);
+    }
+
+    /** Only Workspace nodes without a live FloatingIcon proxy observe this alpha. */
+    static float workspaceBackgroundNodeAlpha(View root) {
+        LauncherGlassStaticLayer layer = find(root);
+        if (layer == null) return 1f;
+        return LauncherGlassGroupHidePolicy.workspaceBackground(
+                AnimationRuntimeState.hideWorkspaceGlassDuringApp(),
+                layer.localWorkspaceProxyActive,
+                layer.launchAwaySuppressionLatched || !layer.launchProxyReturning,
+                layer.launchReturnAlpha);
+    }
+
+    private static void invalidateForDockTransition(boolean changed) {
+        if (!changed) return;
+        Miuix307ZeroCopyRenderer.requestDockProgressRefresh();
+        java.util.ArrayList<LauncherGlassStaticLayer> layers;
+        synchronized (LauncherGlassStaticLayer.class) {
+            layers = new java.util.ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassStaticLayer layer : layers) {
+            if (layer == null || layer.disposed) continue;
+            View root = layer.rootRef.get();
+            if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+        }
     }
 
     static void onLauncherResumed(View root) {
@@ -172,20 +288,6 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (layer == null || !layer.launchAwaySuppressionLatched) return;
         layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
         layer.mainHandler.postDelayed(layer.clearLaunchAwaySuppression, 220L);
-    }
-
-    /** Temporarily removes only Workspace glass from the popup's one-shot backdrop capture. */
-    static boolean setPopupCaptureSuppressed(View root, boolean suppressed) {
-        LauncherGlassStaticLayer layer = find(root);
-        if (layer == null || layer.disposed) return false;
-        Runnable update = () -> {
-            if (layer.disposed || layer.popupCaptureSuppressed == suppressed) return;
-            layer.popupCaptureSuppressed = suppressed;
-            layer.applyLayerAlpha();
-        };
-        if (Looper.myLooper() == Looper.getMainLooper()) update.run();
-        else layer.mainHandler.post(update);
-        return true;
     }
 
     private boolean isMotionAnimationActive() {
@@ -297,20 +399,34 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 .isFolderBackdropFrozenForRoot(root);
         float alpha = frozenFolder ? 1f : workspace != null
                 ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
+        // Dock and Workspace may own different windows but share one glass presentation.
+        LauncherGlassDockTransitionState.Sample presentation =
+                LauncherGlassDockTransitionState.mergeWorkspace(
+                        launchProxyActive, launchProxyReturning, returnProgress,
+                        DOCK_TRANSITION.sample());
+        boolean effectiveProxyActive = presentation.active;
+        boolean effectiveReturning = presentation.returning;
+        float effectiveProgress = presentation.progress;
         boolean wasReturning = layer.launchProxyActive && layer.launchProxyReturning;
-        if (launchProxyReturning) {
+        if (effectiveReturning) {
             layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
             layer.launchAwaySuppressionLatched = false;
-        } else if (launchProxyActive && !layer.launchAwaySuppressionLatched) {
+        } else if (effectiveProxyActive && !layer.launchAwaySuppressionLatched) {
             layer.launchAwaySuppressionLatched = true;
             layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
         }
-        layer.layerAlpha.setWorkspaceAlpha(alpha, launchProxyActive);
-        layer.launchProxyActive = launchProxyActive;
-        layer.launchProxyReturning = launchProxyActive && launchProxyReturning;
+        layer.layerAlpha.setWorkspaceAlpha(alpha, effectiveProxyActive);
+        layer.launchProxyActive = effectiveProxyActive;
+        layer.launchProxyReturning = effectiveProxyActive && effectiveReturning;
+        layer.localWorkspaceProxyActive = launchProxyActive;
+        boolean nextWorkspaceLaunchAway = launchProxyActive && !launchProxyReturning;
+        if (workspaceProxyLaunchingAway != nextWorkspaceLaunchAway) {
+            workspaceProxyLaunchingAway = nextWorkspaceLaunchAway;
+            Miuix307ZeroCopyRenderer.requestDockProgressRefresh();
+        }
         if (layer.launchProxyReturning) {
             long now = SystemClock.uptimeMillis();
-            float progress = clampProgress(returnProgress);
+            float progress = clampProgress(effectiveProgress);
             if (!wasReturning) layer.beginLaunchReturnCycle(progress, now);
             double remainingMs = layer.estimateLaunchReturnRemainingMs(progress, now);
             if (!layer.launchReturnFadeStarted
@@ -318,7 +434,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                             .appReturnGlassFadeStartBeforeEndMs()) {
                 layer.startLaunchReturnFade();
             }
-        } else if (launchProxyActive) {
+        } else if (effectiveProxyActive) {
             layer.cancelLaunchReturnFade();
             layer.launchReturnStartedAtMs = 0L;
             layer.launchReturnStartProgress = 0f;
@@ -433,17 +549,23 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     }
 
     private void applyLayerAlpha() {
+        boolean hideGroup = AnimationRuntimeState.hideWorkspaceGlassDuringApp();
         boolean hideDuringLaunch = launchAwaySuppressionLatched
                 || (launchProxyActive
                     && (!launchProxyReturning || launchReturnAlpha <= 0.001f));
-        float alpha = layerAlpha.alpha() * launchReturnAlpha;
-        if (hideDuringLaunch || alpha <= 0.001f) {
+        // The moving Workspace icon is part of this shared GPU output: never blank its
+        // entire TextureView. Its siblings are hidden per-node in the scene instead.
+        boolean hideWhole = LauncherGlassGroupHidePolicy.hideWholeWorkspaceOutput(
+                hideGroup, localWorkspaceProxyActive);
+        float alpha = layerAlpha.alpha() * (hideWhole ? launchReturnAlpha : 1f);
+        if ((hideWhole && hideDuringLaunch) || alpha <= 0.001f) {
             session.suppressWorkspaceGlassOutput();
         }
-        float presentedAlpha = popupCaptureSuppressed || hideDuringLaunch ? 0f : alpha;
+        float presentedAlpha = hideWhole && hideDuringLaunch ? 0f : alpha;
         if (hwuiProbeActive && hwuiProbe != null) {
             setAlpha(0f);
-            hwuiProbe.setVisibility(hideDuringLaunch ? View.INVISIBLE : View.VISIBLE);
+            hwuiProbe.setVisibility(hideWhole && hideDuringLaunch
+                    ? View.INVISIBLE : View.VISIBLE);
             hwuiProbe.setAlpha(presentedAlpha);
             if (presentedAlpha > 0.001f && hwuiProbeWallpaperScaleDirty) {
                 hwuiProbeWallpaperScaleDirty = false;
@@ -491,6 +613,14 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
             if (disposed || launchReturnAnimator != value) return;
             launchReturnAlpha = (Float) value.getAnimatedValue();
             applyLayerAlpha();
+            // A local FloatingIcon must remain visible, so background-only fading happens
+            // in the shared scene's node alpha rather than the TextureView alpha. Publish
+            // that alpha change on the next UI traversal; no geometry-cache invalidation.
+            if (localWorkspaceProxyActive
+                    && AnimationRuntimeState.hideWorkspaceGlassDuringApp()) {
+                View root = rootRef.get();
+                if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+            }
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
@@ -530,6 +660,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         if (disposed) return;
         session.resetWorkspaceScrollProjection();
         disposed = true;
+        if (workspaceProxyLaunchingAway && localWorkspaceProxyActive) {
+            workspaceProxyLaunchingAway = false;
+            Miuix307ZeroCopyRenderer.requestDockProgressRefresh();
+        }
         mainHandler.removeCallbacks(clearLaunchAwaySuppression);
         cancelSceneAnimation();
         cancelMotionAnimation();
