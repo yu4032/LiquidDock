@@ -70,6 +70,10 @@ final class DockIconAnimationGlassHook {
                                 // even when the FloatingIcon proxy omits update frames.
                                 DockGlassItemRegistry.beginLaunchAnimation(host);
                             }
+                            // A Dock ShortcutIcon can live in a separate ViewRoot. The same
+                            // visibility boundary must also hide Workspace's sibling glass.
+                            LauncherGlassStaticLayer.onDockNativeVisibilityChanged(
+                                    visibility == View.VISIBLE);
                         }
                         return result;
                     }, int.class);
@@ -221,6 +225,8 @@ final class DockIconAnimationGlassHook {
                                     proxy.setAlpha(1.0f);
                                 }
                                 if (GlassRuntimeState.isAnyIconEnabled()) {
+                                    LauncherGlassStaticLayer.onDockProxyFrame(
+                                            closeToHome, progress);
                                     if (closeToHome) {
                                         DockGlassItemRegistry.observeHomeReturnProgress(
                                                 dockTarget, progress);
