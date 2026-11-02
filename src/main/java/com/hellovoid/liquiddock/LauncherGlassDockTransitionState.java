@@ -55,7 +55,7 @@ final class LauncherGlassDockTransitionState {
         returning = false;
         progress = 0f;
         sourceRestored = true;
-        return changed;
+        return true;
     }
 
     synchronized boolean onHomeStarted() {
