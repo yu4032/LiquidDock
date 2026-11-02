@@ -19,6 +19,48 @@ public class LauncherGlassDockTransitionStateTest {
         assertFalse(state.sample().active);
     }
 
+    @Test public void dockOnlySourceHidesWholeWorkspaceAndReturnsOnSameFadeClock() {
+        LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
+        state.onNativeHidden();
+        LauncherGlassDockTransitionState.Sample away =
+                LauncherGlassDockTransitionState.mergeWorkspace(
+                        false, false, 0f, state.sample());
+        assertTrue(away.active);
+        assertFalse(away.returning);
+        state.onHomeStarted();
+        state.onProxyFrame(true, .97f);
+        LauncherGlassDockTransitionState.Sample home =
+                LauncherGlassDockTransitionState.mergeWorkspace(
+                        false, false, 0f, state.sample());
+        assertTrue(home.active);
+        assertTrue(home.returning);
+        assertEquals(.97f, home.progress, .00001f);
+        state.onHomeSettled();
+        assertFalse(LauncherGlassDockTransitionState.mergeWorkspace(
+                false, false, 0f, state.sample()).active);
+    }
+
+    @Test public void localWorkspaceProxyKeepsAuthorityWhenDockIsIdleOrRetargeted() {
+        LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
+        LauncherGlassDockTransitionState.Sample local =
+                LauncherGlassDockTransitionState.mergeWorkspace(
+                        true, true, .92f, state.sample());
+        assertTrue(local.active);
+        assertTrue(local.returning);
+        assertEquals(.92f, local.progress, 0f);
+        state.onNativeHidden();
+        state.onHomeStarted();
+        state.onHomeProgress(.95f);
+        LauncherGlassDockTransitionState.Sample merged =
+                LauncherGlassDockTransitionState.mergeWorkspace(
+                        true, true, .92f, state.sample());
+        assertTrue(merged.returning);
+        assertEquals(.95f, merged.progress, 0f);
+        state.onHomeRetargetedAway();
+        assertTrue(LauncherGlassDockTransitionState.mergeWorkspace(
+                true, true, .92f, state.sample()).returning);
+    }
+
     @Test public void lateProxyCannotReopenCompletedHome() {
         LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
         state.onNativeHidden();
