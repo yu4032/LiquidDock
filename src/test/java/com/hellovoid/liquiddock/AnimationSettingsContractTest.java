@@ -22,6 +22,20 @@ public class AnimationSettingsContractTest {
     }
 
     @Test
+    public void bothGroupHideSwitchesAreUnderAnimationPageAndSearchable() throws Exception {
+        String pages = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/DeclaredSettingsPages.kt"));
+        String searches = Files.readString(
+                MAIN.resolve("kotlin/com/hellovoid/liquiddock/SettingsSearch.kt"));
+        String live = Files.readString(JAVA.resolve("LiveGlassConfigState.java"));
+        assertTrue(pages.contains("toggle(ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP"));
+        assertTrue(pages.contains("toggle(ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP"));
+        assertTrue(searches.contains("pages[page]?.blocks?.filterIsInstance<SettingsBlock.Row>()"));
+        assertTrue(live.contains("ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name()"));
+        assertTrue(live.contains("ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name()"));
+    }
+
+    @Test
     public void ownedExitFadesReadRuntimeConfigurationInTheirOwningProcesses() throws Exception {
         String shortcut = Files.readString(JAVA.resolve("ShortcutPopupGlassLayer.java"));
         String security = Files.readString(JAVA.resolve("SecurityCenterGlassSinkView.java"));
