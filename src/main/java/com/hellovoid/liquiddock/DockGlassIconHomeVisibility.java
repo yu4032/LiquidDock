@@ -9,7 +9,7 @@ final class DockGlassIconHomeVisibility {
     private float alpha = 1f;
 
     boolean begin() {
-        if (returning && alpha == 0f) return false;
+        if (returning) return false;
         returning = true;
         alpha = 0f;
         return true;
