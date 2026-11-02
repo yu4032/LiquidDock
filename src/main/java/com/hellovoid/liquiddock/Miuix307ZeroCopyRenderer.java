@@ -326,11 +326,13 @@ final class Miuix307ZeroCopyRenderer {
      * is used.
      */
     static void onHomeOpeningStarted() {
+        // Dock and Workspace may be hosted in different windows. A missing Dock renderer must
+        // not prevent the Launcher-wide animation owner from entering its HOME return phase.
+        LauncherGlassStaticLayer.onDockHomeOpeningStarted();
         Miuix307PassBlurTextureView gpuBackdrop = gpuBackdropRef.get();
         if (gpuBackdrop == null) return;
-        // Mirror Workspace's hidden/revealing glass presentation without hiding the Dock body.
+        // The Dock body remains visible; only its icon scene follows HOME presentation.
         gpuBackdrop.beginHomeIconReturn();
-        LauncherGlassStaticLayer.onDockHomeOpeningStarted();
 
         final long serial = ++homeFreshnessSerial;
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
