@@ -167,6 +167,34 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 || layerAlpha.alpha() * launchReturnAlpha <= 0.001f;
     }
 
+    /**
+     * Recover a HOME layer whose last per-icon proxy or visibility callback was skipped.
+     * Normal returning glass retains its fade; only stale launch-away suppression is cleared.
+     * Must run on the Launcher UI thread after the authoritative HOME owner finishes.
+     */
+    static void onHomePresentationSettledForAll() {
+        java.util.ArrayList<LauncherGlassStaticLayer> layers;
+        synchronized (LauncherGlassStaticLayer.class) {
+            layers = new java.util.ArrayList<>(BY_ROOT.values());
+        }
+        for (LauncherGlassStaticLayer layer : layers) {
+            if (layer == null || layer.disposed) continue;
+            layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
+            layer.launchAwaySuppressionLatched = false;
+            boolean wasReturning = layer.launchProxyActive && layer.launchProxyReturning;
+            layer.launchProxyActive = false;
+            layer.launchProxyReturning = false;
+            if (wasReturning && !layer.launchReturnFadeStarted) {
+                layer.startLaunchReturnFade();
+            } else if (layer.launchReturnAnimator == null) {
+                layer.launchReturnAlpha = 1f;
+            }
+            layer.applyLayerAlpha();
+            View root = layer.rootRef.get();
+            if (root != null && root.isAttachedToWindow()) root.postInvalidateOnAnimation();
+        }
+    }
+
     static void onLauncherResumed(View root) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null || !layer.launchAwaySuppressionLatched) return;
