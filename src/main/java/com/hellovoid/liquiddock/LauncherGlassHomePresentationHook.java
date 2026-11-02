@@ -30,6 +30,9 @@ final class LauncherGlassHomePresentationHook {
             "com.miui.home.launcher.common.UnlockAnimationStateMachine";
     private static final String PREPARE = "PREPARE";
     private static final long UNLOCK_CAPTURE_FAIL_OPEN_MS = 2_000L;
+    // WindowElement may omit completion after a canceled/merged spring. Do not release during
+    // physical motion, and give the shell enough time to complete its own presentation handoff.
+    private static final long HOME_TERMINAL_RECOVERY_GRACE_MS = 2_000L;
 
     private static boolean installed;
     private static volatile long unlockBarrierSerial = -1L;
@@ -215,7 +218,16 @@ final class LauncherGlassHomePresentationHook {
 
     private static void onLauncherSpringPhysicalTerminal(Object animation) {
         onLauncherNativeTransitionFinished(animation, "spring-terminal");
-        HOME_STATE.onSpringPhysicalTerminal(animation);
+        long cycle = HOME_STATE.onSpringPhysicalTerminal(animation);
+        if (cycle < 0L) return;
+        homeLifecycleHandler().postDelayed(() -> {
+            LauncherHomeTransitionState.Decision fallback =
+                    HOME_STATE.onTerminalGraceExpired(cycle);
+            if (!fallback.releaseBarrier) return;
+            MainHook.log(TAG + " HOME owner completion missing after native spring terminal;"
+                    + " recovered cycle=" + cycle);
+            releaseHomeBarrierOnMain(fallback);
+        }, HOME_TERMINAL_RECOVERY_GRACE_MS);
     }
 
     private static void onLauncherOwnerFinishCompleted(Object owner) {
@@ -270,6 +282,10 @@ final class LauncherGlassHomePresentationHook {
             if (HOME_STATE.isArmed()) return;
             Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
             LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
+            // Native completion may arrive without FloatingIcon/ShortcutIcon terminal callbacks.
+            // Clear stale visual owners and presentation suppression after HOME is settled.
+            LauncherGlassStaticNode.onHomePresentationSettledForAll();
+            LauncherGlassStaticLayer.onHomePresentationSettledForAll();
             LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
         });
     }
