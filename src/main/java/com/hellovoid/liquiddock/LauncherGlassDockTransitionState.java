@@ -70,8 +70,9 @@ final class LauncherGlassDockTransitionState {
         // Ignore late frame callbacks from a previously completed proxy. A Dock target
         // may still enter a new HOME proxy without a corresponding hide callback.
         if (sourceRestored && !homeInProgress) return false;
-        if (!active && !closeToHome) return false;
-        if (!active && closeToHome) {
+        // Some Launcher builds publish a FloatingIcon update before the source hide callback.
+        // Let the first proxy establish ownership unless the prior cycle is terminal.
+        if (!active) {
             active = true;
             sourceRestored = false;
         }
