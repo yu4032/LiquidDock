@@ -501,8 +501,8 @@ final class LauncherGlassStaticNode {
         animator.addUpdateListener(value -> {
             if (disposed || iconReturnAnimator != value) return;
             if (iconReturnReveal.setRevealProgress((Float) value.getAnimatedValue())) {
-                // No geometry-cache invalidation or extra GL draw: the next UI pre-draw
-                // republishes only this node's output alpha.
+                // Keep geometry caches intact. Alpha changes still repaint the shared
+                // Workspace scene, so schedule them after the native close handoff.
                 invalidateVisualOwnerGeometry();
             }
         });
