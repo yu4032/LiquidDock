@@ -188,6 +188,18 @@ class SettingsMetaTest {
             assertEquals(specs.map { it.key }, pages.getValue(page).blocks
                 .filterIsInstance<SettingsBlock.Row>().filter { it.number != null }.map { it.key })
         }
+        val animation = pages.getValue(Page.AnimationWorkspace).blocks
+            .filterIsInstance<SettingsBlock.Row>()
+        val expectedToggles = listOf(
+            com.hellovoid.liquiddock.config.ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP,
+            com.hellovoid.liquiddock.config.ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP,
+        )
+        assertEquals(expectedToggles.map { it.name() },
+            animation.filter { it.toggle != null }.map { it.key })
+        expectedToggles.forEach { option ->
+            assertEquals(Page.AnimationWorkspace,
+                catalog.single { it.key == option.name() }.page)
+        }
     }
 
     @Test(expected = IllegalArgumentException::class)
