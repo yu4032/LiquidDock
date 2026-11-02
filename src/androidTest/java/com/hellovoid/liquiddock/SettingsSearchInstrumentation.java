@@ -12,15 +12,21 @@ import java.util.function.Predicate;
 /** Black-box accessibility regression: Unicode text enters without an ADB IME. */
 public final class SettingsSearchInstrumentation extends Instrumentation {
     private boolean workspaceShaderReuse;
+    private boolean dockBackdrop;
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
         workspaceShaderReuse = arguments != null
                 && "workspaceShaderReuse".equals(arguments.getString("case"));
+        dockBackdrop = arguments != null && "dockBackdrop".equals(arguments.getString("case"));
         start();
     }
 
     @Override public void onStart() {
+        if (dockBackdrop) {
+            DockBackdropCheck.run(this);
+            return;
+        }
         if (workspaceShaderReuse) {
             WorkspaceShaderReuseCheck.run(this);
             return;

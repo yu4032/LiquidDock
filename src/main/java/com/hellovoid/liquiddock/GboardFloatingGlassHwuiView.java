@@ -71,7 +71,7 @@ final class GboardFloatingGlassHwuiView extends View {
             nextShader.setFloatUniform("uProbeBlurScale",
                     (float) blurred.getWidth() / nextLogicalWidth,
                     (float) blurred.getHeight() / nextLogicalHeight);
-            nextShader.setFloatUniform("uProbeWallpaperScale", 1f);
+            nextShader.setFloatUniform("uProbeWallpaperTransform", 1f, 1f, 0f, 0f);
             rawBackdrop = raw;
             blurredBackdrop = blurred;
             logicalWidth = nextLogicalWidth;

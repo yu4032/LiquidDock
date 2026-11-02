@@ -1512,8 +1512,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (root == null || !root.isAttachedToWindow()) return;
         // Anchor the exported bitmap to the wallpaper transform active when PassBlur latched
         // this source frame. The HWUI shader can then follow later zoom updates without recapture.
-        final float wallpaperScaleAtFrame =
-                LauncherWallpaperZoomHook.currentWallpaperSurfaceScale();
+        int displayId = root.getDisplay() != null ? root.getDisplay().getDisplayId() : 0;
         // The Recents child uses this OES frame on the same GL thread, with its own geometry.
         // Never reject its frame because Workspace static-output geometry is temporarily stale
         // or a HOME-only Prismal parameter is unavailable during the Recents transition.
@@ -1597,6 +1596,21 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                                 != pendingWallpaperFrame.authoritative);
             boolean probeBackdropChanged = probeGeometryChanged
                     || hwuiProbeExportDirty || probeWallpaperChanged;
+            boolean exportProbe = BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && workspaceSource
+                    && !staticGlassOutputSuppressed && probeBackdropChanged;
+            final LauncherWallpaperTransformState.Sample wallpaperTransformAtFrame = exportProbe
+                    ? LauncherWallpaperZoomHook.capturedTransform(displayId,frame.timestampNs) : null;
+            if (exportProbe && wallpaperTransformAtFrame == null) {
+                // Native history was unavailable/in flight or the producer buffer is too old.
+                // Never publish guessed metadata; only this rare backdrop replacement retries.
+                hwuiProbeExportDirty = true;
+                // A missing observer must not create a continuous idle capture loop. The
+                // initial native connection resumes pending backgrounds through the registry.
+                if (WallpaperNativeTransformBridge.isConnected()) {
+                    sourceBackend.requestFresh(frame.generation,true);
+                }
+                return;
+            }
             if (trace) Trace.beginSection("LD.Workspace.Backdrop");
             try {
                 prismalRenderer.prepareBackdrop(
@@ -1611,9 +1625,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             }
             long backdropDoneNs = perf ? System.nanoTime() : 0L;
             backdropPrepared = true;
-            if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && workspaceSource
-                    && !staticGlassOutputSuppressed
-                    && probeBackdropChanged) {
+            if (exportProbe) {
                 long exportStartNs = System.nanoTime();
                 Bitmap rawBitmap = null;
                 Bitmap blurredBitmap = null;
@@ -1662,7 +1674,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                         if (!LauncherGlassStaticLayer.publishHwuiProbeBackdrop(
                                 root, rawForUi, blurForUi,
                                 logicalWidth, logicalHeight, rotation,
-                                wallpaperScaleAtFrame)) {
+                                wallpaperTransformAtFrame)) {
                             if (hwuiProbeExportSerial == exportSerial) hwuiProbeExportDirty = true;
                         }
                     })) {
@@ -1836,7 +1848,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
                        android.graphics.RuntimeShader baselineShader,
                        android.graphics.RuntimeShader decoratedShader,
                        android.graphics.RuntimeShader motionDecoratedShader,
-                       float relativeWallpaperScale) {
+                       float[] wallpaperMapping) {
         if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE || shuttingDown || canvas == null
                 || paint == null || baselineShader == null || decoratedShader == null
                 || staticGlassOutputSuppressed || !canvas.isHardwareAccelerated()) return;
@@ -1845,12 +1857,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         StaticSceneSnapshot scene = publishedStaticScene;
         StaticNodeState[] snapshot = scene.nodes;
         if (snapshot.length == 0) return;
-        float sampleScale = Float.isFinite(relativeWallpaperScale)
-                && relativeWallpaperScale > 0f ? relativeWallpaperScale : 1f;
-        baselineShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
-        decoratedShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
+        baselineShader.setFloatUniform("uProbeWallpaperTransform", wallpaperMapping);
+        decoratedShader.setFloatUniform("uProbeWallpaperTransform", wallpaperMapping);
         if (motionDecoratedShader != null) {
-            motionDecoratedShader.setFloatUniform("uProbeWallpaperScale", sampleScale);
+            motionDecoratedShader.setFloatUniform("uProbeWallpaperTransform", wallpaperMapping);
         }
         PrismalParams params = prismalParams != null ? prismalParams : PrismalParams.builder().build();
         float density = root.getResources().getDisplayMetrics().density;
