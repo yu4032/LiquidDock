@@ -15,9 +15,9 @@ final class DockGlassIconOpacity {
     }
 
     /**
-     * The HOME-wide icon reveal matches the proxy's native progress. Use the smaller alpha
-     * for proxy icons rather than squaring the same fade; regular source icons also obey
-     * any independent OEM subtree alpha.
+     * Group hide controls only non-animated Dock icons. FloatingIcon proxy geometry and
+     * its native progress own the animated icon's alpha independently; the background
+     * group must never suppress it or apply a second fade.
      */
     static float resolve(float transitionAlpha, float nativeSourceAlpha,
             boolean proxyActive, float homeSceneAlpha) {
