@@ -121,6 +121,29 @@ public class LauncherGlassDockTransitionStateTest {
         assertFalse(state.onProxyFrame(false, .5f));
     }
 
+    @Test public void committedDockProxyHandoffReleasesWorkspaceWithoutOwnerFinish() {
+        LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
+        state.onNativeHidden();
+        state.onHomeStarted();
+        state.onProxyFrame(true, .95f);
+        assertTrue(state.onProxyReturnFinished());
+        assertFalse(state.sample().active);
+        assertFalse(state.onProxyFrame(true, .99f));
+        assertFalse(state.onNativeVisible());
+        assertFalse(state.onProxyReturnFinished());
+        state.onNativeHidden();
+        assertTrue(state.sample().active);
+    }
+
+    @Test public void launchAwayHandoffMustNotRevealWorkspace() {
+        LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
+        state.onNativeHidden();
+        state.onProxyFrame(false, .5f);
+        assertFalse(state.onProxyReturnFinished());
+        assertTrue(state.sample().active);
+        assertFalse(state.sample().returning);
+    }
+
     @Test public void newCycleAndInvalidProgressDoNotLeakOldVisibility() {
         LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
         state.onNativeHidden();
