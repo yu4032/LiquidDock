@@ -1,5 +1,7 @@
 package com.hellovoid.liquiddock;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.graphics.Matrix;
 import android.view.View;
@@ -26,6 +28,8 @@ final class LauncherGlassStaticNode {
     private final LauncherGlassNodeKind nodeKind;
     private final LauncherGlassVisualOwnerState visualOwnerState =
             new LauncherGlassVisualOwnerState();
+    private final LauncherGlassIconReturnReveal iconReturnReveal =
+            new LauncherGlassIconReturnReveal();
     private final LauncherGlassStaticGeometryCache geometryCache =
             new LauncherGlassStaticGeometryCache();
     private final LauncherGlassFolderReturnState folderReturnState =
@@ -43,6 +47,7 @@ final class LauncherGlassStaticNode {
     private final LauncherGlassPressState pressState = new LauncherGlassPressState();
     private ValueAnimator pressAnimator;
     private ValueAnimator visibilityAnimator;
+    private ValueAnimator iconReturnAnimator;
     private volatile float visibilityAlpha;
     private final View.OnAttachStateChangeListener materialAttachListener;
 
@@ -280,6 +285,7 @@ final class LauncherGlassStaticNode {
             View root, View workspace, float workspaceAlpha, boolean workspaceAlphaBypassed) {
         if (disposed) return 0f;
         float ownAlpha = visibilityAlpha();
+        if (nodeKind == LauncherGlassNodeKind.ICON) ownAlpha *= iconReturnReveal.alpha();
         if (!Float.isFinite(ownAlpha) || ownAlpha <= 0f) return 0f;
 
         if (folderReturnState.isActive()) {
@@ -388,6 +394,8 @@ final class LauncherGlassStaticNode {
     }
 
     void hideImmediately() {
+        cancelIconReturnAnimator();
+        iconReturnReveal.reset();
         if (visibilityAnimator != null) {
             visibilityAnimator.cancel();
             visibilityAnimator = null;
@@ -395,16 +403,26 @@ final class LauncherGlassStaticNode {
         visibilityAlpha = 0f;
     }
 
+    /** Called only for an actual OEM source hide; late proxy frames need a fresh cycle. */
+    void onNativeLaunchHidden() {
+        if (disposed || nodeKind != LauncherGlassNodeKind.ICON) return;
+        cancelIconReturnAnimator();
+        iconReturnReveal.onNativeHidden();
+        invalidateVisualOwnerGeometry();
+    }
+
     boolean holdLaunchProxyHidden() {
         return holdLaunchProxyHidden(false, 0f);
     }
 
     boolean holdLaunchProxyHidden(boolean returning, float progress) {
-        if (disposed) return false;
+        if (disposed || (nodeKind == LauncherGlassNodeKind.ICON
+                && !iconReturnReveal.acceptsProxyUpdates())) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
         boolean wasReturning = visualOwnerState.isLaunchProxyReturning();
         boolean visualChanged = !visualOwnerState.matchesLaunchProxyVisual(null, 0f);
         if (!visualOwnerState.holdLaunchProxyHidden(returning, progress)) return false;
+        updateIconProxyReturnState(returning);
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
@@ -428,7 +446,8 @@ final class LauncherGlassStaticNode {
     boolean updateLaunchProxyGeometry(
             float left, float top, float right, float bottom, float alpha,
             boolean returning, float progress) {
-        if (disposed) return false;
+        if (disposed || (nodeKind == LauncherGlassNodeKind.ICON
+                && !iconReturnReveal.acceptsProxyUpdates())) return false;
         boolean wasActive = visualOwnerState.isLaunchProxyActive();
         boolean wasReturning = visualOwnerState.isLaunchProxyReturning();
         boolean hadGeometry = visualOwnerState.copyLaunchProxyRect() != null;
@@ -436,6 +455,7 @@ final class LauncherGlassStaticNode {
         boolean visualChanged = !visualOwnerState.matchesLaunchProxyVisual(rect, alpha);
         if (!visualOwnerState.updateLaunchProxyRect(
                 rect, alpha, returning, progress)) return false;
+        updateIconProxyReturnState(returning);
         if (!wasActive) resetPressInteraction(false);
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
@@ -448,11 +468,59 @@ final class LauncherGlassStaticNode {
     }
 
     void endLaunchProxy() {
-        if (disposed || !visualOwnerState.endLaunchProxy()) return;
+        if (disposed) return;
+        boolean reveal = nodeKind == LauncherGlassNodeKind.ICON
+                && iconReturnReveal.onNativeVisible();
+        if (!visualOwnerState.endLaunchProxy() && !reveal) return;
         invalidateVisualOwnerGeometry();
         LauncherGlassSession live = session;
         if (live != null) live.onStaticLaunchProxyStateChanged(this, false, false);
         requestLifecycleRefresh();
+        if (reveal) startIconReturnReveal();
+    }
+
+    private void updateIconProxyReturnState(boolean returning) {
+        if (nodeKind != LauncherGlassNodeKind.ICON) return;
+        cancelIconReturnAnimator();
+        iconReturnReveal.onProxyFrame(returning);
+    }
+
+    /** Only the target icon's glass is animated, after its native source is visible. */
+    private void startIconReturnReveal() {
+        long duration = Math.min(LauncherGlassIconReturnReveal.MAX_FADE_MS,
+                Math.max(0L, AnimationRuntimeState.appReturnGlassFadeDurationMs()));
+        if (duration == 0L) {
+            iconReturnReveal.completeReveal();
+            invalidateVisualOwnerGeometry();
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        iconReturnAnimator = animator;
+        animator.setDuration(duration);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(value -> {
+            if (disposed || iconReturnAnimator != value) return;
+            if (iconReturnReveal.setRevealProgress((Float) value.getAnimatedValue())) {
+                // No geometry-cache invalidation or extra GL draw: the next UI pre-draw
+                // republishes only this node's output alpha.
+                invalidateVisualOwnerGeometry();
+            }
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (iconReturnAnimator != animation) return;
+                iconReturnAnimator = null;
+                iconReturnReveal.completeReveal();
+                invalidateVisualOwnerGeometry();
+            }
+        });
+        animator.start();
+    }
+
+    private void cancelIconReturnAnimator() {
+        ValueAnimator previous = iconReturnAnimator;
+        iconReturnAnimator = null;
+        if (previous != null) previous.cancel();
     }
 
     private void invalidateVisualOwnerGeometry() {
