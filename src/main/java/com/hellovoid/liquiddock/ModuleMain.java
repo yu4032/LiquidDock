@@ -48,6 +48,12 @@ public final class ModuleMain extends XposedModule {
     }
 
     @Override
+    public void onSystemServerStarting(@NonNull SystemServerStartingParam param) {
+        if (!reloadGate.enterOwnerLifecycle()) return;
+        WallpaperNativeTransformBridge.installSystemObserver(param.getClassLoader());
+    }
+
+    @Override
     public void onPackageReady(@NonNull PackageReadyParam param) {
         refreshDebugLogging();
         String packageName = param.getPackageName();

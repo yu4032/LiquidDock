@@ -102,7 +102,7 @@ final class ShortcutPopupGlassHwuiView extends View {
         // This shared AGSL shader uses the uniform to zoom sample coordinates. Popup
         // backdrops are already captured in their display scale, so keep their UV mapping
         // neutral; leaving the uniform at its default zero clamps samples to texture corners.
-        shader.setFloatUniform("uProbeWallpaperScale", 1f);
+        shader.setFloatUniform("uProbeWallpaperTransform", 1f, 1f, 0f, 0f);
     }
 
     void updateFrame(LauncherGlassGeometry.Snapshot next, float progress) {

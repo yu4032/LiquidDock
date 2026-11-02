@@ -294,6 +294,35 @@ public final class PrismalRenderer implements AutoCloseable {
         glassDrawCount = 0;
     }
 
+    /**
+     * Render a producer directly into our owned sharp backdrop, avoiding an intermediate 2D copy.
+     * The callback runs synchronously on the caller's current GL context with an RGBA framebuffer
+     * and physical viewport bound. It must overwrite every pixel in Prismal's source orientation
+     * (v=0 is visual top), and leave this context current. It must not retain the framebuffer.
+     * Blur and logical geometry are identical to prepareBackdrop's texture-input path.
+     */
+    public void prepareBackdropRendered(int physicalWidth, int physicalHeight,
+            int logicalWidth, int logicalHeight, PrismalParams params, Runnable renderSource) {
+        if (renderSource == null) throw new IllegalArgumentException("source renderer is null");
+        if (physicalWidth <= 0 || physicalHeight <= 0 || logicalWidth <= 0 || logicalHeight <= 0) {
+            throw new IllegalArgumentException("framebuffer dimensions <= 0");
+        }
+        backdropPrepared = false;
+        glassFrameBegun = false;
+        ensurePrograms();
+        ensureTargets(physicalWidth, physicalHeight, logicalWidth, logicalHeight);
+        width = logicalWidth;
+        height = logicalHeight;
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, sourceFramebuffer);
+        GLES20.glViewport(0, 0, renderWidth, renderHeight);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        renderSource.run();
+        renderBlur(params != null ? params : PrismalParams.builder().build(), blurFramebufferV);
+        backdropPrepared = true;
+        glassDrawCount = 0;
+    }
+
     /** Recompute blur from our source copy, never from a producer-owned texture ID. */
     public void reblurPreparedBackdrop(PrismalParams params) {
         if (!backdropPrepared) throw new IllegalStateException("No prepared backdrop to reblur");
@@ -322,13 +351,42 @@ public final class PrismalRenderer implements AutoCloseable {
             throw new IllegalStateException("prepareBackdrop must be called before beginGlassFrame");
         }
         frameTarget.selectSurface(surfaceWidth, surfaceHeight);
+        beginClearedFrame();
+    }
+
+    /**
+     * Render only the visible native-pixel crop, retaining the full background sampling domain.
+     * One optional padding pixel preserves the original even/odd derivative-quad alignment;
+     * outputTexture() returns this compact texture. Consumers crop off sourceLeft/sourceBottom
+     * parity pixels, then copy the visible extent 1:1. Optics and AA are not rescaled.
+     */
+    public void beginGlassFrameCropped(int visibleWidth, int visibleHeight,
+            int sourceLeft, int sourceBottom) {
+        if (!backdropPrepared) {
+            throw new IllegalStateException("prepareBackdrop must be called before beginGlassFrame");
+        }
+        if (visibleWidth <= 0 || visibleHeight <= 0 || sourceLeft < 0 || sourceBottom < 0
+                || (long) sourceLeft + visibleWidth > width
+                || (long) sourceBottom + visibleHeight > height) {
+            throw new IllegalArgumentException("visible crop outside logical scene");
+        }
+        int textureWidth = visibleWidth + (sourceLeft & 1);
+        int textureHeight = visibleHeight + (sourceBottom & 1);
+        ensureReducedOutput(textureWidth, textureHeight);
+        frameTarget.selectTextureRegion(reducedOutputFramebuffer, textureWidth, textureHeight,
+                width, height, sourceLeft & ~1, sourceBottom & ~1);
+        beginClearedFrame();
+    }
+
+    private void beginClearedFrame() {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
-        GLES20.glViewport(0, 0, frameTarget.width, frameTarget.height);
+        GLES20.glViewport(frameTarget.viewportX, frameTarget.viewportY,
+                frameTarget.width, frameTarget.height);
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         GLES20.glClearColor(0f, 0f, 0f, 0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        // Keep outputNeedsFullClear intact: the internal texture has not been touched.
+        // Keep outputNeedsFullClear intact: the full-sized scene texture has not been touched.
         glassFrameBegun = true;
         glassDrawCount = 0;
         glassTexturesBound = false;
@@ -348,6 +406,12 @@ public final class PrismalRenderer implements AutoCloseable {
             beginGlassFrame();
             return;
         }
+        ensureReducedOutput(nextWidth, nextHeight);
+        frameTarget.selectTexture(reducedOutputFramebuffer, nextWidth, nextHeight);
+        beginClearedFrame();
+    }
+
+    private void ensureReducedOutput(int nextWidth, int nextHeight) {
         if (reducedOutputTexture == 0 || reducedOutputWidth != nextWidth
                 || reducedOutputHeight != nextHeight) {
             releaseReducedOutput();
@@ -356,16 +420,6 @@ public final class PrismalRenderer implements AutoCloseable {
             reducedOutputTexture = createTexture(nextWidth, nextHeight);
             reducedOutputFramebuffer = createFramebuffer(reducedOutputTexture);
         }
-        frameTarget.selectTexture(reducedOutputFramebuffer, nextWidth, nextHeight);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
-        GLES20.glViewport(0, 0, frameTarget.width, frameTarget.height);
-        GLES20.glDisable(GLES20.GL_BLEND);
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glClearColor(0f, 0f, 0f, 0f);
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        glassFrameBegun = true;
-        glassDrawCount = 0;
-        glassTexturesBound = false;
     }
 
     /**
@@ -800,8 +854,10 @@ public final class PrismalRenderer implements AutoCloseable {
                 ? edgeDecoration.extraGuardPx(edgeDensity, minDimension) : 0f;
         if (!PrismalNodeScissor.computeInto(
                 g, frameTarget.width, frameTarget.height, nodeScissor, edgeGuard)) return;
+        if (!frameTarget.clipScissor(nodeScissor)) return;
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameTarget.framebuffer);
-        GLES20.glViewport(0, 0, frameTarget.width, frameTarget.height);
+        GLES20.glViewport(frameTarget.viewportX, frameTarget.viewportY,
+                frameTarget.width, frameTarget.height);
         GLES20.glEnable(GLES20.GL_SCISSOR_TEST);
         GLES20.glScissor(nodeScissor.x, nodeScissor.y,
                 nodeScissor.width, nodeScissor.height);

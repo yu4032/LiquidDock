@@ -8,11 +8,9 @@ import android.os.Looper;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Mirrors the Launcher-issued wallpaper zoom in the HWUI backdrop without
- * changing the vendor wallpaper animation or its Recents settle callbacks.
- *
- * <p>Only hooked in com.miui.home. Track the Launcher-local wallpaper zoom API and
- * SystemWallpaperElement targets so the HWUI backdrop follows either vendor path.
+ * Mirrors applied wallpaper transforms in the HWUI backdrop without changing the
+ * vendor animation. Native WMS samples drive HyperOS animations; the Launcher-local
+ * WallpaperManager observer supplies the current transform before native connection.
  */
 final class LauncherWallpaperZoomHook {
     private static final String TAG = "[DC][WallpaperZoom]";
@@ -22,6 +20,12 @@ final class LauncherWallpaperZoomHook {
     private static final AtomicBoolean FIRST_INTERCEPTION_REPORTED = new AtomicBoolean();
     private static final AtomicBoolean FIRST_ZOOM_UPDATE_REPORTED = new AtomicBoolean();
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
+    private static final java.util.concurrent.ConcurrentHashMap<Integer, LauncherWallpaperTransformState>
+            NATIVE_TRANSFORMS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final AtomicBoolean INVALIDATION_QUEUED = new AtomicBoolean();
+    private static final AtomicBoolean NATIVE_REPORTED = new AtomicBoolean();
+    private static volatile LauncherWallpaperTransformState.Sample fallbackTransform =
+            LauncherWallpaperTransformState.Sample.NEUTRAL;
     private static volatile boolean disableZoom;
     private static volatile boolean installed;
     private static volatile boolean wallpaperZoomHookInstalled;
@@ -80,8 +84,7 @@ final class LauncherWallpaperZoomHook {
             }
         }
         try {
-            // Observe the final native target without synthesizing a second animation. The
-            // WallpaperManager callback remains the source of live scale updates during motion.
+            // Register for applied native transforms through the existing wallpaper command.
             HookUtil.hookMethod(classLoader,
                     "com.miui.home.recents.anim.SystemWallpaperElement", "sendWallpaperCommand",
                     chain -> {
@@ -110,17 +113,38 @@ final class LauncherWallpaperZoomHook {
     }
 
     private static void observeSystemWallpaperCommand(Bundle command) {
-        String action = command.getString("action");
-        float scale = command.getFloat("scale_to", Float.NaN);
-        if (!Float.isFinite(scale) || scale <= 0f || scale > 4f) return;
-        // HyperOS passes this value directly as the wallpaper surface scale (it may exceed 1).
-        // Don't synthesize a second curve: live WallpaperManager updates and this final target
-        // stay authoritative for the HWUI sample mapping.
-        if ("setTo".equals(action)) {
-            setWallpaperSurfaceScale(scale, "system-element-setTo");
+        // Targets cannot describe the current native spring. WMS returns applied transforms
+        // through this callback; do not jump to setTo/startAnim endpoints in the Launcher.
+        WallpaperNativeTransformBridge.attach(command);
+    }
+
+    static void onNativeTransform(int displayId,long timestampNs,float scale,float pivotX,float pivotY) {
+        LauncherWallpaperTransformState state = NATIVE_TRANSFORMS.computeIfAbsent(
+                displayId, ignored -> new LauncherWallpaperTransformState());
+        if (!state.update(timestampNs,scale,pivotX,pivotY)) return;
+        if (NATIVE_REPORTED.compareAndSet(false,true)) {
+            MainHook.log(TAG + " native applied transforms connected display=" + displayId);
+            MAIN_HANDLER.post(LauncherGlassSessionRegistry::onNativeWallpaperTransformConnected);
+        }
+        if (INVALIDATION_QUEUED.compareAndSet(false,true)) {
+            MAIN_HANDLER.post(() -> {
+                INVALIDATION_QUEUED.set(false);
+                LauncherGlassSessionRegistry.onWallpaperZoomOutChanged();
+            });
         }
     }
 
+    static LauncherWallpaperTransformState.Sample currentTransform(int displayId) {
+        LauncherWallpaperTransformState state = NATIVE_TRANSFORMS.get(displayId);
+        LauncherWallpaperTransformState.Sample sample = state != null ? state.latest() : null;
+        return sample != null ? sample : fallbackTransform;
+    }
+
+    static LauncherWallpaperTransformState.Sample capturedTransform(int displayId,long timestampNs) {
+        // Connection and the first oneway UPDATE may lag behind capture. Neither an empty
+        // client history nor a local target authorizes tagging an immutable background.
+        return WallpaperNativeTransformBridge.capture(displayId,timestampNs);
+    }
     private static void updateWallpaperManagerZoomOut(float zoomOut, String source) {
         if (!Float.isFinite(zoomOut) || zoomOut < 0f || zoomOut > 1f) return;
         resolveWallpaperScaleRange();
@@ -134,6 +158,8 @@ final class LauncherWallpaperZoomHook {
         if (Float.floatToIntBits(currentWallpaperSurfaceScale)
                 == Float.floatToIntBits(surfaceScale)) return;
         currentWallpaperSurfaceScale = surfaceScale;
+        fallbackTransform = new LauncherWallpaperTransformState.Sample(
+                System.nanoTime(), surfaceScale, .5f, .5f);
         if (FIRST_ZOOM_UPDATE_REPORTED.compareAndSet(false, true)) {
             String message = "first wallpaper zoom update source=" + source
                     + " surfaceScale=" + surfaceScale;
@@ -141,26 +167,6 @@ final class LauncherWallpaperZoomHook {
             if (BuildConfig.DEBUG) android.util.Log.i(TAG, message);
         }
         LauncherGlassSessionRegistry.onWallpaperZoomOutChanged();
-    }
-
-    private static void setWallpaperSurfaceScale(float surfaceScale, String source) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            updateWallpaperSurfaceScale(surfaceScale, source);
-        } else {
-            MAIN_HANDLER.post(() -> updateWallpaperSurfaceScale(surfaceScale, source));
-        }
-    }
-
-    /** Current wallpaper surface scale; the source path may be WMS or MIUI's wallpaper command. */
-    static float currentWallpaperSurfaceScale() {
-        resolveWallpaperScaleRange();
-        return currentWallpaperSurfaceScale;
-    }
-
-    static float relativeWallpaperSurfaceScale(float capturedScale) {
-        if (!Float.isFinite(capturedScale) || capturedScale <= 0f) return 1f;
-        float ratio = currentWallpaperSurfaceScale() / capturedScale;
-        return Float.isFinite(ratio) && ratio > 0f ? ratio : 1f;
     }
 
     private static void resolveWallpaperScaleRange() {

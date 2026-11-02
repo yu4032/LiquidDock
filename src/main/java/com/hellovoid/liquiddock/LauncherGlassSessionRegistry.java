@@ -85,6 +85,13 @@ final class LauncherGlassSessionRegistry {
         }
     }
 
+    /** Resume backgrounds held until the first authoritative native sample arrived. */
+    static synchronized void onNativeWallpaperTransformConnected() {
+        for (View root : new ArrayList<>(SESSIONS.keySet())) {
+            LauncherGlassSceneController.requestFreshForRoot(root);
+        }
+    }
+
     static View resolveStableRoot(View materialHost) {
         if (materialHost == null || !materialHost.isAttachedToWindow()
                 || materialHost.getWidth() <= 0 || materialHost.getHeight() <= 0) return null;

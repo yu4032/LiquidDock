@@ -19,28 +19,35 @@ final class WorkspaceShaderReuseCheck {
             LauncherGlassHwuiProbeView view = new LauncherGlassHwuiProbeView(owner.getTargetContext(), null);
             try {
                 long start = SystemClock.elapsedRealtimeNanos();
-                require(view.setBackdrops(first, first, 128, 128, 0, 1f), "first bind failed");
+                require(view.setBackdrops(first, first, 128, 128, 0,
+                        new LauncherWallpaperTransformState.Sample(1,1f,.5f,.5f)), "first bind failed");
                 result.putDouble("firstBindMs", (SystemClock.elapsedRealtimeNanos() - start) / 1e6);
                 Object baseline = shader(view, "baselineShader");
                 Object decorated = shader(view, "decoratedShader");
                 Object motion = shader(view, "motionDecoratedShader");
                 require(baseline != null && decorated != null, "required programs unavailable");
                 start = SystemClock.elapsedRealtimeNanos();
-                require(view.setBackdrops(second, second, 192, 192, 1, 1.1f), "replacement bind failed");
+                require(view.setBackdrops(second, second, 192, 192, 1,
+                        new LauncherWallpaperTransformState.Sample(2,1.1f,.5f,.4f)), "replacement bind failed");
                 result.putDouble("replacementBindMs", (SystemClock.elapsedRealtimeNanos() - start) / 1e6);
                 require(shader(view, "baselineShader") == baseline, "baseline program recreated");
                 require(shader(view, "decoratedShader") == decorated, "decorated program recreated");
                 require(shader(view, "motionDecoratedShader") == motion, "motion program recreated");
-                LauncherGlassHwuiProbeView.BackdropSnapshot snapshot = view.snapshotBackdrops();
-                require(snapshot != null && snapshot.raw == second && snapshot.blurred == second,
+                require(shader(view,"backdrop")==second && shader(view,"blurredBackdrop")==second,
                         "replacement image was not published");
-                require(snapshot.logicalWidth == 192 && snapshot.logicalHeight == 192
-                        && snapshot.rotation == 1, "replacement geometry was not published");
+                require(((Number)shader(view,"backdropLogicalWidth")).intValue()==192
+                        && ((Number)shader(view,"backdropLogicalHeight")).intValue()==192,
+                        "replacement geometry was not published");
                 view.clearBackdrops();
-                require(view.snapshotBackdrops() == null && shader(view, "baselineShader") == null,
+                require(shader(view,"backdrop") == null && shader(view, "baselineShader") == null,
                         "clear retained resources");
-                require(view.setBackdrops(first, first, 128, 128, 0, 1f), "bind after clear failed");
+                require(view.setBackdrops(first, first, 128, 128, 0,
+                        new LauncherWallpaperTransformState.Sample(3,1f,.5f,.5f)), "bind after clear failed");
                 require(shader(view, "baselineShader") != baseline, "clear reused retired programs");
+                GboardFloatingGlassHwuiView keyboard = new GboardFloatingGlassHwuiView(owner.getTargetContext(),null);
+                require(keyboard.setBackdrops(first,first,128,128),"Gboard shared shader transform binding failed");
+                ShortcutPopupGlassHwuiView popup = new ShortcutPopupGlassHwuiView(owner.getTargetContext(),null);
+                require(popup.setBackdrops(first,first,128,128),"popup shared shader transform binding failed");
             } catch (Throwable error) {
                 failure[0] = error;
             } finally {

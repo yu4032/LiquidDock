@@ -231,7 +231,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
     static boolean publishHwuiProbeBackdrop(
             View root, Bitmap rawBitmap, Bitmap blurredBitmap,
             int logicalWidth, int logicalHeight, int rotation,
-            float capturedWallpaperScale) {
+            LauncherWallpaperTransformState.Sample capturedWallpaperTransform) {
         LauncherGlassStaticLayer layer = find(root);
         if (layer == null || layer.hwuiProbe == null
                 || rawBitmap == null || blurredBitmap == null) {
@@ -241,7 +241,7 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         }
         if (!layer.hwuiProbe.setBackdrops(
                 rawBitmap, blurredBitmap, logicalWidth, logicalHeight, rotation,
-                capturedWallpaperScale)) {
+                capturedWallpaperTransform)) {
             rawBitmap.recycle();
             blurredBitmap.recycle();
             return false;

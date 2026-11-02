@@ -1169,7 +1169,7 @@ final class RootPassBlurBackend {
                 domain.renderWidth,
                 domain.renderHeight,
                 rotation,
-                rect);
+                rect, inputSurfaceTexture.getTimestamp());
     }
 
     private void bindProducerWhenReady(int attempt) {

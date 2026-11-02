@@ -110,7 +110,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         final float dockUvHeight;
         // Crop the COMPLETE enlarged TextureView output, including exterior
         // Prismal shadows. Dock UVs above still locate only the native body.
-        final float outputUvLeft, outputUvBottom, outputUvWidth, outputUvHeight;
+        final int outputLeft, outputBottom;
         final Miuix307BackdropMapping.Coverage coverage;
         final boolean taskbarMode;
 
@@ -127,8 +127,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 float validDockLeft, float validDockBottom,
                 float validDockRight, float validDockTop,
                 float dockUvLeft, float dockUvBottom, float dockUvWidth, float dockUvHeight,
-                float outputUvLeft, float outputUvBottom,
-                float outputUvWidth, float outputUvHeight,
+                int outputLeft, int outputBottom,
                 Miuix307BackdropMapping.Coverage coverage, boolean taskbarMode) {
             this.visibleWidth = visibleWidth;
             this.visibleHeight = visibleHeight;
@@ -156,10 +155,8 @@ final class Miuix307PassBlurTextureView extends TextureView
             this.dockUvBottom = dockUvBottom;
             this.dockUvWidth = dockUvWidth;
             this.dockUvHeight = dockUvHeight;
-            this.outputUvLeft = outputUvLeft;
-            this.outputUvBottom = outputUvBottom;
-            this.outputUvWidth = outputUvWidth;
-            this.outputUvHeight = outputUvHeight;
+            this.outputLeft = outputLeft;
+            this.outputBottom = outputBottom;
             this.coverage = coverage;
             this.taskbarMode = taskbarMode;
         }
@@ -306,13 +303,8 @@ final class Miuix307PassBlurTextureView extends TextureView
     private PrismalRenderer prismalRenderer;
     private int oesTexture;
 
-    private int rawTexture;
-    private int rawFramebuffer;
-    private int fboWidth;
-    private int fboHeight;
-
     /**
-     * Prismal's prepared backdrop contains the expensive source-adapter + two-pass blur result.
+     * Prismal owns the normalized producer image and its two-pass blur result.
      * Dock icon/proxy animation must reuse it until either a real OES producer frame arrives or
      * the sampling/optical inputs that define the backdrop change.
      */
@@ -614,7 +606,6 @@ final class Miuix307PassBlurTextureView extends TextureView
             if (eglWindowSurface == EGL14.EGL_NO_SURFACE) return;
             try {
                 makeCurrent();
-                ensureFboSize(outputWidth, outputHeight);
                 drawLatestFrame(false);
             } catch (Throwable error) {
                 fail("output resize", error);
@@ -677,7 +668,6 @@ final class Miuix307PassBlurTextureView extends TextureView
                 recreateInputProducer("output-ready");
             }
             ensureGlResources();
-            ensureFboSize(Math.max(1, width), Math.max(1, height));
             drawLatestFrame(false);
         } catch (Throwable error) {
             fail("output attach finish", error);
@@ -818,7 +808,7 @@ final class Miuix307PassBlurTextureView extends TextureView
         }
 
         normalizeProgram = createProgram(
-                Miuix307PassBlurShaders.QUAD_VERTEX,
+                Miuix307PassBlurShaders.PRISMAL_SOURCE_VERTEX,
                 Miuix307PassBlurShaders.OES_NORMALIZE_FRAGMENT);
         compositeProgram = createProgram(
                 Miuix307PassBlurShaders.QUAD_VERTEX,
@@ -874,40 +864,6 @@ final class Miuix307PassBlurTextureView extends TextureView
             Miuix307PassBlurBridge.renewForceRefresh(binding);
             scheduleRender(true);
         }, renderHandler);
-    }
-
-    private void ensureFboSize(int width, int height) {
-        if (maxTextureSize <= 0) {
-            throw new IllegalStateException("FBO allocation before GL_MAX_TEXTURE_SIZE query");
-        }
-        if (width > maxTextureSize || height > maxTextureSize) {
-            throw new IllegalStateException("visible material exceeds GL_MAX_TEXTURE_SIZE "
-                    + width + "x" + height + " max=" + maxTextureSize);
-        }
-        SamplingInsets insets = resolveSamplingInsets(width, height);
-        int logicalWidth = Math.max(1, width + insets.left + insets.right);
-        int logicalHeight = Math.max(1, height + insets.top + insets.bottom);
-        DockPassBlurRenderPlan plan = DockPassBlurRenderPlan.resolve(
-                logicalWidth, logicalHeight, passBlurCaptureScalePercent);
-        ensureFboSizeExact(plan.physicalWidth, plan.physicalHeight);
-    }
-
-    private void ensureFboSizeExact(int nextWidth, int nextHeight) {
-        if (maxTextureSize <= 0) {
-            throw new IllegalStateException("FBO allocation before GL_MAX_TEXTURE_SIZE query");
-        }
-        if (nextWidth <= 0 || nextHeight <= 0
-                || nextWidth > maxTextureSize || nextHeight > maxTextureSize) {
-            throw new IllegalStateException("sample FBO exceeds GL_MAX_TEXTURE_SIZE "
-                    + nextWidth + "x" + nextHeight + " max=" + maxTextureSize);
-        }
-        if (rawFramebuffer != 0 && fboWidth == nextWidth && fboHeight == nextHeight) return;
-
-        releaseFbos();
-        rawTexture = createTexture2D(nextWidth, nextHeight);
-        rawFramebuffer = createFramebuffer(rawTexture);
-        fboWidth = nextWidth;
-        fboHeight = nextHeight;
     }
 
     private void scheduleSceneRender() {
@@ -1015,28 +971,31 @@ final class Miuix307PassBlurTextureView extends TextureView
 
             DockPassBlurRenderPlan renderPlan = DockPassBlurRenderPlan.resolve(
                     mapping.sampleWidth, mapping.sampleHeight, passBlurCaptureScalePercent);
-            ensureFboSizeExact(renderPlan.physicalWidth, renderPlan.physicalHeight);
+            if (maxTextureSize <= 0 || renderPlan.physicalWidth > maxTextureSize
+                    || renderPlan.physicalHeight > maxTextureSize
+                    || renderPlan.logicalWidth > maxTextureSize
+                    || renderPlan.logicalHeight > maxTextureSize) {
+                throw new IllegalStateException("Dock backdrop exceeds GL_MAX_TEXTURE_SIZE");
+            }
 
             boolean rebuildBackdrop = consumedFreshProducerFrame
                     || !canReusePreparedBackdrop(mapping, renderPlan);
             if (rebuildBackdrop) {
-                renderNormalizationPass(mapping);
-                prismalRenderer.prepareBackdrop(
-                        rawTexture,
+                prismalRenderer.prepareBackdropRendered(
                         renderPlan.physicalWidth, renderPlan.physicalHeight,
                         renderPlan.logicalWidth, renderPlan.logicalHeight,
-                        mapping.prismalParams);
+                        mapping.prismalParams, () -> renderNormalizationPass(mapping));
                 rememberPreparedBackdrop(mapping, renderPlan);
             }
 
             PrismalGeometry prismalGeometry = createPrismalGeometry(mapping);
             DockGlassSceneSnapshot dockScene = dockCompositor.latestScene();
-            dockCompositor.drawFrame(prismalRenderer, prismalGeometry, mapping.prismalParams,
+            prismalRenderer.beginGlassFrameCropped(mapping.visibleWidth, mapping.visibleHeight,
+                    mapping.outputLeft, mapping.outputBottom);
+            dockCompositor.drawNodes(prismalRenderer, prismalGeometry, mapping.prismalParams,
                     dockBodyHighlightProfile, dockScene,
                     renderPlan.logicalWidth, renderPlan.logicalHeight);
-
-            int prismalTexture = prismalRenderer.outputTexture();
-            if (!renderCompositePass(prismalTexture, mapping)) return;
+            if (!renderCompositePass(prismalRenderer.outputTexture(), mapping)) return;
 
             // UI geometry may advance while this GL frame is being prepared. Never publish a
             // frame assembled from an obsolete generation; updateBackdropMapping() will queue the
@@ -1156,9 +1115,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     private void renderNormalizationPass(BackdropSnapshot mapping) {
         GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, rawFramebuffer);
-        GLES20.glViewport(0, 0, fboWidth, fboHeight);
-        // Full-screen normalization overwrites every pixel in rawFramebuffer.
+        // Prismal binds its owned source target and physical viewport before this callback.
         GLES20.glUseProgram(normalizeProgram);
         bindQuad(normalizePositionLocation, normalizeUvLocation);
 
@@ -1239,9 +1196,13 @@ final class Miuix307PassBlurTextureView extends TextureView
         bindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, prismalTexture);
+        int paddingX = mapping.outputLeft & 1;
+        int paddingY = mapping.outputBottom & 1;
+        float textureWidth = mapping.visibleWidth + paddingX;
+        float textureHeight = mapping.visibleHeight + paddingY;
         GLES20.glUniform4f(compositeCropRectLocation,
-                mapping.outputUvLeft, mapping.outputUvBottom,
-                mapping.outputUvWidth, mapping.outputUvHeight);
+                paddingX / textureWidth, paddingY / textureHeight,
+                mapping.visibleWidth / textureWidth, mapping.visibleHeight / textureHeight);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         unbindQuad(compositePositionLocation, compositeUvLocation);
         GLES20.glDisable(GLES20.GL_BLEND);
@@ -1263,7 +1224,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 + " textureMatrix=" + formatTextureMatrix(textureMatrix));
         MainHook.log("[DC][PRISMAL-MAP] normalized output="
                 + mapping.visibleWidth + "x" + mapping.visibleHeight
-                + " rawFbo=" + fboWidth + "x" + fboHeight
+                + " sourceFbo=" + prismalRenderer.preparedSourceWidth()
+                + "x" + prismalRenderer.preparedSourceHeight()
                 + " logicalSample=" + mapping.sampleWidth + "x" + mapping.sampleHeight
                 + " dockUvRect=[" + left + "," + bottom + ","
                 + mapping.dockUvWidth + "," + mapping.dockUvHeight + "]"
@@ -1634,14 +1596,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 renderTaskbar = false;
             }
         }
-        float nextOutputUvLeft = DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
-                insets.left, sampleWidth);
-        float nextOutputUvBottom = DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
-                insets.bottom, sampleHeight);
-        float nextOutputUvWidth = DockPrismalShadowViewportPolicy.normalizedOutputExtent(
-                visibleWidth, sampleWidth);
-        float nextOutputUvHeight = DockPrismalShadowViewportPolicy.normalizedOutputExtent(
-                visibleHeight, sampleHeight);
+        int nextOutputLeft = insets.left;
+        int nextOutputBottom = insets.bottom;
         boolean dockSceneChanged = dockCompositor.refreshUiSceneIfNeeded(
                 sampleWidth, sampleHeight, insets.left, insets.top, 1f, 1f);
 
@@ -1674,10 +1630,8 @@ final class Miuix307PassBlurTextureView extends TextureView
                 && Float.compare(dockUvBottom, nextDockUvBottom) == 0
                 && Float.compare(dockUvWidth, nextDockUvWidth) == 0
                 && Float.compare(dockUvHeight, nextDockUvHeight) == 0
-                && Float.compare(currentSnapshot.outputUvLeft, nextOutputUvLeft) == 0
-                && Float.compare(currentSnapshot.outputUvBottom, nextOutputUvBottom) == 0
-                && Float.compare(currentSnapshot.outputUvWidth, nextOutputUvWidth) == 0
-                && Float.compare(currentSnapshot.outputUvHeight, nextOutputUvHeight) == 0
+                && currentSnapshot.outputLeft == nextOutputLeft
+                && currentSnapshot.outputBottom == nextOutputBottom
                 && producerCoverage == dock.coverage;
         if (unchanged) {
             // Dock icon membership/geometry is independent from the PassBlur crop. A hotseat
@@ -1721,8 +1675,7 @@ final class Miuix307PassBlurTextureView extends TextureView
                 sample.validLeft, sample.validBottom, sample.validRight, sample.validTop,
                 dock.validLeft, dock.validBottom, dock.validRight, dock.validTop,
                 nextDockUvLeft, nextDockUvBottom, nextDockUvWidth, nextDockUvHeight,
-                nextOutputUvLeft, nextOutputUvBottom,
-                nextOutputUvWidth, nextOutputUvHeight,
+                nextOutputLeft, nextOutputBottom,
                 dock.coverage, renderTaskbar);
         // Mapping changes are a normal per-frame part of Dock motion. Do not re-arm the
         // heavyweight Stage-B/Prismal diagnostics here: MainHook.log() also appends to disk,
@@ -1899,56 +1852,6 @@ final class Miuix307PassBlurTextureView extends TextureView
         return new float[]{mappedX, mappedY};
     }
 
-    private static int createTexture2D(int width, int height) {
-        int[] textures = new int[1];
-        GLES20.glGenTextures(1, textures, 0);
-        int texture = textures[0];
-        if (texture == 0) throw new IllegalStateException("2D texture=0");
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture);
-        GLES20.glTexImage2D(
-                GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
-                width, height, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
-        GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
-        GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
-        GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-        GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
-        return texture;
-    }
-
-    private static int createFramebuffer(int texture) {
-        int[] framebuffers = new int[1];
-        GLES20.glGenFramebuffers(1, framebuffers, 0);
-        int framebuffer = framebuffers[0];
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer);
-        GLES20.glFramebufferTexture2D(
-                GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
-                GLES20.GL_TEXTURE_2D, texture, 0);
-        int status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-        if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
-            throw new IllegalStateException("framebuffer incomplete=0x" + Integer.toHexString(status));
-        }
-        return framebuffer;
-    }
-
-    private void releaseFbos() {
-        invalidatePreparedBackdrop();
-        if (rawFramebuffer != 0) {
-            GLES20.glDeleteFramebuffers(1, new int[]{rawFramebuffer}, 0);
-            rawFramebuffer = 0;
-        }
-        if (rawTexture != 0) {
-            GLES20.glDeleteTextures(1, new int[]{rawTexture}, 0);
-            rawTexture = 0;
-        }
-        fboWidth = 0;
-        fboHeight = 0;
-    }
-
     private void makeCurrent() {
         if (eglDisplay == EGL14.EGL_NO_DISPLAY
                 || eglContext == EGL14.EGL_NO_CONTEXT
@@ -1984,7 +1887,7 @@ final class Miuix307PassBlurTextureView extends TextureView
             }
         } catch (Throwable ignored) {}
 
-        try { releaseFbos(); } catch (Throwable ignored) {}
+        invalidatePreparedBackdrop();
         if (prismalRenderer != null) {
             try { prismalRenderer.close(); } catch (Throwable ignored) {}
             prismalRenderer = null;
@@ -1993,19 +1896,19 @@ final class Miuix307PassBlurTextureView extends TextureView
             try { GLES20.glDeleteTextures(1, new int[]{oesTexture}, 0); } catch (Throwable ignored) {}
             oesTexture = 0;
         }
-        int[] programs = new int[]{normalizeProgram, compositeProgram};
-        for (int program : programs) {
-            if (program != 0) {
-                try { GLES20.glDeleteProgram(program); } catch (Throwable ignored) {}
-            }
+        if (normalizeProgram != 0) {
+            try { GLES20.glDeleteProgram(normalizeProgram); } catch (Throwable ignored) {}
         }
-        normalizeProgram = 0;
+        if (compositeProgram != 0) {
+            try { GLES20.glDeleteProgram(compositeProgram); } catch (Throwable ignored) {}
+        }
         compositeProgram = 0;
+        compositePositionLocation = compositeUvLocation = -1;
+        compositeTextureLocation = compositeCropRectLocation = -1;
+        normalizeProgram = 0;
         normalizePositionLocation = normalizeUvLocation = normalizeTextureLocation = -1;
         normalizeTexMatrixLocation = normalizeBackdropRectLocation = -1;
         normalizeConfigRotLocation = normalizeValidDockRectLocation = -1;
-        compositePositionLocation = compositeUvLocation = -1;
-        compositeTextureLocation = compositeCropRectLocation = -1;
 
         Surface producer = inputProducerSurface;
         inputProducerSurface = null;
