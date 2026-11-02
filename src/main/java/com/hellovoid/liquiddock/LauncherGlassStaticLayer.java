@@ -208,6 +208,10 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
         invalidateForDockTransition(DOCK_TRANSITION.onProxyFrame(closeToHome, progress));
     }
 
+    static void onDockProxyReturnFinished() {
+        invalidateForDockTransition(DOCK_TRANSITION.onProxyReturnFinished());
+    }
+
     static void onDockHomeOpeningStarted() {
         invalidateForDockTransition(DOCK_TRANSITION.onHomeStarted());
     }
