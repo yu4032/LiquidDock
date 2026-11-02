@@ -151,7 +151,8 @@ final class DockGlassCompositor {
             fingerprint = mix(fingerprint, Float.floatToIntBits(animationSample.opacity));
         }
         fingerprint = mix(fingerprint, outputFingerprint);
-        float homeIconAlpha = homeVisibility.alpha();
+        float homeIconAlpha = LauncherGlassStaticLayer.dockBackgroundIconAlpha(
+                homeVisibility.alpha());
         fingerprint = mix(fingerprint, Float.floatToIntBits(homeIconAlpha));
 
         boolean geometryMappingChanged = framebufferWidth != lastW || framebufferHeight != lastH
