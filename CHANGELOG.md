@@ -6,7 +6,26 @@
 
 暂无新增条目。
 
-## v2.7.6（待发布）
+## v2.7.7（2026-11-02）
+
+### 玻璃渲染与性能
+
+- 工作区玻璃改为在桌面原生绘制帧中同步几何，改善滑动跟手性，并适配缩放、透明度、拖动、文件夹和应用进出动画。[#484](https://github.com/yu4032/LiquidDock/pull/484)、[#485](https://github.com/yu4032/LiquidDock/pull/485)
+- 减少重复的几何比较和材质参数上传，优化玻璃内部着色；应用返回时降低采样开销并平滑恢复完整材质，保留实时背景和折射位置。[#488](https://github.com/yu4032/LiquidDock/pull/488)
+- 优化 Dock 背景处理，修复背景缩放场景中的采样跳变，并优化 Gboard 冻结模式玻璃输出。[#485](https://github.com/yu4032/LiquidDock/pull/485)、[#487](https://github.com/yu4032/LiquidDock/pull/487)
+
+### 图标与动画
+
+- 同步 Dock 图标的原生透明度、显示归属与应用返回渐显，新增独立的工作区及 Dock 图标动画隐藏开关。[#490](https://github.com/yu4032/LiquidDock/pull/490)
+- 移除退出动画结束时强制叠加代理图标及延迟回收的补偿，恢复原图标交接，避免半透明图标出现叠色；动画中的 Dock 图标使用较低成本材质。[#490](https://github.com/yu4032/LiquidDock/pull/490)
+- 修复快捷菜单背景采样范围及长按时工作区玻璃闪失的问题。[#486](https://github.com/yu4032/LiquidDock/pull/486)、[#490](https://github.com/yu4032/LiquidDock/pull/490)
+
+### 升级说明
+
+- 继续要求支持 libxposed API 102 的 LSPosed。更新后请重启设备，以加载桌面及系统背景缩放观察点。
+- 多组件页面和高刷新率动画仍可能掉帧；半透明主题及不同桌面版本的交接效果需结合设备验证。
+
+## v2.7.6
 
 ### 玻璃渲染与性能
 
