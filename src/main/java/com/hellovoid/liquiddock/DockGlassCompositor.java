@@ -30,6 +30,7 @@ final class DockGlassCompositor {
     /** Prismal geometry is in physical framebuffer pixels, while optical widths are dp. */
     private final float pixelDensity;
     private final ArrayList<CachedItem> cached = new ArrayList<>();
+    private final DockGlassIconHomeVisibility homeVisibility = new DockGlassIconHomeVisibility();
     private long[] uiFingerprintScratch = new long[0];
     private long[] proxyFingerprintScratch = new long[0];
     private DockIconAnimationState.Sample[] animationSampleScratch =
@@ -66,6 +67,18 @@ final class DockGlassCompositor {
         workstationIconCornerRadiusDp = Math.max(0f, radiusDp);
         seenRevision = -1L;
         lastFingerprint = Long.MIN_VALUE;
+    }
+
+    boolean beginHomeReturn() {
+        return homeVisibility.begin();
+    }
+
+    boolean observeHomeReturn(float progress) {
+        return homeVisibility.observe(progress);
+    }
+
+    boolean finishHomeReturn() {
+        return homeVisibility.finish();
     }
 
     void invalidateUiScene() {
@@ -138,6 +151,8 @@ final class DockGlassCompositor {
             fingerprint = mix(fingerprint, Float.floatToIntBits(animationSample.opacity));
         }
         fingerprint = mix(fingerprint, outputFingerprint);
+        float homeIconAlpha = homeVisibility.alpha();
+        fingerprint = mix(fingerprint, Float.floatToIntBits(homeIconAlpha));
 
         boolean geometryMappingChanged = framebufferWidth != lastW || framebufferHeight != lastH
                 || Float.compare(sampleInsetLeft, lastInsetL) != 0
@@ -202,7 +217,7 @@ final class DockGlassCompositor {
             float outputAlpha = DockGlassIconOpacity.resolve(
                     animationSample.opacity,
                     animationSample.proxyActive ? 1f : item.nativePresentationAlpha(ownershipRoot),
-                    animationSample.proxyActive);
+                    animationSample.proxyActive, homeIconAlpha);
             if (outputAlpha <= 0.001f || cachedItem.geometry == null) continue;
             out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, outputAlpha));
         }
