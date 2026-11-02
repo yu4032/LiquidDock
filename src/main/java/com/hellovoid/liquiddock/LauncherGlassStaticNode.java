@@ -312,7 +312,14 @@ final class LauncherGlassStaticNode {
                     * (workspaceAlphaBypassed ? clampAlpha(workspaceAlpha) : 1f);
         }
         if (visualOwnerState.isLaunchProxyActive()) {
-            return ownAlpha * visualOwnerState.alpha();
+            // The animated icon is never subject to the Workspace group-hide switch.
+            // Its own native FloatingIcon ownership and CLOSE_TO_HOME progress set visibility.
+            float proxyAlpha = visualOwnerState.alpha();
+            if (visualOwnerState.isLaunchProxyReturning()) {
+                proxyAlpha *= LauncherGlassReturnFade.alpha(
+                        visualOwnerState.launchProxyReturnProgress());
+            }
+            return ownAlpha * proxyAlpha;
         }
 
         View material = materialRef.get();
