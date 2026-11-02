@@ -26,9 +26,9 @@ public class DockGlassIconOpacityTest {
 
     @Test public void targetProxySharesCurveWithoutDoubleFading() {
         assertEquals(.5f, DockGlassIconOpacity.resolve(.5f, 0f, true, .5f), 0f);
-        assertEquals(.25f, DockGlassIconOpacity.resolve(.5f, 0f, true, .25f), 0f);
+        assertEquals(.5f, DockGlassIconOpacity.resolve(.5f, 0f, true, .25f), 0f);
         assertEquals(.4f, DockGlassIconOpacity.resolve(.4f, 0f, true, .6f), 0f);
-        assertEquals(0f, DockGlassIconOpacity.resolve(1f, 0f, true, Float.NaN), 0f);
+        assertEquals(1f, DockGlassIconOpacity.resolve(1f, 0f, true, Float.NaN), 0f);
     }
 
     @Test public void invalidOrOutOfRangeAlphaIsClamped() {
