@@ -52,6 +52,19 @@ public class LauncherGlassIconReturnRevealTest {
     }
 
     @Test
+    public void repeatedHideAndEarlyProxySamplePreserveHomeReturn() {
+        LauncherGlassIconReturnReveal state = new LauncherGlassIconReturnReveal();
+        state.onNativeHidden();
+        state.onProxyFrame(true);
+        state.onNativeHidden();
+        assertTrue(state.onNativeVisible());
+        state.reset();
+        state.onProxyFrame(true); // OEM may publish proxy before hiding the native source.
+        state.onNativeHidden();
+        assertTrue(state.onNativeVisible());
+    }
+
+    @Test
     public void invalidSamplesAndDetachResetAreSafe() {
         LauncherGlassIconReturnReveal state = new LauncherGlassIconReturnReveal();
         state.onNativeHidden();
