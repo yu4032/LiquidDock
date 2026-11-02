@@ -62,16 +62,16 @@ final class DockIconAnimationGlassHook {
 
                         if (host != null && visibility != null
                                 && LauncherGlassHierarchy.isDock(host)
-                                && GlassRuntimeState.isAnyIconEnabled()) {
-                            if (visibility == View.VISIBLE) {
-                                DockGlassItemRegistry.endLaunchAnimation(host);
-                            } else {
-                                // The OEM source hidden boundary owns glass concealment,
-                                // even when the FloatingIcon proxy omits update frames.
-                                DockGlassItemRegistry.beginLaunchAnimation(host);
+                                && GlassRuntimeState.isEnabled()) {
+                            if (GlassRuntimeState.isAnyIconEnabled()) {
+                                if (visibility == View.VISIBLE) {
+                                    DockGlassItemRegistry.endLaunchAnimation(host);
+                                } else {
+                                    DockGlassItemRegistry.beginLaunchAnimation(host);
+                                }
                             }
-                            // A Dock ShortcutIcon can live in a separate ViewRoot. The same
-                            // visibility boundary must also hide Workspace's sibling glass.
+                            // Workspace widgets/folders still require the launch barrier even
+                            // when Dock icon glass itself is disabled.
                             LauncherGlassStaticLayer.onDockNativeVisibilityChanged(
                                     visibility == View.VISIBLE);
                         }
@@ -224,9 +224,11 @@ final class DockIconAnimationGlassHook {
                                         && proxyAlpha <= 0.1f && proxy.getAlpha() < 1.0f) {
                                     proxy.setAlpha(1.0f);
                                 }
-                                if (GlassRuntimeState.isAnyIconEnabled()) {
+                                if (GlassRuntimeState.isEnabled()) {
                                     LauncherGlassStaticLayer.onDockProxyFrame(
                                             closeToHome, progress);
+                                }
+                                if (GlassRuntimeState.isAnyIconEnabled()) {
                                     if (closeToHome) {
                                         DockGlassItemRegistry.observeHomeReturnProgress(
                                                 dockTarget, progress);
