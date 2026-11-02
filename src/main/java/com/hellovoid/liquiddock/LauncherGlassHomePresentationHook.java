@@ -213,7 +213,7 @@ final class LauncherGlassHomePresentationHook {
             return;
         }
         onLauncherNativeTransitionFinished(animation, "spring-retarget-away");
-        releaseHomeBarrierOnMain(HOME_STATE.onAnimationRetargetedAway(owner, animation));
+        releaseHomeBarrierOnMain(HOME_STATE.onAnimationRetargetedAway(owner, animation), false);
     }
 
     private static void onLauncherSpringPhysicalTerminal(Object animation) {
@@ -226,13 +226,13 @@ final class LauncherGlassHomePresentationHook {
             if (!fallback.releaseBarrier) return;
             MainHook.log(TAG + " HOME owner completion missing after native spring terminal;"
                     + " recovered cycle=" + cycle);
-            releaseHomeBarrierOnMain(fallback);
+            releaseHomeBarrierOnMain(fallback, true);
         }, HOME_TERMINAL_RECOVERY_GRACE_MS);
     }
 
     private static void onLauncherOwnerFinishCompleted(Object owner) {
         releaseNativeTransitionsForOwner(owner, "owner-finish-completed");
-        releaseHomeBarrierOnMain(HOME_STATE.onOwnerFinishCompleted(owner));
+        releaseHomeBarrierOnMain(HOME_STATE.onOwnerFinishCompleted(owner), true);
     }
 
     private static synchronized void onLauncherNativeTransitionStarted(
@@ -275,17 +275,19 @@ final class LauncherGlassHomePresentationHook {
     }
 
     private static void releaseHomeBarrierOnMain(
-            LauncherHomeTransitionState.Decision decision) {
+            LauncherHomeTransitionState.Decision decision, boolean homeSettled) {
         if (decision == null || !decision.releaseBarrier) return;
         postHomeLifecycleOnMain(() -> {
             // A newer HOME cycle may have started before an older terminal reached the UI queue.
             if (HOME_STATE.isArmed()) return;
             Miuix307ZeroCopyRenderer.onHomeOpeningFinished();
             LauncherGlassSceneController.setHomeTransitionPendingForAll(false);
-            // Native completion may arrive without FloatingIcon/ShortcutIcon terminal callbacks.
-            // Clear stale visual owners and presentation suppression after HOME is settled.
-            LauncherGlassStaticNode.onHomePresentationSettledForAll();
-            LauncherGlassStaticLayer.onHomePresentationSettledForAll();
+            if (homeSettled) {
+                // Only a completed HOME presentation can retire stale return proxies. Retargeting
+                // into app launch must keep its native hidden/proxy owner intact.
+                LauncherGlassStaticNode.onHomePresentationSettledForAll();
+                LauncherGlassStaticLayer.onHomePresentationSettledForAll();
+            }
             LauncherWidgetTransitionCoordinator.onHomeBarrierReleased();
         });
     }
