@@ -220,7 +220,7 @@ final class DockGlassCompositor {
                     animationSample.proxyActive ? 1f : item.nativePresentationAlpha(ownershipRoot),
                     animationSample.proxyActive, homeIconAlpha);
             if (outputAlpha <= 0.001f || cachedItem.geometry == null) continue;
-            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, outputAlpha));
+            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, outputAlpha, animationSample.proxyActive));
         }
         latestScene = new DockGlassSceneSnapshot(
                 out.toArray(new DockGlassSceneSnapshot.Item[0]));
@@ -262,11 +262,15 @@ final class DockGlassCompositor {
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
-            renderer.drawGlass(new PrismalGeometry(framebufferWidth, framebufferHeight,
-                    geometry.centerX, geometry.centerY, geometry.width, geometry.height,
-                    geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
+            renderer.setTransientQualityActive(item.animating);
+            try {
+                renderer.drawGlass(new PrismalGeometry(framebufferWidth, framebufferHeight,
+                        geometry.centerX, geometry.centerY, geometry.width, geometry.height,
+                        geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
+            } finally {
+                renderer.setTransientQualityActive(false);
+            }
         }
-
         renderer.setEdgeDecoration(null, pixelDensity);
     }
 
