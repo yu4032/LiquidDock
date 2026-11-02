@@ -77,10 +77,14 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     ))
     page(Page.AnimationWorkspace, "按工作区、应用返回和文件夹分别调整玻璃过渡时间。", listOf(
         SettingsBlock.Header("animation.workspace", "应用返回、工作区与文件夹"),
+        toggle(ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP, "应用动画时隐藏工作区玻璃",
+            "只隐藏其他工作区图标、小组件和文件夹玻璃；正在启动或返回的图标始终跟随原生代理"),
         row(animationAppReturnGlassFadeStartSpec), row(animationAppReturnGlassFadeDurationSpec),
         row(animationWorkspaceVisibilitySpec),
         row(animationUnlockGlassFadeSpec),
         SettingsBlock.Header("animation.dock", "Dock 与图标"),
+        toggle(ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP, "应用动画时隐藏其他 Dock 图标玻璃",
+            "保留 Dock 背景和动画目标图标玻璃；目标图标始终跟随原生代理显隐"),
         row(animationDockResizeSpec, dock + listOf(ConfigSchema.Dock.RESIZE_ANIMATION to false, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION to true)),
     ))
     numbers(Page.AnimationInteraction, "玻璃按下与释放反馈独立调节；0 ms 表示立即完成。", listOf(animationPressInSpec, animationPressOutSpec))
