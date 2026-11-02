@@ -17,6 +17,20 @@ public class DockGlassIconOpacityTest {
         assertEquals(0f, DockGlassIconOpacity.resolve(0f, 1f, true), 0f);
     }
 
+    @Test public void globalHomeRevealControlsUnchangedDockIcons() {
+        assertEquals(0f, DockGlassIconOpacity.resolve(1f, 1f, false, 0f), 0f);
+        assertEquals(.5f, DockGlassIconOpacity.resolve(1f, 1f, false, .5f), 0f);
+        assertEquals(.25f, DockGlassIconOpacity.resolve(1f, .5f, false, .5f), 0f);
+        assertEquals(1f, DockGlassIconOpacity.resolve(1f, 1f, false, 1f), 0f);
+    }
+
+    @Test public void targetProxySharesCurveWithoutDoubleFading() {
+        assertEquals(.5f, DockGlassIconOpacity.resolve(.5f, 0f, true, .5f), 0f);
+        assertEquals(.25f, DockGlassIconOpacity.resolve(.5f, 0f, true, .25f), 0f);
+        assertEquals(.4f, DockGlassIconOpacity.resolve(.4f, 0f, true, .6f), 0f);
+        assertEquals(0f, DockGlassIconOpacity.resolve(1f, 0f, true, Float.NaN), 0f);
+    }
+
     @Test public void invalidOrOutOfRangeAlphaIsClamped() {
         assertEquals(0f, DockGlassIconOpacity.resolve(Float.NaN, 1f, false), 0f);
         assertEquals(0f, DockGlassIconOpacity.resolve(1f, Float.NaN, false), 0f);
