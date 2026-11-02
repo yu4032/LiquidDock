@@ -3,6 +3,8 @@ package com.hellovoid.liquiddock;
 /** Process-wide immutable-at-launch animation timing used by injected visual owners. */
 final class AnimationRuntimeState {
     private static volatile int workspaceVisibilityMs = 450;
+    private static volatile boolean hideWorkspaceGlassDuringApp = true;
+    private static volatile boolean hideDockIconsDuringApp = true;
     private static volatile int appReturnGlassFadeStartBeforeEndMs = 600;
     private static volatile int appReturnGlassFadeDurationMs = 450;
     private static volatile int unlockGlassFadeMs = 450;
@@ -14,6 +16,8 @@ final class AnimationRuntimeState {
     static void configure(LiquidDockConfig.Animation animation) {
         if (animation == null) return;
         workspaceVisibilityMs = animation.workspaceVisibilityMs;
+        hideWorkspaceGlassDuringApp = animation.hideWorkspaceGlassDuringApp;
+        hideDockIconsDuringApp = animation.hideDockIconsDuringApp;
         appReturnGlassFadeStartBeforeEndMs = animation.appReturnGlassFadeStartBeforeEndMs;
         appReturnGlassFadeDurationMs = animation.appReturnGlassFadeDurationMs;
         unlockGlassFadeMs = animation.unlockGlassFadeMs;
@@ -23,6 +27,8 @@ final class AnimationRuntimeState {
         securityCenterExitFadeMs = animation.securityCenterExitFadeMs;
     }
 
+    static boolean hideWorkspaceGlassDuringApp() { return hideWorkspaceGlassDuringApp; }
+    static boolean hideDockIconsDuringApp() { return hideDockIconsDuringApp; }
     static int workspaceVisibilityDurationMs() { return workspaceVisibilityMs; }
     static int appReturnGlassFadeStartBeforeEndMs() { return appReturnGlassFadeStartBeforeEndMs; }
     static int appReturnGlassFadeDurationMs() { return appReturnGlassFadeDurationMs; }
