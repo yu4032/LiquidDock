@@ -111,6 +111,7 @@ public class LauncherGlassDockTransitionStateTest {
 
     @Test public void firstDockLaunchProxyCanPrecedeNativeHidden() {
         LauncherGlassDockTransitionState state = new LauncherGlassDockTransitionState();
+        assertFalse(state.onNativeVisible()); // Launcher may initialize source VISIBLE.
         assertTrue(state.onProxyFrame(false, .2f));
         assertTrue(state.sample().active);
         assertFalse(state.sample().returning);
