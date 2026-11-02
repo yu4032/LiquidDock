@@ -126,8 +126,10 @@ final class DockIconAnimationGlassHook {
                             }
                         }
 
+                        boolean returning = isCloseToHomeProxy(proxy);
                         Object result = chain.proceed(args);
                         DockGlassItemRegistry.endProxyGeometry(target);
+                        if (returning) LauncherGlassStaticLayer.onDockProxyReturnFinished();
                         forgetProxyTarget(proxy);
                         return result;
                     }, boolean.class);
@@ -296,6 +298,9 @@ final class DockIconAnimationGlassHook {
         }
         forgetPending(pending);
         DockGlassItemRegistry.endProxyGeometry(pending.source);
+        if (isCloseToHomeProxy(pending.proxy)) {
+            LauncherGlassStaticLayer.onDockProxyReturnFinished();
+        }
         forgetProxyTarget(pending.proxy);
 
         try {
