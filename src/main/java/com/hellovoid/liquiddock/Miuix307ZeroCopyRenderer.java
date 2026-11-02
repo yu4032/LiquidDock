@@ -330,6 +330,7 @@ final class Miuix307ZeroCopyRenderer {
         if (gpuBackdrop == null) return;
         // Mirror Workspace's hidden/revealing glass presentation without hiding the Dock body.
         gpuBackdrop.beginHomeIconReturn();
+        LauncherGlassStaticLayer.onDockHomeOpeningStarted();
 
         final long serial = ++homeFreshnessSerial;
         DockHomeBackdropFreshnessState.Decision decision = HOME_FRESHNESS.onHomeStarted(serial);
