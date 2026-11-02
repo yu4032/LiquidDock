@@ -261,6 +261,13 @@ final class MiuixLauncherStaticGlassHook {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         // Launcher 4.50 WindowElement and FastLaunchWindowElement both pass
                         // (animType != CLOSE_TO_HOME) as the second boolean in this overload.
+                        if (args.length == 10 && args[6] instanceof Boolean
+                                && !((Boolean) args[6]) && args[3] instanceof Number) {
+                            // Material quality is shared by every Workspace node, including
+                            // widgets when icon glass is disabled or the target lives in Dock.
+                            LauncherGlassSessionRegistry.onNativeAppReturnProgress(
+                                    ((Number) args[3]).floatValue());
+                        }
                         if (GlassRuntimeState.isIconEnabled()
                                 && args.length == 10 && args[0] instanceof RectF
                                 && args[1] instanceof RectF && args[6] instanceof Boolean) {

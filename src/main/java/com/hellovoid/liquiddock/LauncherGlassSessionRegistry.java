@@ -85,6 +85,12 @@ final class LauncherGlassSessionRegistry {
         }
     }
 
+    static synchronized void onNativeAppReturnProgress(float progress) {
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session != null && !session.isShutdown()) session.setNativeAppReturnProgress(progress);
+        }
+    }
+
     /** Resume backgrounds held until the first authoritative native sample arrived. */
     static synchronized void onNativeWallpaperTransformConnected() {
         for (View root : new ArrayList<>(SESSIONS.keySet())) {

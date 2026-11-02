@@ -23,13 +23,15 @@ import java.util.IdentityHashMap;
 final class LauncherGlassStaticGeometryCache {
     /**
      * A consistent UI-thread view of each ancestor for ONE Workspace PreDraw.
-     * Node-specific history remains in ViewStamp; no reading is retained as
-     * authority between frames. Recycle slots to avoid hot-path allocations.
+     * Every View is re-read each PreDraw. Its change revision is shared by all
+     * descendants; node stamps remember revisions instead of duplicating matrices.
+     * Recycle slots to avoid hot-path allocations.
      */
     static final class Frame {
         private final IdentityHashMap<View, ViewSample> observed = new IdentityHashMap<>();
         private final ArrayList<ViewSample> samples = new ArrayList<>();
         private int used;
+        private long revision;
 
         void reset() {
             observed.clear();
@@ -41,38 +43,49 @@ final class LauncherGlassStaticGeometryCache {
             if (existing != null) return existing;
             if (used == samples.size()) samples.add(new ViewSample());
             ViewSample next = samples.get(used++);
-            next.read(view);
+            next.read(view, ++revision);
             observed.put(view, next);
             return next;
         }
     }
 
-    private static final class ViewSample {
+    static final class ViewSample {
+        private java.lang.ref.WeakReference<View> owner;
         final Matrix matrix = new Matrix();
         Matrix animationMatrix;
         int left, top, right, bottom, scrollX, scrollY, visibility;
         float alpha, translationX, translationY;
         boolean transientMotion;
+        long revision;
 
-        void read(View view) {
-            matrix.set(view.getMatrix());
+        void read(View view, long nextRevision) {
+            Matrix currentMatrix = view.getMatrix();
             Matrix animated = view.getAnimationMatrix();
-            if (animated == null) {
-                animationMatrix = null;
-            } else {
-                if (animationMatrix == null) animationMatrix = new Matrix();
-                animationMatrix.set(animated);
+            int l = view.getLeft(), t = view.getTop(), r = view.getRight(), b = view.getBottom();
+            int sx = view.getScrollX(), sy = view.getScrollY(), v = view.getVisibility();
+            float a = view.getAlpha(), tx = view.getTranslationX(), ty = view.getTranslationY();
+            boolean matrixChanged = !matrix.equals(currentMatrix);
+            boolean animationChanged = (animated == null) != (animationMatrix == null)
+                    || (animated != null && !animated.equals(animationMatrix));
+            boolean ownerChanged = owner == null || owner.get() != view;
+            if (ownerChanged || left != l || top != t || right != r || bottom != b
+                    || scrollX != sx || scrollY != sy || visibility != v
+                    || Float.compare(alpha, a) != 0 || Float.compare(translationX, tx) != 0
+                    || Float.compare(translationY, ty) != 0 || matrixChanged || animationChanged) {
+                revision = nextRevision;
             }
-            left = view.getLeft();
-            top = view.getTop();
-            right = view.getRight();
-            bottom = view.getBottom();
-            scrollX = view.getScrollX();
-            scrollY = view.getScrollY();
-            visibility = view.getVisibility();
-            alpha = view.getAlpha();
-            translationX = view.getTranslationX();
-            translationY = view.getTranslationY();
+            if (ownerChanged) owner = new java.lang.ref.WeakReference<>(view);
+            left = l; top = t; right = r; bottom = b;
+            scrollX = sx; scrollY = sy; visibility = v;
+            alpha = a; translationX = tx; translationY = ty;
+            if (matrixChanged) matrix.set(currentMatrix);
+            if (animationChanged) {
+                if (animated == null) animationMatrix = null;
+                else {
+                    if (animationMatrix == null) animationMatrix = new Matrix();
+                    animationMatrix.set(animated);
+                }
+            }
             android.view.animation.Animation animation = view.getAnimation();
             transientMotion = view.isLayoutRequested() || view.hasTransientState()
                     || (animation != null && !animation.hasEnded());
@@ -81,46 +94,19 @@ final class LauncherGlassStaticGeometryCache {
 
     private static final class ViewStamp {
         View view;
-        final Matrix matrix = new Matrix();
-        Matrix animationMatrix;
-        int left, top, right, bottom, scrollX, scrollY, visibility;
-        float alpha, translationX, translationY;
+        ViewSample sample;
+        long revision;
 
         boolean observe(View candidate, ViewSample current) {
-            boolean matrixChanged = !matrix.equals(current.matrix);
-            // Native Transition animationMatrix is independent from getMatrix.
-            boolean animationChanged =
-                    (current.animationMatrix == null) != (animationMatrix == null)
-                    || (current.animationMatrix != null
-                    && !current.animationMatrix.equals(animationMatrix));
-            boolean changed = view != candidate
-                    || left != current.left || top != current.top
-                    || right != current.right || bottom != current.bottom
-                    || scrollX != current.scrollX || scrollY != current.scrollY
-                    || visibility != current.visibility
-                    || Float.compare(alpha, current.alpha) != 0
-                    || Float.compare(translationX, current.translationX) != 0
-                    || Float.compare(translationY, current.translationY) != 0
-                    || matrixChanged || animationChanged;
+            // A shared ancestor's native Matrix comparison happens in Frame.sample once,
+            // rather than again in every descendant node's ancestry stamp.
+            boolean changed = view != candidate || sample != current || revision != current.revision;
             view = candidate;
-            left = current.left; top = current.top;
-            right = current.right; bottom = current.bottom;
-            scrollX = current.scrollX; scrollY = current.scrollY;
-            visibility = current.visibility; alpha = current.alpha;
-            translationX = current.translationX;
-            translationY = current.translationY;
-            if (matrixChanged) matrix.set(current.matrix);
-            if (animationChanged) {
-                if (current.animationMatrix == null) animationMatrix = null;
-                else {
-                    if (animationMatrix == null) animationMatrix = new Matrix();
-                    animationMatrix.set(current.animationMatrix);
-                }
-            }
+            sample = current;
+            revision = current.revision;
             return changed;
         }
     }
-
     // ShortcutIcon may change its compound drawable without changing the host bounds.
     // Observe only the inputs used by LauncherGlassIconGeometry.resolve().
     private static final class IconStamp {

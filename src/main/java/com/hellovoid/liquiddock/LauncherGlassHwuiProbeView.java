@@ -28,6 +28,7 @@ final class LauncherGlassHwuiProbeView extends View {
     private static volatile String motionDecoratedAgslSource;
 
     private final LauncherGlassSession session;
+    private final LauncherGlassHwuiUniforms materialUniforms = new LauncherGlassHwuiUniforms();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private Bitmap backdrop;
     private Bitmap blurredBackdrop;
@@ -230,8 +231,10 @@ final class LauncherGlassHwuiProbeView extends View {
     private static RuntimeShader workspaceShader(boolean decorated, boolean motion) {
         // Workspace always replaces legacy edge families with OS4. Generic cached sources
         // remain configurable for other consumers such as Gboard.
-        return new RuntimeShader(PrismalRenderer.specializeWorkspaceHwuiSource(
-                agslSource(decorated, motion)));
+        String source = PrismalRenderer.specializeWorkspaceHwuiSource(agslSource(decorated, motion));
+        if (decorated) source = LauncherGlassHwuiMotionBody.apply(source);
+        source = LauncherGlassHwuiTransitionShader.apply(source, decorated);
+        return new RuntimeShader(source);
     }
 
     boolean setBackdrops(Bitmap rawBitmap, Bitmap blurBitmap,
@@ -279,6 +282,7 @@ final class LauncherGlassHwuiProbeView extends View {
                     (float) blurBitmap.getWidth() / logicalWidth,
                     (float) blurBitmap.getHeight() / logicalHeight);
             nextBaseline.setFloatUniform("uProbeWallpaperTransform", 1f, 1f, 0f, 0f);
+            nextBaseline.setFloatUniform("u_workspaceDetail", 1f);
             nextDecorated.setFloatUniform("uProbeRawScale",
                     (float) rawBitmap.getWidth() / logicalWidth,
                     (float) rawBitmap.getHeight() / logicalHeight);
@@ -286,6 +290,7 @@ final class LauncherGlassHwuiProbeView extends View {
                     (float) blurBitmap.getWidth() / logicalWidth,
                     (float) blurBitmap.getHeight() / logicalHeight);
             nextDecorated.setFloatUniform("uProbeWallpaperTransform", 1f, 1f, 0f, 0f);
+            nextDecorated.setFloatUniform("u_workspaceDetail", 1f);
             if (nextMotionDecorated != null) {
                 nextMotionDecorated.setFloatUniform("uProbeRawScale",
                         (float) rawBitmap.getWidth() / logicalWidth,
@@ -294,6 +299,7 @@ final class LauncherGlassHwuiProbeView extends View {
                         (float) blurBitmap.getWidth() / logicalWidth,
                         (float) blurBitmap.getHeight() / logicalHeight);
                 nextMotionDecorated.setFloatUniform("uProbeWallpaperTransform", 1f, 1f, 0f, 0f);
+                nextMotionDecorated.setFloatUniform("u_workspaceDetail", 1f);
             }
             backdrop = rawBitmap;
             blurredBackdrop = blurBitmap;
@@ -317,6 +323,7 @@ final class LauncherGlassHwuiProbeView extends View {
 
     /** Drop Java/Skia inputs after detach. Let HWUI release in-flight GPU references safely. */
     void clearBackdrops() {
+        materialUniforms.clear();
         baselineShader = null;
         decoratedShader = null;
         motionDecoratedShader = null;
@@ -345,7 +352,8 @@ final class LauncherGlassHwuiProbeView extends View {
                 LauncherWallpaperTransformState.map(backdropWallpaperTransform,
                         LauncherWallpaperZoomHook.currentTransform(displayId), wallpaperMapping);
                 session.drawHwuiProbe(
-                        canvas, paint, baseline, decorated, motionDecorated, wallpaperMapping);
+                        canvas, paint, baseline, decorated, motionDecorated, wallpaperMapping,
+                        materialUniforms);
             } finally {
                 if (Trace.isEnabled()) Trace.endSection();
             }
