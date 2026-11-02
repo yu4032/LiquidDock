@@ -185,7 +185,8 @@ class SettingsMetaTest {
             Page.AnimationGui to listOf(animationSettingsPageSpec),
         )
         owners.forEach { (page, specs) ->
-            assertEquals(specs.map { it.key }, pages.getValue(page).blocks.filterIsInstance<SettingsBlock.Row>().map { it.key })
+            assertEquals(specs.map { it.key }, pages.getValue(page).blocks
+                .filterIsInstance<SettingsBlock.Row>().filter { it.number != null }.map { it.key })
         }
     }
 
