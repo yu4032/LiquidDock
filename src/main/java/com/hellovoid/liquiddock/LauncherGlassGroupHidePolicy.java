@@ -16,6 +16,12 @@ final class LauncherGlassGroupHidePolicy {
         return enabled && !localProxyActive;
     }
 
+    static boolean honorWorkspaceAncestorAlpha(boolean enabled, boolean localProxyActive) {
+        // When hiding is disabled, native Workspace alpha must not inadvertently hide
+        // the independent shared-glass output through each sibling node.
+        return enabled && localProxyActive;
+    }
+
     static float workspaceBackground(boolean enabled, boolean localProxyActive,
             boolean launchAway, float returningAlpha) {
         if (!enabled || !localProxyActive) return 1f;
