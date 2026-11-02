@@ -433,6 +433,25 @@ final class Miuix307PassBlurTextureView extends TextureView
         });
     }
 
+    /**
+     * The HOME presentation state controls only Dock icon glass. The Dock body and its
+     * PassBlur producer remain live across this transition.
+     */
+    void beginHomeIconReturn() {
+        if (shuttingDown) return;
+        if (dockCompositor.beginHomeReturn()) requestDockProgressRefresh();
+    }
+
+    void observeHomeIconReturn(float progress) {
+        if (shuttingDown) return;
+        if (dockCompositor.observeHomeReturn(progress)) requestDockProgressRefresh();
+    }
+
+    void finishHomeIconReturn() {
+        if (shuttingDown) return;
+        if (dockCompositor.finishHomeReturn()) requestDockProgressRefresh();
+    }
+
     /** Native progress changes opacity, not geometry or the prepared OES backdrop. */
     private boolean dockProgressRefreshPending;
 
