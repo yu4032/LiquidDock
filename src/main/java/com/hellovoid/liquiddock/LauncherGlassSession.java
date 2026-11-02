@@ -1149,8 +1149,10 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
             // Workspace alpha inside individual nodes: Launcher intentionally fades that
             // ancestor during an app spring, even though the shared glass lives outside it.
             // Ordinary icon subtree alpha and the active FloatingIcon proxy remain native.
-            boolean honorWorkspaceGroupAlpha = launchProxyActive
-                    && AnimationRuntimeState.hideWorkspaceGlassDuringApp();
+            boolean honorWorkspaceGroupAlpha =
+                    LauncherGlassGroupHidePolicy.honorWorkspaceAncestorAlpha(
+                            AnimationRuntimeState.hideWorkspaceGlassDuringApp(),
+                            launchProxyActive);
             float outputAlpha = node.presentationAlpha(
                     root, workspaceRoot, workspaceAlpha, honorWorkspaceGroupAlpha);
             if (!node.isLaunchProxyActive()) outputAlpha *= backgroundGlassAlpha;
