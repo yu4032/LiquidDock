@@ -19,6 +19,18 @@ final class LauncherGlassDockTransitionState {
         }
     }
 
+    static Sample mergeWorkspace(boolean workspaceActive, boolean workspaceReturning,
+            float workspaceProgress, Sample dock) {
+        if (dock == null) return new Sample(workspaceActive, workspaceReturning,
+                workspaceProgress);
+        boolean mergedActive = workspaceActive || dock.active;
+        boolean mergedReturning = workspaceReturning || (dock.active && dock.returning);
+        float mergedProgress = workspaceReturning
+                ? Math.max(workspaceProgress, dock.returning ? dock.progress : 0f)
+                : dock.returning ? dock.progress : workspaceProgress;
+        return new Sample(mergedActive, mergedActive && mergedReturning, mergedProgress);
+    }
+
     private boolean active;
     private boolean returning;
     private boolean homeInProgress;
