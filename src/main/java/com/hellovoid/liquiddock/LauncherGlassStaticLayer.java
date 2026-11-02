@@ -349,14 +349,14 @@ final class LauncherGlassStaticLayer extends TextureView implements TextureView.
                 .isFolderBackdropFrozenForRoot(root);
         float alpha = frozenFolder ? 1f : workspace != null
                 ? LauncherGlassVisibility.alphaBelowRoot(workspace, root) : 1f;
-        LauncherGlassDockTransitionState.Sample dock = DOCK_TRANSITION.sample();
-        // A Dock icon's FloatingIcon belongs to a different root; merge its presentation
-        // owner before applying the existing Workspace launch/return fade state machine.
-        boolean effectiveProxyActive = launchProxyActive || dock.active;
-        boolean effectiveReturning = launchProxyReturning || (dock.active && dock.returning);
-        float effectiveProgress = launchProxyReturning
-                ? Math.max(returnProgress, dock.returning ? dock.progress : 0f)
-                : dock.returning ? dock.progress : returnProgress;
+        // Dock and Workspace may own different windows but share one glass presentation.
+        LauncherGlassDockTransitionState.Sample presentation =
+                LauncherGlassDockTransitionState.mergeWorkspace(
+                        launchProxyActive, launchProxyReturning, returnProgress,
+                        DOCK_TRANSITION.sample());
+        boolean effectiveProxyActive = presentation.active;
+        boolean effectiveReturning = presentation.returning;
+        float effectiveProgress = presentation.progress;
         boolean wasReturning = layer.launchProxyActive && layer.launchProxyReturning;
         if (effectiveReturning) {
             layer.mainHandler.removeCallbacks(layer.clearLaunchAwaySuppression);
