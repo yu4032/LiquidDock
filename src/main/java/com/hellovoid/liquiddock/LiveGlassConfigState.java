@@ -157,6 +157,8 @@ final class LiveGlassConfigState {
     private static final Set<String> ANIMATION_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(
                     ConfigSchema.Animation.WORKSPACE_VISIBILITY.name(),
+                    ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name(),
+                    ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name(),
                     ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END.name(),
                     ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION.name(),
                     ConfigSchema.Animation.UNLOCK_GLASS_FADE.name(),
@@ -320,6 +322,8 @@ final class LiveGlassConfigState {
             if (animationChanged) {
                 lastAnimation = animation;
                 AnimationRuntimeState.configure(next.animation);
+                LauncherGlassStaticLayer.onAnimationVisibilitySettingsChanged();
+                Miuix307ZeroCopyRenderer.requestDockProgressRefresh();
                 LauncherWallpaperZoomHook.onLiveConfigChanged(next);
                 MainHook.log(TAG + " launcher animation/zoom policy updated");
             }
