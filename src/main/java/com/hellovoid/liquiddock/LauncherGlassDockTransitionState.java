@@ -95,6 +95,21 @@ final class LauncherGlassDockTransitionState {
         return changed;
     }
 
+    /**
+     * The Dock FloatingIcon handoff is its own authoritative visual terminal, even when
+     * WindowElement completion is delayed or absent. Workspace's existing fade will keep
+     * rendering after this proxy stops owning the launch presentation.
+     */
+    synchronized boolean onProxyReturnFinished() {
+        if (!active || !returning) return false;
+        active = false;
+        returning = false;
+        homeInProgress = false;
+        sourceRestored = true;
+        progress = 0f;
+        return true;
+    }
+
     synchronized boolean onHomeRetargetedAway() {
         homeInProgress = false;
         if (!active) return false;
