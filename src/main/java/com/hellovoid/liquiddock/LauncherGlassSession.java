@@ -948,6 +948,7 @@ final class LauncherGlassSession implements RootPassBlurBackend.Consumer {
         if (shuttingDown) return;
         View root = rootRef.get();
         if (root == null) return;
+        if (folderFrameFrozen) OpenFolderGlassCoordinator.releaseDestroyedFolderOwner();
         if (folderFrameFrozen) {
             // Folder presentation intentionally freezes HOME geometry and backdrop work, but its
             // layer fade still draws the cached HWUI material. Keep that draw on the motion tier.

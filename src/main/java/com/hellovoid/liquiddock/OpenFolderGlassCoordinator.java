@@ -51,6 +51,30 @@ final class OpenFolderGlassCoordinator {
 
     static boolean hasActiveSession() { return current != null; }
 
+    /** A theme can replace Launcher without sending the old folder's close terminal. */
+    static void releaseDestroyedFolderOwner() {
+        State state = current;
+        if (state != null && ownerDestroyed(state)) releaseAll();
+    }
+
+    private static boolean ownerDestroyed(State state) {
+        if (state.launcherOwner == null) return false;
+        android.app.Activity owner = state.launcherOwner.get();
+        return owner == null || owner.isDestroyed();
+    }
+
+    private static android.app.Activity activityOwner(android.content.Context context) {
+        while (context instanceof android.content.ContextWrapper) {
+            if (context instanceof android.app.Activity) {
+                return (android.app.Activity) context;
+            }
+            android.content.Context base = ((android.content.ContextWrapper) context).getBaseContext();
+            if (base == context) break;
+            context = base;
+        }
+        return null;
+    }
+
     /** Only an accepted, native OPEN is allowed to preserve the folder's
      * original blur target when Recents returns to its still-live Cling.
      * Touch-only preparations and native CLOSE are explicitly excluded.
@@ -524,6 +548,7 @@ final class OpenFolderGlassCoordinator {
 
     static void releaseAll() {
         State state = current;
+        boolean destroyedOwner = state != null && ownerDestroyed(state);
         if (state != null) trace("releaseAll", state);
         current = null;
         OWNER.release();
@@ -545,6 +570,9 @@ final class OpenFolderGlassCoordinator {
         View cling = state.cling.get();
         if (cling != null) cling.postInvalidateOnAnimation();
         MiuixFolderGlassHook.releaseExpandedFolderOwner(state.serial);
+        // Unlike a transient Cling detach in Recents, Activity destruction is a real terminal.
+        // The cover is process-wide and must not be inherited by the replacement Workspace.
+        if (destroyedOwner) MiuixFolderGlassHook.onFolderOpeningFailed();
     }
 
     private static void sync(State state) {
@@ -879,6 +907,7 @@ final class OpenFolderGlassCoordinator {
     }
 
     private static final class State {
+        final WeakReference<android.app.Activity> launcherOwner;
         final WeakReference<View> root;
         final WeakReference<ViewGroup> icon;
         WeakReference<View> cling = new WeakReference<>(null), folder = new WeakReference<>(null);
@@ -936,6 +965,8 @@ final class OpenFolderGlassCoordinator {
         };
         State(View root, ViewGroup icon, long serial, LiquidDockConfig.Glass glass,
               String launcherSurfaceName, String[] dockRootsAtPrepare) {
+            android.app.Activity owner = activityOwner(icon.getContext());
+            launcherOwner = owner != null ? new WeakReference<>(owner) : null;
             this.root = new WeakReference<>(root);
             this.icon = new WeakReference<>(icon);
             this.serial = serial;
