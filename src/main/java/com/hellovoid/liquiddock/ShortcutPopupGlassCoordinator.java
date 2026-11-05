@@ -157,10 +157,17 @@ final class ShortcutPopupGlassCoordinator {
                 || !state.requestStarted || state.contentRef.get() != null) return false;
         ShortcutPopupGlassLayer prepared = state.stagedLayer;
         View root = state.captureRootRef.get();
-        if (prepared != null && root != null
-                && prepared.hasPreShowHwuiBackdrop(root.getWidth(), root.getHeight())) {
-            MainHook.log(TAG + " native show admitted with ready pre-show glass ageMs="
-                    + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+        if (prepared != null && root != null && prepared.hasCapturedHwuiBackdrop()) {
+            if (prepared.hasPreShowHwuiBackdrop(root.getWidth(), root.getHeight())) {
+                MainHook.log(TAG + " native show admitted with ready pre-show glass ageMs="
+                        + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+                return false;
+            }
+            // A captured bitmap in the wrong logical domain will trigger GL fallback
+            // only after the animation begins. Reject it BEFORE calling OEM show().
+            MainHook.log(TAG + " pre-show glass dimension mismatch launcher="
+                    + root.getWidth() + "x" + root.getHeight());
+            releaseLocked("show-glass-bounds-mismatch");
             return false;
         }
         if (state.deferredShow != null) {
@@ -420,9 +427,20 @@ final class ShortcutPopupGlassCoordinator {
             }
         } else {
             MainHook.log(TAG + " popup HWUI prepared before/after bind="
-                    + (state.layer != null) + " ageMs="
-                    + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
-            resumeDeferredShowWithGlass(state);
+                    + (state.layer != null) + " source=" + width + "x" + height
+                    + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+            View captureRoot = state.captureRootRef.get();
+            if (state.deferredShow != null && state.stagedLayer != null
+                    && captureRoot != null
+                    && !state.stagedLayer.hasPreShowHwuiBackdrop(
+                            captureRoot.getWidth(), captureRoot.getHeight())) {
+                MainHook.log(TAG + " pre-show output bounds mismatch source="
+                        + width + "x" + height + " launcher="
+                        + captureRoot.getWidth() + "x" + captureRoot.getHeight());
+                releaseLocked("show-glass-bounds-mismatch");
+            } else {
+                resumeDeferredShowWithGlass(state);
+            }
         }
     }
 
@@ -732,6 +750,7 @@ final class ShortcutPopupGlassCoordinator {
                 || "source-overlay-unavailable".equals(reason)
                 || "session-failure".equals(reason)
                 || "show-glass-material-failed".equals(reason)
+                || "show-glass-bounds-mismatch".equals(reason)
                 || "live-popup-glass-disabled".equals(reason);
         View captureRoot = state.captureRootRef.get();
         if (captureRoot != null) {
