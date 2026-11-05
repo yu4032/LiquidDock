@@ -81,8 +81,10 @@ final class MiuixShortcutMenuGlassHook {
             Method nativeShow = HookUtil.findMethodExact(
                     shortcutMenuClass, "show", new Class<?>[0]);
             boolean canDeferShow = nativeShow.getReturnType() == void.class;
-            MainHook.log(TAG + " first-frame native show gate installed=" + canDeferShow
-                    + " returnType=" + nativeShow.getReturnType().getName());
+            if (!canDeferShow) {
+                MainHook.log(TAG + " native show return type unsupported for pre-show gate: "
+                        + nativeShow.getReturnType().getName());
+            }
             HookUtil.hook(nativeShow, chain -> {
                 Object menu = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
