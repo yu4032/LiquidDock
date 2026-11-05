@@ -127,12 +127,6 @@ final class ShortcutPopupGlassCoordinator {
             // the requesting View to have the Dock owner's Java class.
             boolean dockMatch = state.dockEarly
                     && state.captureRootRef.get() == captureRoot;
-            if (dockMatch && (state.session == null || !state.session.hasFrozenBackdrop())) {
-                // Never turn a late capture into a snapshot of the entering popup.
-                // Keep the vendor menu material for this gesture instead.
-                releaseLocked("dock-pre-show-backdrop-not-ready");
-                return;
-            }
             if (workspaceMatch || dockMatch) {
                 state.requestStarted = true;
                 cancelHandoffCleanup(state);
@@ -389,25 +383,13 @@ final class ShortcutPopupGlassCoordinator {
             ViewTreeObserver observer = decorView.getViewTreeObserver();
             ViewTreeObserver.OnPreDrawListener listener = () -> {
                 updateGeometry(state);
-                // HWUI uses the same ViewRoot and can draw its prepared backdrop
-                // in this very frame. Claim the vendor background before the
-                // first composited popup draw, not one Handler turn after it.
-                if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && !state.firstVisiblePreDraw
-                        && !state.materialClaimed) {
-                    View popup = state.popupRef.get();
-                    if (popup != null && popup.isShown()) {
-                        state.firstVisiblePreDraw = true;
-                        if (state.layer != null && state.layer.hasPreparedHwuiFrame()) {
-                            onPresented(state);
-                        } else {
-                            // Do not replace the OEM material halfway through an entrance.
-                            // A late export cannot satisfy the first-frame contract.
-                            state.nativeMaterialLocked = true;
-                            View decor = state.popupDecorRef.get();
-                            if (decor != null) decor.post(
-                                    () -> release(state, "first-popup-frame-not-ready"));
-                        }
-                    }
+                // Claim the native material as soon as a complete HWUI frame can
+                // draw. The first traversal may precede popup layout and texture
+                // export; it must NEVER permanently disable the popup session.
+                // onPresented() remains the fallback for GL output readiness.
+                if (!state.materialClaimed && state.layer != null
+                        && state.layer.hasPreparedHwuiFrame()) {
+                    onPresented(state);
                 }
                 return true;
             };
@@ -529,8 +511,7 @@ final class ShortcutPopupGlassCoordinator {
 
     private static void onPresented(State state) {
         synchronized (ShortcutPopupGlassCoordinator.class) {
-            if (current != state || state.released || state.materialClaimed
-                    || state.nativeMaterialLocked) return;
+            if (current != state || state.released || state.materialClaimed) return;
             View content = state.contentRef.get();
             ShortcutPopupGlassLayer layer = state.layer;
             if (content == null || layer == null) return;
@@ -688,8 +669,6 @@ final class ShortcutPopupGlassCoordinator {
         View.OnAttachStateChangeListener popupDetachListener;
         boolean requestStarted;
         boolean materialClaimed;
-        boolean firstVisiblePreDraw;
-        boolean nativeMaterialLocked;
         boolean dismissCleanupPosted;
         Runnable handoffCleanup;
         boolean released;
