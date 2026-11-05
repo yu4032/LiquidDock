@@ -40,26 +40,34 @@ final class ShortcutPopupGlassHwuiView extends View {
         failureListener = listener;
     }
 
-    boolean setBackdrops(Bitmap rawBitmap, Bitmap blurBitmap, int width, int height) {
-        if (rawBitmap == null || blurBitmap == null || width <= 0 || height <= 0) return false;
+    /** Construct the popup's AGSL programs during the long-press prewarm, not show(). */
+    boolean prepareShaders() {
+        if (baselineShader != null && decoratedShader != null) return true;
         try {
-            if (baselineShader == null || decoratedShader == null) {
-                RuntimeShader nextBaseline = new RuntimeShader(
-                        LauncherGlassHwuiProbeView.agslSource(false));
-                RuntimeShader nextDecorated = new RuntimeShader(
-                        LauncherGlassHwuiProbeView.agslSource(true));
-                RuntimeShader nextMotionDecorated = null;
-                try {
-                    nextMotionDecorated = new RuntimeShader(
-                            LauncherGlassHwuiProbeView.agslSource(true, true));
-                } catch (RuntimeException ignored) {
-                    // Use the full material if this device rejects the optional motion variant.
-                }
-                baselineShader = nextBaseline;
-                decoratedShader = nextDecorated;
-                motionDecoratedShader = nextMotionDecorated;
+            RuntimeShader nextBaseline = new RuntimeShader(
+                    LauncherGlassHwuiProbeView.agslSource(false));
+            RuntimeShader nextDecorated = new RuntimeShader(
+                    LauncherGlassHwuiProbeView.agslSource(true));
+            RuntimeShader nextMotionDecorated = null;
+            try {
+                nextMotionDecorated = new RuntimeShader(
+                        LauncherGlassHwuiProbeView.agslSource(true, true));
+            } catch (RuntimeException ignored) {
+                // Keep the regular material if optional motion AGSL is unsupported.
             }
+            baselineShader = nextBaseline;
+            decoratedShader = nextDecorated;
+            motionDecoratedShader = nextMotionDecorated;
+            return true;
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
 
+    boolean setBackdrops(Bitmap rawBitmap, Bitmap blurBitmap, int width, int height) {
+        if (rawBitmap == null || blurBitmap == null || width <= 0 || height <= 0
+                || !prepareShaders()) return false;
+        try {
             BitmapShader rawInput = new BitmapShader(
                     rawBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             BitmapShader blurInput = new BitmapShader(
@@ -112,6 +120,29 @@ final class ShortcutPopupGlassHwuiView extends View {
         geometry = next;
         openProgress = clamped;
         invalidate();
+    }
+
+    /** Bitmap/AGSL inputs can be prepared offscreen, before the OEM menu is created. */
+    boolean hasPreparedBackdrops() {
+        return backdrop != null && blurredBackdrop != null
+                && baselineShader != null && decoratedShader != null
+                && logicalWidth > 0 && logicalHeight > 0;
+    }
+
+    /** Check the destination ViewRoot dimensions before admitting native show(). */
+    boolean hasPreparedBackdropsFor(int width, int height) {
+        return hasPreparedBackdrops()
+                && width > 0 && height > 0
+                && logicalWidth == width && logicalHeight == height;
+    }
+
+    /** True only when the cached source and current popup frame can draw in this root. */
+    boolean hasPreparedFrame() {
+        return isAttachedToWindow()
+                && getWidth() > 0 && getHeight() > 0
+                && hasPreparedBackdrops()
+                && geometry != null
+                && logicalWidth == getWidth() && logicalHeight == getHeight();
     }
 
     void clearBackdrops() {

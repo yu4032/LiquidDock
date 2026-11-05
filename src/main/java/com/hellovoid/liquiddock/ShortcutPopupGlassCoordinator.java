@@ -5,6 +5,7 @@ import android.view.ViewParent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.ViewConfiguration;
 
 import java.lang.ref.WeakReference;
 
@@ -12,12 +13,24 @@ import java.lang.ref.WeakReference;
 final class ShortcutPopupGlassCoordinator {
     private static final String TAG = "[DC][ShortcutPopupGlass]";
     private static State current;
+    // HWUI Workspace normally needs no extra popup producer on a simple icon tap.
+    // Begin warming only for a sustained hold, before the native long-press timeout.
+    private static final long WORKSPACE_PREWARM_LEAD_MS = 430L;
+    private static final long HANDOFF_CANCEL_GRACE_MS = 1200L;
+    // Never start the OEM entrance on a missing glass snapshot. Bounded native-only
+    // fallback avoids a hung long press if capture/export fails.
+    private static final long SHOW_GLASS_READY_TIMEOUT_MS = 700L;
+    private static View pendingWorkspaceRoot;
+    private static Runnable pendingWorkspacePrewarm;
 
     private ShortcutPopupGlassCoordinator() {}
 
     /** An installed Hook can switch at runtime; a visible popup is never re-captured in place. */
     static synchronized void onLivePopupGlassEnabled(boolean enabled) {
-        if (!enabled) releaseLocked("live-popup-glass-disabled");
+        if (!enabled) {
+            cancelScheduledWorkspacePrewarm(null);
+            releaseLocked("live-popup-glass-disabled");
+        }
         // If enabled while a vendor popup is already visible, wait for the next popup.
         // Capturing now would recursively sample the popup's own foreground.
     }
@@ -38,19 +51,61 @@ final class ShortcutPopupGlassCoordinator {
 
     static synchronized void prepareEarly(
             View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        // Start scene capture at the native menu request on the HWUI path, so ordinary
-        // app-icon taps do not create a capture window and GL session.
-        if (LauncherGlassStaticLayer.isHwuiProbeActive(captureRoot)) return;
-        prepareInternal(captureRoot, glassConfig, true, null, "early-prepare-replace");
+        if (captureRoot == null) return;
+        // Keep the TextureView fallback's proven immediate source path.
+        if (!LauncherGlassStaticLayer.isHwuiProbeActive(captureRoot)) {
+            prepareInternal(captureRoot, glassConfig, true, null, "early-prepare-replace");
+            return;
+        }
+        // On the HWUI path, avoid a new PassBlur session for ordinary short taps.
+        // Prepare before the long-press callback so the popup's FIRST frame can
+        // already use the full desktop instead of switching mid-animation.
+        if (pendingWorkspaceRoot == captureRoot && pendingWorkspacePrewarm != null) return;
+        cancelScheduledWorkspacePrewarm(null);
+        Runnable prewarm = () -> {
+            synchronized (ShortcutPopupGlassCoordinator.class) {
+                if (pendingWorkspaceRoot != captureRoot) return;
+                pendingWorkspaceRoot = null;
+                pendingWorkspacePrewarm = null;
+                State live = current;
+                if (live != null && !live.released && live.contentRef.get() != null) return;
+                prepareInternal(captureRoot, glassConfig, true, null,
+                        "workspace-hold-prewarm-replace");
+            }
+        };
+        pendingWorkspaceRoot = captureRoot;
+        pendingWorkspacePrewarm = prewarm;
+        long delay = Math.max(0L,
+                (long) ViewConfiguration.getLongPressTimeout() - WORKSPACE_PREWARM_LEAD_MS);
+        if (!captureRoot.postDelayed(prewarm, delay)) {
+            cancelScheduledWorkspacePrewarm(captureRoot);
+        }
+    }
+
+    private static void cancelScheduledWorkspacePrewarm(View root) {
+        if (pendingWorkspacePrewarm == null
+                || (root != null && pendingWorkspaceRoot != root)) return;
+        View pendingRoot = pendingWorkspaceRoot;
+        if (pendingRoot != null) pendingRoot.removeCallbacks(pendingWorkspacePrewarm);
+        pendingWorkspaceRoot = null;
+        pendingWorkspacePrewarm = null;
     }
 
     static synchronized void prepareDockEarly(
             View dockMenuOwner, LiquidDockConfig.Glass glassConfig) {
         if (dockMenuOwner == null) return;
-        if (LauncherGlassStaticLayer.isHwuiProbeActive(dockMenuOwner.getRootView())) return;
+        // Dock icon long-press animations can start before the menu request. Unlike
+        // Workspace's HWUI shortcut, the Dock must preserve a pre-animation scene.
         State state = current;
-        if (state != null && !state.released && state.contentRef.get() != null) {
-            return;
+        if (state != null && !state.released) {
+            if (state.contentRef.get() != null) return;
+            // Both Dock touch routes can dispatch the same ACTION_DOWN. Replacing an
+            // in-flight capture here would postpone freezing until the popup animates.
+            if (state.early && state.dockEarly
+                    && state.earlyOwnerRef.get() == dockMenuOwner
+                    && state.captureRootRef.get() == dockMenuOwner.getRootView()) {
+                return;
+            }
         }
         prepareInternal(
                 dockMenuOwner.getRootView(),
@@ -64,14 +119,20 @@ final class ShortcutPopupGlassCoordinator {
             View authorityOwner,
             View captureRoot,
             LiquidDockConfig.Glass glassConfig) {
+        cancelScheduledWorkspacePrewarm(captureRoot);
         State state = current;
         if (state != null && !state.released && state.early) {
             View earlyOwner = state.earlyOwnerRef.get();
             boolean workspaceMatch = earlyOwner == null
                     && state.captureRootRef.get() == captureRoot;
-            boolean dockMatch = matchesDockAuthority(state, authorityOwner);
+            // setRequestingItemInfo belongs to ShortcutMenuLayer, not to
+            // DockContainerView. Match the Launcher ViewRoot rather than requiring
+            // the requesting View to have the Dock owner's Java class.
+            boolean dockMatch = state.dockEarly
+                    && state.captureRootRef.get() == captureRoot;
             if (workspaceMatch || dockMatch) {
                 state.requestStarted = true;
+                cancelHandoffCleanup(state);
                 return;
             }
         }
@@ -82,7 +143,90 @@ final class ShortcutPopupGlassCoordinator {
         }
     }
 
+    /**
+     * The real ShortcutMenu.show() must not run until the offscreen glass material is
+     * ready. Its entrance animation starts synchronously in the vendor method; merely
+     * preparing the popup output after show() cannot guarantee a first-frame takeover.
+     * The callback re-enters the hooked show on the UI thread with a one-shot bypass.
+     */
+    static synchronized boolean deferShowUntilGlassReady(Object menu, Runnable resumeShow) {
+        State state = current;
+        if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
+                || menu == null || resumeShow == null || state == null || state.released
+                || !state.requestStarted || state.contentRef.get() != null) return false;
+        ShortcutPopupGlassLayer prepared = state.stagedLayer;
+        View root = state.captureRootRef.get();
+        if (prepared != null && root != null && prepared.hasCapturedHwuiBackdrop()) {
+            if (prepared.hasPreShowHwuiBackdrop(root.getWidth(), root.getHeight())) {
+                return false;
+            }
+            // A captured bitmap in the wrong logical domain will trigger GL fallback
+            // only after the animation begins. Reject it BEFORE calling OEM show().
+            MainHook.log(TAG + " pre-show glass dimension mismatch launcher="
+                    + root.getWidth() + "x" + root.getHeight());
+            releaseLocked("show-glass-bounds-mismatch");
+            return false;
+        }
+        if (state.deferredShow != null) {
+            // Vendor may issue duplicate show() calls in one long-press cycle.
+            return state.deferredMenu == menu;
+        }
+        if (root == null || !root.isAttachedToWindow()) return false;
+        state.deferredMenu = menu;
+        state.deferredShow = resumeShow;
+        Runnable deadline = () -> {
+            synchronized (ShortcutPopupGlassCoordinator.class) {
+                if (current == state && !state.released && state.deferredShow != null) {
+                    MainHook.log(TAG + " native-only fallback: glass not ready before show deadline");
+                    releaseLocked("show-preparation-timeout");
+                }
+            }
+        };
+        state.deferredShowTimeout = deadline;
+        if (!root.postDelayed(deadline, SHOW_GLASS_READY_TIMEOUT_MS)) {
+            takeDeferredShow(state);
+            releaseLocked("show-deadline-scheduling-failed");
+            return false;
+        }
+        return true;
+    }
+
+    /** Suppress a pending vendor show if the same menu was dismissed before presentation. */
+    static synchronized void cancelDeferredShow(Object menu) {
+        State state = current;
+        if (state != null && state.deferredShow != null && state.deferredMenu == menu) {
+            takeDeferredShow(state);
+            releaseLocked("dismiss-before-native-show");
+        }
+    }
+
+    private static Runnable takeDeferredShow(State state) {
+        if (state == null) return null;
+        Runnable resume = state.deferredShow;
+        state.deferredShow = null;
+        state.deferredMenu = null;
+        Runnable timeout = state.deferredShowTimeout;
+        state.deferredShowTimeout = null;
+        View root = state.captureRootRef.get();
+        if (timeout != null && root != null) root.removeCallbacks(timeout);
+        return resume;
+    }
+
+    private static void resumeDeferredShowWithGlass(State state) {
+        if (state == null || state.deferredShow == null || current != state
+                || state.released || state.stagedLayer == null) return;
+        View root = state.captureRootRef.get();
+        if (root == null || !state.stagedLayer.hasPreShowHwuiBackdrop(
+                root.getWidth(), root.getHeight())) return;
+        Runnable resume = takeDeferredShow(state);
+        if (resume == null) return;
+        // onHwuiBackdropsReady is already on the main thread. Invoke immediately
+        // rather than posting another task that could race dismiss/replacement.
+        resume.run();
+    }
+
     static synchronized void cancelEarlyIfUnused(View captureRoot) {
+        cancelScheduledWorkspacePrewarm(captureRoot);
         State state = current;
         if (state == null || state.released || !state.early
                 || state.earlyOwnerRef.get() != null
@@ -91,6 +235,43 @@ final class ShortcutPopupGlassCoordinator {
             return;
         }
         releaseLocked("early-touch-ended-unused");
+    }
+
+    /**
+     * Native long-press ownership may send ACTION_CANCEL before it requests the menu.
+     * Keep the already-frozen desktop across that handoff, but release it if no
+     * menu request follows so drag-only gestures cannot retain a GPU producer.
+     */
+    static synchronized void deferEarlyCancelIfUnused(View root, View dockOwner) {
+        if (dockOwner == null) cancelScheduledWorkspacePrewarm(root);
+        State state = current;
+        if (state == null || state.released || !state.early
+                || state.captureRootRef.get() != root
+                || state.earlyOwnerRef.get() != dockOwner
+                || state.requestStarted || state.contentRef.get() != null
+                || state.handoffCleanup != null) return;
+        View anchor = state.captureRootRef.get();
+        if (anchor == null) return;
+        Runnable expire = () -> {
+            synchronized (ShortcutPopupGlassCoordinator.class) {
+                if (current == state && !state.released && !state.requestStarted
+                        && state.contentRef.get() == null) {
+                    releaseLocked("touch-cancel-handoff-unused");
+                }
+            }
+        };
+        state.handoffCleanup = expire;
+        if (!anchor.postDelayed(expire, HANDOFF_CANCEL_GRACE_MS)) {
+            state.handoffCleanup = null;
+            releaseLocked("touch-cancel-detached");
+        }
+    }
+
+    private static void cancelHandoffCleanup(State state) {
+        if (state == null || state.handoffCleanup == null) return;
+        View root = state.captureRootRef.get();
+        if (root != null) root.removeCallbacks(state.handoffCleanup);
+        state.handoffCleanup = null;
     }
 
     static synchronized void cancelDockEarlyIfUnused(View dockMenuOwner) {
@@ -133,7 +314,10 @@ final class ShortcutPopupGlassCoordinator {
         // Capture the already-visible desktop scene. Hiding the shared Workspace glass
         // for a single popup screenshot produces a visible black/transparent flash. The
         // popup's own dedicated source overlay handles capture independently.
-        ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
+        // The HWUI popup paints in Launcher coordinates. A fullscreen WindowManager
+        // panel may have different system-bar insets, causing logicalWidth/Height
+        // mismatch and a late TextureView fallback during the entrance.
+        ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attachToLauncherBounds(
                 captureRoot,
                 new ShortcutPopupSourceOverlay.Listener() {
                     @Override public void onAttached(ShortcutPopupSourceOverlay attached) {
@@ -151,7 +335,7 @@ final class ShortcutPopupGlassCoordinator {
                         MainHook.log(TAG + " source overlay attach failed: " + error);
                         release(state, "source-attach-failed");
                     }
-                });
+                }, "LiquidDockShortcutBackdropSource");
         state.sourceOverlay = overlay;
         if (overlay == null) releaseLocked("source-overlay-unavailable");
     }
@@ -192,9 +376,15 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
+            // Stage the actual popup View and HWUI shaders during the hold.
+            // Creating them only after ShortcutMenu.show() started the OEM
+            // entrance was the remaining source of mid-animation handoff.
+            if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE) {
+                state.stagedLayer = new ShortcutPopupGlassLayer(
+                        sourceRoot.getContext(), state.session);
+            }
             state.session.requestInitialCapture();
-            boolean outputReady = ensurePopupOutput(state);
-            MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
+            ensurePopupOutput(state);
         }
     }
 
@@ -206,7 +396,8 @@ final class ShortcutPopupGlassCoordinator {
             if (blurredBitmap != null) blurredBitmap.recycle();
             return;
         }
-        ShortcutPopupGlassLayer layer = state.layer;
+        ShortcutPopupGlassLayer layer = state.layer != null
+                ? state.layer : state.stagedLayer;
         if (layer == null) {
             if (state.pendingBackdropOwned) {
                 if (state.pendingRawBackdrop != null) state.pendingRawBackdrop.recycle();
@@ -223,13 +414,34 @@ final class ShortcutPopupGlassCoordinator {
             if (rawBitmap != null) rawBitmap.recycle();
             if (blurredBitmap != null) blurredBitmap.recycle();
             layer.fallbackToTextureView();
+            if (state.deferredShow != null) {
+                releaseLocked("show-glass-material-failed");
+            }
+        } else {
+            View captureRoot = state.captureRootRef.get();
+            if (state.deferredShow != null && state.stagedLayer != null
+                    && captureRoot != null
+                    && !state.stagedLayer.hasPreShowHwuiBackdrop(
+                            captureRoot.getWidth(), captureRoot.getHeight())) {
+                MainHook.log(TAG + " pre-show output bounds mismatch source="
+                        + width + "x" + height + " launcher="
+                        + captureRoot.getWidth() + "x" + captureRoot.getHeight());
+                releaseLocked("show-glass-bounds-mismatch");
+            } else {
+                resumeDeferredShowWithGlass(state);
+            }
         }
     }
 
     private static synchronized void onHwuiBackdropExportFailed(State state, Throwable error) {
         if (current != state || state.released) return;
         MainHook.log(TAG + " popup HWUI backdrop export failed; restoring GL output: " + error);
-        ShortcutPopupGlassLayer layer = state.layer;
+        if (state.deferredShow != null) {
+            releaseLocked("show-glass-material-failed");
+            return;
+        }
+        ShortcutPopupGlassLayer layer = state.layer != null
+                ? state.layer : state.stagedLayer;
         if (layer != null) layer.fallbackToTextureView();
         if (state.pendingRawBackdrop != null) {
             if (state.pendingBackdropOwned) state.pendingRawBackdrop.recycle();
@@ -248,7 +460,8 @@ final class ShortcutPopupGlassCoordinator {
         if (root != null) {
             LauncherGlassSessionRegistry.setPopupMotionQualityForRoot(root, active);
         }
-        ShortcutPopupGlassLayer layer = state.layer;
+        ShortcutPopupGlassLayer layer = state.layer != null
+                ? state.layer : state.stagedLayer;
         if (layer != null) layer.setMotionQualityActive(active);
     }
 
@@ -286,7 +499,16 @@ final class ShortcutPopupGlassCoordinator {
         if (state.preDrawListener == null) {
             ViewTreeObserver observer = decorView.getViewTreeObserver();
             ViewTreeObserver.OnPreDrawListener listener = () -> {
+                ensurePopupOutput(state);
                 updateGeometry(state);
+                // Claim the native material as soon as a complete HWUI frame can
+                // draw. The first traversal may precede popup layout and texture
+                // export; it must NEVER permanently disable the popup session.
+                // onPresented() remains the fallback for GL output readiness.
+                if (!state.materialClaimed && state.layer != null
+                        && state.layer.hasPreparedHwuiFrame()) {
+                    onPresented(state);
+                }
                 return true;
             };
             if (observer.isAlive()) {
@@ -316,11 +538,12 @@ final class ShortcutPopupGlassCoordinator {
         int popupIndex = decorGroup.indexOfChild(popup);
         if (popupIndex < 0) return false;
 
-        ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
-                decor.getContext(), state.session);
+        ShortcutPopupGlassLayer layer = state.stagedLayer != null
+                ? state.stagedLayer : new ShortcutPopupGlassLayer(decor.getContext(), state.session);
         decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         state.layer = layer;
+        state.stagedLayer = null;
         if (state.pendingRawBackdrop != null && state.pendingBlurredBackdrop != null) {
             android.graphics.Bitmap raw = state.pendingRawBackdrop;
             android.graphics.Bitmap blurred = state.pendingBlurredBackdrop;
@@ -338,7 +561,7 @@ final class ShortcutPopupGlassCoordinator {
             state.pendingBackdropOwned = false;
         }
         updateGeometry(state);
-        MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
+        MainHook.log(TAG + " popup output bound below PopupView index=" + popupIndex
                 + " backdropReady=" + state.session.hasFrozenBackdrop());
         return true;
     }
@@ -416,7 +639,7 @@ final class ShortcutPopupGlassCoordinator {
             content.setElevation(0f);
             state.materialClaimed = true;
             layer.reveal();
-            MainHook.log(TAG + " workspace-backed popup glass presented; vendor material released");
+            MainHook.log(TAG + " popup glass presented; vendor material released");
         }
     }
 
@@ -441,7 +664,10 @@ final class ShortcutPopupGlassCoordinator {
 
     static synchronized void cancelPending(View authorityOwner, View captureRoot) {
         State state = current;
-        if (state == null || state.contentRef.get() != null) return;
+        if (state == null || state.contentRef.get() != null
+                || state.deferredShow != null) return;
+        // The OEM may clear ItemInfo after invoking show(). A deferred show
+        // must remain alive until glass is ready, timeout, or explicit dismiss.
         boolean rootMatches = state.captureRootRef.get() == captureRoot;
         boolean ownerMatches = matchesDockAuthority(state, authorityOwner);
         if (rootMatches || ownerMatches) releaseLocked("query-cancelled");
@@ -487,10 +713,20 @@ final class ShortcutPopupGlassCoordinator {
     }
 
     private static void releaseLocked(String reason) {
+        cancelScheduledWorkspacePrewarm(null);
         State state = current;
         current = null;
         if (state == null || state.released) return;
         state.released = true;
+        cancelHandoffCleanup(state);
+        Runnable pendingNativeShow = takeDeferredShow(state);
+        boolean showNativeAfterFailure = "show-preparation-timeout".equals(reason)
+                || "source-attach-failed".equals(reason)
+                || "source-overlay-unavailable".equals(reason)
+                || "session-failure".equals(reason)
+                || "show-glass-material-failed".equals(reason)
+                || "show-glass-bounds-mismatch".equals(reason)
+                || "live-popup-glass-disabled".equals(reason);
         View captureRoot = state.captureRootRef.get();
         if (captureRoot != null) {
             LauncherGlassSessionRegistry.setPopupMotionQualityForRoot(captureRoot, false);
@@ -510,8 +746,11 @@ final class ShortcutPopupGlassCoordinator {
         state.observer = null;
         state.preDrawListener = null;
         ShortcutPopupGlassLayer layer = state.layer;
+        ShortcutPopupGlassLayer stagedLayer = state.stagedLayer;
         state.layer = null;
+        state.stagedLayer = null;
         if (layer != null) layer.dispose();
+        if (stagedLayer != null && stagedLayer != layer) stagedLayer.dispose();
         if (state.pendingBackdropOwned) {
             if (state.pendingRawBackdrop != null) state.pendingRawBackdrop.recycle();
             if (state.pendingBlurredBackdrop != null) state.pendingBlurredBackdrop.recycle();
@@ -528,6 +767,10 @@ final class ShortcutPopupGlassCoordinator {
         // confirms native detach and releases EGL; a failure stays owned, never unhooks early.
         if (session != null) session.shutdown(source != null ? source::dispose : null);
         else if (source != null) source.dispose();
+        if (showNativeAfterFailure && pendingNativeShow != null
+                && captureRoot != null && captureRoot.isAttachedToWindow()) {
+            captureRoot.post(pendingNativeShow);
+        }
         MainHook.log(TAG + " released reason=" + reason);
     }
 
@@ -553,6 +796,7 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupSourceOverlay sourceOverlay;
         ShortcutPopupGlassSession session;
         ShortcutPopupGlassLayer layer;
+        ShortcutPopupGlassLayer stagedLayer;
         android.graphics.Bitmap pendingRawBackdrop;
         android.graphics.Bitmap pendingBlurredBackdrop;
         int pendingBackdropWidth;
@@ -564,6 +808,10 @@ final class ShortcutPopupGlassCoordinator {
         boolean requestStarted;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
+        Runnable handoffCleanup;
+        Object deferredMenu;
+        Runnable deferredShow;
+        Runnable deferredShowTimeout;
         boolean released;
 
         State(

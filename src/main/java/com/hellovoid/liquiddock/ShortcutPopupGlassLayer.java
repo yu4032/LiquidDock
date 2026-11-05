@@ -46,6 +46,9 @@ final class ShortcutPopupGlassLayer extends FrameLayout
             hwuiView = new ShortcutPopupGlassHwuiView(context, session);
             hwuiView.setVisibility(View.INVISIBLE);
             hwuiView.setFailureListener(this::fallbackToTextureView);
+            // Popup sessions are created at touch-down/hold prewarm. Compile the
+            // AGSL variants now so show() only attaches a ready HWUI layer.
+            if (!session.isFolderBackdrop()) hwuiView.prepareShaders();
             addView(hwuiView, matchParent());
             textureView.setVisibility(View.GONE);
         } else {
@@ -59,6 +62,23 @@ final class ShortcutPopupGlassLayer extends FrameLayout
     }
 
     boolean isAvailable() { return textureView.isAvailable(); }
+
+    /** True even before this layer is attached to the native popup ViewRoot. */
+    boolean hasCapturedHwuiBackdrop() {
+        return !disposed && hwuiReady && hwuiView != null
+                && hwuiView.hasPreparedBackdrops();
+    }
+
+    boolean hasPreShowHwuiBackdrop(int width, int height) {
+        return hasCapturedHwuiBackdrop()
+                && hwuiView.hasPreparedBackdropsFor(width, height);
+    }
+
+    /** Prepared HWUI content can replace the native material in the same pre-draw. */
+    boolean hasPreparedHwuiFrame() {
+        return !disposed && hwuiReady && hwuiView != null
+                && hwuiView.hasPreparedFrame();
+    }
 
     boolean setHwuiBackdrops(Bitmap raw, Bitmap blurred, int width, int height) {
         if (disposed || hwuiView == null) return false;
