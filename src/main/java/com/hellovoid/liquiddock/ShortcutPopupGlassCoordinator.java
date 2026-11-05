@@ -47,10 +47,18 @@ final class ShortcutPopupGlassCoordinator {
     static synchronized void prepareDockEarly(
             View dockMenuOwner, LiquidDockConfig.Glass glassConfig) {
         if (dockMenuOwner == null) return;
-        if (LauncherGlassStaticLayer.isHwuiProbeActive(dockMenuOwner.getRootView())) return;
+        // Dock icon long-press animations can start before the menu request. Unlike
+        // Workspace's HWUI shortcut, the Dock must preserve a pre-animation scene.
         State state = current;
-        if (state != null && !state.released && state.contentRef.get() != null) {
-            return;
+        if (state != null && !state.released) {
+            if (state.contentRef.get() != null) return;
+            // Both Dock touch routes can dispatch the same ACTION_DOWN. Replacing an
+            // in-flight capture here would postpone freezing until the popup animates.
+            if (state.early && state.dockEarly
+                    && state.earlyOwnerRef.get() == dockMenuOwner
+                    && state.captureRootRef.get() == dockMenuOwner.getRootView()) {
+                return;
+            }
         }
         prepareInternal(
                 dockMenuOwner.getRootView(),
@@ -69,7 +77,17 @@ final class ShortcutPopupGlassCoordinator {
             View earlyOwner = state.earlyOwnerRef.get();
             boolean workspaceMatch = earlyOwner == null
                     && state.captureRootRef.get() == captureRoot;
-            boolean dockMatch = matchesDockAuthority(state, authorityOwner);
+            // setRequestingItemInfo belongs to ShortcutMenuLayer, not to
+            // DockContainerView. Match the Launcher ViewRoot rather than requiring
+            // the requesting View to have the Dock owner's Java class.
+            boolean dockMatch = state.dockEarly
+                    && state.captureRootRef.get() == captureRoot;
+            if (dockMatch && (state.session == null || !state.session.hasFrozenBackdrop())) {
+                // Never turn a late capture into a snapshot of the entering popup.
+                // Keep the vendor menu material for this gesture instead.
+                releaseLocked("dock-pre-show-backdrop-not-ready");
+                return;
+            }
             if (workspaceMatch || dockMatch) {
                 state.requestStarted = true;
                 return;
