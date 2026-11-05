@@ -311,7 +311,10 @@ final class ShortcutPopupGlassCoordinator {
         // Capture the already-visible desktop scene. Hiding the shared Workspace glass
         // for a single popup screenshot produces a visible black/transparent flash. The
         // popup's own dedicated source overlay handles capture independently.
-        ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attach(
+        // The HWUI popup paints in Launcher coordinates. A fullscreen WindowManager
+        // panel may have different system-bar insets, causing logicalWidth/Height
+        // mismatch and a late TextureView fallback during the entrance.
+        ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attachToLauncherBounds(
                 captureRoot,
                 new ShortcutPopupSourceOverlay.Listener() {
                     @Override public void onAttached(ShortcutPopupSourceOverlay attached) {
@@ -329,7 +332,7 @@ final class ShortcutPopupGlassCoordinator {
                         MainHook.log(TAG + " source overlay attach failed: " + error);
                         release(state, "source-attach-failed");
                     }
-                });
+                }, "LiquidDockShortcutBackdropSource");
         state.sourceOverlay = overlay;
         if (overlay == null) releaseLocked("source-overlay-unavailable");
     }
@@ -551,6 +554,7 @@ final class ShortcutPopupGlassCoordinator {
         }
         updateGeometry(state);
         MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
+                + " popupRoot=" + decor.getWidth() + "x" + decor.getHeight()
                 + " backdropReady=" + state.session.hasFrozenBackdrop()
                 + " hwuiPrepared=" + layer.hasPreparedHwuiFrame()
                 + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
