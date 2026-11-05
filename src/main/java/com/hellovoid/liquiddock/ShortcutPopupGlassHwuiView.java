@@ -114,6 +114,16 @@ final class ShortcutPopupGlassHwuiView extends View {
         invalidate();
     }
 
+    /** True only when the cached source and current popup frame can draw in this root. */
+    boolean hasPreparedFrame() {
+        return isAttachedToWindow()
+                && getWidth() > 0 && getHeight() > 0
+                && backdrop != null && blurredBackdrop != null
+                && baselineShader != null && decoratedShader != null
+                && geometry != null
+                && logicalWidth == getWidth() && logicalHeight == getHeight();
+    }
+
     void clearBackdrops() {
         backdrop = null;
         blurredBackdrop = null;
