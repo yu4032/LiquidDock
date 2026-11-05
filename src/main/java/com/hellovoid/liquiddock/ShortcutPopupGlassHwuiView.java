@@ -129,6 +129,13 @@ final class ShortcutPopupGlassHwuiView extends View {
                 && logicalWidth > 0 && logicalHeight > 0;
     }
 
+    /** Check the destination ViewRoot dimensions before admitting native show(). */
+    boolean hasPreparedBackdropsFor(int width, int height) {
+        return hasPreparedBackdrops()
+                && width > 0 && height > 0
+                && logicalWidth == width && logicalHeight == height;
+    }
+
     /** True only when the cached source and current popup frame can draw in this root. */
     boolean hasPreparedFrame() {
         return isAttachedToWindow()
