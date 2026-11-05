@@ -122,12 +122,18 @@ final class ShortcutPopupGlassHwuiView extends View {
         invalidate();
     }
 
+    /** Bitmap/AGSL inputs can be prepared offscreen, before the OEM menu is created. */
+    boolean hasPreparedBackdrops() {
+        return backdrop != null && blurredBackdrop != null
+                && baselineShader != null && decoratedShader != null
+                && logicalWidth > 0 && logicalHeight > 0;
+    }
+
     /** True only when the cached source and current popup frame can draw in this root. */
     boolean hasPreparedFrame() {
         return isAttachedToWindow()
                 && getWidth() > 0 && getHeight() > 0
-                && backdrop != null && blurredBackdrop != null
-                && baselineShader != null && decoratedShader != null
+                && hasPreparedBackdrops()
                 && geometry != null
                 && logicalWidth == getWidth() && logicalHeight == getHeight();
     }
