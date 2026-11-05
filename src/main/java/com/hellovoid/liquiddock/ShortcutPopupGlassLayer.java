@@ -64,9 +64,9 @@ final class ShortcutPopupGlassLayer extends FrameLayout
     boolean isAvailable() { return textureView.isAvailable(); }
 
     /** True even before this layer is attached to the native popup ViewRoot. */
-    boolean hasPreShowHwuiBackdrop() {
+    boolean hasPreShowHwuiBackdrop(int width, int height) {
         return !disposed && hwuiReady && hwuiView != null
-                && hwuiView.hasPreparedBackdrops();
+                && hwuiView.hasPreparedBackdropsFor(width, height);
     }
 
     /** Prepared HWUI content can replace the native material in the same pre-draw. */
