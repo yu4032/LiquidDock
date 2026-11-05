@@ -15,7 +15,7 @@ final class ShortcutPopupGlassCoordinator {
     private static State current;
     // HWUI Workspace normally needs no extra popup producer on a simple icon tap.
     // Begin warming only for a sustained hold, before the native long-press timeout.
-    private static final long WORKSPACE_PREWARM_LEAD_MS = 220L;
+    private static final long WORKSPACE_PREWARM_LEAD_MS = 300L;
     private static final long HANDOFF_CANCEL_GRACE_MS = 1200L;
     private static View pendingWorkspaceRoot;
     private static Runnable pendingWorkspacePrewarm;
@@ -392,8 +392,22 @@ final class ShortcutPopupGlassCoordinator {
                 // HWUI uses the same ViewRoot and can draw its prepared backdrop
                 // in this very frame. Claim the vendor background before the
                 // first composited popup draw, not one Handler turn after it.
-                if (state.layer != null && state.layer.hasPreparedHwuiFrame()) {
-                    onPresented(state);
+                if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE && !state.firstVisiblePreDraw
+                        && !state.materialClaimed) {
+                    View popup = state.popupRef.get();
+                    if (popup != null && popup.isShown()) {
+                        state.firstVisiblePreDraw = true;
+                        if (state.layer != null && state.layer.hasPreparedHwuiFrame()) {
+                            onPresented(state);
+                        } else {
+                            // Do not replace the OEM material halfway through an entrance.
+                            // A late export cannot satisfy the first-frame contract.
+                            state.nativeMaterialLocked = true;
+                            View decor = state.popupDecorRef.get();
+                            if (decor != null) decor.post(
+                                    () -> release(state, "first-popup-frame-not-ready"));
+                        }
+                    }
                 }
                 return true;
             };
@@ -515,7 +529,8 @@ final class ShortcutPopupGlassCoordinator {
 
     private static void onPresented(State state) {
         synchronized (ShortcutPopupGlassCoordinator.class) {
-            if (current != state || state.released || state.materialClaimed) return;
+            if (current != state || state.released || state.materialClaimed
+                    || state.nativeMaterialLocked) return;
             View content = state.contentRef.get();
             ShortcutPopupGlassLayer layer = state.layer;
             if (content == null || layer == null) return;
@@ -673,6 +688,8 @@ final class ShortcutPopupGlassCoordinator {
         View.OnAttachStateChangeListener popupDetachListener;
         boolean requestStarted;
         boolean materialClaimed;
+        boolean firstVisiblePreDraw;
+        boolean nativeMaterialLocked;
         boolean dismissCleanupPosted;
         Runnable handoffCleanup;
         boolean released;
