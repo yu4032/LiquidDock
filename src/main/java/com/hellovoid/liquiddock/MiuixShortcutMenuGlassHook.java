@@ -126,9 +126,10 @@ final class MiuixShortcutMenuGlassHook {
                             ShortcutPopupGlassCoordinator.prepareEarly(launcherRoot, glassConfig);
                         }
                     }
-                } else if (action == MotionEvent.ACTION_UP
-                        || action == MotionEvent.ACTION_CANCEL) {
+                } else if (action == MotionEvent.ACTION_UP) {
                     ShortcutPopupGlassCoordinator.cancelEarlyIfUnused(launcherRoot);
+                } else if (action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.deferEarlyCancelIfUnused(launcherRoot, null);
                 }
             }
             return result;
@@ -170,6 +171,9 @@ final class MiuixShortcutMenuGlassHook {
                             dockMenuOwner, glassConfig);
                 } else if (action == MotionEvent.ACTION_UP) {
                     ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused(dockMenuOwner);
+                } else if (action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.deferEarlyCancelIfUnused(
+                            dockMenuOwner.getRootView(), dockMenuOwner);
                 }
             }
             return result;
