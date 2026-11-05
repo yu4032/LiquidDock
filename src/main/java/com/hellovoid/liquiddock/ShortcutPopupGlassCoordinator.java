@@ -16,6 +16,7 @@ final class ShortcutPopupGlassCoordinator {
     // HWUI Workspace normally needs no extra popup producer on a simple icon tap.
     // Begin warming only for a sustained hold, before the native long-press timeout.
     private static final long WORKSPACE_PREWARM_LEAD_MS = 220L;
+    private static final long HANDOFF_CANCEL_GRACE_MS = 1200L;
     private static View pendingWorkspaceRoot;
     private static Runnable pendingWorkspacePrewarm;
 
@@ -134,6 +135,7 @@ final class ShortcutPopupGlassCoordinator {
             }
             if (workspaceMatch || dockMatch) {
                 state.requestStarted = true;
+                cancelHandoffCleanup(state);
                 return;
             }
         }
@@ -154,6 +156,43 @@ final class ShortcutPopupGlassCoordinator {
             return;
         }
         releaseLocked("early-touch-ended-unused");
+    }
+
+    /**
+     * Native long-press ownership may send ACTION_CANCEL before it requests the menu.
+     * Keep the already-frozen desktop across that handoff, but release it if no
+     * menu request follows so drag-only gestures cannot retain a GPU producer.
+     */
+    static synchronized void deferEarlyCancelIfUnused(View root, View dockOwner) {
+        if (dockOwner == null) cancelScheduledWorkspacePrewarm(root);
+        State state = current;
+        if (state == null || state.released || !state.early
+                || state.captureRootRef.get() != root
+                || state.earlyOwnerRef.get() != dockOwner
+                || state.requestStarted || state.contentRef.get() != null
+                || state.handoffCleanup != null) return;
+        View anchor = state.captureRootRef.get();
+        if (anchor == null) return;
+        Runnable expire = () -> {
+            synchronized (ShortcutPopupGlassCoordinator.class) {
+                if (current == state && !state.released && !state.requestStarted
+                        && state.contentRef.get() == null) {
+                    releaseLocked("touch-cancel-handoff-unused");
+                }
+            }
+        };
+        state.handoffCleanup = expire;
+        if (!anchor.postDelayed(expire, HANDOFF_CANCEL_GRACE_MS)) {
+            state.handoffCleanup = null;
+            releaseLocked("touch-cancel-detached");
+        }
+    }
+
+    private static void cancelHandoffCleanup(State state) {
+        if (state == null || state.handoffCleanup == null) return;
+        View root = state.captureRootRef.get();
+        if (root != null) root.removeCallbacks(state.handoffCleanup);
+        state.handoffCleanup = null;
     }
 
     static synchronized void cancelDockEarlyIfUnused(View dockMenuOwner) {
@@ -561,6 +600,7 @@ final class ShortcutPopupGlassCoordinator {
         current = null;
         if (state == null || state.released) return;
         state.released = true;
+        cancelHandoffCleanup(state);
         View captureRoot = state.captureRootRef.get();
         if (captureRoot != null) {
             LauncherGlassSessionRegistry.setPopupMotionQualityForRoot(captureRoot, false);
@@ -634,6 +674,7 @@ final class ShortcutPopupGlassCoordinator {
         boolean requestStarted;
         boolean materialClaimed;
         boolean dismissCleanupPosted;
+        Runnable handoffCleanup;
         boolean released;
 
         State(
