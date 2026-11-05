@@ -156,7 +156,9 @@ final class ShortcutPopupGlassCoordinator {
                 || menu == null || resumeShow == null || state == null || state.released
                 || !state.requestStarted || state.contentRef.get() != null) return false;
         ShortcutPopupGlassLayer prepared = state.stagedLayer;
-        if (prepared != null && prepared.hasPreShowHwuiBackdrop()) {
+        View root = state.captureRootRef.get();
+        if (prepared != null && root != null
+                && prepared.hasPreShowHwuiBackdrop(root.getWidth(), root.getHeight())) {
             MainHook.log(TAG + " native show admitted with ready pre-show glass ageMs="
                     + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
             return false;
@@ -165,7 +167,6 @@ final class ShortcutPopupGlassCoordinator {
             // Vendor may issue duplicate show() calls in one long-press cycle.
             return state.deferredMenu == menu;
         }
-        View root = state.captureRootRef.get();
         if (root == null || !root.isAttachedToWindow()) return false;
         state.deferredMenu = menu;
         state.deferredShow = resumeShow;
@@ -211,8 +212,10 @@ final class ShortcutPopupGlassCoordinator {
 
     private static void resumeDeferredShowWithGlass(State state) {
         if (state == null || state.deferredShow == null || current != state
-                || state.released || state.stagedLayer == null
-                || !state.stagedLayer.hasPreShowHwuiBackdrop()) return;
+                || state.released || state.stagedLayer == null) return;
+        View root = state.captureRootRef.get();
+        if (root == null || !state.stagedLayer.hasPreShowHwuiBackdrop(
+                root.getWidth(), root.getHeight())) return;
         Runnable resume = takeDeferredShow(state);
         if (resume == null) return;
         MainHook.log(TAG + " glass ready; admitting native entrance ageMs="
