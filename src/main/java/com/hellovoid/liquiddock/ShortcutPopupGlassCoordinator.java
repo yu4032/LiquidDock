@@ -214,16 +214,12 @@ final class ShortcutPopupGlassCoordinator {
                 || state.released || state.stagedLayer == null
                 || !state.stagedLayer.hasPreShowHwuiBackdrop()) return;
         Runnable resume = takeDeferredShow(state);
-        View root = state.captureRootRef.get();
-        if (resume == null || root == null) return;
+        if (resume == null) return;
         MainHook.log(TAG + " glass ready; admitting native entrance ageMs="
                 + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
-        root.post(() -> {
-            synchronized (ShortcutPopupGlassCoordinator.class) {
-                if (current != state || state.released) return;
-            }
-            resume.run();
-        });
+        // onHwuiBackdropsReady is already on the main thread. Invoke immediately
+        // rather than posting another task that could race dismiss/replacement.
+        resume.run();
     }
 
     static synchronized void cancelEarlyIfUnused(View captureRoot) {
@@ -661,7 +657,10 @@ final class ShortcutPopupGlassCoordinator {
 
     static synchronized void cancelPending(View authorityOwner, View captureRoot) {
         State state = current;
-        if (state == null || state.contentRef.get() != null) return;
+        if (state == null || state.contentRef.get() != null
+                || state.deferredShow != null) return;
+        // The OEM may clear ItemInfo after invoking show(). A deferred show
+        // must remain alive until glass is ready, timeout, or explicit dismiss.
         boolean rootMatches = state.captureRootRef.get() == captureRoot;
         boolean ownerMatches = matchesDockAuthority(state, authorityOwner);
         if (rootMatches || ownerMatches) releaseLocked("query-cancelled");
