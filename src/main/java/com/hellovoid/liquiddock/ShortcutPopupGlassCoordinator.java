@@ -412,6 +412,9 @@ final class ShortcutPopupGlassCoordinator {
             if (rawBitmap != null) rawBitmap.recycle();
             if (blurredBitmap != null) blurredBitmap.recycle();
             layer.fallbackToTextureView();
+            if (state.deferredShow != null) {
+                releaseLocked("show-glass-material-failed");
+            }
         } else {
             MainHook.log(TAG + " popup HWUI prepared before/after bind="
                     + (state.layer != null) + " ageMs="
@@ -423,6 +426,10 @@ final class ShortcutPopupGlassCoordinator {
     private static synchronized void onHwuiBackdropExportFailed(State state, Throwable error) {
         if (current != state || state.released) return;
         MainHook.log(TAG + " popup HWUI backdrop export failed; restoring GL output: " + error);
+        if (state.deferredShow != null) {
+            releaseLocked("show-glass-material-failed");
+            return;
+        }
         ShortcutPopupGlassLayer layer = state.layer != null
                 ? state.layer : state.stagedLayer;
         if (layer != null) layer.fallbackToTextureView();
@@ -721,6 +728,7 @@ final class ShortcutPopupGlassCoordinator {
                 || "source-attach-failed".equals(reason)
                 || "source-overlay-unavailable".equals(reason)
                 || "session-failure".equals(reason)
+                || "show-glass-material-failed".equals(reason)
                 || "live-popup-glass-disabled".equals(reason);
         View captureRoot = state.captureRootRef.get();
         if (captureRoot != null) {
