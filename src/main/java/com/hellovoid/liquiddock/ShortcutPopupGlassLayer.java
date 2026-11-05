@@ -46,6 +46,9 @@ final class ShortcutPopupGlassLayer extends FrameLayout
             hwuiView = new ShortcutPopupGlassHwuiView(context, session);
             hwuiView.setVisibility(View.INVISIBLE);
             hwuiView.setFailureListener(this::fallbackToTextureView);
+            // Popup sessions are created at touch-down/hold prewarm. Compile the
+            // AGSL variants now so show() only attaches a ready HWUI layer.
+            if (!session.isFolderBackdrop()) hwuiView.prepareShaders();
             addView(hwuiView, matchParent());
             textureView.setVisibility(View.GONE);
         } else {
