@@ -1,7 +1,6 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
-import android.os.SystemClock;
 import android.view.ViewParent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -159,8 +158,6 @@ final class ShortcutPopupGlassCoordinator {
         View root = state.captureRootRef.get();
         if (prepared != null && root != null && prepared.hasCapturedHwuiBackdrop()) {
             if (prepared.hasPreShowHwuiBackdrop(root.getWidth(), root.getHeight())) {
-                MainHook.log(TAG + " native show admitted with ready pre-show glass ageMs="
-                        + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
                 return false;
             }
             // A captured bitmap in the wrong logical domain will trigger GL fallback
@@ -180,8 +177,7 @@ final class ShortcutPopupGlassCoordinator {
         Runnable deadline = () -> {
             synchronized (ShortcutPopupGlassCoordinator.class) {
                 if (current == state && !state.released && state.deferredShow != null) {
-                    MainHook.log(TAG + " native-only fallback: glass not ready before show deadline"
-                            + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+                    MainHook.log(TAG + " native-only fallback: glass not ready before show deadline");
                     releaseLocked("show-preparation-timeout");
                 }
             }
@@ -189,10 +185,9 @@ final class ShortcutPopupGlassCoordinator {
         state.deferredShowTimeout = deadline;
         if (!root.postDelayed(deadline, SHOW_GLASS_READY_TIMEOUT_MS)) {
             takeDeferredShow(state);
+            releaseLocked("show-deadline-scheduling-failed");
             return false;
         }
-        MainHook.log(TAG + " native show deferred until glass inputs are ready ageMs="
-                + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
         return true;
     }
 
@@ -225,8 +220,6 @@ final class ShortcutPopupGlassCoordinator {
                 root.getWidth(), root.getHeight())) return;
         Runnable resume = takeDeferredShow(state);
         if (resume == null) return;
-        MainHook.log(TAG + " glass ready; admitting native entrance ageMs="
-                + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
         // onHwuiBackdropsReady is already on the main thread. Invoke immediately
         // rather than posting another task that could race dismiss/replacement.
         resume.run();
@@ -391,8 +384,7 @@ final class ShortcutPopupGlassCoordinator {
                         sourceRoot.getContext(), state.session);
             }
             state.session.requestInitialCapture();
-            boolean outputReady = ensurePopupOutput(state);
-            MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
+            ensurePopupOutput(state);
         }
     }
 
@@ -426,9 +418,6 @@ final class ShortcutPopupGlassCoordinator {
                 releaseLocked("show-glass-material-failed");
             }
         } else {
-            MainHook.log(TAG + " popup HWUI prepared before/after bind="
-                    + (state.layer != null) + " source=" + width + "x" + height
-                    + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
             View captureRoot = state.captureRootRef.get();
             if (state.deferredShow != null && state.stagedLayer != null
                     && captureRoot != null
@@ -512,15 +501,6 @@ final class ShortcutPopupGlassCoordinator {
             ViewTreeObserver.OnPreDrawListener listener = () -> {
                 ensurePopupOutput(state);
                 updateGeometry(state);
-                if (!state.firstPreDrawLogged) {
-                    state.firstPreDrawLogged = true;
-                    MainHook.log(TAG + " popup first preDraw ageMs="
-                            + (SystemClock.uptimeMillis() - state.createdAtUptimeMs)
-                            + " staged=" + (state.stagedLayer != null)
-                            + " output=" + (state.layer != null)
-                            + " hwuiDrawable=" + (state.layer != null
-                                    && state.layer.hasPreparedHwuiFrame()));
-                }
                 // Claim the native material as soon as a complete HWUI frame can
                 // draw. The first traversal may precede popup layout and texture
                 // export; it must NEVER permanently disable the popup session.
@@ -581,11 +561,8 @@ final class ShortcutPopupGlassCoordinator {
             state.pendingBackdropOwned = false;
         }
         updateGeometry(state);
-        MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
-                + " popupRoot=" + decor.getWidth() + "x" + decor.getHeight()
-                + " backdropReady=" + state.session.hasFrozenBackdrop()
-                + " hwuiPrepared=" + layer.hasPreparedHwuiFrame()
-                + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+        MainHook.log(TAG + " popup output bound below PopupView index=" + popupIndex
+                + " backdropReady=" + state.session.hasFrozenBackdrop());
         return true;
     }
 
@@ -662,9 +639,7 @@ final class ShortcutPopupGlassCoordinator {
             content.setElevation(0f);
             state.materialClaimed = true;
             layer.reveal();
-            MainHook.log(TAG + " workspace-backed popup glass presented; vendor material released"
-                    + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs)
-                    + " preDraw=" + state.firstPreDrawLogged);
+            MainHook.log(TAG + " popup glass presented; vendor material released");
         }
     }
 
@@ -822,8 +797,6 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupGlassSession session;
         ShortcutPopupGlassLayer layer;
         ShortcutPopupGlassLayer stagedLayer;
-        final long createdAtUptimeMs = SystemClock.uptimeMillis();
-        boolean firstPreDrawLogged;
         android.graphics.Bitmap pendingRawBackdrop;
         android.graphics.Bitmap pendingBlurredBackdrop;
         int pendingBackdropWidth;
