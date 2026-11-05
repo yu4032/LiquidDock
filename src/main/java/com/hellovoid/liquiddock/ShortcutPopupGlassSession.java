@@ -468,9 +468,10 @@ final class ShortcutPopupGlassSession implements RootPassBlurBackend.Consumer {
     public void onFreshFrame(RootPassBlurBackend backend, RootPassBlurFrame frame) {
         if (shuttingDown || folderOutputFrozen || backend != sourceBackend || frame == null
                 || frame.generation != GENERATION) return;
-        // The Launcher and Dock surfaces are excluded for OPEN_FOLDER, so a
-        // late wallpaper frame cannot recursively contain FolderCling.
-        if (folderBackdrop && sourceFrozen) return;
+        // This source is a one-shot snapshot for both the shortcut popup and the
+        // expanded folder. A queued second frame must not overwrite the clean
+        // pre-popup backdrop with pixels from the menu's entrance animation.
+        if (sourceFrozen) return;
         try {
             ensureGl();
             logicalWidth = frame.logicalWidth;
