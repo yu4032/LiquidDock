@@ -18,6 +18,9 @@ final class ShortcutPopupGlassCoordinator {
     // Begin warming only for a sustained hold, before the native long-press timeout.
     private static final long WORKSPACE_PREWARM_LEAD_MS = 430L;
     private static final long HANDOFF_CANCEL_GRACE_MS = 1200L;
+    // Never start the OEM entrance on a missing glass snapshot. Bounded native-only
+    // fallback avoids a hung long press if capture/export fails.
+    private static final long SHOW_GLASS_READY_TIMEOUT_MS = 700L;
     private static View pendingWorkspaceRoot;
     private static Runnable pendingWorkspacePrewarm;
 
@@ -139,6 +142,88 @@ final class ShortcutPopupGlassCoordinator {
         if (state != null && state.captureRootRef.get() == captureRoot) {
             state.requestStarted = true;
         }
+    }
+
+    /**
+     * The real ShortcutMenu.show() must not run until the offscreen glass material is
+     * ready. Its entrance animation starts synchronously in the vendor method; merely
+     * preparing the popup output after show() cannot guarantee a first-frame takeover.
+     * The callback re-enters the hooked show on the UI thread with a one-shot bypass.
+     */
+    static synchronized boolean deferShowUntilGlassReady(Object menu, Runnable resumeShow) {
+        State state = current;
+        if (!BuildConfig.WORKSPACE_GLASS_HWUI_PROBE
+                || menu == null || resumeShow == null || state == null || state.released
+                || !state.requestStarted || state.contentRef.get() != null) return false;
+        ShortcutPopupGlassLayer prepared = state.stagedLayer;
+        if (prepared != null && prepared.hasPreShowHwuiBackdrop()) {
+            MainHook.log(TAG + " native show admitted with ready pre-show glass ageMs="
+                    + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+            return false;
+        }
+        if (state.deferredShow != null) {
+            // Vendor may issue duplicate show() calls in one long-press cycle.
+            return state.deferredMenu == menu;
+        }
+        View root = state.captureRootRef.get();
+        if (root == null || !root.isAttachedToWindow()) return false;
+        state.deferredMenu = menu;
+        state.deferredShow = resumeShow;
+        Runnable deadline = () -> {
+            synchronized (ShortcutPopupGlassCoordinator.class) {
+                if (current == state && !state.released && state.deferredShow != null) {
+                    MainHook.log(TAG + " native-only fallback: glass not ready before show deadline"
+                            + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+                    releaseLocked("show-preparation-timeout");
+                }
+            }
+        };
+        state.deferredShowTimeout = deadline;
+        if (!root.postDelayed(deadline, SHOW_GLASS_READY_TIMEOUT_MS)) {
+            takeDeferredShow(state);
+            return false;
+        }
+        MainHook.log(TAG + " native show deferred until glass inputs are ready ageMs="
+                + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+        return true;
+    }
+
+    /** Suppress a pending vendor show if the same menu was dismissed before presentation. */
+    static synchronized void cancelDeferredShow(Object menu) {
+        State state = current;
+        if (state != null && state.deferredShow != null && state.deferredMenu == menu) {
+            takeDeferredShow(state);
+            releaseLocked("dismiss-before-native-show");
+        }
+    }
+
+    private static Runnable takeDeferredShow(State state) {
+        if (state == null) return null;
+        Runnable resume = state.deferredShow;
+        state.deferredShow = null;
+        state.deferredMenu = null;
+        Runnable timeout = state.deferredShowTimeout;
+        state.deferredShowTimeout = null;
+        View root = state.captureRootRef.get();
+        if (timeout != null && root != null) root.removeCallbacks(timeout);
+        return resume;
+    }
+
+    private static void resumeDeferredShowWithGlass(State state) {
+        if (state == null || state.deferredShow == null || current != state
+                || state.released || state.stagedLayer == null
+                || !state.stagedLayer.hasPreShowHwuiBackdrop()) return;
+        Runnable resume = takeDeferredShow(state);
+        View root = state.captureRootRef.get();
+        if (resume == null || root == null) return;
+        MainHook.log(TAG + " glass ready; admitting native entrance ageMs="
+                + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+        root.post(() -> {
+            synchronized (ShortcutPopupGlassCoordinator.class) {
+                if (current != state || state.released) return;
+            }
+            resume.run();
+        });
     }
 
     static synchronized void cancelEarlyIfUnused(View captureRoot) {
@@ -332,6 +417,7 @@ final class ShortcutPopupGlassCoordinator {
             MainHook.log(TAG + " popup HWUI prepared before/after bind="
                     + (state.layer != null) + " ageMs="
                     + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
+            resumeDeferredShowWithGlass(state);
         }
     }
 
@@ -627,6 +713,12 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null || state.released) return;
         state.released = true;
         cancelHandoffCleanup(state);
+        Runnable pendingNativeShow = takeDeferredShow(state);
+        boolean showNativeAfterFailure = "show-preparation-timeout".equals(reason)
+                || "source-attach-failed".equals(reason)
+                || "source-overlay-unavailable".equals(reason)
+                || "session-failure".equals(reason)
+                || "live-popup-glass-disabled".equals(reason);
         View captureRoot = state.captureRootRef.get();
         if (captureRoot != null) {
             LauncherGlassSessionRegistry.setPopupMotionQualityForRoot(captureRoot, false);
@@ -667,6 +759,10 @@ final class ShortcutPopupGlassCoordinator {
         // confirms native detach and releases EGL; a failure stays owned, never unhooks early.
         if (session != null) session.shutdown(source != null ? source::dispose : null);
         else if (source != null) source.dispose();
+        if (showNativeAfterFailure && pendingNativeShow != null
+                && captureRoot != null && captureRoot.isAttachedToWindow()) {
+            captureRoot.post(pendingNativeShow);
+        }
         MainHook.log(TAG + " released reason=" + reason);
     }
 
@@ -707,6 +803,9 @@ final class ShortcutPopupGlassCoordinator {
         boolean materialClaimed;
         boolean dismissCleanupPosted;
         Runnable handoffCleanup;
+        Object deferredMenu;
+        Runnable deferredShow;
+        Runnable deferredShowTimeout;
         boolean released;
 
         State(
