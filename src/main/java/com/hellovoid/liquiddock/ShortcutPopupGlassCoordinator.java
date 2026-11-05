@@ -5,6 +5,7 @@ import android.view.ViewParent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.ViewConfiguration;
 
 import java.lang.ref.WeakReference;
 
@@ -12,12 +13,20 @@ import java.lang.ref.WeakReference;
 final class ShortcutPopupGlassCoordinator {
     private static final String TAG = "[DC][ShortcutPopupGlass]";
     private static State current;
+    // HWUI Workspace normally needs no extra popup producer on a simple icon tap.
+    // Begin warming only for a sustained hold, before the native long-press timeout.
+    private static final long WORKSPACE_PREWARM_LEAD_MS = 220L;
+    private static View pendingWorkspaceRoot;
+    private static Runnable pendingWorkspacePrewarm;
 
     private ShortcutPopupGlassCoordinator() {}
 
     /** An installed Hook can switch at runtime; a visible popup is never re-captured in place. */
     static synchronized void onLivePopupGlassEnabled(boolean enabled) {
-        if (!enabled) releaseLocked("live-popup-glass-disabled");
+        if (!enabled) {
+            cancelScheduledWorkspacePrewarm(null);
+            releaseLocked("live-popup-glass-disabled");
+        }
         // If enabled while a vendor popup is already visible, wait for the next popup.
         // Capturing now would recursively sample the popup's own foreground.
     }
@@ -38,10 +47,44 @@ final class ShortcutPopupGlassCoordinator {
 
     static synchronized void prepareEarly(
             View captureRoot, LiquidDockConfig.Glass glassConfig) {
-        // Start scene capture at the native menu request on the HWUI path, so ordinary
-        // app-icon taps do not create a capture window and GL session.
-        if (LauncherGlassStaticLayer.isHwuiProbeActive(captureRoot)) return;
-        prepareInternal(captureRoot, glassConfig, true, null, "early-prepare-replace");
+        if (captureRoot == null) return;
+        // Keep the TextureView fallback's proven immediate source path.
+        if (!LauncherGlassStaticLayer.isHwuiProbeActive(captureRoot)) {
+            prepareInternal(captureRoot, glassConfig, true, null, "early-prepare-replace");
+            return;
+        }
+        // On the HWUI path, avoid a new PassBlur session for ordinary short taps.
+        // Prepare before the long-press callback so the popup's FIRST frame can
+        // already use the full desktop instead of switching mid-animation.
+        if (pendingWorkspaceRoot == captureRoot && pendingWorkspacePrewarm != null) return;
+        cancelScheduledWorkspacePrewarm(null);
+        Runnable prewarm = () -> {
+            synchronized (ShortcutPopupGlassCoordinator.class) {
+                if (pendingWorkspaceRoot != captureRoot) return;
+                pendingWorkspaceRoot = null;
+                pendingWorkspacePrewarm = null;
+                State live = current;
+                if (live != null && !live.released && live.contentRef.get() != null) return;
+                prepareInternal(captureRoot, glassConfig, true, null,
+                        "workspace-hold-prewarm-replace");
+            }
+        };
+        pendingWorkspaceRoot = captureRoot;
+        pendingWorkspacePrewarm = prewarm;
+        long delay = Math.max(0L,
+                (long) ViewConfiguration.getLongPressTimeout() - WORKSPACE_PREWARM_LEAD_MS);
+        if (!captureRoot.postDelayed(prewarm, delay)) {
+            cancelScheduledWorkspacePrewarm(captureRoot);
+        }
+    }
+
+    private static void cancelScheduledWorkspacePrewarm(View root) {
+        if (pendingWorkspacePrewarm == null
+                || (root != null && pendingWorkspaceRoot != root)) return;
+        View pendingRoot = pendingWorkspaceRoot;
+        if (pendingRoot != null) pendingRoot.removeCallbacks(pendingWorkspacePrewarm);
+        pendingWorkspaceRoot = null;
+        pendingWorkspacePrewarm = null;
     }
 
     static synchronized void prepareDockEarly(
@@ -72,6 +115,7 @@ final class ShortcutPopupGlassCoordinator {
             View authorityOwner,
             View captureRoot,
             LiquidDockConfig.Glass glassConfig) {
+        cancelScheduledWorkspacePrewarm(captureRoot);
         State state = current;
         if (state != null && !state.released && state.early) {
             View earlyOwner = state.earlyOwnerRef.get();
@@ -101,6 +145,7 @@ final class ShortcutPopupGlassCoordinator {
     }
 
     static synchronized void cancelEarlyIfUnused(View captureRoot) {
+        cancelScheduledWorkspacePrewarm(captureRoot);
         State state = current;
         if (state == null || state.released || !state.early
                 || state.earlyOwnerRef.get() != null
@@ -305,6 +350,12 @@ final class ShortcutPopupGlassCoordinator {
             ViewTreeObserver observer = decorView.getViewTreeObserver();
             ViewTreeObserver.OnPreDrawListener listener = () -> {
                 updateGeometry(state);
+                // HWUI uses the same ViewRoot and can draw its prepared backdrop
+                // in this very frame. Claim the vendor background before the
+                // first composited popup draw, not one Handler turn after it.
+                if (state.layer != null && state.layer.hasPreparedHwuiFrame()) {
+                    onPresented(state);
+                }
                 return true;
             };
             if (observer.isAlive()) {
@@ -505,6 +556,7 @@ final class ShortcutPopupGlassCoordinator {
     }
 
     private static void releaseLocked(String reason) {
+        cancelScheduledWorkspacePrewarm(null);
         State state = current;
         current = null;
         if (state == null || state.released) return;
