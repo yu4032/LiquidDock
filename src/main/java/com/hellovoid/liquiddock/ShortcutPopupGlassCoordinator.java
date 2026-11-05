@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
+import android.os.SystemClock;
 import android.view.ViewParent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,7 +16,7 @@ final class ShortcutPopupGlassCoordinator {
     private static State current;
     // HWUI Workspace normally needs no extra popup producer on a simple icon tap.
     // Begin warming only for a sustained hold, before the native long-press timeout.
-    private static final long WORKSPACE_PREWARM_LEAD_MS = 300L;
+    private static final long WORKSPACE_PREWARM_LEAD_MS = 430L;
     private static final long HANDOFF_CANCEL_GRACE_MS = 1200L;
     private static View pendingWorkspaceRoot;
     private static Runnable pendingWorkspacePrewarm;
@@ -288,6 +289,13 @@ final class ShortcutPopupGlassCoordinator {
                             release(state, "session-failure");
                         }
                     });
+            // Stage the actual popup View and HWUI shaders during the hold.
+            // Creating them only after ShortcutMenu.show() started the OEM
+            // entrance was the remaining source of mid-animation handoff.
+            if (BuildConfig.WORKSPACE_GLASS_HWUI_PROBE) {
+                state.stagedLayer = new ShortcutPopupGlassLayer(
+                        sourceRoot.getContext(), state.session);
+            }
             state.session.requestInitialCapture();
             boolean outputReady = ensurePopupOutput(state);
             MainHook.log(TAG + " pre-show workspace capture requested popupReady=" + outputReady);
@@ -302,7 +310,8 @@ final class ShortcutPopupGlassCoordinator {
             if (blurredBitmap != null) blurredBitmap.recycle();
             return;
         }
-        ShortcutPopupGlassLayer layer = state.layer;
+        ShortcutPopupGlassLayer layer = state.layer != null
+                ? state.layer : state.stagedLayer;
         if (layer == null) {
             if (state.pendingBackdropOwned) {
                 if (state.pendingRawBackdrop != null) state.pendingRawBackdrop.recycle();
@@ -319,13 +328,18 @@ final class ShortcutPopupGlassCoordinator {
             if (rawBitmap != null) rawBitmap.recycle();
             if (blurredBitmap != null) blurredBitmap.recycle();
             layer.fallbackToTextureView();
+        } else {
+            MainHook.log(TAG + " popup HWUI prepared before/after bind="
+                    + (state.layer != null) + " ageMs="
+                    + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
         }
     }
 
     private static synchronized void onHwuiBackdropExportFailed(State state, Throwable error) {
         if (current != state || state.released) return;
         MainHook.log(TAG + " popup HWUI backdrop export failed; restoring GL output: " + error);
-        ShortcutPopupGlassLayer layer = state.layer;
+        ShortcutPopupGlassLayer layer = state.layer != null
+                ? state.layer : state.stagedLayer;
         if (layer != null) layer.fallbackToTextureView();
         if (state.pendingRawBackdrop != null) {
             if (state.pendingBackdropOwned) state.pendingRawBackdrop.recycle();
@@ -344,7 +358,8 @@ final class ShortcutPopupGlassCoordinator {
         if (root != null) {
             LauncherGlassSessionRegistry.setPopupMotionQualityForRoot(root, active);
         }
-        ShortcutPopupGlassLayer layer = state.layer;
+        ShortcutPopupGlassLayer layer = state.layer != null
+                ? state.layer : state.stagedLayer;
         if (layer != null) layer.setMotionQualityActive(active);
     }
 
@@ -382,7 +397,17 @@ final class ShortcutPopupGlassCoordinator {
         if (state.preDrawListener == null) {
             ViewTreeObserver observer = decorView.getViewTreeObserver();
             ViewTreeObserver.OnPreDrawListener listener = () -> {
+                ensurePopupOutput(state);
                 updateGeometry(state);
+                if (!state.firstPreDrawLogged) {
+                    state.firstPreDrawLogged = true;
+                    MainHook.log(TAG + " popup first preDraw ageMs="
+                            + (SystemClock.uptimeMillis() - state.createdAtUptimeMs)
+                            + " staged=" + (state.stagedLayer != null)
+                            + " output=" + (state.layer != null)
+                            + " hwuiDrawable=" + (state.layer != null
+                                    && state.layer.hasPreparedHwuiFrame()));
+                }
                 // Claim the native material as soon as a complete HWUI frame can
                 // draw. The first traversal may precede popup layout and texture
                 // export; it must NEVER permanently disable the popup session.
@@ -420,11 +445,12 @@ final class ShortcutPopupGlassCoordinator {
         int popupIndex = decorGroup.indexOfChild(popup);
         if (popupIndex < 0) return false;
 
-        ShortcutPopupGlassLayer layer = new ShortcutPopupGlassLayer(
-                decor.getContext(), state.session);
+        ShortcutPopupGlassLayer layer = state.stagedLayer != null
+                ? state.stagedLayer : new ShortcutPopupGlassLayer(decor.getContext(), state.session);
         decorGroup.addView(layer, popupIndex, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         state.layer = layer;
+        state.stagedLayer = null;
         if (state.pendingRawBackdrop != null && state.pendingBlurredBackdrop != null) {
             android.graphics.Bitmap raw = state.pendingRawBackdrop;
             android.graphics.Bitmap blurred = state.pendingBlurredBackdrop;
@@ -443,7 +469,9 @@ final class ShortcutPopupGlassCoordinator {
         }
         updateGeometry(state);
         MainHook.log(TAG + " stable full-screen output inserted below PopupView index=" + popupIndex
-                + " backdropReady=" + state.session.hasFrozenBackdrop());
+                + " backdropReady=" + state.session.hasFrozenBackdrop()
+                + " hwuiPrepared=" + layer.hasPreparedHwuiFrame()
+                + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs));
         return true;
     }
 
@@ -520,7 +548,9 @@ final class ShortcutPopupGlassCoordinator {
             content.setElevation(0f);
             state.materialClaimed = true;
             layer.reveal();
-            MainHook.log(TAG + " workspace-backed popup glass presented; vendor material released");
+            MainHook.log(TAG + " workspace-backed popup glass presented; vendor material released"
+                    + " ageMs=" + (SystemClock.uptimeMillis() - state.createdAtUptimeMs)
+                    + " preDraw=" + state.firstPreDrawLogged);
         }
     }
 
@@ -616,8 +646,11 @@ final class ShortcutPopupGlassCoordinator {
         state.observer = null;
         state.preDrawListener = null;
         ShortcutPopupGlassLayer layer = state.layer;
+        ShortcutPopupGlassLayer stagedLayer = state.stagedLayer;
         state.layer = null;
+        state.stagedLayer = null;
         if (layer != null) layer.dispose();
+        if (stagedLayer != null && stagedLayer != layer) stagedLayer.dispose();
         if (state.pendingBackdropOwned) {
             if (state.pendingRawBackdrop != null) state.pendingRawBackdrop.recycle();
             if (state.pendingBlurredBackdrop != null) state.pendingBlurredBackdrop.recycle();
@@ -659,6 +692,9 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupSourceOverlay sourceOverlay;
         ShortcutPopupGlassSession session;
         ShortcutPopupGlassLayer layer;
+        ShortcutPopupGlassLayer stagedLayer;
+        final long createdAtUptimeMs = SystemClock.uptimeMillis();
+        boolean firstPreDrawLogged;
         android.graphics.Bitmap pendingRawBackdrop;
         android.graphics.Bitmap pendingBlurredBackdrop;
         int pendingBackdropWidth;
