@@ -97,7 +97,7 @@ internal val overviewEntries = listOf(
     HubEntry(Page.Dock, R.string.page_dock, "Dock 外观、位置、动画与最近程序"),
     HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与性能"),
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏与分屏布局"),
-    HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock、玻璃交互与系统界面"),
+    HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock 与玻璃交互动画"),
 )
 
 internal val layoutEntries = listOf(
@@ -114,6 +114,7 @@ internal val glassEntries = listOf(
     HubEntry(Page.Stroke, R.string.page_stroke, "Dock 描边、方圆曲线与颜色"),
     HubEntry(Page.Shadow, R.string.page_shadow, "仅开启 Dock 自定义且关闭液态玻璃时生效"),
     HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock 与玻璃交互动画"),
+    HubEntry(Page.AnimationSystem, R.string.page_animation_system, "通知与控制中心顶部模糊、系统手势手柄联动"),
     HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用适配"),
 )
 
@@ -170,7 +171,6 @@ internal val animationEntries = listOf(
     HubEntry(Page.AnimationWorkspace, R.string.page_animation_workspace, "应用返回渐显时机与时长、工作区和文件夹玻璃、Dock 尺寸变化"),
     HubEntry(Page.AnimationInteraction, R.string.page_animation_interaction, "玻璃按压进入与释放"),
     HubEntry(Page.AnimationPopups, R.string.page_animation_popups, "快捷菜单与安全中心退出渐隐"),
-    HubEntry(Page.AnimationSystem, R.string.page_animation_system, "系统手势手柄等界面联动"),
     HubEntry(Page.AnimationGui, R.string.page_animation_gui, "设置页面切换时长"),
 )
 

@@ -72,6 +72,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> HIDE_GESTURE_HANDLE_HOME_RECENTS = bool(
                 "animation_hide_gesture_handle_home_recents",
                 false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> SYSTEM_UI_HEADER_GRADIENT_BLUR = bool(
+                "systemui_header_gradient_blur", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DISABLE_WALLPAPER_ZOOM = bool(
                 "animation_disable_wallpaper_zoom",
                 false, false, false, ConfigKey.ExportMode.ALWAYS);
@@ -653,6 +656,7 @@ public final class ConfigSchema {
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,
                 Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
+                Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR,
                 Animation.DISABLE_WALLPAPER_ZOOM);
         add(keys, Grid.ENABLED, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
