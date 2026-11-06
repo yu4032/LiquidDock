@@ -48,6 +48,25 @@ public final class ModuleMain extends XposedModule {
     }
 
     @Override
+    public void onPackageLoaded(@NonNull PackageLoadedParam param) {
+        if (!SYSTEM_UI_PACKAGE.equals(param.getPackageName())) return;
+        refreshDebugLogging();
+        try {
+            ConfigReader configReader = ConfigReader.load();
+            boolean enabled = configReader.b(
+                    ConfigSchema.Core.ENABLED.name(),
+                    ConfigSchema.Core.ENABLED.runtimeFallback());
+            boolean headerGradientBlurEnabled = configReader.b(
+                    ConfigSchema.Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR.name(), false);
+            SystemUiHeaderGradientBlurHook.install(enabled && headerGradientBlurEnabled);
+        } catch (Throwable error) {
+            Api101Bridge.log(
+                    "[DC][SystemUiHeaderGradientBlur] early bootstrap failed; preserving SystemUI behavior",
+                    error);
+        }
+    }
+
+    @Override
     public void onSystemServerStarting(@NonNull SystemServerStartingParam param) {
         if (!reloadGate.enterOwnerLifecycle()) return;
         WallpaperNativeTransformBridge.installSystemObserver(param.getClassLoader());
