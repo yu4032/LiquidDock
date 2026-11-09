@@ -3,7 +3,6 @@ package com.hellovoid.liquiddock;
 import android.appwidget.AppWidgetHostView;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.Context;
-import android.content.res.Configuration;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -288,15 +287,23 @@ final class LauncherWidgetProportionalResizeHook {
         OBSERVED.put(widget, Boolean.TRUE);
         WeakReference<View> reference = new WeakReference<>(widget);
         ViewTreeObserver.OnPreDrawListener listener = new ViewTreeObserver.OnPreDrawListener() {
-            private int lastOuterWidth = -1;
-            private int lastOuterHeight = -1;
             private boolean scaled;
-            private int targetLeft, targetTop, targetWidth, targetHeight;
             @Override public boolean onPreDraw() {
                 View wrapper = reference.get();
                 if (wrapper == null) return true;
                 Object info = wrapper.getTag();
-                if (info == null || !isMarked(wrapper, info)) return true;
+                if (info == null || !isMarked(wrapper, info)) {
+                    // The provider may be replaced while this host stays attached.
+                    if (scaled) {
+                        Object lastHost = HookUtil.tryInvoke(wrapper, "getHostView").value();
+                        if (lastHost instanceof View) {
+                            ((View) lastHost).setScaleX(1f);
+                            ((View) lastHost).setScaleY(1f);
+                        }
+                        scaled = false;
+                    }
+                    return true;
+                }
                 Object hostObject = HookUtil.tryInvoke(wrapper, "getHostView").value();
                 if (!(hostObject instanceof View)) return true;
                 View content = (View) hostObject;
@@ -325,22 +332,32 @@ final class LauncherWidgetProportionalResizeHook {
                     if (cellW <= 0 || cellH <= 0 || outerW <= 0 || outerH <= 0) {
                         return true;
                     }
-                    if (outerW != lastOuterWidth || outerH != lastOuterHeight || !scaled) {
-                        // Capture the OEM's actual host allocation, including its widget
-                        // margins. Do not derive a 2x2 pixel rectangle from guessed gaps.
-                        targetLeft = content.getLeft();
-                        targetTop = content.getTop();
-                        targetWidth = content.getWidth();
-                        targetHeight = content.getHeight();
-                        lastOuterWidth = outerW;
-                        lastOuterHeight = outerH;
+                    // The wrapper is native-sized after the 2x2 CellLayout commit.
+                    // Derive the target from its current content box, not the child's
+                    // previous measured size: that size may already be scaled from
+                    // the prior orientation or before a Launcher re-layout.
+                    int leftInset = wrapper.getPaddingLeft();
+                    int rightInset = wrapper.getPaddingRight();
+                    int topInset = wrapper.getPaddingTop();
+                    int bottomInset = wrapper.getPaddingBottom();
+                    ViewGroup.LayoutParams params = content.getLayoutParams();
+                    if (params instanceof ViewGroup.MarginLayoutParams) {
+                        ViewGroup.MarginLayoutParams margins =
+                                (ViewGroup.MarginLayoutParams) params;
+                        leftInset += Math.max(0, margins.leftMargin);
+                        rightInset += Math.max(0, margins.rightMargin);
+                        topInset += Math.max(0, margins.topMargin);
+                        bottomInset += Math.max(0, margins.bottomMargin);
                     }
                     WidgetProportionalScalePolicy.Frame frame =
-                            WidgetProportionalScalePolicy.fit(targetLeft, targetTop,
-                                    targetWidth, targetHeight, cellW, cellH);
+                            WidgetProportionalScalePolicy.fit(leftInset, topInset,
+                                    outerW - leftInset - rightInset,
+                                    outerH - topInset - bottomInset, cellW, cellH);
                     if (frame == null) return true;
                     boolean sizeChanged = content.getWidth() != frame.width
-                            || content.getHeight() != frame.height;
+                            || content.getHeight() != frame.height
+                            || content.getLeft() != frame.left
+                            || content.getTop() != frame.top;
                     if (sizeChanged) {
                         int wSpec = View.MeasureSpec.makeMeasureSpec(
                                 frame.width, View.MeasureSpec.EXACTLY);
