@@ -4,11 +4,11 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class WidgetProportionalScalePolicyTest {
-    @Test public void fixedOneByOneOnly() {
-        assertTrue(WidgetProportionalScalePolicy.eligible(1, 1, 0));
-        assertFalse(WidgetProportionalScalePolicy.eligible(1, 1, 3));
-        assertFalse(WidgetProportionalScalePolicy.eligible(1, 2, 0));
-        assertFalse(WidgetProportionalScalePolicy.eligible(2, 2, 0));
+    @Test public void oneByOneOnly() {
+        assertTrue(WidgetProportionalScalePolicy.eligible(1, 1));
+        assertTrue(WidgetProportionalScalePolicy.eligible(1, 1));
+        assertFalse(WidgetProportionalScalePolicy.eligible(1, 2));
+        assertFalse(WidgetProportionalScalePolicy.eligible(2, 2));
     }
 
     @Test public void uniformScalePreservesSourceAspectRatio() {
