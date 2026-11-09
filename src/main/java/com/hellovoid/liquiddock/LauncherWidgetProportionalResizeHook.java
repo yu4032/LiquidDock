@@ -129,10 +129,33 @@ final class LauncherWidgetProportionalResizeHook {
             HookUtil.hook(setWidget, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 if (chain.getThisObject() instanceof View) {
-                    observeIfMarked((View) chain.getThisObject());
+                    View widget = (View) chain.getThisObject();
+                    widget.post(() -> observeIfMarked(widget));
                 }
                 return result;
             });
+            // Some Launcher builds attach a host before assigning its ItemInfo tag.
+            // A post-bind observation restores persisted scaling after process restart.
+            try {
+                Class<?> infoClass = Class.forName(
+                        "com.miui.home.launcher.LauncherAppWidgetInfo", false, loader);
+                Class<?> launcherClass = Class.forName(
+                        "com.miui.home.launcher.Launcher", false, loader);
+                Method bind = HookUtil.findMethodExact(infoClass, "onBindAppWidget",
+                        new Class<?>[]{launcherClass, widgetViewClass});
+                HookUtil.hook(bind, chain -> {
+                    Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                    Object widget = chain.getArg(1);
+                    if (widget instanceof View) {
+                        View view = (View) widget;
+                        view.post(() -> observeIfMarked(view));
+                    }
+                    return result;
+                });
+            } catch (Throwable ignored) {
+                // The attach and setWidget hooks remain sufficient when tagging
+                // happens before attachment on this Launcher revision.
+            }
             installed = true;
             MainHook.log(TAG + " native edit/resize integration installed");
             return true;
