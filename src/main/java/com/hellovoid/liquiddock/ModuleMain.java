@@ -196,8 +196,10 @@ public final class ModuleMain extends XposedModule {
                 LauncherLargeFolderPickerHook.install(classLoader);
                 LauncherLargeFolderNativeSpanHook.install(classLoader);
                 LauncherNativeFourFolderHook.install(classLoader);
-                // Use the OEM widget shortcut menu and resize frame for fixed 1x1 widgets.
-                LauncherWidgetProportionalResizeHook.install(classLoader);
+                // Allow size toggling from Launcher widget shortcuts.
+                if (LauncherWidgetProportionalResizeHook.install(classLoader)) {
+                    LauncherWidgetResizeShortcutHook.install(classLoader);
+                }
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),

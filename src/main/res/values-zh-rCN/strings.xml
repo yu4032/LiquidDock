@@ -28,6 +28,10 @@
     <string name="security_center_sidebar_category_appearance">外观</string>
     <string name="page_dialog_customization">对话弹窗自定义</string>
     <string name="page_widget_components">小组件组件</string>
+    <string name="widget_resize_expand">放大到 2×2</string>
+    <string name="widget_resize_shrink">还原为 1×1</string>
+    <string name="widget_resize_no_space">该小组件周围没有足够的 2×2 空间</string>
+    <string name="widget_resize_failed">无法调整小组件尺寸</string>
     <string name="page_widget_component_detail">小组件组件详情</string>
     <string name="widget_components_entry">小组件部件管理</string>
     <string name="widget_components_entry_summary">手动载入小组件，可隐藏内部部件或选择文字与图像白化</string>
