@@ -9,38 +9,27 @@ import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 import java.util.WeakHashMap;
 
 /**
- * Adds an action to the OEM widget shortcut menu and delegates occupancy changes to
- * Launcher WidgetResizeDragController. Fixed-size 1x1 content is then rendered at its
- * original measured size with a uniform transform inside the committed native 2x2 cell.
- *
- * No Favorites DB writes and no replacement menu/resize view.
+ * Long-pressing a 1x1 AppWidget opens the stock Launcher resize handles.
+ * Cell occupancy, collision handling, drag gestures and database commits stay OEM-owned.
+ * Only a widget-specific presentation marker enables proportional 2x2 content scaling.
  */
 final class LauncherWidgetProportionalResizeHook {
     private static final String TAG = "[DC][Widget2x2]";
     private static final String PREFIX = "widget_scale_";
     private static final String PREFS = "liquiddock_widget_scale";
 
-    // Weak entries: shortcut items and attached widget views never outlive Launcher.
-    private static final WeakHashMap<Object, WeakReference<Object>> MENU_ITEMS =
-            new WeakHashMap<>();
     private static final WeakHashMap<View, Boolean> OBSERVED = new WeakHashMap<>();
-
     private static Class<?> appClass;
-    private static Class<?> editItemClass;
     private static Class<?> dragLayerClass;
     private static Class<?> widgetViewClass;
     private static Class<?> cellLayoutClass;
     private static Class<?> itemInfoClass;
-    private static Constructor<?> editItemConstructor;
-    private static Method addResizeFrame;
+    private static Class<?> hostViewClass;
+    private static Method nativeAddResizeFrame;
     private static boolean installed;
 
     private LauncherWidgetProportionalResizeHook() {}
@@ -51,78 +40,66 @@ final class LauncherWidgetProportionalResizeHook {
         try {
             appClass = Class.forName("com.miui.home.launcher.Application", false, loader);
             itemInfoClass = Class.forName("com.miui.home.launcher.ItemInfo", false, loader);
+            hostViewClass = Class.forName(
+                    "com.miui.home.launcher.LauncherAppWidgetHostView", false, loader);
             widgetViewClass = Class.forName("com.miui.home.launcher.LauncherWidgetView",
                     false, loader);
             cellLayoutClass = Class.forName("com.miui.home.launcher.CellLayout",
                     false, loader);
             dragLayerClass = Class.forName("com.miui.home.launcher.DragLayer",
                     false, loader);
-            Class<?> controllerClass = Class.forName(
-                    "com.miui.home.launcher.WidgetResizeDragController", false, loader);
-            addResizeFrame = HookUtil.findMethodExact(controllerClass, "addResizeFrame",
-                    new Class<?>[]{itemInfoClass, widgetViewClass, cellLayoutClass});
-            // This signature must exist before a custom menu action can be advertised.
-            HookUtil.findMethodExact(dragLayerClass, "getWidgetResizeDragController",
-                    new Class<?>[]{Class.forName("com.miui.home.launcher.Launcher",
-                            false, loader),
-                            Class.forName("com.miui.home.launcher.DragController",
-                                    false, loader)});
-            Class<?> manager = Class.forName(
-                    "com.miui.home.launcher.shortcuts.ShortcutMenuManager", false, loader);
-            Method getAll = HookUtil.findMethodExact(manager,
-                    "getAllShortcutMenuItems", new Class<?>[]{itemInfoClass});
-            editItemClass = Class.forName(
-                    "com.miui.home.launcher.shortcuts.SystemShortcutMenuItem$EditShortcutMenuItem",
-                    false, loader);
-            editItemConstructor = editItemClass.getDeclaredConstructor();
-            editItemConstructor.setAccessible(true);
-            Method getListener = HookUtil.findMethodExact(editItemClass,
-                    "getOnClickListener", new Class<?>[0]);
 
-            // Hook a concrete widget class. Never hook ViewGroup globally.
+            // SuperDraglayer.addResizeFrame delegates to its registered, live
+            // mWidgetResizeDragController (also the touch controller). Calling
+            // DragLayer.getWidgetResizeDragController instead constructs a different
+            // controller that does NOT receive drag-layer touch events.
+            Class<?> superDragLayer = Class.forName(
+                    "com.miui.home.launcher.SuperDraglayer", false, loader);
+            nativeAddResizeFrame = HookUtil.findMethodExact(superDragLayer,
+                    "addResizeFrame",
+                    new Class<?>[]{itemInfoClass, widgetViewClass, cellLayoutClass});
+            Class<?> agentClass = Class.forName(
+                    "com.miui.home.launcher.OnLongClickAgent", false, loader);
+            Method setListener = HookUtil.findMethodExact(agentClass,
+                    "setOnLongClickListener",
+                    new Class<?>[]{View.OnLongClickListener.class});
+
+            // The LauncherAppWidgetHostView owns this agent, and OEM long-press
+            // recognition remains untouched. Only its final callback is redirected.
+            // Original long-press behavior remains available while editing.
+            HookUtil.hook(setListener, chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (args.length != 1 || !(args[0] instanceof View.OnLongClickListener)) {
+                    return chain.proceed(args);
+                }
+                Object client;
+                try {
+                    client = HookUtil.getField(chain.getThisObject(), "mClientView");
+                } catch (Throwable ignored) {
+                    return chain.proceed(args);
+                }
+                if (!(client instanceof View) || !hostViewClass.isInstance(client)) {
+                    return chain.proceed(args);
+                }
+                View host = (View) client;
+                View.OnLongClickListener original = (View.OnLongClickListener) args[0];
+                args[0] = (View.OnLongClickListener) source -> {
+                    if (tryOpenNativeResizeFrame(host)) return true;
+                    return original.onLongClick(source);
+                };
+                return chain.proceed(args);
+            });
+
+            // Concrete OEM widget lifecycle hooks only, never global View hooks.
             Method attached = HookUtil.findMethodExact(widgetViewClass,
                     "onAttachedToWindow", new Class<?>[0]);
-            Method setWidget = HookUtil.findMethodExact(widgetViewClass, "setWidget",
-                    new Class<?>[]{AppWidgetHostView.class});
-
-            HookUtil.hook(getListener, chain -> {
-                Object item = chain.getThisObject();
-                WeakReference<Object> bound = MENU_ITEMS.get(item);
-                if (bound == null) {
-                    return chain.proceed(chain.getArgs().toArray(new Object[0]));
-                }
-                return (View.OnClickListener) clicked -> {
-                    Object info = bound.get();
-                    if (info != null) openNativeEditor(info);
-                };
-            });
-
-            HookUtil.hook(getAll, chain -> {
-                Object[] args = chain.getArgs().toArray(new Object[0]);
-                Object result = chain.proceed(args);
-                Object info = args.length == 1 ? args[0] : null;
-                if (result == null || !eligible(info)) return result;
-                try {
-                    Object original = HookUtil.requireInvoke(
-                            result, "getWidgetShortcutMenuItems");
-                    if (!(original instanceof List<?>)) return result;
-                    Object newItem = editItemConstructor.newInstance();
-                    HookUtil.requireInvoke(newItem, "setShortTitle", actionTitle(
-                            ((View) widget(info)).getContext()));
-                    ArrayList<Object> items = new ArrayList<>((List<?>) original);
-                    items.add(newItem);
-                    HookUtil.requireInvoke(result, "setWidgetShortcutMenuItems", items);
-                    MENU_ITEMS.put(newItem, new WeakReference<>(info));
-                } catch (Throwable error) {
-                    MainHook.log(TAG + " native menu entry unavailable: " + error);
-                }
-                return result;
-            });
-
+            Method setWidget = HookUtil.findMethodExact(widgetViewClass,
+                    "setWidget", new Class<?>[]{AppWidgetHostView.class});
             HookUtil.hook(attached, chain -> {
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 if (chain.getThisObject() instanceof View) {
-                    observeIfMarked((View) chain.getThisObject());
+                    View widget = (View) chain.getThisObject();
+                    widget.post(() -> observeIfMarked(widget));
                 }
                 return result;
             });
@@ -134,8 +111,6 @@ final class LauncherWidgetProportionalResizeHook {
                 }
                 return result;
             });
-            // Some Launcher builds attach a host before assigning its ItemInfo tag.
-            // A post-bind observation restores persisted scaling after process restart.
             try {
                 Class<?> infoClass = Class.forName(
                         "com.miui.home.launcher.LauncherAppWidgetInfo", false, loader);
@@ -153,22 +128,16 @@ final class LauncherWidgetProportionalResizeHook {
                     return result;
                 });
             } catch (Throwable ignored) {
-                // The attach and setWidget hooks remain sufficient when tagging
-                // happens before attachment on this Launcher revision.
+                // Some OEM builds bind before the host is attached; attach/setWidget
+                // paths remain available for restoring the per-widget presentation.
             }
             installed = true;
-            MainHook.log(TAG + " native edit/resize integration installed");
+            MainHook.log(TAG + " direct native resize integration installed");
             return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " native edit API unavailable; feature disabled: " + error);
+            MainHook.log(TAG + " native resize API unavailable; no behavior changed: " + error);
             return false;
         }
-    }
-
-    private static CharSequence actionTitle(Context context) {
-        return context.getResources().getConfiguration().locale.getLanguage()
-                .equals(Locale.CHINESE.getLanguage())
-                ? "等比放大（拖至 2×2）" : "Scale proportionally (drag to 2×2)";
     }
 
     private static Object widget(Object info) {
@@ -193,73 +162,74 @@ final class LauncherWidgetProportionalResizeHook {
 
     private static boolean eligible(Object info) {
         Object host = widget(info);
-        if (!(host instanceof View)) return false;
-        AppWidgetProviderInfo provider = provider(host);
-        if (provider == null) return false;
+        if (!(host instanceof View) || provider(host) == null) return false;
         try {
             return WidgetProportionalScalePolicy.eligible(
                     HookUtil.getIntField(info, "spanX"),
-                    HookUtil.getIntField(info, "spanY"), provider.resizeMode);
+                    HookUtil.getIntField(info, "spanY"));
         } catch (Throwable ignored) {
             return false;
         }
     }
 
-    private static void openNativeEditor(Object info) {
-        if (!eligible(info)) return;
-        Object target = widget(info);
-        if (!(target instanceof View)) return;
-        View host = (View) target;
-        View cell = ancestor(host, cellLayoutClass);
-        if (cell == null) return;
-        AppWidgetProviderInfo provider = provider(target);
-        if (provider == null) return;
+    /**
+     * Returns false before any UI change when this is not a supported 1x1
+     * widget, so the OEM long-press listener retains ownership.
+     */
+    private static boolean tryOpenNativeResizeFrame(View touchedHost) {
+        View wrapper = ancestor(touchedHost, widgetViewClass);
+        if (wrapper == null || !wrapper.isAttachedToWindow()) return false;
+        Object info = wrapper.getTag();
+        if (!eligible(info) || widget(info) != wrapper) return false;
+        View cell = ancestor(wrapper, cellLayoutClass);
+        if (cell == null) return false;
 
-        Object vendorInfo;
-        try {
-            vendorInfo = HookUtil.requireInvoke(info, "getLauncherProviderInfo");
-        } catch (Throwable error) {
-            MainHook.log(TAG + " provider sizing metadata unavailable: " + error);
-            return;
-        }
-        if (vendorInfo == null) return;
-
-        int oldMode = provider.resizeMode;
-        int oldMaxX;
-        int oldMaxY;
-        try {
-            oldMaxX = HookUtil.getIntField(vendorInfo, "maxSpanX");
-            oldMaxY = HookUtil.getIntField(vendorInfo, "maxSpanY");
-        } catch (Throwable error) {
-            MainHook.log(TAG + " native span limits unavailable: " + error);
-            return;
-        }
         try {
             Object launcher = HookUtil.requireInvokeStatic(appClass, "getLauncher");
-            Object layer = HookUtil.requireInvoke(launcher, "getDragLayer");
-            Object dragController = HookUtil.requireInvoke(launcher, "getDragController");
-            if (!dragLayerClass.isInstance(layer)) return;
-            Object resizeController = HookUtil.requireInvoke(layer,
-                    "getWidgetResizeDragController", launcher, dragController);
-            if (resizeController == null) return;
+            if (launcher == null) return false;
+            Object editing = HookUtil.tryInvoke(launcher, "isInEditing").value();
+            if (Boolean.TRUE.equals(editing)) return false;
 
-            // Only the original resize-frame construction sees the widened limits.
-            // The provider information is restored even if a vendor method fails.
-            provider.resizeMode = AppWidgetProviderInfo.RESIZE_BOTH;
-            HookUtil.setIntField(vendorInfo, "maxSpanX", Math.max(2, oldMaxX));
-            HookUtil.setIntField(vendorInfo, "maxSpanY", Math.max(2, oldMaxY));
+            Object layer = HookUtil.requireInvoke(launcher, "getDragLayer");
+            if (!dragLayerClass.isInstance(layer)) return false;
+            // This exact controller must also belong to the OEM touch dispatch.
+            if (HookUtil.getField(layer, "mWidgetResizeDragController") == null) return false;
+            AppWidgetProviderInfo appProvider = provider(wrapper);
+            Object vendorInfo = HookUtil.requireInvoke(info, "getLauncherProviderInfo");
+            if (appProvider == null || vendorInfo == null) return false;
+
+            int originalResizeMode = appProvider.resizeMode;
+            int originalMinX = HookUtil.getIntField(vendorInfo, "minSpanX");
+            int originalMinY = HookUtil.getIntField(vendorInfo, "minSpanY");
+            int originalMaxX = HookUtil.getIntField(vendorInfo, "maxSpanX");
+            int originalMaxY = HookUtil.getIntField(vendorInfo, "maxSpanY");
+
+            // Values are copied into AppWidgetResizeFrame during construction.
+            // Restore shared provider metadata on every exit path.
             try {
-                HookUtil.requireInvoke(launcher, "hideShortcutMenuWithoutAnim");
-                addResizeFrame.invoke(resizeController, info, target, cell);
+                appProvider.resizeMode = AppWidgetProviderInfo.RESIZE_BOTH;
+                HookUtil.setIntField(vendorInfo, "minSpanX", 1);
+                HookUtil.setIntField(vendorInfo, "minSpanY", 1);
+                HookUtil.setIntField(vendorInfo, "maxSpanX", Math.max(2, originalMaxX));
+                HookUtil.setIntField(vendorInfo, "maxSpanY", Math.max(2, originalMaxY));
+                // The stock DragLayer owns both the overlay and touch controller.
+                HookUtil.requireInvoke(layer, "clearAllResizeFrames");
+                nativeAddResizeFrame.invoke(layer, info, wrapper, cell);
             } finally {
-                provider.resizeMode = oldMode;
-                HookUtil.setIntField(vendorInfo, "maxSpanX", oldMaxX);
-                HookUtil.setIntField(vendorInfo, "maxSpanY", oldMaxY);
+                appProvider.resizeMode = originalResizeMode;
+                HookUtil.setIntField(vendorInfo, "minSpanX", originalMinX);
+                HookUtil.setIntField(vendorInfo, "minSpanY", originalMinY);
+                HookUtil.setIntField(vendorInfo, "maxSpanX", originalMaxX);
+                HookUtil.setIntField(vendorInfo, "maxSpanY", originalMaxY);
             }
-            saveMarker(host.getContext(), info, provider);
-            observeIfMarked(host);
+
+            saveMarker(wrapper.getContext(), info, appProvider);
+            observeIfMarked(wrapper);
+            MainHook.log(TAG + " opened stock resize frame for 1x1 widget");
+            return true;
         } catch (Throwable error) {
-            MainHook.log(TAG + " could not open native resize handles: " + error);
+            MainHook.log(TAG + " stock resize entry failed: " + error);
+            return false;
         }
     }
 
