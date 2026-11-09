@@ -187,13 +187,19 @@ final class LauncherWidgetProportionalResizeHook {
     static void setExpanded(View wrapper, Object info, String identity, boolean expanded) {
         String key = markerKey(info);
         if (key == null) return;
-        android.content.SharedPreferences.Editor editor = wrapper.getContext()
-                .getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
         if (expanded) {
-            editor.putString(key, identity).apply();
+            wrapper.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit().putString(key, identity).apply();
             observeIfMarked(wrapper);
         } else {
-            editor.remove(key).apply();
+            clearExpanded(wrapper.getContext(), info);
+        }
+    }
+
+    static void clearExpanded(Context context, Object info) {
+        String key = markerKey(info);
+        if (key != null) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(key).apply();
         }
     }
 
@@ -342,7 +348,7 @@ final class LauncherWidgetProportionalResizeHook {
         }
     }
 
-    private static boolean isExpanded(Object info) {
+    static boolean isExpanded(Object info) {
         return info != null && HookUtil.getIntField(info, "spanX") == 2
                 && HookUtil.getIntField(info, "spanY") == 2;
     }

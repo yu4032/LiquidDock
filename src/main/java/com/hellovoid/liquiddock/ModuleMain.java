@@ -199,6 +199,7 @@ public final class ModuleMain extends XposedModule {
                 // Allow size toggling from Launcher widget shortcuts.
                 if (LauncherWidgetProportionalResizeHook.install(classLoader)) {
                     LauncherWidgetResizeShortcutHook.install(classLoader);
+                    LauncherWidgetReplacementHook.install(classLoader);
                 }
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
