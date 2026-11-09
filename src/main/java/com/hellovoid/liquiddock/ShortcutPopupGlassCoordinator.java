@@ -125,11 +125,10 @@ final class ShortcutPopupGlassCoordinator {
             View earlyOwner = state.earlyOwnerRef.get();
             boolean workspaceMatch = earlyOwner == null
                     && state.captureRootRef.get() == captureRoot;
-            // setRequestingItemInfo belongs to ShortcutMenuLayer, not to
-            // DockContainerView. Match the Launcher ViewRoot rather than requiring
-            // the requesting View to have the Dock owner's Java class.
-            boolean dockMatch = state.dockEarly
-                    && state.captureRootRef.get() == captureRoot;
+            // The in-app Floating Dock and ShortcutMenuLayer may live in different
+            // ViewRoots. The Dock's already-frozen source, not the requester's root,
+            // owns this long-press. A display match is required for cross-window reuse.
+            boolean dockMatch = matchesDockAuthority(state, authorityOwner);
             if (workspaceMatch || dockMatch) {
                 state.requestStarted = true;
                 cancelHandoffCleanup(state);
@@ -141,6 +140,25 @@ final class ShortcutPopupGlassCoordinator {
         if (state != null && state.captureRootRef.get() == captureRoot) {
             state.requestStarted = true;
         }
+    }
+
+    /**
+     * Some non-Home Dock routes go directly to ShortcutMenu.show() without notifying
+     * ShortcutMenuLayer.setRequestingItemInfo(). Claim only an existing Dock touch-down
+     * source; never capture at show time, which would include the entrance animation.
+     */
+    static synchronized void claimDockRequestAtShow() {
+        State state = current;
+        View root = state != null ? state.captureRootRef.get() : null;
+        boolean sourceAlive = state != null && state.sourceOverlay != null
+                && (state.sourceOverlay.isAttachedToWindow()
+                || (root != null && root.isAttachedToWindow()));
+        if (state == null || state.released || !ShortcutPopupDockHandoffPolicy.canAdoptOnShow(
+                state.dockEarly, state.requestStarted, sourceAlive,
+                state.contentRef.get() != null)) return;
+        state.requestStarted = true;
+        cancelHandoffCleanup(state);
+        MainHook.log(TAG + " non-Home Dock menu adopted early capture");
     }
 
     /**
@@ -477,6 +495,11 @@ final class ShortcutPopupGlassCoordinator {
             return false;
         }
 
+        if (dockOwnerMatches && !rootMatches) {
+            View captureRoot = state.captureRootRef.get();
+            MainHook.log(TAG + " Dock cross-window popup bound source="
+                    + dimensions(captureRoot) + " popup=" + dimensions(decorView));
+        }
         state.popupDecorRef = new WeakReference<>(decorView);
         state.popupRef = new WeakReference<>(popupView);
         state.contentRef = new WeakReference<>(contentView);
@@ -669,7 +692,8 @@ final class ShortcutPopupGlassCoordinator {
         // The OEM may clear ItemInfo after invoking show(). A deferred show
         // must remain alive until glass is ready, timeout, or explicit dismiss.
         boolean rootMatches = state.captureRootRef.get() == captureRoot;
-        boolean ownerMatches = matchesDockAuthority(state, authorityOwner);
+        boolean ownerMatches = state.requestStarted
+                && matchesDockAuthority(state, authorityOwner);
         if (rootMatches || ownerMatches) releaseLocked("query-cancelled");
     }
 
@@ -679,7 +703,7 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null) return;
         boolean rootMatches = state.captureRootRef.get() == liveRoot;
         boolean ownerMatches = matchesDockAuthority(state, decorView);
-        if (!rootMatches && !ownerMatches) return;
+        if ((!rootMatches && !ownerMatches) || state.popupDecorRef.get() != decorView) return;
         if (popupView == null || !popupView.isAttachedToWindow()) releaseLocked("popup-dismissed");
     }
 
@@ -700,9 +724,17 @@ final class ShortcutPopupGlassCoordinator {
     }
 
     private static boolean matchesDockAuthority(State state, View candidate) {
-        if (state == null || candidate == null || !state.dockEarly) return false;
-        Class<?> authorityClass = state.earlyAuthorityClass;
-        return authorityClass != null && authorityClass.isInstance(candidate);
+        return state != null && ShortcutPopupDockHandoffPolicy.matchesDisplay(
+                state.dockEarly, state.captureDisplayId, displayId(candidate));
+    }
+
+    private static int displayId(View view) {
+        return view != null && view.getDisplay() != null
+                ? view.getDisplay().getDisplayId() : -1;
+    }
+
+    private static String dimensions(View view) {
+        return view != null ? view.getWidth() + "x" + view.getHeight() : "none";
     }
 
     private static void release(State expected, String reason) {
@@ -788,7 +820,7 @@ final class ShortcutPopupGlassCoordinator {
         LiquidDockConfig.Glass glassConfig;
         final boolean early;
         final boolean dockEarly;
-        final Class<?> earlyAuthorityClass;
+        final int captureDisplayId;
         final WeakReference<View> earlyOwnerRef;
         WeakReference<View> popupDecorRef = new WeakReference<>(null);
         WeakReference<View> popupRef = new WeakReference<>(null);
@@ -823,7 +855,7 @@ final class ShortcutPopupGlassCoordinator {
             this.glassConfig = glassConfig;
             this.early = early;
             this.dockEarly = earlyOwner != null;
-            this.earlyAuthorityClass = earlyOwner != null ? earlyOwner.getClass() : null;
+            captureDisplayId = displayId(captureRoot);
             earlyOwnerRef = new WeakReference<>(earlyOwner);
         }
     }
