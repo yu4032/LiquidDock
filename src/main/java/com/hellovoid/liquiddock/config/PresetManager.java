@@ -156,6 +156,7 @@ public final class PresetManager {
         source.put("animation_security_center_exit_fade_ms", 80);
         source.put("animation_settings_page_ms", 300);
         source.put("animation_hide_gesture_handle_home_recents", Boolean.FALSE);
+        source.put("systemui_header_gradient_blur", Boolean.FALSE);
         source.put("animation_disable_wallpaper_zoom", Boolean.FALSE);
         source.put("grid_enabled", Boolean.FALSE);
         source.put("grid_columns", 8);
