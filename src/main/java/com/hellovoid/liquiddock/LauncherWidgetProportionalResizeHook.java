@@ -364,7 +364,8 @@ final class LauncherWidgetProportionalResizeHook {
         if (OBSERVED.containsKey(wrapper)) return;
         OBSERVED.put(wrapper, Boolean.TRUE);
         WeakReference<View> reference = new WeakReference<>(wrapper);
-        ViewTreeObserver.OnPreDrawListener listener = new ViewTreeObserver.OnPreDrawListener() {
+        class ContentObserver implements ViewTreeObserver.OnPreDrawListener,
+                View.OnAttachStateChangeListener {
             private WeakReference<View> scaledContent = new WeakReference<>(null);
 
             @Override public boolean onPreDraw() {
@@ -376,10 +377,15 @@ final class LauncherWidgetProportionalResizeHook {
                     View content = host instanceof ViewGroup ? ((ViewGroup) host).getChildAt(0) : null;
                     View previous = scaledContent.get();
                     if (previous != null && previous != content) reset(previous);
+                    if (!isMarked(owner, info)) {
+                        if (previous != null && previous == content) reset(content);
+                        stop(owner);
+                        return true;
+                    }
                     if (content == null) return true;
                     View cell = ancestor(owner, cellLayoutClass);
-                    if (cell == null || !isExpanded(info) || !isMarked(owner, info)) {
-                        if (previous == content) reset(content);
+                    if (cell == null || !isExpanded(info)) {
+                        if (previous != null && previous == content) reset(content);
                         return true;
                     }
                     int cellW = (Integer) getCellWidth.invoke(cell);
@@ -416,18 +422,22 @@ final class LauncherWidgetProportionalResizeHook {
                 view.setScaleY(1f);
                 scaledContent.clear();
             }
-        };
-        wrapper.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(View v) {}
 
-            @Override public void onViewDetachedFromWindow(View v) {
-                if (v.getViewTreeObserver().isAlive()) {
-                    v.getViewTreeObserver().removeOnPreDrawListener(listener);
-                }
-                v.removeOnAttachStateChangeListener(this);
-                OBSERVED.remove(v);
+            @Override public void onViewAttachedToWindow(View view) {}
+
+            @Override public void onViewDetachedFromWindow(View view) {
+                stop(view);
             }
-        });
-        wrapper.getViewTreeObserver().addOnPreDrawListener(listener);
+
+            private void stop(View view) {
+                ViewTreeObserver tree = view.getViewTreeObserver();
+                if (tree.isAlive()) tree.removeOnPreDrawListener(this);
+                view.removeOnAttachStateChangeListener(this);
+                OBSERVED.remove(view);
+            }
+        }
+        ContentObserver observer = new ContentObserver();
+        wrapper.addOnAttachStateChangeListener(observer);
+        wrapper.getViewTreeObserver().addOnPreDrawListener(observer);
     }
 }
