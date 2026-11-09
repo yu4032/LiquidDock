@@ -703,7 +703,9 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null) return;
         boolean rootMatches = state.captureRootRef.get() == liveRoot;
         boolean ownerMatches = matchesDockAuthority(state, decorView);
-        if ((!rootMatches && !ownerMatches) || state.popupDecorRef.get() != decorView) return;
+        View boundDecor = state.popupDecorRef.get();
+        if ((!rootMatches && !ownerMatches)
+                || (boundDecor != null && boundDecor != decorView)) return;
         if (popupView == null || !popupView.isAttachedToWindow()) releaseLocked("popup-dismissed");
     }
 
