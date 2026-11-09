@@ -88,6 +88,10 @@ final class MiuixShortcutMenuGlassHook {
             HookUtil.hook(nativeShow, chain -> {
                 Object menu = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (popupGlassEnabled && GlassRuntimeState.isEnabled()
+                        && SHOW_REENTRY.get() != menu) {
+                    ShortcutPopupGlassCoordinator.claimDockRequestAtShow();
+                }
                 if (canDeferShow && popupGlassEnabled && GlassRuntimeState.isEnabled()
                         && SHOW_REENTRY.get() != menu
                         && ShortcutPopupGlassCoordinator.deferShowUntilGlassReady(
