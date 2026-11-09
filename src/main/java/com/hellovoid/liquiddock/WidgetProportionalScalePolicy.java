@@ -16,8 +16,8 @@ final class WidgetProportionalScalePolicy {
         }
     }
 
-    static boolean eligible(int spanX, int spanY, int resizeMode) {
-        return spanX == 1 && spanY == 1 && resizeMode == 0;
+    static boolean eligible(int spanX, int spanY) {
+        return spanX == 1 && spanY == 1;
     }
 
     /** One uniform scale, centered in the native 2x2 host bounds. */
