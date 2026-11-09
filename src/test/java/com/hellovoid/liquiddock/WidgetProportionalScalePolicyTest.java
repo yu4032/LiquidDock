@@ -6,7 +6,7 @@ import static org.junit.Assert.*;
 public class WidgetProportionalScalePolicyTest {
     @Test public void oneByOneOnly() {
         assertTrue(WidgetProportionalScalePolicy.eligible(1, 1));
-        assertTrue(WidgetProportionalScalePolicy.eligible(1, 1));
+        assertFalse(WidgetProportionalScalePolicy.eligible(0, 1));
         assertFalse(WidgetProportionalScalePolicy.eligible(1, 2));
         assertFalse(WidgetProportionalScalePolicy.eligible(2, 2));
     }
