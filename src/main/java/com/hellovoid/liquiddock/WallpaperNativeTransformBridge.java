@@ -214,8 +214,10 @@ final class WallpaperNativeTransformBridge {
                     });
             Api101Bridge.log(
                     "[DC][WallpaperTransform] native applied-transform observer installed");
+            android.util.Log.i("LiquidDock-System", "native wallpaper observer installed");
         } catch (Throwable error) {
             Api101Bridge.log("[DC][WallpaperTransform] native observer unavailable", error);
+            android.util.Log.e("LiquidDock-System", "native wallpaper observer unavailable", error);
         }
     }
 
