@@ -24,26 +24,14 @@ public final class ModuleMain extends XposedModule {
         loadedProcessName = param.getProcessName();
         Api101Bridge.log("[DC] API102 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
-        if ("system".equals(loadedProcessName)) {
+        if (param.isSystemServer()) {
+            // The virtual scope is named "system", but the actual process name is
+            // framework-dependent. Use API 102's authoritative system-server flag.
+            android.util.Log.i("LiquidDock-System",
+                    "module loaded process=" + loadedProcessName);
             // Acquiring a wallpaper listener or renderer makes this process non-reloadable.
             if (!reloadGate.enterOwnerLifecycle()) return;
-            try {
-                ConfigReader config = ConfigReader.load();
-                boolean enabled = config.b(
-                        ConfigSchema.Core.ENABLED.name(),
-                        ConfigSchema.Core.ENABLED.runtimeFallback());
-                boolean liquidGlassEnabled = config.b(
-                        ConfigSchema.Glass.ENABLED.name(),
-                        ConfigSchema.Glass.ENABLED.runtimeFallback());
-                boolean wallpaperFlickerFixEnabled = config.b(
-                        ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name(),
-                        ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
-                WallpaperClientCompositionHook.initialize(
-                        Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP),
-                        enabled && liquidGlassEnabled && wallpaperFlickerFixEnabled);
-            } catch (Throwable error) {
-                Api101Bridge.log("[DC][WallpaperClientComposition] config gate failed", error);
-            }
+            initializeSystemWallpaperComposition("module-load");
         }
     }
 
@@ -68,8 +56,42 @@ public final class ModuleMain extends XposedModule {
 
     @Override
     public void onSystemServerStarting(@NonNull SystemServerStartingParam param) {
+        android.util.Log.i("LiquidDock-System", "system server starting callback received");
         if (!reloadGate.enterOwnerLifecycle()) return;
+        // Remote Preferences can become ready after onModuleLoaded. Reconcile the
+        // initial feature gate here without registering a duplicate SurfaceControl hook.
+        initializeSystemWallpaperComposition("system-server-start");
         WallpaperNativeTransformBridge.installSystemObserver(param.getClassLoader());
+    }
+
+    private void initializeSystemWallpaperComposition(String phase) {
+        try {
+            ConfigReader config = ConfigReader.load();
+            boolean coreEnabled = config.b(
+                    ConfigSchema.Core.ENABLED.name(),
+                    ConfigSchema.Core.ENABLED.runtimeFallback());
+            boolean glassEnabled = config.b(
+                    ConfigSchema.Glass.ENABLED.name(),
+                    ConfigSchema.Glass.ENABLED.runtimeFallback());
+            boolean flickerEnabled = config.b(
+                    ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name(),
+                    ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
+            WallpaperClientCompositionHook.initialize(
+                    Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP),
+                    coreEnabled && glassEnabled && flickerEnabled);
+            android.util.Log.i("LiquidDock-System",
+                    "composition configured phase=" + phase
+                    + " core=" + coreEnabled
+                    + " glass=" + glassEnabled
+                    + " flicker=" + flickerEnabled
+                    + " configPresent="
+                    + config.has(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name()));
+        } catch (Throwable error) {
+            // This runs before debug preferences might be available. Do not hide
+            // the cause of a system_server-only bootstrap failure behind that gate.
+            android.util.Log.e("LiquidDock-System",
+                    "composition bootstrap failed phase=" + phase, error);
+        }
     }
 
     @Override
