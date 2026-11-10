@@ -28,6 +28,10 @@
     <string name="security_center_sidebar_category_appearance">Appearance</string>
     <string name="page_dialog_customization">Dialog popup customization</string>
     <string name="page_widget_components">Widget components</string>
+    <string name="widget_resize_expand">Enlarge to 2×2</string>
+    <string name="widget_resize_shrink">Restore to 1×1</string>
+    <string name="widget_resize_no_space">Not enough space around this widget</string>
+    <string name="widget_resize_failed">Could not resize the widget</string>
     <string name="page_widget_component_detail">Widget component detail</string>
     <string name="widget_components_entry">Widget component styling</string>
     <string name="widget_components_entry_summary">Load widgets to hide components or turn selected text/icons white</string>

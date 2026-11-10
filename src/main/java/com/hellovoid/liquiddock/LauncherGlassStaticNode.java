@@ -586,8 +586,12 @@ final class LauncherGlassStaticNode {
         int hostWidth = material.getWidth();
         int hostHeight = material.getHeight();
         float density = material.getResources().getDisplayMetrics().density;
+        float nativeRadius = nativeCornerRadiusPx;
+        if (kind == LauncherGlassDragState.Kind.WIDGET && nativeRadius <= 0f) {
+            nativeRadius = Math.max(0, Math.min(hostWidth, hostHeight)) * 0.08f;
+        }
         float requestedRadius = style.cornerRadiusDp > 0f
-                ? style.cornerRadiusDp * density : nativeCornerRadiusPx;
+                ? style.cornerRadiusDp * density : nativeRadius;
 
         if (visualOwnerState.isLaunchProxyActive()) {
             // While MIUI owns the icon with FloatingIconView2/FloatingIconLayer2, the source View

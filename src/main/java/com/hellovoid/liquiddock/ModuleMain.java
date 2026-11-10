@@ -196,6 +196,11 @@ public final class ModuleMain extends XposedModule {
                 LauncherLargeFolderPickerHook.install(classLoader);
                 LauncherLargeFolderNativeSpanHook.install(classLoader);
                 LauncherNativeFourFolderHook.install(classLoader);
+                // Allow size toggling from Launcher widget shortcuts.
+                if (LauncherWidgetProportionalResizeHook.install(classLoader)) {
+                    LauncherWidgetResizeShortcutHook.install(classLoader);
+                    LauncherWidgetReplacementHook.install(classLoader);
+                }
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),

@@ -644,6 +644,8 @@ final class MiuixLauncherStaticGlassHook {
         }
         float nativeRadius = readCornerRadius(host);
         if (Float.isFinite(nativeRadius) && nativeRadius > 0f) return nativeRadius;
+        // The widget's size-dependent fallback is resolved from each geometry snapshot.
+        if (kind == LauncherGlassDragState.Kind.WIDGET) return 0f;
         float min = Math.min(Math.max(1, host.getWidth()), Math.max(1, host.getHeight()));
         return Math.max(0f, min * 0.08f);
     }
