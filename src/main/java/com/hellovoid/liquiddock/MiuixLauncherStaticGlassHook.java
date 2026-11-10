@@ -6,6 +6,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -369,21 +370,113 @@ final class MiuixLauncherStaticGlassHook {
         }
     }
 
+    private static final Map<View, WorkspaceResumeReconcile> PENDING_WORKSPACE_RESUMES =
+            new WeakHashMap<>();
+
     private static void scheduleWorkspaceResumeReconcile(
             Object launcher, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || launcher == null) return;
         View root = launcherDecorView(launcher);
         if (root == null) return;
-        root.postOnAnimation(() -> {
-            if (!GlassRuntimeState.isEnabled() || !root.isAttachedToWindow()) return;
-            LauncherGlassStaticLayer.onLauncherResumed(root);
-            View workspace = findWorkspace(root);
-            if (workspace != null) reconcileCurrentWorkspacePage(workspace, glassConfig);
-            // Resume is not a source invalidation. The invalidate only schedules normal pre-draw
-            // geometry reconciliation; Surface/wallpaper/rotation freshness stays with its owner.
-            root.postInvalidateOnAnimation();
-            MainHook.log(TAG + " Workspace HOME resume reconciled");
-        });
+        // onResume can run before the Launcher root is attached or before its first
+        // CellLayout exists. A single posted frame then silently loses the only
+        // cold-start reconciliation. Observe attach/layout until the page is ready.
+        WorkspaceResumeReconcile pending = PENDING_WORKSPACE_RESUMES.get(root);
+        if (pending == null) {
+            pending = new WorkspaceResumeReconcile(root, glassConfig);
+            PENDING_WORKSPACE_RESUMES.put(root, pending);
+            pending.start();
+        } else {
+            pending.glassConfig = glassConfig;
+            pending.schedule();
+        }
+    }
+
+    private static final class WorkspaceResumeReconcile
+            implements View.OnAttachStateChangeListener, ViewTreeObserver.OnGlobalLayoutListener {
+        final View root;
+        LiquidDockConfig.Glass glassConfig;
+        private ViewTreeObserver observer;
+        private boolean posted;
+        private boolean stopped;
+
+        WorkspaceResumeReconcile(View root, LiquidDockConfig.Glass glassConfig) {
+            this.root = root;
+            this.glassConfig = glassConfig;
+        }
+
+        void start() {
+            root.addOnAttachStateChangeListener(this);
+            observeLayout();
+            schedule();
+        }
+
+        private void observeLayout() {
+            ViewTreeObserver next = root.getViewTreeObserver();
+            if (observer == next) return;
+            if (observer != null && observer.isAlive()) {
+                observer.removeOnGlobalLayoutListener(this);
+            }
+            observer = next;
+            if (next != null && next.isAlive()) next.addOnGlobalLayoutListener(this);
+        }
+
+        @Override public void onViewAttachedToWindow(View view) {
+            observeLayout();
+            schedule();
+        }
+
+        @Override public void onViewDetachedFromWindow(View view) {
+            stop();
+        }
+
+        @Override public void onGlobalLayout() {
+            schedule();
+        }
+
+        void schedule() {
+            if (stopped || posted || !root.isAttachedToWindow()) return;
+            posted = true;
+            root.postOnAnimation(() -> {
+                posted = false;
+                if (stopped) return;
+                if (!GlassRuntimeState.isEnabled()) {
+                    stop();
+                    return;
+                }
+                if (!root.isAttachedToWindow() || root.getWidth() <= 0
+                        || root.getHeight() <= 0) return;
+                View workspace = findWorkspace(root);
+                if (workspace == null || !workspace.isAttachedToWindow()
+                        || workspace.getWidth() <= 0 || workspace.getHeight() <= 0) return;
+                // A layout event, rather than a fixed retry count, is the authority
+                // that the current CellLayout is now eligible for static-node binding.
+                HookUtil.InvocationResult<Object> current =
+                        HookUtil.tryInvoke(workspace, "getCurrentCellLayout");
+                if (!current.succeeded() || !(current.value() instanceof View)
+                        || !((View) current.value()).isAttachedToWindow()) return;
+                stop();
+                LauncherGlassStaticLayer.onLauncherResumed(root);
+                reconcileCurrentWorkspacePage(workspace,
+                        installedGlassConfig != null ? installedGlassConfig : glassConfig);
+                // Resume is not a source invalidation: only request normal geometry
+                // reconciliation, leaving wallpaper freshness to its existing owner.
+                root.postInvalidateOnAnimation();
+                MainHook.log(TAG + " Workspace HOME resume reconciled after layout");
+            });
+        }
+
+        private void stop() {
+            if (stopped) return;
+            stopped = true;
+            if (observer != null && observer.isAlive()) {
+                observer.removeOnGlobalLayoutListener(this);
+            }
+            root.removeOnAttachStateChangeListener(this);
+            if (PENDING_WORKSPACE_RESUMES.get(root) == this) {
+                PENDING_WORKSPACE_RESUMES.remove(root);
+            }
+        }
     }
 
     private static View launcherDecorView(Object launcher) {
