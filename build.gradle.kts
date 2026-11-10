@@ -17,7 +17,7 @@ android {
         minSdk = 33
         targetSdk = 37
         testInstrumentationRunner = "com.hellovoid.liquiddock.SettingsSearchInstrumentation"
-        versionCode = 40
+        versionCode = 41
         versionName = "2.7.9"
         buildConfigField(
             "boolean",
