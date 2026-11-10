@@ -8,6 +8,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -394,24 +395,28 @@ final class MiuixLauncherStaticGlassHook {
 
     private static final class WorkspaceResumeReconcile
             implements View.OnAttachStateChangeListener, ViewTreeObserver.OnGlobalLayoutListener {
-        final View root;
+        private final WeakReference<View> rootRef;
         LiquidDockConfig.Glass glassConfig;
         private ViewTreeObserver observer;
         private boolean posted;
         private boolean stopped;
 
         WorkspaceResumeReconcile(View root, LiquidDockConfig.Glass glassConfig) {
-            this.root = root;
+            this.rootRef = new WeakReference<>(root);
             this.glassConfig = glassConfig;
         }
 
         void start() {
+            View root = rootRef.get();
+            if (root == null) return;
             root.addOnAttachStateChangeListener(this);
             observeLayout();
             schedule();
         }
 
         private void observeLayout() {
+            View root = rootRef.get();
+            if (root == null) return;
             ViewTreeObserver next = root.getViewTreeObserver();
             if (observer == next) return;
             if (observer != null && observer.isAlive()) {
@@ -435,6 +440,8 @@ final class MiuixLauncherStaticGlassHook {
         }
 
         void schedule() {
+            View root = rootRef.get();
+            if (root == null) return;
             if (stopped || posted || !root.isAttachedToWindow()) return;
             posted = true;
             root.postOnAnimation(() -> {
@@ -469,12 +476,15 @@ final class MiuixLauncherStaticGlassHook {
         private void stop() {
             if (stopped) return;
             stopped = true;
+            View root = rootRef.get();
             if (observer != null && observer.isAlive()) {
                 observer.removeOnGlobalLayoutListener(this);
             }
-            root.removeOnAttachStateChangeListener(this);
-            if (PENDING_WORKSPACE_RESUMES.get(root) == this) {
-                PENDING_WORKSPACE_RESUMES.remove(root);
+            if (root != null) {
+                root.removeOnAttachStateChangeListener(this);
+                if (PENDING_WORKSPACE_RESUMES.get(root) == this) {
+                    PENDING_WORKSPACE_RESUMES.remove(root);
+                }
             }
         }
     }
