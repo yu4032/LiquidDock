@@ -724,7 +724,8 @@ final class MiuixLauncherStaticGlassHook {
                 oldLeft, oldTop, oldRight, oldBottom) -> {
             if (view.getWidth() <= 0 || view.getHeight() <= 0) return;
             clearPendingHostSize(view);
-            scheduleBind(view, kind, glassConfig, 0);
+            // Do not create a shared TextureView in the middle of View.layout().
+            view.postOnAnimation(() -> scheduleBind(view, kind, glassConfig, 0));
         };
         PENDING_HOST_SIZE.put(host, listener);
         host.addOnLayoutChangeListener(listener);
