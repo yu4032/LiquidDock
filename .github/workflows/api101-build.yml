@@ -51,6 +51,52 @@ jobs:
           fi
       - name: Unit + debug assembly
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      # PR-only A/B experiment: build the optimized Release variant, but sign it
+      # with the SAME public debug key as assembleDebug. The resulting two APKs
+      # differ by build type/R8, not by signing identity.
+      - name: Assemble optimized Release and verify Xposed entry
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew assembleRelease --stacktrace
+          APK=$(find build/outputs/apk/release -name '*-unsigned.apk' -print -quit)
+          test -n "$APK"
+          ENTRY=$(unzip -p "$APK" META-INF/xposed/java_init.list)
+          echo "Release Xposed entry: $ENTRY"
+          test "$ENTRY" = "com.hellovoid.liquiddock.ModuleMain"
+          for variant in debug release; do
+            MAP="build/outputs/mapping/$variant/mapping.txt"
+            test -f "$MAP"
+            echo "$variant mapping:"
+            grep -F 'com.hellovoid.liquiddock.ModuleMain -> com.hellovoid.liquiddock.ModuleMain:' "$MAP"
+          done
+          TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$TOOLS/zipalign" -f -p 4 "$APK" build/outputs/apk/release/LiquidDock-release-aligned.apk
+          "$TOOLS/apksigner" sign \
+            --ks signing/hellovoid-debug.keystore \
+            --ks-key-alias hellovoid-debug \
+            --ks-pass pass:hellovoid-debug \
+            --key-pass pass:hellovoid-debug \
+            --out build/outputs/apk/release/LiquidDock-release-debug-signed.apk \
+            build/outputs/apk/release/LiquidDock-release-aligned.apk
+          "$TOOLS/apksigner" verify --verbose build/outputs/apk/release/LiquidDock-release-debug-signed.apk
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
+        with:
+          name: LiquidDock-release-debug-key-r8-test
+          path: build/outputs/apk/release/LiquidDock-release-debug-signed.apk
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
+        with:
+          name: LiquidDock-r8-mapping
+          path: |
+            build/outputs/mapping/debug/mapping.txt
+            build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
           name: LiquidDock-api102-debug
