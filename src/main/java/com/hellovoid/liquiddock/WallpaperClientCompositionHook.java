@@ -32,7 +32,14 @@ final class WallpaperClientCompositionHook {
     /** Delayed one-time system Hook installation when the user enables this option. */
     static synchronized void initialize(SharedPreferences next, boolean initialEnabled) {
         if (preferences != null && listener != null) {
-            preferences.unregisterOnSharedPreferenceChangeListener(listener);
+            // A stale remote-preferences binder must not prevent the second
+            // system_server bootstrap from installing the requested hook.
+            try {
+                preferences.unregisterOnSharedPreferenceChangeListener(listener);
+            } catch (Throwable error) {
+                android.util.Log.w("LiquidDock-System",
+                        "previous wallpaper preferences listener unavailable", error);
+            }
         }
         preferences = next;
         liveEnabled = initialEnabled;
