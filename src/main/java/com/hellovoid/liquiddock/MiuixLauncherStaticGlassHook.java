@@ -410,7 +410,9 @@ final class MiuixLauncherStaticGlassHook {
             View root = rootRef.get();
             if (root == null) return;
             root.addOnAttachStateChangeListener(this);
-            observeLayout();
+            // A detached View has a floating ViewTreeObserver. Installing there
+            // can be merged into the real observer on attach and duplicate callbacks.
+            if (root.isAttachedToWindow()) observeLayout();
             schedule();
         }
 
