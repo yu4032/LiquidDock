@@ -1,17 +1,22 @@
 package com.hellovoid.liquiddock;
 
 import android.graphics.Color;
-import android.view.ViewParent;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.view.Display;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.view.ViewTreeObserver;
+import android.view.WindowManager;
 
 import java.lang.ref.WeakReference;
 
 /** Coordinates pre-show workspace capture and stable root-wide ShortcutMenu glass presentation. */
 final class ShortcutPopupGlassCoordinator {
     private static final String TAG = "[DC][ShortcutPopupGlass]";
+    private static final int FLOATING_DOCK_WINDOW_TYPE = 2997;
     private static State current;
     // HWUI Workspace normally needs no extra popup producer on a simple icon tap.
     // Begin warming only for a sustained hold, before the native long-press timeout.
@@ -157,13 +162,13 @@ final class ShortcutPopupGlassCoordinator {
         ShortcutPopupGlassLayer prepared = state.stagedLayer;
         View root = state.captureRootRef.get();
         if (prepared != null && root != null && prepared.hasCapturedHwuiBackdrop()) {
-            if (prepared.hasPreShowHwuiBackdrop(root.getWidth(), root.getHeight())) {
+            if (hasReadyBackdrop(state, prepared, root)) {
                 return false;
             }
             // A captured bitmap in the wrong logical domain will trigger GL fallback
             // only after the animation begins. Reject it BEFORE calling OEM show().
-            MainHook.log(TAG + " pre-show glass dimension mismatch launcher="
-                    + root.getWidth() + "x" + root.getHeight());
+            MainHook.log(TAG + " pre-show glass dimension mismatch output="
+                    + state.outputWidth(root) + "x" + state.outputHeight(root));
             releaseLocked("show-glass-bounds-mismatch");
             return false;
         }
@@ -216,8 +221,7 @@ final class ShortcutPopupGlassCoordinator {
         if (state == null || state.deferredShow == null || current != state
                 || state.released || state.stagedLayer == null) return;
         View root = state.captureRootRef.get();
-        if (root == null || !state.stagedLayer.hasPreShowHwuiBackdrop(
-                root.getWidth(), root.getHeight())) return;
+        if (root == null || !hasReadyBackdrop(state, state.stagedLayer, root)) return;
         Runnable resume = takeDeferredShow(state);
         if (resume == null) return;
         // onHwuiBackdropsReady is already on the main thread. Invoke immediately
@@ -296,6 +300,24 @@ final class ShortcutPopupGlassCoordinator {
                 && (state.requestStarted || state.contentRef.get() != null);
     }
 
+    private static boolean hasReadyBackdrop(State state, ShortcutPopupGlassLayer layer, View root) {
+        return layer.hasPreShowHwuiBackdrop(state.outputWidth(root), state.outputHeight(root));
+    }
+
+    private static Rect floatingDockPopupBounds(View root) {
+        if (!(root.getLayoutParams() instanceof WindowManager.LayoutParams params)) return null;
+        if (params.type != FLOATING_DOCK_WINDOW_TYPE
+                || !"Floating Dock".contentEquals(params.getTitle())) {
+            return null;
+        }
+        Display display = root.getDisplay();
+        if (display == null) return null;
+        // The vendor expands this separate window to the full display for a shortcut menu.
+        Point size = new Point();
+        display.getRealSize(size);
+        return size.x > 0 && size.y > 0 ? new Rect(0, 0, size.x, size.y) : null;
+    }
+
     private static void prepareInternal(
             View captureRoot,
             LiquidDockConfig.Glass glassConfig,
@@ -314,28 +336,29 @@ final class ShortcutPopupGlassCoordinator {
         // Capture the already-visible desktop scene. Hiding the shared Workspace glass
         // for a single popup screenshot produces a visible black/transparent flash. The
         // popup's own dedicated source overlay handles capture independently.
-        // The HWUI popup paints in Launcher coordinates. A fullscreen WindowManager
-        // panel may have different system-bar insets, causing logicalWidth/Height
-        // mismatch and a late TextureView fallback during the entrance.
-        ShortcutPopupSourceOverlay overlay = ShortcutPopupSourceOverlay.attachToLauncherBounds(
-                captureRoot,
-                new ShortcutPopupSourceOverlay.Listener() {
-                    @Override public void onAttached(ShortcutPopupSourceOverlay attached) {
-                        View root = state.captureRootRef.get();
-                        if (root == null) {
-                            startSession(state, attached);
-                        } else {
-                            // Let the overlay attach finish before PassBlur samples the
-                            // visible desktop, without toggling the Workspace output.
-                            root.postOnAnimation(() -> startSession(state, attached));
-                        }
-                    }
+        // Capture in the output window's logical coordinates. The floating Dock
+        // expands to the display bounds when the menu opens.
+        ShortcutPopupSourceOverlay.Listener sourceListener = new ShortcutPopupSourceOverlay.Listener() {
+            @Override public void onAttached(ShortcutPopupSourceOverlay attached) {
+                View root = state.captureRootRef.get();
+                if (root == null) {
+                    startSession(state, attached);
+                } else {
+                    // Let the overlay attach finish before PassBlur samples the scene.
+                    root.postOnAnimation(() -> startSession(state, attached));
+                }
+            }
 
-                    @Override public void onAttachFailed(Throwable error) {
-                        MainHook.log(TAG + " source overlay attach failed: " + error);
-                        release(state, "source-attach-failed");
-                    }
-                }, "LiquidDockShortcutBackdropSource");
+            @Override public void onAttachFailed(Throwable error) {
+                MainHook.log(TAG + " source overlay attach failed: " + error);
+                release(state, "source-attach-failed");
+            }
+        };
+        String title = "LiquidDockShortcutBackdropSource";
+        ShortcutPopupSourceOverlay overlay = state.floatingDockBounds == null
+                ? ShortcutPopupSourceOverlay.attachToLauncherBounds(captureRoot, sourceListener, title)
+                : ShortcutPopupSourceOverlay.attachToBounds(
+                        captureRoot, state.floatingDockBounds, sourceListener, title);
         state.sourceOverlay = overlay;
         if (overlay == null) releaseLocked("source-overlay-unavailable");
     }
@@ -421,11 +444,10 @@ final class ShortcutPopupGlassCoordinator {
             View captureRoot = state.captureRootRef.get();
             if (state.deferredShow != null && state.stagedLayer != null
                     && captureRoot != null
-                    && !state.stagedLayer.hasPreShowHwuiBackdrop(
-                            captureRoot.getWidth(), captureRoot.getHeight())) {
+                    && !hasReadyBackdrop(state, state.stagedLayer, captureRoot)) {
                 MainHook.log(TAG + " pre-show output bounds mismatch source="
-                        + width + "x" + height + " launcher="
-                        + captureRoot.getWidth() + "x" + captureRoot.getHeight());
+                        + width + "x" + height + " output="
+                        + state.outputWidth(captureRoot) + "x" + state.outputHeight(captureRoot));
                 releaseLocked("show-glass-bounds-mismatch");
             } else {
                 resumeDeferredShowWithGlass(state);
@@ -574,6 +596,11 @@ final class ShortcutPopupGlassCoordinator {
         if (decor == null || content == null || session == null || decor.getWidth() <= 0
                 || decor.getHeight() <= 0 || !content.isAttachedToWindow()) return;
         if (content.getWidth() <= 0 || content.getHeight() <= 0) return;
+        Rect dockBounds = state.floatingDockBounds;
+        if (dockBounds != null
+                && (decor.getWidth() != dockBounds.width() || decor.getHeight() != dockBounds.height())) {
+            return;
+        }
 
         // ShortcutMenuPosition defines the layout-space frame. MiuiX then applies the material
         // host's local Matrix (pivot/scale) before composition. Reconstruct that visual frame in
@@ -788,6 +815,7 @@ final class ShortcutPopupGlassCoordinator {
         LiquidDockConfig.Glass glassConfig;
         final boolean early;
         final boolean dockEarly;
+        final Rect floatingDockBounds;
         final Class<?> earlyAuthorityClass;
         final WeakReference<View> earlyOwnerRef;
         WeakReference<View> popupDecorRef = new WeakReference<>(null);
@@ -823,8 +851,17 @@ final class ShortcutPopupGlassCoordinator {
             this.glassConfig = glassConfig;
             this.early = early;
             this.dockEarly = earlyOwner != null;
+            floatingDockBounds = floatingDockPopupBounds(captureRoot);
             this.earlyAuthorityClass = earlyOwner != null ? earlyOwner.getClass() : null;
             earlyOwnerRef = new WeakReference<>(earlyOwner);
+        }
+
+        int outputWidth(View root) {
+            return floatingDockBounds == null ? root.getWidth() : floatingDockBounds.width();
+        }
+
+        int outputHeight(View root) {
+            return floatingDockBounds == null ? root.getHeight() : floatingDockBounds.height();
         }
     }
 }
