@@ -5,8 +5,7 @@ import android.os.Bundle;
 import android.view.View;
 
 import java.lang.reflect.Method;
-import java.util.Collections;
-import java.util.Set;
+import java.util.Map;
 import java.util.WeakHashMap;
 
 /** Keeps picker compatibility separate from the workspace footprint of an enlarged widget. */
@@ -37,13 +36,13 @@ final class LauncherWidgetReplacementHook {
             Method findMaml = method(handler, "findMaMlByWidgetId", launcher, int.class);
             Method findAppWidget = method(handler, "findWidgetByWidgetId", launcher, int.class);
             Method providerWidgetId = method(provider, "getAppWidgetId");
-            Set<Object> expandedReplacements = Collections.newSetFromMap(new WeakHashMap<>());
+            Map<Object, String> expandedReplacements = new WeakHashMap<>();
 
             HookUtil.hook(open, chain -> {
                 Object logicalInfo;
                 try {
                     Object current = chain.getArg(1);
-                    logicalInfo = isExpandedWidget(current) ? cloneItem.invoke(current) : null;
+                    logicalInfo = expandedIdentity(current) != null ? cloneItem.invoke(current) : null;
                     if (logicalInfo != null) {
                         HookUtil.setIntField(logicalInfo, "spanX", 1);
                         HookUtil.setIntField(logicalInfo, "spanY", 1);
@@ -60,6 +59,7 @@ final class LauncherWidgetReplacementHook {
                 Object owner = chain.getArg(0);
                 Bundle selection = (Bundle) chain.getArg(1);
                 Object original = null;
+                String identity = null;
                 Method find = null;
                 int id = -1;
                 try {
@@ -71,7 +71,8 @@ final class LauncherWidgetReplacementHook {
                                 : type == APP_WIDGET ? findAppWidget : null;
                         if (find != null && id >= 0) {
                             Object candidate = find.invoke(null, owner, id);
-                            if (isExpandedWidget(candidate)) original = candidate;
+                            identity = expandedIdentity(candidate);
+                            if (identity != null) original = candidate;
                         }
                     }
                 } catch (ReflectiveOperationException | RuntimeException error) {
@@ -89,7 +90,7 @@ final class LauncherWidgetReplacementHook {
                 Object result = chain.proceed(new Object[]{owner, placement});
                 try {
                     // Launcher removes the old item before posting the add callback.
-                    if (find.invoke(null, owner, id) == null) expandedReplacements.add(original);
+                    if (find.invoke(null, owner, id) == null) expandedReplacements.put(original, identity);
                 } catch (ReflectiveOperationException | RuntimeException error) {
                     MainHook.log(TAG + " could not track replacement: " + error);
                 }
@@ -98,7 +99,8 @@ final class LauncherWidgetReplacementHook {
 
             HookUtil.hook(apply, chain -> {
                 Object previous = chain.getArg(1);
-                if (!expandedReplacements.remove(previous)) return chain.proceed();
+                String previousIdentity = expandedReplacements.remove(previous);
+                if (previousIdentity == null) return chain.proceed();
                 Object incoming = chain.getArg(2);
                 Object owner = chain.getArg(3);
                 // The provider branch creates a new model object and clears the provider's id.
@@ -112,7 +114,7 @@ final class LauncherWidgetReplacementHook {
                 }
                 Object result = chain.proceed();
                 try {
-                    LauncherWidgetProportionalResizeHook.clearExpanded((Context) owner, previous);
+                    LauncherWidgetProportionalResizeHook.clearExpanded((Context) owner, previous, previousIdentity);
                     Object replacement = id >= 0 ? findAppWidget.invoke(null, owner, id) : incoming;
                     if (LauncherWidgetProportionalResizeHook.isExpanded(replacement)) {
                         Object host = HookUtil.getField(replacement, "hostView");
@@ -136,13 +138,13 @@ final class LauncherWidgetReplacementHook {
         }
     }
 
-    private static boolean isExpandedWidget(Object info) throws ReflectiveOperationException {
-        if (!LauncherWidgetProportionalResizeHook.isExpanded(info)) return false;
+    private static String expandedIdentity(Object info) throws ReflectiveOperationException {
+        if (!LauncherWidgetProportionalResizeHook.isExpanded(info)) return null;
         Object host = HookUtil.getField(info, "hostView");
-        if (!(host instanceof View)) return false;
+        if (!(host instanceof View)) return null;
         View wrapper = (View) host;
-        return LauncherWidgetProportionalResizeHook.isMarked(wrapper, info,
-                LauncherWidgetProportionalResizeHook.widgetIdentity(wrapper, info));
+        String identity = LauncherWidgetProportionalResizeHook.widgetIdentity(wrapper, info);
+        return LauncherWidgetProportionalResizeHook.isMarked(wrapper, info, identity) ? identity : null;
     }
 
     private static void preserveConfigSpan(Bundle placement, String key) {

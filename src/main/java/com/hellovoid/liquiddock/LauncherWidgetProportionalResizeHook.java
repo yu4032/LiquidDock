@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.appwidget.AppWidgetHostView;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Matrix;
 import android.view.MotionEvent;
 import android.view.View;
@@ -19,6 +20,7 @@ import java.util.WeakHashMap;
 final class LauncherWidgetProportionalResizeHook {
     private static final String TAG = "[DC][Widget2x2]";
     private static final String PREFIX = "widget_scale_";
+    private static final String INSTANCE_PREFIX = "widget_scale_instance:";
     private static final String PREFS = "liquiddock_widget_scale";
 
     private static final WeakHashMap<View, Boolean> OBSERVED = new WeakHashMap<>();
@@ -29,6 +31,7 @@ final class LauncherWidgetProportionalResizeHook {
     private static Class<?> mamlInfoClass;
     private static Method getMamlHostView;
     private static Method getMamlProduct;
+    private static Method mapNativeMamlSpan;
     private static Method setMamlScale;
     private static Method setMamlTranslate;
     private static Field mamlRoot;
@@ -39,6 +42,7 @@ final class LauncherWidgetProportionalResizeHook {
     private static final WeakHashMap<View, MamlPresentation> MAML_PRESENTATIONS =
             new WeakHashMap<>();
     private static Method getAppWidgetInfo;
+    private static Method getAppWidgetId;
     private static Method getCellWidth;
     private static Method getCellHeight;
     private static boolean installed;
@@ -55,6 +59,9 @@ final class LauncherWidgetProportionalResizeHook {
             getHostView = HookUtil.findMethodExact(widgetViewClass, "getHostView", new Class<?>[0]);
             getAppWidgetInfo = HookUtil.findMethodExact(
                     widgetViewClass, "getAppWidgetInfo", new Class<?>[0]);
+            Class<?> appWidgetInfo = Class.forName(
+                    "com.miui.home.launcher.LauncherAppWidgetInfo", false, loader);
+            getAppWidgetId = HookUtil.findMethodExact(appWidgetInfo, "getAppWidgetId", new Class<?>[0]);
             getCellWidth = HookUtil.findMethodExact(cellLayoutClass, "getCellWidth", new Class<?>[0]);
             getCellHeight = HookUtil.findMethodExact(cellLayoutClass, "getCellHeight", new Class<?>[0]);
 
@@ -97,6 +104,13 @@ final class LauncherWidgetProportionalResizeHook {
             Class<?> host = Class.forName(base + "maml.MaMlHostView", false, loader);
             getMamlHostView = HookUtil.findMethodExact(widget, "getHostView", new Class<?>[0]);
             getMamlProduct = HookUtil.findMethodExact(info, "getProductId", new Class<?>[0]);
+            try {
+                Class<?> device = Class.forName(base + "DeviceConfig", false, loader);
+                mapNativeMamlSpan = HookUtil.findMethodExact(device, "mapFromResSizeToDisplaySize",
+                        new Class<?>[]{int.class, int.class, boolean.class});
+            } catch (ReflectiveOperationException error) {
+                MainHook.log(TAG + " native MAML span recovery unavailable: " + error);
+            }
             Class<?> mamlView = host.getSuperclass();
             setMamlScale = HookUtil.findMethodExact(mamlView, "setScale",
                     new Class<?>[]{float.class, int.class, int.class});
@@ -185,22 +199,27 @@ final class LauncherWidgetProportionalResizeHook {
     }
 
     static void setExpanded(View wrapper, Object info, String identity, boolean expanded) {
-        String key = markerKey(info);
-        if (key == null) return;
         if (expanded) {
+            String instanceKey = instanceKey(info, identity);
+            if (instanceKey == null) return;
             wrapper.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .edit().putString(key, identity).apply();
+                    .edit().putBoolean(instanceKey, true).apply();
             observeIfMarked(wrapper);
         } else {
-            clearExpanded(wrapper.getContext(), info);
+            clearExpanded(wrapper.getContext(), info, identity);
         }
     }
 
-    static void clearExpanded(Context context, Object info) {
-        String key = markerKey(info);
-        if (key != null) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(key).apply();
+    static void clearExpanded(Context context, Object info, String identity) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        String instanceKey = instanceKey(info, identity);
+        if (instanceKey != null) editor.remove(instanceKey);
+        String legacyKey = legacyKey(info);
+        if (legacyKey != null && identity != null && identity.equals(prefs.getString(legacyKey, null))) {
+            editor.remove(legacyKey);
         }
+        editor.apply();
     }
 
     private static View ancestor(View view, Class<?> clazz) {
@@ -212,7 +231,7 @@ final class LauncherWidgetProportionalResizeHook {
         return null;
     }
 
-    private static String markerKey(Object info) {
+    private static String legacyKey(Object info) {
         try {
             long id = HookUtil.getLongField(info, "id");
             return id >= 0 ? PREFIX + id : null;
@@ -231,9 +250,52 @@ final class LauncherWidgetProportionalResizeHook {
     }
 
     static boolean isMarked(View wrapper, Object info, String identity) {
-        String key = markerKey(info);
-        return key != null && identity != null && identity.equals(wrapper.getContext()
-                .getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, null));
+        String instanceKey = instanceKey(info, identity);
+        if (instanceKey == null) return false;
+        SharedPreferences prefs = wrapper.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (prefs.getBoolean(instanceKey, false)) return true;
+
+        String legacyKey = legacyKey(info);
+        boolean legacyMatches = legacyKey != null && identity.equals(prefs.getString(legacyKey, null));
+        if (!legacyMatches && !isRecoverableMaml(info)) return false;
+
+        SharedPreferences.Editor editor = prefs.edit().putBoolean(instanceKey, true);
+        if (legacyMatches) editor.remove(legacyKey);
+        editor.apply();
+        return true;
+    }
+
+    private static String instanceKey(Object info, String identity) {
+        if (identity == null || info == null) return null;
+        if (mamlInfoClass != null && mamlInfoClass.isInstance(info)) {
+            return INSTANCE_PREFIX + identity;
+        }
+        try {
+            int widgetId = (Integer) getAppWidgetId.invoke(info);
+            return widgetId >= 0 ? INSTANCE_PREFIX + identity + ":" + widgetId : null;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            return null;
+        }
+    }
+
+    private static boolean isRecoverableMaml(Object info) {
+        if (mapNativeMamlSpan == null || mamlInfoClass == null || !mamlInfoClass.isInstance(info)
+                || !isExpanded(info) || HookUtil.getLongField(info, "container") != -100L) {
+            return false;
+        }
+        try {
+            int configX = HookUtil.getIntField(info, "configSpanX");
+            int configY = HookUtil.getIntField(info, "configSpanY");
+            if (configX <= 0 || configY <= 0) return false;
+            // Launcher stores the provider's resource span separately from its occupied span.
+            // Its mapping lets us recover older expansions whose row-based marker was lost.
+            Object nativeSpan = mapNativeMamlSpan.invoke(null, configX, configY, true);
+            if (!(nativeSpan instanceof android.util.Pair<?, ?>)) return false;
+            android.util.Pair<?, ?> pair = (android.util.Pair<?, ?>) nativeSpan;
+            return Integer.valueOf(1).equals(pair.first) && Integer.valueOf(1).equals(pair.second);
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            return false;
+        }
     }
 
     private static View hostView(View wrapper) {
