@@ -23,6 +23,8 @@ final class MiuixLauncherStaticGlassHook {
     private static final int MAX_BIND_ATTEMPTS = 8;
     private static final Map<View, View.OnAttachStateChangeListener> BOOTSTRAP_OBSERVERS =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, View.OnLayoutChangeListener> PENDING_HOST_SIZE =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static boolean installed;
     private static LiquidDockConfig.Glass installedGlassConfig;
 
@@ -622,6 +624,7 @@ final class MiuixLauncherStaticGlassHook {
                     }
                 }
                 @Override public void onViewDetachedFromWindow(View v) {
+                    clearPendingHostSize(v);
                     DockGlassItemRegistry.unregister(v);
                     // Preserve the Workspace static node across transient page cache detach.
                     // The node's own attach listener handles session unregister/re-register.
@@ -653,9 +656,16 @@ final class MiuixLauncherStaticGlassHook {
         }
         if (!GlassRuntimeState.isEnabled() || !host.isAttachedToWindow()) return;
         if (host.getWidth() <= 0 || host.getHeight() <= 0) {
-            host.postOnAnimation(() -> scheduleBind(host, kind, glassConfig, attempt + 1));
+            if (attempt < MAX_BIND_ATTEMPTS) {
+                host.postOnAnimation(() -> scheduleBind(host, kind, glassConfig, attempt + 1));
+            } else {
+                // During cold boot a widget may not be measured within eight frames.
+                // A final layout event must still be able to start its first glass bind.
+                awaitHostSize(host, kind, glassConfig);
+            }
             return;
         }
+        clearPendingHostSize(host);
         LauncherGlassHierarchy.Domain domain = LauncherGlassHierarchy.classify(host);
         LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
         if (kind == LauncherGlassDragState.Kind.ICON
@@ -705,6 +715,24 @@ final class MiuixLauncherStaticGlassHook {
             // Exact whiten overrides the optional generic dark-neutral text pass.
             LauncherWidgetWhiteningExecutor.claim(host);
         }
+    }
+
+    private static void awaitHostSize(
+            View host, LauncherGlassDragState.Kind kind, LiquidDockConfig.Glass glassConfig) {
+        if (PENDING_HOST_SIZE.containsKey(host)) return;
+        View.OnLayoutChangeListener listener = (view, left, top, right, bottom,
+                oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (view.getWidth() <= 0 || view.getHeight() <= 0) return;
+            clearPendingHostSize(view);
+            scheduleBind(view, kind, glassConfig, 0);
+        };
+        PENDING_HOST_SIZE.put(host, listener);
+        host.addOnLayoutChangeListener(listener);
+    }
+
+    private static void clearPendingHostSize(View host) {
+        View.OnLayoutChangeListener listener = PENDING_HOST_SIZE.remove(host);
+        if (listener != null) host.removeOnLayoutChangeListener(listener);
     }
 
     private static boolean isIconHostEligible(View host) {
