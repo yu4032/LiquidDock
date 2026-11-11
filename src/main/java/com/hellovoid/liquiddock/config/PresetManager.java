@@ -140,6 +140,7 @@ public final class PresetManager {
     private static Map<String, Object> createDefaultValues() {
         Map<String, Object> source = new LinkedHashMap<>();
         source.put("liquiddock_enabled", Boolean.TRUE);
+        source.put(ConfigSchema.Grid.NATIVE_HOOK_SAFETY.name(), Boolean.FALSE);
         source.put("animation_workspace_visibility_ms", 0);
         source.put(ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name(), Boolean.TRUE);
         source.put(ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name(), Boolean.TRUE);
@@ -353,8 +354,14 @@ public final class PresetManager {
         source.put("third_party_glass.systemui.lockscreen_clock.enabled", Boolean.FALSE);
         source.put("third_party_glass.systemui.lockscreen_clock.blur", 3.3722174d);
         source.put("third_party_glass.systemui.lockscreen_clock.tint_b", 239);
-        Map<String, Object> values = ConfigCodec.importValues(source);
+        Map<String, Object> values = new LinkedHashMap<>(ConfigCodec.importValues(source));
         values.put(ConfigSchema.Debug.LOGGING.name(), Boolean.FALSE);
+        // Every ALWAYS key must have a persisted default, including keys added by
+        // newer features; the profile is the export baseline for backup/restore.
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            if (key.exportMode() != ConfigKey.ExportMode.ALWAYS) continue;
+            if (!values.containsKey(key.name())) values.put(key.name(), key.uiDefault());
+        }
         return Collections.unmodifiableMap(values);
     }
 

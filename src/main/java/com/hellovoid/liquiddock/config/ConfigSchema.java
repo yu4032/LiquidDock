@@ -272,7 +272,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> BACKLIT_EXTENT = integer(
                 "liquid_backlit_extent", 100, 100, 100, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(
-                "liquid_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+                "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SOFT_GLASS_ENABLED = bool(
                 "liquid_soft_glass_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(

@@ -84,7 +84,9 @@ void ld_blog(const char *fmt, ...)
     (void)write(fd, line, (size_t)n);
 }
 
-LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
+/* Macro order is (columns, rows): the launcher's x0 receives the column count
+ * and x2 the row count. Passing them inverted swapped landscape/portrait. */
+LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
                      g_orig_pad_counts, g_pad_pool, g_pad_trace)
 #include "layout_runtime.h"
 #include "layout_profiles.h"

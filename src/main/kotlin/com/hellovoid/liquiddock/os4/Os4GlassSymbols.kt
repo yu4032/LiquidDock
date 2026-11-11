@@ -211,8 +211,8 @@ internal object Os4GlassSymbols {
         val allTargets = found + probes + listOfNotNull(passBlur) + renderGates
         if (!renderGatesComplete || renderGates.size != renderGateNames.size ||
             allTargets.map { pair -> pair.first }.distinct().size != allTargets.size)
-            return result + "||"
-        return result + "|" + format(renderGates)
+            return (result + "||").trimEnd('|')
+        return (result + "|" + format(renderGates)).trimEnd('|')
     }
 
     private class Elf64(private val data: ByteArray) {

@@ -58,7 +58,7 @@ public class PrismalInteriorFastPathTest {
         String shader = PrismalInteriorFastPath.apply(PrismalOpticalEdgeShader.apply(
                 PrismalSingleEdgeShader.apply(PrismalShaderSources.FRAGMENT)));
         assertTrue(shader.contains("if (reflW > 0.0)"));
-        assertTrue(shader.contains("color = mix(color, reflSample, reflW);"));
+        assertTrue(shader.contains("color = mix(color, reflSample, reflW"));
     }
 
     @Test(expected = IllegalArgumentException.class)

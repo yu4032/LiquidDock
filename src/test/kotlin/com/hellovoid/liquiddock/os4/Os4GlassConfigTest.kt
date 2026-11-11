@@ -14,7 +14,7 @@ class Os4GlassConfigTest {
             ConfigSchema.Glass.WIDGET_GLASS.name() to false,
         ))
         assertEquals(
-            "icon_size_enabled=0\nglass_enabled=1\nicon_size_percent=100\nend=1\n",
+            "hook_safety_enabled=0\nicon_size_enabled=0\nglass_enabled=1\nicon_size_percent=100\nend=1\n",
             result,
         )
     }
@@ -24,7 +24,7 @@ class Os4GlassConfigTest {
             ConfigSchema.Dock.ENABLED.name() to false,
         ))
         assertEquals(
-            "icon_size_enabled=0\nglass_enabled=1\nglass_icons=1\n" +
+            "hook_safety_enabled=0\nicon_size_enabled=0\nglass_enabled=1\nglass_icons=1\n" +
                 "glass_icon_size=0.0\nglass_icon_corner=0.0\nglass_widgets=1\n" +
                 "icon_size_percent=100\nend=1\n",
             result,
