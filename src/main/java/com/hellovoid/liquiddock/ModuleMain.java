@@ -2,8 +2,12 @@ package com.hellovoid.liquiddock;
 
 import androidx.annotation.NonNull;
 
+import android.content.pm.ApplicationInfo;
+import android.os.Build;
+
 import com.hellovoid.liquiddock.config.ConfigSchema;
 import com.hellovoid.liquiddock.config.PresetManager;
+import com.hellovoid.liquiddock.os4.Os4LauncherIdentityPolicy;
 
 import android.content.SharedPreferences;
 
@@ -27,6 +31,7 @@ public final class ModuleMain extends XposedModule {
         if ("system".equals(loadedProcessName)) {
             // Acquiring a wallpaper listener or renderer makes this process non-reloadable.
             if (!reloadGate.enterOwnerLifecycle()) return;
+            RustSpawnerCompatHook.install();
             try {
                 ConfigReader config = ConfigReader.load();
                 boolean enabled = config.b(
@@ -176,6 +181,11 @@ public final class ModuleMain extends XposedModule {
             return;
         }
         if (!LAUNCHER_PACKAGE.equals(packageName)) return;
+        if (shouldBlockLegacyLauncherBackend(param)) {
+            // The fuxi OS4 Launcher runs in hyos_spawner without ART. Java Activity hooks
+            // cannot implement its rotation lifecycle; OS4 layout work belongs in native_init.
+            return;
+        }
         try {
             initializeCurrentProfileIfEmpty();
             ClassLoader classLoader = param.getClassLoader();
@@ -252,6 +262,21 @@ public final class ModuleMain extends XposedModule {
         } catch (Throwable error) {
             Api101Bridge.errorAlways("[DC] API102 package init failed", error);
         }
+    }
+
+    /** OS4's AOT Launcher has no dex classes, so skip the legacy Java hooks. */
+    private static boolean shouldBlockLegacyLauncherBackend(PackageReadyParam param) {
+        ApplicationInfo info = param.getApplicationInfo();
+        if (info == null) {
+            Api101Bridge.log("[DC][OS4] legacy Java backend disabled unknown metadata");
+            return true;
+        }
+        boolean hasCode = (info.flags & ApplicationInfo.FLAG_HAS_CODE) != 0;
+        if (!Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(hasCode)) {
+            return false;
+        }
+        Api101Bridge.log("[DC][OS4] legacy Java backend disabled for AOT Launcher");
+        return true;
     }
 
     /** First-install initialization, never reinterpretation of prior persisted keys. */

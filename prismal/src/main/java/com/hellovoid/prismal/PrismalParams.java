@@ -28,6 +28,7 @@ public final class PrismalParams {
     public final float os4DirectionalAngleRange;
     public final float os4DirectionalIntensity;
     public final float os4DirectionalOppositeIntensity;
+    public final float os4Darker;
     public final float lightDirX;
     public final float lightDirY;
     public final float specular;
@@ -54,6 +55,8 @@ public final class PrismalParams {
     public final float glowCenterX;
     public final float glowCenterY;
     public final float glowStrength;
+    public final boolean softGlassMode;
+    public final PrismalSoftGlassProfile softGlassProfile;
     public final boolean showNormals;
     public final boolean continuousCorners;
 
@@ -85,6 +88,7 @@ public final class PrismalParams {
         os4DirectionalAngleRange = b.os4DirectionalAngleRange;
         os4DirectionalIntensity = b.os4DirectionalIntensity;
         os4DirectionalOppositeIntensity = b.os4DirectionalOppositeIntensity;
+        os4Darker = b.os4Darker;
         lightDirX = b.lightDirX;
         lightDirY = b.lightDirY;
         specular = b.specular;
@@ -114,6 +118,9 @@ public final class PrismalParams {
         glowCenterX = b.glowCenterX;
         glowCenterY = b.glowCenterY;
         glowStrength = b.glowStrength;
+        softGlassMode = b.softGlassMode;
+        softGlassProfile = b.softGlassProfile != null
+                ? b.softGlassProfile : PrismalSoftGlassProfile.DEFAULT;
         showNormals = b.showNormals;
     }
 
@@ -150,6 +157,7 @@ public final class PrismalParams {
         public float os4DirectionalAngleRange = 0.52f;
         public float os4DirectionalIntensity = 0.42f;
         public float os4DirectionalOppositeIntensity = 0.14f;
+        public float os4Darker;
         public float lightDirX = -0.5f;
         public float lightDirY = -0.8f;
         public float specular = 0.8f;
@@ -176,6 +184,8 @@ public final class PrismalParams {
         public float glowCenterX = 0.5f;
         public float glowCenterY = 0.5f;
         public float glowStrength = 1f;
+        public boolean softGlassMode;
+        public PrismalSoftGlassProfile softGlassProfile = PrismalSoftGlassProfile.DEFAULT;
         public boolean showNormals;
 
         public Builder() {}
@@ -209,6 +219,7 @@ public final class PrismalParams {
             os4DirectionalAngleRange = source.os4DirectionalAngleRange;
             os4DirectionalIntensity = source.os4DirectionalIntensity;
             os4DirectionalOppositeIntensity = source.os4DirectionalOppositeIntensity;
+            os4Darker = source.os4Darker;
             lightDirX = source.lightDirX;
             lightDirY = source.lightDirY;
             specular = source.specular;
@@ -238,6 +249,8 @@ public final class PrismalParams {
             glowCenterX = source.glowCenterX;
             glowCenterY = source.glowCenterY;
             glowStrength = source.glowStrength;
+            softGlassMode = source.softGlassMode;
+            softGlassProfile = source.softGlassProfile;
             showNormals = source.showNormals;
         }
 

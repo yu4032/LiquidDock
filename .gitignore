@@ -1,6 +1,8 @@
 .gradle/
 build/
 local.properties
+__pycache__/
+*.pyc
 *.apk
 *.aab
 *.jks
@@ -19,3 +21,6 @@ keystore.properties
 # Hermes desktop attachments
 .hermes/
 .worktrees/
+
+# Standalone OS4 build products
+os4/out/

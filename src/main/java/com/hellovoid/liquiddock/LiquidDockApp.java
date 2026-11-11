@@ -29,6 +29,7 @@ public final class LiquidDockApp extends Application
         localPreferences = PreferenceManager.getDefaultSharedPreferences(this);
         ensureWidgetDiscoveryToken();
         localPreferences.registerOnSharedPreferenceChangeListener(this);
+        com.hellovoid.liquiddock.os4.Os4ConfigSync.install(this);
         XposedServiceHelper.registerListener(this);
     }
 
@@ -61,6 +62,11 @@ public final class LiquidDockApp extends Application
             syncKeyToRemote(key, sharedPreferences);
         } catch (Throwable error) {
             Log.w("LiquidDock", "Remote Preferences sync failed for " + key, error);
+        }
+        try {
+            com.hellovoid.liquiddock.os4.Os4ConfigSync.onPreferenceChanged(this, key);
+        } catch (Throwable error) {
+            Log.w("LiquidDock", "OS4 grid config sync failed for " + key, error);
         }
     }
 

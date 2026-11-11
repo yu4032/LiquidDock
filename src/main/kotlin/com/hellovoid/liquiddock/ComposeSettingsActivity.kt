@@ -74,7 +74,11 @@ class ComposeSettingsActivity : SettingsActivity() {
                 preferences.registerOnSharedPreferenceChangeListener(listener)
                 onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
             }
-            CompositionLocalProvider(LocalSettingsPreferenceRevisions provides revisions) {
+            val availability = remember { SettingsAvailability.detect(this) }
+            CompositionLocalProvider(
+                LocalSettingsPreferenceRevisions provides revisions,
+                LocalSettingsAvailability provides availability,
+            ) {
                 SettingsUiColorTheme(controller = controller, palette = palette) {
                     LiquidDockSettings(
                         activity = this,
@@ -116,9 +120,12 @@ private fun LiquidDockSettings(
             ),
         )
     }
+    val availability = LocalSettingsAvailability.current
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var navigationStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
-    val root = isRootPage(page)
+    // Saved navigation from another Launcher build must never expose unsupported controls.
+    val visiblePage = if (availability.allows(page)) page else Page.Home
+    val root = isRootPage(visiblePage)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     val declaredPages = remember(activity) { declaredSettingsPages(activity::getString) }
@@ -136,7 +143,7 @@ private fun LiquidDockSettings(
         searchQuery = ""
         searchOpen = true
     }
-    val selectedRootIndex = ROOT_PAGES.indexOf(page).coerceAtLeast(0)
+    val selectedRootIndex = ROOT_PAGES.indexOf(visiblePage).coerceAtLeast(0)
     val rootIcons = listOf(
         MiuixIcons.Home,
         MiuixIcons.GridView,
@@ -157,20 +164,23 @@ private fun LiquidDockSettings(
 
     fun navigateTo(target: Page) {
         searchFocusKey = null
-        if (target == page) return
-        navigationStack = ArrayList(navigationStack).apply { add(page.name) }
+        if (!availability.allows(target) || target == visiblePage) return
+        navigationStack = ArrayList(navigationStack).apply { add(visiblePage.name) }
         page = target
     }
 
     fun navigateBack() {
         searchFocusKey = null
-        val previous = navigationStack.lastOrNull()
-            ?.let { runCatching { Page.valueOf(it) }.getOrNull() }
-        navigationStack = ArrayList(navigationStack.dropLast(1))
-        page = previous ?: Page.Home
+        val index = navigationStack.indexOfLast { name ->
+            runCatching { availability.allows(Page.valueOf(name)) }.getOrDefault(false)
+        }
+        val previous = if (index >= 0) Page.valueOf(navigationStack[index]) else Page.Home
+        navigationStack = ArrayList(navigationStack.take(index.coerceAtLeast(0)))
+        page = previous
     }
 
     fun selectRoot(target: Page) {
+        if (!availability.allows(target)) return
         searchFocusKey = null
         navigationStack = arrayListOf()
         page = target
@@ -198,7 +208,9 @@ private fun LiquidDockSettings(
     }
 
     ModernSettingsScaffold(
-        title = if (searchOpen) "搜索设置" else declaredPages[page]?.title ?: stringResource(page.titleRes),
+        title = if (searchOpen) "搜索设置" else (declaredPages[visiblePage]?.title
+            ?: stringResource(visiblePage.titleRes)) +
+            if (availability.status(visiblePage) == PagePortState.TESTING) " · 实验中" else "",
         glassEnabled = uiGlassEnabled,
         showBack = searchOpen || !root,
         backLabel = stringResource(R.string.action_back),
@@ -207,7 +219,7 @@ private fun LiquidDockSettings(
             if (!searchOpen) ModernTopActionButton(
                 text = stringResource(R.string.action_restart_scopes),
                 onClick = {
-                    selectedRestartScopes = when (page) {
+                    selectedRestartScopes = when (visiblePage) {
                         Page.Gboard -> setOf("com.google.android.inputmethod.latin")
                         Page.SecurityCenterSidebar,
                         Page.SidebarEdge,
@@ -314,7 +326,7 @@ private fun LiquidDockSettings(
                 )
             } else {
                 AnimatedContent(
-                    targetState = page,
+                    targetState = visiblePage,
                     modifier = Modifier.fillMaxSize().then(
                         // Only the four bottom-navigation root pages may reveal search.
                         // Keep nested-scroll entirely off subpages, not merely disabled.
@@ -504,6 +516,7 @@ private fun HomePage(
     onMasterChanged: (Boolean) -> Unit,
     open: (Page) -> Unit,
 ) {
+    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -523,6 +536,11 @@ private fun HomePage(
                 ) { onMasterChanged(it) }
             }
         }
+        if (os4Launcher) {
+            item {
+                PageHeader("", "HyperOS 4：部分功能已完成移植，具体支持项见各页面说明。实验中页面用于真机验证；尚未开展的页面置灰。")
+            }
+        }
         item { ModernSectionLabel("快捷入口") }
         overviewEntries.forEach { entry ->
             item {
@@ -531,6 +549,7 @@ private fun HomePage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }
@@ -539,12 +558,15 @@ private fun HomePage(
                 modifier = Modifier.padding(start = 14.dp, top = 4.dp, end = 14.dp),
             ) {
                 Text(
-                    text = if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
+                    text = if (os4Launcher) "LiquidDock4 开发模式" else
+                        if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = if (masterEnabled) {
+                    text = if (os4Launcher) {
+                        "实验页面仅供测试配置界面，尚不代表 OS4 功能生效；其他应用的独立 Hook 保持原有逻辑。"
+                    } else if (masterEnabled) {
                         "可即时生效的外观设置会立即更新；需要重启的项目会在说明中明确标注。"
                     } else {
                         "LiquidDock 已暂停，已保存的设置不会丢失。"
@@ -580,6 +602,7 @@ internal fun HubPage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }
@@ -619,6 +642,7 @@ private fun MoreHubPage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }

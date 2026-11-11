@@ -79,6 +79,7 @@ android {
 
 dependencies {
     implementation(project(":prismal"))
+    implementation("org.tukaani:xz:1.12") // XZ mini-debug ELF, module app only
 
     // API 102 is supplied by the framework in injected processes; no API classes in the APK.
     compileOnly("io.github.libxposed:api:102.0.0")

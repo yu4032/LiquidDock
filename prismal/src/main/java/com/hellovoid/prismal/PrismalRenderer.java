@@ -187,6 +187,11 @@ public final class PrismalRenderer implements AutoCloseable {
     private int blurFramebufferH;
     private int blurTextureV;
     private int blurFramebufferV;
+    // Allocated only after a soft-glass frame needs OS4's separate uBgColorTex blur.
+    private int softBackgroundBlurTexture;
+    private int softBackgroundBlurFramebuffer;
+    private int softBackgroundBlurWidth;
+    private int softBackgroundBlurHeight;
     private int outputTexture;
     private int outputFramebuffer;
     private int reducedOutputTexture;
@@ -288,7 +293,12 @@ public final class PrismalRenderer implements AutoCloseable {
         width = logicalFramebufferWidth;
         height = logicalFramebufferHeight;
         renderSourceAdapter(backgroundTexture2D);
-        renderBlur(params, blurFramebufferV);
+        renderBlur(params.blurRadiusPx, blurFramebufferV);
+        if (params.softGlassMode) {
+            ensureSoftBackgroundBlurTarget();
+            renderBlur(params.softGlassProfile.backgroundBlurRadiusPx,
+                    softBackgroundBlurFramebuffer);
+        }
         backdropPrepared = true;
         glassFrameBegun = false;
         glassDrawCount = 0;
@@ -329,7 +339,12 @@ public final class PrismalRenderer implements AutoCloseable {
         PrismalParams effective = params != null ? params : PrismalParams.builder().build();
         float requestedSigma = blurSigma(effective);
         if (PrismalBlurReusePolicy.needsReblur(cachedBlurSigma, requestedSigma)) {
-            renderBlur(effective, blurFramebufferV);
+            renderBlur(effective.blurRadiusPx, blurFramebufferV);
+        }
+        if (effective.softGlassMode) {
+            ensureSoftBackgroundBlurTarget();
+            renderBlur(effective.softGlassProfile.backgroundBlurRadiusPx,
+                    softBackgroundBlurFramebuffer);
         }
         glassFrameBegun = false;
         glassDrawCount = 0;
@@ -629,6 +644,7 @@ public final class PrismalRenderer implements AutoCloseable {
         GLES20.glUseProgram(glassProgram);
         GLES20.glUniform1i(glassUniformLocation("u_backgroundTexture"), 0);
         GLES20.glUniform1i(glassUniformLocation("u_blurredTexture"), 1);
+        GLES20.glUniform1i(glassUniformLocation("u_backgroundBlurredTexture"), 2);
         GLES20.glUniform1i(glassUniformLocation("u_useBlurredTexture"), 1);
         cachedStaticParams = null;
         cachedHighlightMask = Integer.MIN_VALUE;
@@ -649,8 +665,11 @@ public final class PrismalRenderer implements AutoCloseable {
      * ES2 GPUs the larger fragment may be rejected; retain the known-good
      * baseline program in that case. All session owners share this fail-open path.
      */
-    private boolean selectGlassProgramForNode() {
-        boolean wantsDecorations = edgeDecoration.hasBacklit() || edgeDecoration.hasShadow();
+    private boolean selectGlassProgramForNode(boolean softGlassMode) {
+        // Soft glass owns the complete material response. Keep saved OS3 backlight and
+        // cast-shadow settings intact, but do not stack that separate decoration pass on it.
+        boolean wantsDecorations = !softGlassMode
+                && (edgeDecoration.hasBacklit() || edgeDecoration.hasShadow());
         if (wantsDecorations && decoratedGlassProgram == 0 && !decorationProgramUnavailable) {
             // One-time diagnostic distinguishes an absent setting/renderer route
             // from an unsupported Mali shader. No per-frame log or allocation.
@@ -721,6 +740,7 @@ public final class PrismalRenderer implements AutoCloseable {
             // Sampler bindings and uniform locations belong to each linked program.
             GLES20.glUniform1i(glassUniformLocation("u_backgroundTexture"), 0);
             GLES20.glUniform1i(glassUniformLocation("u_blurredTexture"), 1);
+            GLES20.glUniform1i(glassUniformLocation("u_backgroundBlurredTexture"), 2);
             GLES20.glUniform1i(glassUniformLocation("u_useBlurredTexture"), 1);
             cachedStaticParams = null;
             cachedHighlightMask = Integer.MIN_VALUE;
@@ -762,6 +782,17 @@ public final class PrismalRenderer implements AutoCloseable {
         outputNeedsFullClear = true;
     }
 
+    private void ensureSoftBackgroundBlurTarget() {
+        if (softBackgroundBlurTexture != 0
+                && softBackgroundBlurWidth == blurWidth
+                && softBackgroundBlurHeight == blurHeight) return;
+        releaseSoftBackgroundBlurTarget();
+        softBackgroundBlurWidth = blurWidth;
+        softBackgroundBlurHeight = blurHeight;
+        softBackgroundBlurTexture = createTexture(blurWidth, blurHeight);
+        softBackgroundBlurFramebuffer = createFramebuffer(softBackgroundBlurTexture);
+    }
+
     private void ensureOutputTarget() {
         if (outputTexture != 0) return;
         // Surface-only consumers never sample an intermediate scene texture.
@@ -786,12 +817,20 @@ public final class PrismalRenderer implements AutoCloseable {
     }
 
     private float blurSigma(PrismalParams p) {
-        return PrismalBlurReusePolicy.sigma(p.blurRadiusPx, renderWidth, renderHeight,
+        return blurSigma(p.blurRadiusPx);
+    }
+
+    private float blurSigma(float blurRadiusPx) {
+        return PrismalBlurReusePolicy.sigma(blurRadiusPx, renderWidth, renderHeight,
                 width, height, BLUR_FBO_SCALE);
     }
 
     private void renderBlur(PrismalParams p, int verticalFramebuffer) {
-        float sigma = blurSigma(p);
+        renderBlur(p.blurRadiusPx, verticalFramebuffer);
+    }
+
+    private void renderBlur(float blurRadiusPx, int verticalFramebuffer) {
+        float sigma = blurSigma(blurRadiusPx);
         boolean updateTexelSize = cachedBlurWidth != blurWidth || cachedBlurHeight != blurHeight;
         boolean updateSigma = Float.compare(cachedBlurSigma, sigma) != 0;
         if (updateSigma && optimizedGaussianBlur) gaussianKernel.update(sigma);
@@ -848,7 +887,7 @@ public final class PrismalRenderer implements AutoCloseable {
         // The fragment shader renders a full-frame quad per glass node. Restrict its expensive
         // refraction/highlight shading to the SDF silhouette with an AA guard. This preserves
         // native-pixel edge fidelity at reduced backdrop capture density.
-        boolean decoratedProgramActive = selectGlassProgramForNode();
+        boolean decoratedProgramActive = selectGlassProgramForNode(p.softGlassMode);
         float minDimension = Math.min(g.glassWidth, g.glassHeight);
         float edgeGuard = decoratedProgramActive
                 ? edgeDecoration.extraGuardPx(edgeDensity, minDimension) : 0f;
@@ -943,7 +982,9 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform1f("u_pressProgress", pressProgress);
         uniform2f("u_glowCenter", glowCenterX, glowCenterY);
 
-        int highlightMask = highlightMask(highlights);
+        // Soft glass replaces Prismal's legacy rim/specular families with the OS4 SDF
+        // reflection and directional-light response; keep only that native edge layer.
+        int highlightMask = p.softGlassMode ? (1 << 9) : highlightMask(highlights);
         if (cachedHighlightMask != highlightMask) {
             uploadHighlightMask(highlightMask);
             cachedHighlightMask = highlightMask;
@@ -956,6 +997,10 @@ public final class PrismalRenderer implements AutoCloseable {
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sourceTexture);
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, blurTextureV);
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,
+                    softBackgroundBlurTexture != 0 ? softBackgroundBlurTexture : blurTextureV);
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
             glassTexturesBound = true;
         }
 
@@ -995,6 +1040,27 @@ public final class PrismalRenderer implements AutoCloseable {
         uniform1f("u_os4DirectionalAngleRange", p.os4DirectionalAngleRange);
         uniform1f("u_os4DirectionalIntensity", p.os4DirectionalIntensity);
         uniform1f("u_os4DirectionalOppositeIntensity", p.os4DirectionalOppositeIntensity);
+        uniform1f("u_os4Darker", p.os4Darker);
+        uniform1f("u_softGlassMode", p.softGlassMode ? 1f : 0f);
+        PrismalSoftGlassProfile soft = p.softGlassProfile;
+        uniform1f("u_softEdgePower", soft.edgePower);
+        uniform1f("u_softLightZ", soft.lightZ);
+        uniform1f("u_softEdgeAmbient", soft.edgeAmbient);
+        uniform1f("u_softEdgeLightLength", soft.edgeLightLength);
+        uniform1f("u_softBackgroundBlurMix", soft.backgroundBlurMix);
+        uniform1f("u_softDarkerLow", soft.darkerLow);
+        uniform1f("u_softDarkerHigh", soft.darkerHigh);
+        uniform1f("u_softBackgroundSaturation", soft.backgroundSaturation);
+        uniform1f("u_softBackgroundBrightness", soft.backgroundBrightness);
+        uniform1f("u_softInnerBottom", soft.innerBottom);
+        uniform1f("u_softInnerWhite", soft.innerWhite);
+        uniform1f("u_softInnerMix", soft.innerMix);
+        uniform1f("u_softLuminanceAmount", soft.luminanceAmount);
+        uniform4f("u_softLuminanceCoefficients", soft.luminanceC0, soft.luminanceC1,
+                soft.luminanceC2, soft.luminanceC3);
+        uniform1f("u_softColorPower", soft.colorPower);
+        uniform1f("u_softUnshade", soft.unshade);
+        uniform1f("u_softBurn", soft.burn);
         uniform2f("u_lightDir", p.lightDirX, p.lightDirY);
         PrismalOs4InvariantShader.compute(p, cachedOs4Invariants);
         uniform3f("u_invariantLightPrimary",
@@ -1168,6 +1234,7 @@ public final class PrismalRenderer implements AutoCloseable {
 
     private void releaseTargets() {
         releaseReducedOutput();
+        releaseSoftBackgroundBlurTarget();
         if (sourceFramebuffer != 0) GLES20.glDeleteFramebuffers(1, new int[]{sourceFramebuffer}, 0);
         if (blurFramebufferH != 0) GLES20.glDeleteFramebuffers(1, new int[]{blurFramebufferH}, 0);
         if (blurFramebufferV != 0) GLES20.glDeleteFramebuffers(1, new int[]{blurFramebufferV}, 0);
@@ -1180,12 +1247,25 @@ public final class PrismalRenderer implements AutoCloseable {
         sourceTexture = blurTextureH = blurTextureV = outputTexture = 0;
         width = height = renderWidth = renderHeight = outputWidth = outputHeight = 0;
         blurWidth = blurHeight = 0;
+        cachedBlurWidth = cachedBlurHeight = -1;
+        cachedBlurSigma = Float.NaN;
         backdropPrepared = false;
         outputNeedsFullClear = true;
         glassFrameBegun = false;
         glassDrawCount = 0;
         glassTexturesBound = false;
         legacySingleDraw = false;
+    }
+
+    private void releaseSoftBackgroundBlurTarget() {
+        if (softBackgroundBlurFramebuffer != 0) {
+            GLES20.glDeleteFramebuffers(1, new int[]{softBackgroundBlurFramebuffer}, 0);
+        }
+        if (softBackgroundBlurTexture != 0) {
+            GLES20.glDeleteTextures(1, new int[]{softBackgroundBlurTexture}, 0);
+        }
+        softBackgroundBlurFramebuffer = softBackgroundBlurTexture = 0;
+        softBackgroundBlurWidth = softBackgroundBlurHeight = 0;
     }
 
     private void releaseReducedOutput() {

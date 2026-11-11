@@ -64,6 +64,15 @@ public final class ConfigKey<T> {
                 exportDefault, minInt, maxInt, storageMode, exportMode, tenths);
     }
 
+    /** Copy this setting's type, defaults and bounds under an independent preference name. */
+    ConfigKey<T> withName(String newName) {
+        if (newName == null || newName.trim().isEmpty()) {
+            throw new IllegalArgumentException("ConfigKey name must not be empty");
+        }
+        return new ConfigKey<>(newName, type, uiDefault, runtimeFallback, exportDefault,
+                minInt, maxInt, storageMode, exportMode, defaultDpTenths);
+    }
+
     public float uiDefaultDp() {
         return defaultDpTenths == null ? ((Number) uiDefault).floatValue()
                 : defaultDpTenths / 10f;

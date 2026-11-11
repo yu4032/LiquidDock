@@ -1,0 +1,148 @@
+{
+  "launcher_elf_sha256": "1adaa4466d8516c14174a36814948c03f70579090468f7d40937156e05b87b20",
+  "launcher_elf_size": 29983448,
+  "rust_elf_sha256": "971e62def084aa58848ac3c061f030794afbc42020f5cb7a9e7b1582c07286db",
+  "rust_elf_size": 16245752,
+  "targets": [
+    {
+      "name": "PadRowColHandler.handle",
+      "vaddr": "0x1b9edc4",
+      "size": 344,
+      "sha256": "70e6c2449a4e9c494143d1f0204d51ff1676749811c24cdaca4ec5abf585d30a",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "LauncherModel.deleteItemDatabase",
+      "vaddr": "0x92113c",
+      "size": 132,
+      "sha256": "20c2fd7e3aab6b0fbd370156f2668259c31a4896a41f5b36821d4d56606efac2",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "RustLibApiImpl.sse_encode_list_item_info",
+      "vaddr": "0x8fbf98",
+      "size": 224,
+      "sha256": "234901332358a4199eaecf7c4e8ef6181352e8b44777ec0946bde5fb84080c95",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "LauncherModel.updateItemDatabase",
+      "vaddr": "0x8f2b6c",
+      "size": 132,
+      "sha256": "f7f94fba1a40036809774d8a78c907b044e1741f40264ababeefab7b603e5609",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "ItemDataProcessor.processItems",
+      "vaddr": "0x15e2828",
+      "size": 9476,
+      "sha256": "7dc36450898e8c47cdade93b97954ac9c8c15209bf4c3c659176f5480e921f86",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "LayoutDropRuleForSwapPlaces.isLegalXY",
+      "vaddr": "0x18c8e98",
+      "size": 96,
+      "sha256": "ec741341443d7b220c9311b82e9b2f38ee013d33dcf8ed9b36ba993f5fedfb45",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "GridController._filterActiveGridConfig",
+      "vaddr": "0x8e3238",
+      "size": 728,
+      "sha256": "220141f2676d4c1dd484e70ed122b9c63e2e42322e25e2e161909da86cd06495",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "GridOccupancyController._processScreenList",
+      "vaddr": "0x8fc2b4",
+      "size": 2192,
+      "sha256": "ad3586575f0103c6eb70a11aca4e8d4c171a7ec1087c590f409543b0e9adcfb2",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "CellLayoutGetxController._usesNoVacantMode",
+      "vaddr": "0x8bf3b0",
+      "size": 48,
+      "sha256": "36b5e96af51b6639d510a6294931bc5a17f8ef1813caa4cb614998fc5817905a",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "GridOccupancyController.onOrientationChanged",
+      "vaddr": "0x8fb664",
+      "size": 1336,
+      "sha256": "ee76ea2692c077dfe6ded3c02c270b16fb04042face0273471ba6b8661221293",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "WidgetContainerWidget.widgetContainerWidth",
+      "vaddr": "0x1181124",
+      "size": 608,
+      "sha256": "83d761a4a55159c6195f509a15abfb9550c7afd9078b619b903314c176ed069e",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "_HotseatWidgetPadState._recomputeDockBgParams",
+      "vaddr": "0x1401918",
+      "size": 1856,
+      "sha256": "36bf30ada78103422849f5d9a32861096f01e0f7ac6179869b68000ae0b83707",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "_HotseatWidgetPadState._defaultIconSize",
+      "vaddr": "0x9c4c84",
+      "size": 148,
+      "sha256": "ee1997913f49dfc731468dad0f9a635460d10b58ab8adc0a50cdc6b9cc5615d3",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "HotseatLayoutCalculator.calculate",
+      "vaddr": "0x9c4988",
+      "size": 588,
+      "sha256": "d1856dfa67a776828f70ef34abdf374e26ef2e10529741ba18f82d6ba2b52fe6",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "HotSeatsConstants2.calcScaledIconSize",
+      "vaddr": "0xaa7e60",
+      "size": 236,
+      "sha256": "3c55915bdb790eb1ee7ab9c1bf415e82afc427a6054d7259fdc49a9b262afcda",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "GridController.hotSeatsMarginBottom",
+      "vaddr": "0x8d85e8",
+      "size": 108,
+      "sha256": "b72cf4be667aba0b4d86f62ad39cdb17f0d5e9be7628c1b534ea4c9e8f304d9b",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "_ImageFilter.__initGlassV7$Method$FfiNative",
+      "vaddr": "0x1ba9ac0",
+      "size": 1208,
+      "sha256": "994d6adb039c63f8190a5ca1523124f4c159c49af5ffcc58fd4c8d536f036387",
+      "elf": "libapp.so"
+    },
+    {
+      "name": "_RNvNtNtNtCs8Fq59dB8uNi_12app_launcher8launcher4data23launcher_model_internal44check_database_data_orientation_when_loading",
+      "vaddr": "0x910768",
+      "size": 6400,
+      "sha256": "5ed7358119ba6475f448e028a4ed111c5e590f978c4eee1bceef78f92af62551",
+      "elf": "libapp_launcher.so"
+    },
+    {
+      "name": "_ZN5tonic13FfiDispatcherIN7flutter11ImageFilterEMS2_FvdddiiddddP12_Dart_HandleddddS4_ddddddS4_ddS4_dddddddddiididdddddiiidiiEXadL_ZNS2_11initGlassV7EdddiiddddS4_ddddS4_ddddddS4_ddS4_dddddddddiididdddddiiidiiEEE4CallEPNS_13DartWrappableEdddiiddddS4_ddddS4_ddddddS4_ddS4_dddddddddiididdddddiiidii",
+      "vaddr": "0xe971ec",
+      "size": 2560,
+      "sha256": "9ca07535dda5dec66764d9cce26bd557acea6b91096a79f33e4fecd7b871661d",
+      "elf": "libhyper_os_flutter.so"
+    }
+  ],
+  "unsupported": [
+    "DockBoundsReporter._flushPending",
+    "GridController.padIndicatorSpacing",
+    "ComputePipeline.compute"
+  ],
+  "engine_sha256": "77a3901d9df41d0d7db41a09250ea1627052225bf8661d0c992d4d668cc15e2b",
+  "engine_size": 18882704
+}
