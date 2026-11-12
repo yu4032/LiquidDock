@@ -14,8 +14,8 @@ class SettingsAvailabilityTest {
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
             Page.Dock, Page.DockBehavior, Page.DockGeometry, Page.Divider,
             Page.GlassIcons, Page.GlassWidgets, Page.WidgetComponents,
-            Page.Liquid, Page.LiquidMaterial, Page.LiquidRefraction,
-            Page.LiquidColor, Page.LiquidLighting, Page.LiquidShadow,
+            Page.Liquid, Page.LiquidMaterial,
+            Page.LiquidColor, Page.LiquidLighting,
             Page.LiquidSampling, Page.GlassEdge,
         )
         testing.forEach {

@@ -20,7 +20,7 @@
     <string name="page_divider">Dock divider</string>
     <string name="page_workstation">Custom workstation</string>
     <string name="page_recents">Recents</string>
-    <string name="page_liquid">Liquid glass</string>
+    <string name="page_liquid">Soft-light glass</string>
     <string name="page_sidebar_glass">Sidebar glass</string>
     <string name="page_soft_glass">Soft glass</string>
     <string name="page_security_center_sidebar">Security Center sidebar</string>
@@ -111,10 +111,10 @@
     <string name="page_glass_edge">Shadow</string>
     <string name="page_shortcut_popup">Shortcut menu customization</string>
     <string name="page_handle_menu">Top menu customization</string>
-    <string name="page_liquid_material">Material basics</string>
+    <string name="page_liquid_material">Material &amp; refraction</string>
     <string name="page_liquid_refraction">Refraction</string>
-    <string name="page_liquid_color">Color &amp; dispersion</string>
-    <string name="page_liquid_lighting">Highlights &amp; lighting</string>
+    <string name="page_liquid_color">Color &amp; shadow</string>
+    <string name="page_liquid_lighting">Lighting &amp; edges</string>
     <string name="page_liquid_shadow">Inner shadow</string>
     <string name="page_liquid_sampling">Sampling &amp; performance</string>
     <string name="page_animation_workspace">Workspace &amp; Dock</string>

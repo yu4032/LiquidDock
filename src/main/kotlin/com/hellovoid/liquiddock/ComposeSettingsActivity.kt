@@ -373,6 +373,20 @@ private fun LiquidDockSettings(
                     searchFocusKey?.takeIf { searchFocusPage == target.name }?.let {
                         SettingsFocusRequest(target, it, searchFocusSequence)
                     }, ::navigateTo,
+                    nativeGlass = {
+                        // OS4 的柔光玻璃子页按功能展示原生玻璃参数；非 OS4 只展示 Prismal 参数。
+                        if (availability.isOs4Launcher()) {
+                            os4NativeGlassSettings(
+                                prefs,
+                                masterEnabled && prefs.getBoolean(
+                                    ConfigSchema.Glass.ENABLED.name(),
+                                    ConfigSchema.Glass.ENABLED.uiDefault(),
+                                ),
+                                liquidNativeSections[target],
+                            )
+                        }
+                    },
+                    hideRows = availability.isOs4Launcher(),
                 ) else when (target) {
                     Page.Home -> HomePage(
                         padding,
