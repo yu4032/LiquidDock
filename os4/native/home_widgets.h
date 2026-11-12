@@ -94,7 +94,7 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
     uintptr_t variables = ld_heap_pointer(c, grid, 0x8f), fullscreen = 0;
     uint32_t layout = 0;
     if (!variables || !ld_read_heap(variables + 0x27, &layout, 4)
-            || !ld_read_heap(c->x[27] + 0xef20, &fullscreen, 8)
+            || !ld_read_heap(c->x[27] + 0xef60, &fullscreen, 8)
             || !(layout & 1) || !(fullscreen & 1) || layout != (uint32_t)fullscreen) return;
 
     int64_t span = ld_heap_i64(item_info, 0x1f);

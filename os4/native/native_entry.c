@@ -4,7 +4,6 @@
 #include "widget_resize.h"
 #include "superellipse_blur.h"
 #include "glass_superellipse.h"
-#include "layout_margins_write.h"
 #include "divider_paint.h"
 #include "process_gate.h"
 #include "sha256_region.h"
@@ -100,7 +99,8 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "layout_load.h"
 #include "layout_save.h"
 #include "home_icons.h"
-#include "home_geometry.h"
+#include "home_margins.h"
+#include "safe_mode.h"
 #include "home_indicator.h"
 #include "home_widgets.h"
 #include "dock_geometry.h"
@@ -122,20 +122,21 @@ __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_contex
     memcpy((void *)(grid+0x8f),&compressed,4);
     struct ld_home_baseline baseline={0};
     int direction=ld_grid_direction(c,grid);
+    if(direction==0 || direction==1)
+        ld_home_margins_note(variables,direction,(int)ld_heap_i64(grid,0x23),(int)ld_heap_i64(grid,0x1b));
     uintptr_t fullscreen=0,icons=ld_heap_pointer(c,grid,0x6b);
     uint32_t layout=0;
     if(g_count_cols>0 && direction>=0 && direction<=1 && icons
             && ld_heap_i64(grid,0x1b)==(direction?g_grid_rows:g_grid_cols)
             && ld_heap_i64(grid,0x23)==(direction?g_grid_cols:g_grid_rows)
             && ld_read_heap(variables+0x27,&layout,4)
-            && ld_read_heap(c->x[27]+0xef20,&fullscreen,8)
+            && ld_read_heap(c->x[27]+0xef60,&fullscreen,8)
             && (layout&1) && layout==(uint32_t)fullscreen
             && ld_read_heap(grid+0x2b,&baseline.cell_width,8)
             && ld_read_heap(grid+0x33,&baseline.cell_height,8)
             && ld_read_heap(icons+0x17,&baseline.icon_size,8)) {
         baseline.direction=direction; baseline.valid=1;
     }
-    ld_apply_home_geometry(c,grid);
     ld_apply_home_icons(c,grid);
     if(baseline.valid && ld_read_heap(grid+0x2b,&baseline.current_width,8)
             && ld_read_heap(grid+0x33,&baseline.current_height,8)
@@ -613,7 +614,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_widget_resize_install(api,&lib);
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);
-    ld_layout_margins_write_install(api,&lib);
+    ld_home_margins_install(api,&lib);
     ld_divider_paint_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
@@ -831,10 +832,13 @@ on_library_loaded_t native_init(struct native_api *api)
 {
     if (!os4_is_launcher_process()) return NULL;
     ld_blog("native_init enter pid=%d", (int)getpid());
+    ld_sm_start_watchdog();
     if (!api || api->version != 2 || !api->hook) {
         LOGE("unknown native injection ABI");
         return NULL;
     }
+    /* 连续崩溃保护：安全模式下不装任何 hook，直接返回。 */
+    if (ld_safe_mode_tick()) return NULL;
 
     g_api = api;
     load_grid_config();

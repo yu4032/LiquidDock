@@ -265,6 +265,11 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         Set<String> selected = Set.copyOf(scopes);
+        boolean wantsHome = selected.contains("com.miui.home");
+        if (wantsHome) LiquidDockRestart.requestLauncher(this);
+        Set<String> remaining = new java.util.HashSet<>(selected);
+        remaining.remove("com.miui.home");
+        if (remaining.isEmpty()) return;   // 只选了桌面：已由看门狗重启，无需 su
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         boolean diagnostic = preferences.getBoolean(
                 com.hellovoid.liquiddock.config.ConfigSchema.Debug.LOGGING.name(),
@@ -277,7 +282,7 @@ public class SettingsActivity extends AppCompatActivity {
                         .redirectErrorStream(true)
                         .start();
                 try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                    os.writeBytes(HookScopeRestartShell.buildScript(selected, diagnostic));
+                    os.writeBytes(HookScopeRestartShell.buildScript(remaining, diagnostic));
                     os.flush();
                 }
                 if (!p.waitFor(45, TimeUnit.SECONDS)) {
@@ -345,35 +350,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     void restartLauncher() {
-        // Configuration is already in API101 Remote Preferences. Root is used only to
-        // restart MIUI Home so process-start-only hooks reload their settings.
+        // Remote Preferences 已同步；重启请求通过 launcher 内的原生看门狗执行，
+        // 不依赖 root（本机 app 命名空间里没有 su）。
         LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
-        new Thread(() -> {
-            try {
-                Process p = new ProcessBuilder("su")
-                        .redirectOutput(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
-                        .redirectError(ProcessBuilder.Redirect.to(new java.io.File("/dev/null")))
-                        .start();
-                try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                    os.writeBytes("am force-stop com.miui.home && sleep 1 && "
-                        + "am start -a android.intent.action.MAIN -c android.intent.category.HOME\nexit\n");
-                    os.flush();
-                }
-                if (!p.waitFor(8, TimeUnit.SECONDS)) {
-                    p.destroy();
-                    if (!p.waitFor(1, TimeUnit.SECONDS)) p.destroyForcibly();
-                    throw new IOException("su timed out while restarting MIUI Home");
-                }
-                int exitCode = p.exitValue();
-                if (exitCode != 0) throw new IOException("su failed with exit code " + exitCode);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                runOnUiThread(() -> Toast.makeText(this,
-                        "Launcher restart interrupted", Toast.LENGTH_SHORT).show());
-            } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Error: "+e.getMessage(), Toast.LENGTH_SHORT).show());
-            }
-        }).start();
+        LiquidDockRestart.requestLauncher(this);
     }
 
     void restartPackageProcess(String packageName, String displayName) {

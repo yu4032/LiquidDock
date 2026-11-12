@@ -36,7 +36,7 @@ static int ld_dock_active(struct ld_dart_context *c)
     uint32_t mode=0;
     return rx && grid && variables && orientation && (direction==0 || direction==1)
         && ld_read_heap(variables+0x27,&mode,4)
-        && ld_read_heap(c->x[27]+0xef20,&fullscreen,8)
+        && ld_read_heap(c->x[27]+0xef60,&fullscreen,8)
         && (mode&1) && (fullscreen&1) && mode==(uint32_t)fullscreen;
 }
 

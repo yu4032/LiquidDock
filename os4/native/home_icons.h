@@ -24,9 +24,9 @@ static inline void ld_apply_home_icons(struct ld_dart_context *c,uintptr_t grid)
     uintptr_t variables=ld_heap_pointer(c,grid,0x8f),icons=ld_heap_pointer(c,grid,0x6b),fullscreen=0;
     uint32_t layout=0;
     /* Verified against GridController.isSplit and List.isEmpty: +0x20 is true.
-     * isSplit returns true on NE, so equality with PP+0xef20 is fullscreen. */
+     * isSplit returns true on NE, so equality with PP+0xef60 is fullscreen. */
     if(!variables || !icons || !ld_read_heap(variables+0x27,&layout,sizeof layout)
-            || !ld_read_heap(c->x[27]+0xef20,&fullscreen,sizeof fullscreen)
+            || !ld_read_heap(c->x[27]+0xef60,&fullscreen,sizeof fullscreen)
             || !(layout&1) || !(fullscreen&1) || layout==(uint32_t)c->x[22]
             || layout!=(uint32_t)fullscreen) return;
     double size=0,top=0;

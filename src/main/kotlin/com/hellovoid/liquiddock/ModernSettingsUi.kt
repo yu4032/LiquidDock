@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
@@ -117,6 +120,8 @@ internal fun ModernSettingsScaffold(
     // Touch-gated controls use the original background sample, but their
     // render nodes only attach during active gestures. No third capture layer.
     val touchBackdrop = if (glassEnabled) backgroundLayer else null
+    val safeModeActive = rememberSafeModeActive()
+    val layoutDirection = LocalLayoutDirection.current
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
     // Header and bottom navigation share the captured background + content.
     Box(modifier = Modifier.fillMaxSize()) {
@@ -242,7 +247,24 @@ internal fun ModernSettingsScaffold(
                             else Modifier,
                         ),
                 ) {
-                    content(padding)
+                    Column(Modifier.fillMaxSize()) {
+                        if (safeModeActive) {
+                            SafeModeBanner(
+                                onExit = { Os4SafeMode.exit() },
+                                modifier = Modifier.padding(top = padding.calculateTopPadding()),
+                            )
+                        }
+                        Box(Modifier.weight(1f)) {
+                            content(
+                                if (safeModeActive) PaddingValues(
+                                    start = padding.calculateStartPadding(layoutDirection),
+                                    top = 0.dp,
+                                    end = padding.calculateEndPadding(layoutDirection),
+                                    bottom = padding.calculateBottomPadding(),
+                                ) else padding,
+                            )
+                        }
+                    }
                 }
             }
             overlay()
