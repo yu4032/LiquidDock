@@ -146,16 +146,12 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         cols = g_hm_cur_cols;
         rows = g_hm_cur_rows;
     }
-    /* 方向以 config 自己的链为准：cfg+0x8f -> variables+0x23 -> 值对象+7，raw 0/1。
-     * 这是 GridController.getOrientationType 的同一条路径，不依赖对象池比较。 */
-    if (vo) {
-        int64_t raw = -1;
-        __builtin_memcpy(&raw, (const void *)(vo + 7), sizeof raw);
-        if (raw == 0 || raw == 1) {
-            landscape = (raw == 1);      /* 1=横屏 0=竖屏 */
-            cols = landscape ? g_grid_cols : g_grid_rows;
-            rows = landscape ? g_grid_rows : g_grid_cols;
-        }
+    /* 方向 = 当前网格的实际形状：列多于行就是横屏。config 自带的方向标志在这台
+     * 机器上和真实布局相反（7 列页面拿到 0），不能当依据；对象池比较同样不可靠。 */
+    if (g_grid_cols > 0 && g_grid_rows > 0 && g_grid_cols != g_grid_rows) {
+        landscape = (g_grid_cols > g_grid_rows);
+        cols = landscape ? g_grid_cols : g_grid_rows;
+        rows = landscape ? g_grid_rows : g_grid_cols;
     }
     uint32_t vo_low = 0, sent_low = 0;
     (void)vo_low; (void)sent_low;
