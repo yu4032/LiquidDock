@@ -112,7 +112,7 @@ final class LauncherNativeFourFolderHook {
                     loader, vendor.config, vendor.itemIcon, vendor.content);
             installedHooks += installNativeBindingHook(
                     vendor.folderIcon, vendor.launcher, vendor.infoType);
-            installedHooks += installCellSizingHooks(loader, vendor.cell);
+            installedHooks += installCellSizingHooks(vendor.cell);
             installedHooks += installCellCommitHooks(vendor.cell);
             installed = installedHooks > 0;
             if (installed) bindPreviewScale();
@@ -523,7 +523,7 @@ final class LauncherNativeFourFolderHook {
                 HookUtil.hook(infoType.getDeclaredMethod("load", Context.class, android.database.Cursor.class), chain -> {
                     Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                     if (chain.getArg(0) instanceof Context) {
-                        normalizeAllAppsFolder((Context) chain.getArg(0), chain.getThisObject());
+                        normalizeAllAppsFolder(chain.getThisObject(), false);
                     }
                     return result;
                 });
@@ -542,7 +542,7 @@ final class LauncherNativeFourFolderHook {
             Object info = chain.getArg(3);
             ViewGroup parent = (ViewGroup) chain.getArg(2);
             if (HomeGridCellGeometryHook.isWorkstationAllAppsView(parent)) {
-                normalizeAllAppsFolder(parent.getContext(), info);
+                normalizeAllAppsFolder(info, true);
                 return chain.proceed(chain.getArgs().toArray(new Object[0]));
             }
             if (info != null) {
@@ -576,31 +576,12 @@ final class LauncherNativeFourFolderHook {
         return installedHooks;
     }
 
-    private static int installCellSizingHooks(ClassLoader loader, Class<?> cell) {
+    private static int installCellSizingHooks(Class<?> cell) {
         int installedHooks = 0;
-        // The original HomeGrid four-argument hook delegates marked-folder
-        // sizing here. This owner installs only the edit-aware OEM overload,
-        // so no method is intercepted twice.
         if (cell != null) {
-            Class<?> itemInfoClass = vendorClass(loader, "com.miui.home.launcher.ItemInfo");
-            Class<?> paramsClass = vendorClass(
-                    loader, "com.miui.home.launcher.CellLayout$LayoutParams");
-            if (itemInfoClass != null && paramsClass != null) {
-                try {
-                    HookUtil.hookMethod(cell, "setupLayoutParam",
-                            new Class<?>[]{int.class, int.class, itemInfoClass,
-                                    boolean.class, paramsClass}, chain -> {
-                                Object[] args = chain.getArgs().toArray(new Object[0]);
-                                Object result = chain.proceed(args);
-                                prepareFolderLayoutParams(chain.getThisObject(),
-                                        (Integer) args[0], (Integer) args[1], args[2], args[4]);
-                                return result;
-                            });
-                    installedHooks++;
-                } catch (Throwable error) {
-                    Api101Bridge.log(TAG + " edit-aware folder setupLayoutParam unavailable", error);
-                }
-            }
+            // The HomeGrid four-argument setupLayoutParam hook already handles marked
+            // folders. The ROM has no five-parameter edit-aware overload; preserve
+            // the post-measure correction used by normal and edit-mode layout.
             // OEM initial measurement can permanently cache a compact
             // preview. Restore the previously working post-measure correction
             // here rather than removing it under the single-owner refactor.
@@ -1073,7 +1054,7 @@ final class LauncherNativeFourFolderHook {
 
     /**
      * The only custom 2x2 folder LayoutParams writer. Called by the existing
-     * four-argument HomeGrid dispatcher, the edit-mode hook, and measureChild.
+     * four-argument HomeGrid dispatcher and measureChild.
      * Stock folders and drag/fullscreen animation copies are never changed.
      */
     static void prepareFolderLayoutParams(
@@ -1100,17 +1081,21 @@ final class LauncherNativeFourFolderHook {
         return frame == null ? null : new int[]{frame[2], frame[3]};
     }
 
-    private static void normalizeAllAppsFolder(Context context, Object info) {
+    private static void normalizeAllAppsFolder(Object info, boolean workstationAllAppsView) {
         if (info == null) return;
         try {
+            Object container = HookUtil.getField(info, "container");
+            long containerId = container instanceof Number
+                    ? ((Number) container).longValue() : Long.MIN_VALUE;
             if (LargeFolderFootprintPolicy.normalizeAllAppsCopy(
-                    LauncherLargeFolderPickerHook.isMarked(context, info),
-                    ((Number) HookUtil.getField(info, "container")).longValue(),
+                    workstationAllAppsView, containerId,
                     HookUtil.getIntField(info, "itemType"),
                     HookUtil.getIntField(info, "spanX"), HookUtil.getIntField(info, "spanY"))) {
+                // Only normalize the in-memory All Apps copy; never rewrite the
+                // original desktop folder or its persisted 2x2 footprint.
                 HookUtil.setIntField(info, "spanX", 1);
                 HookUtil.setIntField(info, "spanY", 1);
-                MainHook.log(TAG + " AllApps folder copy footprint normalized to 1x1");
+                MainHook.log(TAG + " AllApps ordinary folder footprint normalized to 1x1");
             }
         } catch (Throwable error) {
             MainHook.log(TAG + " AllApps folder scope unavailable: " + error);

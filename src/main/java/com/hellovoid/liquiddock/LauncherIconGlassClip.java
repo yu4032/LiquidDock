@@ -1,0 +1,447 @@
+package com.hellovoid.liquiddock;
+
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Path;
+import android.graphics.Rect;
+import android.graphics.drawable.AdaptiveIconDrawable;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Animatable;
+import android.graphics.drawable.ColorDrawable;
+import android.view.View;
+import android.widget.TextView;
+
+import com.hellovoid.prismal.PrismalContinuousCorners;
+
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
+
+/**
+ * Bake the icon's glass outline into a display-only bitmap when Launcher binds
+ * its drawable. The original mIconDrawable stays untouched for native gestures,
+ * drag snapshots, animation and shortcut visibility. No draw/onDraw hook.
+ */
+final class LauncherIconGlassClip {
+    private static final String TAG = "[DC][IconGlassClip]";
+    private static final Map<TextView, Cache> CACHE = Collections.synchronizedMap(new WeakHashMap<>());
+    private static volatile LiquidDockConfig.Glass glass;
+    private static volatile float workstationRadiusDp;
+    private static final HashSet<String> SOURCE_LOGGED = new HashSet<>();
+
+    private static final class Cache {
+        volatile WeakReference<Drawable> original = new WeakReference<>(null);
+        volatile WeakReference<BitmapDrawable> display = new WeakReference<>(null);
+        float width, height, left, top, right, bottom, radius;
+        boolean continuous;
+        float offsetDp, cornerDp;
+        int hostWidth, hostHeight, baseIconSize, bitmapGeneration;
+        int paddingTop, paddingLeft, paddingRight;
+        volatile boolean dock;
+        boolean workstationMode;
+        float workstationRadius, density;
+
+        boolean matchesBinding(TextView host, Drawable source,
+                               LiquidDockConfig.Glass latest, boolean dock,
+                               boolean workstationMode, int iconSize) {
+            if (original.get() != source || display.get() == null
+                    || this.dock != dock || this.workstationMode != workstationMode
+                    || (dock && this.workstationRadius != workstationRadiusDp)
+                    || this.baseIconSize != iconSize
+                    || this.hostWidth != host.getWidth()
+                    || this.hostHeight != host.getHeight()
+                    || this.paddingTop != host.getPaddingTop()
+                    || this.paddingLeft != host.getCompoundPaddingLeft()
+                    || this.paddingRight != host.getCompoundPaddingRight()
+                    || this.density != host.getResources().getDisplayMetrics().density
+                    || this.offsetDp != latest.iconStyle.sizeOffsetDp
+                    || this.cornerDp != latest.iconStyle.cornerRadiusDp
+                    || this.continuous != latest.continuousCorners) return false;
+            if (source instanceof BitmapDrawable) {
+                Bitmap bitmap = ((BitmapDrawable) source).getBitmap();
+                return bitmap != null && bitmapGeneration == bitmap.getGenerationId();
+            }
+            return true;
+        }
+
+        void set(Drawable original, BitmapDrawable display,
+                 LauncherIconGlassClipGeometry.Result shape,
+                 float width, float height, boolean continuous,
+                 LiquidDockConfig.Glass config, TextView host,
+                 boolean dock, boolean workstationMode, int iconSize) {
+            this.original = new WeakReference<>(original);
+            this.display = new WeakReference<>(display);
+            this.left = shape.left;
+            this.top = shape.top;
+            this.right = shape.right;
+            this.bottom = shape.bottom;
+            this.radius = shape.radius;
+            this.width = width;
+            this.height = height;
+            this.continuous = continuous;
+            this.offsetDp = config.iconStyle.sizeOffsetDp;
+            this.cornerDp = config.iconStyle.cornerRadiusDp;
+            this.hostWidth = host.getWidth();
+            this.hostHeight = host.getHeight();
+            this.paddingTop = host.getPaddingTop();
+            this.paddingLeft = host.getCompoundPaddingLeft();
+            this.paddingRight = host.getCompoundPaddingRight();
+            this.density = host.getResources().getDisplayMetrics().density;
+            this.dock = dock;
+            this.workstationMode = workstationMode;
+            this.workstationRadius = workstationRadiusDp;
+            this.baseIconSize = iconSize;
+            Bitmap bitmap = original instanceof BitmapDrawable
+                    ? ((BitmapDrawable) original).getBitmap() : null;
+            this.bitmapGeneration = bitmap != null ? bitmap.getGenerationId() : -1;
+        }
+    }
+
+    static void configure(LiquidDockConfig.Glass config) {
+        LiquidDockConfig.Glass previous = glass;
+        glass = config;
+        if (sameGeometry(previous, config)) return;
+        refreshAll();
+    }
+
+    private static boolean sameGeometry(LiquidDockConfig.Glass before,
+                                        LiquidDockConfig.Glass after) {
+        if (before == after) return true;
+        if (before == null || after == null) return false;
+        return before.continuousCorners == after.continuousCorners
+                && before.iconStyle.sizeOffsetDp == after.iconStyle.sizeOffsetDp
+                && before.iconStyle.cornerRadiusDp == after.iconStyle.cornerRadiusDp;
+    }
+
+    static void workstation(LiquidDockConfig.Workstation config) {
+        float next = config != null ? config.dockIconGlassCornerRadius : 0f;
+        if (workstationRadiusDp == next) return;
+        workstationRadiusDp = next;
+        refreshAll();
+    }
+
+    /** Called only on settings/policy changes, not on any animation frame. */
+    static void refreshAll() {
+        List<TextView> hosts;
+        synchronized (CACHE) { hosts = new ArrayList<>(CACHE.keySet()); }
+        for (TextView host : hosts) {
+            if (host == null) continue;
+            Cache cache = CACHE.get(host);
+            if (cache == null) continue;
+            cache.offsetDp = Float.NaN; // invalidate geometry-only cache
+            host.post(() -> {
+                if (host.isAttachedToWindow()) {
+                    HookUtil.tryInvoke(host, "updateIconDrawable");
+                }
+            });
+        }
+    }
+
+    static void refreshHost(View host) {
+        if (host instanceof TextView) {
+            Cache cache = CACHE.get((TextView) host);
+            if (cache != null) cache.offsetDp = Float.NaN;
+            host.post(() -> {
+                if (host.isAttachedToWindow()) {
+                    HookUtil.tryInvoke(host, "updateIconDrawable");
+                }
+            });
+        }
+    }
+
+    static void install(ClassLoader loader) {
+        try {
+            Class<?> shortcut = Class.forName("com.miui.home.launcher.ShortcutIcon", false, loader);
+
+            // Launcher 4.50 dispatches updateIconDrawable() on initial binds,
+            // re-measure, icon replacement and our explicit post-registration
+            // refresh. Its private applyIconDrawable() may be ART-inlined,
+            // so never depend on a hook at that private call site.
+            Field source = HookUtil.findField(shortcut, "mIconDrawable");
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "getContentDrawable",
+                    new Class<?>[0]), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                return animationDrawable(chain.getThisObject(), result, false);
+            });
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "getIconDrawable",
+                    new Class<?>[0]), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                return animationDrawable(chain.getThisObject(), result, true);
+            });
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "updateIconDrawable",
+                    new Class<?>[0]), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                bakeBoundSource(chain.getThisObject(), source);
+                return result;
+            });
+
+            // OEM uses 0 for the real drawable and 4 for its transparent placeholder.
+            // Re-bake only when the original is restored.
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "setIconVisibility",
+                    new Class<?>[]{int.class}), chain -> {
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                Object result = chain.proceed(args);
+                if (args.length == 1 && args[0] instanceof Integer
+                        && LauncherIconAnimationClipPolicy.isOemIconVisible((Integer) args[0])) {
+                    bakeBoundSource(chain.getThisObject(), source);
+                }
+                return result;
+            });
+
+            // Native press/spring gesture changes mIconDrawable bounds. Mirror
+            // just its rectangle to the baked display bitmap; no clipping work.
+            HookUtil.hook(HookUtil.findMethodExact(shortcut, "setIconDrawableScale",
+                    new Class<?>[]{float.class}), chain -> {
+                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                TextView host = (TextView) chain.getThisObject();
+                Cache cache = CACHE.get(host);
+                BitmapDrawable baked = cache != null ? cache.display.get() : null;
+                if (baked != null && host.getCompoundDrawables()[1] == baked) {
+                    Drawable nativeDrawable = cache.original.get();
+                    if (nativeDrawable != null)
+                        baked.setBounds(nativeDrawable.getBounds());
+                }
+                return result;
+            });
+            MainHook.log(TAG + " public OEM bind/visibility hooks installed; no onDraw clipping");
+        } catch (Throwable error) {
+            MainHook.log(TAG + " unavailable: " + error);
+        }
+    }
+
+    private static Object animationDrawable(Object owner, Object original, boolean refresh) {
+        if (!(owner instanceof TextView) || !(original instanceof Drawable)
+                || !GlassRuntimeState.isAnyIconEnabled()) return original;
+        Cache cache = CACHE.get((TextView) owner);
+        BitmapDrawable display = cache != null ? cache.display.get() : null;
+        if (display == null || cache.original.get() != original
+                || (cache.dock ? !DockGlassItemRegistry.contains((View) owner)
+                        : !GlassRuntimeState.isIconEnabled())) return original;
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        if (!(refresh ? LauncherIconAnimationClipPolicy.isFloatingIconRefresh(stack)
+                : LauncherIconAnimationClipPolicy.isFloatingIconInit(stack))) return original;
+        Drawable.ConstantState state = display.getConstantState();
+        if (state == null) return original;
+        Drawable animationIcon = state.newDrawable(((TextView) owner).getResources()).mutate();
+        animationIcon.setBounds(display.getBounds());
+        logSourceOnce((Drawable) original, refresh ? "animation-refresh-baked" : "animation-baked");
+        return animationIcon;
+    }
+
+    private static void bakeBoundSource(Object owner, Field source) {
+        if (!(owner instanceof TextView)) return;
+        TextView host = (TextView) owner;
+        if (!eligible(host)) return;
+        try {
+            // getIconVisibility() is defined by OEM as identity against its
+            // transparent placeholder; do not disturb a hidden icon.
+            HookUtil.InvocationResult<Object> visible =
+                    HookUtil.tryInvoke(owner, "getIconVisibility");
+            if (!visible.succeeded() || !(visible.value() instanceof Number)
+                    || !LauncherIconAnimationClipPolicy.isOemIconVisible(
+                            ((Number) visible.value()).intValue())) return;
+            Drawable original = (Drawable) source.get(owner);
+            if (original != null) installCachedDrawable(host, original);
+        } catch (Throwable error) {
+            synchronized (SOURCE_LOGGED) {
+                String key = "binding-error:" + error.getClass().getName();
+                if (SOURCE_LOGGED.add(key))
+                    MainHook.log(TAG + " source bind failed: " + error);
+            }
+        }
+    }
+
+    private static boolean eligible(TextView view) {
+        if (glass == null || !GlassRuntimeState.isAnyIconEnabled()) return false;
+        if (DockGlassItemRegistry.contains(view)) return true;
+        LauncherGlassStaticNode node = LauncherGlassStaticNode.find(view);
+        return node != null && node.kind() == LauncherGlassDragState.Kind.ICON;
+    }
+
+    /**
+     * Xiaomi's icon cache returns LayerAdaptiveIconDrawable/BadgeDrawable as well
+     * as framework bitmaps. An exact-class whitelist silently disabled clipping
+     * for most OS3 icons. Check the content instead; never freeze live layers.
+     */
+    private static boolean safeStaticDrawable(Drawable drawable, int depth) {
+        if (drawable == null || depth > 4 || drawable instanceof Animatable
+                || (depth == 0 && drawable.getClass() == ColorDrawable.class)) return false;
+        String name = drawable.getClass().getName();
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("fancy") || lower.contains("maml")
+                || lower.contains("lottie") || lower.contains("animated")
+                || lower.contains("dynamic")) return false;
+
+        if (name.equals("com.miui.home.launcher.graphics.drawable.BadgeDrawable")) {
+            // Work-profile badges are static decorations, but their image
+            // source must not secretly be a live MAML/Fancy drawable.
+            HookUtil.InvocationResult<Object> back =
+                    HookUtil.tryInvoke(drawable, "getBackDrawable");
+            HookUtil.InvocationResult<Object> badge =
+                    HookUtil.tryInvoke(drawable, "getBadgeDrawable");
+            if (!back.succeeded() || !(back.value() instanceof Drawable)
+                    || !safeStaticDrawable((Drawable) back.value(), depth + 1)) return false;
+            return !badge.succeeded() || badge.value() == null
+                    || badge.value() instanceof Drawable
+                    && safeStaticDrawable((Drawable) badge.value(), depth + 1);
+        }
+        if (name.equals("com.miui.home.launcher.graphics.drawable.LayerAdaptiveIconDrawable")) {
+            HookUtil.InvocationResult<Object> background =
+                    HookUtil.tryInvoke(drawable, "getBackgroundLayer");
+            HookUtil.InvocationResult<Object> foreground =
+                    HookUtil.tryInvoke(drawable, "getForegroundLayers");
+            if (!background.succeeded() || !foreground.succeeded()
+                    || !(foreground.value() instanceof List<?>)) return false;
+            if (background.value() != null
+                    && !safeLayer(background.value(), depth + 1)) return false;
+            for (Object layer : (List<?>) foreground.value())
+                if (!safeLayer(layer, depth + 1)) return false;
+            return true;
+        }
+        if (drawable instanceof AdaptiveIconDrawable) {
+            AdaptiveIconDrawable adaptive = (AdaptiveIconDrawable) drawable;
+            return (adaptive.getForeground() == null
+                    || safeStaticDrawable(adaptive.getForeground(), depth + 1))
+                    && (adaptive.getBackground() == null
+                    || safeStaticDrawable(adaptive.getBackground(), depth + 1));
+        }
+        // Other ordinary non-animated Drawables can be snapshotted once.
+        // The OEM original stays alive for native app-return/drag animations.
+        return true;
+    }
+
+    private static boolean safeLayer(Object layer, int depth) {
+        if (layer == null) return true;
+        HookUtil.InvocationResult<Object> current =
+                HookUtil.tryInvoke(layer, "getCurrentShowDrawable");
+        return current.succeeded() && current.value() instanceof Drawable
+                && safeStaticDrawable((Drawable) current.value(), depth + 1);
+    }
+
+    private static void logSourceOnce(Drawable source, String status) {
+        String key = status + ":" + source.getClass().getName();
+        synchronized (SOURCE_LOGGED) {
+            if (SOURCE_LOGGED.add(key)) {
+                MainHook.log(TAG + " " + status + " source=" + source.getClass().getName());
+            }
+        }
+    }
+
+    private static void installCachedDrawable(TextView host, Drawable original) {
+        LiquidDockConfig.Glass config = glass;
+        if (config == null) return;
+        boolean dock = DockGlassItemRegistry.contains(host);
+        boolean workstationMode = dock && MainHook.isWorkstationMode();
+        HookUtil.InvocationResult<Object> iconSizeResult =
+                HookUtil.tryInvoke(host, "getIconSize");
+        int iconSize = iconSizeResult.succeeded() && iconSizeResult.value() instanceof Number
+                ? ((Number) iconSizeResult.value()).intValue() : 0;
+        Cache cache = CACHE.get(host);
+        if (cache != null && cache.matchesBinding(host, original, config,
+                dock, workstationMode, iconSize)) {
+            BitmapDrawable existing = cache.display.get();
+            if (existing != null) {
+                existing.setBounds(original.getBounds());
+                replaceDisplayOnly(host, existing);
+            }
+            return;
+        }
+
+        // Only classify the OEM layer graph when the source/geometry changes.
+        // A hot repeat bind reuses the cached bitmap above without reflection.
+        if (!safeStaticDrawable(original, 0)) {
+            logSourceOnce(original, "skip");
+            return;
+        }
+
+        Rect bounds = original.getBounds();
+        int width = bounds.width();
+        int height = bounds.height();
+        if (width <= 0 || height <= 0 || width > 512 || height > 512) {
+            logSourceOnce(original, "skip-bounds " + width + "x" + height);
+            return;
+        }
+        LauncherGlassIconGeometry.Bounds icon = LauncherGlassIconGeometry.resolve(host);
+        if (icon == null) {
+            logSourceOnce(original, "skip-geometry");
+            return;
+        }
+        float density = host.getResources().getDisplayMetrics().density;
+        float radiusDp = config.iconStyle.cornerRadiusDp;
+        if (dock) {
+            radiusDp = WorkstationDockIconRadiusPolicy.resolve(
+                    radiusDp, workstationRadiusDp, density, workstationMode);
+        }
+        float min = Math.min(icon.width(), icon.height());
+        float nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
+                original, min, min, min * .22f);
+        if (dock && radiusDp <= 0f) {
+            float[] adjusted = LauncherGlassBoundsPolicy.apply(icon.left, icon.top,
+                    icon.right, icon.bottom, config.iconStyle.sizeOffsetDp * density);
+            float w = adjusted[2] - adjusted[0], h = adjusted[3] - adjusted[1];
+            nativeRadius = LauncherGlassIconShapeResolver.resolveAutoRadius(
+                    original, w, h, Math.min(w, h) * .22f);
+        }
+        LauncherIconGlassClipGeometry.Result shape = LauncherIconGlassClipGeometry.resolve(
+                icon.left, icon.top, icon.right, icon.bottom,
+                config.iconStyle.sizeOffsetDp * density, radiusDp * density, nativeRadius);
+
+        // Translate the unchanged static glass outline from TextView to the
+        // top compound Drawable's own local coordinate system.
+        LauncherIconGlassClipGeometry.Result local =
+                LauncherIconGlassClipGeometry.localize(shape, icon.left, icon.top);
+        // This branch runs only when a source, silhouette, or geometry changed.
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        Path outline = new Path();
+        if (config.continuousCorners) {
+            float[] xy = PrismalContinuousCorners.contour(local.right - local.left,
+                    local.bottom - local.top, local.radius);
+            if (xy.length < 2) return;
+            outline.moveTo(local.left + xy[0], local.top + xy[1]);
+            for (int i = 2; i < xy.length; i += 2)
+                outline.lineTo(local.left + xy[i], local.top + xy[i + 1]);
+            outline.close();
+        } else {
+            outline.addRoundRect(local.left, local.top, local.right, local.bottom,
+                    local.radius, local.radius, Path.Direction.CW);
+        }
+        canvas.clipPath(outline);
+
+        // One-time draw with the existing OEM tint/filter and native bounds.
+        // No BitmapDrawable/AdaptiveIconDrawable state is modified.
+        int save = canvas.save();
+        try {
+            canvas.translate(-bounds.left, -bounds.top);
+            original.draw(canvas);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+
+        BitmapDrawable baked = new BitmapDrawable(host.getResources(), bitmap);
+        baked.setBounds(bounds);
+        if (cache == null) {
+            cache = new Cache();
+            CACHE.put(host, cache);
+        }
+        cache.set(original, baked, local, width, height,
+                config.continuousCorners, config, host,
+                dock, workstationMode, iconSize);
+        replaceDisplayOnly(host, baked);
+        logSourceOnce(original, "baked");
+    }
+
+    private static void replaceDisplayOnly(TextView host, BitmapDrawable drawable) {
+        Drawable[] current = host.getCompoundDrawables();
+        if (current[1] == drawable) return;
+        host.setCompoundDrawables(current[0], drawable, current[2], current[3]);
+    }
+
+    private LauncherIconGlassClip() {}
+}

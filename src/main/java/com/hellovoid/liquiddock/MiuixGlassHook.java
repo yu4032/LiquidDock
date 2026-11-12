@@ -241,6 +241,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
 
         DockLiquidGlassHostView host = new DockLiquidGlassHostView(dockBg.getContext());
         host.setId(View.generateViewId());
+        host.setContinuousCorners(config.glass.continuousCorners);
         host.setGeometry(WorkstationRuntimeState.isActive()
                 && config.workstation.dockEnabled && config.workstation.taskbarMode
                 ? 0f : nativeRadius, false, SQUIRCLE_CP);
@@ -355,6 +356,7 @@ private static void rebuildRetainedHostRenderer(DockLiquidGlassHostView attached
         suppressVendorMaterialBody(dockBg, nativeRadius);
         float shapeRadius = Miuix307ZeroCopyRenderer.isWorkstationTaskbarMode()
                 ? 0f : nativeRadius;
+        host.setContinuousCorners(config.glass.continuousCorners);
         host.setGeometry(shapeRadius, false, SQUIRCLE_CP);
         Miuix307ZeroCopyRenderer.setNativeOpticsRadiusPx(nativeRadius);
         Miuix307ZeroCopyRenderer.sync(config.glass, Math.round(config.glass.blur));

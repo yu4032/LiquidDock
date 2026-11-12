@@ -27,7 +27,7 @@ class SettingsAvailabilityTest {
     @Test fun unrelatedLauncherFeaturesStillGrayOut() {
         val unavailable = listOf(
             Page.GridSplit, Page.DockRecentBlacklist, Page.Divider,
-            Page.Workstation, Page.WorkstationDock, Page.WorkstationDesktop,
+            Page.Workstation, Page.WorkstationDock,
             Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait, Page.Recents,
             Page.GlassFolders,
             Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,

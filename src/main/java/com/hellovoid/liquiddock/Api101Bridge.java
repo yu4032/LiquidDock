@@ -5,7 +5,7 @@ import android.util.Log;
 
 import io.github.libxposed.api.XposedModule;
 
-/** Process-local bridge to libxposed API101. */
+/** Process-local libxposed bridge (historical class name retained for source compatibility). */
 public final class Api101Bridge {
     private static volatile XposedModule module;
     private static volatile boolean debugLogging;
@@ -26,7 +26,7 @@ public final class Api101Bridge {
 
     public static XposedModule module() {
         XposedModule value = module;
-        if (value == null) throw new IllegalStateException("API 101 module not initialized");
+        if (value == null) throw new IllegalStateException("Xposed module not initialized");
         return value;
     }
 

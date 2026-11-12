@@ -38,6 +38,18 @@ public class SecurityCenterGlassGeometryTest {
     }
 
     @Test
+    public void sidebarOnlyCornerOverrideUsesDpAndClampsToHalfSize() {
+        SecurityCenterGlassGeometry geometry = SecurityCenterGlassGeometry.resolve(
+                1200, 1800, 0f, 0f, 0f, 0f, 320f, 1600f, 32f);
+        assertNotNull(geometry);
+        assertEquals(32f, geometry.toPrismalGeometry().topLeftRadius, 0.001f);
+        assertEquals(48f, geometry.toPrismalGeometry(24f, 2f).topLeftRadius, 0.001f);
+        assertEquals(160f, geometry.toPrismalGeometry(160f, 2f).topLeftRadius, 0.001f);
+        assertEquals(0f, geometry.toPrismalGeometry(0f, 2f).topLeftRadius, 0.001f);
+        assertEquals(32f, geometry.toPrismalGeometry(-1f, 2f).topLeftRadius, 0.001f);
+    }
+
+    @Test
     public void allAppsBoundsRemainRootLocalAndProduceMatchingPrismalGeometry() {
         SecurityCenterGlassGeometry geometry = SecurityCenterGlassGeometry.resolve(
                 1200, 1800,

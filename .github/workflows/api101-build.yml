@@ -1,4 +1,4 @@
-name: API101 migration build
+name: API102 migration build
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: api101-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: api102-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -90,7 +90,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: github.ref != 'refs/heads/liquiddock4' && github.head_ref != 'liquiddock4'
         with:
-          name: LiquidDock-api101-debug
+          name: LiquidDock-api102-debug
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7

@@ -21,6 +21,8 @@ LiquidDock 当前使用或编译依赖：
 
 LiquidDock 仓库包含独立 `prismal` 模块，并基于 Prismal 的光学/Shader/参数设计进行适配。具体许可证与上游归属以仓库内对应声明为准。
 
+- **liquid_glass_easy** — MIT License, Copyright (c) 2025 Ahmed Gamil — <https://github.com/AhmeedGamil/liquid_glass_easy>, revision `8e253fee087ba1d3c0928bea4c877427a36e4889`. Adapted its per-axis continuous rounded rectangle field and matching contour geometry for Prismal coverage, refraction, normals, border and shadow. No Flutter runtime or additional rendering pass. License: `docs/licenses/LiquidGlassEasy-MIT.txt`.
+
 ## Engineering references
 
 - **HyperCeiler** — GPL-3.0 — <https://github.com/ReChronoRain/HyperCeiler>

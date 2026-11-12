@@ -53,6 +53,13 @@ final class LauncherGlassSessionRegistry {
         return session != null && !session.isShutdown() ? session : null;
     }
 
+    static synchronized void setPopupMotionQualityForRoot(View root, boolean active) {
+        LauncherGlassSession session = root != null ? SESSIONS.get(root) : null;
+        if (session != null && !session.isShutdown()) {
+            session.setPopupMotionQualityActive(active);
+        }
+    }
+
     /** Update existing root owners without acquiring new surfaces or reattaching nodes. */
     static synchronized void applyLiveGlassConfigToAll(LiquidDockConfig.Glass glassConfig) {
         for (java.util.Map.Entry<View, LauncherGlassSession> entry
@@ -68,6 +75,30 @@ final class LauncherGlassSessionRegistry {
     static synchronized void requestEffectsRedrawToAll() {
         for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
             if (session != null && !session.isShutdown()) session.requestSceneRedraw();
+        }
+    }
+
+    /** Keep the immutable HWUI backdrop's sampling transform aligned with wallpaper zoom. */
+    static synchronized void onWallpaperZoomOutChanged() {
+        for (View root : new ArrayList<>(SESSIONS.keySet())) {
+            LauncherGlassStaticLayer.invalidateHwuiProbe(root);
+        }
+    }
+
+    static synchronized void onNativeAppReturnProgress(float progress) {
+        for (LauncherGlassSession session : new ArrayList<>(SESSIONS.values())) {
+            if (session != null && !session.isShutdown()) session.setNativeAppReturnProgress(progress);
+        }
+        // The FloatingIcon callback is shared by Dock and Workspace targets. Keep the Dock
+        // icon scene on the same native HOME progress even when there are no Workspace nodes.
+        Miuix307ZeroCopyRenderer.onNativeAppReturnProgress(progress);
+        LauncherGlassStaticLayer.onDockHomeReturnProgress(progress);
+    }
+
+    /** Resume backgrounds held until the first authoritative native sample arrived. */
+    static synchronized void onNativeWallpaperTransformConnected() {
+        for (View root : new ArrayList<>(SESSIONS.keySet())) {
+            LauncherGlassSceneController.requestFreshForRoot(root);
         }
     }
 

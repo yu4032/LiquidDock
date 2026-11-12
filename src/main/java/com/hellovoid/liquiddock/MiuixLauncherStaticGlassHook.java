@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock;
 
+import android.app.Activity;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -27,6 +28,24 @@ final class MiuixLauncherStaticGlassHook {
 
     static void onLiveGlassConfigChanged(LiquidDockConfig.Glass config) {
         installedGlassConfig = config;
+        LauncherIconGlassClip.configure(config);
+        invalidateIconHosts();
+    }
+
+    static void onWorkstationConfigChanged(LiquidDockConfig.Workstation config) {
+        LauncherIconGlassClip.workstation(config);
+        invalidateIconHosts();
+    }
+
+    static void onWorkstationModeChanged() {
+        LauncherIconGlassClip.refreshAll();
+        invalidateIconHosts();
+    }
+
+    private static void invalidateIconHosts() {
+        for (View host : new ArrayList<>(BOOTSTRAP_OBSERVERS.keySet())) {
+            if (isIconHost(host)) host.invalidate();
+        }
     }
 
     static void onRuntimeGlassDisabled() {
@@ -40,8 +59,10 @@ final class MiuixLauncherStaticGlassHook {
             DockGlassItemRegistry.unregister(host);
             LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
             if (node != null) node.dispose();
+            if (isIconHost(host)) host.invalidate();
         }
         BOOTSTRAP_OBSERVERS.clear();
+        LauncherIconGlassClip.refreshAll();
     }
 
     static void onRuntimeIconGlassDisabled() {
@@ -71,6 +92,8 @@ final class MiuixLauncherStaticGlassHook {
         DockGlassItemRegistry.unregister(host);
         LauncherGlassStaticNode node = LauncherGlassStaticNode.find(host);
         if (node != null && node.kind() == LauncherGlassDragState.Kind.ICON) node.dispose();
+        LauncherIconGlassClip.refreshHost(host);
+        host.invalidate();
     }
 
     /** Rebind observed widget hosts immediately after a live enable (no new Hook install). */
@@ -119,6 +142,9 @@ final class MiuixLauncherStaticGlassHook {
         }
         LiquidDockConfig.Glass glassConfig = runtimeConfig.glass;
         installedGlassConfig = glassConfig;
+        LauncherIconGlassClip.configure(glassConfig);
+        LauncherIconGlassClip.workstation(runtimeConfig.workstation);
+        LauncherIconGlassClip.install(classLoader);
         // Observe native self-blur writes before constructing/binding widget hosts.
         LauncherWidgetNativeViewBlurGate.install(classLoader);
         boolean any = false;
@@ -235,6 +261,13 @@ final class MiuixLauncherStaticGlassHook {
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         // Launcher 4.50 WindowElement and FastLaunchWindowElement both pass
                         // (animType != CLOSE_TO_HOME) as the second boolean in this overload.
+                        if (args.length == 10 && args[6] instanceof Boolean
+                                && !((Boolean) args[6]) && args[3] instanceof Number) {
+                            // Material quality is shared by every Workspace node, including
+                            // widgets when icon glass is disabled or the target lives in Dock.
+                            LauncherGlassSessionRegistry.onNativeAppReturnProgress(
+                                    ((Number) args[3]).floatValue());
+                        }
                         if (GlassRuntimeState.isIconEnabled()
                                 && args.length == 10 && args[0] instanceof RectF
                                 && args[1] instanceof RectF && args[6] instanceof Boolean) {
@@ -247,14 +280,9 @@ final class MiuixLauncherStaticGlassHook {
                                 LauncherGlassStaticNode node =
                                         LauncherGlassStaticNode.find((View) target);
                                 if (node != null && args[2] instanceof Number) {
-                                    if ((Boolean) args[6]) {
-                                        // A running return can be retargeted into a new launch.
-                                        node.resetHomeReturnFade();
-                                        return chain.proceed(args);
-                                    }
-                                    if (args[3] instanceof Number) {
-                                        node.updateHomeReturnProgress(((Number) args[3]).floatValue());
-                                    }
+                                    boolean closeToHome = !((Boolean) args[6]);
+                                    float transitionProgress = args[3] instanceof Number
+                                            ? ((Number) args[3]).floatValue() : 0f;
                                     float proxyAlpha = ((Number) args[2]).floatValue();
                                     boolean drawIcon;
                                     if (useRotationRect) {
@@ -276,8 +304,12 @@ final class MiuixLauncherStaticGlassHook {
                                                     proxyAlpha, drawIcon)
                                             : LauncherGlassProxyVisibility.isView2Visible(
                                                     proxyAlpha, drawIcon);
-                                    if (!proxyVisible) {
-                                        if (node.holdLaunchProxyHidden()) {
+                                    boolean publishProxyGeometry =
+                                            LauncherGlassProxyVisibility.shouldPublishGeometry(
+                                                    closeToHome, proxyVisible);
+                                    if (!publishProxyGeometry) {
+                                        if (node.holdLaunchProxyHidden(
+                                                closeToHome, transitionProgress)) {
                                             MainHook.log(TAG + " proxy owner hidden class="
                                                     + owner.getClass().getSimpleName()
                                                     + " target=" + target.getClass().getSimpleName()
@@ -285,12 +317,20 @@ final class MiuixLauncherStaticGlassHook {
                                         }
                                     } else {
                                         // FloatingIconView2 draws iconRect; FloatingIconLayer2 places
-                                        // its SurfaceControl from rotationIconRect. Do not publish the
-                                        // task-sized morph rect until MIUI itself shows the icon proxy.
+                                        // its SurfaceControl from rotationIconRect. CLOSE_TO_HOME
+                                        // waits for drawable ownership; launch-away tracks its morph
+                                        // rect from the first update and gates opacity separately.
                                         RectF proxyRect = (RectF) args[useRotationRect ? 1 : 0];
+                                        // Launch-away Layer2 opacity is a continuous SurfaceControl
+                                        // value; View2's setAlpha is binary at the native visibility
+                                        // threshold. CLOSE_TO_HOME keeps the shared progress fade.
+                                        float visualAlpha = closeToHome ? 1f
+                                                : proxyVisible
+                                                ? (useRotationRect ? proxyAlpha : 1f) : 0f;
                                         boolean firstVisible = node.updateLaunchProxyGeometry(
                                                 proxyRect.left, proxyRect.top,
-                                                proxyRect.right, proxyRect.bottom);
+                                                proxyRect.right, proxyRect.bottom,
+                                                visualAlpha, closeToHome, transitionProgress);
                                         if (firstVisible) {
                                             MainHook.log(TAG + " proxy geometry visible class="
                                                     + owner.getClass().getSimpleName()
@@ -332,19 +372,36 @@ final class MiuixLauncherStaticGlassHook {
     private static void scheduleWorkspaceResumeReconcile(
             Object launcher, LiquidDockConfig.Glass glassConfig) {
         if (!GlassRuntimeState.isEnabled() || launcher == null) return;
-        HookUtil.InvocationResult<Object> workspaceResult =
-                HookUtil.tryInvoke(launcher, "getWorkspace");
-        Object value = workspaceResult.succeeded() ? workspaceResult.value() : null;
-        if (!(value instanceof View)) return;
-        View workspace = (View) value;
-        workspace.postOnAnimation(() -> {
-            if (!GlassRuntimeState.isEnabled() || !workspace.isAttachedToWindow()) return;
-            reconcileCurrentWorkspacePage(workspace, glassConfig);
+        View root = launcherDecorView(launcher);
+        if (root == null) return;
+        root.postOnAnimation(() -> {
+            if (!GlassRuntimeState.isEnabled() || !root.isAttachedToWindow()) return;
+            LauncherGlassStaticLayer.onLauncherResumed(root);
+            View workspace = findWorkspace(root);
+            if (workspace != null) reconcileCurrentWorkspacePage(workspace, glassConfig);
             // Resume is not a source invalidation. The invalidate only schedules normal pre-draw
             // geometry reconciliation; Surface/wallpaper/rotation freshness stays with its owner.
-            workspace.postInvalidateOnAnimation();
+            root.postInvalidateOnAnimation();
             MainHook.log(TAG + " Workspace HOME resume reconciled");
         });
+    }
+
+    private static View launcherDecorView(Object launcher) {
+        if (!(launcher instanceof Activity)) return null;
+        Activity activity = (Activity) launcher;
+        return activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
+    }
+
+    private static View findWorkspace(View view) {
+        if (view == null) return null;
+        if ("com.miui.home.launcher.Workspace".equals(view.getClass().getName())) return view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View workspace = findWorkspace(group.getChildAt(i));
+            if (workspace != null) return workspace;
+        }
+        return null;
     }
 
     private static void installWidgetBackgroundOwnershipHook(
@@ -454,6 +511,10 @@ final class MiuixLauncherStaticGlassHook {
             View.OnAttachStateChangeListener listener = new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View v) {
                     scheduleBind(v, kind, glassConfig, 0);
+                    if (kind == LauncherGlassDragState.Kind.ICON) {
+                        // A detached page can miss an icon radius/config refresh.
+                        LauncherIconGlassClip.refreshHost(v);
+                    }
                 }
                 @Override public void onViewDetachedFromWindow(View v) {
                     DockGlassItemRegistry.unregister(v);
@@ -495,7 +556,10 @@ final class MiuixLauncherStaticGlassHook {
         if (kind == LauncherGlassDragState.Kind.ICON
                 && domain == LauncherGlassHierarchy.Domain.DOCK) {
             if (node != null) node.dispose();
-            DockGlassItemRegistry.register(host);
+            if (!DockGlassItemRegistry.contains(host)) {
+                DockGlassItemRegistry.register(host);
+                LauncherIconGlassClip.refreshHost(host);
+            }
             return;
         }
         DockGlassItemRegistry.unregister(host);
@@ -514,6 +578,10 @@ final class MiuixLauncherStaticGlassHook {
         if (node == null || node.kind() != kind) {
             float radius = resolveCornerRadius(host, kind);
             node = LauncherGlassStaticNode.attachToMaterial(host, kind, radius, glassConfig);
+            if (kind == LauncherGlassDragState.Kind.ICON) {
+                LauncherIconGlassClip.refreshHost(host);
+                host.invalidate();
+            }
         } else {
             node.requestLifecycleRefresh();
         }
@@ -576,6 +644,8 @@ final class MiuixLauncherStaticGlassHook {
         }
         float nativeRadius = readCornerRadius(host);
         if (Float.isFinite(nativeRadius) && nativeRadius > 0f) return nativeRadius;
+        // The widget's size-dependent fallback is resolved from each geometry snapshot.
+        if (kind == LauncherGlassDragState.Kind.WIDGET) return 0f;
         float min = Math.min(Math.max(1, host.getWidth()), Math.max(1, host.getHeight()));
         return Math.max(0f, min * 0.08f);
     }

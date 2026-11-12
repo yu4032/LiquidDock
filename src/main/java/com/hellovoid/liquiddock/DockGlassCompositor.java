@@ -13,8 +13,6 @@ import java.util.ArrayList;
 final class DockGlassCompositor {
     private static final long HASH_SEED = 0xcbf29ce484222325L;
     private static final long HASH_PRIME = 0x100000001b3L;
-    // PrismalRasterGuardShader expands every silhouette by two logical pixels per side.
-    private static final float RASTER_GUARD_PX = 2f;
 
     private static final class CachedItem {
         final DockGlassItemNode node;
@@ -32,6 +30,7 @@ final class DockGlassCompositor {
     /** Prismal geometry is in physical framebuffer pixels, while optical widths are dp. */
     private final float pixelDensity;
     private final ArrayList<CachedItem> cached = new ArrayList<>();
+    private final DockGlassIconHomeVisibility homeVisibility = new DockGlassIconHomeVisibility();
     private long[] uiFingerprintScratch = new long[0];
     private long[] proxyFingerprintScratch = new long[0];
     private DockIconAnimationState.Sample[] animationSampleScratch =
@@ -49,14 +48,6 @@ final class DockGlassCompositor {
     private float lastInsetL = Float.NaN, lastInsetT = Float.NaN;
     private float lastScaleX = Float.NaN, lastScaleY = Float.NaN;
     private boolean lastWorkstationMode;
-    private boolean lastDirtyValid;
-    private int lastDirtyFramebufferWidth = -1;
-    private int lastDirtyFramebufferHeight = -1;
-    private float lastDirtyLeft;
-    private float lastDirtyTop;
-    private float lastDirtyRight;
-    private float lastDirtyBottom;
-
     DockGlassCompositor(View ownershipRoot, View outputRoot) {
         ownershipRootRef = new WeakReference<>(ownershipRoot);
         outputRootRef = new WeakReference<>(outputRoot);
@@ -76,6 +67,18 @@ final class DockGlassCompositor {
         workstationIconCornerRadiusDp = Math.max(0f, radiusDp);
         seenRevision = -1L;
         lastFingerprint = Long.MIN_VALUE;
+    }
+
+    boolean beginHomeReturn() {
+        return homeVisibility.begin();
+    }
+
+    boolean observeHomeReturn(float progress) {
+        return homeVisibility.observe(progress);
+    }
+
+    boolean finishHomeReturn() {
+        return homeVisibility.finish();
     }
 
     void invalidateUiScene() {
@@ -148,6 +151,9 @@ final class DockGlassCompositor {
             fingerprint = mix(fingerprint, Float.floatToIntBits(animationSample.opacity));
         }
         fingerprint = mix(fingerprint, outputFingerprint);
+        float homeIconAlpha = LauncherGlassStaticLayer.dockBackgroundIconAlpha(
+                homeVisibility.alpha());
+        fingerprint = mix(fingerprint, Float.floatToIntBits(homeIconAlpha));
 
         boolean geometryMappingChanged = framebufferWidth != lastW || framebufferHeight != lastH
                 || Float.compare(sampleInsetLeft, lastInsetL) != 0
@@ -206,8 +212,15 @@ final class DockGlassCompositor {
                 cachedItem.uiFingerprint = uiFingerprint;
                 cachedItem.proxyFingerprint = proxyFingerprint;
             }
-            if (animationSample.opacity <= 0f || cachedItem.geometry == null) continue;
-            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, animationSample.opacity));
+            // Native ShortcutIcon and its container may fade independently from
+            // CLOSE_TO_HOME progress. The proxy owns visibility while the source is
+            // hidden, so do not apply the source's zero alpha to proxy geometry.
+            float outputAlpha = DockGlassIconOpacity.resolve(
+                    animationSample.opacity,
+                    animationSample.proxyActive ? 1f : item.nativePresentationAlpha(ownershipRoot),
+                    animationSample.proxyActive, homeIconAlpha);
+            if (outputAlpha <= 0.001f || cachedItem.geometry == null) continue;
+            out.add(new DockGlassSceneSnapshot.Item(cachedItem.geometry, outputAlpha, animationSample.proxyActive));
         }
         latestScene = new DockGlassSceneSnapshot(
                 out.toArray(new DockGlassSceneSnapshot.Item[0]));
@@ -233,48 +246,13 @@ final class DockGlassCompositor {
 
     DockGlassSceneSnapshot latestScene() { return latestScene; }
 
-    int drawFrame(PrismalRenderer renderer, PrismalGeometry dockBody, PrismalParams params,
+    /** Append the Dock body and icons to the output selected by the session. */
+    void drawNodes(PrismalRenderer renderer, PrismalGeometry dockBody, PrismalParams params,
             PrismalHighlightProfile dockBodyHighlightProfile,
             DockGlassSceneSnapshot scene, int framebufferWidth, int framebufferHeight) {
         PrismalHighlightProfile bodyHighlightProfile = dockBodyHighlightProfile != null
                 ? dockBodyHighlightProfile : PrismalHighlightProfile.ALL_ENABLED;
         DockGlassSceneSnapshot stable = scene != null ? scene : DockGlassSceneSnapshot.EMPTY;
-
-        // The dirty-region guard must also enclose optional exterior paint.
-        // Keep the previous-frame union below to prevent trails during movement.
-        float bodyFringe = RASTER_GUARD_PX + GlassEdgeEffects.current(GlassEdgeEffects.DOCK)
-                .extraGuardPx(pixelDensity, Math.min(dockBody.glassWidth, dockBody.glassHeight));
-        float currentLeft = dockBody.left() - bodyFringe;
-        float currentTop = dockBody.top() - bodyFringe;
-        float currentRight = dockBody.right() + bodyFringe;
-        float currentBottom = dockBody.bottom() + bodyFringe;
-        for (DockGlassSceneSnapshot.Item item : stable.items) {
-            LauncherGlassGeometry.Snapshot geometry = item.geometry;
-            if (geometry == null) continue;
-            float iconFringe = RASTER_GUARD_PX + GlassEdgeEffects.current(GlassEdgeEffects.ICON)
-                    .extraGuardPx(pixelDensity, Math.min(geometry.width, geometry.height));
-            currentLeft = Math.min(
-                    currentLeft, geometry.centerX - geometry.width * 0.5f - iconFringe);
-            currentTop = Math.min(
-                    currentTop, geometry.centerY - geometry.height * 0.5f - iconFringe);
-            currentRight = Math.max(
-                    currentRight, geometry.centerX + geometry.width * 0.5f + iconFringe);
-            currentBottom = Math.max(
-                    currentBottom, geometry.centerY + geometry.height * 0.5f + iconFringe);
-        }
-
-        boolean sameFramebuffer = lastDirtyValid
-                && lastDirtyFramebufferWidth == framebufferWidth
-                && lastDirtyFramebufferHeight == framebufferHeight;
-        if (sameFramebuffer) {
-            renderer.beginGlassFrameRegion(
-                    Math.min(lastDirtyLeft, currentLeft),
-                    Math.min(lastDirtyTop, currentTop),
-                    Math.max(lastDirtyRight, currentRight),
-                    Math.max(lastDirtyBottom, currentBottom));
-        } else {
-            renderer.beginGlassFrame();
-        }
 
         // Dock body and icons use the same configurable in-pass Prismal
         // cast-shadow pipeline as all other liquid-glass components.
@@ -284,20 +262,16 @@ final class DockGlassCompositor {
         for (DockGlassSceneSnapshot.Item item : stable.items) {
             LauncherGlassGeometry.Snapshot geometry = item.geometry;
             if (geometry == null) continue;
-            renderer.drawGlass(new PrismalGeometry(framebufferWidth, framebufferHeight,
-                    geometry.centerX, geometry.centerY, geometry.width, geometry.height,
-                    geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
+            renderer.setTransientQualityActive(item.animating);
+            try {
+                renderer.drawGlass(new PrismalGeometry(framebufferWidth, framebufferHeight,
+                        geometry.centerX, geometry.centerY, geometry.width, geometry.height,
+                        geometry.cornerRadius), params, iconHighlightProfile, item.opacity);
+            } finally {
+                renderer.setTransientQualityActive(false);
+            }
         }
-
         renderer.setEdgeDecoration(null, pixelDensity);
-        lastDirtyValid = true;
-        lastDirtyFramebufferWidth = framebufferWidth;
-        lastDirtyFramebufferHeight = framebufferHeight;
-        lastDirtyLeft = currentLeft;
-        lastDirtyTop = currentTop;
-        lastDirtyRight = currentRight;
-        lastDirtyBottom = currentBottom;
-        return stable.size();
     }
 
     private static long proxyFingerprint(DockIconAnimationState.Sample sample) {

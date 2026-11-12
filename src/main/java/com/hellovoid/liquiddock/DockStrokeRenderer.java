@@ -237,12 +237,16 @@ final class DockStrokeRenderer {
 
             if (installed == null) {
                 installed = new StrokeDrawable(
-                        preserveExistingForeground ? current : null);
+                        preserveExistingForeground ? current : null,
+                        host instanceof DockLiquidGlassHostView
+                                && ((DockLiquidGlassHostView) host).usesContinuousCorners());
                 INSTALLED.put(host, installed);
             } else if (!preserveExistingForeground) {
                 installed.setBaseForeground(null);
             }
 
+            installed.setContinuousCorners(host instanceof DockLiquidGlassHostView
+                    && ((DockLiquidGlassHostView) host).usesContinuousCorners());
             installed.setStyle(style);
             installed.setRadius(radius);
             if (host.getForeground() != installed) {
@@ -290,6 +294,8 @@ final class DockStrokeRenderer {
                     continue;
                 }
                 Style style = Style.from(config, host);
+                installed.setContinuousCorners(host instanceof DockLiquidGlassHostView
+                        && ((DockLiquidGlassHostView) host).usesContinuousCorners());
                 installed.setStyle(style);
                 if (host.getForeground() != installed) {
                     host.setForeground(installed);
@@ -472,6 +478,7 @@ final class DockStrokeRenderer {
 
     private static final class StrokeDrawable extends Drawable {
         private Drawable baseForeground;
+        private boolean continuousCorners;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path outer = new Path();
         private final Path inner = new Path();
@@ -485,8 +492,9 @@ final class DockStrokeRenderer {
         private int drawableAlpha = 255;
         private ColorFilter colorFilter;
 
-        StrokeDrawable(Drawable baseForeground) {
+        StrokeDrawable(Drawable baseForeground, boolean continuousCorners) {
             this.baseForeground = baseForeground;
+            this.continuousCorners = continuousCorners;
             paint.setStyle(Paint.Style.FILL);
         }
 
@@ -496,6 +504,13 @@ final class DockStrokeRenderer {
 
         void setBaseForeground(Drawable baseForeground) {
             this.baseForeground = baseForeground;
+            invalidateSelf();
+        }
+
+        void setContinuousCorners(boolean enabled) {
+            if (continuousCorners == enabled) return;
+            continuousCorners = enabled;
+            geometryDirty = true;
             invalidateSelf();
         }
 
@@ -616,12 +631,16 @@ final class DockStrokeRenderer {
             return true;
         }
 
-        private static void buildShape(
+        private void buildShape(
                 Path out,
                 RectF rect,
                 float requestedRadius,
                 boolean squircle,
                 float cp) {
+            if (continuousCorners) {
+                DockShapePath.buildContinuous(out, rect, requestedRadius);
+                return;
+            }
             float maxRadius =
                     Math.max(0f, Math.min(rect.width(), rect.height()) * 0.5f);
             float r =

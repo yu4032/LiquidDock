@@ -1,6 +1,6 @@
 # LiquidDock Architecture
 
-本文档记录 LiquidDock 生产架构（原逐项核验于 2026-10-03）。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。具体 Hook 时序以源码和测试为准；当前架构技术债见 [TODO.md](TODO.md) 与 [2026-10-10 可维护性审计](docs/maintainability-audit-20261010.md)。历史 `docs/superpowers/*` 是阶段性记录。
+本文件介绍 LiquidDock 当前架构、运行时所有权和主要渲染流程。当前构建为 **v2.7.6 / libxposed API 102**；Hook 时序及未完成任务见源码、[HOOKS.md](HOOKS.md) 与 [TODO.md](TODO.md)。
 
 当前新增边界：
 
@@ -18,7 +18,7 @@ Launcher:       com.miui.home release-4.50.x.x
 SystemUI:       com.android.systemui
 SecurityCenter: com.miui.securitycenter:ui
 Third party:    Gboard / MIUI Searchbox
-Hook API:       libxposed API 101
+Hook API:       libxposed API 102
 Renderer:       PassBlur + OES/GLES + Prismal
 Build:          JDK 17 / Gradle 9.6.1 / AGP 9.3.0
 Optimization:   Debug 与 Release 均启用
@@ -47,7 +47,7 @@ Launcher 是主功能进程，负责：
 当前主要组合入口：
 
 - `MainHook`：Dock / Workstation / Grid 的安装顺序与 fallback composition；
-- `Miuix307MaterialPipeline`：支持版本的 Dock 主材质路径；
+- `MiuixMaterialPipeline`：支持版本的 Dock 主材质路径；
 - `MiuixLauncherStaticGlassHook`：Workspace 静态节点；
 - `MiuixLauncherDragOverlayHook`：拖拽视觉；
 - `MiuixFolderGlassHook`：文件夹；
@@ -264,7 +264,7 @@ ShortcutMenu 的小型 drawable 颜色分类 Bitmap 不属于 backdrop capture�
 5. Dock shadow ownership；
 6. glass owner / fallback Dock customization。
 
-当支持的 `Miuix307MaterialPipeline` 成功拥有 Dock 时，旧 fallback Dock customization 不再继续安装。
+当支持的 `MiuixMaterialPipeline` 成功拥有 Dock 时，旧 fallback Dock customization 不再继续安装。
 
 Dock 相关主要 owner：
 
@@ -300,7 +300,7 @@ Workspace 图标、小组件、文件夹等静态节点共享 Launcher root-wide
 - `LauncherGlassSession` 在 UI `OnPreDraw` 内扫描静态节点；只有已经验证且本帧保持稳定的 geometry frame 才能复用。成功捕获的空文件夹使用显式空帧 token，未捕获不视为空帧。
 - `LauncherGlassStaticGeometryCache` 保留**每节点独立**的旧帧 View 指纹；每个 PreDraw 使用共享的 `Frame` 临时采样相同祖先 View 的属性和矩阵，随帧重置，不把共享样本当作跨帧修订号。
 - Widget 的 native span owner、`spanX` 与网格计算的横向宽度补偿仍在每次允许复用的 PreDraw 中校验，变化则重新捕获。原生运动、代理、旋转、解锁和 Recents 时保持完整几何 authority。
-- [#420](https://github.com/yu4032/LiquidDock/pull/420)–[#422](https://github.com/yu4032/LiquidDock/pull/422) 完成上述**稳定 Workspace 静态几何 P0**；见 [2026-10-18 验收记录](docs/perf/workspace-static-geometry-p0-20261018.md)。这不意味着动态分页、PassBlur、GPU 或端到端掉帧已解决。
+- [#420](https://github.com/yu4032/LiquidDock/pull/420)–[#422](https://github.com/yu4032/LiquidDock/pull/422) 已完成 Workspace 静态几何复用与 P0 验收；动态场景、PassBlur 与 GPU 帧时间分别列入后续性能任务。见 [2026-10-18 验收记录](docs/perf/workspace-static-geometry-p0-20261018.md)。
 
 ### Freshness authority
 

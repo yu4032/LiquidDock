@@ -200,6 +200,12 @@ final class LauncherGlassSceneController {
         displayRotation = readDisplayRotation(root);
     }
 
+    static boolean isWallpaperContentGenerationCurrent(View root, long generation) {
+        LauncherGlassSceneController controller = findRoot(root);
+        return controller != null
+                && controller.wallpaperContentState.generation() == generation;
+    }
+
     static synchronized void applyLiveGlassConfigForRoot(
             View root, LiquidDockConfig.Glass glassConfig) {
         LauncherGlassSceneController controller = BY_ROOT.get(root);
@@ -631,6 +637,10 @@ final class LauncherGlassSceneController {
             return;
         }
         if (isPresentationPending()) return;
+        // A native HOME handoff can leave the independent glass layer with an old alpha
+        // even though its retained scene is still valid. Reconcile actual visibility
+        // before choosing whether the content needs a fresh producer frame.
+        applyLayerVisibility();
         if (state.state() != State.COVERED && state.state() != State.DETACHED) {
             MainHook.log(TAG + " presentation settled reason=home"
                     + " generation=" + state.generation());
@@ -759,8 +769,8 @@ final class LauncherGlassSceneController {
                     || state.isRotationPresentationPending();
             boolean visible = state.isLayerVisible() && !hardPresentationCover;
             current.setSceneVisible(visible, state.consumeFadeReveal(),
-                    state.requiresImmediateLayerHide(folderCovered, recentsCovered),
-                    folderCovered && !recentsCovered && !state.isRotationPresentationPending());
+                    state.requiresImmediateLayerHide(folderCovered, recentsCovered)
+                            || folderCovered);
         }
     }
 

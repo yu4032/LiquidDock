@@ -26,8 +26,9 @@ internal fun ShortcutPopupGlassSettingsPage(
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
     onOpenEdge: () -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) = ScopedMenuGlassSettingsPage(
-    padding, prefs, masterEnabled, onOpenAll, onOpenEdge,
+    padding, prefs, masterEnabled, onOpenAll, onOpenEdge, searchFocus,
     scope = ScopedGlassOptics.POPUP,
     titleRes = R.string.page_shortcut_popup,
     description = "独立调整桌面长按快捷菜单的玻璃外观；未单独设置的参数继承全局液态玻璃。",
@@ -35,6 +36,7 @@ internal fun ShortcutPopupGlassSettingsPage(
     toggleTitle = "启用快捷菜单玻璃",
     toggleDescription = "替换长按图标时的菜单背景；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启桌面",
     blurTitle = "菜单背景模糊",
+    cornerRadiusKey = ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS,
 )
 
 @Composable
@@ -44,8 +46,9 @@ internal fun HandleMenuGlassSettingsPage(
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
     onOpenEdge: () -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) = ScopedMenuGlassSettingsPage(
-    padding, prefs, masterEnabled, onOpenAll, onOpenEdge,
+    padding, prefs, masterEnabled, onOpenAll, onOpenEdge, searchFocus,
     scope = ScopedGlassOptics.HANDLE_MENU,
     titleRes = R.string.page_handle_menu,
     description = "独立调整应用顶部控制器弹出菜单的玻璃；未单独设置的参数继承全局液态玻璃。",
@@ -53,6 +56,7 @@ internal fun HandleMenuGlassSettingsPage(
     toggleTitle = "启用应用顶部菜单玻璃",
     toggleDescription = "替换应用顶部控制器展开的分屏、小窗菜单；已有 Hook 时实时生效，首次加载缺失的 Hook 需重启系统界面",
     blurTitle = "顶部菜单背景模糊",
+    cornerRadiusKey = ConfigSchema.Glass.HANDLE_MENU_CORNER_RADIUS,
 )
 
 @Composable
@@ -62,6 +66,7 @@ private fun ScopedMenuGlassSettingsPage(
     masterEnabled: Boolean,
     onOpenAll: () -> Unit,
     onOpenEdge: () -> Unit,
+    searchFocus: SettingsFocusRequest?,
     scope: String,
     titleRes: Int,
     description: String,
@@ -69,6 +74,7 @@ private fun ScopedMenuGlassSettingsPage(
     toggleTitle: String,
     toggleDescription: String,
     blurTitle: String,
+    cornerRadiusKey: ConfigKey<Int>,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -126,7 +132,15 @@ private fun ScopedMenuGlassSettingsPage(
         )
     }
 
+    val page = if (scope == ScopedGlassOptics.POPUP)
+        Page.ShortcutPopupCustomization else Page.HandleMenuCustomization
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(searchFocus?.sequence, searchFocus?.key) {
+        val index = searchFocus?.key?.let { customDenseFocusIndex(page, it) }
+        if (index != null) listState.animateScrollToItem(index)
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = padding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -159,7 +173,18 @@ private fun ScopedMenuGlassSettingsPage(
                 }
             }
         }
-        item(key = "shortcut-color-title") { SmallTitle("玻璃颜色") }
+        item(key = "menu-corner-title") { SmallTitle("圆角") }
+        item(key = "menu-corner-radius") {
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    IntSpec(cornerRadiusKey, "菜单圆角", "dp",
+                        summary = "小于 0 跟随系统圆角，0 为直角；重新打开菜单生效"),
+                    controlsEnabled,
+                )
+            }
+        }
+        item(key = "shortcut-color-title") { SmallTitle("玻璃染色（保留背景纹理）") }
         item(key = "shortcut-color") {
             SettingsCard {
                 appearance(ConfigSchema.Glass.TINT_RED, "红")
@@ -169,7 +194,7 @@ private fun ScopedMenuGlassSettingsPage(
         }
         item(key = "shortcut-color-alpha") {
             SettingsCard {
-                appearance(ConfigSchema.Glass.TINT_ALPHA, "不透明度")
+                appearance(ConfigSchema.Glass.TINT_ALPHA, "染色强度")
             }
         }
         item(key = "shortcut-blur-title") { SmallTitle("模糊") }

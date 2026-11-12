@@ -12,6 +12,18 @@ final class Miuix307PassBlurShaders {
             }
             """;
 
+    // Fuse the existing source adapter's Y flip into producer normalization. Other consumers
+    // still use QUAD_VERTEX and conventional FBO orientation.
+    static final String PRISMAL_SOURCE_VERTEX = """
+            attribute vec2 aPosition;
+            attribute vec2 aUv;
+            varying vec2 vUv;
+            void main() {
+                vUv = vec2(aUv.x, 1.0 - aUv.y);
+                gl_Position = vec4(aPosition, 0.0, 1.0);
+            }
+            """;
+
     static final String OES_NORMALIZE_FRAGMENT = """
             #extension GL_OES_EGL_image_external : require
             precision highp float;

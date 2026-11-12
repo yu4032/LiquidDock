@@ -109,6 +109,60 @@ public class LauncherHomeTransitionStateTest {
         assertFalse(state.isArmed());
     }
 
+    @Test public void physicalTerminalWithoutOwnerCompletionEventuallyReleases() {
+        LauncherHomeTransitionState state = new LauncherHomeTransitionState();
+        Object owner = new Object();
+        Object spring = new Object();
+        state.onHomeAnimationStarted(owner, spring);
+        long cycle = state.onSpringPhysicalTerminal(spring);
+        assertTrue(cycle > 0L);
+        assertTrue("physical terminal alone cannot release a merged HOME owner", state.isArmed());
+        assertTrue(state.onTerminalGraceExpired(cycle).releaseBarrier);
+        assertFalse(state.isArmed());
+        assertFalse(state.onTerminalGraceExpired(cycle).releaseBarrier);
+    }
+
+    @Test public void failOpenCannotReleaseLiveOrRestartedSpring() {
+        LauncherHomeTransitionState state = new LauncherHomeTransitionState();
+        Object owner = new Object();
+        Object spring = new Object();
+        state.onHomeAnimationStarted(owner, spring);
+        assertFalse(state.onTerminalGraceExpired(1L).releaseBarrier);
+        long oldCycle = state.onSpringPhysicalTerminal(spring);
+        state.onHomeAnimationStarted(owner, spring);
+        assertFalse(state.onTerminalGraceExpired(oldCycle).releaseBarrier);
+        assertTrue(state.isArmed());
+        long newCycle = state.onSpringPhysicalTerminal(spring);
+        assertTrue(state.onTerminalGraceExpired(newCycle).releaseBarrier);
+    }
+
+    @Test public void naturalCompletionOrRetargetSupersedesPendingTimeout() {
+        LauncherHomeTransitionState state = new LauncherHomeTransitionState();
+        Object owner = new Object();
+        Object spring = new Object();
+        state.onHomeAnimationStarted(owner, spring);
+        long cycle = state.onSpringPhysicalTerminal(spring);
+        state.onOwnerFinishRequested(owner);
+        assertTrue(state.onOwnerFinishCompleted(owner).releaseBarrier);
+        assertFalse(state.onTerminalGraceExpired(cycle).releaseBarrier);
+        state.onHomeAnimationStarted(owner, spring);
+        long nextCycle = state.onSpringPhysicalTerminal(spring);
+        assertTrue(state.onAnimationRetargetedAway(owner, spring).releaseBarrier);
+        assertFalse(state.onTerminalGraceExpired(nextCycle).releaseBarrier);
+    }
+
+    @Test public void stalePhysicalTerminalCannotArmRecoveryForNewOwner() {
+        LauncherHomeTransitionState state = new LauncherHomeTransitionState();
+        Object owner = new Object();
+        Object previousSpring = new Object();
+        Object activeSpring = new Object();
+        state.onHomeAnimationStarted(owner, previousSpring);
+        state.onHomeAnimationStarted(owner, activeSpring);
+        assertTrue(state.onSpringPhysicalTerminal(previousSpring) < 0L);
+        assertFalse(state.onTerminalGraceExpired(1L).releaseBarrier);
+        assertTrue(state.isArmed());
+    }
+
     @Test public void acceptedRetargetAwayReleasesOnlyMatchingHomeSpring() {
         LauncherHomeTransitionState state = new LauncherHomeTransitionState();
         Object owner = new Object();

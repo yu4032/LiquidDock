@@ -340,11 +340,13 @@ final class LauncherGlassDragOverlay {
         if (carrierParent instanceof ViewGroup) ((ViewGroup) carrierParent).removeView(carrier);
         LauncherGlassSession session = sourceSession;
         sourceSession = null;
-        if (session != null) session.shutdown();
         LauncherDragSourceOverlay overlay = sourceOverlay;
         sourceOverlay = null;
         sourceAttachPending = false;
-        if (overlay != null) overlay.dispose();
+        // Native PassBlur unbind runs asynchronously. The independent capture root must
+        // remain valid until the compositor has committed detach and EGL teardown completes.
+        if (session != null) session.shutdown(overlay != null ? overlay::dispose : null);
+        else if (overlay != null) overlay.dispose();
     }
 
     private void applyCarrierGeometry(View source) {

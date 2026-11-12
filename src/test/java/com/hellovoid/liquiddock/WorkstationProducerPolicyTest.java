@@ -29,23 +29,19 @@ public class WorkstationProducerPolicyTest {
     @Test
     public void recentsConsumerReleaseRespectsFolderAndWallpaperAuthorities() {
         assertTrue(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
-                true, false, false, false));
+                true, false));
         assertTrue(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
-                true, true, false, true));
+                true, true));
         assertTrue(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
-                false, true, false, false));
-        assertTrue(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
-                false, false, true, false));
+                false, false));
         assertFalse(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
-                false, true, true, true));
-        assertFalse(WorkstationProducerPolicy.shouldPauseAfterRecentsConsumerGone(
-                false, false, false, false));
+                false, true));
     }
 
     @Test
-    public void workspaceRefreshUsesContinuousCaptureInAllModes() {
+    public void normalWorkspaceRefreshUsesPulseAndWorkstationRemainsLive() {
         assertFalse(WorkstationProducerPolicy.shouldUseSingleFramePulse(true));
-        assertFalse(WorkstationProducerPolicy.shouldUseSingleFramePulse(false));
+        assertTrue(WorkstationProducerPolicy.shouldUseSingleFramePulse(false));
     }
 
     @Test

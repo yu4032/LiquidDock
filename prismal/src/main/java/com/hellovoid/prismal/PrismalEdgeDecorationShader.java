@@ -10,6 +10,8 @@ package com.hellovoid.prismal;
 final class PrismalEdgeDecorationShader {
     private static final String PRECISION = "precision highp float;";
     private static final String BEFORE_DISCARD = "if (opacity < 0.001) discard;";
+    private static final String BASE_FILL =
+            "color = mix(color, u_baseColor.rgb, u_baseColor.a);";
     private static final String FINAL =
             "gl_FragColor = vec4(color, opacity * u_transmittance);";
 
@@ -19,6 +21,7 @@ final class PrismalEdgeDecorationShader {
         requireOnce(shader, PRECISION);
         requireOnce(shader, BEFORE_DISCARD);
         requireOnce(shader, FINAL);
+        requireOnce(shader, BASE_FILL);
         if (!shader.contains("vec2 os4SdfGradient = vec2(")
                 || !shader.contains("float edgeAa = max(fwidth(distMask), 0.75);")
                 || !shader.contains("float edgeDist = -distMask;")
@@ -27,7 +30,10 @@ final class PrismalEdgeDecorationShader {
                 || !shader.contains("uniform float u_os4DirectionalOppositeIntensity;")) {
             throw new IllegalStateException("Prismal OS4 optics/light contract changed");
         }
-        return shader.replace(PRECISION, PRECISION + """
+        // OpticalEdgeShader injects debug normals between base fill and final output.
+        // Remove the upstream fill before replacing the final compositor, so pure color
+        // applies exactly once to the decorated glass body after ring shading.
+        return shader.replace(BASE_FILL, "").replace(PRECISION, PRECISION + """
                 uniform float u_backlitWidthPx;
                 uniform float u_backlitStrength;
                 uniform float u_backlitSideStart;
@@ -332,6 +338,10 @@ final class PrismalEdgeDecorationShader {
                                 clamp(hold * 0.14 * u_backlitStrength
                                         * opticalDark, 0.0, 0.14));
                     }
+
+                    // A separate solid fill replaces the *glass body* after all sampled
+                    // optics are calculated, without swallowing independent glints/contours.
+                    ringShadedGlass = mix(ringShadedGlass, u_baseColor.rgb, u_baseColor.a);
 
                     // Preserve the native OS4 highlight. Source-over order:
                     // glass/ring -> independent INNER glint -> OUTER contour ->

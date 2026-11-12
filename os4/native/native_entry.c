@@ -1,4 +1,19 @@
 #include "native_api.h"
+#include "superellipse.h"
+#include "dart_superellipse.h"
+#include "widget_resize.h"
+#include "superellipse_blur.h"
+#include "glass_superellipse.h"
+#include "layout_margins_write.h"
+#include "dock_divider.h"
+#include "divider_size_hook.h"
+#include "divider_tag_swap.h"
+#include "dock_glass_probe.h"
+#include "divider_factory_probe.h"
+#include "divider_skip_probe.h"
+#include "hotseat_item_probe.h"
+#include "divider_draw_probe.h"
+#include "dock_material_skip.h"
 #include "process_gate.h"
 #include "sha256_region.h"
 
@@ -36,8 +51,6 @@
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
 #define LD_LAYOUT_MANAGED_MARKER \
     "/data/user_de/0/com.miui.home/files/liquiddock-layout-managed-v1"
-#define LD_PAD_ROWCOL_VADDR 0x1a84cfcu
-#define LD_FILTER_VADDR 0x8d39a4u
 
 static volatile int g_grid_cols;
 static volatile int g_grid_rows;
@@ -86,7 +99,9 @@ void ld_blog(const char *fmt, ...)
     (void)write(fd, line, (size_t)n);
 }
 
-LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_rows, g_count_cols,
+/* Macro order is (columns, rows): the launcher's x0 receives the column count
+ * and x2 the row count. Passing them inverted swapped landscape/portrait. */
+LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
                      g_orig_pad_counts, g_pad_pool, g_pad_trace)
 #include "layout_runtime.h"
 #include "layout_profiles.h"
@@ -170,6 +185,16 @@ static void load_grid_config(void)
 
     g_grid_cols = conf.cols;
     g_grid_rows = conf.rows;
+    /* 规范为「横屏语义」（列 >= 行）。PadRowCol wrapper 会按方向转置：
+     * 竖屏得到 (rows, cols)，横屏得到 (cols, rows)。若 GUI 在竖屏保存了 4x8，
+     * 这里补一次转置，避免横屏变成 8 行 4 列被切页。 */
+    if (g_grid_cols < g_grid_rows) {
+        int swapped = g_grid_cols;
+        g_grid_cols = g_grid_rows;
+        g_grid_rows = swapped;
+        ld_blog("grid config normalized to landscape canonical %dx%d (was %dx%d)",
+                g_grid_cols, g_grid_rows, conf.cols, conf.rows);
+    }
     g_home_options=conf;
     LOGI("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     ld_blog("grid config %dx%d source=%s", conf.cols, conf.rows, source);
@@ -196,7 +221,7 @@ static int attest_layout_elf(const ld_lib_info *lib,size_t size,const unsigned c
         && !memcmp(expected,observed,sizeof observed);
 }
 static void pin_installed_hook(uintptr_t site) {
-    int ok=ld_pin_code_pages(site,16);
+    int ok=ld_pin_code_pages_soft(site,16);
     if(!ok) {
         g_hook_pin_ok=0; g_layout_hooks_ready=0;
         g_grid_cols=0; g_grid_rows=0; g_count_cols=0; g_count_rows=0;
@@ -270,7 +295,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         close(fd);
         if(mapping==MAP_FAILED) { ld_blog("OS4 glass safety check unavailable: mmap"); return; }
         apk=mapping;
-        const size_t vendor_size=29980112u;
+        const size_t vendor_size=29983448u;
         ready=lib->entry_off<=(size_t)st.st_size
             && vendor_size<=(size_t)st.st_size-lib->entry_off;
     }
@@ -386,7 +411,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     for(size_t i=0;i<3;i++) {
         int rc=api->hook((void *)targets[i],replacements[i],&g_os4_glass_original[i]);
         if(rc!=0 || !g_os4_glass_original[i]
-                || !ld_pin_code_pages(targets[i],16)) {
+                || !ld_pin_code_pages_soft(targets[i],16)) {
             /* Any previously installed hooks still tail-call the original. */
             ld_blog("OS4 glass gate unavailable: hook/pin %zu rc=%d",i,rc);
             return;
@@ -403,7 +428,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         int rc=api->hook((void *)render_targets[i],render_replacements[i],
                 &g_os4_render_gate_original[i]);
         if(rc==0 && g_os4_render_gate_original[i]
-                && ld_pin_code_pages(render_targets[i],16)) {
+                && ld_pin_code_pages_soft(render_targets[i],16)) {
             g_os4_render_gate_mask|=(uint16_t)(1u<<i);
             render_mask|=1u<<i;
             ld_blog("OS4 render gate installed: %s enabled=%d",
@@ -417,7 +442,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     if(passblur_ready && !g_passblur_supported_installed) {
         int rc=api->hook((void *)passblur_target,(void *)repl_os4_passblur_supported,
                 &g_orig_passblur_supported);
-        if(rc==0 && g_orig_passblur_supported && ld_pin_code_pages(passblur_target,16)) {
+        if(rc==0 && g_orig_passblur_supported && ld_pin_code_pages_soft(passblur_target,16)) {
             g_passblur_supported_installed=true;
             ld_blog("OS4 PassBlur support gate installed: enabled=%d",
                     g_home_options.glass_enabled);
@@ -439,7 +464,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             continue;
         }
         int rc=api->hook((void *)pipeline[i],wrapper[i],original[i]);
-        if(rc==0 && *original[i] && ld_pin_code_pages(pipeline[i],16)) {
+        if(rc==0 && *original[i] && ld_pin_code_pages_soft(pipeline[i],16)) {
             g_os4_pipeline_mask|=1u<<i;
             ld_blog("OS4 glass pipeline installed %s",label[i]);
         } else ld_blog("OS4 glass pipeline skipped %s: hook/pin rc=%d",label[i],rc);
@@ -473,8 +498,12 @@ static void update_layout_ready(void) {
     ld_blog("complete layout pipeline ready=%d",g_layout_hooks_ready);
 }
 
+/* The icon-glass hook windows are not symbol-addressable; they are pinned per
+ * Launcher build. Enable only after re-pinning the windows for this build. */
+#define LD_PIN_ICON_GLASS 0
 static void ld_install_icon_materials(const struct native_api *api,const ld_lib_info *lib)
 {
+    if(!LD_PIN_ICON_GLASS) { (void)api; (void)lib; return; }
     if(!g_hook_pin_ok || !api || !api->hook || !lib)
         return;
     if(!g_icon_glass_installed) {
@@ -496,7 +525,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
         for(size_t i=0;i<2;i++) {
             if(*originals[i]) continue;
             void *backup=NULL;
-            int rc=ld_pin_code_pages(targets[i],16)
+            int rc=ld_pin_code_pages_soft(targets[i],16)
                     ? api->hook((void*)targets[i],replacements[i],&backup) : -1;
             if(rc!=0 || !backup) {
                 ld_blog("icon glass hook install failed vaddr=%lx rc=%d backup=%d",
@@ -516,7 +545,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
                     LD_ICON_GLASS_FLIGHT_SIZE,ld_icon_glass_flight_sha))) {
         uintptr_t target=0;
         if(ld_vaddr_to_runtime(lib,LD_ICON_GLASS_FLIGHT_START,&target)
-                && executable_range(target,16) && ld_pin_code_pages(target,16)) {
+                && executable_range(target,16) && ld_pin_code_pages_soft(target,16)) {
             void *backup=NULL;
             if(api->hook((void*)target,(void*)repl_icon_glass_local_flight,&backup)==0 && backup) {
                 g_orig_icon_glass_flight=backup;
@@ -531,7 +560,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
                     LD_ICON_GLASS_RADIUS_SIZE,ld_icon_glass_radius_sha))) {
         uintptr_t target=0;
         if(ld_vaddr_to_runtime(lib,0x14e9c90u,&target) && executable_range(target,16)
-                && ld_pin_code_pages(target,16)) {
+                && ld_pin_code_pages_soft(target,16)) {
             void *backup=NULL;
             if(api->hook((void*)target,(void*)repl_icon_glass_radius,&backup)==0 && backup) {
                 g_orig_icon_glass_radius=backup;
@@ -563,14 +592,14 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
     bool strict=g_home_options.hook_safety_enabled;
-    static const unsigned char rust_digest[32]={0xf7,0xa,0x2d,0x15,0x50,0x5a,0xbc,0x83,0xbb,0xc2,0xf0,0x3c,0xbe,0x9e,0x90,0xb6,0x35,0xa8,0xad,0xd6,0xd8,0x9a,0xe0,0xfe,0xf7,0x64,0x10,0xa,0xea,0x1c,0x6d,0x8b};
+    static const unsigned char rust_digest[32]={0x97,0x1e,0x62,0xde,0xf0,0x84,0xaa,0x58,0x84,0x8a,0xc3,0xc0,0x61,0xf0,0x30,0x79,0x4a,0xfb,0xc4,0x20,0x20,0xf5,0xcb,0x7a,0x9e,0x7b,0x15,0x82,0xc0,0x72,0x86,0xdb};
     if(g_grid_cols>0 && g_grid_rows>0 && !g_orig_rust_orientation) {
         ld_lib_info rust; uintptr_t target=0;
         if(ld_resolve_lib(ld_launcher_apk_substr(),"lib/arm64-v8a/libapp_launcher.so",&rust)
-                && ld_vaddr_to_runtime(&rust,0x90ffa0u,&target)
+                && ld_vaddr_to_runtime(&rust,LD_RUST_ORIENTATION_VADDR,&target)
                 && executable_range(target,strict?sizeof ld_rust_orientation_words:16)
                 && (!strict || (!memcmp((void *)target,ld_rust_orientation_words,sizeof ld_rust_orientation_words)
-                    && attest_layout_elf(&rust,16242592u,rust_digest)))) {
+                    && attest_layout_elf(&rust,16245752u,rust_digest)))) {
             int result=api->hook((void *)target,(void *)repl_rust_orientation,(void **)&g_orig_rust_orientation);
             if(result==0 && g_orig_rust_orientation) pin_installed_hook(target);
             ld_blog("Rust pre-load orientation guard installed result=%d",result);
@@ -589,6 +618,20 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_widget_inventory_reset_once();
     (void)ld_maml_install(api);
     ld_install_os4_glass(api,&lib);
+    ld_widget_resize_install(api,&lib);
+    ld_superellipse_blur_install();
+    ld_glass_superellipse_install(api);
+    ld_layout_margins_write_install(api,&lib);
+    ld_dock_divider_install(api,&lib);
+    ld_divider_size_install(api,&lib);
+    ld_divider_tag_swap_install(api,&lib);
+    ld_dock_glass_probe_install(api,&lib);
+    ld_divider_factory_probe_install(api,&lib);
+    ld_divider_skip_install(api,&lib);
+    ld_hotseat_item_probe_install(api,&lib);
+    ld_divider_draw_probe_install(api);
+    ld_dock_material_skip_install(api);
+    ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
         LOGE("libapp.so identity cross-check failed");
         ld_blog("libapp.so identity cross-check failed");
@@ -606,8 +649,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         return;
     }
 
-    static const unsigned char dart_digest[32]={0x93,0xe5,0x11,0x98,0x92,0x02,0xa7,0x0d,0x38,0xb8,0x23,0x1c,0x31,0x33,0x16,0x7b,0x83,0x0c,0xa7,0x60,0x9b,0x61,0xba,0x6a,0xd1,0x33,0x89,0x87,0x37,0xd0,0xe0,0xef};
-    if(strict && !attest_layout_elf(&lib,29980112u,dart_digest)) {
+    static const unsigned char dart_digest[32]={0x1a,0xda,0xa4,0x46,0x6d,0x85,0x16,0xc1,0x41,0x74,0xa3,0x68,0x14,0x94,0x8c,0x03,0xf7,0x05,0x79,0x09,0x04,0x68,0xf7,0xd4,0x09,0x37,0x15,0x6e,0x05,0xb8,0x7b,0x20};
+    if(strict && !attest_layout_elf(&lib,29983448u,dart_digest)) {
         ld_blog("8584 whole-ELF SHA-256 mismatch; safety switch is enabled"); return;
     }
     struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
@@ -671,13 +714,13 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         ld_blog("read-only grid selection installed result=%d",result);
     }
     struct { uintptr_t vaddr; const void *words; size_t size; void *replace; void **orig; } observers[] = {
-        {0x918fe0u, ld_delete_item_words, sizeof ld_delete_item_words, (void *)repl_delete_item, &g_orig_delete_item},
-        {0x8effa4u, ld_save_batch_words, sizeof ld_save_batch_words, (void *)repl_save_batch, &g_orig_save_batch},
-        {0x8e340cu, ld_save_single_words, sizeof ld_save_single_words, (void *)repl_save_single, &g_orig_save_single},
-        {0x15e91b4u, ld_load_items_words, sizeof ld_load_items_words, (void *)repl_load_items, &g_orig_load_items},
-        {0x18c8f44u, ld_widget_lattice_words, sizeof ld_widget_lattice_words, (void *)repl_widget_lattice, &g_orig_widget_lattice},
-        {0x8ecc10u, ld_no_vacant_words, sizeof ld_no_vacant_words, (void *)repl_free_place, &g_orig_no_vacant},
-        {0x8f02c0u, ld_process_screen_words, sizeof ld_process_screen_words, (void *)repl_process_screen, &g_orig_process_screen},
+        {LD_DELETE_ITEM_VADDR, ld_delete_item_words, sizeof ld_delete_item_words, (void *)repl_delete_item, &g_orig_delete_item},
+        {LD_SAVE_BATCH_VADDR, ld_save_batch_words, sizeof ld_save_batch_words, (void *)repl_save_batch, &g_orig_save_batch},
+        {LD_SAVE_SINGLE_VADDR, ld_save_single_words, sizeof ld_save_single_words, (void *)repl_save_single, &g_orig_save_single},
+        {LD_LOAD_ITEMS_VADDR, ld_load_items_words, sizeof ld_load_items_words, (void *)repl_load_items, &g_orig_load_items},
+        {LD_WIDGET_LATTICE_VADDR, ld_widget_lattice_words, sizeof ld_widget_lattice_words, (void *)repl_widget_lattice, &g_orig_widget_lattice},
+        {LD_NO_VACANT_VADDR, ld_no_vacant_words, sizeof ld_no_vacant_words, (void *)repl_free_place, &g_orig_no_vacant},
+        {LD_PROCESS_SCREEN_VADDR, ld_process_screen_words, sizeof ld_process_screen_words, (void *)repl_process_screen, &g_orig_process_screen},
     };
     for (size_t i = 0; i < sizeof observers / sizeof *observers; i++) {
         uintptr_t target = 0;
@@ -687,7 +730,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             result = api->hook((void *)target, observers[i].replace, observers[i].orig);
             if(result==0 && *observers[i].orig) pin_installed_hook(target);
             ld_blog("layout observer %lx installed result=%d", (unsigned long)observers[i].vaddr, result);
-            if(observers[i].vaddr==0x8f02c0u && result==0) {
+            if(observers[i].vaddr==LD_PROCESS_SCREEN_VADDR && result==0) {
                 g_process_resume=target+0x384;
                 int mid_result=api->hook((void *)(target+0x218),(void *)repl_process_mid,&g_orig_process_mid);
                 g_layout_mid_ready=mid_result==0 && g_orig_process_mid!=NULL;
@@ -701,7 +744,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         }
     }
     uintptr_t orientation = 0;
-    if (ld_vaddr_to_runtime(&lib, 0x8ef670u, &orientation)
+    if (ld_vaddr_to_runtime(&lib, LD_ORIENTATION_VADDR, &orientation)
             && executable_range(orientation, strict?sizeof ld_orientation_words:16)
             && (!strict || memcmp((const void *)orientation, ld_orientation_words,
                       sizeof ld_orientation_words) == 0)) {
@@ -736,6 +779,7 @@ static void on_library_loaded(const char *name, void *handle)
     if(name) {
         const char *base=strrchr(name,'/'); base=base?base+1:name;
         if(!strcmp(base,"libapp.so") || !strcmp(base,"libapp_launcher.so")) install_grid_hook(g_api);
+        else if(!strcmp(base,"libhyper_os_flutter.so")) ld_glass_superellipse_install(g_api);
         else if(!strcmp(base,"librust_maml_sdk.so")) {
             pthread_mutex_lock(&g_install_lock);
             ld_widget_inventory_reset_once();
@@ -812,5 +856,6 @@ on_library_loaded_t native_init(struct native_api *api)
     load_grid_config();
     ld_prepare_native_glass();
     install_grid_hook(api);
+    ld_superellipse_install(api);
     return on_library_loaded;
 }

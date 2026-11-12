@@ -1,6 +1,6 @@
 # LiquidDock Hook / Listener Map
 
-本文档记录 LiquidDock 的主要 Hook、listener、reflection 和 runtime ownership 边界（原逐项核验于 2026-10-03）。当前源码版本为 **2.7.4（versionCode 36）**，上一正式版本为 **2.7.3**。新增或更改的时序以当前源码、契约测试和真实设备记录为准；见 [TODO.md](TODO.md) 与 [可维护性审计](docs/maintainability-audit-20261010.md)。
+本文件介绍 LiquidDock 当前 Hook、listener、reflection 及运行时生命周期的所有权。当前构建为 **v2.7.6 / libxposed API 102**；详细时序与验证见源码、测试及 [TODO.md](TODO.md)。
 
 当前 Xposed scope：
 
@@ -81,7 +81,7 @@ Launcher package ready 后依次完成：
 - `DockResizeAnimationHook`；
 - `DockDividerHook`；
 - `DockShadowOwnership`；
-- `Miuix307MaterialPipeline`；
+- `MiuixMaterialPipeline`；
 - `DockBottomGeometryHook`；
 - `DockIconAnimationGlassHook`；
 - `DockGlassDropRefreshHook`。

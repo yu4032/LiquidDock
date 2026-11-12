@@ -13,20 +13,29 @@ final class GestureHandleRuntimeState {
     }
 
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
+    private static final Api102ListenerEpoch EPOCH = new Api102ListenerEpoch();
 
     private static volatile boolean coreEnabled;
     private static volatile boolean featureEnabled;
     private static volatile Listener stateListener;
     private static SharedPreferences preferences;
     private static SharedPreferences.OnSharedPreferenceChangeListener preferenceListener;
+    private static volatile long activeGeneration;
 
     private GestureHandleRuntimeState() {}
 
     static synchronized void initialize(SharedPreferences nextPreferences) {
+        EPOCH.invalidate(); // disarm callbacks from an earlier preference registration
         if (preferences != null && preferenceListener != null) {
             try {
                 preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener);
-            } catch (Throwable ignored) {}
+            } catch (Throwable error) {
+                // Do not lose the only reference to an observer that might still be registered.
+                // Its epoch is already invalidated; a later retry may detach it safely.
+                throw new IllegalStateException(
+                        "Cannot replace gesture preference observer before detaching previous owner",
+                        error);
+            }
         }
 
         preferences = nextPreferences;
@@ -42,21 +51,53 @@ final class GestureHandleRuntimeState {
                         ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name(),
                         ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.runtimeFallback());
 
+        final long generation = EPOCH.activate();
+        activeGeneration = generation;
         if (nextPreferences == null) return;
         preferenceListener = (sharedPreferences, key) -> {
             if (!ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name().equals(key)) {
                 return;
             }
-            apply(
-                    sharedPreferences.getBoolean(
-                            ConfigSchema.Core.ENABLED.name(),
-                            ConfigSchema.Core.ENABLED.runtimeFallback()),
-                    sharedPreferences.getBoolean(
-                            ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name(),
-                            ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.runtimeFallback()));
+            // Check and apply under the SAME monitor used by initialize()/shutdown().
+            // Checking EPOCH before taking this lock permits a stale callback to update
+            // coreEnabled after shutdown has already returned.
+            synchronized (GestureHandleRuntimeState.class) {
+                if (!EPOCH.isCurrent(generation)) return;
+                apply(
+                        sharedPreferences.getBoolean(
+                                ConfigSchema.Core.ENABLED.name(),
+                                ConfigSchema.Core.ENABLED.runtimeFallback()),
+                        sharedPreferences.getBoolean(
+                                ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.name(),
+                                ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS.runtimeFallback()));
+            }
         };
         nextPreferences.registerOnSharedPreferenceChangeListener(preferenceListener);
+    }
+
+    /**
+     * Detach the SystemUI-only preference observer before a future owner handoff.
+     * A failed unregister retains the old references and returns false, but callback generations
+     * are invalidated immediately to prevent stale preference or Handler events.
+     */
+    static synchronized boolean shutdownForFutureReload() {
+        EPOCH.invalidate();
+        stateListener = null;
+        coreEnabled = false;
+        featureEnabled = false;
+        activeGeneration = 0L;
+        if (preferences != null && preferenceListener != null) {
+            try {
+                preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener);
+            } catch (Throwable error) {
+                Api101Bridge.log("[DC][API102] gesture preference unregister failed", error);
+                return false;
+            }
+        }
+        preferences = null;
+        preferenceListener = null;
+        return true;
     }
 
     static boolean isEnabled() {
@@ -79,8 +120,16 @@ final class GestureHandleRuntimeState {
     }
 
     private static void notifyListener(Listener listener, boolean enabled) {
+        // Posted notifications can outlive the owner and even the old module classloader.
+        final long generation = activeGeneration;
         MAIN_HANDLER.post(() -> {
-            if (stateListener == listener) listener.onEnabledChanged(enabled);
+            // Hold the same lifecycle monitor as shutdown/initialize until invocation returns.
+            // The stale callback cannot cross a completed shutdown even if it was already dequeued.
+            synchronized (GestureHandleRuntimeState.class) {
+                if (EPOCH.isCurrent(generation) && stateListener == listener) {
+                    listener.onEnabledChanged(enabled);
+                }
+            }
         });
     }
 }

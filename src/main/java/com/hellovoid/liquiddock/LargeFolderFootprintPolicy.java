@@ -10,9 +10,12 @@ final class LargeFolderFootprintPolicy {
         return marked && !workstationAllApps;
     }
 
-    static boolean normalizeAllAppsCopy(boolean marked, long container, int type, int spanX, int spanY) {
-        // Native Laptop All Apps creates ordinary folder copies in container -104.
-        return marked && container == -104L && type == 2 && (spanX != 1 || spanY != 1);
+    static boolean normalizeAllAppsCopy(
+            boolean workstationAllAppsView, long container, int type, int spanX, int spanY) {
+        // Workstation All Apps ordinary folders must use 1x1 even after a previous
+        // desktop 2x2 selection is disabled. Never depend on a large-folder marker.
+        return (workstationAllAppsView || container == -104L)
+                && type == 2 && (spanX != 1 || spanY != 1);
     }
 
     static boolean supportsType(int type) {

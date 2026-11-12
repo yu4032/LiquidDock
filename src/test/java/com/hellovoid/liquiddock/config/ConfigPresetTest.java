@@ -30,6 +30,10 @@ public class ConfigPresetTest {
 
         assertEquals(Boolean.TRUE, defaults.get(ConfigSchema.Glass.ENABLED.name()));
         assertEquals(Integer.valueOf(9), defaults.get(ConfigSchema.Glass.CHROMATIC.name()));
+        assertEquals(Integer.valueOf(255), defaults.get(ConfigSchema.Glass.BASE_COLOR_RED.name()));
+        assertEquals(Integer.valueOf(255), defaults.get(ConfigSchema.Glass.BASE_COLOR_GREEN.name()));
+        assertEquals(Integer.valueOf(255), defaults.get(ConfigSchema.Glass.BASE_COLOR_BLUE.name()));
+        assertEquals(Integer.valueOf(0), defaults.get(ConfigSchema.Glass.BASE_COLOR_ALPHA.name()));
         assertEquals(Integer.valueOf(72),
                 defaults.get(ConfigSchema.Glass.BLUR.name() + "_tenths"));
         assertEquals(Integer.valueOf(13),

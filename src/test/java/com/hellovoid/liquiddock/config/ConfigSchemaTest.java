@@ -30,6 +30,20 @@ public class ConfigSchemaTest {
     }
 
     @Test
+    public void groupGlassHideSwitchesAreIndependentAndExported() {
+        ConfigKey<Boolean> dock = ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP;
+        ConfigKey<Boolean> workspace = ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP;
+        assertFalse(dock.name().equals(workspace.name()));
+        for (ConfigKey<Boolean> key : java.util.List.of(dock, workspace)) {
+            assertEquals(Boolean.TRUE, key.uiDefault());
+            assertEquals(Boolean.TRUE, key.runtimeFallback());
+            assertEquals(Boolean.TRUE, key.exportDefault());
+            assertEquals(ConfigKey.ExportMode.ALWAYS, key.exportMode());
+            assertTrue(ConfigSchema.all().contains(key));
+        }
+    }
+
+    @Test
     public void gestureHandleHomeRecentsFadeIsOptInAndExported() {
         ConfigKey<Boolean> key = ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS;
         assertEquals("animation_hide_gesture_handle_home_recents", key.name());
@@ -150,7 +164,6 @@ public class ConfigSchemaTest {
 
     @Test
     public void composeWorkstationSpecsKeepTheirCurrentDefaultsAndBounds() {
-        assertComposeIntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, 0, -240, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, 0, 0, 240);
         assertComposeIntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, 0, -48, 48);
@@ -195,13 +208,29 @@ public class ConfigSchemaTest {
         assertComposeIntSpec(ConfigSchema.Glass.LENS_REFRACTION, 1, 0, 8);
         assertComposeIntSpec(ConfigSchema.Glass.DEPTH_EFFECT, 0, 0, 100);
         assertComposeIntSpec(ConfigSchema.Glass.CHROMATIC, 26, 0, 40);
-        assertComposeIntSpec(ConfigSchema.Glass.TINT_ALPHA, 35, 0, 160);
+        assertComposeIntSpec(ConfigSchema.Glass.TINT_ALPHA, 35, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.TINT_RED, 0, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.TINT_GREEN, 0, 0, 255);
         assertComposeIntSpec(ConfigSchema.Glass.TINT_BLUE, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.BASE_COLOR_RED, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.BASE_COLOR_GREEN, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.BASE_COLOR_BLUE, 255, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.BASE_COLOR_ALPHA, 0, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_RED, -1, -1, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_GREEN, -1, -1, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_BLUE, -1, -1, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_ALPHA, -1, -1, 255);
         assertComposeIntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, 100, 50, 300);
         assertComposeIntSpec(ConfigSchema.Glass.BRIGHTNESS, 108, 50, 200);
         assertComposeIntSpec(ConfigSchema.Glass.CAUSTICS, 28, 0, 100);
+    }
+
+    @Test
+    public void glassTintAlphaSupportsFullEightBitRangeWithoutChangingDefaults() {
+        assertComposeIntSpec(ConfigSchema.Glass.TINT_ALPHA, 35, 0, 255);
+        assertComposeIntSpec(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA, 35, 0, 255);
+        assertEquals(Integer.valueOf(35), ConfigSchema.Glass.TINT_ALPHA.runtimeFallback());
+        assertEquals(Integer.valueOf(35), ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.runtimeFallback());
     }
 
     @Test
@@ -266,6 +295,21 @@ public class ConfigSchemaTest {
         assertEquals(Integer.valueOf(0), renderFps.minInt());
         assertEquals(Integer.valueOf(Integer.MAX_VALUE), renderFps.maxInt());
         assertEquals(ConfigKey.ExportMode.ALWAYS, renderFps.exportMode());
+    }
+
+    @Test
+    public void obsoleteWorkstationDesktopOffsetCannotBeImportedOrExported() {
+        String removedKey = "workstation_grid_horizontal_offset";
+        java.util.Map<String, Object> oldPreferences = java.util.Map.of(
+                removedKey, 120,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET.name(), 24);
+        assertFalse(ConfigSchema.all().stream().anyMatch(key -> key.name().equals(removedKey)));
+        assertFalse(ConfigCodec.importValues(oldPreferences).containsKey(removedKey));
+        assertFalse(ConfigCodec.exportValues(oldPreferences).containsKey(removedKey));
+        // Removing the workspace-only offset must not affect existing All Apps / Dock settings.
+        assertTrue(ConfigSchema.all().contains(
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET));
+        assertTrue(ConfigSchema.all().contains(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET));
     }
 
     @Test

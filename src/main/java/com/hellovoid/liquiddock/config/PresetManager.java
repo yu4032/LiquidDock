@@ -140,11 +140,15 @@ public final class PresetManager {
     private static Map<String, Object> createDefaultValues() {
         Map<String, Object> source = new LinkedHashMap<>();
         source.put("liquiddock_enabled", Boolean.TRUE);
+        source.put(ConfigSchema.Grid.NATIVE_HOOK_SAFETY.name(), Boolean.FALSE);
         source.put("animation_workspace_visibility_ms", 0);
+        source.put(ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name(), Boolean.TRUE);
+        source.put(ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name(), Boolean.TRUE);
+        source.put(ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END.name(), 600);
+        source.put(ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION.name(), 450);
         // Distinct from ordinary Workspace reveal: retain the native unlock fade.
         source.put(ConfigSchema.Animation.UNLOCK_GLASS_FADE.name(), 450);
-        // Folder opening has its own visual timing. The general Workspace
-        // visibility preset intentionally remains immediate.
+        // Legacy export compatibility; Workspace glass now hides immediately on folder open.
         source.put(ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name(), 180);
         source.put("animation_press_in_ms", 90);
         source.put("animation_press_out_ms", 160);
@@ -154,6 +158,7 @@ public final class PresetManager {
         source.put("animation_settings_page_ms", 300);
         source.put("animation_hide_gesture_handle_home_recents", Boolean.FALSE);
         source.put("animation_disable_wallpaper_zoom", Boolean.FALSE);
+        source.put(ConfigSchema.Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR.name(), Boolean.FALSE);
         source.put("grid_enabled", Boolean.FALSE);
         source.put("grid_columns", 8);
         source.put("grid_rows", 4);
@@ -173,6 +178,7 @@ public final class PresetManager {
         source.put("indicator_portrait_y", 11.8d);
         source.put("dock_customization", Boolean.FALSE);
         source.put("dock_hide_mirror_shortcut", Boolean.FALSE);
+        source.put(ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS.name(), Boolean.FALSE);
         source.put("dock_frame_sync", Boolean.TRUE);
         source.put("dock_resize_animation", Boolean.FALSE);
         source.put("dock_smooth_resize_animation", Boolean.TRUE);
@@ -213,6 +219,7 @@ public final class PresetManager {
         source.put("dock_divider_alpha", 128);
         source.put("liquid_glass", Boolean.TRUE);
         source.put("liquid_wallpaper_flicker_fix", Boolean.FALSE);
+        source.put("liquid_continuous_corners", Boolean.FALSE);
         source.put("liquid_security_center_glass", Boolean.FALSE);
         source.put("liquid_systemui_handle_menu_glass", Boolean.FALSE);
         source.put("liquid_shortcut_popup_glass", Boolean.TRUE);
@@ -245,6 +252,10 @@ public final class PresetManager {
         source.put("open_folder_glass_ior", 155);
         source.put("open_folder_glass_thickness", 18);
         source.put("open_folder_glass_tint_alpha", 35);
+        source.put(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_RED.name(), -1);
+        source.put(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_GREEN.name(), -1);
+        source.put(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_BLUE.name(), -1);
+        source.put(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_ALPHA.name(), -1);
         source.put("liquid_large_folder_size_offset", 0);
         source.put("liquid_large_folder_corner_radius", 16);
         source.put("liquid_blur_mode", "advanced_material");
@@ -252,6 +263,10 @@ public final class PresetManager {
         source.put("liquid_blur", 7.2d);
         source.put("liquid_chromatic", 9);
         source.put("liquid_tint_alpha", 0);
+        source.put(ConfigSchema.Glass.BASE_COLOR_RED.name(), 255);
+        source.put(ConfigSchema.Glass.BASE_COLOR_GREEN.name(), 255);
+        source.put(ConfigSchema.Glass.BASE_COLOR_BLUE.name(), 255);
+        source.put(ConfigSchema.Glass.BASE_COLOR_ALPHA.name(), 0);
         source.put("liquid_capture_power_limit_fps", 30);
         source.put("liquid_capture_stop_delay", 150);
         source.put("liquid_thickness", 18);
@@ -319,13 +334,14 @@ public final class PresetManager {
         source.put("workstation_dock_customization", Boolean.FALSE);
         source.put(ConfigSchema.Workstation.TASKBAR_MODE.name(), Boolean.FALSE);
         source.put("workstation_dock_icon_glass_corner_radius", 12);
-        source.put("workstation_grid_horizontal_offset", 0);
         source.put("workstation_all_apps_landscape_horizontal_offset", 41.1d);
         source.put("workstation_all_apps_landscape_top_spacing", 90);
         source.put("workstation_all_apps_landscape_bottom_spacing", 118);
         source.put("workstation_all_apps_portrait_horizontal_offset", 41.2d);
         source.put("workstation_all_apps_portrait_top_spacing", 132);
         source.put("workstation_all_apps_portrait_bottom_spacing", 60.8d);
+        source.put(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y.name(), 0);
+        source.put(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y.name(), 0);
         source.put("workstation_dock_vertical_offset", 0);
         source.put("workstation_dock_icon_landscape_vertical_offset", 0);
         source.put("workstation_dock_icon_top_offset", 0);
@@ -338,8 +354,14 @@ public final class PresetManager {
         source.put("third_party_glass.systemui.lockscreen_clock.enabled", Boolean.FALSE);
         source.put("third_party_glass.systemui.lockscreen_clock.blur", 3.3722174d);
         source.put("third_party_glass.systemui.lockscreen_clock.tint_b", 239);
-        Map<String, Object> values = ConfigCodec.importValues(source);
+        Map<String, Object> values = new LinkedHashMap<>(ConfigCodec.importValues(source));
         values.put(ConfigSchema.Debug.LOGGING.name(), Boolean.FALSE);
+        // Every ALWAYS key must have a persisted default, including keys added by
+        // newer features; the profile is the export baseline for backup/restore.
+        for (ConfigKey<?> key : ConfigSchema.all()) {
+            if (key.exportMode() != ConfigKey.ExportMode.ALWAYS) continue;
+            if (!values.containsKey(key.name())) values.put(key.name(), key.uiDefault());
+        }
         return Collections.unmodifiableMap(values);
     }
 

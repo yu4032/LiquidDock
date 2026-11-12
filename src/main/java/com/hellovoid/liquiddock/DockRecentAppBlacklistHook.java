@@ -20,9 +20,9 @@ final class DockRecentAppBlacklistHook {
 
     private DockRecentAppBlacklistHook() {}
 
-    static void install(ClassLoader classLoader) {
+    static void install(ClassLoader classLoader, boolean hideRecentTaskIcons) {
         installProviderCapture(classLoader);
-        installBlacklistFilter(classLoader);
+        installBlacklistFilter(classLoader, hideRecentTaskIcons);
         installCandidateSnapshot(classLoader);
         installContextCapture(classLoader);
     }
@@ -50,7 +50,8 @@ final class DockRecentAppBlacklistHook {
      * Extending filterSupportLaunchPairApp therefore removes a blocked task before limit(),
      * allowing the next eligible task to fill the slot naturally.
      */
-    private static void installBlacklistFilter(ClassLoader classLoader) {
+    private static void installBlacklistFilter(
+            ClassLoader classLoader, boolean hideRecentTaskIcons) {
         try {
             HookUtil.hookMethod(
                     classLoader,
@@ -58,6 +59,9 @@ final class DockRecentAppBlacklistHook {
                     "filterSupportLaunchPairApp",
                     chain -> {
                         LauncherManualDiscoveryBridge.captureDockProvider(chain.getThisObject());
+                        // Drop recommendations at the provider source, before sorting/limit,
+                        // so Launcher does not create empty placeholder icons or slots.
+                        if (hideRecentTaskIcons) return false;
                         Object[] args = chain.getArgs().toArray(new Object[0]);
                         Object original = chain.proceed(args);
                         if (!(original instanceof Boolean) || !((Boolean) original)) {

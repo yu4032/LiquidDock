@@ -38,10 +38,33 @@ public class LiveGlassConfigStateTest {
     }
 
     @Test
+    public void dockAndWorkspaceGroupVisibilitySwitchesUpdateWithoutReload() {
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name()));
+        assertTrue(LiveGlassConfigState.isLiveKey(
+                ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name()));
+        Map<String, Object> values = new HashMap<>();
+        assertTrue(LiquidDockConfig.from(new ConfigReader(values))
+                .animation.hideDockIconsDuringApp);
+        assertTrue(LiquidDockConfig.from(new ConfigReader(values))
+                .animation.hideWorkspaceGlassDuringApp);
+        values.put(ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name(), false);
+        LiquidDockConfig dockOff = LiquidDockConfig.from(new ConfigReader(values));
+        assertFalse(dockOff.animation.hideDockIconsDuringApp);
+        assertTrue(dockOff.animation.hideWorkspaceGlassDuringApp);
+        AnimationRuntimeState.configure(dockOff.animation);
+        assertFalse(AnimationRuntimeState.hideDockIconsDuringApp());
+        assertTrue(AnimationRuntimeState.hideWorkspaceGlassDuringApp());
+        values.put(ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name(), false);
+        AnimationRuntimeState.configure(LiquidDockConfig.from(new ConfigReader(values)).animation);
+        assertFalse(AnimationRuntimeState.hideWorkspaceGlassDuringApp());
+    }
+
+    @Test
     public void alreadyInstalledLauncherAnimationTimingsUpdateWithoutHookReload() {
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Animation.WORKSPACE_VISIBILITY.name()));
-        assertTrue(LiveGlassConfigState.isLiveKey(
+        assertFalse(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name()));
         assertTrue(LiveGlassConfigState.isLiveKey(
                 ConfigSchema.Animation.UNLOCK_GLASS_FADE.name()));
@@ -55,13 +78,11 @@ public class LiveGlassConfigStateTest {
                 ConfigSchema.Animation.SETTINGS_PAGE.name()));
 
         Map<String, Object> values = new HashMap<>();
-        values.put(ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name(), 780);
         values.put(ConfigSchema.Animation.WORKSPACE_VISIBILITY.name(), 0);
         values.put(ConfigSchema.Animation.UNLOCK_GLASS_FADE.name(), 600);
         values.put(ConfigSchema.Animation.PRESS_IN.name(), 125);
         values.put(ConfigSchema.Animation.PRESS_OUT.name(), 210);
         AnimationRuntimeState.configure(LiquidDockConfig.from(new ConfigReader(values)).animation);
-        assertEquals(780, AnimationRuntimeState.folderOpenGlassFadeDurationMs());
         assertEquals(0, AnimationRuntimeState.workspaceVisibilityDurationMs());
         assertEquals(600, AnimationRuntimeState.unlockGlassFadeDurationMs());
         assertEquals(125, AnimationRuntimeState.pressInDurationMs());

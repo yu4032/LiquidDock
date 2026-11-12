@@ -38,14 +38,8 @@ public final class DockPrismalShadowViewportPolicyTest {
                 inset,outputH,pad,bodyH,sampleH);
         float bodyU=bodyW/(float)sampleW;
         float bodyV=bodyH/(float)sampleH;
-        float outputLeft=DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
-                inset,sampleW);
-        float outputBottom=DockPrismalShadowViewportPolicy.normalizedOutputOrigin(
-                inset,sampleH);
-        float outputU=DockPrismalShadowViewportPolicy.normalizedOutputExtent(
-                outputW,sampleW);
-        float outputV=DockPrismalShadowViewportPolicy.normalizedOutputExtent(
-                outputH,sampleH);
+        float outputLeft=inset/(float)sampleW;
+        float outputBottom=inset/(float)sampleH;
 
         assertTrue(bodyLeft>outputLeft);
         assertTrue(bodyBottom>outputBottom);
@@ -53,22 +47,18 @@ public final class DockPrismalShadowViewportPolicyTest {
         assertEquals(pad,Math.round((bodyBottom-outputBottom)*sampleH));
         assertEquals(bodyW,Math.round(bodyU*sampleW));
         assertEquals(bodyH,Math.round(bodyV*sampleH));
-        assertEquals(outputW,Math.round(outputU*sampleW));
-        assertEquals(outputH,Math.round(outputV*sampleH));
     }
 
     @Test public void zeroOverscanGivesOriginalNativeExactCrop() {
         int width=500,height=160,insetX=24,insetY=12;
         int sw=width+2*insetX,sh=height+2*insetY;
         assertEquals(
-                DockPrismalShadowViewportPolicy.normalizedOutputOrigin(insetX,sw),
+                insetX/(float)sw,
                 DockPrismalShadowViewportPolicy.normalizedBodyX(insetX,0,sw),0f);
         assertEquals(
-                DockPrismalShadowViewportPolicy.normalizedOutputOrigin(insetY,sh),
+                insetY/(float)sh,
                 DockPrismalShadowViewportPolicy.normalizedBodyBottom(
                         insetY,height,0,height,sh),0f);
-        assertEquals(width/(float)sw,
-                DockPrismalShadowViewportPolicy.normalizedOutputExtent(width,sw),0f);
     }
 
     @Test public void shadowGuardIsClampedForHighDensityAndLargeNodes() {

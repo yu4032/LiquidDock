@@ -45,6 +45,7 @@ public final class PrismalParams {
     public final float tintG;
     public final float tintB;
     public final float tintA;
+    public final float baseColorR, baseColorG, baseColorB, baseColorA;
     public final float shadowR;
     public final float shadowG;
     public final float shadowB;
@@ -57,8 +58,10 @@ public final class PrismalParams {
     public final boolean softGlassMode;
     public final PrismalSoftGlassProfile softGlassProfile;
     public final boolean showNormals;
+    public final boolean continuousCorners;
 
     private PrismalParams(Builder b) {
+        continuousCorners = b.continuousCorners;
         ior = b.ior;
         glassThicknessPx = b.glassThicknessPx;
         normalStrength = b.normalStrength;
@@ -102,6 +105,10 @@ public final class PrismalParams {
         tintG = b.tintG;
         tintB = b.tintB;
         tintA = b.tintA;
+        baseColorR = b.baseColorR;
+        baseColorG = b.baseColorG;
+        baseColorB = b.baseColorB;
+        baseColorA = b.baseColorA;
         shadowR = b.shadowR;
         shadowG = b.shadowG;
         shadowB = b.shadowB;
@@ -129,6 +136,7 @@ public final class PrismalParams {
         public float displacementScale = 1f;
         public float heightTransitionWidthPx = 8f;
         public float sminSmoothingPx = 1f;
+        public boolean continuousCorners;
         public float refractionInsetPx = 20f;
         public float edgeRefractionFalloff = 4f;
         public float liquidDome = 0.78f;
@@ -166,6 +174,7 @@ public final class PrismalParams {
         public float tintG = 1f;
         public float tintB = 1f;
         public float tintA = 0f;
+        public float baseColorR = 1f, baseColorG = 1f, baseColorB = 1f, baseColorA = 0f;
         public float shadowR = 0f;
         public float shadowG = 0f;
         public float shadowB = 0f;
@@ -183,6 +192,7 @@ public final class PrismalParams {
 
         private Builder(PrismalParams source) {
             if (source == null) return;
+            continuousCorners = source.continuousCorners;
             ior = source.ior;
             glassThicknessPx = source.glassThicknessPx;
             normalStrength = source.normalStrength;
@@ -226,6 +236,10 @@ public final class PrismalParams {
             tintG = source.tintG;
             tintB = source.tintB;
             tintA = source.tintA;
+            baseColorR = source.baseColorR;
+            baseColorG = source.baseColorG;
+            baseColorB = source.baseColorB;
+            baseColorA = source.baseColorA;
             shadowR = source.shadowR;
             shadowG = source.shadowG;
             shadowB = source.shadowB;

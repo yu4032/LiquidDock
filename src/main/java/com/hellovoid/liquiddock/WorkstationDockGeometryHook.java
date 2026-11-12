@@ -113,6 +113,7 @@ final class WorkstationDockGeometryHook {
     }
 
     static void onWorkstationModeChanged(boolean enabled) {
+        MiuixLauncherStaticGlassHook.onWorkstationModeChanged();
         WorkstationNativeTaskbarHook.refresh();
         // Workstation and the normal HotSeats background can overlap during the hierarchy handoff.
         // Release the remembered native foreground ring before changing visible Dock geometry.

@@ -136,11 +136,9 @@ final class HomeGridCellGeometryPolicy {
             top = margins[2];
             bottom = margins[3];
         } else if (in.workstationActive) {
-            int workstationX = Math.max(
-                    -baseLeft,
-                    Math.min(baseRight, in.workstation.workspaceHorizontalOffset));
-            left = baseLeft + workstationX;
-            right = baseRight - workstationX;
+            // Workstation workspace keeps native margins; All Apps has its own branch.
+            left = baseLeft;
+            right = baseRight;
             top = baseTop;
             bottom = baseBottom;
         } else {

@@ -177,11 +177,19 @@ final class SecurityCenterGlassGeometry {
     }
 
     PrismalGeometry toPrismalGeometry() {
+        return toPrismalGeometry(-1f, 1f);
+    }
+
+    PrismalGeometry toPrismalGeometry(float overrideRadiusDp, float density) {
+        float radius = overrideRadiusDp >= 0f
+                ? Math.min(overrideRadiusDp * Math.max(0f, density),
+                        Math.min(width, height) * 0.5f)
+                : cornerRadius;
         return new PrismalGeometry(
                 rootWidth, rootHeight,
                 centerX, centerY,
                 width, height,
-                cornerRadius);
+                radius);
     }
 
     /**

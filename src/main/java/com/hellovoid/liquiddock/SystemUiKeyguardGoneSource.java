@@ -18,13 +18,16 @@ final class SystemUiKeyguardGoneSource {
             "com.android.systemui.keyguard.shared.model.TransitionStep";
 
     private static final AtomicBoolean INSTALLED = new AtomicBoolean();
+    private static final Api102HookDomain DOMAIN =
+            Api102HookDomain.forProcess("systemui.keyguard.gone");
     private static final AtomicBoolean GONE_FINISHED_SENT = new AtomicBoolean();
 
     private SystemUiKeyguardGoneSource() {}
 
-    static void install(ClassLoader classLoader) {
+    static synchronized void install(ClassLoader classLoader) {
         if (!INSTALLED.compareAndSet(false, true)) return;
         try {
+            DOMAIN.begin();
             Class<?> repositoryClass = Class.forName(REPOSITORY, false, classLoader);
             Class<?> stepClass = Class.forName(TRANSITION_STEP, false, classLoader);
             int hooked = 0;
@@ -32,12 +35,16 @@ final class SystemUiKeyguardGoneSource {
                 if (Modifier.isStatic(method.getModifiers())) continue;
                 if (!"emitTransition".equals(method.getName())) continue;
                 if (!containsParameter(method, stepClass)) continue;
-                HookUtil.hook(method, chain -> {
+                DOMAIN.hook(method, chain -> {
                     Object[] args = chain.getArgs().toArray(new Object[0]);
                     Object step = findStep(args, stepClass);
                     Object result = chain.proceed(args);
                     try {
-                        if (step != null) onTransitionStep(step);
+                        // In-flight callbacks may finish after an uninstall request. Never
+                        // publish a broadcast or mutate policy state for a stopped generation.
+                        if (step != null) {
+                            DOMAIN.runActiveSideEffect(() -> onTransitionStep(step));
+                        }
                     } catch (Throwable error) {
                         // Never let LiquidDock observation failures escape into SystemUI's keyguard
                         // transition path. Even diagnostic logging is best-effort only.
@@ -52,15 +59,36 @@ final class SystemUiKeyguardGoneSource {
                 hooked++;
             }
             if (hooked == 0) {
-                INSTALLED.set(false);
                 throw new IllegalStateException(
                         "KeyguardTransitionRepositoryImpl.emitTransition(TransitionStep) unavailable");
             }
+            GONE_FINISHED_SENT.set(false);
+            DOMAIN.commit();
             Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED source installed hooks=" + hooked);
         } catch (Throwable error) {
-            INSTALLED.set(false);
+            // Even if unhook fails, DOMAIN remains BLOCKED and callback side effects stay gated.
+            if (DOMAIN.state() == Api102HookDomain.State.INSTALLING
+                    || DOMAIN.state() == Api102HookDomain.State.BLOCKED) {
+                if (DOMAIN.abort()) INSTALLED.set(false);
+            } else {
+                INSTALLED.set(false);
+            }
             Api101Bridge.log("[DC] SystemUI keyguard GONE FINISHED source unavailable", error);
         }
+    }
+
+    /**
+     * Standalone owner teardown primitive. Not wired to global hot reload: the rest of SystemUI
+     * still owns other hooks, preference listeners and potentially GL-backed material sessions.
+     */
+    static synchronized boolean stopForFutureReload() {
+        if (!INSTALLED.get()) return true;
+        boolean released = DOMAIN.stop();
+        if (released) {
+            INSTALLED.set(false);
+            GONE_FINISHED_SENT.set(false);
+        }
+        return released;
     }
 
     private static boolean containsParameter(Method method, Class<?> type) {
@@ -79,6 +107,7 @@ final class SystemUiKeyguardGoneSource {
     }
 
     private static void onTransitionStep(Object step) {
+        if (!DOMAIN.isActive()) return;
         String from = token(read(step, "getFrom", "from"));
         String to = token(read(step, "getTo", "to"));
         String state = token(read(step, "getTransitionState", "transitionState"));
@@ -90,6 +119,7 @@ final class SystemUiKeyguardGoneSource {
             return;
         }
         if (!GONE_FINISHED_SENT.compareAndSet(false, true)) return;
+        if (!DOMAIN.isActive()) return;
         publishFinished(from);
     }
 
@@ -109,6 +139,7 @@ final class SystemUiKeyguardGoneSource {
     }
 
     private static void publishFinished(String from) {
+        if (!DOMAIN.isActive()) return;
         HookUtil.InvocationResult<Object> applicationResult =
                 HookUtil.tryInvokeActivityThreadCurrentApplication();
         Object application = applicationResult.succeeded() ? applicationResult.value() : null;

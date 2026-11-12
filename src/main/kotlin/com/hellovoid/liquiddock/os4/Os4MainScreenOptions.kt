@@ -33,6 +33,21 @@ data class Os4DockOptions(
             corner.isFinite() && corner in -50.0..100.0
 }
 
+data class Os4DividerOptions(
+    val enabled: Boolean = false,
+    val widthDp: Int = 10,
+    val heightScale: Int = 60,
+    val yOffsetDp: Int = 0,
+    val colorR: Int = 255,
+    val colorG: Int = 255,
+    val colorB: Int = 255,
+    val alpha: Int = 128,
+) {
+    internal fun isValid(): Boolean =
+        widthDp in 0..160 && heightScale in 0..100 && yOffsetDp in -80..80 &&
+            listOf(colorR, colorG, colorB, alpha).all { it in 0..255 }
+}
+
 /** Pure preference extraction, independent from Android/root and launcher identity checks. */
 data class Os4MainScreenOptions(
     val iconSizeEnabled: Boolean = false,
@@ -41,6 +56,7 @@ data class Os4MainScreenOptions(
     val landscape: Os4GridOffsets = Os4GridOffsets(),
     val portrait: Os4GridOffsets = Os4GridOffsets(),
     val dock: Os4DockOptions = Os4DockOptions(),
+    val divider: Os4DividerOptions = Os4DividerOptions(),
     val glassEnabled: Boolean = false,
     val glassNativeOverrides: Map<String, Double> = emptyMap(),
     val glassIcons: Boolean = false,
@@ -141,6 +157,16 @@ data class Os4MainScreenOptions(
                             landscape = if (grid) offsets(0) else Os4GridOffsets(),
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),
                             dock = if (dockEnabled) dockOptions() else Os4DockOptions(),
+                            divider = Os4DividerOptions(
+                                enabled = boolean(ConfigSchema.Divider.ENABLED),
+                                widthDp = integer(ConfigSchema.Divider.WIDTH_DP),
+                                heightScale = integer(ConfigSchema.Divider.HEIGHT_SCALE),
+                                yOffsetDp = integer(ConfigSchema.Divider.Y_OFFSET_DP),
+                                colorR = integer(ConfigSchema.Divider.COLOR_RED),
+                                colorG = integer(ConfigSchema.Divider.COLOR_GREEN),
+                                colorB = integer(ConfigSchema.Divider.COLOR_BLUE),
+                                alpha = integer(ConfigSchema.Divider.ALPHA),
+                            ),
                             glassEnabled = glassEnabled,
                             glassNativeOverrides = nativeGlassOverrides,
                             glassIcons = glassIcons,

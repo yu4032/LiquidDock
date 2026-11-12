@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.0"
 }
 
+val workspaceGlassHwuiProbeEnabled = providers.gradleProperty("workspaceGlassHwuiProbe")
+    .map { it.toBoolean() }
+    .getOrElse(true)
+
 android {
     namespace = "com.hellovoid.liquiddock"
     compileSdk = 37
@@ -12,8 +16,13 @@ android {
         applicationId = "com.hellovoid.liquiddock"
         minSdk = 33
         targetSdk = 37
-        versionCode = 36
-        versionName = "2.7.4"
+        testInstrumentationRunner = "com.hellovoid.liquiddock.SettingsSearchInstrumentation"
+        versionCode = 41
+        versionName = "2.7.9"
+        buildConfigField(
+            "boolean",
+            "WORKSPACE_GLASS_HWUI_PROBE",
+            workspaceGlassHwuiProbeEnabled.toString())
     }
 
     signingConfigs {
@@ -29,6 +38,7 @@ android {
 
     buildTypes {
         debug {
+            proguardFiles("graphics-jni.pro")
             signingConfig = signingConfigs.getByName("hellovoidDebug")
             // CI/device-test APKs go through the same R8 code + resource optimization
             // path as release, so shrinker regressions are caught before publishing.
@@ -37,6 +47,7 @@ android {
             }
         }
         release {
+            proguardFiles("graphics-jni.pro")
             // Keep release output unsigned. The isolated liquiddock-keys workflow
             // performs zipalign + apksigner on a separate runner.
             optimization {
@@ -45,7 +56,10 @@ android {
         }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     packaging {
         resources {
@@ -67,18 +81,21 @@ dependencies {
     implementation(project(":prismal"))
     implementation("org.tukaani:xz:1.12") // XZ mini-debug ELF, module app only
 
-    // API 101 is provided by the Xposed framework inside hooked processes.
-    compileOnly("io.github.libxposed:api:101.0.1")
-    // The module app uses the companion service binder to read/write Remote Preferences.
-    implementation("io.github.libxposed:service:101.0.0")
+    // API 102 is supplied by the framework in injected processes; no API classes in the APK.
+    compileOnly("io.github.libxposed:api:102.0.0")
+    // The standalone settings app uses the API 102 companion service.
+    implementation("io.github.libxposed:service:102.0.0")
 
     implementation("androidx.preference:preference:1.2.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.graphics:graphics-core:1.0.4")
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
     implementation("com.github.styropyr0:PrismalAGSL:v1.0.4")
+    // JVM fake HookHandle tests need API classes at test runtime (still compileOnly in APK).
+    testImplementation("io.github.libxposed:api:102.0.0")
     testImplementation("junit:junit:4.13.2")
 }
 

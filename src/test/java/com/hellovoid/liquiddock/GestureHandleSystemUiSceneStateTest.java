@@ -57,6 +57,20 @@ public class GestureHandleSystemUiSceneStateTest {
     }
 
     @Test
+    public void futureGenerationResetDiscardsStaleOverviewAndHome() {
+        GestureHandleSystemUiSceneState state = new GestureHandleSystemUiSceneState();
+        state.onTaskMovedToFront(true);
+        state.onOverviewShown();
+        assertTrue(state.shouldHide());
+        state.resetForFutureReload();
+        assertFalse(state.snapshot().home);
+        assertFalse(state.snapshot().recentsAnimation);
+        assertFalse(state.snapshot().overview);
+        assertFalse(state.shouldHide());
+        assertFalse(state.onTaskMovedToFront(false));
+    }
+
+    @Test
     public void proxyDisconnectClearsOnlyRecentsAuthority() {
         GestureHandleSystemUiSceneState state = new GestureHandleSystemUiSceneState();
 

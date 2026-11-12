@@ -6,12 +6,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -69,21 +68,14 @@ internal fun LiquidPage(
         if (os4Launcher) {
             os4NativeGlassSettings(prefs, masterEnabled && liquidGlass)
         } else {
-            item(key = "soft-glass-mode") {
+            item(key = "continuous-glass-corners") {
                 SettingsCard {
                     BooleanSetting(
                         prefs,
-                        ConfigSchema.Glass.SOFT_GLASS_ENABLED,
-                        "柔光玻璃",
-                        "替换所有 LiquidDock 液态玻璃表面的共享材质参数；普通液态玻璃参数单独保留。",
+                        ConfigSchema.Glass.CONTINUOUS_CORNERS,
+                        "iPadOS 风格连续圆角",
+                        "替换所有液态玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
                         masterEnabled && liquidGlass,
-                    )
-                    ModernListDivider()
-                    ArrowPreference(
-                        title = stringResource(R.string.page_soft_glass),
-                        summary = "独立调整柔光材质、折射、色彩、方向光与阴影参数",
-                        enabled = masterEnabled && liquidGlass,
-                        onClick = { open(Page.SoftGlass) },
                     )
                 }
             }
@@ -94,31 +86,17 @@ internal fun LiquidPage(
                         summary = entry.summary,
                         onClick = { open(entry.page) },
                         modifier = Modifier.padding(horizontal = 14.dp),
-                        page = entry.page,
                     )
                 }
-            }
-            item {
-                ModernFeatureCard(
-                    title = stringResource(R.string.page_glass_components),
-                    summary = "管理图标、小组件、文件夹与菜单玻璃",
-                    onClick = { open(Page.GlassComponents) },
-                    page = Page.GlassComponents,
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                )
             }
         }
-        if (os4Launcher) {
-            item(key = "os4-glass-components-entry") {
-                SettingsCard {
-                    ArrowPreference(
-                        title = "图标与小组件",
-                        summary = "配置桌面图标、小部件玻璃与已载入的 MAML 小组件隐藏规则",
-                        enabled = true,
-                        onClick = { open(Page.GlassComponents) },
-                    )
-                }
-            }
+        item {
+            ModernFeatureCard(
+                title = stringResource(R.string.page_glass_components),
+                summary = "管理图标、小组件、文件夹与菜单玻璃",
+                onClick = { open(Page.GlassComponents) },
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
         }
         if (!liquidGlass) {
             item {
@@ -134,120 +112,7 @@ internal fun LiquidPage(
 }
 
 @Composable
-internal fun SoftGlassSettingsPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    DenseSettingsList(
-        padding = padding,
-        title = stringResource(R.string.page_soft_glass),
-        summary = "此页只保存柔光玻璃参数。可先调整后再开启柔光模式；关闭柔光后恢复普通液态玻璃参数。",
-    ) {
-        groupedLiquidSettings(softGlassGroups, prefs, masterEnabled && liquidEnabled)
-    }
-}
 
-@Composable
-internal fun LiquidSpecPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-    summary: String,
-    groups: List<LiquidSpecGroup>,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    DenseSettingsList(
-        padding = padding,
-        title = "",
-        summary = summary,
-    ) {
-        groupedLiquidSettings(groups, prefs, masterEnabled && liquidEnabled)
-    }
-}
-
-
-@Composable
-internal fun LiquidLightingPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    val enabled = masterEnabled && liquidEnabled
-    DenseSettingsList(
-        padding = padding,
-        title = stringResource(R.string.page_liquid_lighting),
-        summary = "调节焦散、菲涅尔反射与光源方向，并集中调整 OS4 边缘反射和方向光。",
-    ) {
-        groupedLiquidSettings(liquidLightingGroups + liquidOs4Groups, prefs, enabled)
-    }
-}
-
-@Composable
-internal fun LiquidSamplingPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    DenseSettingsList(
-        padding,
-        stringResource(R.string.page_liquid_sampling),
-        "调整背景缩放、PassBlur 渲染分辨率与实时刷新上限。采样保护区由渲染器自动计算。",
-    ) {
-        groupedLiquidSettings(liquidSamplingGroups, prefs, masterEnabled && liquidEnabled)
-        item(key = "sampling-performance-title") { SmallTitle("实时背景采样与帧同步") }
-        item(key = passBlurCaptureScaleSpec.key) {
-            SettingsCard {
-                IntSetting(prefs, passBlurCaptureScaleSpec, masterEnabled && liquidEnabled)
-            }
-        }
-        item(key = passBlurRenderFpsSpec.key) {
-            SettingsCard {
-                IntSetting(prefs, passBlurRenderFpsSpec, masterEnabled && liquidEnabled)
-            }
-        }
-        item(key = ConfigSchema.Dock.FRAME_SYNC.name()) {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Dock.FRAME_SYNC,
-                    stringResource(R.string.dock_frame_sync),
-                    stringResource(R.string.dock_frame_sync_summary),
-                    masterEnabled && liquidEnabled,
-                )
-            }
-        }
-        item(key = "sampling-debug-title") { SmallTitle("调试显示") }
-        item(key = ConfigSchema.Glass.PRISMAL_SHOW_NORMALS.name()) {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.PRISMAL_SHOW_NORMALS,
-                    "OS4 法线与方向光可视化",
-                    "内部显示玻璃表面法线，边缘显示 OS4 反射使用的 SDF 法线；亮度反映 OS4 方向光，不包含背景反射纹理",
-                    masterEnabled && liquidEnabled,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 internal fun GlassComponentsPage(
     padding: PaddingValues,
     open: (Page) -> Unit,
@@ -278,6 +143,7 @@ internal fun GlassIconsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     val liquidEnabled = prefs.getBoolean(
@@ -308,6 +174,8 @@ internal fun GlassIconsPage(
         stringResource(R.string.page_glass_icons),
         if (os4Launcher) "控制普通桌面图标与 Dock 应用图标玻璃，并调整尺寸与圆角。"
         else "调整桌面图标、Dock 功能图标与多任务胶囊玻璃。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GlassIcons, it.key) },
+        focusSequence = searchFocus?.sequence,
     ) {
         item(key = "icons-glass-title") { SmallTitle("图标玻璃开关") }
         item(key = "icons-glass-toggles") {
@@ -390,6 +258,7 @@ internal fun GlassWidgetsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     val liquidEnabled = prefs.getBoolean(
@@ -409,6 +278,8 @@ internal fun GlassWidgetsPage(
         stringResource(R.string.page_glass_widgets),
         if (os4Launcher) "控制小部件玻璃；组件隐藏规则独立于玻璃开关。重启桌面生效。"
         else "小组件玻璃、内容适配与独立外观分开调整。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GlassWidgets, it.key) },
+        focusSequence = searchFocus?.sequence,
     ) {
         item(key = "widget-function-heading") {
             SmallTitle(if (os4Launcher) "玻璃" else "玻璃与内容适配")
@@ -466,12 +337,58 @@ internal fun GlassWidgetsPage(
     }
 }
 
+
+/** Stable existing folder cell positions; multiple sliders in one cell share one target. */
+internal enum class FolderGlassCell(val id: String) {
+    SMALL_HEADING("folder-small-heading"),
+    SMALL_ENABLED("folder-small-enabled"),
+    SMALL_GEOMETRY("folder-small-geometry"),
+    LARGE_HEADING("folder-large-heading"),
+    LARGE_ENABLED("folder-large-enabled"),
+    LARGE_GEOMETRY("folder-large-geometry"),
+    LARGE_PREVIEW("folder-large-preview"),
+    LARGE_NATIVE_OUTLINE("folder-large-native-outline"),
+    LARGE_MINGOU_COMPAT("folder-large-mingou-compat"),
+    OPEN_HEADING("folder-open-heading"),
+    OPEN_ENABLED("folder-open-enabled"),
+    OPEN_BLUR("folder-open-blur"),
+    OPEN_OPTICS("folder-open-optics"),
+    OPEN_FILL_HEADING("folder-open-fill-heading"),
+    OPEN_FILL_RGB("folder-open-fill-rgb"),
+    OPEN_FILL_ALPHA("folder-open-fill-alpha"),
+    SHADOW_HEADING("folder-shadow-heading"),
+    SHADOW("folder-shadow");
+}
+internal val folderGlassCellOrder: List<String> = FolderGlassCell.entries.map { it.id }
+internal val folderGlassFocusCell: Map<String, String> = mapOf(
+    ConfigSchema.Glass.SMALL_FOLDER_GLASS.name() to FolderGlassCell.SMALL_ENABLED.id,
+    smallFolderSizeOffsetSpec.key to FolderGlassCell.SMALL_GEOMETRY.id,
+    smallFolderCornerRadiusSpec.key to FolderGlassCell.SMALL_GEOMETRY.id,
+    ConfigSchema.Glass.LARGE_FOLDER_GLASS.name() to FolderGlassCell.LARGE_ENABLED.id,
+    largeFolderSizeOffsetSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
+    largeFolderCornerRadiusSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
+    largeFolderPreviewIconScaleSpec.key to FolderGlassCell.LARGE_PREVIEW.id,
+    ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE.name() to FolderGlassCell.LARGE_NATIVE_OUTLINE.id,
+    ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT.name() to FolderGlassCell.LARGE_MINGOU_COMPAT.id,
+    ConfigSchema.Glass.OPEN_FOLDER_GLASS.name() to FolderGlassCell.OPEN_ENABLED.id,
+    openFolderBlurSpec.key to FolderGlassCell.OPEN_BLUR.id,
+    openFolderNativeBlurSpec.key to FolderGlassCell.OPEN_BLUR.id,
+    openFolderIorSpec.key to FolderGlassCell.OPEN_OPTICS.id,
+    openFolderThicknessSpec.key to FolderGlassCell.OPEN_OPTICS.id,
+    openFolderTintSpec.key to FolderGlassCell.OPEN_OPTICS.id,
+    openFolderBaseColorRedSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
+    openFolderBaseColorGreenSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
+    openFolderBaseColorBlueSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
+    openFolderBaseColorAlphaSpec.key to FolderGlassCell.OPEN_FILL_ALPHA.id
+)
+
 @Composable
 internal fun GlassFoldersPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -505,9 +422,12 @@ internal fun GlassFoldersPage(
         padding,
         stringResource(R.string.page_glass_folders),
         "小文件夹、大文件夹和展开文件夹分别调整，不混用背景与几何参数。",
+        focusItemIndex = searchFocus?.key?.let(folderGlassFocusCell::get)
+            ?.let(folderGlassCellOrder::indexOf)?.takeIf { it >= 0 }?.plus(1),
+        focusSequence = searchFocus?.sequence,
     ) {
-        item(key = "folder-small-heading") { SmallTitle("小文件夹") }
-        item(key = "folder-small-enabled") {
+        item(key = FolderGlassCell.SMALL_HEADING.id) { SmallTitle("小文件夹") }
+        item(key = FolderGlassCell.SMALL_ENABLED.id) {
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS,
@@ -516,15 +436,15 @@ internal fun GlassFoldersPage(
                 ) { smallFolderGlass = it }
             }
         }
-        item(key = "folder-small-geometry") {
+        item(key = FolderGlassCell.SMALL_GEOMETRY.id) {
             SettingsCard {
                 IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidEnabled && smallFolderGlass)
                 ModernListDivider()
                 IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidEnabled && smallFolderGlass)
             }
         }
-        item(key = "folder-large-heading") { SmallTitle("大文件夹") }
-        item(key = "folder-large-enabled") {
+        item(key = FolderGlassCell.LARGE_HEADING.id) { SmallTitle("大文件夹") }
+        item(key = FolderGlassCell.LARGE_ENABLED.id) {
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.LARGE_FOLDER_GLASS,
@@ -533,19 +453,19 @@ internal fun GlassFoldersPage(
                 ) { largeFolderGlass = it }
             }
         }
-        item(key = "folder-large-geometry") {
+        item(key = FolderGlassCell.LARGE_GEOMETRY.id) {
             SettingsCard {
                 IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
                 ModernListDivider()
                 IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
             }
         }
-        item(key = "folder-large-preview") {
+        item(key = FolderGlassCell.LARGE_PREVIEW.id) {
             SettingsCard {
                 IntSetting(prefs, largeFolderPreviewIconScaleSpec, masterEnabled)
             }
         }
-        item(key = "folder-large-native-outline") {
+        item(key = FolderGlassCell.LARGE_NATIVE_OUTLINE.id) {
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,
@@ -555,7 +475,7 @@ internal fun GlassFoldersPage(
                 )
             }
         }
-        item(key = "folder-large-mingou-compat") {
+        item(key = FolderGlassCell.LARGE_MINGOU_COMPAT.id) {
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT,
@@ -565,8 +485,8 @@ internal fun GlassFoldersPage(
                 )
             }
         }
-        item(key = "folder-open-heading") { SmallTitle("展开文件夹") }
-        item(key = "folder-open-enabled") {
+        item(key = FolderGlassCell.OPEN_HEADING.id) { SmallTitle("展开文件夹") }
+        item(key = FolderGlassCell.OPEN_ENABLED.id) {
             SettingsCard {
                 // FolderCling background is independent of the desktop preview;
                 // its first Hook installation still requires a Launcher restart.
@@ -578,14 +498,14 @@ internal fun GlassFoldersPage(
                 ) { openFolderGlass = it }
             }
         }
-        item(key = "folder-open-blur") {
+        item(key = FolderGlassCell.OPEN_BLUR.id) {
             SettingsCard {
                 IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
                 ModernListDivider()
                 IntSetting(prefs, openFolderNativeBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
             }
         }
-        item(key = "folder-open-optics") {
+        item(key = FolderGlassCell.OPEN_OPTICS.id) {
             SettingsCard {
                 IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled && openFolderGlass)
                 ModernListDivider()
@@ -594,8 +514,23 @@ internal fun GlassFoldersPage(
                 IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
             }
         }
-        item(key = "folder-shadow-heading") { SmallTitle("玻璃阴影") }
-        item(key = "folder-shadow") {
+        item(key = FolderGlassCell.OPEN_FILL_HEADING.id) { SmallTitle("展开文件夹 · 底色（纯色覆盖）") }
+        item(key = FolderGlassCell.OPEN_FILL_RGB.id) {
+            SettingsCard {
+                IntSetting(prefs, openFolderBaseColorRedSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderBaseColorGreenSpec, masterEnabled && liquidEnabled && openFolderGlass)
+                ModernListDivider()
+                IntSetting(prefs, openFolderBaseColorBlueSpec, masterEnabled && liquidEnabled && openFolderGlass)
+            }
+        }
+        item(key = FolderGlassCell.OPEN_FILL_ALPHA.id) {
+            SettingsCard {
+                IntSetting(prefs, openFolderBaseColorAlphaSpec, masterEnabled && liquidEnabled && openFolderGlass)
+            }
+        }
+        item(key = FolderGlassCell.SHADOW_HEADING.id) { SmallTitle("玻璃阴影") }
+        item(key = FolderGlassCell.SHADOW.id) {
             SettingsCard {
                 ArrowPreference(
                     title = "阴影",
@@ -609,70 +544,7 @@ internal fun GlassFoldersPage(
 }
 
 @Composable
-internal fun GlassMenusPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-    open: (Page) -> Unit,
-) {
-    val liquidEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    DenseSettingsList(
-        padding,
-        stringResource(R.string.page_glass_menus),
-        "菜单与弹窗按组件设置，系统级壁纸修复独立放置。",
-    ) {
-        item(key = "menus-heading") { SmallTitle("菜单与弹窗") }
-        item(key = "menus-handle") {
-            SettingsCard {
-                ArrowPreference(
-                    title = stringResource(R.string.page_handle_menu),
-                    summary = "应用顶部控制器的菜单玻璃、颜色、模糊与独立光学参数",
-                    enabled = masterEnabled && liquidEnabled,
-                    targetPage = Page.HandleMenuCustomization,
-                    onClick = { open(Page.HandleMenuCustomization) },
-                )
-            }
-        }
-        item(key = "menus-shortcut") {
-            SettingsCard {
-                ArrowPreference(
-                    title = stringResource(R.string.page_shortcut_popup),
-                    summary = "长按快捷菜单的玻璃、深色模式、模糊、颜色及独立光学参数",
-                    enabled = masterEnabled && liquidEnabled,
-                    targetPage = Page.ShortcutPopupCustomization,
-                    onClick = { open(Page.ShortcutPopupCustomization) },
-                )
-            }
-        }
-        item(key = "menus-dialog") {
-            SettingsCard {
-                ArrowPreference(
-                    title = stringResource(R.string.page_dialog_customization),
-                    summary = "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色",
-                    enabled = masterEnabled && liquidEnabled,
-                    targetPage = Page.DialogCustomization,
-                    onClick = { open(Page.DialogCustomization) },
-                )
-            }
-        }
-        item(key = "menus-flicker-heading") { SmallTitle("系统兼容性") }
-        item(key = "menus-flicker") {
-            SettingsCard {
-                BooleanSetting(
-                    prefs, ConfigSchema.Glass.WALLPAPER_FLICKER_FIX,
-                    "壁纸闪烁修复",
-                    "仅在壁纸闪烁时开启；需要为 LiquidDock 启用 System Framework（system）作用域并重启设备",
-                    masterEnabled && liquidEnabled,
-                )
-            }
-        }
-    }
-}
 
-@Composable
 internal fun LauncherHighlightsPage(
     padding: PaddingValues,
     open: (Page) -> Unit,
@@ -716,4 +588,3 @@ internal fun LauncherHighlightTogglePage(
         }
     }
 }
-

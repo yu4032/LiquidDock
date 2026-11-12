@@ -44,6 +44,10 @@ final class LiveGlassConfigState {
                     ConfigSchema.Glass.OPEN_FOLDER_IOR.name(),
                     ConfigSchema.Glass.OPEN_FOLDER_THICKNESS.name(),
                     ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA.name(),
+                    ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_RED.name(),
+                    ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_GREEN.name(),
+                    ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_BLUE.name(),
+                    ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_ALPHA.name(),
                     ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS.name(),
                     ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS.name(),
                     ConfigSchema.Glass.ICON_SIZE_OFFSET.name(),
@@ -67,6 +71,10 @@ final class LiveGlassConfigState {
                     ConfigSchema.Glass.TINT_RED.name(),
                     ConfigSchema.Glass.TINT_GREEN.name(),
                     ConfigSchema.Glass.TINT_BLUE.name(),
+                    ConfigSchema.Glass.BASE_COLOR_RED.name(),
+                    ConfigSchema.Glass.BASE_COLOR_GREEN.name(),
+                    ConfigSchema.Glass.BASE_COLOR_BLUE.name(),
+                    ConfigSchema.Glass.BASE_COLOR_ALPHA.name(),
                     ConfigSchema.Glass.BRIGHTNESS.name(),
                     ConfigSchema.Glass.CAUSTICS.name(),
                     ConfigSchema.Glass.PRISMAL_REFRACTION_INSET.name(),
@@ -138,6 +146,7 @@ final class LiveGlassConfigState {
 
     private static Set<String> popupKeys() {
         Set<String> keys = new HashSet<>(POPUP_POLICY_KEYS);
+        keys.add(ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS.name());
         for (com.hellovoid.liquiddock.config.ConfigKey<Integer> config
                 : ScopedGlassOptics.keysForScope(ScopedGlassOptics.POPUP)) {
             keys.add(ScopedGlassOptics.key(ScopedGlassOptics.POPUP, config));
@@ -158,8 +167,11 @@ final class LiveGlassConfigState {
     private static final Set<String> ANIMATION_KEYS = Collections.unmodifiableSet(new HashSet<>(
             Arrays.asList(
                     ConfigSchema.Animation.WORKSPACE_VISIBILITY.name(),
+                    ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name(),
+                    ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name(),
+                    ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END.name(),
+                    ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION.name(),
                     ConfigSchema.Animation.UNLOCK_GLASS_FADE.name(),
-                    ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE.name(),
                     ConfigSchema.Animation.PRESS_IN.name(),
                     ConfigSchema.Animation.PRESS_OUT.name(),
                     ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE.name(),
@@ -289,6 +301,7 @@ final class LiveGlassConfigState {
             }
             if (workstationChanged) {
                 lastWorkstation = workstation;
+                MiuixLauncherStaticGlassHook.onWorkstationConfigChanged(next.workstation);
                 WorkstationDockCustomizationHook.applyLiveConfig(next.workstation);
                 WorkstationDockGeometryHook.applyLiveConfig(next.workstation);
                 MainHook.log(TAG + " workstation Dock geometry updated");
@@ -319,6 +332,8 @@ final class LiveGlassConfigState {
             if (animationChanged) {
                 lastAnimation = animation;
                 AnimationRuntimeState.configure(next.animation);
+                LauncherGlassStaticLayer.onAnimationVisibilitySettingsChanged();
+                Miuix307ZeroCopyRenderer.requestDockProgressRefresh();
                 LauncherWallpaperZoomHook.onLiveConfigChanged(next);
                 MainHook.log(TAG + " launcher animation/zoom policy updated");
             }

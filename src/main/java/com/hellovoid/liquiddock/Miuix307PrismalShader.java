@@ -51,6 +51,7 @@ final class Miuix307PrismalShader {
 
             uniform float u_brightness;
             uniform vec4  u_glassColor;
+            uniform vec4  u_baseColor;
             uniform float u_highlightWidth;
 
             uniform vec2  u_lightDir;
@@ -464,6 +465,7 @@ final class Miuix307PrismalShader {
                     color += vec3(1.0) * pressGlow * (0.08 + spot * 0.15);
                 }
 
+                color = mix(color, u_baseColor.rgb, u_baseColor.a);
                 gl_FragColor = vec4(color, opacity * u_transmittance);
             }
             """);

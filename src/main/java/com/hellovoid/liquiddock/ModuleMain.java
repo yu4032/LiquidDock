@@ -13,21 +13,24 @@ import android.content.SharedPreferences;
 
 import io.github.libxposed.api.XposedModule;
 
-/** libxposed API 101 entry point with process-specific timing and opt-in glass integrations. */
+/** libxposed API 102 entry point; hot reload remains disabled for owned process resources. */
 public final class ModuleMain extends XposedModule {
     private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
 
     private String loadedProcessName;
+    private final Api102ReloadGate reloadGate = new Api102ReloadGate();
 
     @Override
     public void onModuleLoaded(@NonNull ModuleLoadedParam param) {
         Api101Bridge.init(this);
         refreshDebugLogging();
         loadedProcessName = param.getProcessName();
-        Api101Bridge.log("[DC] API101 module loaded process=" + loadedProcessName
+        Api101Bridge.log("[DC] API102 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
         if ("system".equals(loadedProcessName)) {
+            // Acquiring a wallpaper listener or renderer makes this process non-reloadable.
+            if (!reloadGate.enterOwnerLifecycle()) return;
             RustSpawnerCompatHook.install();
             try {
                 ConfigReader config = ConfigReader.load();
@@ -50,9 +53,43 @@ public final class ModuleMain extends XposedModule {
     }
 
     @Override
+    public void onPackageLoaded(@NonNull PackageLoadedParam param) {
+        if (!SYSTEM_UI_PACKAGE.equals(param.getPackageName())) return;
+        refreshDebugLogging();
+        try {
+            ConfigReader configReader = ConfigReader.load();
+            boolean enabled = configReader.b(
+                    ConfigSchema.Core.ENABLED.name(),
+                    ConfigSchema.Core.ENABLED.runtimeFallback());
+            boolean headerGradientBlurEnabled = configReader.b(
+                    ConfigSchema.Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR.name(), false);
+            SystemUiHeaderGradientBlurHook.install(enabled && headerGradientBlurEnabled);
+        } catch (Throwable error) {
+            Api101Bridge.log(
+                    "[DC][SystemUiHeaderGradientBlur] early bootstrap failed; preserving SystemUI behavior",
+                    error);
+        }
+    }
+
+    @Override
+    public void onSystemServerStarting(@NonNull SystemServerStartingParam param) {
+        if (!reloadGate.enterOwnerLifecycle()) return;
+        WallpaperNativeTransformBridge.installSystemObserver(param.getClassLoader());
+    }
+
+    @Override
     public void onPackageReady(@NonNull PackageReadyParam param) {
         refreshDebugLogging();
         String packageName = param.getPackageName();
+        // Claim ownership before any install operation, including failing/partial installs.
+        // In an admitted pre-install handoff the old generation must not start new hooks.
+        if ((SYSTEM_UI_PACKAGE.equals(packageName)
+                || LAUNCHER_PACKAGE.equals(packageName)
+                || SecurityCenterProcessPolicy.PACKAGE.equals(packageName)
+                || ThirdPartyGlassAdapterRegistry.handles(packageName))
+                && !reloadGate.enterOwnerLifecycle()) {
+            return;
+        }
         if (SYSTEM_UI_PACKAGE.equals(packageName)) {
             ClassLoader classLoader = param.getClassLoader();
             if (classLoader == null) return;
@@ -96,8 +133,9 @@ public final class ModuleMain extends XposedModule {
                 GlassEdgeEffects.refresh(configReader);
                 LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
                 AnimationRuntimeState.configure(runtimeConfig.animation);
-                boolean sideSlideEnabled = SideSlideHoldFeatureConfig.isEnabled(configReader);
-                if (runtimeConfig.enabled && sideSlideEnabled) {
+                // Native Sidebar bridge also owns the vendor-handle glass entry.
+                // Launcher side-slide extension remains gated separately below.
+                if (runtimeConfig.enabled) {
                     SecurityCenterSidebarCommandBridge.install(classLoader);
                 }
                 SecurityCenterGlassRuntimeState.initialize(
@@ -168,6 +206,11 @@ public final class ModuleMain extends XposedModule {
                 LauncherLargeFolderPickerHook.install(classLoader);
                 LauncherLargeFolderNativeSpanHook.install(classLoader);
                 LauncherNativeFourFolderHook.install(classLoader);
+                // Allow size toggling from Launcher widget shortcuts.
+                if (LauncherWidgetProportionalResizeHook.install(classLoader)) {
+                    LauncherWidgetResizeShortcutHook.install(classLoader);
+                    LauncherWidgetReplacementHook.install(classLoader);
+                }
             }
             AnimationRuntimeState.configure(runtimeConfig.animation);
             GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
@@ -217,7 +260,7 @@ public final class ModuleMain extends XposedModule {
             RecentsBackgroundBlurHook.install(classLoader, runtimeConfig);
             DockBottomGeometryHook.install(classLoader);
         } catch (Throwable error) {
-            Api101Bridge.errorAlways("[DC] API101 package init failed", error);
+            Api101Bridge.errorAlways("[DC] API102 package init failed", error);
         }
     }
 
@@ -247,6 +290,38 @@ public final class ModuleMain extends XposedModule {
             // A storage failure must not block Launcher hooks: snapshot defaults still work.
             Api101Bridge.log("[DC][Config] default profile initialization unavailable", error);
         }
+    }
+
+    /**
+     * API 102 can only transfer an UNINITIALIZED generation. Package-ready callbacks are not
+     * replayed automatically, and owners of hooks, views, receivers and EGL cannot be detached.
+     * The module remains non-auto-reloadable until every owner has a verified teardown path.
+     */
+    @Override
+    public boolean onHotReloading(@NonNull HotReloadingParam param) {
+        if (Api102HookRegistry.installedCount() != 0 || !reloadGate.beginHandoff()) {
+            Api101Bridge.log("[DC][API102] hot reload rejected: active process owners or HookHandles");
+            return false;
+        }
+        try {
+            param.setSavedInstanceState(loadedProcessName);
+            return true;
+        } catch (Throwable error) {
+            reloadGate.abortHandoff();
+            Api101Bridge.log("[DC][API102] hot reload state transfer failed", error);
+            return false;
+        }
+    }
+
+    @Override
+    public void onHotReloaded(@NonNull HotReloadedParam param) {
+        // Only the no-owners path above can succeed. Never move a HookHandle, View, or closure
+        // across class loaders, and never try to replay onPackageReady manually.
+        Api101Bridge.init(this);
+        Object saved = param.getSavedInstanceState();
+        loadedProcessName = saved instanceof String ? (String) saved : null;
+        refreshDebugLogging();
+        Api101Bridge.log("[DC][API102] restored uninitialized process generation");
     }
 
     private static void refreshDebugLogging() {

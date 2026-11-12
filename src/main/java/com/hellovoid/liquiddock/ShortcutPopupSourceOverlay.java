@@ -3,6 +3,7 @@ package com.hellovoid.liquiddock;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -36,15 +37,21 @@ final class ShortcutPopupSourceOverlay extends FrameLayout {
     }
 
     static ShortcutPopupSourceOverlay attach(View launcherRoot, Listener listener, String title) {
-        return attach(launcherRoot, listener, title, false);
+        return attachToBounds(launcherRoot, null, listener, title);
     }
 
-    static ShortcutPopupSourceOverlay attachToLauncherBounds(View launcherRoot, Listener listener, String title) {
-        return attach(launcherRoot, listener, title, true);
+    static ShortcutPopupSourceOverlay attachToLauncherBounds(
+            View launcherRoot, Listener listener, String title) {
+        if (launcherRoot == null) return null;
+        int[] location = new int[2];
+        launcherRoot.getLocationOnScreen(location);
+        return attachToBounds(launcherRoot, new Rect(location[0], location[1],
+                location[0] + launcherRoot.getWidth(), location[1] + launcherRoot.getHeight()),
+                listener, title);
     }
 
-    private static ShortcutPopupSourceOverlay attach(View launcherRoot, Listener listener, String title,
-                                                      boolean matchLauncherBounds) {
+    static ShortcutPopupSourceOverlay attachToBounds(
+            View launcherRoot, Rect bounds, Listener listener, String title) {
         if (launcherRoot == null || launcherRoot.getWindowToken() == null) return null;
         Context context = launcherRoot.getContext();
         WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -69,16 +76,13 @@ final class ShortcutPopupSourceOverlay extends FrameLayout {
                 PixelFormat.TRANSLUCENT);
         lp.token = launcherRoot.getWindowToken();
         lp.gravity = Gravity.TOP | Gravity.START;
-        if (matchLauncherBounds) {
-            // Independent windows can otherwise receive different status/navigation insets.
-            // Capture and output must share the Launcher root's exact logical pixel domain.
-            int[] location = new int[2];
-            launcherRoot.getLocationOnScreen(location);
+        if (bounds != null) {
+            // Match the output's logical pixels, including its screen origin.
             lp.gravity = Gravity.TOP | Gravity.LEFT;
-            lp.width = launcherRoot.getWidth();
-            lp.height = launcherRoot.getHeight();
-            lp.x = location[0];
-            lp.y = location[1];
+            lp.width = bounds.width();
+            lp.height = bounds.height();
+            lp.x = bounds.left;
+            lp.y = bounds.top;
             lp.setFitInsetsTypes(0);
         }
         lp.setTitle(title);

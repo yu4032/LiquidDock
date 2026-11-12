@@ -261,9 +261,12 @@ static int ld_maml_install(const struct native_api *api)
     if(!api || !api->hook || g_maml_init_original) return g_maml_init_original!=NULL;
     int strict=g_home_options.hook_safety_enabled;
     unsigned char digest[32],body[LD_MAML_INIT_SIZE]; char hex[65];
-    if(strict) {
-        if(!ld_maml_hash_path(LD_MAML_SDK_PATH,digest)) return 0;
-        ld_maml_hex(digest,hex); if(strcmp(hex,LD_MAML_SDK_SHA)) return 0;
+    /* Always attest the SDK: a stale offset in a rebuilt SDK would hook an
+     * unrelated function. Only the pinned SDK build is supported. */
+    if(!ld_maml_hash_path(LD_MAML_SDK_PATH,digest)) return 0;
+    ld_maml_hex(digest,hex); if(strcmp(hex,LD_MAML_SDK_SHA)) {
+        ld_blog("MAML SDK build differs; widget material hook disabled");
+        return 0;
     }
     uintptr_t base=0; char maps[1024]; FILE *f=fopen("/proc/self/maps","r");
     if(!f) return 0;

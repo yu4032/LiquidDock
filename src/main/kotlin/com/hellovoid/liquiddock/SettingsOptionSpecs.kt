@@ -65,13 +65,14 @@ internal fun optionSummary(key: String): String = when (key) {
     "dock_divider_color_g" -> "分隔竖线颜色 · 绿"
     "dock_divider_color_b" -> "分隔竖线颜色 · 蓝"
     "dock_divider_alpha" -> "分隔竖线不透明度"
-    "workstation_grid_horizontal_offset" -> "整体平移工作台桌面图标区域，适用于当前实际网格列数；不继承普通桌面水平偏移"
     "workstation_all_apps_landscape_horizontal_offset" -> "直接设置工作台所有应用横屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_landscape_top_spacing" -> "直接设置工作台所有应用横屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_landscape_bottom_spacing" -> "直接设置工作台所有应用横屏图标区下间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_horizontal_offset" -> "直接设置工作台所有应用竖屏图标区左右间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_top_spacing" -> "直接设置工作台所有应用竖屏图标区上间距；不叠加系统默认位置"
     "workstation_all_apps_portrait_bottom_spacing" -> "直接设置工作台所有应用竖屏图标区下间距；不叠加系统默认位置"
+    "workstation_all_apps_landscape_indicator_y" -> "工作台所有应用横屏页面指示器的垂直偏移；正值下移，负值上移，不影响普通桌面"
+    "workstation_all_apps_portrait_indicator_y" -> "工作台所有应用竖屏页面指示器的垂直偏移；正值下移，负值上移，不影响普通桌面"
     "workstation_dock_vertical_offset" -> "同时移动工作台 Dock 背景和全部图标，正值向下、负值向上；横竖屏共用"
     "workstation_dock_icon_landscape_vertical_offset" -> "仅在横屏调整图标垂直偏移，正值向下、负值向上"
     "workstation_dock_icon_top_offset" -> "工作台任务栏模式直接平移整行图标（正值向下、负值向上）；普通工作台模式仍调整图标顶部间距"
@@ -82,10 +83,14 @@ internal fun optionSummary(key: String): String = when (key) {
     "liquid_dome" -> "控制玻璃表面的凸起程度"
     "liquid_lens_refraction" -> "边缘透镜折射位移增益；实际强度同时受 IOR 影响，0 关闭透镜位移，其他光学效果仍保留"
     "liquid_chromatic" -> "控制红、绿、蓝通道分离形成的色散强度"
-    "liquid_tint_alpha" -> "玻璃颜色乘色强度"
-    "liquid_tint_r" -> "玻璃颜色 · 红"
-    "liquid_tint_g" -> "玻璃颜色 · 绿"
-    "liquid_tint_b" -> "玻璃颜色 · 蓝"
+    "liquid_tint_alpha" -> "改变背景色调，通常保留原有纹理"
+    "liquid_tint_r" -> "调整染色的红色分量"
+    "liquid_tint_g" -> "调整染色的绿色分量"
+    "liquid_tint_b" -> "调整染色的蓝色分量"
+    "liquid_base_color_r" -> "设置纯色底色的红色分量"
+    "liquid_base_color_g" -> "设置纯色底色的绿色分量"
+    "liquid_base_color_b" -> "设置纯色底色的蓝色分量"
+    "liquid_base_color_alpha" -> "纯色覆盖背景：0 不覆盖，255 完全覆盖"
     "liquid_highlight_width" -> "控制边缘反射与高光带宽度"
     "liquid_depth_effect" -> "控制圆角处折射方向向中心偏转；直边不变，0 为关闭"
     "liquid_brightness" -> "整体输出亮度"
@@ -93,7 +98,7 @@ internal fun optionSummary(key: String): String = when (key) {
     "liquid_prismal_refraction_inset" -> "调整玻璃可见遮罩的内缩；20 为原轮廓，保留抗锯齿"
     "liquid_prismal_displacement_scale" -> "折射与视差位移总倍率"
     "liquid_prismal_height_transition_width" -> "控制玻璃表面从边缘到中心的高度过渡范围"
-    "liquid_prismal_smin_smoothing" -> "控制圆角边界的平滑程度"
+    "liquid_prismal_smin_smoothing" -> "控制原轮廓的圆角平滑；开启连续圆角后调整表面法线采样范围"
     "liquid_prismal_edge_refraction_falloff" -> "控制边缘折射向内部的衰减；越高越集中在边缘"
     "liquid_prismal_fresnel_reflect" -> "控制随观察角度增强的边缘反射强度"
     "liquid_prismal_dispersion_r" -> "红色通道相对色散倍率"
@@ -187,16 +192,12 @@ internal val workstationDockSpecs by lazy {
         ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
     )
 }
-internal val workstationDesktopSpecs by lazy {
-    workstationSpecsFor(
-        ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET,
-    )
-}
 internal val workstationAppsLandscapeSpecs by lazy {
     workstationSpecsFor(
         ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
         ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
         ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
+        ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y,
     )
 }
 internal val workstationAppsPortraitSpecs by lazy {
@@ -204,6 +205,7 @@ internal val workstationAppsPortraitSpecs by lazy {
         ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
         ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
         ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
+        ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y,
     )
 }
 
@@ -225,13 +227,14 @@ internal fun ensureDividerDefaults(prefs: SharedPreferences) {
 }
 internal val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS, "工作台 Dock 图标玻璃圆角", "dp"),
-    IntSpec(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET, "工作台桌面水平偏移"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, "所有应用 · 横屏水平间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING, "所有应用 · 横屏上间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING, "所有应用 · 横屏下间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, "所有应用 · 竖屏水平间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING, "所有应用 · 竖屏上间距"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, "所有应用 · 竖屏下间距"),
+    IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y, "所有应用 · 横屏指示器高度"),
+    IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y, "所有应用 · 竖屏指示器高度"),
     IntSpec(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET, "整个 Dock 垂直平移"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET, "横屏 · Dock 图标垂直偏移"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "竖屏 · Dock 图标垂直偏移"),
@@ -254,7 +257,15 @@ internal val openFolderBlurSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BLUR, "
 internal val openFolderNativeBlurSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT, "展开文件夹 · 外部原生模糊", "%", summary = "调整文件夹外壁纸的系统模糊，独立于玻璃内模糊；下次打开文件夹或多任务返回时生效")
 internal val openFolderIorSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_IOR, "展开文件夹 · 折射率", "×100", summary = "100 = 1.00（不折射），155 = 1.55")
 internal val openFolderThicknessSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_THICKNESS, "展开文件夹 · 玻璃厚度", "dp")
-internal val openFolderTintSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA, "展开文件夹 · 染色透明度", "", summary = "0 = 完全透明，160 = 较强染色；颜色继承全局玻璃颜色")
+internal val openFolderTintSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_TINT_ALPHA, "展开文件夹 · 染色强度", "", summary = "改变背景色调，通常保留纹理；颜色继承全局")
+internal val openFolderBaseColorRedSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_RED,
+    "展开文件夹 · 底色红", "", summary = "−1 继承全局；设置纯色底色的红色分量")
+internal val openFolderBaseColorGreenSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_GREEN,
+    "展开文件夹 · 底色绿", "", summary = "−1 继承全局；设置纯色底色的绿色分量")
+internal val openFolderBaseColorBlueSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_BLUE,
+    "展开文件夹 · 底色蓝", "", summary = "−1 继承全局；设置纯色底色的蓝色分量")
+internal val openFolderBaseColorAlphaSpec = IntSpec(ConfigSchema.Glass.OPEN_FOLDER_BASE_COLOR_ALPHA,
+    "展开文件夹 · 底色透明度", "", summary = "−1 继承全局；0 不覆盖，255 完全覆盖背景")
 internal val largeFolderPreviewIconScaleSpec = IntSpec(
     ConfigSchema.Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
     "2×2 文件夹内图标大小",
@@ -283,10 +294,14 @@ internal val liquidSpecs = listOf(
     IntSpec(ConfigSchema.Glass.LENS_REFRACTION, "透镜折射倍率", "×"),
     IntSpec(ConfigSchema.Glass.DEPTH_EFFECT, "透镜中心偏转", "%"),
     IntSpec(ConfigSchema.Glass.CHROMATIC, "色散强度", ""),
-    IntSpec(ConfigSchema.Glass.TINT_ALPHA, "玻璃底色透明度", ""),
-    IntSpec(ConfigSchema.Glass.TINT_RED, "底色 · 红", ""),
-    IntSpec(ConfigSchema.Glass.TINT_GREEN, "底色 · 绿", ""),
-    IntSpec(ConfigSchema.Glass.TINT_BLUE, "底色 · 蓝", ""),
+    IntSpec(ConfigSchema.Glass.TINT_ALPHA, "染色强度", ""),
+    IntSpec(ConfigSchema.Glass.TINT_RED, "染色 · 红", ""),
+    IntSpec(ConfigSchema.Glass.TINT_GREEN, "染色 · 绿", ""),
+    IntSpec(ConfigSchema.Glass.TINT_BLUE, "染色 · 蓝", ""),
+    IntSpec(ConfigSchema.Glass.BASE_COLOR_RED, "底色 · 红", ""),
+    IntSpec(ConfigSchema.Glass.BASE_COLOR_GREEN, "底色 · 绿", ""),
+    IntSpec(ConfigSchema.Glass.BASE_COLOR_BLUE, "底色 · 蓝", ""),
+    IntSpec(ConfigSchema.Glass.BASE_COLOR_ALPHA, "底色透明度", ""),
     IntSpec(ConfigSchema.Glass.HIGHLIGHT_WIDTH, "玻璃边缘厚度", "%"),
     IntSpec(ConfigSchema.Glass.BRIGHTNESS, "亮度", "%"),
     IntSpec(ConfigSchema.Glass.CAUSTICS, "焦散强度", "%"),
@@ -367,6 +382,10 @@ internal val liquidColorSpecs = liquidSpecsFor(
     ConfigSchema.Glass.TINT_RED,
     ConfigSchema.Glass.TINT_GREEN,
     ConfigSchema.Glass.TINT_BLUE,
+    ConfigSchema.Glass.BASE_COLOR_RED,
+    ConfigSchema.Glass.BASE_COLOR_GREEN,
+    ConfigSchema.Glass.BASE_COLOR_BLUE,
+    ConfigSchema.Glass.BASE_COLOR_ALPHA,
     ConfigSchema.Glass.PRISMAL_DISPERSION_R,
     ConfigSchema.Glass.PRISMAL_DISPERSION_B,
     ConfigSchema.Glass.PRISMAL_VIBRANCY,
@@ -431,10 +450,13 @@ internal val liquidRefractionGroups = listOf(
         ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING),
 )
 internal val liquidColorGroups = listOf(
-    liquidGroup("玻璃底色", ConfigSchema.Glass.TINT_RED,
+    liquidGroup("玻璃染色（保留纹理）", ConfigSchema.Glass.TINT_RED,
         ConfigSchema.Glass.TINT_GREEN, ConfigSchema.Glass.TINT_BLUE),
-    liquidGroup("透明度与色彩表现", ConfigSchema.Glass.TINT_ALPHA,
+    liquidGroup("染色强度与饱和度", ConfigSchema.Glass.TINT_ALPHA,
         ConfigSchema.Glass.PRISMAL_VIBRANCY),
+    liquidGroup("玻璃底色（纯色覆盖）", ConfigSchema.Glass.BASE_COLOR_RED,
+        ConfigSchema.Glass.BASE_COLOR_GREEN, ConfigSchema.Glass.BASE_COLOR_BLUE),
+    liquidGroup("底色透明度", ConfigSchema.Glass.BASE_COLOR_ALPHA),
     liquidGroup("色散", ConfigSchema.Glass.CHROMATIC,
         ConfigSchema.Glass.PRISMAL_DISPERSION_R, ConfigSchema.Glass.PRISMAL_DISPERSION_B),
 )
@@ -696,17 +718,23 @@ internal val animationWorkspaceVisibilitySpec = IntSpec(
     "ms",
     summary = "工作区玻璃淡入淡出时长；已加载的桌面 Hook 即时生效",
 )
+internal val animationAppReturnGlassFadeStartSpec = IntSpec(
+    ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END,
+    "退出应用 · 渐显开始提前量",
+    "ms",
+    summary = "控制原生返回动画结束前多久开始渐显；0 = 动画结束时开始，已加载的桌面 Hook 即时生效",
+)
+internal val animationAppReturnGlassFadeDurationSpec = IntSpec(
+    ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION,
+    "退出应用 · 渐显持续时间",
+    "ms",
+    summary = "控制玻璃从开始渐显到完全显示的时长；0 = 到达开始时机后立即显示，已加载的桌面 Hook 即时生效",
+)
 internal val animationUnlockGlassFadeSpec = IntSpec(
     ConfigSchema.Animation.UNLOCK_GLASS_FADE,
     "解锁时工作区玻璃渐显",
     "ms",
     summary = "跟随 Launcher 原生解锁飞入动画末尾渐显；0 = 立即显示，修改后下次解锁生效",
-)
-internal val animationFolderOpenGlassFadeSpec = IntSpec(
-    ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE,
-    "文件夹打开 · 其他玻璃渐隐",
-    "ms",
-    summary = "文件夹打开时其他文件夹与小组件玻璃的退场时长；0 = 立即隐藏，下次打开文件夹生效",
 )
 internal val animationDockResizeSpec = IntSpec(
     ConfigSchema.Animation.DOCK_RESIZE,

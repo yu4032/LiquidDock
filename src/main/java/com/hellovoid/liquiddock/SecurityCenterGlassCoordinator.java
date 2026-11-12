@@ -117,6 +117,7 @@ final class SecurityCenterGlassCoordinator
             new SecurityCenterMaterialOwnershipState();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile LiquidDockConfig.Glass glassConfig;
+    private volatile ThirdPartyGlassAppearance sidebarAppearance;
     private final SecurityCenterVendorMaterialBridge vendorMaterialBridge;
     private final int allAppsCornerRadiusResId;
     private final int gameToolboxCornerRadiusResId;
@@ -196,7 +197,17 @@ final class SecurityCenterGlassCoordinator
             SecurityCenterVendorMaterialBridge vendorMaterialBridge,
             int allAppsCornerRadiusResId,
             int gameToolboxCornerRadiusResId) {
+        this(glassConfig, null, vendorMaterialBridge,
+                allAppsCornerRadiusResId, gameToolboxCornerRadiusResId);
+    }
+
+    SecurityCenterGlassCoordinator(
+            LiquidDockConfig.Glass glassConfig, ThirdPartyGlassAppearance appearance,
+            SecurityCenterVendorMaterialBridge vendorMaterialBridge,
+            int allAppsCornerRadiusResId,
+            int gameToolboxCornerRadiusResId) {
         this.glassConfig = glassConfig;
+        this.sidebarAppearance = appearance;
         this.vendorMaterialBridge = vendorMaterialBridge;
         this.allAppsCornerRadiusResId = allAppsCornerRadiusResId;
         this.gameToolboxCornerRadiusResId = gameToolboxCornerRadiusResId;
@@ -205,10 +216,22 @@ final class SecurityCenterGlassCoordinator
 
     /** Keep existing source, sinks and ownership, updating only shader parameters. */
     void applyLiveGlassConfig(LiquidDockConfig.Glass config) {
+        applyLiveGlassConfig(config, null);
+    }
+
+    void applyLiveGlassConfig(
+            LiquidDockConfig.Glass config, ThirdPartyGlassAppearance appearance) {
         if (config == null) return;
         glassConfig = config;
+        sidebarAppearance = appearance;
+        if (appearance != null && !appearance.enabled) {
+            releaseAll();
+            return;
+        }
         SecurityCenterGlassSession live = session;
-        if (live != null && !live.isShutdown()) live.applyLiveGlassConfig(config);
+        if (live != null && !live.isShutdown()) {
+            live.applyLiveGlassConfig(config, appearance);
+        }
     }
 
     void bindGlobalDock(View turboLayout, View dockLayout) {
@@ -329,8 +352,26 @@ final class SecurityCenterGlassCoordinator
         if (isCurrentTurbo(turboLayout)) releasePanel(turboLayout, "vendor terminal cleanup");
     }
 
+    /** Native handle show path: refresh existing sinks without replacing root ownership. */
+    void onExternalVendorShow() {
+        if (!SecurityCenterGlassRuntimeState.isEnabled()) return;
+        // refreshCurrentFrame already reconciles sinks and synchronizes their transforms.
+        refreshCurrentFrame(true);
+        onSidebarShowRequested();
+    }
+
     // AIDL show/hide is not a material lifetime boundary. Carrier/root lifecycle owns teardown.
-    void onSidebarShowRequested() {}
+    void onSidebarShowRequested() {
+        // This vendor callback can originate on Binder. Do not mutate the root or
+        // its consumer policy until the Security Center UI looper owns the turn.
+        SecurityCenterGlassSession expectedSession = session;
+        mainHandler.post(() -> {
+            if (expectedSession == null || expectedSession != session
+                    || expectedSession.isShutdown()) return;
+            cancelPanelExitFade();
+            expectedSession.applyDeferredQualityOnShow();
+        });
+    }
     void onSidebarHideRequested(boolean animated) {}
 
     @Override
@@ -357,8 +398,11 @@ final class SecurityCenterGlassCoordinator
                 || previousAuthority == null || currentAuthority == null
                 || previousAuthority.equals(currentAuthority)
                 || turboRef.get() == null || session == null || session.isShutdown()) return false;
+        if (!hideAndRestoreVendor()) {
+            log("source authority rollover deferred; vendor material restore incomplete", null);
+            return false;
+        }
         advancePresentationGeneration("source authority");
-        hideAndRestoreVendor();
         prepareCustomOwnershipForPresentation();
         boolean accepted = session.requestSourceRebind("security-center-source-authority");
         refreshCurrentFrame(true);
@@ -502,7 +546,8 @@ final class SecurityCenterGlassCoordinator
         if (old != null) old.shutdown();
         cleanupRootObserverOnly();
 
-        session = new SecurityCenterGlassSession(root, glassConfig, this);
+        session = new SecurityCenterGlassSession(
+                root, glassConfig, sidebarAppearance, this);
         if (!policy.onSessionCreated(root, session)) {
             session.shutdown();
             session = null;
@@ -878,20 +923,25 @@ final class SecurityCenterGlassCoordinator
         if (appsSink != null && !appsSink.isDisposed()) appsSink.setAuthorizedVisible(false);
     }
 
-    private void hideAndRestoreVendor() {
-        hideCustomOnly();
+    private boolean hideAndRestoreVendor() {
         boolean wasCustom = ownership.owner() != SecurityCenterMaterialOwnershipState.Owner.VENDOR;
         View ownedTurbo = customOwnerTurboRef.get();
+        // Preserve the currently presented custom glass if restoring the OEM
+        // background fails. Hiding it first makes the app page completely blank.
+        if (wasCustom && ownedTurbo != null && vendorMaterialBridge != null) {
+            try {
+                vendorMaterialBridge.restoreVendor(ownedTurbo);
+            } catch (Throwable error) {
+                log("vendor material restore failed; keeping custom presentation", error);
+                return false;
+            }
+        }
+        hideCustomOnly();
         ownership.releaseToVendor();
         handoffPending = false;
         renderedGeneration = -1L;
         customOwnerTurboRef = new WeakReference<>(null);
-        if (!wasCustom || ownedTurbo == null || vendorMaterialBridge == null) return;
-        try {
-            vendorMaterialBridge.restoreVendor(ownedTurbo);
-        } catch (Throwable error) {
-            log("vendor material restore failed", error);
-        }
+        return true;
     }
 
     private void releasePanel(View turboLayout, String reason) {

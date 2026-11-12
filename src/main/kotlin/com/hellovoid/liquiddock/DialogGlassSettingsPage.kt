@@ -26,6 +26,7 @@ internal fun DialogGlassSettingsPage(
     masterEnabled: Boolean,
     onOpenAll: () -> Unit = {},
     onOpenEdge: () -> Unit = {},
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -154,7 +155,13 @@ internal fun DialogGlassSettingsPage(
         appearanceGeneration++
     }
 
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(searchFocus?.sequence, searchFocus?.key) {
+        val index = searchFocus?.key?.let { customDenseFocusIndex(Page.DialogCustomization, it) }
+        if (index != null) listState.animateScrollToItem(index)
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = padding,
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -193,7 +200,18 @@ internal fun DialogGlassSettingsPage(
                 )
             }
         }
-        item { SmallTitle("玻璃颜色") }
+        item(key = "dialog-corner-heading") { SmallTitle("圆角") }
+        item(key = "dialog-corner-radius") {
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    IntSpec(ConfigSchema.Glass.DIALOG_CORNER_RADIUS, "对话弹窗圆角", "dp",
+                        summary = "小于 0 跟随系统圆角，0 为直角；重新打开弹窗生效"),
+                    controlsEnabled,
+                )
+            }
+        }
+        item { SmallTitle("玻璃染色（保留背景纹理）") }
         item {
             SettingsCard {
                 DialogAppearanceValueSlider(
@@ -229,7 +247,7 @@ internal fun DialogGlassSettingsPage(
             SettingsCard {
                 DialogAppearanceValueSlider(
                     key = ConfigSchema.Glass.DIALOG_TINT_ALPHA.name(),
-                    title = "不透明度",
+                    title = "染色强度",
                     value = tintAlpha,
                     onValueChange = { tintAlpha = it },
                     prefs = prefs,

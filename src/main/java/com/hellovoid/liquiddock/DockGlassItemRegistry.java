@@ -14,12 +14,14 @@ final class DockGlassItemRegistry {
     static synchronized void register(View view) {
         if (!GlassRuntimeState.isAnyIconEnabled() || view == null || ICONS.containsKey(view)) return;
         ICONS.put(view, Boolean.TRUE);
+        view.invalidate();
         membershipRevision++;
     }
     static synchronized void unregister(View view) {
         if (view != null) ANIMATION.remove(view);
-        if (view != null && ICONS.remove(view) != null) membershipRevision++;
+        if (view != null && ICONS.remove(view) != null) { membershipRevision++; view.invalidate(); }
     }
+    static synchronized boolean contains(View view) { return view != null && ICONS.containsKey(view); }
     static synchronized void clear() {
         ANIMATION.clear();
         if (!ICONS.isEmpty()) { ICONS.clear(); membershipRevision++; }

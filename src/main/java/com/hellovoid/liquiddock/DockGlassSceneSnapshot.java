@@ -7,9 +7,14 @@ final class DockGlassSceneSnapshot {
     static final class Item {
         final LauncherGlassGeometry.Snapshot geometry;
         final float opacity;
+        final boolean animating;
         Item(LauncherGlassGeometry.Snapshot geometry, float opacity) {
+            this(geometry, opacity, false);
+        }
+        Item(LauncherGlassGeometry.Snapshot geometry, float opacity, boolean animating) {
             this.geometry = geometry;
             this.opacity = Math.max(0f, Math.min(1f, opacity));
+            this.animating = animating;
         }
     }
     final Item[] items;

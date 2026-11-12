@@ -41,6 +41,52 @@ public class RootPassBlurBackendStateTest {
     }
 
     @Test
+    public void invalidOldRootCannotTrapWorkspaceRecoveryPendingForever() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        assertTrue(state.requestFresh(11L));
+        state.onBindSucceeded();
+        assertTrue(state.onFreshFrame(11L));
+        assertTrue(state.requestRebind().accepted);
+        assertTrue(state.isRebindPending());
+        // A second request is refused by the recovery state. The pending owner must
+        // instead isolate the dead ViewRoot's producer when a new generation appears.
+        assertFalse(state.requestRebind().accepted);
+        assertTrue(WorkspacePassBlurRolloverPolicy.isolate(true, false, true, false, false));
+        assertFalse(state.hasFreshFrame(11L));
+        assertTrue(state.onProducerRecreated().requestBind);
+        state.onBindSucceeded();
+        assertFalse(state.isRebindPending());
+        assertTrue(state.onFreshFrame(11L));
+        assertTrue(state.hasFreshFrame(11L));
+    }
+
+    @Test
+    public void oldEpochCannotAbortReplacementRecovery() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        assertTrue(state.requestRebind().accepted);
+        state.onRebindScheduled(8L);
+        assertFalse(state.onRebindAborted(7L));
+        assertTrue(state.isRebindPending());
+        assertTrue(state.transferRebindOwner(8L, 9L));
+        assertFalse(state.onRebindAborted(8L));
+        assertTrue(state.isRebindPending());
+        assertTrue(state.onProducerRecreated().requestBind);
+        state.onBindSucceeded();
+        assertFalse(state.isRebindPending());
+    }
+
+    @Test
+    public void abandonedOwnerCanClearPendingForLaterRequest() {
+        RootPassBlurBackendState state = new RootPassBlurBackendState();
+        assertTrue(state.requestRebind().accepted);
+        state.onRebindScheduled(44L);
+        assertTrue(state.onRebindAborted(44L));
+        assertFalse(state.isRebindPending());
+        assertFalse(state.onRebindAborted(44L));
+        assertTrue(state.requestRebind().accepted);
+    }
+
+    @Test
     public void staleGenerationCannotAuthorizeFreshOutput() {
         RootPassBlurBackendState state = new RootPassBlurBackendState();
         assertTrue(state.requestFresh(20L));

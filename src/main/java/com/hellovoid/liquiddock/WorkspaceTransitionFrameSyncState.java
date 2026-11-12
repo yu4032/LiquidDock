@@ -47,6 +47,12 @@ final class WorkspaceTransitionFrameSyncState {
         return updateAggregate();
     }
 
+    Decision onWorkspaceScrollMutation() {
+        stableFrames = 0;
+        geometryActive = true;
+        return updateAggregate();
+    }
+
     Decision onNativeTransition(boolean enabled) {
         nativeTransitionActive = enabled;
         return updateAggregate();

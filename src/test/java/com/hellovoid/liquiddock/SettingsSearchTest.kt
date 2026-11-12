@@ -12,6 +12,24 @@ class SettingsSearchTest {
     )
 
     @Test
+    fun sidebarAndSecurityCenterBothResolveToUnifiedSettingsPage() {
+        val items = listOf(
+            SettingsSearchItem(Page.SidebarEdge, "侧边栏 / 安全中心", "独立玻璃背景与光照"),
+            SettingsSearchItem(Page.SidebarEdge, "模糊强度", "侧边栏背景"),
+        )
+        assertEquals(Page.SidebarEdge, filterSettingsSearch(items, "侧边栏").first().page)
+        assertEquals(Page.SidebarEdge, filterSettingsSearch(items, "安全中心").first().page)
+    }
+
+    @Test
+    fun sidebarGlassNavigationStaysIndependentFromShadowSettings() {
+        assertEquals(R.string.page_sidebar_glass, Page.SidebarEdge.titleRes)
+        assertEquals(R.string.page_glass_edge, Page.SecurityCenterEdge.titleRes)
+        assertTrue(componentEntries.any { it.page == Page.SidebarEdge })
+        assertTrue(liquidEntries.any { it.page == Page.GlassEdge })
+    }
+
+    @Test
     fun blankQueryDoesNotFloodResults() {
         assertTrue(filterSettingsSearch(catalog, "  ").isEmpty())
     }
@@ -30,30 +48,14 @@ class SettingsSearchTest {
     }
 
     @Test
-    fun multipleMatchingOptionsAppearUnderOnePage() {
-        val items = listOf(
-            SettingsSearchItem(Page.LiquidColor, "玻璃颜色", "色散与底色"),
-            SettingsSearchItem(Page.LiquidColor, "色散强度", "玻璃材质"),
-            SettingsSearchItem(Page.LiquidColor, "色散蓝", "玻璃材质"),
-            SettingsSearchItem(Page.LiquidRefraction, "玻璃折射", "几何设置"),
-        )
-        val results = searchSettingsPages(items, "色散")
-        assertEquals(1, results.size)
-        assertEquals("玻璃颜色", results.single().title)
-        assertEquals(Page.LiquidColor, results.single().page)
-        assertEquals(setOf("色散强度", "色散蓝"), results.single().matchedOptions.toSet())
-    }
-
-    @Test
-    fun resultNamesArePagesNotRawOptions() {
+    fun resultRetainsMatchedKeyRatherThanReplacingItWithPageEntry() {
         val items = listOf(
             SettingsSearchItem(Page.DockGeometry, "Dock 尺寸与位置", "功能页面"),
-            SettingsSearchItem(Page.DockGeometry, "Dock 图标间距", "图标间距"),
+            SettingsSearchItem(Page.DockGeometry, "Dock 图标间距", "图标间距", "dock_spacing"),
         )
-        val results = searchSettingsPages(items, "间距")
-        assertEquals(1, results.size)
-        assertEquals("Dock 尺寸与位置", results.single().title)
-        assertTrue(results.single().description.contains("Dock 图标间距"))
+        val result = filterSettingsSearch(items, "间距").single()
+        assertEquals("dock_spacing", result.key)
+        assertEquals("Dock 图标间距", result.title)
     }
 
     @Test

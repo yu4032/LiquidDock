@@ -255,6 +255,10 @@ final class LauncherGlassSinkView extends TextureView implements TextureView.Sur
         if (decision.publishImmediately) publishInteraction();
     }
 
+    boolean isPressAnimationActive() {
+        return pressAnimator != null && pressAnimator.isStarted();
+    }
+
     private void animatePressTo(float target) {
         if (pressAnimator != null) pressAnimator.cancel();
         float start = pressState.progress();

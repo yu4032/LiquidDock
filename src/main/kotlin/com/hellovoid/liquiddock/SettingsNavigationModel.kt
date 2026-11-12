@@ -22,13 +22,11 @@ internal enum class Page(val titleRes: Int) {
     Divider(R.string.page_divider),
     Workstation(R.string.page_workstation),
     WorkstationDock(R.string.page_workstation_dock),
-    WorkstationDesktop(R.string.page_workstation_desktop),
     WorkstationAppsLandscape(R.string.page_workstation_apps_landscape),
     WorkstationAppsPortrait(R.string.page_workstation_apps_portrait),
     Recents(R.string.page_recents),
 
     Liquid(R.string.page_liquid),
-    SoftGlass(R.string.page_soft_glass),
     LiquidMaterial(R.string.page_liquid_material),
     LiquidRefraction(R.string.page_liquid_refraction),
     LiquidColor(R.string.page_liquid_color),
@@ -45,6 +43,7 @@ internal enum class Page(val titleRes: Int) {
     GboardEdge(R.string.page_glass_edge),
     SearchboxEdge(R.string.page_glass_edge),
     SecurityCenterEdge(R.string.page_glass_edge),
+    SidebarEdge(R.string.page_sidebar_glass),
     LiquidSampling(R.string.page_liquid_sampling),
 
     GlassComponents(R.string.page_glass_components),
@@ -98,13 +97,13 @@ internal val overviewEntries = listOf(
     HubEntry(Page.Dock, R.string.page_dock, "Dock 外观、位置、动画与最近程序"),
     HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与性能"),
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏与分屏布局"),
-    HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock、玻璃交互与系统界面"),
+    HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock 与玻璃交互动画"),
 )
 
 internal val layoutEntries = listOf(
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏间距与分屏布局"),
     HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、尺寸、位置与最近程序"),
-    HubEntry(Page.Workstation, R.string.page_workstation, "工作台桌面、Dock 与所有应用布局"),
+    HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock 与所有应用布局"),
     HubEntry(Page.Recents, R.string.page_recents, "多任务壁纸背景与模糊"),
     HubEntry(Page.SecurityCenterSidebar, R.string.page_security_center_sidebar, "侧滑呼出、工具箱与侧边栏设置"),
 )
@@ -115,6 +114,7 @@ internal val glassEntries = listOf(
     HubEntry(Page.Stroke, R.string.page_stroke, "Dock 描边、方圆曲线与颜色"),
     HubEntry(Page.Shadow, R.string.page_shadow, "仅开启 Dock 自定义且关闭液态玻璃时生效"),
     HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock 与玻璃交互动画"),
+    HubEntry(Page.AnimationSystem, R.string.page_animation_system, "通知与控制中心顶部模糊、系统手势手柄联动"),
     HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用适配"),
 )
 
@@ -140,7 +140,6 @@ internal val dockEntries = listOf(
 
 internal val workstationEntries = listOf(
     HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "任务栏模式、图标垂直偏移与玻璃圆角"),
-    HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "按当前网格列数整体调整工作台桌面水平位置"),
     HubEntry(Page.WorkstationAppsLandscape, R.string.page_workstation_apps_landscape, "所有应用横屏水平与上下间距"),
     HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
 )
@@ -160,6 +159,7 @@ internal val componentEntries = listOf(
     HubEntry(Page.GlassWidgets, R.string.page_glass_widgets, "小组件玻璃、内容适配与组件隐藏"),
     HubEntry(Page.GlassFolders, R.string.page_glass_folders, "大小文件夹玻璃与独立尺寸"),
     HubEntry(Page.GlassMenus, R.string.page_glass_menus, "快捷菜单、系统顶部菜单与对话弹窗"),
+    HubEntry(Page.SidebarEdge, R.string.page_sidebar_glass, "模糊、颜色、透明度、圆角与玻璃高光"),
 )
 
 internal val highlightEntries = listOf(
@@ -168,10 +168,9 @@ internal val highlightEntries = listOf(
 )
 
 internal val animationEntries = listOf(
-    HubEntry(Page.AnimationWorkspace, R.string.page_animation_workspace, "工作区显隐、Dock 恢复与尺寸变化"),
+    HubEntry(Page.AnimationWorkspace, R.string.page_animation_workspace, "应用返回渐显时机与时长、工作区和文件夹玻璃、Dock 尺寸变化"),
     HubEntry(Page.AnimationInteraction, R.string.page_animation_interaction, "玻璃按压进入与释放"),
     HubEntry(Page.AnimationPopups, R.string.page_animation_popups, "快捷菜单与安全中心退出渐隐"),
-    HubEntry(Page.AnimationSystem, R.string.page_animation_system, "系统手势手柄等界面联动"),
     HubEntry(Page.AnimationGui, R.string.page_animation_gui, "设置页面切换时长"),
 )
 

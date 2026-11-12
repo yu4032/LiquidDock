@@ -30,12 +30,4 @@ final class DockPrismalShadowViewportPolicy {
                 / (float) Math.max(1, sampleHeight);
     }
 
-    /** Full output crop, not the smaller native Dock crop. */
-    static float normalizedOutputOrigin(int sampleInset, int sampleExtent) {
-        return sampleInset / (float) Math.max(1, sampleExtent);
-    }
-
-    static float normalizedOutputExtent(int outputExtent, int sampleExtent) {
-        return outputExtent / (float) Math.max(1, sampleExtent);
-    }
 }

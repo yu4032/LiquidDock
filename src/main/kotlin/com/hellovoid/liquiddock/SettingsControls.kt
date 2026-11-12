@@ -11,13 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,7 +26,6 @@ import androidx.compose.ui.unit.sp
 import com.hellovoid.liquiddock.config.ConfigKey
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -39,46 +37,6 @@ internal val LocalSettingsPreferenceRevisions = staticCompositionLocalOf<Map<Str
 // Prismal surfaces. Their callbacks, state keys and rendering are intentionally
 // the same as the original implementations.
 /**
- * Keep at most three numeric settings in one native Prismal glass surface.
- * This avoids a separate blur/refraction GraphicsLayer per dense-list row,
- * while each small group remains a LazyColumn item that scrolls with its
- * border. Sliders, steppers, and their live setting callbacks are untouched.
- */
-internal fun LazyListScope.groupedIntSettings(
-    specs: List<IntSpec>,
-    prefs: SharedPreferences,
-    enabled: Boolean,
-) {
-    items(specs.chunked(3), key = { group -> "int-group:${group.first().key}" }) { group ->
-        SettingsCard {
-            group.forEachIndexed { index, spec ->
-                if (index > 0) ModernListDivider()
-                IntSetting(prefs, spec, enabled)
-            }
-        }
-    }
-}
-
-/** Organize first by function, then render at most 3 sliders per cell. */
-internal fun LazyListScope.groupedLiquidSettings(
-    groups: List<LiquidSpecGroup>,
-    prefs: SharedPreferences,
-    enabled: Boolean,
-) {
-    groups.forEach { group ->
-        item(key = "optical-title:${group.title}") { SmallTitle(group.title) }
-        item(key = "optical-cell:${group.title}") {
-            SettingsCard {
-                group.specs.forEachIndexed { index, spec ->
-                    if (index > 0) ModernListDivider()
-                    IntSetting(prefs, spec, enabled)
-                }
-            }
-        }
-    }
-}
-
-/**
  * Long settings pages have ONE lazy, vertically scrolling root.
  * Each visible control owns its own moving glass card; the previous
  * viewport-fixed outer card made the border appear stationary while only
@@ -89,9 +47,18 @@ internal fun DenseSettingsList(
     padding: PaddingValues,
     title: String,
     summary: String? = null,
+    focusItemIndex: Int? = null,
+    focusSequence: Int? = null,
     content: LazyListScope.() -> Unit,
 ) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(focusSequence, focusItemIndex) {
+        if (focusItemIndex != null && focusItemIndex >= 0) {
+            listState.animateScrollToItem(focusItemIndex)
+        }
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = padding.calculateTopPadding() + 8.dp,

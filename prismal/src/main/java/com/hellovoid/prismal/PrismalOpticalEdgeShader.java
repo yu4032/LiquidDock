@@ -360,6 +360,7 @@ public final class PrismalOpticalEdgeShader {
                 """;
 
     public static String apply(String source) {
+        source = PrismalContinuousCorners.apply(source);
         requireSingle(source, PRECISION);
         requireSingle(source, SHAPE_POSITION);
         requireSingle(source, EDGE_DISTANCE);
@@ -397,6 +398,13 @@ public final class PrismalOpticalEdgeShader {
                         + "    float os4EdgeT = clamp(edgeDist / max(os4EdgeWidthPx, 1.0), 0.0, 1.0);\n"
                         + "    float os4EdgeMask = os4EdgeBand(edgeDist, os4EdgeWidthPx, edgeAa)\n"
                         + "            * step(0.5, u_os4EdgeEnabled);")
+                .replace(OPACITY, OPACITY + """
+                        
+                        // Decoration/shadow metrics share the shifted silhouette; the
+                        // opacity formula itself stays on the shipped inset curve.
+                        float insetShiftPx = clamp((u_refractionInset - 20.0) * 0.25,
+                                -minDim * 0.05, minDim * 0.12);
+                        """)
                 .replace("if (opacity < 0.001) discard;",
                         "if (opacity < 0.001) discard;\n" + SOFT_GLASS_BRANCH)
                 .replace(VIBRANCY_NEUTRAL,

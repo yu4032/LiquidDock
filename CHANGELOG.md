@@ -1,10 +1,97 @@
 # Changelog
 
-> 本文件按版本记录当时的变化，历史条目不会为追随当前实现而改写。当前行为请以 `main` 生产源码和 [README.md](README.md)、[FEATURES.md](FEATURES.md)、[ARCHITECTURE.md](ARCHITECTURE.md)、[HOOKS.md](HOOKS.md) 为准。
+> 历史变更按对应版本保留；当前功能与使用方式见 [README.md](README.md) 和 [FEATURES.md](FEATURES.md)。
 
 ## Unreleased
 
 暂无新增条目。
+
+## v2.7.9（2026-11-10）
+
+### 小组件
+
+- 单格小组件的长按菜单新增「放大到 2×2」与「还原为 1×1」，通过桌面注册的原生缩放框与等比缩放策略调整尺寸，缩放后按当前原生部件框重新排布内容；周围空间不足时提示并保持原尺寸。[#494](https://github.com/yu4032/LiquidDock/pull/494)
+
+### 升级说明
+
+- 继续要求支持 libxposed API 102 的 LSPosed；更新模块后请重启桌面以加载新代码。
+
+## v2.7.8（2026-11-06）
+
+### 变更
+
+- 修复更换主题后工作区玻璃失效的问题。[#491](https://github.com/yu4032/LiquidDock/pull/491)
+- 工作区与 Dock 的快捷菜单从打开动画第一帧起即显示玻璃。[#492](https://github.com/yu4032/LiquidDock/pull/492)
+- 新增「控制中心/通知中心顶部渐变模糊」开关，默认关闭，需启用 SystemUI 作用域；「系统界面」设置页移至「外观」根目录。[#493](https://github.com/yu4032/LiquidDock/pull/493)
+
+### 升级说明
+
+- 建议开启作用域：系统框架（system）、系统界面（com.android.systemui）、系统桌面（com.miui.home），并重启系统使 hook 生效。
+
+## v2.7.7（2026-11-02）
+
+### 玻璃渲染与性能
+
+- 工作区玻璃改为在桌面原生绘制帧中同步几何，改善滑动跟手性，并适配缩放、透明度、拖动、文件夹和应用进出动画。[#484](https://github.com/yu4032/LiquidDock/pull/484)、[#485](https://github.com/yu4032/LiquidDock/pull/485)
+- 减少重复的几何比较和材质参数上传，优化玻璃内部着色；应用返回时降低采样开销并平滑恢复完整材质，保留实时背景和折射位置。[#488](https://github.com/yu4032/LiquidDock/pull/488)
+- 优化 Dock 背景处理，修复背景缩放场景中的采样跳变，并优化 Gboard 冻结模式玻璃输出。[#485](https://github.com/yu4032/LiquidDock/pull/485)、[#487](https://github.com/yu4032/LiquidDock/pull/487)
+
+### 图标与动画
+
+- 同步 Dock 图标的原生透明度、显示归属与应用返回渐显，新增独立的工作区及 Dock 图标动画隐藏开关。[#490](https://github.com/yu4032/LiquidDock/pull/490)
+- 移除退出动画结束时强制叠加代理图标及延迟回收的补偿，恢复原图标交接，避免半透明图标出现叠色；动画中的 Dock 图标使用较低成本材质。[#490](https://github.com/yu4032/LiquidDock/pull/490)
+- 修复快捷菜单背景采样范围及长按时工作区玻璃闪失的问题。[#486](https://github.com/yu4032/LiquidDock/pull/486)、[#490](https://github.com/yu4032/LiquidDock/pull/490)
+
+### 升级说明
+
+- 继续要求支持 libxposed API 102 的 LSPosed。更新后请重启设备，以加载桌面及系统背景缩放观察点。
+- 多组件页面和高刷新率动画仍可能掉帧；半透明主题及不同桌面版本的交接效果需结合设备验证。
+
+## v2.7.6
+
+### 玻璃渲染与性能
+
+- 改善工作区玻璃在桌面滑动时的跟手性：减少渲染任务的中间转发，使每帧使用一致的滚动位置与组件几何快照，并跳过已过期的画面，缓解玻璃滞后、闪跳和振颤。[#479](https://github.com/yu4032/LiquidDock/pull/479)
+- 优化玻璃平坦区域的着色计算，并在安全中心多个玻璃区域采用相同模糊参数时复用处理结果，减少不必要的 GPU 工作。[#469](https://github.com/yu4032/LiquidDock/pull/469)
+- 修复频繁打开、关闭桌面快捷菜单或拖拽浮层后，捕获窗口未及时释放导致 GPU 内存持续增长的问题；等待系统合成器确认解绑后再回收图形资源。[#474](https://github.com/yu4032/LiquidDock/pull/474)
+
+### 图标玻璃与外观
+
+- 新增图标图形的玻璃轮廓裁剪，适配圆角及连续圆角，保留图标文字和角标。支持的静态图标在资源绑定时完成裁剪并复用缓存，避免动画期间逐帧重建裁剪路径。[#469](https://github.com/yu4032/LiquidDock/pull/469)、[#471](https://github.com/yu4032/LiquidDock/pull/471)
+- 修复部分图标拖入 Dock 后边缘残留直线，以及启动应用或返回桌面时图标短暂恢复原始方形的问题。[#471](https://github.com/yu4032/LiquidDock/pull/471)、[#472](https://github.com/yu4032/LiquidDock/pull/472)
+- 将玻璃「染色」和「底色」分为两种独立效果：染色保留背景纹理并调整色调，底色可使用自选 RGBA 纯色覆盖背景；染色强度上限扩展至 255。展开文件夹支持独立底色或继承全局配置。[#477](https://github.com/yu4032/LiquidDock/pull/477)
+
+### 适配与设置
+
+- 迁移至 **libxposed API 102**，完善 Hook 注册、替换与资源生命周期管理，提升多场景切换时的稳定性。[#465](https://github.com/yu4032/LiquidDock/pull/465)、[#474](https://github.com/yu4032/LiquidDock/pull/474)
+- 完善安全中心侧边栏玻璃的原生材质恢复和独立外观设置，支持单独调整背景、光照、几何与渲染质量。[#465](https://github.com/yu4032/LiquidDock/pull/465)
+- 重新组织玻璃、Dock、网格、文件夹、弹窗及菜单等设置分组；设置搜索可定位到具体参数并高亮显示，改善过去只能跳转页面或定位错误的问题。[#468](https://github.com/yu4032/LiquidDock/pull/468)、[#477](https://github.com/yu4032/LiquidDock/pull/477)
+- 优化小组件部件管理：列表显示可识别的小组件名称，匿名部件改用类型和编号表示，方便选择隐藏或白化的目标。[#467](https://github.com/yu4032/LiquidDock/pull/467)
+
+### 升级说明
+
+- **本版要求 LSPosed 支持 API 102**，推荐使用 LSPosed v2.2.1。更新模块后，请重启系统桌面及已启用的其他作用域以加载新代码；本版不提供无需重启的模块热重载。
+- 新增纯色底色默认完全透明，原有染色配置保持生效；无需重新设置即可保持此前的玻璃外观。
+
+## v2.7.5（2026-10-25）
+
+### 玻璃圆角
+
+- 液态玻璃页新增「iPadOS 风格连续圆角」开关，默认关闭；开启后统一玻璃遮罩、折射、高光与 Dock 阴影、描边的轮廓，关闭恢复原效果。[#461](https://github.com/yu4032/LiquidDock/pull/461)
+- 对话弹窗、长按快捷菜单和应用顶部菜单新增独立圆角调节，支持小数 dp；负值跟随系统，0 为直角，未设置时保持原有外观。[#462](https://github.com/yu4032/LiquidDock/pull/462)
+- 修复顶部菜单的原生窗口裁剪限制自定义圆角的问题；切回自动模式或玻璃退出时恢复原生裁剪，并修正预加载对话框沿用旧圆角设置的问题。[#462](https://github.com/yu4032/LiquidDock/pull/462)
+
+### Dock、文件夹与搜索
+
+- 新增隐藏 Dock 最近任务图标的开关，以及工作台 All Apps 横竖屏分页指示器偏移设置。[#453](https://github.com/yu4032/LiquidDock/pull/453)
+- 改善关闭文件夹时的玻璃渐隐与桌面文件夹背景恢复。[#444](https://github.com/yu4032/LiquidDock/pull/444)
+- 修复 MIUI 搜索框在屏幕旋转后，玻璃输出与背景采样不同步的问题。
+- 移除已废弃的工作台桌面水平偏移设置，统一中英文布局说明。
+
+### 升级提醒
+
+- 连续圆角默认关闭，已有配置不会被自动替换；新圆角选项默认跟随系统。
+- 更新后重启桌面和系统界面以加载新代码；圆角调节后重新打开对应弹窗或菜单生效。
 
 ## v2.7.4（2026-10-20）
 
@@ -98,7 +185,7 @@
 - 大幅提高 iOS 设置界面性能，删除部分无效选项，并完善界面细节。
 - 略微降低部分玻璃效果的计算负担。
 
-## v2.7.0（待发布；2026-10-11）
+## v2.7.0（2026-10-11）
 
 ### 设置界面与交互
 

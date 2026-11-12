@@ -40,15 +40,27 @@ final class LiquidDockConfig {
     }
 
     static final class Animation {
-        final int workspaceVisibilityMs, unlockGlassFadeMs, folderOpenGlassFadeMs,
+        final int workspaceVisibilityMs, appReturnGlassFadeStartBeforeEndMs,
+                appReturnGlassFadeDurationMs,
+                unlockGlassFadeMs,
                 pressInMs, pressOutMs, dockResizeMs, shortcutPopupDismissFadeMs,
                 securityCenterExitFadeMs;
         final boolean disableWallpaperZoom;
+        final boolean hideWorkspaceGlassDuringApp, hideDockIconsDuringApp;
 
         Animation(ConfigReader c) {
+            hideWorkspaceGlassDuringApp = c.b(
+                    ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.name(),
+                    ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP.runtimeFallback());
+            hideDockIconsDuringApp = c.b(
+                    ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.name(),
+                    ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP.runtimeFallback());
             workspaceVisibilityMs = duration(c, ConfigSchema.Animation.WORKSPACE_VISIBILITY);
+            appReturnGlassFadeStartBeforeEndMs = duration(
+                    c, ConfigSchema.Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END);
+            appReturnGlassFadeDurationMs = duration(
+                    c, ConfigSchema.Animation.APP_RETURN_GLASS_FADE_DURATION);
             unlockGlassFadeMs = duration(c, ConfigSchema.Animation.UNLOCK_GLASS_FADE);
-            folderOpenGlassFadeMs = duration(c, ConfigSchema.Animation.FOLDER_OPEN_GLASS_FADE);
             pressInMs = duration(c, ConfigSchema.Animation.PRESS_IN);
             pressOutMs = duration(c, ConfigSchema.Animation.PRESS_OUT);
             dockResizeMs = duration(c, ConfigSchema.Animation.DOCK_RESIZE);
@@ -132,6 +144,7 @@ final class LiquidDockConfig {
 
     static final class Dock {
         final boolean enabled, resizeAnimation, smoothResizeAnimation, dimensionsDp;
+        final boolean hideRecentTaskIcons;
         final float widthOffset, heightOffset, spacing, bottomOffset;
         final int blurRadius;
         final boolean cornersDp, squircle, fillDiff, strokeEnabled, strokeShadow, shadowEnabled;
@@ -144,6 +157,8 @@ final class LiquidDockConfig {
         Dock(ConfigReader c) {
             enabled = c.b(ConfigSchema.Dock.ENABLED.name(),
                     ConfigSchema.Dock.ENABLED.runtimeFallback());
+            hideRecentTaskIcons = c.b(ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS.name(),
+                    ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS.runtimeFallback());
             resizeAnimation = c.b(ConfigSchema.Dock.RESIZE_ANIMATION.name(),
                     ConfigSchema.Dock.RESIZE_ANIMATION.runtimeFallback());
             smoothResizeAnimation = c.b(ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION.name(),
@@ -235,7 +250,8 @@ final class LiquidDockConfig {
         final GlassComponentStyle widgetStyle;
         final GlassComponentStyle smallFolderStyle;
         final GlassComponentStyle largeFolderStyle;
-        final boolean prismalShowNormals;
+        final boolean prismalShowNormals, continuousCorners;
+        final float dialogCornerRadiusDp, shortcutPopupCornerRadiusDp, handleMenuCornerRadiusDp;
         final PrismalHighlightProfile launcherHighlightProfile, largeSurfaceHighlightProfile;
         final float blur, chromatic, thickness, ior, normalStrength, dome,
         lensRefraction, depthEffect, highlightWidth, brightness,
@@ -248,6 +264,7 @@ final class LiquidDockConfig {
                 os4DirectionalOppositeIntensity, os4Darker,
                 prismalLightDirX, prismalLightDirY, prismalShadowSoftness, prismalTransmittance,
                 prismalBackdropScaleX, prismalBackdropScaleY, prismalParallaxScale;
+        final int baseColorR, baseColorG, baseColorB, baseColorAlpha;
         final int tintAlpha, tintR, tintG, tintB,
                 prismalShadowR, prismalShadowG, prismalShadowB, prismalShadowAlpha;
         final PrismalSoftGlassProfile softGlassProfile;
@@ -255,6 +272,11 @@ final class LiquidDockConfig {
         final int openFolderNativeBlurPercent;
 
         Glass(ConfigReader c) {
+            dialogCornerRadiusDp = GlassComponentCorners.readDp(c, ConfigSchema.Glass.DIALOG_CORNER_RADIUS);
+            shortcutPopupCornerRadiusDp = GlassComponentCorners.readDp(c, ConfigSchema.Glass.SHORTCUT_POPUP_CORNER_RADIUS);
+            handleMenuCornerRadiusDp = GlassComponentCorners.readDp(c, ConfigSchema.Glass.HANDLE_MENU_CORNER_RADIUS);
+            continuousCorners = c.b(ConfigSchema.Glass.CONTINUOUS_CORNERS.name(),
+                    ConfigSchema.Glass.CONTINUOUS_CORNERS.runtimeFallback());
             enabled = c.b(ConfigSchema.Glass.ENABLED.name(),
                     ConfigSchema.Glass.ENABLED.runtimeFallback());
             softGlassMode = c.b(ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
@@ -328,6 +350,14 @@ final class LiquidDockConfig {
                     ConfigSchema.Glass.CHROMATIC.runtimeFallback());
             tintAlpha = channel(c.i(ConfigSchema.Glass.TINT_ALPHA.name(),
                     ConfigSchema.Glass.TINT_ALPHA.runtimeFallback()));
+            baseColorR = channel(c.i(ConfigSchema.Glass.BASE_COLOR_RED.name(),
+                    ConfigSchema.Glass.BASE_COLOR_RED.runtimeFallback()));
+            baseColorG = channel(c.i(ConfigSchema.Glass.BASE_COLOR_GREEN.name(),
+                    ConfigSchema.Glass.BASE_COLOR_GREEN.runtimeFallback()));
+            baseColorB = channel(c.i(ConfigSchema.Glass.BASE_COLOR_BLUE.name(),
+                    ConfigSchema.Glass.BASE_COLOR_BLUE.runtimeFallback()));
+            baseColorAlpha = channel(c.i(ConfigSchema.Glass.BASE_COLOR_ALPHA.name(),
+                    ConfigSchema.Glass.BASE_COLOR_ALPHA.runtimeFallback()));
             thickness = c.f(ConfigSchema.Glass.THICKNESS.name(),
                     ConfigSchema.Glass.THICKNESS.runtimeFallback());
             ior = c.i(ConfigSchema.Glass.IOR.name(), ConfigSchema.Glass.IOR.runtimeFallback()) / 100f;
@@ -479,11 +509,12 @@ final class LiquidDockConfig {
 
     static final class Workstation {
         final boolean dockEnabled, taskbarMode, dimensionsDp;
-        final float dockIconGlassCornerRadius, gridHorizontalOffset;
+        final float dockIconGlassCornerRadius;
         final float allAppsLandscapeHorizontalOffset;
         final float allAppsLandscapeTopSpacing, allAppsLandscapeBottomSpacing;
         final float allAppsPortraitHorizontalOffset;
         final float allAppsPortraitTopSpacing, allAppsPortraitBottomSpacing;
+        final float allAppsLandscapeIndicatorY, allAppsPortraitIndicatorY;
         final float iconTopOffset, iconBottomOffset;
         final float dockVerticalOffset, iconLandscapeTopOffset;
 
@@ -496,8 +527,6 @@ final class LiquidDockConfig {
             dockIconGlassCornerRadius = c.f(
                     ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS.name(),
                     ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS.runtimeFallback());
-            gridHorizontalOffset = c.f(ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET.name(),
-                    ConfigSchema.Workstation.GRID_HORIZONTAL_OFFSET.runtimeFallback());
             allAppsLandscapeHorizontalOffset = c.f(
                     ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET.name(),
                     ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET.runtimeFallback());
@@ -516,6 +545,12 @@ final class LiquidDockConfig {
             allAppsPortraitBottomSpacing = c.f(
                     ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.name(),
                     ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING.runtimeFallback());
+            allAppsLandscapeIndicatorY = c.f(
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y.name(),
+                    ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y.runtimeFallback());
+            allAppsPortraitIndicatorY = c.f(
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y.name(),
+                    ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y.runtimeFallback());
             iconTopOffset = c.f(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.runtimeFallback());
             dockVerticalOffset = c.f(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET.name(), 0f);

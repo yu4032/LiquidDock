@@ -27,8 +27,22 @@ public final class ConfigSchema {
     }
 
     public static final class Animation {
+        /** Hide background Workspace glass during app animations; animated icon is exempt. */
+        public static final ConfigKey<Boolean> HIDE_WORKSPACE_GLASS_DURING_APP = bool(
+                "animation_hide_workspace_glass_during_app", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
+        /** Hide non-target Dock icon glass during app animations, not the Dock body. */
+        public static final ConfigKey<Boolean> HIDE_DOCK_ICONS_DURING_APP = bool(
+                "animation_hide_dock_icons_during_app", true, true, true,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> WORKSPACE_VISIBILITY = integer(
                 "animation_workspace_visibility_ms", 450, 450, 450, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> APP_RETURN_GLASS_FADE_START_BEFORE_END = integer(
+                "animation_app_return_glass_fade_ms", 600, 600, 600, 0, 2000,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> APP_RETURN_GLASS_FADE_DURATION = integer(
+                "animation_app_return_glass_fade_duration_ms", 450, 450, 450, 0, 2000,
                 ConfigKey.ExportMode.ALWAYS);
         // Unlock fly-in uses its own motion fade. The ordinary Workspace
         // visibility preset is intentionally 0ms and must not disable unlock.
@@ -59,6 +73,9 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> HIDE_GESTURE_HANDLE_HOME_RECENTS = bool(
                 "animation_hide_gesture_handle_home_recents",
                 false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> SYSTEM_UI_HEADER_GRADIENT_BLUR = bool(
+                "systemui_header_gradient_blur", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> DISABLE_WALLPAPER_ZOOM = bool(
                 "animation_disable_wallpaper_zoom",
                 false, false, false, ConfigKey.ExportMode.ALWAYS);
@@ -128,6 +145,9 @@ public final class ConfigSchema {
                 "dock_customization", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> HIDE_MIRROR_SHORTCUT = bool(
                 "dock_hide_mirror_shortcut", false, false, false,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> HIDE_RECENT_TASK_ICONS = bool(
+                "dock_hide_recent_task_icons", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> FRAME_SYNC = bool(
                 "dock_frame_sync", true, true, true, ConfigKey.ExportMode.ALWAYS);
@@ -216,6 +236,8 @@ public final class ConfigSchema {
     }
 
     public static final class Glass {
+        public static final ConfigKey<Boolean> CONTINUOUS_CORNERS = bool(
+                "liquid_continuous_corners", false, false, false, ConfigKey.ExportMode.ALWAYS);
         // Whole-silhouette cast shadow and optically lit SDF contour are distinct
         // from Prismal's interior optical shading and OS4 light-facing highlights.
         // Both are opt-in to preserve rendering with older presets and OEM native shadows.
@@ -250,7 +272,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> BACKLIT_EXTENT = integer(
                 "liquid_backlit_extent", 100, 100, 100, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> ENABLED = bool(
-                "liquid_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+                "liquid_glass", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> SOFT_GLASS_ENABLED = bool(
                 "liquid_soft_glass_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WALLPAPER_FLICKER_FIX = bool(
@@ -271,6 +293,12 @@ public final class ConfigSchema {
         public static final ConfigKey<Boolean> UNINSTALL_DIALOG_GLASS = bool(
                 "liquid_uninstall_dialog_glass", true, true, true,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DIALOG_CORNER_RADIUS = dp(
+                "liquid_dialog_corner_radius", -1, -1, -1, -1, 160, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> SHORTCUT_POPUP_CORNER_RADIUS = dp(
+                "liquid_shortcut_popup_corner_radius", -1, -1, -1, -1, 160, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Integer> HANDLE_MENU_CORNER_RADIUS = dp(
+                "liquid_handle_menu_corner_radius", -1, -1, -1, -1, 160, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> DIALOG_DISABLE_DIMMING = bool(
                 "liquid_dialog_disable_dimming", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
@@ -337,7 +365,16 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> OPEN_FOLDER_THICKNESS = integer(
                 "open_folder_glass_thickness", 18, 18, 18, 1, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> OPEN_FOLDER_TINT_ALPHA = integer(
-                "open_folder_glass_tint_alpha", 35, 35, 35, 0, 160, ConfigKey.ExportMode.ALWAYS);
+                "open_folder_glass_tint_alpha", 35, 35, 35, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        // -1 inherits the current global solid fill; 0..255 independently overrides it.
+        public static final ConfigKey<Integer> OPEN_FOLDER_BASE_COLOR_RED = integer(
+                "open_folder_base_color_r", -1, -1, -1, -1, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_BASE_COLOR_GREEN = integer(
+                "open_folder_base_color_g", -1, -1, -1, -1, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_BASE_COLOR_BLUE = integer(
+                "open_folder_base_color_b", -1, -1, -1, -1, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> OPEN_FOLDER_BASE_COLOR_ALPHA = integer(
+                "open_folder_base_color_alpha", -1, -1, -1, -1, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> LARGE_FOLDER_NATIVE_OUTLINE = bool(
                 "large_folder_native_outline", true, true, true, ConfigKey.ExportMode.ALWAYS);
         // Opt-in only: repair marked, database-backed 2x2 folders on custom
@@ -361,7 +398,16 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> CHROMATIC = integer(
                 "liquid_chromatic", 26, 26, 2, 0, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> TINT_ALPHA = integer(
-                "liquid_tint_alpha", 35, 35, 38, 0, 160, ConfigKey.ExportMode.ALWAYS);
+                "liquid_tint_alpha", 35, 35, 38, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        // Independent opaque fill. Default alpha=0 preserves every existing glass appearance.
+        public static final ConfigKey<Integer> BASE_COLOR_RED = integer(
+                "liquid_base_color_r", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> BASE_COLOR_GREEN = integer(
+                "liquid_base_color_g", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> BASE_COLOR_BLUE = integer(
+                "liquid_base_color_b", 255, 255, 255, 0, 255, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> BASE_COLOR_ALPHA = integer(
+                "liquid_base_color_alpha", 0, 0, 0, 0, 255, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_FPS = integer(
                 "liquid_capture_power_limit_fps", 20, 20, 20, 5, 60, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> CAPTURE_STOP_DELAY = integer(
@@ -722,9 +768,6 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> DOCK_ICON_GLASS_CORNER_RADIUS = dp(
                 "workstation_dock_icon_glass_corner_radius", 0, 0, 0, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
-        public static final ConfigKey<Integer> GRID_HORIZONTAL_OFFSET = dp(
-                "workstation_grid_horizontal_offset", 0, 0, 0, -240, 240,
-                ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET = dp(
                 "workstation_all_apps_landscape_horizontal_offset", 0, 0, 0, 0, 240,
                 ConfigKey.ExportMode.ALWAYS);
@@ -742,6 +785,12 @@ public final class ConfigSchema {
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_BOTTOM_SPACING = dp(
                 "workstation_all_apps_portrait_bottom_spacing", 0, 0, 0, 0, 240,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_INDICATOR_Y = dp(
+                "workstation_all_apps_landscape_indicator_y", 0, 0, 0, -160, 160,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_INDICATOR_Y = dp(
+                "workstation_all_apps_portrait_indicator_y", 0, 0, 0, -160, 160,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_VERTICAL_OFFSET = dp(
                 "workstation_dock_vertical_offset", 0, 0, 0, -120, 120,
@@ -787,11 +836,17 @@ public final class ConfigSchema {
     private static List<ConfigKey<?>> createAll() {
         List<ConfigKey<?>> keys = new ArrayList<>();
         add(keys, Core.ENABLED);
-        add(keys, Animation.WORKSPACE_VISIBILITY, Animation.UNLOCK_GLASS_FADE,
+        add(keys, Animation.WORKSPACE_VISIBILITY,
+                Animation.HIDE_WORKSPACE_GLASS_DURING_APP,
+                Animation.HIDE_DOCK_ICONS_DURING_APP,
+                Animation.APP_RETURN_GLASS_FADE_START_BEFORE_END,
+                Animation.APP_RETURN_GLASS_FADE_DURATION,
+                Animation.UNLOCK_GLASS_FADE,
                 Animation.FOLDER_OPEN_GLASS_FADE,
                 Animation.PRESS_IN, Animation.PRESS_OUT, Animation.DOCK_RESIZE,
                 Animation.SHORTCUT_POPUP_DISMISS_FADE, Animation.SECURITY_CENTER_EXIT_FADE,
                 Animation.SETTINGS_PAGE, Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS,
+                Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR,
                 Animation.DISABLE_WALLPAPER_ZOOM);
         add(keys, Grid.ENABLED, Grid.NATIVE_HOOK_SAFETY, Grid.COLUMNS, Grid.ROWS,
                 Grid.ICON_SIZE_ENABLED, Grid.ICON_SIZE_PERCENT,
@@ -802,7 +857,8 @@ public final class ConfigSchema {
                 Grid.SPLIT_HORIZONTAL_OFFSET ,
                 Grid.LANDSCAPE_ROW_GAP, Grid.PORTRAIT_ROW_GAP,
                 Grid.LANDSCAPE_INDICATOR_Y, Grid.PORTRAIT_INDICATOR_Y);
-        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT, Dock.FRAME_SYNC,
+        add(keys, Dock.ENABLED, Dock.HIDE_MIRROR_SHORTCUT,
+                Dock.HIDE_RECENT_TASK_ICONS, Dock.FRAME_SYNC,
                 Dock.RESIZE_ANIMATION, Dock.SMOOTH_RESIZE_ANIMATION,
                 Dock.WIDTH_OFFSET, Dock.HEIGHT_OFFSET, Dock.SPACING,
                 Dock.BOTTOM_OFFSET, Dock.BLUR_RADIUS, Dock.CORNER_OFFSET,
@@ -821,10 +877,13 @@ public final class ConfigSchema {
                 Glass.BACKLIT_ENABLED, Glass.BACKLIT_WIDTH,
                 Glass.BACKLIT_STRENGTH, Glass.BACKLIT_SOFTNESS,
                 Glass.BACKLIT_EXTENT);
-        add(keys, Glass.ENABLED, Glass.SOFT_GLASS_ENABLED, Glass.WALLPAPER_FLICKER_FIX,
+        add(keys, Glass.ENABLED, Glass.CONTINUOUS_CORNERS, Glass.SOFT_GLASS_ENABLED,
+                Glass.WALLPAPER_FLICKER_FIX,
                 Glass.SECURITY_CENTER_GLASS, Glass.SYSTEMUI_HANDLE_MENU_GLASS,
                 Glass.SHORTCUT_POPUP_GLASS, Glass.SHORTCUT_POPUP_DARK_TEXT,
-                Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_DISABLE_DIMMING,
+                Glass.UNINSTALL_DIALOG_GLASS, Glass.DIALOG_CORNER_RADIUS,
+                Glass.SHORTCUT_POPUP_CORNER_RADIUS, Glass.HANDLE_MENU_CORNER_RADIUS,
+                Glass.DIALOG_DISABLE_DIMMING,
                 Glass.DIALOG_DARK_MODE, Glass.DIALOG_BLUR, Glass.DIALOG_TINT_RED, Glass.DIALOG_TINT_GREEN,
                 Glass.DIALOG_TINT_BLUE, Glass.DIALOG_TINT_ALPHA,
                 Glass.WIDGET_GLASS,
@@ -839,10 +898,14 @@ public final class ConfigSchema {
                 Glass.LARGE_FOLDER_PREVIEW_ICON_PERCENT,
                 Glass.OPEN_FOLDER_GLASS, Glass.OPEN_FOLDER_BLUR, Glass.OPEN_FOLDER_NATIVE_BLUR_PERCENT,
                 Glass.OPEN_FOLDER_IOR, Glass.OPEN_FOLDER_THICKNESS, Glass.OPEN_FOLDER_TINT_ALPHA,
+                Glass.OPEN_FOLDER_BASE_COLOR_RED, Glass.OPEN_FOLDER_BASE_COLOR_GREEN,
+                Glass.OPEN_FOLDER_BASE_COLOR_BLUE, Glass.OPEN_FOLDER_BASE_COLOR_ALPHA,
                 Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
                 Glass.BLUR_MODE,
                 Glass.BLUR, Glass.CHROMATIC,
-                Glass.TINT_ALPHA, Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY,
+                Glass.TINT_ALPHA, Glass.BASE_COLOR_RED, Glass.BASE_COLOR_GREEN,
+                Glass.BASE_COLOR_BLUE, Glass.BASE_COLOR_ALPHA,
+                Glass.CAPTURE_FPS, Glass.CAPTURE_STOP_DELAY,
                 Glass.THICKNESS,
                 Glass.IOR, Glass.NORMAL_STRENGTH, Glass.DOME, Glass.LENS_REFRACTION,
                 Glass.CAPTURE_SCALE, Glass.PASSBLUR_CAPTURE_SCALE,
@@ -875,13 +938,14 @@ public final class ConfigSchema {
                 LauncherHighlight.LARGE_CAUSTICS, LauncherHighlight.LARGE_PRESS_GLOW);
         add(keys, Workstation.DOCK_CUSTOMIZATION, Workstation.TASKBAR_MODE,
                 Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
-                Workstation.GRID_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
                 Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
                 Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
                 Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
                 Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
+                Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y,
+                Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y,
                 Workstation.DOCK_VERTICAL_OFFSET,
                 Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
                 Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET);

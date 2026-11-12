@@ -13,6 +13,7 @@ public class OpenFolderGlassOpticsTest {
         assertEquals(40f, result.glassThicknessPx, 0.0001f);
         assertEquals(80f / 255f, result.tintA, 0.0001f);
         assertEquals(base.causticIntensity, result.causticIntensity, 0.0001f);
+        assertEquals(base.baseColorA, result.baseColorA, 0.0001f);
         assertEquals(base.blurRadiusPx, PrismalParams.builder(base).build().blurRadiusPx, 0.0001f);
     }
     @Test public void folderMaterialMustRemainStableAcrossNativeClose() {
@@ -24,12 +25,42 @@ public class OpenFolderGlassOpticsTest {
         assertEquals(125f / 255f, folder.tintA, .0001f);
         // Closing no longer runs a second gaussian pass at another radius.
     }
+    @Test public void folderTintAlphaCanReachFullyOpaqueWithoutChangingOtherOptics() {
+        PrismalParams base = PrismalParams.builder().build();
+        PrismalParams params = OpenFolderGlassOptics.apply(base, 6, 155, 18, 255, 1f);
+        assertEquals(1f, params.tintA, 0.0001f);
+        PrismalParams transparent = OpenFolderGlassOptics.apply(base, 6, 155, 18, 0, 1f);
+        assertEquals(0f, transparent.tintA, 0f);
+    }
+
+    @Test public void folderSolidFillInheritsGlobalUntilIndividuallyOverridden() {
+        PrismalParams.Builder p = PrismalParams.builder();
+        p.baseColorR = .25f;
+        p.baseColorG = .50f;
+        p.baseColorB = .75f;
+        p.baseColorA = .4f;
+        PrismalParams global = p.build();
+        PrismalParams inherited = OpenFolderGlassOptics.apply(global, 6, 155, 18, 35,
+                -1, -1, -1, -1, 1f);
+        assertEquals(.25f, inherited.baseColorR, 0f);
+        assertEquals(.50f, inherited.baseColorG, 0f);
+        assertEquals(.75f, inherited.baseColorB, 0f);
+        assertEquals(.4f, inherited.baseColorA, 0f);
+        PrismalParams explicit = OpenFolderGlassOptics.apply(global, 6, 155, 18, 35,
+                255, 0, 100, 255, 1f);
+        assertEquals(1f, explicit.baseColorR, 0f);
+        assertEquals(0f, explicit.baseColorG, 0f);
+        assertEquals(100f / 255f, explicit.baseColorB, .0001f);
+        assertEquals(1f, explicit.baseColorA, 0f);
+        assertEquals(.4f, global.baseColorA, 0f);
+    }
+
     @Test public void folderOpticsClampToSchemaLimits() {
         PrismalParams params = OpenFolderGlassOptics.apply(PrismalParams.builder().build(),
                 -500, 9999, -4, 999, 1f);
         assertEquals(0f, params.blurRadiusPx, 0f);
         assertEquals(2f, params.ior, 0f);
         assertEquals(1f, params.glassThicknessPx, 0f);
-        assertEquals(160f / 255f, params.tintA, 0.0001f);
+        assertEquals(1f, params.tintA, 0.0001f);
     }
 }

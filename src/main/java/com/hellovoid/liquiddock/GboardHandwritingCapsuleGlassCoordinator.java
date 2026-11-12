@@ -153,6 +153,8 @@ final class GboardHandwritingCapsuleGlassCoordinator {
                         markPresented(state);
                     }
 
+                    @Override public void onPresentationInvalidated() {}
+
                     @Override public void onFailure(Throwable error) {
                         state.host.post(() -> failClosed(state, "session failure", error));
                     }

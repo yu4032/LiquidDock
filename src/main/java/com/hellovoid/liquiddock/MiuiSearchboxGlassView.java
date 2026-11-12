@@ -37,16 +37,33 @@ final class MiuiSearchboxGlassView extends TextureView
     }
 
     @Override
+    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight);
+        if (!disposed && outputSurface != null && width > 0 && height > 0) {
+            SurfaceTexture current = getSurfaceTexture();
+            if (current != null) current.setDefaultBufferSize(width, height);
+            session.updateOutputGeometry(this);
+            session.resizeOutput(width, height);
+        }
+    }
+
+    @Override
     public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
         if (disposed) return;
+        surfaceTexture.setDefaultBufferSize(width, height);
         Surface surface = new Surface(surfaceTexture);
         outputSurface = surface;
+        session.updateOutputGeometry(this);
         session.attachOutput(surface, width, height);
     }
 
     @Override
     public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int width, int height) {
-        if (!disposed) session.resizeOutput(width, height);
+        if (!disposed) {
+            surfaceTexture.setDefaultBufferSize(width, height);
+            session.updateOutputGeometry(this);
+            session.resizeOutput(width, height);
+        }
     }
 
     @Override

@@ -7,6 +7,7 @@ package com.hellovoid.liquiddock;
  */
 final class RootPassBlurFrame {
     final long generation;
+    final long timestampNs;
     final int normalizedTextureId;
     final int logicalWidth;
     final int logicalHeight;
@@ -23,8 +24,9 @@ final class RootPassBlurFrame {
             int physicalWidth,
             int physicalHeight,
             int rotation,
-            RootPassBlurContentRect contentRect) {
+            RootPassBlurContentRect contentRect, long timestampNs) {
         this.generation = generation;
+        this.timestampNs = timestampNs;
         this.normalizedTextureId = normalizedTextureId;
         this.logicalWidth = logicalWidth;
         this.logicalHeight = logicalHeight;

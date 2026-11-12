@@ -33,6 +33,32 @@ final class LauncherGlassVisibility {
         return effectiveAlpha(host, sceneRoot, false);
     }
 
+    /**
+     * The opacity contributed by a View and its descendants below {@code ancestor}.
+     * The ancestor and scene root are excluded so a caller can combine this factor with
+     * the Workspace/layer alpha exactly once.
+     */
+    static float alphaBelowAncestor(View host, View ancestor, View sceneRoot) {
+        if (host == null || ancestor == null || sceneRoot == null
+                || !host.isAttachedToWindow() || !ancestor.isAttachedToWindow()
+                || host.getRootView() != sceneRoot || ancestor.getRootView() != sceneRoot) {
+            return 0f;
+        }
+        float result = 1f;
+        View cursor = host;
+        while (cursor != null) {
+            if (cursor == ancestor) return result;
+            if (cursor == sceneRoot || cursor.getVisibility() != View.VISIBLE) return 0f;
+            float alpha = cursor.getAlpha();
+            if (!Float.isFinite(alpha) || alpha <= 0f) return 0f;
+            result *= alpha;
+            if (!Float.isFinite(result) || result <= EPSILON) return 0f;
+            ViewParent parent = cursor.getParent();
+            cursor = parent instanceof View ? (View) parent : null;
+        }
+        return 0f;
+    }
+
     private static float effectiveAlpha(View host, View sceneRoot, boolean includeRoot) {
         if (host == null || sceneRoot == null || !host.isAttachedToWindow()) return 0f;
         float result = 1f;

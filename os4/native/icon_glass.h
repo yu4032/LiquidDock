@@ -10,15 +10,15 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-static void *g_orig_icon_glass_enabled;
-static void *g_orig_icon_glass_size;
-static void *g_orig_icon_glass_radius;
-static int g_icon_glass_installed;
-static int g_icon_glass_radius_installed;
-static void *g_orig_icon_glass_flight;
-static volatile unsigned g_icon_glass_flag_calls;
-static volatile unsigned g_icon_glass_radius_calls;
-static int g_icon_glass_state_logged;
+__attribute__((used)) static void *g_orig_icon_glass_enabled;
+__attribute__((used)) static void *g_orig_icon_glass_size;
+__attribute__((used)) static void *g_orig_icon_glass_radius;
+__attribute__((used)) static int g_icon_glass_installed;
+__attribute__((used)) static int g_icon_glass_radius_installed;
+__attribute__((used)) static void *g_orig_icon_glass_flight;
+__attribute__((used)) static volatile unsigned g_icon_glass_flag_calls;
+__attribute__((used)) static volatile unsigned g_icon_glass_radius_calls;
+__attribute__((used)) static int g_icon_glass_state_logged;
 
 /* Dart's local Hero flight carries the native glass background with the icon.
  * The SF bitmap flight only contains the resource image. Select local mode at

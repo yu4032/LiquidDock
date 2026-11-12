@@ -45,6 +45,13 @@ final class SecurityCenterGlassRuntimeState {
         if (nextPreferences == null) return;
 
         listener = (sharedPreferences, key) -> {
+            if (SideSlideHoldFeatureConfig.KEY.equals(key)) {
+                SecurityCenterSidebarCommandBridge.onSideSlideHoldPreferenceChanged(
+                        sharedPreferences.getBoolean(
+                                SideSlideHoldFeatureConfig.KEY,
+                                SideSlideHoldFeatureConfig.DEFAULT_ENABLED));
+                return;
+            }
             if (!ConfigSchema.Core.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.ENABLED.name().equals(key)
                     && !ConfigSchema.Glass.SECURITY_CENTER_GLASS.name().equals(key)) {
@@ -90,14 +97,30 @@ final class SecurityCenterGlassRuntimeState {
         }
     }
 
+    /** A real vendor handle show does not carry a Launcher-supplied generation. */
+    static void onExternalVendorShow() {
+        if (!isEnabled()) return;
+        Owner expected = owner;
+        if (!(expected instanceof SecurityCenterGlassCoordinator)) return;
+        runOnMain(() -> {
+            if (!isEnabled() || owner != expected) return;
+            ((SecurityCenterGlassCoordinator) expected).onExternalVendorShow();
+        });
+    }
+
     static void onSourceAuthorityChanged(Object previousAuthority, Object currentAuthority) {
         if (!isEnabled() || previousAuthority == null || currentAuthority == null
                 || previousAuthority.equals(currentAuthority)) return;
-        Owner currentOwner = owner;
-        if (currentOwner instanceof SecurityCenterGlassCoordinator) {
-            ((SecurityCenterGlassCoordinator) currentOwner)
+        // IActivityChangeListener is dispatched by Binder, not the UI looper.
+        // Capture ownership now and revalidate after dispatch: a newer panel/session
+        // must not receive an outdated source rollover from the previous owner.
+        Owner expectedOwner = owner;
+        if (!(expectedOwner instanceof SecurityCenterGlassCoordinator)) return;
+        runOnMain(() -> {
+            if (!isEnabled() || owner != expectedOwner) return;
+            ((SecurityCenterGlassCoordinator) expectedOwner)
                     .onSourceAuthorityChanged(previousAuthority, currentAuthority);
-        }
+        });
     }
 
     private static synchronized void apply(

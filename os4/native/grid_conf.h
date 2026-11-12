@@ -378,6 +378,10 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if(index==LD_NATIVE_GLASS_COUNT || (c.native_glass.mask&(1ull<<index)) ||
                         !ld_grid_parse_plain_decimal(val,ld_native_glass_fields[index].min,ld_native_glass_fields[index].max,&c.native_glass.values[index])) {bad=1;break;}
                     c.native_glass.mask|=1ull<<index;
+                } else if (strncmp(key, "dock_divider_", 13) == 0) {
+                    /* 分隔符键由 dock_divider.h 直接读文件解析；这里只接受，避免整份 conf 被判非法。 */
+                    int v;
+                    if (!ld_grid_parse_int(val, 0, 1000, &v)) { bad = 1; break; }
                 } else if (strcmp(key, "end") == 0) {
                     if (seen & 64u) { bad = 1; break; }
                     if (val[0] != '1' || val[1] != '\0') { bad = 1; break; }

@@ -22,6 +22,9 @@ final class MiuixShortcutMenuGlassHook {
     private static volatile boolean popupGlassEnabled;
     private static volatile boolean darkModeEnabled;
     private static WeakReference<View> visibleContentRef = new WeakReference<>(null);
+    // Reflection re-enters the same API102 hook when an asynchronous, ready-to-draw
+    // menu resumes. This guard is scoped to exactly that menu and UI invocation.
+    private static final ThreadLocal<Object> SHOW_REENTRY = new ThreadLocal<>();
 
     static void onLivePreferences(ConfigReader prefs) {
         boolean nextGlass = prefs.b(ConfigSchema.Glass.SHORTCUT_POPUP_GLASS.name(),
@@ -74,14 +77,33 @@ final class MiuixShortcutMenuGlassHook {
                 return chain.proceed(args);
             }, ITEM_INFO);
 
-            HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "show", chain -> {
-                Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
-                bindShownPopup(chain.getThisObject());
+            Class<?> shortcutMenuClass = Class.forName(SHORTCUT_MENU, false, classLoader);
+            Method nativeShow = HookUtil.findMethodExact(
+                    shortcutMenuClass, "show", new Class<?>[0]);
+            boolean canDeferShow = nativeShow.getReturnType() == void.class;
+            if (!canDeferShow) {
+                MainHook.log(TAG + " native show return type unsupported for pre-show gate: "
+                        + nativeShow.getReturnType().getName());
+            }
+            HookUtil.hook(nativeShow, chain -> {
+                Object menu = chain.getThisObject();
+                Object[] args = chain.getArgs().toArray(new Object[0]);
+                if (canDeferShow && popupGlassEnabled && GlassRuntimeState.isEnabled()
+                        && SHOW_REENTRY.get() != menu
+                        && ShortcutPopupGlassCoordinator.deferShowUntilGlassReady(
+                                menu, () -> resumeNativeShow(menu, nativeShow))) {
+                    // show() is void; the same original method is invoked exactly
+                    // once when the prebuilt glass is ready (or native fallback wins).
+                    return null;
+                }
+                Object result = chain.proceed(args);
+                bindShownPopup(menu);
                 return result;
             });
 
             HookUtil.hookMethod(classLoader, SHORTCUT_MENU, "dismiss", chain -> {
                 Object menu = chain.getThisObject();
+                ShortcutPopupGlassCoordinator.cancelDeferredShow(menu);
                 ShortcutPopupGlassCoordinator.beginDismissFade(menu);
                 Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
                 releaseIfAlreadyDetached(menu);
@@ -126,9 +148,10 @@ final class MiuixShortcutMenuGlassHook {
                             ShortcutPopupGlassCoordinator.prepareEarly(launcherRoot, glassConfig);
                         }
                     }
-                } else if (action == MotionEvent.ACTION_UP
-                        || action == MotionEvent.ACTION_CANCEL) {
+                } else if (action == MotionEvent.ACTION_UP) {
                     ShortcutPopupGlassCoordinator.cancelEarlyIfUnused(launcherRoot);
+                } else if (action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.deferEarlyCancelIfUnused(launcherRoot, null);
                 }
             }
             return result;
@@ -170,10 +193,25 @@ final class MiuixShortcutMenuGlassHook {
                             dockMenuOwner, glassConfig);
                 } else if (action == MotionEvent.ACTION_UP) {
                     ShortcutPopupGlassCoordinator.cancelDockEarlyIfUnused(dockMenuOwner);
+                } else if (action == MotionEvent.ACTION_CANCEL) {
+                    ShortcutPopupGlassCoordinator.deferEarlyCancelIfUnused(
+                            dockMenuOwner.getRootView(), dockMenuOwner);
                 }
             }
             return result;
         });
+    }
+
+    private static void resumeNativeShow(Object menu, Method method) {
+        if (menu == null || method == null) return;
+        SHOW_REENTRY.set(menu);
+        try {
+            method.invoke(menu);
+        } catch (Throwable error) {
+            MainHook.log(TAG + " deferred native show failed: " + error);
+        } finally {
+            SHOW_REENTRY.remove();
+        }
     }
 
     private static void bindShownPopup(Object menu) {

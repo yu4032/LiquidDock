@@ -1,6 +1,6 @@
 package com.hellovoid.liquiddock;
 
-/** Workspace PassBlur capture policy: HOME stays live while explicit coverage may suspend it. */
+/** Workspace PassBlur capture policy: ordinary HOME is demand-driven; Workstation stays live. */
 final class WorkstationProducerPolicy {
     private WorkstationProducerPolicy() {}
 
@@ -17,24 +17,18 @@ final class WorkstationProducerPolicy {
         return visibleConsumer && capsulesEnabled;
     }
 
-    /** Releasing the final capsule restores the right owner of native capture.
-     * Folder coverage is a hard HOME freeze; ordinary Recents/presentation
-     * coverage respects Workstation's explicit always-live producer policy.
-     */
+    /** Once Recents releases its live lease, ordinary HOME returns to idle capture policy. */
     static boolean shouldPauseAfterRecentsConsumerGone(
-            boolean folderFrozen, boolean workspaceCovered,
-            boolean wallpaperSettlePending, boolean workstationMode) {
-        return folderFrozen
-                || shouldPauseSharedProducer(workspaceCovered || wallpaperSettlePending,
-                        workstationMode);
+            boolean folderFrozen, boolean workstationMode) {
+        return folderFrozen || !workstationMode;
     }
 
-    /** Workspace HOME capture is continuous; coverage/presentation suspension is handled separately. */
+    /** Normal Workspace capture is a short freshness pulse; Workstation keeps its live producer. */
     static boolean shouldUseSingleFramePulse(boolean workstationMode) {
-        return false;
+        return !workstationMode;
     }
 
-    /** Consuming a live OES frame is not a reason to suspend the continuous Workspace producer. */
+    /** Workstation keeps its shared source active after each consumed frame. */
     static boolean shouldPauseAfterFrameConsumed(boolean workstationMode) {
         return false;
     }

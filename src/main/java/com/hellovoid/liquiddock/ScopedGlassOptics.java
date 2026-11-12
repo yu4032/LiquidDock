@@ -68,6 +68,10 @@ public final class ScopedGlassOptics {
                     ConfigSchema.Glass.PRISMAL_SHADOW_ALPHA,
                     ConfigSchema.Glass.PRISMAL_SHADOW_SOFTNESS,
                     ConfigSchema.Glass.PRISMAL_TRANSMITTANCE,
+                    ConfigSchema.Glass.BASE_COLOR_RED,
+                    ConfigSchema.Glass.BASE_COLOR_GREEN,
+                    ConfigSchema.Glass.BASE_COLOR_BLUE,
+                    ConfigSchema.Glass.BASE_COLOR_ALPHA,
                     ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_X,
                     ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y,
                     ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE

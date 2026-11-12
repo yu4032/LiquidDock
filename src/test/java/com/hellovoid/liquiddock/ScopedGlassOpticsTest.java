@@ -20,7 +20,7 @@ public class ScopedGlassOpticsTest {
         assertFalse(g.equals(d));
         assertTrue(g.startsWith("liquid_"));
         // Four legacy per-scope highlight strength controls were replaced by OS4.
-        assertEquals(37, ScopedGlassOptics.opticalKeys().size());
+        assertEquals(41, ScopedGlassOptics.opticalKeys().size());
     }
 
     @Test public void popupOverridesBasicOpticsAndHighlightsWithoutChangingGlobalMaterial() {
@@ -93,6 +93,27 @@ public class ScopedGlassOpticsTest {
         assertTrue(shortcut.largeSurfaceHighlightProfile.caustics);
         assertTrue(ScopedGlassOptics.keysForScope(ScopedGlassOptics.HANDLE_MENU)
                 .contains(ConfigSchema.Glass.TINT_ALPHA));
+    }
+
+    @Test public void solidFillIsIndependentOfLegacyTintAndScopedOverrides() {
+        Map<String, Object> values = new HashMap<>();
+        values.put(ConfigSchema.Glass.TINT_ALPHA.name(), 160);
+        values.put(ConfigSchema.Glass.BASE_COLOR_ALPHA.name(), 220);
+        values.put(ConfigSchema.Glass.BASE_COLOR_RED.name(), 17);
+        values.put(ScopedGlassOptics.key(ScopedGlassOptics.POPUP,
+                ConfigSchema.Glass.BASE_COLOR_ALPHA), 255);
+        ConfigReader reader = new ConfigReader(values);
+        LiquidDockConfig.Glass global = LiquidDockConfig.from(reader).glass;
+        LiquidDockConfig.Glass popup = ScopedGlassOptics.resolve(
+                reader, global, ScopedGlassOptics.POPUP);
+        LiquidDockConfig.Glass folder = ScopedGlassOptics.resolve(
+                reader, global, ScopedGlassOptics.DIALOG);
+        assertEquals(160, global.tintAlpha);
+        assertEquals(160, popup.tintAlpha);
+        assertEquals(220, global.baseColorAlpha);
+        assertEquals(255, popup.baseColorAlpha);
+        assertEquals(220, folder.baseColorAlpha);
+        assertEquals(17, popup.baseColorR);
     }
 
     @Test public void popupInheritsGlobalChangesUntilOverridden() {

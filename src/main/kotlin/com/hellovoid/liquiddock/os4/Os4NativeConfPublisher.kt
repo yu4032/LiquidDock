@@ -27,6 +27,7 @@ object Os4NativeConfPublisher {
         if (Os4NativeGlassOptions.configLines(options.glassNativeOverrides) == null) return null
         if (grid && (!options.landscape.isValid() || !options.portrait.isValid())) return null
         if (options.dock.enabled && !options.dock.isValid()) return null
+        if (options.divider.enabled && !options.divider.isValid()) return null
         if (options.glassEnabled && options.glassIcons &&
             (!options.glassIconSize.isFinite() || options.glassIconSize !in -40.0..40.0 ||
                 !options.glassIconCorner.isFinite() || options.glassIconCorner !in 0.0..128.0)) return null
@@ -72,6 +73,16 @@ object Os4NativeConfPublisher {
                 append("dock_geometry_spacing=").append(options.dock.spacing).append('\n')
                 append("dock_geometry_bottom=").append(options.dock.bottom).append('\n')
                 append("dock_geometry_corner=").append(options.dock.corner).append('\n')
+            }
+            if (options.divider.enabled) {
+                append("dock_divider_enabled=1\n")
+                append("dock_divider_width=").append(options.divider.widthDp).append('\n')
+                append("dock_divider_height_scale=").append(options.divider.heightScale).append('\n')
+                append("dock_divider_y_offset=").append(options.divider.yOffsetDp).append('\n')
+                append("dock_divider_color_r=").append(options.divider.colorR).append('\n')
+                append("dock_divider_color_g=").append(options.divider.colorG).append('\n')
+                append("dock_divider_color_b=").append(options.divider.colorB).append('\n')
+                append("dock_divider_alpha=").append(options.divider.alpha).append('\n')
             }
             append("end=1\n")
         }
