@@ -32,6 +32,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include "bootlog.h"
+#include "divider_conf.h"
 #include "native_api.h"
 #include "lib_base.h"
 #include "dart_observer.h"
@@ -99,22 +100,49 @@ static void ld_dp_load_cfg(void)
     fclose(f);
     buf[n] = '\0';
     struct ld_dp_cfg c = g_dp_cfg;
+    uint32_t seen = 0;
+    int bad = 0;
     const char *p = buf;
     while (p && *p) {
         const char *eol = strchr(p, '\n');
         size_t len = eol ? (size_t)(eol - p) : strlen(p);
-        if (len > 21 && !strncmp(p, "dock_divider_enabled=", 21)) c.enabled = atoi(p + 21);
-        else if (len > 26 && !strncmp(p, "dock_divider_height_scale=", 26)) c.height_pct = atoi(p + 26);
-        else if (len > 22 && !strncmp(p, "dock_divider_y_offset=", 22)) c.y_offset_dp10 = atoi(p + 22);
-        else if (len > 21 && !strncmp(p, "dock_divider_color_r=", 21)) c.color_r = atoi(p + 21);
-        else if (len > 21 && !strncmp(p, "dock_divider_color_g=", 21)) c.color_g = atoi(p + 21);
-        else if (len > 21 && !strncmp(p, "dock_divider_color_b=", 21)) c.color_b = atoi(p + 21);
-        else if (len > 19 && !strncmp(p, "dock_divider_alpha=", 19)) c.alpha = atoi(p + 19);
-        else if (len > 19 && !strncmp(p, "dock_divider_width=", 19)) c.width_dp10 = atoi(p + 19);
+        /* 与主解析器共用 divider_conf.h 的字段定义：名称精确匹配、纯整数、
+         * 上下限（y_offset 可为负）、查重——非法行直接忽略。 */
+        char line[64];
+        if (len > 0 && len < sizeof line) {
+            memcpy(line, p, len);
+            line[len] = '\0';
+            char *eq = strchr(line, '=');
+            if (eq) {
+                *eq = '\0';
+                if (strncmp(line, "dock_divider_", 13) == 0) {
+                    int idx = ld_divider_conf_kv(line, eq + 1, &seen);
+                    if (idx < 0) {
+                        /* 与主解析器同语义：非法/重复的分隔线字段使整份分隔线配置无效。 */
+                        if (!bad) ld_blog("divider: conf invalid at %s", line);
+                        bad = 1;
+                        continue;
+                    }
+                    int v = (int)strtol(eq + 1, NULL, 10);
+                    switch (idx) {
+                    case LD_DIVIDER_F_ENABLED:      c.enabled = v; break;
+                    case LD_DIVIDER_F_WIDTH:        c.width_dp10 = v; break;
+                    case LD_DIVIDER_F_HEIGHT_SCALE: c.height_pct = v; break;
+                    case LD_DIVIDER_F_Y_OFFSET:     c.y_offset_dp10 = v; break;
+                    case LD_DIVIDER_F_COLOR_R:      c.color_r = v; break;
+                    case LD_DIVIDER_F_COLOR_G:      c.color_g = v; break;
+                    case LD_DIVIDER_F_COLOR_B:      c.color_b = v; break;
+                    case LD_DIVIDER_F_ALPHA:        c.alpha = v; break;
+                    default: break;
+                    }
+                }
+            }
+        }
         p = eol ? eol + 1 : NULL;
     }
     struct stat st;
     c.stamp = stat(LD_DP_CONF, &st) == 0 ? (long)st.st_mtime : 0;
+    if (bad) { c = g_dp_cfg; c.stamp = stat(LD_DP_CONF, &st) == 0 ? (long)st.st_mtime : 0; }
     g_dp_cfg = c;
     ld_blog("divider: cfg enabled=%d w=%d(0.1dp) h%%=%d y=%d(0.1dp) rgb=%d,%d,%d a=%d",
             c.enabled, c.width_dp10, c.height_pct, c.y_offset_dp10,

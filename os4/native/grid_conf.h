@@ -47,6 +47,7 @@
 #include <stdint.h>
 #include <errno.h>
 #include "native_glass_schema.h"
+#include "divider_conf.h"
 
 #define LD_GRID_CONF_MAX_BYTES 4096
 #define LD_GRID_LINE_MAX       255   /* 含 LF；对齐 hooks_dock.c 的 fgets(line,256) */
@@ -224,6 +225,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
     c.icon_size_percent = 100;
     uint64_t seen = 0;  /* bit0=dock_offset_y bit1=dock_offset_x bit2=glass bit3=icons
                            bit4=grid_cols bit5=grid_rows bit6=end */
+    uint32_t divider_seen = 0;   /* 分隔线字段查重（定义见 divider_conf.h） */
     int ok = 0;
 
     // A binary NUL could make strcmp/strchr accept only a prefix of an
@@ -379,9 +381,10 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         !ld_grid_parse_plain_decimal(val,ld_native_glass_fields[index].min,ld_native_glass_fields[index].max,&c.native_glass.values[index])) {bad=1;break;}
                     c.native_glass.mask|=1ull<<index;
                 } else if (strncmp(key, "dock_divider_", 13) == 0) {
-                    /* 分隔符键由分隔符实现直接读文件解析；这里只接受，避免整份 conf 被判非法。 */
-                    int v;
-                    if (!ld_grid_parse_int(val, 0, 1000, &v)) { bad = 1; break; }
+                    /* 分隔线字段由 divider_conf.h 集中定义并校验：字段名精确匹配、
+                     * 值为纯整数、落在该字段上下限内（y_offset 可为负）、同一字段不得重复。
+                     * 校验通过的值由 divider_paint.h 直接读文件解析，两侧语义一致。 */
+                    if (ld_divider_conf_kv(key, val, &divider_seen) < 0) { bad = 1; break; }
                 } else if (strcmp(key, "end") == 0) {
                     if (seen & 64u) { bad = 1; break; }
                     if (val[0] != '1' || val[1] != '\0') { bad = 1; break; }

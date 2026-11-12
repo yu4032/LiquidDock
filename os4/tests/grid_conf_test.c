@@ -73,6 +73,32 @@ int main(void)
             || !glass.glass_observers_present || glass.glass_obs_size[3]!=292) return 1;
     const char *truncated="glass_enabled=1\nglass_observers=0x140000:660,0x142000:644\nend=1\n";
     if(ld_grid_conf_parse(truncated,strlen(truncated),&glass)) return 1;
+
+    /* 分隔线字段：GUI 允许 y_offset 为负（dp×10，-80..80），不得拖垮整份配置。 */
+    const char *divider="dock_divider_enabled=1\ndock_divider_width=15\n"
+        "dock_divider_height_scale=150\ndock_divider_y_offset=-40\n"
+        "dock_divider_color_r=255\ndock_divider_color_g=0\ndock_divider_color_b=0\n"
+        "dock_divider_alpha=128\nend=1\n";
+    if(!ld_grid_conf_parse(divider,strlen(divider),NULL)) {
+        puts("FAIL: legal divider config with negative y_offset rejected"); return 1;
+    }
+    const char *bad_divider[]={
+        /* 字段名必须精确匹配 */
+        "dock_divider_enabled=1\ndock_divider_w=15\nend=1\n",
+        /* 上下限：y_offset 最小 -80，alpha 最大 255 */
+        "dock_divider_enabled=1\ndock_divider_y_offset=-81\nend=1\n",
+        "dock_divider_enabled=1\ndock_divider_alpha=256\nend=1\n",
+        /* 纯整数 */
+        "dock_divider_enabled=1\ndock_divider_width=abc\nend=1\n",
+        "dock_divider_enabled=1\ndock_divider_width=15x\nend=1\n",
+        /* 不得重复 */
+        "dock_divider_enabled=1\ndock_divider_width=15\ndock_divider_width=15\nend=1\n",
+    };
+    for(size_t i=0;i<sizeof bad_divider/sizeof *bad_divider;i++) {
+        if(ld_grid_conf_parse(bad_divider[i],strlen(bad_divider[i]),NULL)) {
+            puts("FAIL: malformed or repeated divider field accepted"); return 1;
+        }
+    }
     puts("PASS: strict glass gates and four AOT pipeline observers");
     return 0;
 }

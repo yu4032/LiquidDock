@@ -368,6 +368,8 @@ private fun LiquidDockSettings(
                     label = "settings-page",
                 ) { target ->
                 val meta = declaredPages[target]
+                // 只有柔光玻璃子页承载原生玻璃字段；其他声明式页面保留自己的设置项。
+                val liquidNative = liquidNativeSections[target]
                 if (meta != null) DeclaredSettingsPage(
                     padding, meta, prefs, masterEnabled,
                     searchFocusKey?.takeIf { searchFocusPage == target.name }?.let {
@@ -375,18 +377,18 @@ private fun LiquidDockSettings(
                     }, ::navigateTo,
                     nativeGlass = {
                         // OS4 的柔光玻璃子页按功能展示原生玻璃参数；非 OS4 只展示 Prismal 参数。
-                        if (availability.isOs4Launcher()) {
+                        if (liquidNative != null && availability.isOs4Launcher()) {
                             os4NativeGlassSettings(
                                 prefs,
                                 masterEnabled && prefs.getBoolean(
                                     ConfigSchema.Glass.ENABLED.name(),
                                     ConfigSchema.Glass.ENABLED.uiDefault(),
                                 ),
-                                liquidNativeSections[target],
+                                liquidNative,
                             )
                         }
                     },
-                    hideRows = availability.isOs4Launcher(),
+                    hideRows = liquidNative != null && availability.isOs4Launcher(),
                 ) else when (target) {
                     Page.Home -> HomePage(
                         padding,
