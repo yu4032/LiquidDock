@@ -147,30 +147,34 @@ internal fun IntSetting(
     previewWriteAllowed: ((Float) -> Boolean)? = null,
 ) {
     val decimalDp = spec.isDecimal
+    // DIRECT 存储但值是 dp×10 的键（分隔符宽度/偏移）：UI 按 0.1dp 显示，
+    // 存储仍然写回原来的 dp×10 整数，不改导出/导入契约。
+    val rawTenths = spec.displayTenths && !decimalDp
+    val showDecimal = decimalDp || rawTenths
     val context = LocalContext.current
     val maxValue = remember(spec.key, context) { spec.max(context) }
+    val dpMin = if (rawTenths) spec.min / 10f else spec.min.toFloat()
+    val dpMax = if (rawTenths) maxValue / 10f else maxValue.toFloat()
     val resetValue = remember(spec.key, maxValue) {
-        spec.resetValue().coerceIn(spec.min.toFloat(), maxValue.toFloat())
+        spec.resetValue().let { if (rawTenths) it / 10f else it }.coerceIn(dpMin, dpMax)
     }
     // Reading the disk-backed preference on every drag/recomposition was wasteful:
     // remember() already owns the initial state until this setting leaves composition.
     val storedRevision = LocalSettingsPreferenceRevisions.current[spec.key] ?: 0
-    var value by remember(spec.key, maxValue) {
-        val initial = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
+    fun readStored(): Float = when {
+        decimalDp && prefs.contains("${spec.key}_tenths") ->
             prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
-        else if (decimalDp && !prefs.contains(spec.key)) resetValue
-        else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
-            .coerceIn(spec.min.toFloat(), maxValue.toFloat())
-        mutableStateOf(initial)
+        decimalDp && !prefs.contains(spec.key) -> resetValue
+        rawTenths -> prefs.getInt(spec.key, (resetValue * 10f).roundToInt()) / 10f
+        else -> prefs.getInt(spec.key, resetValue.roundToInt()).toFloat()
+    }
+    var value by remember(spec.key, maxValue) {
+        mutableStateOf(readStored().coerceIn(dpMin, dpMax))
     }
     LaunchedEffect(spec.key, maxValue, storedRevision) {
         // Reread only the externally changed key; normal drag recomposition is pure state.
         if (storedRevision > 0) {
-            value = (if (decimalDp && prefs.contains("${spec.key}_tenths"))
-                prefs.getInt("${spec.key}_tenths", (resetValue * 10f).roundToInt()) / 10f
-            else if (decimalDp && !prefs.contains(spec.key)) resetValue
-        else prefs.getInt(spec.key, resetValue.roundToInt()).toFloat())
-                .coerceIn(spec.min.toFloat(), maxValue.toFloat())
+            value = readStored().coerceIn(dpMin, dpMax)
         }
     }
     var editingValue by remember(spec.key) { mutableStateOf(false) }
@@ -180,42 +184,47 @@ internal fun IntSetting(
     val enabled = enabledOverride ?: spec.dependency?.let { prefs.getBoolean(it, false) } ?: true
 
     fun save(nextValue: Float) {
-        val next = if (decimalDp) {
+        val next = if (showDecimal) {
             (nextValue * 10f).roundToInt() / 10f
         } else {
             nextValue.roundToInt().toFloat()
         }
-        val bounded = next.coerceIn(spec.min.toFloat(), maxValue.toFloat())
+        val bounded = next.coerceIn(dpMin, dpMax)
         if (bounded == value) return // already persisted this quantized value
         val persist = {
             value = bounded
-            val editor = prefs.edit().putInt(spec.key, bounded.roundToInt())
-            if (decimalDp) editor.putInt("${spec.key}_tenths", (bounded * 10f).roundToInt())
+            val editor = if (rawTenths) {
+                prefs.edit().putInt(spec.key, (bounded * 10f).roundToInt())
+            } else {
+                prefs.edit().putInt(spec.key, bounded.roundToInt()).also {
+                    if (decimalDp) it.putInt("${spec.key}_tenths", (bounded * 10f).roundToInt())
+                }
+            }
             editor.apply()
         }
         if (beforeSave != null) beforeSave(bounded, persist) else persist()
     }
 
-    val displayValue = remember(value, decimalDp) {
-        if (decimalDp) {
+    val displayValue = remember(value, showDecimal) {
+        if (showDecimal) {
             String.format(java.util.Locale.ROOT, "%.1f", value)
         } else {
             value.roundToInt().toString()
         }
     }
     val previewLabel = sliderPreview?.let { draft ->
-        if (decimalDp) String.format(java.util.Locale.ROOT, "%.1f", draft)
+        if (showDecimal) String.format(java.util.Locale.ROOT, "%.1f", draft)
         else draft.roundToInt().toString()
     }
     val displayText = "${previewLabel ?: displayValue}${if (spec.unit.isBlank()) "" else " ${spec.unit}"}"
-    val scaledValue = if (decimalDp) (value * 10f).roundToInt() else value.roundToInt()
-    val scaledMin = if (decimalDp) spec.min * 10 else spec.min
-    val scaledMax = if (decimalDp) maxValue * 10 else maxValue
+    val scaledValue = if (showDecimal) (value * 10f).roundToInt() else value.roundToInt()
+    val scaledMin = if (showDecimal) (dpMin * 10f).roundToInt() else dpMin.roundToInt()
+    val scaledMax = if (showDecimal) (dpMax * 10f).roundToInt() else dpMax.roundToInt()
     val sliderSteps = if (steps > 0) steps else
-        DiscreteSliderSteps.forStoragePrecision(spec.min, maxValue, decimalDp)
+        DiscreteSliderSteps.forStoragePrecision(scaledMin, scaledMax, showDecimal)
     // The thumb remains continuous while dragging; its displayed/persisted
     // values use storage precision without allocating excessive native tick marks.
-    val snapIncrement = if (decimalDp) 0.1f else 1f
+    val snapIncrement = if (showDecimal) 0.1f else 1f
 
     Column(modifier = Modifier.fillMaxWidth()) {
         BasicComponent(
@@ -277,7 +286,7 @@ internal fun IntSetting(
                 valueRange = scaledMin..scaledMax,
                 enabled = enabled,
                 onValueChange = { next ->
-                    save(if (decimalDp) next / 10f else next.toFloat())
+                    save(if (showDecimal) next / 10f else next.toFloat())
                 },
             )
         }
@@ -286,8 +295,8 @@ internal fun IntSetting(
         visible = editingValue,
         title = spec.title,
         currentText = displayValue,
-        valueRange = spec.min.toFloat()..maxValue.toFloat(),
-        integerOnly = !decimalDp,
+        valueRange = dpMin..dpMax,
+        integerOnly = !showDecimal,
         onDismiss = { editingValue = false },
         onConfirm = { next ->
             save(next)

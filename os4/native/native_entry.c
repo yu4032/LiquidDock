@@ -5,6 +5,7 @@
 #include "superellipse_blur.h"
 #include "glass_superellipse.h"
 #include "layout_margins_write.h"
+#include "divider_paint.h"
 #include "process_gate.h"
 #include "sha256_region.h"
 
@@ -613,6 +614,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);
     ld_layout_margins_write_install(api,&lib);
+    ld_divider_paint_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
         LOGE("libapp.so identity cross-check failed");

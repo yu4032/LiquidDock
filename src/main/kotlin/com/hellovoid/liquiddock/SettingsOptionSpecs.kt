@@ -18,6 +18,8 @@ internal data class IntSpec(
     val section: IntSection = IntSection.General,
     val summary: String = optionSummary(config.name()),
     val dynamicMax: ((Context) -> Int)? = null,
+    /** 值为 dp×10 整数但 UI 需要按 0.1dp 显示（不改存储契约）。 */
+    val displayTenths: Boolean = false,
 ) {
     val key: String get() = config.name()
     val default: Int get() = config.uiDefault()
@@ -25,6 +27,7 @@ internal data class IntSpec(
     fun max(context: Context): Int =
         (dynamicMax?.invoke(context) ?: requireNotNull(config.maxInt())).coerceAtLeast(min)
     val isDecimal: Boolean get() = config.storageMode() == ConfigKey.StorageMode.DP_TENTHS
+    val showsTenths: Boolean get() = isDecimal || displayTenths
     fun resetValue(): Float {
         if (!key.startsWith("liquid_")) return default.toFloat()
         val preset = PresetManager.defaultValues()
@@ -210,13 +213,13 @@ internal val workstationAppsPortraitSpecs by lazy {
 }
 
 internal val dividerSpecs = listOf(
-    IntSpec(ConfigSchema.Divider.WIDTH_DP, "分隔线宽度", "dp×10"),
+    IntSpec(ConfigSchema.Divider.WIDTH_DP, "分隔线宽度", "dp", displayTenths = true),
     IntSpec(ConfigSchema.Divider.HEIGHT_SCALE, "分隔线高度比例", "%"),
-    IntSpec(ConfigSchema.Divider.Y_OFFSET_DP, "分隔线垂直偏移", "dp×10"),
+    IntSpec(ConfigSchema.Divider.Y_OFFSET_DP, "分隔线垂直偏移", "dp", displayTenths = true),
     IntSpec(ConfigSchema.Divider.COLOR_RED, "分隔线颜色 · 红", ""),
     IntSpec(ConfigSchema.Divider.COLOR_GREEN, "分隔线颜色 · 绿", ""),
     IntSpec(ConfigSchema.Divider.COLOR_BLUE, "分隔线颜色 · 蓝", ""),
-    IntSpec(ConfigSchema.Divider.ALPHA, "分隔线透明度", ""),
+    IntSpec(ConfigSchema.Divider.ALPHA, "分隔线不透明度", ""),
 )
 internal val dividerKeys = dividerSpecs.map { it.key }
 internal fun hasLegacyDividerConfig(prefs: SharedPreferences): Boolean = dividerKeys.any(prefs::contains)

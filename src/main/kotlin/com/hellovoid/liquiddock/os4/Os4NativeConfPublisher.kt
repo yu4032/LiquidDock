@@ -74,15 +74,18 @@ object Os4NativeConfPublisher {
                 append("dock_geometry_bottom=").append(options.dock.bottom).append('\n')
                 append("dock_geometry_corner=").append(options.dock.corner).append('\n')
             }
-            if (options.divider.enabled) {
-                append("dock_divider_enabled=1\n")
-                append("dock_divider_width=").append(options.divider.widthDp).append('\n')
-                append("dock_divider_height_scale=").append(options.divider.heightScale).append('\n')
-                append("dock_divider_y_offset=").append(options.divider.yOffsetDp).append('\n')
-                append("dock_divider_color_r=").append(options.divider.colorR).append('\n')
-                append("dock_divider_color_g=").append(options.divider.colorG).append('\n')
-                append("dock_divider_color_b=").append(options.divider.colorB).append('\n')
-                append("dock_divider_alpha=").append(options.divider.alpha).append('\n')
+            // 启用过或改过数值才下发分隔符块（enabled=0 也要下发，native 才能热关），
+            // 默认状态保持 conf 与旧版本完全一致。
+            val divider = options.divider
+            if (divider.enabled || divider != Os4DividerOptions()) {
+            append("dock_divider_enabled=").append(if (divider.enabled) 1 else 0).append('\n')
+            append("dock_divider_width=").append(divider.widthDp.coerceIn(0, 160)).append('\n')
+            append("dock_divider_height_scale=").append(divider.heightScale.coerceIn(0, 200)).append('\n')
+            append("dock_divider_y_offset=").append(divider.yOffsetDp.coerceIn(-80, 80)).append('\n')
+            append("dock_divider_color_r=").append(divider.colorR.coerceIn(0, 255)).append('\n')
+            append("dock_divider_color_g=").append(divider.colorG.coerceIn(0, 255)).append('\n')
+            append("dock_divider_color_b=").append(divider.colorB.coerceIn(0, 255)).append('\n')
+            append("dock_divider_alpha=").append(divider.alpha.coerceIn(0, 255)).append('\n')
             }
             append("end=1\n")
         }
