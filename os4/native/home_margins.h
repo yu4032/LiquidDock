@@ -34,17 +34,27 @@ static unsigned char g_hm_cc_save[64] __attribute__((aligned(16), used));
 static void *g_hm_cc_orig __attribute__((used));
 static volatile unsigned g_hm_cc_calls __attribute__((used));
 
-struct ld_hm_base { double cw, ox, ch, oy, ind; int valid; };
+struct ld_hm_base { double cw, ox, ch, oy, ind; int valid; int cols, rows; int oy_valid; };
 static struct ld_hm_base g_hm_base[2] __attribute__((used));
+/* 诊断：记录我们上一次写进去的 ox/cw，用来判断厂商下一帧是复制还是重算。 */
+static double g_hm_wrote_ox[2] __attribute__((used));
+static double g_hm_wrote_cw[2] __attribute__((used));
 /* pipeline 观察器按 config 指针记方向：同一份 config 只对应一个方向。 */
 struct ld_hm_note { uintptr_t cfg; int dir, cols, rows; };
 static struct ld_hm_note g_hm_notes[8] __attribute__((used));
 static volatile unsigned g_hm_note_n __attribute__((used));
 static volatile int g_hm_last_dir __attribute__((used)) = -1;
+/* 当前活动网格的方向/行列（由 pipeline 观察器写入，来自 GridController 的
+ * ld_grid_direction + grid+0x1b/0x23），post-hook 不再自己猜方向。
+ * ld_grid_direction: 1=横屏 0=竖屏（与旧代码的假设相反）。 */
+static volatile int g_hm_cur_dir __attribute__((used)) = -1;
+static volatile int g_hm_cur_cols __attribute__((used));
+static volatile int g_hm_cur_rows __attribute__((used));
 
 __attribute__((used)) static void ld_home_margins_note(uintptr_t cfg, int dir, int cols, int rows)
 {
     if (!cfg || (dir != 0 && dir != 1) || cols <= 0 || rows <= 0) return;
+    g_hm_cur_dir = dir; g_hm_cur_cols = cols; g_hm_cur_rows = rows;
     unsigned used = __atomic_load_n(&g_hm_note_n, __ATOMIC_RELAXED);
     for (unsigned i = 0; i < used && i < 8u; i++)
         if (g_hm_notes[i].cfg == cfg) {
@@ -127,10 +137,24 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     int landscape = -1, cols = 0, rows = 0;
     const struct ld_hm_note *note = ld_hm_lookup(cfg, x28);
     if (note) {
-        if (note->cols == g_grid_cols && note->rows == g_grid_rows) {
-            landscape = 1; cols = note->cols; rows = note->rows;
-        } else if (note->cols == g_grid_rows && note->rows == g_grid_cols) {
-            landscape = 0; cols = note->cols; rows = note->rows;
+        landscape = (note->dir == 1);   /* ld_grid_direction: 1=横屏 0=竖屏 */
+        cols = note->cols;
+        rows = note->rows;
+    } else if (g_hm_cur_dir == 0 || g_hm_cur_dir == 1) {
+        /* note 按 config 指针对不上时，用观察器最近一次记录的当前网格方向。 */
+        landscape = (g_hm_cur_dir == 1);
+        cols = g_hm_cur_cols;
+        rows = g_hm_cur_rows;
+    }
+    /* 方向以 config 自己的链为准：cfg+0x8f -> variables+0x23 -> 值对象+7，raw 0/1。
+     * 这是 GridController.getOrientationType 的同一条路径，不依赖对象池比较。 */
+    if (vo) {
+        int64_t raw = -1;
+        __builtin_memcpy(&raw, (const void *)(vo + 7), sizeof raw);
+        if (raw == 0 || raw == 1) {
+            landscape = (raw == 1);      /* 1=横屏 0=竖屏 */
+            cols = landscape ? g_grid_cols : g_grid_rows;
+            rows = landscape ? g_grid_rows : g_grid_cols;
         }
     }
     uint32_t vo_low = 0, sent_low = 0;
@@ -161,12 +185,15 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     if (cols <= 0) return (void *)cfg;
 
     struct ld_hm_base *base = &g_hm_base[landscape ? 0 : 1];
+    /* config 的几何（列/行）变了说明换页/分屏/文件夹网格，旧基准作废重采。 */
+    if (base->valid && (base->cols != cols || base->rows != rows)) base->valid = 0;
     if (!base->valid) {
         double cw_now = 0, ch_now = 0;
         __builtin_memcpy(&cw_now, (const void *)(cfg + 0x2b), sizeof cw_now);
         __builtin_memcpy(&ch_now, (const void *)(cfg + 0x33), sizeof ch_now);
-        /* 启动早期会拿到还没填值的空 config（0.00）；拿它当基准会把整条路废掉。 */
-        if (!(cw_now > 1.0) || !(ch_now > 1.0)) return (void *)cfg;
+        /* 启动早期会拿到还没填值的空 config（0.00）；文件夹/搜索等容器的格子只有
+         * 40 上下，也不是主页网格。两者都不配当基准，否则偏移会被写进别的容器。 */
+        if (!(cw_now > 80.0) || !(ch_now > 80.0)) return (void *)cfg;
         __builtin_memcpy(&base->cw, (const void *)(cfg + 0x2b), sizeof base->cw);
         __builtin_memcpy(&base->ch, (const void *)(cfg + 0x33), sizeof base->ch);
         uintptr_t box0 = ld_hm_ptr(cfg, 0x3b, x28);
@@ -177,6 +204,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         if (oybox0) __builtin_memcpy(&base->oy, (const void *)(oybox0 + 7), sizeof base->oy);
         base->ind = 0;
         __builtin_memcpy(&base->ind, (const void *)(cfg + 0x4b), sizeof base->ind);
+        base->cols = cols; base->rows = rows;
         base->valid = 1;
         ld_blog("home margin base dir=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
                 landscape, base->cw, base->ox, base->ch, base->oy, base->ind, cols, dh);
@@ -188,7 +216,11 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         ld_blog("home margin currentConfig #%u ptr=%p dir=%d cellW=%.2f cellH=%.2f",
                 n + 1u, (void *)cfg, landscape, cw, ch);
     }
-    if (dh != 0 && isfinite(base->cw) && base->cw > 1.0) {
+    double cw_cur = 0;
+    __builtin_memcpy(&cw_cur, (const void *)(cfg + 0x2b), sizeof cw_cur);
+    /* 只动和基准同一张网格的 config：文件夹/搜索的 cell 宽度差一个数量级。 */
+    if (!isfinite(cw_cur) || __builtin_fabs(cw_cur - base->cw) > 0.3 * base->cw) return (void *)cfg;
+    if (isfinite(base->cw) && base->cw > 1.0) {
         double cw = base->cw - 2.0 * dh / (double)cols;
         double ox = base->ox + dh;
         if (isfinite(cw) && isfinite(ox) && cw > 1.0) {
@@ -199,14 +231,27 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
             if (box) {
                 double curx = 0;
                 __builtin_memcpy(&curx, (const void *)(box + 7), sizeof curx);
+                int bi = landscape ? 0 : 1;
+                if ((n % 500u) == 0u)
+                    ld_blog("home margin h dir=%d cols=%d cw_in=%.2f cw_prev=%.2f ox_in=%.2f ox_prev=%.2f target=cw%.2f/ox%.2f",
+                            landscape, cols, cw_cur, g_hm_wrote_cw[bi], curx, g_hm_wrote_ox[bi], cw, ox);
                 if (curx != ox) __builtin_memcpy((void *)(box + 7), &ox, sizeof ox);
+                g_hm_wrote_ox[bi] = ox;
+                g_hm_wrote_cw[bi] = cw;
             }
         }
     }
 
 #if LD_HM_VERTICAL
     double dt = o->top, db = o->bottom;
-    if ((dt != 0.0 || db != 0.0) && rows > 0 && isfinite(base->ch) && base->ch > 1.0) {
+    if (!base->oy_valid) {
+        /* 启动早期 Rx 链还没挂好，originY 会读到 0；拿 0 当基准会把整个网格顶上去。 */
+        uintptr_t b = ld_hm_oy_box(x28, x26);
+        double v = 0;
+        if (b) __builtin_memcpy(&v, (const void *)(b + 7), sizeof v);
+        if (isfinite(v) && v > 1.0) { base->oy = v; base->oy_valid = 1; }
+    }
+    if (rows > 0 && isfinite(base->ch) && base->ch > 1.0) {
         double ch = base->ch - (dt + db) / (double)rows;
         double oy = base->oy + dt;
         if (isfinite(ch) && isfinite(oy) && ch > 1.0) {
@@ -215,7 +260,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
             if (cur != ch) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
             uintptr_t oybox = ld_hm_oy_box(x28, x26);
             uintptr_t leftbox = ld_hm_ptr(cfg, 0x3b, x28);
-            if (oybox) {
+            if (oybox && base->oy_valid) {
                 double cury = 0;
                 __builtin_memcpy(&cury, (const void *)(oybox + 7), sizeof cury);
                 if (cury != oy) __builtin_memcpy((void *)(oybox + 7), &oy, sizeof oy);
@@ -230,7 +275,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     /* 指示器底边距：GridController.workspaceIndicatorMarginBottom = hotSeatsMarginBottom()
      * + cfg+0x4b，再减去 getEditIndicatorMarginBottom。改 cfg+0x4b 即整条链路跟着动。 */
     double di = o->indicator_y;
-    if (di != 0.0 && isfinite(base->ind)) {
+    if (isfinite(base->ind)) {
         double ind = base->ind + di;
         if (isfinite(ind)) {
             double cur = 0;
@@ -285,11 +330,7 @@ static void ld_home_margins_install(const struct native_api *api, ld_lib_info *l
     if (state || !api || !api->hook || !lib) return;
     state = 1;
     const struct ld_grid_offsets *lo = &g_home_options.landscape, *po = &g_home_options.portrait;
-    if (lo->horizontal == 0 && lo->top == 0 && lo->bottom == 0 && lo->indicator_y == 0
-            && po->horizontal == 0 && po->top == 0 && po->bottom == 0 && po->indicator_y == 0) {
-        ld_blog("home margin: no offsets, hook skipped");
-        return;
-    }
+    /* 全 0 也要装：hook 负责把基准写回去，否则配置归零后界面会停在上一次的偏移上。 */
     ld_blog("home margin: landscape(h=%.1f t=%.1f b=%.1f ind=%.1f) portrait(h=%.1f t=%.1f b=%.1f ind=%.1f)",
             lo->horizontal, lo->top, lo->bottom, lo->indicator_y,
             po->horizontal, po->top, po->bottom, po->indicator_y);
