@@ -121,6 +121,7 @@ internal fun ModernSettingsScaffold(
     // render nodes only attach during active gestures. No third capture layer.
     val touchBackdrop = if (glassEnabled) backgroundLayer else null
     val safeModeActive = rememberSafeModeActive()
+    val safeModeContext = androidx.compose.ui.platform.LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
     val activeOverlayBackdrop = if (glassEnabled) overlayBackdrop else null
     // Header and bottom navigation share the captured background + content.
@@ -250,7 +251,11 @@ internal fun ModernSettingsScaffold(
                     Column(Modifier.fillMaxSize()) {
                         if (safeModeActive) {
                             SafeModeBanner(
-                                onExit = { Os4SafeMode.exit() },
+                                onExit = {
+                                    if (Os4SafeMode.exit()) {
+                                        LiquidDockRestart.pullHomeForward(safeModeContext)
+                                    }
+                                },
                                 modifier = Modifier.padding(top = padding.calculateTopPadding()),
                             )
                         }
