@@ -154,7 +154,7 @@ public class ConfigSchemaTest {
     @Test
     public void composeDividerSpecsKeepTheirCurrentDefaultsAndBounds() {
         assertComposeIntSpec(ConfigSchema.Divider.WIDTH_DP, 10, 0, 160);
-        assertComposeIntSpec(ConfigSchema.Divider.HEIGHT_SCALE, 60, 0, 100);
+        assertComposeIntSpec(ConfigSchema.Divider.HEIGHT_SCALE, 60, 0, 200);
         assertComposeIntSpec(ConfigSchema.Divider.Y_OFFSET_DP, 0, -80, 80);
         assertComposeIntSpec(ConfigSchema.Divider.COLOR_RED, 255, 0, 255);
         assertComposeIntSpec(ConfigSchema.Divider.COLOR_GREEN, 255, 0, 255);

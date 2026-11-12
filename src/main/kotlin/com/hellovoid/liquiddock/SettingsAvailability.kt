@@ -49,6 +49,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
         private val OS4_TESTING_PAGES = setOf(
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
             Page.Dock, Page.DockBehavior, Page.DockGeometry,
+            Page.Divider,
             Page.Liquid, Page.LiquidMaterial, Page.LiquidRefraction,
             Page.LiquidColor, Page.LiquidLighting, Page.LiquidShadow,
             Page.LiquidSampling, Page.GlassEdge,
