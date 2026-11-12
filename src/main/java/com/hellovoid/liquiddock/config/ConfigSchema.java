@@ -220,7 +220,7 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> WIDTH_DP = integer(
                 "dock_divider_width_dp", 10, null, 0, 0, 160, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> HEIGHT_SCALE = integer(
-                "dock_divider_height_scale", 60, null, 0, 0, 100, ConfigKey.ExportMode.IF_PRESENT);
+                "dock_divider_height_scale", 60, null, 0, 0, 200, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> Y_OFFSET_DP = integer(
                 "dock_divider_y_offset", 0, null, 0, -80, 80, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Integer> COLOR_RED = integer(

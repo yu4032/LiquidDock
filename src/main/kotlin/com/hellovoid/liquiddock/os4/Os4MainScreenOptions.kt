@@ -44,7 +44,7 @@ data class Os4DividerOptions(
     val alpha: Int = 128,
 ) {
     internal fun isValid(): Boolean =
-        widthDp in 0..160 && heightScale in 0..100 && yOffsetDp in -80..80 &&
+        widthDp in 0..160 && heightScale in 0..200 && yOffsetDp in -80..80 &&
             listOf(colorR, colorG, colorB, alpha).all { it in 0..255 }
 }
 
@@ -102,6 +102,13 @@ data class Os4MainScreenOptions(
             add(WidgetComponentStore.SELECTION_KEY)
             add(ConfigSchema.Dock.ENABLED.name())
             dockKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
+            add(ConfigSchema.Divider.ENABLED.name())
+            listOf(
+                ConfigSchema.Divider.WIDTH_DP, ConfigSchema.Divider.HEIGHT_SCALE,
+                ConfigSchema.Divider.Y_OFFSET_DP, ConfigSchema.Divider.COLOR_RED,
+                ConfigSchema.Divider.COLOR_GREEN, ConfigSchema.Divider.COLOR_BLUE,
+                ConfigSchema.Divider.ALPHA,
+            ).forEach { add(it.name()); add("${it.name()}_tenths") }
         }
 
         /** Empty means disabled; null means corrupt active settings and must clear stale state. */
@@ -112,6 +119,15 @@ data class Os4MainScreenOptions(
                 if (values.containsKey(key.name())) values[key.name()] as Int else key.uiDefault()
             fun string(key: ConfigKey<String>): String =
                 if (values.containsKey(key.name())) values[key.name()] as String else key.uiDefault()
+            /** divider 的 dp×10 值：优先 _tenths；旧键值本身即 dp×10；否则用 DP_TENTHS 默认。 */
+            fun dp10(key: ConfigKey<Int>): Int {
+                val tenths = "${key.name()}_tenths"
+                return when {
+                    values.containsKey(tenths) -> values[tenths] as Int
+                    values.containsKey(key.name()) -> values[key.name()] as Int
+                    else -> key.uiDefault()
+                }
+            }
             fun dp(key: ConfigKey<Int>): Double {
                 val tenths = "${key.name()}_tenths"
                 val value = if (values.containsKey(tenths)) (values[tenths] as Int) / 10.0
@@ -125,6 +141,7 @@ data class Os4MainScreenOptions(
                 val grid = boolean(ConfigSchema.Grid.ENABLED)
                 val icons = boolean(ConfigSchema.Grid.ICON_SIZE_ENABLED)
                 val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
+                val dividerEnabled = boolean(ConfigSchema.Divider.ENABLED)
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
                 val glassIcons = glassEnabled && boolean(ConfigSchema.Glass.ICON_GLASS)
                 val glassWidgets = glassEnabled && boolean(ConfigSchema.Glass.WIDGET_GLASS)
@@ -133,7 +150,7 @@ data class Os4MainScreenOptions(
                     Os4NativeGlassOptions.parse(string(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES))
                         ?: return null
                 } else emptyMap()
-                if (!grid && !icons && !dockEnabled && !glassEnabled && !widgetOverrides) ""
+                if (!grid && !icons && !dockEnabled && !dividerEnabled && !glassEnabled && !widgetOverrides) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
                         enabled = true,
@@ -158,10 +175,10 @@ data class Os4MainScreenOptions(
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),
                             dock = if (dockEnabled) dockOptions() else Os4DockOptions(),
                             divider = Os4DividerOptions(
-                                enabled = boolean(ConfigSchema.Divider.ENABLED),
-                                widthDp = integer(ConfigSchema.Divider.WIDTH_DP),
+                                enabled = dividerEnabled,
+                                widthDp = dp10(ConfigSchema.Divider.WIDTH_DP),
                                 heightScale = integer(ConfigSchema.Divider.HEIGHT_SCALE),
-                                yOffsetDp = integer(ConfigSchema.Divider.Y_OFFSET_DP),
+                                yOffsetDp = dp10(ConfigSchema.Divider.Y_OFFSET_DP),
                                 colorR = integer(ConfigSchema.Divider.COLOR_RED),
                                 colorG = integer(ConfigSchema.Divider.COLOR_GREEN),
                                 colorB = integer(ConfigSchema.Divider.COLOR_BLUE),
