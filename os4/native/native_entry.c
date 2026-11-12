@@ -5,15 +5,6 @@
 #include "superellipse_blur.h"
 #include "glass_superellipse.h"
 #include "layout_margins_write.h"
-#include "dock_divider.h"
-#include "divider_size_hook.h"
-#include "divider_tag_swap.h"
-#include "dock_glass_probe.h"
-#include "divider_factory_probe.h"
-#include "divider_skip_probe.h"
-#include "hotseat_item_probe.h"
-#include "divider_draw_probe.h"
-#include "dock_material_skip.h"
 #include "process_gate.h"
 #include "sha256_region.h"
 
@@ -622,15 +613,6 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);
     ld_layout_margins_write_install(api,&lib);
-    ld_dock_divider_install(api,&lib);
-    ld_divider_size_install(api,&lib);
-    ld_divider_tag_swap_install(api,&lib);
-    ld_dock_glass_probe_install(api,&lib);
-    ld_divider_factory_probe_install(api,&lib);
-    ld_divider_skip_install(api,&lib);
-    ld_hotseat_item_probe_install(api,&lib);
-    ld_divider_draw_probe_install(api);
-    ld_dock_material_skip_install(api);
     ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
         LOGE("libapp.so identity cross-check failed");
