@@ -70,6 +70,10 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 internal val ModernPreferenceMargin = PaddingValues(horizontal = 18.dp, vertical = 14.dp)
 internal const val SETTINGS_UI_PREFS = "liquiddock_settings_ui"
 internal const val SETTINGS_UI_GLASS_ENABLED = "glass_effect_enabled"
+// 从桌面图标（ACTION_MAIN/CATEGORY_LAUNCHER）启动会开新任务，Compose 的
+// rememberSaveable 拿不到上次状态；页面位置持久化到 uiPrefs 才能回到原页。
+internal const val SETTINGS_UI_LAST_PAGE = "settings_last_page"
+internal const val SETTINGS_UI_NAV_STACK = "settings_nav_stack"
 internal const val SETTINGS_UI_THEME_PALETTE = "theme_palette"
 
 // Flat header blur uses the same Prismal source as the bottom navigation.

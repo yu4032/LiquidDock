@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -121,8 +122,25 @@ private fun LiquidDockSettings(
         )
     }
     val availability = LocalSettingsAvailability.current
-    var page by rememberSaveable { mutableStateOf(Page.Home) }
-    var navigationStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    var page by rememberSaveable {
+        mutableStateOf(
+            uiPrefs.getString(SETTINGS_UI_LAST_PAGE, null)
+                ?.let { name -> runCatching { Page.valueOf(name) }.getOrNull() } ?: Page.Home,
+        )
+    }
+    var navigationStack by rememberSaveable {
+        mutableStateOf(
+            ArrayList(
+                (uiPrefs.getString(SETTINGS_UI_NAV_STACK, "") ?: "")
+                    .split('\u0001')
+                    .filter { it.isNotBlank() && runCatching { Page.valueOf(it) }.isSuccess },
+            ),
+        )
+    }
+    LaunchedEffect(page) { uiPrefs.edit().putString(SETTINGS_UI_LAST_PAGE, page.name).apply() }
+    LaunchedEffect(navigationStack) {
+        uiPrefs.edit().putString(SETTINGS_UI_NAV_STACK, navigationStack.joinToString("\u0001")).apply()
+    }
     // Saved navigation from another Launcher build must never expose unsupported controls.
     val visiblePage = if (availability.allows(page)) page else Page.Home
     val root = isRootPage(visiblePage)
