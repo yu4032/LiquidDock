@@ -1,4 +1,19 @@
 #include "native_api.h"
+#include "superellipse.h"
+#include "dart_superellipse.h"
+#include "widget_resize.h"
+#include "superellipse_blur.h"
+#include "glass_superellipse.h"
+#include "layout_margins_write.h"
+#include "dock_divider.h"
+#include "divider_size_hook.h"
+#include "divider_tag_swap.h"
+#include "dock_glass_probe.h"
+#include "divider_factory_probe.h"
+#include "divider_skip_probe.h"
+#include "hotseat_item_probe.h"
+#include "divider_draw_probe.h"
+#include "dock_material_skip.h"
 #include "process_gate.h"
 #include "sha256_region.h"
 
@@ -170,6 +185,16 @@ static void load_grid_config(void)
 
     g_grid_cols = conf.cols;
     g_grid_rows = conf.rows;
+    /* 规范为「横屏语义」（列 >= 行）。PadRowCol wrapper 会按方向转置：
+     * 竖屏得到 (rows, cols)，横屏得到 (cols, rows)。若 GUI 在竖屏保存了 4x8，
+     * 这里补一次转置，避免横屏变成 8 行 4 列被切页。 */
+    if (g_grid_cols < g_grid_rows) {
+        int swapped = g_grid_cols;
+        g_grid_cols = g_grid_rows;
+        g_grid_rows = swapped;
+        ld_blog("grid config normalized to landscape canonical %dx%d (was %dx%d)",
+                g_grid_cols, g_grid_rows, conf.cols, conf.rows);
+    }
     g_home_options=conf;
     LOGI("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     ld_blog("grid config %dx%d source=%s", conf.cols, conf.rows, source);
@@ -593,6 +618,20 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_widget_inventory_reset_once();
     (void)ld_maml_install(api);
     ld_install_os4_glass(api,&lib);
+    ld_widget_resize_install(api,&lib);
+    ld_superellipse_blur_install();
+    ld_glass_superellipse_install(api);
+    ld_layout_margins_write_install(api,&lib);
+    ld_dock_divider_install(api,&lib);
+    ld_divider_size_install(api,&lib);
+    ld_divider_tag_swap_install(api,&lib);
+    ld_dock_glass_probe_install(api,&lib);
+    ld_divider_factory_probe_install(api,&lib);
+    ld_divider_skip_install(api,&lib);
+    ld_hotseat_item_probe_install(api,&lib);
+    ld_divider_draw_probe_install(api);
+    ld_dock_material_skip_install(api);
+    ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
         LOGE("libapp.so identity cross-check failed");
         ld_blog("libapp.so identity cross-check failed");
@@ -740,6 +779,7 @@ static void on_library_loaded(const char *name, void *handle)
     if(name) {
         const char *base=strrchr(name,'/'); base=base?base+1:name;
         if(!strcmp(base,"libapp.so") || !strcmp(base,"libapp_launcher.so")) install_grid_hook(g_api);
+        else if(!strcmp(base,"libhyper_os_flutter.so")) ld_glass_superellipse_install(g_api);
         else if(!strcmp(base,"librust_maml_sdk.so")) {
             pthread_mutex_lock(&g_install_lock);
             ld_widget_inventory_reset_once();
@@ -816,5 +856,6 @@ on_library_loaded_t native_init(struct native_api *api)
     load_grid_config();
     ld_prepare_native_glass();
     install_grid_hook(api);
+    ld_superellipse_install(api);
     return on_library_loaded;
 }

@@ -44,6 +44,17 @@ static void *g_orig_dock_background __attribute__((used));
 static void *g_orig_dock_spacing __attribute__((used));
 __attribute__((used)) static void ld_observe_dock_background(struct ld_dart_context *c)
 {
+    /* 实验 B：只隐藏 Dock 背景（宽高置 0），保留布局与图标。 */
+    if (access("/data/user_de/0/com.miui.home/files/liquiddock-dockbg-hide", F_OK) == 0) {
+        uintptr_t params=c->x[2],size=ld_heap_pointer(c,params,7);
+        if(!size) return;
+        double zero=0.0;
+        memcpy((void *)(size+7),&zero,8); memcpy((void *)(size+0xf),&zero,8);
+        static unsigned hide_logs;
+        if(__atomic_fetch_add(&hide_logs,1u,__ATOMIC_RELAXED)<3)
+            ld_blog("dockbg-hide: params=%p size=%p forced 0x0",(void*)params,(void*)size);
+        return;
+    }
     if(g_home_options.dock.width==0 && g_home_options.dock.height==0 && g_home_options.dock.corner==0) return;
     if(!ld_dock_active(c)) return;
     uintptr_t params=c->x[2],size=ld_heap_pointer(c,params,7);
