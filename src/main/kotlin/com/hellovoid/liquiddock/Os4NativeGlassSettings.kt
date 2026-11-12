@@ -23,12 +23,29 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 
+/**
+ * 按柔光玻璃模型的分节渲染原生字段：`sections` 为 (小节标题 -> 字段 id 列表)，
+ * 字段按 id 从 `Os4NativeGlassOptions.fields` 取出。`sections` 为空时按原分组渲染。
+ */
 internal fun LazyListScope.os4NativeGlassSettings(
     prefs: SharedPreferences,
     enabled: Boolean,
+    sections: List<Pair<String, List<String>>>? = null,
 ) {
-    Os4NativeGlassOptions.groups.forEach { (group, fields) ->
-        item(key = "os4-native-glass-title:$group") { SmallTitle(group) }
+    if (sections == null) {
+        Os4NativeGlassOptions.groups.forEach { (group, fields) ->
+            item(key = "os4-native-glass-title:$group") { SmallTitle(group) }
+            items(fields, key = Os4NativeGlassOptions.Field::id) { field ->
+                Os4NativeGlassFieldSetting(prefs, field, enabled)
+            }
+        }
+        return
+    }
+    val byId = Os4NativeGlassOptions.fields.associateBy(Os4NativeGlassOptions.Field::id)
+    sections.forEach { (title, ids) ->
+        val fields = ids.mapNotNull(byId::get)
+        if (fields.isEmpty()) return@forEach
+        item(key = "os4-native-glass-title:$title") { SmallTitle(title) }
         items(fields, key = Os4NativeGlassOptions.Field::id) { field ->
             Os4NativeGlassFieldSetting(prefs, field, enabled)
         }

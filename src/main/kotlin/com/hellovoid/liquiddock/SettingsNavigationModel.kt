@@ -28,10 +28,8 @@ internal enum class Page(val titleRes: Int) {
 
     Liquid(R.string.page_liquid),
     LiquidMaterial(R.string.page_liquid_material),
-    LiquidRefraction(R.string.page_liquid_refraction),
     LiquidColor(R.string.page_liquid_color),
     LiquidLighting(R.string.page_liquid_lighting),
-    LiquidShadow(R.string.page_liquid_shadow),
     GlassEdge(R.string.page_glass_edge),
     DockEdge(R.string.page_glass_edge),
     IconEdge(R.string.page_glass_edge),
@@ -145,12 +143,9 @@ internal val workstationEntries = listOf(
 )
 
 internal val liquidEntries = listOf(
-    HubEntry(Page.LiquidMaterial, R.string.page_liquid_material, "模糊、厚度、透射率与亮度"),
-    HubEntry(Page.LiquidRefraction, R.string.page_liquid_refraction, "折射、法线、穹顶与位移"),
-    HubEntry(Page.LiquidColor, R.string.page_liquid_color, "底色、色散与鲜艳度"),
-    HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "高光、焦散、OS4 边缘反射与方向光"),
-    HubEntry(Page.GlassEdge, R.string.page_glass_edge, "Prismal 外阴影与光学描边，仅液态玻璃开启时生效"),
-    HubEntry(Page.LiquidShadow, R.string.page_liquid_shadow, "玻璃内部阴影颜色与柔和度"),
+    HubEntry(Page.LiquidMaterial, R.string.page_liquid_material, "模糊、厚度、透射率、折射率与边缘轮廓"),
+    HubEntry(Page.LiquidColor, R.string.page_liquid_color, "亮度、染色、底色、色散、色调曲线与内阴影"),
+    HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "高光、焦散、反射、光源方向、外阴影与描边"),
     HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "背景缩放、帧率与帧同步"),
 )
 

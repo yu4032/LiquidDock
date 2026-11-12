@@ -20,7 +20,7 @@
     <string name="page_divider">Dock 分隔线</string>
     <string name="page_workstation">自定义工作台</string>
     <string name="page_recents">多任务</string>
-    <string name="page_liquid">液态玻璃</string>
+    <string name="page_liquid">柔光玻璃</string>
     <string name="page_sidebar_glass">侧边栏玻璃</string>
     <string name="page_soft_glass">柔光玻璃参数</string>
     <string name="page_security_center_sidebar">安全中心侧边栏</string>
@@ -109,10 +109,10 @@
     <string name="page_glass_edge">阴影</string>
     <string name="page_shortcut_popup">快捷菜单自定义</string>
     <string name="page_handle_menu">顶部菜单自定义</string>
-    <string name="page_liquid_material">材质基础</string>
+    <string name="page_liquid_material">材质与折射</string>
     <string name="page_liquid_refraction">折射</string>
-    <string name="page_liquid_color">颜色与色散</string>
-    <string name="page_liquid_lighting">高光与光照</string>
+    <string name="page_liquid_color">色彩与阴影</string>
+    <string name="page_liquid_lighting">光影与描边</string>
     <string name="page_liquid_shadow">内阴影</string>
     <string name="page_liquid_sampling">采样与性能</string>
     <string name="page_animation_workspace">工作区与 Dock</string>

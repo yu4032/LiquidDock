@@ -490,6 +490,16 @@ internal val liquidSamplingGroups = listOf(
         ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE),
 )
 
+/**
+ * 柔光玻璃模型：材质决定光怎么进出（模糊/厚度/折射/轮廓），色彩决定显色与阴影
+ * （亮度/染色/底色/色散/色调曲线/内阴影），光影决定光的来源与边缘（高光/焦散/
+ * 反射/光源/外阴影描边），采样决定渲染开销。四个子页按这套模型归并参数。
+ */
+internal val liquidSoftLightMaterialGroups = liquidMaterialGroups.filter { it.title == "玻璃主体" } + liquidRefractionGroups
+internal val liquidSoftLightColorGroups = liquidMaterialGroups.filter { it.title == "亮度" } + liquidColorGroups + liquidShadowGroups
+internal val liquidSoftLightLightingGroups = liquidLightingGroups + liquidOs4Groups
+internal val liquidSoftLightSamplingGroups = liquidSamplingGroups
+
 /** Shared ordering for the global pages and all per-component "全部参数" pages. */
 internal val liquidAllGroups: List<LiquidSpecGroup> by lazy {
     (liquidMaterialGroups + liquidRefractionGroups + liquidColorGroups +
