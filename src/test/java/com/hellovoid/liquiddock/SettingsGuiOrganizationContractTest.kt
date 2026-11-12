@@ -10,8 +10,8 @@ class SettingsGuiOrganizationContractTest {
     private val declared get() = declaredSettingsPages { "resource:$it" }
 
     private val declaredRoutes = setOf(
-        Page.LiquidMaterial, Page.LiquidRefraction, Page.LiquidColor,
-        Page.LiquidLighting, Page.LiquidShadow, Page.LiquidSampling,
+        Page.LiquidMaterial, Page.LiquidColor,
+        Page.LiquidLighting, Page.LiquidSampling,
         Page.DockGeometry, Page.DockBehavior, Page.GridSplit,
         Page.GridLandscape, Page.GridPortrait,
         Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,

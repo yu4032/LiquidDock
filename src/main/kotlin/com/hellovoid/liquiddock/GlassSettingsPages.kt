@@ -58,36 +58,35 @@ internal fun LiquidPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.ENABLED,
-                    stringResource(R.string.liquid_enable),
-                    if (os4Launcher) "启用或关闭原生玻璃后重启桌面生效。"
+                    if (os4Launcher) "开启自定义" else stringResource(R.string.liquid_enable),
+                    if (os4Launcher) "开启后自定义桌面原生玻璃的参数；重启桌面生效。"
                     else stringResource(R.string.liquid_enable_summary),
                     masterEnabled,
                 ) { liquidGlass = it }
             }
         }
-        if (os4Launcher) {
-            os4NativeGlassSettings(prefs, masterEnabled && liquidGlass)
-        } else {
+        if (!os4Launcher) {
             item(key = "continuous-glass-corners") {
                 SettingsCard {
                     BooleanSetting(
                         prefs,
                         ConfigSchema.Glass.CONTINUOUS_CORNERS,
                         "iPadOS 风格连续圆角",
-                        "替换所有液态玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
+                        "替换所有柔光玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
                         masterEnabled && liquidGlass,
                     )
                 }
             }
-            liquidEntries.forEach { entry ->
-                item {
-                    ModernFeatureCard(
-                        title = stringResource(entry.titleRes),
-                        summary = entry.summary,
-                        onClick = { open(entry.page) },
-                        modifier = Modifier.padding(horizontal = 14.dp),
-                    )
-                }
+        }
+        // 柔光玻璃按功能分为子页面；OS4 与非 OS4 共用同一套入口。
+        liquidEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
             }
         }
         item {

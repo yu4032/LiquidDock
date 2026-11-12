@@ -50,8 +50,8 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
             Page.Dock, Page.DockBehavior, Page.DockGeometry,
             Page.Divider,
-            Page.Liquid, Page.LiquidMaterial, Page.LiquidRefraction,
-            Page.LiquidColor, Page.LiquidLighting, Page.LiquidShadow,
+            Page.Liquid, Page.LiquidMaterial,
+            Page.LiquidColor, Page.LiquidLighting,
             Page.LiquidSampling, Page.GlassEdge,
             Page.GlassIcons, Page.GlassWidgets, Page.WidgetComponents,
         )

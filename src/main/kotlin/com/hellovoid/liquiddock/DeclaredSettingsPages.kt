@@ -4,6 +4,32 @@ import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
 
 /** These declarations are consumed both by the page renderer and search. */
+/**
+ * OS4 原生玻璃字段按柔光玻璃模型分节：材质决定光怎么进出，色彩决定显色与阴影，
+ * 光影决定光的来源与边缘；采样页不承载原生字段。
+ */
+internal val liquidNativeSections: Map<Page, List<Pair<String, List<String>>>> = mapOf(
+    Page.LiquidMaterial to listOf(
+        "模糊与厚度" to listOf("blur_background", "blur_refract", "thickness_px"),
+        "折射与轮廓" to listOf("ior", "edge_px", "edge_pow"),
+    ),
+    Page.LiquidColor to listOf(
+        "颜色与透明度" to listOf("glass_r", "glass_g", "glass_b", "glass_a", "alpha"),
+        "色调与饱和度" to listOf("unshade", "color_pow", "saturation", "brightness",
+            "bg_saturation", "bg_brightness"),
+        "暗部与亮度曲线" to listOf("darker", "darker_low", "darker_high", "luminance_amount",
+            "luminance_c0", "luminance_c1", "luminance_c2", "luminance_c3"),
+        "内层阴影" to listOf("inner_white", "inner_mix", "burn"),
+    ),
+    Page.LiquidLighting to listOf(
+        "光源" to listOf("light_x", "light_y", "light_z", "light_intensity", "light_opposite",
+            "light_range", "light_edge_pow"),
+        "反射与内光" to listOf("reflection_strength", "reflection_lighten", "inner_bottom",
+            "reflect_offset_px"),
+    ),
+    Page.LiquidSampling to emptyList(),
+)
+
 internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMeta> = buildMap {
     val glass = listOf(ConfigSchema.Glass.ENABLED to true)
     val dock = listOf(ConfigSchema.Dock.ENABLED to true)
@@ -25,14 +51,18 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     fun groups(groups: List<LiquidSpecGroup>): List<SettingsBlock> = groups.flatMapIndexed { i, group ->
         listOf(SettingsBlock.Header("group.$i", group.title)) + group.specs.map { row(it) }
     }
-    page(Page.LiquidMaterial, "控制玻璃主体的基础材质感", groups(liquidMaterialGroups), glass)
-    page(Page.LiquidRefraction, "折射形状、位移、边缘衰减与表面几何", groups(liquidRefractionGroups), glass)
-    page(Page.LiquidColor, "染色保留背景纹理，底色可纯色覆盖；另可调整色散与饱和度", groups(liquidColorGroups), glass)
-    page(Page.LiquidShadow, "玻璃内部阴影颜色与柔和程度", groups(liquidShadowGroups), glass)
-    page(Page.LiquidLighting, "调节焦散、菲涅尔反射与光源方向，并集中调整 OS4 边缘反射和方向光。",
-        groups(liquidLightingGroups + liquidOs4Groups), glass)
-    page(Page.LiquidSampling, "调整背景缩放、PassBlur 渲染分辨率与实时刷新上限。采样保护区由渲染器自动计算。",
-        groups(liquidSamplingGroups) + listOf(
+    page(Page.LiquidMaterial, "玻璃本体与几何：模糊、厚度、透射率、折射率、法线位移与边缘轮廓。",
+        groups(liquidSoftLightMaterialGroups), glass)
+    page(Page.LiquidColor, "显色与阴影：亮度、染色、底色透明度、色散、饱和度、色调曲线与内阴影。",
+        groups(liquidSoftLightColorGroups), glass)
+    page(Page.LiquidLighting, "光的来源与边缘：高光、焦散、菲涅尔反射、光源方向、OS4 反射、外阴影与描边。",
+        groups(liquidSoftLightLightingGroups) + listOf(
+            SettingsBlock.Header("lighting.edge", "外阴影与描边"),
+            SettingsBlock.Link("lighting.edge.scope", text(R.string.page_glass_edge),
+                "Prismal 外阴影与光学描边，按作用域（Dock、图标、小组件…）独立调整", Page.GlassEdge),
+        ), glass)
+    page(Page.LiquidSampling, "渲染开销：背景缩放、视差、实时采样帧率与调试显示。",
+        groups(liquidSoftLightSamplingGroups) + listOf(
             SettingsBlock.Header("sampling.performance", "实时背景采样与帧同步"),
             row(passBlurCaptureScaleSpec), row(passBlurRenderFpsSpec),
             toggle(ConfigSchema.Dock.FRAME_SYNC, text(R.string.dock_frame_sync), text(R.string.dock_frame_sync_summary)),
