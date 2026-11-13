@@ -1,6 +1,7 @@
 package com.hellovoid.liquiddock.os4
 
 import com.hellovoid.liquiddock.config.ConfigSchema
+import com.hellovoid.liquiddock.WidgetComponentStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,6 +30,30 @@ class Os4GlassConfigTest {
                 "icon_size_percent=100\nend=1\n",
             result,
         )
+    }
+
+    @Test fun widgetHiddenNodesAreSuspendedWhenGlassIsDisabled() {
+        val selection = setOf("M2\\tos4:demo:widget_2x2\\thide")
+        val enabled = mapOf<String, Any>(
+            ConfigSchema.Dock.ENABLED.name() to false,
+            ConfigSchema.Glass.ENABLED.name() to true,
+            ConfigSchema.Glass.WIDGET_GLASS.name() to true,
+            WidgetComponentStore.SELECTION_KEY to selection,
+        )
+        val on = Os4MainScreenOptions.fromPreferences(enabled)
+        assertTrue(on != null && on.contains("glass_widgets=1\\n"))
+        assertTrue(on != null && on.contains("widget_overrides=1\\n"))
+
+        val off = Os4MainScreenOptions.fromPreferences(
+            enabled + (ConfigSchema.Glass.WIDGET_GLASS.name() to false)
+        )
+        assertTrue(off != null && !off.contains("glass_widgets=1\\n"))
+        assertTrue(off != null && !off.contains("widget_overrides=1\\n"))
+
+        val globalOff = Os4MainScreenOptions.fromPreferences(
+            enabled + (ConfigSchema.Glass.ENABLED.name() to false)
+        )
+        assertEquals("", globalOff)
     }
 
     @Test fun defaultDoesNotForceVendorMaterial() {
