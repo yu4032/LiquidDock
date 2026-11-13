@@ -145,7 +145,7 @@ data class Os4MainScreenOptions(
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
                 val glassIcons = glassEnabled && boolean(ConfigSchema.Glass.ICON_GLASS)
                 val glassWidgets = glassEnabled && boolean(ConfigSchema.Glass.WIDGET_GLASS)
-                val widgetOverrides = glassWidgets && selectedOs4MamlWidget(values[WidgetComponentStore.SELECTION_KEY])
+                val widgetOverrides = selectedOs4MamlWidget(values[WidgetComponentStore.SELECTION_KEY])
                 val nativeGlassOverrides = if (glassEnabled) {
                     Os4NativeGlassOptions.parse(string(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES))
                         ?: return null
