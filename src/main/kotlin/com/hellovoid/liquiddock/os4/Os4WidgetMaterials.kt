@@ -99,6 +99,7 @@ object Os4WidgetMaterials {
             (preferences.all[WidgetComponentStore.SELECTION_KEY] as? Set<*>)
                 ?.filterIsInstance<String>()?.toSet().orEmpty()
         } catch (_: Throwable) { emptySet() }
+        val active = preferences.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault())
         val glass = isGlassRequested(preferences)
         val sourceState = state.getString(SOURCES, "").orEmpty()
         val fingerprint = sha256(("permissions-v2\ntransform=" + TRANSFORM_VERSION + "\n" + sourceState + "\nselected=" + selected.sorted().joinToString("\n") +
