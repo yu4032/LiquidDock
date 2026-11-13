@@ -132,13 +132,7 @@ internal fun GridBasicsPage(
         padding,
         stringResource(R.string.page_grid_basics),
         "调整网格行列数、图标大小与小组件宽度。",
-        focusItemIndex = searchFocus?.let {
-            customDenseFocusIndex(Page.GridBasics, it.key)?.let { index ->
-                // The in-flight status card is inserted ahead of widget layout.
-                if (gridCheckPending && it.key == ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name())
-                    index + 1 else index
-            }
-        },
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GridBasics, it.key) },
         focusSequence = searchFocus?.sequence,
     ) {
         item(key = "grid-icon-heading") { SmallTitle("图标大小") }
@@ -238,19 +232,6 @@ internal fun GridBasicsPage(
                         fontSize = 13.sp,
                     )
                 }
-            }
-        }
-
-        item(key = "grid-widget-stretch-heading") { SmallTitle("小组件布局") }
-        item(key = "grid-widget-stretch") {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH,
-                    "小组件随水平边距拉伸",
-                    "多列小组件随水平距离偏移调整宽度；关闭时保持原尺寸并居中；1×1 始终不拉伸；重启桌面后生效",
-                    masterEnabled && customGrid,
-                )
             }
         }
     }

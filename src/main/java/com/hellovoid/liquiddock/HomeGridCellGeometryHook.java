@@ -119,61 +119,7 @@ final class HomeGridCellGeometryHook {
 
     static int widgetHorizontalSpanDeltaPx(
             View spanOwner, int spanX, WidgetWidthFrame frame) {
-        HomeGridInstallConfig current = installConfig;
-        if (spanOwner == null || current == null || !current.enabled
-                || !current.widgetHorizontalStretch || spanX <= 1
-                || MainHook.isWorkstationMode()) {
-            return 0;
-        }
-
-        View cellLayoutView = spanOwner;
-        for (int depth = 0; cellLayoutView != null && depth < 4; depth++) {
-            if ("com.miui.home.launcher.CellLayout".equals(
-                    cellLayoutView.getClass().getName())) {
-                break;
-            }
-            android.view.ViewParent parent = cellLayoutView.getParent();
-            cellLayoutView = parent instanceof View ? (View) parent : null;
-        }
-        if (cellLayoutView == null
-                || !"com.miui.home.launcher.CellLayout".equals(
-                        cellLayoutView.getClass().getName())) {
-            return 0;
-        }
-
-        try {
-            boolean portrait = spanOwner.getResources().getConfiguration().orientation
-                    == Configuration.ORIENTATION_PORTRAIT;
-            WidgetGridBaseline grid = frame != null ? frame.grids.get(cellLayoutView) : null;
-            if (grid == null || grid.portrait != portrait) {
-                if (frame != null) frame.gridReads++;
-                grid = readWidgetGridBaseline(cellLayoutView, current, portrait);
-                // Do not memoize failed/unknown OEM state: fail open on
-                // a second node even if the vendor changes it mid-traversal.
-                if (frame != null && grid != null) frame.grids.put(cellLayoutView, grid);
-            } else if (frame != null) {
-                frame.gridHits++;
-            }
-            if (grid == null) return 0;
-
-            // Never share the actual widget span or frame bounds: native resize
-            // and drag can change these between separate nodes in one traversal.
-            long baselineAllocation = (long) grid.cellSize * spanX
-                    + (long) Math.max(0, spanX - 1) * grid.widthGap;
-            int horizontalInset = 0;
-            ViewGroup.LayoutParams lp = spanOwner.getLayoutParams();
-            if (lp instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) lp;
-                horizontalInset = Math.max(0, margins.leftMargin)
-                        + Math.max(0, margins.rightMargin);
-            }
-            int baselineFrameWidth = (int) Math.max(
-                    1L, Math.min(Integer.MAX_VALUE, baselineAllocation - horizontalInset));
-            return LauncherWidgetGlassGeometryPolicy.horizontalWidthDelta(
-                    spanX, spanOwner.getWidth(), baselineFrameWidth);
-        } catch (Throwable ignored) {
-            return 0;
-        }
+        return 0;
     }
 
     private static WidgetGridBaseline readWidgetGridBaseline(

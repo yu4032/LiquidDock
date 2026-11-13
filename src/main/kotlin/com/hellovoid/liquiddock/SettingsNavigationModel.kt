@@ -103,7 +103,7 @@ internal val layoutEntries = listOf(
 internal val glassEntries = listOf(
     HubEntry(Page.SoftGlass, R.string.page_soft_glass, "OS4 系统桌面原生柔光玻璃参数"),
     HubEntry(Page.SoftGlassComponents, R.string.page_soft_glass_components, "桌面图标与小组件柔光玻璃"),
-    HubEntry(Page.Liquid, R.string.page_liquid, "液态玻璃材质与光学参数（其他 Hook 应用）"),
+    HubEntry(Page.Liquid, R.string.page_liquid, "暂仅支持分屏菜单和侧边栏；材质与光学参数"),
     HubEntry(Page.AnimationSystem, R.string.page_animation_system, "通知与控制中心顶部模糊、系统手势手柄联动"),
     HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用适配"),
 )

@@ -93,7 +93,6 @@ class SettingsMetaTest {
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
             launcher450IconSizeSpec.key,
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.ENABLED.name(),
-            com.hellovoid.liquiddock.config.ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH.name(),
         ) + gridDimensionSpecs.map { it.key }
         assertEquals(expected, rows.map { it.key }.toSet())
         rows.forEach { assertTrue(customDenseFocusIndex(Page.GridBasics, it.key) != null) }

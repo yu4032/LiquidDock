@@ -21,7 +21,6 @@
  *   icon_size_enabled=0|1; icon_size_percent=80..120 (缺省100)
  *   glass_enabled=0|1
  *   glass_native_<field>=decimal (逐项原生参数，缺键保留系统值)
- *   widget_horizontal_stretch=0|1
  *   grid_{landscape,portrait}_{horizontal_distance,top_distance,bottom_distance}=-600..600 dp
  *   grid_{landscape,portrait}_row_gap=-200..400 dp
  *   indicator_{landscape,portrait}_y=-160..160 dp
@@ -69,7 +68,7 @@ struct ld_dock_conf {
 struct ld_grid_conf {
     int cols;   /* 0 = 不改（缺键）；否则 [LD_GRID_COLS_MIN, LD_GRID_COLS_MAX] */
     int rows;   /* 0 = 不改（缺键）；否则 [LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX] */
-    int icon_size_enabled, icon_size_percent, widget_horizontal_stretch;
+    int icon_size_enabled, icon_size_percent;
     struct ld_grid_offsets landscape, portrait;
     struct ld_dock_conf dock;
     int glass_enabled;
@@ -414,7 +413,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     done = 1;                            /* 必须是最后一行 */
                 } else {
                     static const char *const keys[] = {
-                        "icon_size_enabled", "icon_size_percent", "widget_horizontal_stretch",
+                        "icon_size_enabled", "icon_size_percent",
                         "grid_landscape_horizontal_distance", "grid_landscape_top_distance",
                         "grid_landscape_bottom_distance", "grid_landscape_row_gap",
                         "grid_portrait_horizontal_distance", "grid_portrait_top_distance",
@@ -436,12 +435,11 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     int valid;
                     if (i == 0) valid = ld_grid_parse_bool01(val, &c.icon_size_enabled);
                     else if (i == 1) valid = ld_grid_parse_int(val, 80, 120, &c.icon_size_percent);
-                    else if (i == 2) valid = ld_grid_parse_bool01(val, &c.widget_horizontal_stretch);
                     else {
                         double v;
                         double lo = -600, hi = 600;
-                        if (i == 6 || i == 10) { lo = -200; hi = 400; }
-                        if (i >= 11) { lo = -160; hi = 160; }
+                        if (i == 5 || i == 9) { lo = -200; hi = 400; }
+                        if (i >= 10) { lo = -160; hi = 160; }
                         /* Signed decimal (including Double.toString's exponent form).
                          * No whitespace, hex, NaN or infinity. */
                         const char *q = val;
@@ -462,7 +460,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         }
                         valid = syntax && *q == '\0' && ld_grid_parse_double(val, &v)
                                 && v >= lo && v <= hi;
-                        if (valid) *offsets[i - 3] = v;
+                        if (valid) *offsets[i - 2] = v;
                     }
                     if (!valid) { bad = 1; break; }
                     seen |= 128u << i;

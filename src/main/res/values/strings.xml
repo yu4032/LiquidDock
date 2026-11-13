@@ -81,7 +81,7 @@
     <string name="liquid_material_blur">HyperOS advanced material</string>
     <string name="liquid_dynamic_capture">Continuous capture for dynamic apps</string>
     <string name="liquid_dynamic_capture_summary">Refreshes while the Dock is open over games or video, and stops immediately after it closes</string>
-    <string name="liquid_header_summary">Component switches and optics update live in installed hooks; newly required hooks or structural changes may still require a restart of the affected scope.</string>
+    <string name="liquid_header_summary">Currently only split-screen menus and the sidebar are supported; component switches and optics update live in installed hooks, while newly required hooks or structural changes may still require a restart of the affected scope.</string>
     <string name="page_launcher_highlights">Icon, folder &amp; widget highlights</string>
     <string name="launcher_highlights_entry">Icon, folder &amp; widget highlight layers</string>
     <string name="launcher_highlights_entry_summary">Control the glass highlight layers used by workspace icons, folders, and widgets</string>

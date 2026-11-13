@@ -135,21 +135,21 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
             && ld_read_heap(item_info + 0xfb, &item_flags, 1)
             && (config_flags & 0x10) && (item_flags & 0x10);
 
-    if((!g_home_options.widget_horizontal_stretch || span==1) && special_phone
+    if(special_phone
             && !memcmp(&base->cell_width,&current_width,sizeof current_width)
             && !memcmp(&base->cell_height,&current_height,sizeof current_height)
             && !memcmp(&base->icon_size,&current_icon,sizeof current_icon)) return;
 
     double desired = 0;
     if (!ld_home_widget_width(base, span, current_width,
-                g_home_options.widget_horizontal_stretch, special_phone, &desired)) return;
+                0, special_phone, &desired)) return;
     if (!g_home_widget_allocate) return;
     memcpy(&c->q[0][0], &desired, sizeof desired);
     c->reserved = g_home_widget_allocate;
     static unsigned widget_hits = 0;
     if (__atomic_fetch_add(&widget_hits, 1u, __ATOMIC_RELAXED) < 5u) {
-        ld_blog("home widget: span=%lld width=%.2f (base=%.2f) stretch=%d",
-                (long long)span, desired, base->cell_width, g_home_options.widget_horizontal_stretch);
+        ld_blog("home widget: span=%lld width=%.2f (base=%.2f)",
+                (long long)span, desired, base->cell_width);
     }
 }
 

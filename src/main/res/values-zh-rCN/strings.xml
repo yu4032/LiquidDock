@@ -79,7 +79,7 @@
     <string name="liquid_material_blur">HyperOS 高级材质</string>
     <string name="liquid_dynamic_capture">动态应用持续捕获</string>
     <string name="liquid_dynamic_capture_summary">游戏或视频中 Dock 展开时持续刷新；Dock 收起后立即停止</string>
-    <string name="liquid_header_summary">组件开关与光学参数在已加载的 Hook 中可实时更新；新增未安装的 Hook 或结构性设置仍需重启对应作用域。</string>
+    <string name="liquid_header_summary">暂仅支持分屏菜单和侧边栏；组件开关与光学参数在已加载的 Hook 中可实时更新，新增未安装的 Hook 或结构性设置仍需重启对应作用域。</string>
     <string name="page_launcher_highlights">图标、文件夹与小组件高光</string>
     <string name="launcher_highlights_entry">图标、文件夹与小组件高光层</string>
     <string name="launcher_highlights_entry_summary">控制工作区图标、文件夹与小组件玻璃使用的高光层</string>

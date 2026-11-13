@@ -52,7 +52,6 @@ data class Os4DividerOptions(
 data class Os4MainScreenOptions(
     val iconSizeEnabled: Boolean = false,
     val iconSizePercent: Int = 100,
-    val widgetHorizontalStretch: Boolean = false,
     val landscape: Os4GridOffsets = Os4GridOffsets(),
     val portrait: Os4GridOffsets = Os4GridOffsets(),
     val dock: Os4DockOptions = Os4DockOptions(),
@@ -91,8 +90,7 @@ data class Os4MainScreenOptions(
             addAll(listOf(ConfigSchema.Core.ENABLED, ConfigSchema.Grid.ENABLED,
                 ConfigSchema.Grid.NATIVE_HOOK_SAFETY,
                 ConfigSchema.Grid.COLUMNS, ConfigSchema.Grid.ROWS,
-                ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
-                ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH).map { it.name() })
+                ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT).map { it.name() })
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Glass.ENABLED.name())
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
@@ -174,7 +172,6 @@ data class Os4MainScreenOptions(
                         Os4MainScreenOptions(
                             iconSizeEnabled = icons,
                             iconSizePercent = if (icons) integer(ConfigSchema.Grid.ICON_SIZE_PERCENT) else 100,
-                            widgetHorizontalStretch = grid && boolean(ConfigSchema.Grid.WIDGET_HORIZONTAL_STRETCH),
                             landscape = if (grid) offsets(0) else Os4GridOffsets(),
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),
                             dock = if (dockEnabled) dockOptions() else Os4DockOptions(),

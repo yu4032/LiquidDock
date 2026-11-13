@@ -55,8 +55,6 @@ object Os4NativeConfPublisher {
             if (options.widgetOverrides) append("widget_overrides=1\n")
             append("icon_size_percent=").append(options.iconSizePercent).append('\n')
             if (grid) {
-                append("widget_horizontal_stretch=")
-                    .append(if (options.widgetHorizontalStretch) 1 else 0).append('\n')
                 fun offsets(direction: String, offsets: Os4GridOffsets) {
                     append("grid_${direction}_horizontal_distance=").append(offsets.horizontal).append('\n')
                     append("grid_${direction}_top_distance=").append(offsets.top).append('\n')
