@@ -134,6 +134,9 @@ __attribute__((used)) static void ld_observe_flutter_view(struct ld_dart_context
         uint32_t dart_null = (uint32_t)c->x[22];
         memcpy((void *)(props + g_rv_props_bg_override_off), &dart_null, 4);
         memcpy((void *)(props + g_rv_props_bg_default_off), &dart_null, 4);
+        if (g_rv_props_bg_override_off >= 8) {
+            memcpy((void *)(props + g_rv_props_bg_override_off - 8), &dart_null, 4);
+        }
     }
 }
 
