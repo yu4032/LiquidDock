@@ -1009,8 +1009,7 @@ static void on_library_loaded(const char *name, void *handle)
         if(!strcmp(base,"libapp.so") || !strcmp(base,"libapp_launcher.so")) install_grid_hook(g_api);
         else if(!strcmp(base,"libhyper_os_flutter.so")) {
             ld_glass_superellipse_install(g_api);
-            ld_passblur_light_install(g_api);
-        ld_glass_filter_hook_install(g_api);
+            ld_glass_filter_hook_install(g_api);
         }
         else if(!strcmp(base,"librust_maml_sdk.so")) {
             pthread_mutex_lock(&g_install_lock);

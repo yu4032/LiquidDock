@@ -162,61 +162,6 @@ static void ld_icon_adjust_radius_site(struct ld_dart_context *c,unsigned site)
 __attribute__((used)) static void ld_icon_adjust_radius(struct ld_dart_context *c) { ld_icon_adjust_radius_site(c,0); }
 __attribute__((used)) static void ld_icon_adjust_radius_b(struct ld_dart_context *c) { ld_icon_adjust_radius_site(c,1); }
 
-/* SceneBuilder::pushPassBlurLight (libhyper_os_flutter.so). The stock icon material is
- * PassBlurBackgroundLight; its blur radius (w3) and ARGB tint list (x5, Int32List of
- * (color, aux) pairs) are rewritten here from the native_glass customization. */
-typedef uintptr_t (*ld_pbl_fn)(void*,void*,void*,int32_t,void*,void*,int32_t,int32_t,
-    double,double,double,double,double,double,double,double,void*);
-static ld_pbl_fn g_orig_pbl;
-static bool (*g_pbl_is_null)(void *h);
-static void (*g_pbl_acquire)(void *h, int32_t *type, void **data, int64_t *len);
-
-static inline bool ld_ng_has(unsigned i){return (g_home_options.native_glass.mask>>i)&1;}
-
-static uintptr_t ld_pbl_hook(void*x0,void*x1,void*x2,int32_t w3,void*x4,void*x5,int32_t w6,int32_t w7,
-    double d0,double d1,double d2,double d3,double d4,double d5,double d6,double d7,void*stk)
-{
-    static unsigned calls;
-    unsigned n=__atomic_fetch_add(&calls,1u,__ATOMIC_RELAXED);
-    if(g_home_options.glass_enabled && g_home_options.glass_icons && g_home_options.native_glass.mask){
-        int32_t orig_r=w3;
-        if(ld_ng_has(23)){ double v=g_home_options.native_glass.values[23]; if(v>=1.0) w3=(int32_t)v; }
-        else if(ld_ng_has(22)){ double v=g_home_options.native_glass.values[22]; if(v>=1.0) w3=(int32_t)v; }
-        bool tint=ld_ng_has(15)||ld_ng_has(16)||ld_ng_has(17)||ld_ng_has(18);
-        uint32_t *pairs=NULL; int64_t len=0;
-        if(x5 && g_pbl_is_null && g_pbl_acquire && !g_pbl_is_null(x5)){
-            int32_t type=0; void *data=NULL;
-            g_pbl_acquire(x5,&type,&data,&len);
-            if(type==6 && data && len>0 && len<=64 && (len&1)==0) pairs=(uint32_t*)data;
-        }
-        if(pairs){
-            if(n<6){
-                ld_blog("PBL[%u] r=%d->%d len=%lld p0=(%08x,%08x) p1=(%08x,%08x) tint=%d",n,orig_r,w3,(long long)len,
-                    pairs[0],pairs[1],len>2?pairs[2]:0,len>2?pairs[3]:0,tint);
-            }
-            if(tint) for(int64_t i=0;i+1<len;i+=2){
-                uint32_t c=pairs[i];
-                uint32_t a=c>>24,r=(c>>16)&255,g=(c>>8)&255,b=c&255;
-                if(ld_ng_has(15)) r=(uint32_t)(g_home_options.native_glass.values[15]*255.0+0.5);
-                if(ld_ng_has(16)) g=(uint32_t)(g_home_options.native_glass.values[16]*255.0+0.5);
-                if(ld_ng_has(17)) b=(uint32_t)(g_home_options.native_glass.values[17]*255.0+0.5);
-                if(ld_ng_has(18)) a=(uint32_t)(g_home_options.native_glass.values[18]*255.0+0.5);
-                if(r>255)r=255; if(g>255)g=255; if(b>255)b=255; if(a>255)a=255;
-                pairs[i]=(a<<24)|(r<<16)|(g<<8)|b;
-            }
-        } else if(n<3) ld_blog("PBL[%u] r=%d->%d (no tint list)",n,orig_r,w3);
-    }
-    return g_orig_pbl(x0,x1,x2,w3,x4,x5,w6,w7,d0,d1,d2,d3,d4,d5,d6,d7,stk);
-}
-
-static uintptr_t ld_decode_bl(uintptr_t at)
-{
-    uint32_t w=*(uint32_t*)at;
-    if((w&0xfc000000u)!=0x94000000u) return 0;
-    int32_t imm=(int32_t)((w&0x03ffffffu)<<6)>>6;
-    return at+((intptr_t)imm<<2);
-}
-
 static bool ld_resolve_so(const char *lib_substr, ld_lib_info *out)
 {
     memset(out, 0, sizeof *out);
@@ -253,31 +198,6 @@ static bool ld_resolve_so(const char *lib_substr, ld_lib_info *out)
     bool ok = ld_verify_load_layout(out, segs, nsegs);
     free(segs);
     return ok;
-}
-
-static void ld_passblur_light_install(const struct native_api *api)
-{
-    static bool installed;
-    if (installed || !api || !api->hook || !g_home_options.glass_enabled || !g_home_options.glass_icons) return;
-    ld_lib_info lib = {0};
-    if (!ld_resolve_so("libhyper_os_flutter.so", &lib) || !lib.elf_base) return;
-    static const uint32_t pat[8] = {
-        0xd10683ffu, 0x6d122bebu, 0x6d1323e9u, 0xa9147bfdu,
-        0xa9156ffcu, 0xa91667fau, 0xa9175ff8u, 0xa91857f6u,
-    };
-    uintptr_t target = ld_find_aot_pattern(&lib, 0xea7624u, pat, 8);
-    if (!target) { ld_blog("pushPassBlurLight pattern not found"); return; }
-    uintptr_t isnull = ld_decode_bl(target + 0x68);
-    uintptr_t acquire = ld_decode_bl(target + 0x84);
-    if (!isnull || !acquire) { ld_blog("pushPassBlurLight helper decode failed"); return; }
-    g_pbl_is_null = (bool (*)(void *))isnull;
-    g_pbl_acquire = (void (*)(void *, int32_t *, void **, int64_t *))acquire;
-    void *backup = NULL;
-    if (api->hook((void *)target, (void *)ld_pbl_hook, &backup) == 0 && backup) {
-        g_orig_pbl = (ld_pbl_fn)backup;
-        installed = true;
-        ld_blog("pushPassBlurLight hook installed at %p isnull=%p acquire=%p", (void *)target, (void*)isnull, (void*)acquire);
-    }
 }
 
 LD_DART_OBSERVER(repl_icon_glass_enabled,ld_icon_force_folder_flag,g_orig_icon_glass_enabled)
