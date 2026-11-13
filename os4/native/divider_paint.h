@@ -128,7 +128,7 @@ static void ld_dp_load_cfg(void)
                         /* 与主解析器同语义：非法/重复的分隔线字段使整份分隔线配置无效。 */
                         if (!bad) ld_blog("divider: conf invalid at %s", line);
                         bad = 1;
-                        continue;
+                        break;
                     }
                     int v = (int)strtol(eq + 1, NULL, 10);
                     switch (idx) {
@@ -452,7 +452,6 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
     ld_dp_load_cfg();
     if (!g_dp_cfg.enabled && access(LD_DP_MARKER, F_OK) != 0) {
         ld_blog("divider: disabled in conf; hooks skipped");
-        state = 2;
         return;
     }
     static const uint32_t inner_pat[8] = {

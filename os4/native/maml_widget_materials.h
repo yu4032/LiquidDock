@@ -155,6 +155,7 @@ static int ld_widget_map_load(void)
         for(size_t i=0;i<g_widget_map_count;i++) if(!strcmp(g_widget_map[i].source,c)){ok=0;break;}
         if(!ok) break;
         struct ld_widget_map_entry *e=&g_widget_map[g_widget_map_count++];
+        e->verified=0;
         memcpy(e->source_hash,a,65); memcpy(e->shadow_hash,b,65);
         memcpy(e->source,c,strlen(c)+1); memcpy(e->shadow,d,strlen(d)+1);
     }
@@ -366,13 +367,19 @@ static int ld_maml_install(const struct native_api *api)
         ld_blog("MAML target %p not executable (strict=%d)", (void *)target, strict);
         return 0;
     }
-    /* 函数体摘要只记日志（门禁已取消）：按符号解析不存在陈旧偏移风险。 */
     if(ld_read_heap(target,body,sizeof body)) {
         struct ld_sha256 sha; ld_sha256_init(&sha); ld_sha256_update(&sha,body,sizeof body); ld_sha256_final(&sha,digest);
         ld_maml_hex(digest,hex);
-        ld_blog("MAML init_maml body %s%s", hex, strcmp(hex,LD_MAML_INIT_SHA)?" (differs from pin)":"");
+        int body_mismatch=strcmp(hex,LD_MAML_INIT_SHA)!=0;
+        ld_blog("MAML init_maml body %s%s", hex, body_mismatch?" (differs from pin)":"");
+        if(strict && body_mismatch) {
+            ld_blog("MAML strict mode: refusing init_maml hook on body mismatch");
+            return 0;
+        }
+    } else if(strict) {
+        ld_blog("MAML strict mode: unreadable init_maml body");
+        return 0;
     }
-    (void)strict;
     void *backup=NULL; int rc=api->hook((void*)target,(void*)ld_maml_init_replacement,&backup);
     if(rc || !backup) { ld_blog("MAML init hook failed result=%d",rc); return 0; }
     g_maml_init_original=(void(*)(const void*))backup;

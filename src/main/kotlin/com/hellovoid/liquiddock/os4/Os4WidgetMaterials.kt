@@ -118,7 +118,7 @@ object Os4WidgetMaterials {
                 val key = sha256((TRANSFORM_VERSION + "\n" + source.sha + "\n" + paths.sorted().joinToString("\n") + "\nglass=$glass").toByteArray())
                 val shadow = File(cache, "$key.zip")
                 val outputSha = state.getString(CACHE_PREFIX + key, null)
-                if (!shadow.exists() || outputSha == null || sha256(shadow.readBytes()) != outputSha) {
+                val outSha = if (!shadow.exists() || outputSha == null || sha256(shadow) != outputSha) {
                     val changed = Os4MamlArchive.rewrite(
                         Os4MamlArchive.FileLike(source.file), Os4MamlArchive.FileLike(shadow), paths, glass,
                     )
@@ -126,9 +126,10 @@ object Os4WidgetMaterials {
                         shadow.delete()
                         continue
                     }
-                    state.edit().putString(CACHE_PREFIX + key, sha256(shadow.readBytes())).apply()
+                    sha256(shadow).also { state.edit().putString(CACHE_PREFIX + key, it).apply() }
+                } else {
+                    outputSha
                 }
-                val outSha = sha256(shadow.readBytes())
                 published += Published(source, outSha, shadow)
             }
             if (published.isEmpty()) {
