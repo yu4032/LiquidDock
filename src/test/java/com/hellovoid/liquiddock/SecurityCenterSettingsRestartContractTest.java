@@ -84,8 +84,10 @@ public class SecurityCenterSettingsRestartContractTest {
                 MAIN.resolve("java/com/hellovoid/liquiddock/HookScopeRestartShell.java"));
 
         assertTrue(activity.contains("void restartHookScopes(Set<String> scopes)"));
-        assertTrue(activity.contains("HookScopeRestartShell.buildScript(selected, diagnostic)"));
-        assertTrue(activity.contains("HookScopeRestartShell.parseResults("));
+        assertTrue(activity.contains("LiquidDockRestart.requestLauncher(this)"));
+        assertTrue(activity.contains("remaining.remove(\"com.miui.home\")"));
+        assertTrue(activity.contains("HookScopeRestartShell.buildScript(remaining, diagnostic)"));
+        assertTrue(activity.contains("HookScopeRestartShell.parseResults(\n                        remaining, stdout.toString())"));
         assertTrue(activity.contains("new InputStreamReader(p.getInputStream()"));
         assertTrue(shell.contains("am force-stop com.miui.home"));
         assertTrue(shell.contains("restart_running com.miui.securitycenter com.miui.securitycenter:ui"));

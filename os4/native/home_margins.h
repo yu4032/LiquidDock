@@ -31,7 +31,6 @@
 #define LD_HM_CC_VADDR 0xb47388u   /* GridController.currentConfig */
 #define LD_HM_VERTICAL 1           /* 竖直：cellH 收缩 + GridController+0xeb 的 originY */
 
-static unsigned char g_hm_cc_save[64] __attribute__((aligned(16), used));
 static void *g_hm_cc_orig __attribute__((used));
 static volatile unsigned g_hm_cc_calls __attribute__((used));
 
@@ -290,35 +289,33 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
 __attribute__((naked, used)) static void ld_hm_cc_hook(void)
 {
     __asm__ volatile(
-        "adrp x16, g_hm_cc_save\n"
-        "add  x16, x16, :lo12:g_hm_cc_save\n"
-        "str  x15, [x16, #8]\n"
-        "str  x30, [x16, #16]\n"
-        "str  x28, [x16, #40]\n"
-        "str  x27, [x16, #48]\n"
-        "str  x26, [x16, #56]\n"
+        "sub  x15, x15, #64\n"
+        "str  x19, [x15, #0]\n"
+        "add  x16, x15, #64\n"
+        "str  x16, [x15, #8]\n"
+        "str  x30, [x15, #16]\n"
         "mov  x17, sp\n"
-        "str  x17, [x16, #32]\n"
+        "str  x17, [x15, #32]\n"
+        "str  x28, [x15, #40]\n"
+        "str  x27, [x15, #48]\n"
+        "str  x26, [x15, #56]\n"
         "adrp x17, g_hm_cc_orig\n"
         "ldr  x17, [x17, :lo12:g_hm_cc_orig]\n"
         "cbz  x17, 1f\n"
         "blr  x17\n"
         "1:\n"
-        "adrp x17, g_hm_cc_save\n"
-        "add  x17, x17, :lo12:g_hm_cc_save\n"
-        "str  x0, [x17, #24]\n"
+        "str  x0, [x15, #24]\n"
+        "mov  x19, x15\n"
         "sub  x17, x15, #1024\n"
         "and  x17, x17, #0xfffffffffffffff0\n"
         "mov  sp, x17\n"
-        "adrp x0, g_hm_cc_save\n"
-        "add  x0, x0, :lo12:g_hm_cc_save\n"
+        "mov  x0, x15\n"
         "bl   ld_hm_cc_post\n"
-        "adrp x17, g_hm_cc_save\n"
-        "add  x17, x17, :lo12:g_hm_cc_save\n"
-        "ldr  x16, [x17, #32]\n"
+        "ldr  x16, [x19, #32]\n"
         "mov  sp, x16\n"
-        "ldr  x15, [x17, #8]\n"
-        "ldr  x30, [x17, #16]\n"
+        "ldr  x30, [x19, #16]\n"
+        "add  x15, x19, #64\n"
+        "ldr  x19, [x19, #0]\n"
         "ret\n");
 }
 

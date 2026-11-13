@@ -303,7 +303,7 @@ public class SettingsActivity extends AppCompatActivity {
                     throw new IOException("root shell failed (code " + p.exitValue() + ")");
                 }
                 Map<String, String> outcomes = HookScopeRestartShell.parseResults(
-                        selected, stdout.toString());
+                        remaining, stdout.toString());
                 if (diagnostic) ((LiquidDockApp) getApplication()).logScopedRestart(
                         "UI_RESULT|" + outcomes);
                 // No confirmation dialog for successful restarts. Only surface
