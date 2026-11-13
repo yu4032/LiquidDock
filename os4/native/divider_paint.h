@@ -11,7 +11,7 @@
  * 识别分隔符：painter+0xc -> decoration，decoration+8 -> color，
  *            与内层闭包 PP[0xd4a30] 的厂商 const Color 比较。
  *
- * 门控：/data/user_de/0/com.miui.home/files/liquiddock-divider
+ * 门控：dock_divider_enabled=1；绘制 Hook 始终预装，关闭时不执行修改。
  * 配置：liquiddock-native.conf（键必须写在 end=1 之前）
  *        dock_divider_width        线宽 dp（>0 生效，默认厂商 1.0）
  *        dock_divider_height_scale 高度百分比（>0 生效）
@@ -40,7 +40,6 @@
 #include "dart_observer.h"
 #include "aot_scanner.h"
 
-#define LD_DP_MARKER "/data/user_de/0/com.miui.home/files/liquiddock-divider-force"
 #define LD_DP_CONF   "/data/user/0/com.miui.home/files/liquiddock-native.conf"
 #define LD_DP_CONF_EARLY "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
 
@@ -59,6 +58,7 @@ struct ld_dp_cfg {
 };
 static struct ld_dp_cfg g_dp_cfg = {0, -1, -1, 0, -1, -1, -1, -1, 0, 0, 0};
 static pthread_mutex_t g_dp_cfg_lock = PTHREAD_MUTEX_INITIALIZER;
+static int g_dp_enabled_fast;  /* atomic publication for disabled paint hot path */
 static volatile unsigned g_dp_reload_ticks;
 static uint64_t g_dp_const_color;
 static volatile unsigned g_dp_hits, g_dp_rect_writes, g_dp_color_writes;
@@ -109,6 +109,7 @@ static void ld_dp_load_cfg_locked(int force)
     if (!f) {
         ld_blog("divider: conf missing; restoring factory divider");
         g_dp_cfg = c;
+        __atomic_store_n(&g_dp_enabled_fast, 0, __ATOMIC_RELEASE);
         return;
     }
     size_t n = fread(buf, 1, sizeof buf - 1, f);
@@ -170,6 +171,7 @@ static void ld_dp_load_cfg_locked(int force)
     c.stamp = sec;
     c.stamp_ns = nsec;
     g_dp_cfg = c;
+    __atomic_store_n(&g_dp_enabled_fast, c.enabled, __ATOMIC_RELEASE);
     ld_blog("divider: cfg enabled=%d w=%d(0.1dp) h%%=%d y=%d(0.1dp) rgb=%d,%d,%d a=%d",
             c.enabled, c.width_dp10, c.height_pct, c.y_offset_dp10,
             c.color_r, c.color_g, c.color_b, c.alpha);
@@ -338,10 +340,13 @@ static void *g_dp_bg_orig __attribute__((used));
 
 __attribute__((used)) static void ld_dp_bg_cb(struct ld_dart_context *c)
 {
+    /* Most users leave divider customization off; avoid mutexes and stats
+     * on every box/background paint. The config poller publishes the flag. */
+    if (!__atomic_load_n(&g_dp_enabled_fast, __ATOMIC_ACQUIRE)) return;
     ld_dp_maybe_reload();
     struct ld_dp_cfg cfg = ld_dp_cfg_snapshot();
     if (!cfg.enabled) return;
-    if (!g_dp_const_color) return;
+    if (!__atomic_load_n(&g_dp_const_color, __ATOMIC_ACQUIRE)) return;
     uintptr_t heap = (uintptr_t)((uint64_t)c->x[28] << 32);
     uintptr_t painter = (uintptr_t)c->x[1] & ~(uintptr_t)1;
     uintptr_t rectp = (uintptr_t)c->x[3] & ~(uintptr_t)1;
@@ -414,7 +419,7 @@ __attribute__((naked, used)) static void name(void) { \
 __attribute__((used)) static void ld_dp_gp_post(struct ld_dart_context *c, uintptr_t result)
 {
     (void)result;
-    if (!g_dp_const_color) return;
+    if (!__atomic_load_n(&g_dp_const_color, __ATOMIC_ACQUIRE)) return;
     uintptr_t heap = (uintptr_t)(((const uint64_t *)c)[31] << 32);
     uintptr_t painter = (uintptr_t)c->x[1] & ~(uintptr_t)1;
     uintptr_t rectp = (uintptr_t)c->x[3] & ~(uintptr_t)1;
@@ -457,6 +462,7 @@ LD_DART_OBSERVER(repl_dp_inner, ld_dp_inner_cb, g_dp_inner_orig)
 static void ld_dp_hook(const struct native_api *api, ld_lib_info *lib, uintptr_t vaddr,
                        const char *tag, void *repl, void **orig)
 {
+    if (*orig) return;
     uintptr_t fn = 0;
     if (!ld_vaddr_to_runtime(lib, vaddr, &fn)) {
         ld_blog("divider: %s vaddr 0x%lx not mapped", tag, (unsigned long)vaddr);
@@ -467,7 +473,6 @@ static void ld_dp_hook(const struct native_api *api, ld_lib_info *lib, uintptr_t
         ld_blog("divider: %s prologue mismatch at %p", tag, (void *)fn);
         return;
     }
-    if (*orig) return;
     /* Reserve the executable COW page BEFORE patching. On this launcher,
      * an unpinned inline hook can disappear after a file-page discard.
      * Do not treat ENOMEM as success (unlike the best-effort legacy policy). */
