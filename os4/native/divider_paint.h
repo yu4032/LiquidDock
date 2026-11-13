@@ -454,16 +454,24 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
         ld_blog("divider: disabled in conf; hooks skipped");
         return;
     }
-    static const uint32_t inner_pat[8] = {
+    static const uint32_t inner_pat[24] = {
         0xa9bf79fdu, 0xaa0f03fdu, 0xd10101efu, 0xf9400ba0u,
         0xb8417002u, 0x8b1c8042u, 0xf81f83a2u, 0xb840b040u,
+        0x8b1c8000u, 0xb840f001u, 0x8b1c8021u, 0xb8407020u,
+        0x8b1c8000u, 0xaa0003e1u, 0x97db6ebfu, 0x37200080u,
+        0x91435361u, 0xf944a421u, 0x14000013u, 0xf85f83a0u,
+        0xb840f001u, 0x8b1c8021u, 0x97daeb15u, 0xb841f001u,
     };
-    static const uint32_t bg_pat[8] = {
+    static const uint32_t bg_pat[24] = {
         0xa9bf79fdu, 0xaa0f03fdu, 0xd10081efu, 0xaa0303e0u,
         0xf81e83a3u, 0xaa0503e3u, 0xf81e03a5u, 0xaa0103e5u,
+        0xaa0203e4u, 0xf81f83a1u, 0xf81f03a2u, 0xb840b0a1u,
+        0x8b1c8021u, 0xb8407022u, 0x8b1c8042u, 0x6b16005fu,
+        0x540000a1u, 0xb841b022u, 0x8b1c8042u, 0x6b16005fu,
+        0x540001e0u, 0xaa0503e1u, 0xaa0003e2u, 0x940000c9u,
     };
-    uintptr_t fn_inner = ld_find_aot_pattern(lib, 0x18893ccu, inner_pat, 8);
-    if (!fn_inner) fn_inner = ld_find_aot_pattern(lib, 0x188aa7cu, inner_pat, 8);
+    uintptr_t fn_inner = ld_find_aot_pattern(lib, 0x18893ccu, inner_pat, 24);
+    if (!fn_inner) fn_inner = ld_find_aot_pattern(lib, 0x188aa7cu, inner_pat, 24);
     if (fn_inner) {
         const uint32_t *w = (const uint32_t *)fn_inner;
         for (int k = 0; k < 30; k++) {
@@ -477,8 +485,8 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
         }
         ld_dp_hook(api, lib, fn_inner - lib->elf_base, "inner", (void *)repl_dp_inner, &g_dp_inner_orig);
     }
-    uintptr_t fn_bg = ld_find_aot_pattern(lib, 0x15af7b4u, bg_pat, 8);
-    if (!fn_bg) fn_bg = ld_find_aot_pattern(lib, 0x17493b8u, bg_pat, 8);
+    uintptr_t fn_bg = ld_find_aot_pattern(lib, 0x15af7b4u, bg_pat, 24);
+    if (!fn_bg) fn_bg = ld_find_aot_pattern(lib, 0x17493b8u, bg_pat, 24);
     if (fn_bg) {
         ld_dp_hook(api, lib, fn_bg - lib->elf_base, "bgPaint", (void *)repl_dp_bg, &g_dp_bg_orig);
     }
