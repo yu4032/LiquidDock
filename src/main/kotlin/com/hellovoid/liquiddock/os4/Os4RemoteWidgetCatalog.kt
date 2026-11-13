@@ -68,17 +68,29 @@ object Os4RemoteWidgetCatalog {
 
         val pm = app.packageManager
         val resCache = HashMap<String, android.content.res.Resources?>()
-        val labelCache = HashMap<String, String>()
+        val appLabelCache = HashMap<String, String>()
+        val providerLabelCache = HashMap<ComponentName, String>()
+        val pkgProviderCount = idToProvider.values.groupBy { it.packageName }.mapValues { it.value.distinct().size }
         val catalog = LinkedHashSet<String>()
         for (v in views) {
             val cn = idToProvider[v.appWidgetId] ?: continue
             val pkg = cn.packageName
-            val owner = "$OWNER_PREFIX$pkg"
-            val appLabel = labelCache.getOrPut(pkg) {
+            val owner = "$OWNER_PREFIX${cn.flattenToShortString()}"
+            val appLabel = appLabelCache.getOrPut(pkg) {
                 runCatching {
                     val ai = pm.getApplicationInfo(pkg, 0)
                     pm.getApplicationLabel(ai).toString()
                 }.getOrDefault(pkg)
+            }
+            val ownerLabel = providerLabelCache.getOrPut(cn) {
+                val pLabel = runCatching {
+                    pm.getReceiverInfo(cn, 0).loadLabel(pm).toString().trim()
+                }.getOrDefault("")
+                when {
+                    pLabel.isNotEmpty() && pLabel != appLabel -> "$appLabel · $pLabel"
+                    (pkgProviderCount[pkg] ?: 0) > 1 -> "$appLabel · ${cn.className.substringAfterLast('.')}"
+                    else -> appLabel
+                }
             }
             val res = resCache.getOrPut(pkg) {
                 runCatching { pm.getResourcesForApplication(pkg) }.getOrNull()
@@ -96,7 +108,7 @@ object Os4RemoteWidgetCatalog {
                 "FlutterView",
                 v.viewId.toString(),
                 type,
-                appLabel,
+                ownerLabel,
             ) ?: continue
             catalog += desc.encodeCatalog()
         }
@@ -112,12 +124,14 @@ object Os4RemoteWidgetCatalog {
         } catch (_: Throwable) { emptySet() }
 
         val mapRaw = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(ID_MAP_KEY, "").orEmpty()
+        val providerToIds = LinkedHashMap<String, MutableList<Int>>()
         val pkgToIds = LinkedHashMap<String, MutableList<Int>>()
         for (line in mapRaw.lineSequence()) {
             val p = line.split('\t')
             if (p.size != 2) continue
             val wid = p[0].toIntOrNull() ?: continue
             val cn = ComponentName.unflattenFromString(p[1]) ?: continue
+            providerToIds.getOrPut(cn.flattenToShortString()) { ArrayList() } += wid
             pkgToIds.getOrPut(cn.packageName) { ArrayList() } += wid
         }
 
@@ -125,9 +139,15 @@ object Os4RemoteWidgetCatalog {
         for (encoded in selected) {
             val d = WidgetComponentStore.parseSelector(encoded) ?: continue
             if (!d.isRemoteViews || !d.owner.startsWith(OWNER_PREFIX)) continue
-            val pkg = d.owner.removePrefix(OWNER_PREFIX)
+            val ownerKey = d.owner.removePrefix(OWNER_PREFIX)
             val viewId = d.hierarchyPath.toIntOrNull() ?: continue
-            for (wid in pkgToIds[pkg].orEmpty()) {
+            val targetIds = if (ownerKey.contains('/')) {
+                val normalized = ComponentName.unflattenFromString(ownerKey)?.flattenToShortString() ?: ownerKey
+                providerToIds[normalized].orEmpty()
+            } else {
+                pkgToIds[ownerKey].orEmpty()
+            }
+            for (wid in targetIds) {
                 lines += "$wid\t$viewId"
             }
         }
