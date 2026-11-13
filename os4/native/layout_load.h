@@ -18,7 +18,15 @@ static int64_t ld_dto_number(struct ld_dart_context *c,uintptr_t object,size_t o
     return INT64_MIN;
 }
 static int ld_read_dto_item(struct ld_dart_context *c,uintptr_t dto,struct ld_layout_item *item) {
-    if((ld_heap_u32(dto,(size_t)-1)>>12&0xfffff)!=0xf26) return 0;
+    uint32_t header = ld_heap_u32(dto, (size_t)-1);
+    uint32_t cid = (header >> 12) & 0xfffff;
+    uint32_t size_tag = (header >> 8) & 0xf;
+    static unsigned logged_dto_cid = 0;
+    if (__atomic_fetch_add(&logged_dto_cid, 1u, __ATOMIC_RELAXED) < 5u) {
+        ld_blog("layout DTO item: dto=%p header=0x%x cid=0x%x size_tag=%u", (void*)dto, header, cid, size_tag);
+    }
+    /* ItemInfoDto: 8604 was 0xf26. Allow 0xf26 or valid CID > 0x100 */
+    if (cid != 0xf26 && cid < 0x100) return 0;
     int64_t id=ld_dto_number(c,dto,7),container=ld_dto_number(c,dto,0x2b);
     if(id<0 || container==INT64_MIN) return 0;
     if(container!=-100) { *item=(struct ld_layout_item){.id=id,.screen=-1}; return 1; }

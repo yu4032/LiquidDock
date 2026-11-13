@@ -20,7 +20,7 @@ object Os4WidgetMaterials {
     private const val SOURCES = "sources_v1"
     private const val PUBLISH_KEY = "publish_key"
     private const val CACHE_PREFIX = "shadow_"
-    private const val TRANSFORM_VERSION = "maml-glass-support-background-blur-v2"
+    private const val TRANSFORM_VERSION = "maml-glass-clock-config-v3"
     private const val CE_PREFIX = "/data/user/0/com.miui.home/files/maml/res/"
     private const val DE_PREFIX = "/data/user_de/0/com.miui.home/files/maml/res/"
     private const val SHADOW_DIR = "/data/user_de/0/com.miui.home/files/liquiddock-widget-shadows"
@@ -245,7 +245,7 @@ object Os4WidgetMaterials {
               n=0
               while IFS= read -r line; do
                 [ "${'$'}line" = DONE ] && break
-                IFS="$(printf "\t")" read -r srcsha outsha src dst size <<EOF
+                IFS="$(printf "\t")" read -r srcsha outsha src dst shadow_src <<EOF
 ${'$'}line
 EOF
                 case "${'$'}srcsha" in *[!a-f0-9]*) exit 23 ;; esac
@@ -255,11 +255,12 @@ EOF
                 case "${'$'}src" in *widget_[1-9]x[1-9]) ;; *) exit 23 ;; esac
                 [ "${'$'}dst" = "${'$'}D/${'$'}outsha.zip" ] || exit 23
                 case "${'$'}src" in *..*|*//*|*[!a-zA-Z0-9_./-]*) exit 23 ;; esac
-                [ "${'$'}{#src}" -le 511 ] && [ "${'$'}size" -le 134217728 ] || exit 24
+                [ "${'$'}{#src}" -le 511 ] || exit 24
                 [ -f "${'$'}src" ] && [ ! -L "${'$'}src" ] || exit 24
                 [ "${'$'}(sha256sum "${'$'}src" | cut -d " " -f 1)" = "${'$'}srcsha" ] || exit 25
+                [ -f "${'$'}shadow_src" ] && [ ! -L "${'$'}shadow_src" ] || exit 24
                 t="${'$'}(mktemp "${'$'}D/.shadow.XXXXXX")"
-                head -c "${'$'}size" > "${'$'}t"
+                cat "${'$'}shadow_src" > "${'$'}t"
                 [ "${'$'}(sha256sum "${'$'}t" | cut -d " " -f 1)" = "${'$'}outsha" ] || exit 26
                 chown "${'$'}U:${'$'}U" "${'$'}t"; chmod 600 "${'$'}t"; restorecon -F "${'$'}t"; mv -f "${'$'}t" "${'$'}dst"
                 printf "%s\t%s\t%s\t%s\n" "${'$'}srcsha" "${'$'}outsha" "${'$'}src" "${'$'}dst" >> "${'$'}ROWS"
@@ -279,11 +280,10 @@ EOF
             out.write("WIDGETS1\n".toByteArray())
             for (item in valid) {
                 val dest = "$SHADOW_DIR/${item.shadowSha}.zip"
-                val size = item.shadow.length()
-                out.write("${item.source.sha}\t${item.shadowSha}\t${item.source.path}\t$dest\t$size\n".toByteArray())
-                item.shadow.inputStream().use { it.copyTo(out) }
+                out.write("${item.source.sha}\t${item.shadowSha}\t${item.source.path}\t$dest\t${item.shadow.absolutePath}\n".toByteArray())
             }
             out.write("DONE\n".toByteArray())
+            out.flush()
         }
         val output = process.inputStream.bufferedReader().readText()
         return process.waitFor(90, TimeUnit.SECONDS) && process.exitValue() == 0 && output.lineSequence().any { it == "RESULT_OK" }

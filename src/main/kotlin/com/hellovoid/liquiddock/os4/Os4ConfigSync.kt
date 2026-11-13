@@ -46,7 +46,12 @@ object Os4ConfigSync {
 
     private fun publishNow(context: Context, reason: String) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        val widgetPublished = Os4WidgetMaterials.publish(context, prefs)
+        var widgetPublished = Os4WidgetMaterials.publish(context, prefs)
+        if (!widgetPublished) {
+            Log.w(TAG, "[$reason] MAML widget override publish returned false; scanning inventory...")
+            Os4WidgetMaterials.scan(context)
+            widgetPublished = Os4WidgetMaterials.publish(context, prefs, force = true)
+        }
         if (!widgetPublished) Log.e(TAG, "[$reason] MAML widget override publish failed")
         val conf = Os4MainScreenOptions.fromPreferences(prefs.all)
         if (conf == null) Log.e(TAG, "[$reason] invalid options; native snapshot cleared")

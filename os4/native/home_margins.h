@@ -26,6 +26,7 @@
 #include "bootlog.h"
 #include "native_api.h"
 #include "lib_base.h"
+#include "aot_scanner.h"
 
 #define LD_HM_CC_VADDR 0xb47388u   /* GridController.currentConfig */
 #define LD_HM_VERTICAL 1           /* 竖直：cellH 收缩 + GridController+0xeb 的 originY */
@@ -95,17 +96,24 @@ static uintptr_t ld_hm_ptr(uintptr_t obj, size_t off, uintptr_t x28)
     return (uintptr_t)v + (x28 << 32);
 }
 
+static uintptr_t g_hm_ctrl_offset = 0;
+
 /* originY 的真值不在 cfg 上：cellToCenterOffset 用的是 GridController 单例的
- * controller+0xeb -> Rx -> (+0x13) 值对象 -> +7。控制器取自 [x26+0x78]+0x27c8。 */
+ * controller+0xeb -> Rx -> (+0x13) 值对象 -> +7。控制器取自 [x26+0x78]+0x27c8 (v8604) / +0x2828 (v9239)。 */
 static uintptr_t ld_hm_oy_box(uintptr_t x28, uintptr_t x26)
 {
     uintptr_t fields = 0, ctrl = 0;
     if (!x26) return 0;
     __builtin_memcpy(&fields, (const void *)(x26 + 0x78), sizeof fields);
     if (!fields) return 0;
-    __builtin_memcpy(&ctrl, (const void *)(fields + 0x27c8), sizeof ctrl);
+    uintptr_t off = g_hm_ctrl_offset ? g_hm_ctrl_offset : 0x27c8u;
+    __builtin_memcpy(&ctrl, (const void *)(fields + off), sizeof ctrl);
+    if (!ctrl && off != 0x2828u) {
+        __builtin_memcpy(&ctrl, (const void *)(fields + 0x2828u), sizeof ctrl);
+    }
     if (!ctrl) return 0;
-    uintptr_t rx = ld_hm_ptr(ctrl, 0xeb, x28);
+    uintptr_t rx = ld_hm_ptr(ctrl, 0xef, x28);
+    if (!rx) rx = ld_hm_ptr(ctrl, 0xeb, x28);
     return rx ? ld_hm_ptr(rx, 0x13, x28) : 0;
 }
 
@@ -130,44 +138,36 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
 
     unsigned n = __atomic_fetch_add(&g_hm_cc_calls, 1u, __ATOMIC_RELAXED);
 
-    /* 方向：优先用 pipeline 观察器按 config 指针记下的 cols/rows（横竖都准），
-     * 拿不到才退回旧的单例比较。 */
+    /* 方向：优先从 GridConfig (cfg + 0x1b / 0x23) 读取 cols / rows，
+     * 避免写死的全局常量导致竖屏被强行判定为横屏。 */
     uintptr_t variables = ld_hm_ptr(cfg, 0x8f, x28);
     uintptr_t vo = ld_hm_ptr(variables, 0x23, x28);
+    int64_t cfg_cols = 0, cfg_rows = 0, dir_raw = -1;
+    __builtin_memcpy(&cfg_cols, (const void *)(cfg + 0x1b), sizeof cfg_cols);
+    __builtin_memcpy(&cfg_rows, (const void *)(cfg + 0x23), sizeof cfg_rows);
+    if (vo) __builtin_memcpy(&dir_raw, (const void *)(vo + 7), sizeof dir_raw);
+
     int landscape = -1, cols = 0, rows = 0;
     const struct ld_hm_note *note = ld_hm_lookup(cfg, x28);
-    if (note) {
-        landscape = (note->dir == 1);   /* ld_grid_direction: 1=横屏 0=竖屏 */
-        cols = note->cols;
-        rows = note->rows;
-    } else if (g_hm_cur_dir == 0 || g_hm_cur_dir == 1) {
-        /* note 按 config 指针对不上时，用观察器最近一次记录的当前网格方向。 */
-        landscape = (g_hm_cur_dir == 1);
-        cols = g_hm_cur_cols;
-        rows = g_hm_cur_rows;
+    if (cfg_cols >= 2 && cfg_cols <= 16 && cfg_rows >= 2 && cfg_rows <= 16) {
+        cols = (int)cfg_cols;
+        rows = (int)cfg_rows;
+        if (cols != rows) landscape = (cols > rows);
+        else if (dir_raw == 0 || dir_raw == 1) landscape = (dir_raw == 0);
     }
-    /* 方向 = 当前网格的实际形状：列多于行就是横屏。config 自带的方向标志在这台
-     * 机器上和真实布局相反（7 列页面拿到 0），不能当依据；对象池比较同样不可靠。 */
-    if (g_grid_cols > 0 && g_grid_rows > 0 && g_grid_cols != g_grid_rows) {
-        landscape = (g_grid_cols > g_grid_rows);
-        cols = landscape ? g_grid_cols : g_grid_rows;
-        rows = landscape ? g_grid_rows : g_grid_cols;
+    if (landscape < 0 && note) {
+        landscape = (note->dir == 0);   /* ld_grid_direction: 0=横屏 1=竖屏 */
+        if (cols <= 0) { cols = note->cols; rows = note->rows; }
+    } else if (landscape < 0 && (g_hm_cur_dir == 0 || g_hm_cur_dir == 1)) {
+        landscape = (g_hm_cur_dir == 0);
+        if (cols <= 0) { cols = g_hm_cur_cols; rows = g_hm_cur_rows; }
     }
-    uint32_t vo_low = 0, sent_low = 0;
-    (void)vo_low; (void)sent_low;
-    if (landscape < 0) {
-        int last = __atomic_load_n(&g_hm_last_dir, __ATOMIC_RELAXED);
-        if (last == 0) landscape = 1;
-        else if (last == 1) landscape = 0;
-        if (vo && pp) {
-            uint64_t sentinel = 0;
-            __builtin_memcpy(&sentinel, (const void *)(pp + 0x9b10), sizeof sentinel);
-            vo_low = (uint32_t)vo;
-            sent_low = (uint32_t)sentinel;
-            landscape = vo_low == sent_low;
+    if (landscape < 0 && (dir_raw == 0 || dir_raw == 1)) {
+        landscape = (dir_raw == 0);
+        if (cols <= 0) {
+            cols = landscape ? g_grid_cols : g_grid_rows;
+            rows = landscape ? g_grid_rows : g_grid_cols;
         }
-        cols = landscape ? g_grid_cols : g_grid_rows;
-        rows = landscape ? g_grid_rows : g_grid_cols;
     }
     if (landscape < 0 || cols <= 0 || rows <= 0) return (void *)cfg;
     double cell_w_now = 0;
@@ -216,7 +216,8 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     __builtin_memcpy(&cw_cur, (const void *)(cfg + 0x2b), sizeof cw_cur);
     /* 只动和基准同一张网格的 config：文件夹/搜索的 cell 宽度差一个数量级。 */
     if (!isfinite(cw_cur) || __builtin_fabs(cw_cur - base->cw) > 0.3 * base->cw) return (void *)cfg;
-    if (isfinite(base->cw) && base->cw > 1.0) {
+    int bi = landscape ? 0 : 1;
+    if (isfinite(base->cw) && base->cw > 1.0 && (dh != 0.0 || g_hm_wrote_cw[bi] != 0.0)) {
         double cw = base->cw - 2.0 * dh / (double)cols;
         double ox = base->ox + dh;
         if (isfinite(cw) && isfinite(ox) && cw > 1.0) {
@@ -227,7 +228,6 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
             if (box) {
                 double curx = 0;
                 __builtin_memcpy(&curx, (const void *)(box + 7), sizeof curx);
-                int bi = landscape ? 0 : 1;
                 if ((n % 500u) == 0u)
                     ld_blog("home margin h dir=%d cols=%d cw_in=%.2f cw_prev=%.2f ox_in=%.2f ox_prev=%.2f target=cw%.2f/ox%.2f",
                             landscape, cols, cw_cur, g_hm_wrote_cw[bi], curx, g_hm_wrote_ox[bi], cw, ox);
@@ -240,30 +240,32 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
 
 #if LD_HM_VERTICAL
     double dt = o->top, db = o->bottom;
-    if (!base->oy_valid) {
-        /* 启动早期 Rx 链还没挂好，originY 会读到 0；拿 0 当基准会把整个网格顶上去。 */
-        uintptr_t b = ld_hm_oy_box(x28, x26);
-        double v = 0;
-        if (b) __builtin_memcpy(&v, (const void *)(b + 7), sizeof v);
-        if (isfinite(v) && v > 1.0) { base->oy = v; base->oy_valid = 1; }
-    }
-    if (rows > 0 && isfinite(base->ch) && base->ch > 1.0) {
-        double ch = base->ch - (dt + db) / (double)rows;
-        double oy = base->oy + dt;
-        if (isfinite(ch) && isfinite(oy) && ch > 1.0) {
-            double cur = 0;
-            __builtin_memcpy(&cur, (const void *)(cfg + 0x33), sizeof cur);
-            if (cur != ch) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
-            uintptr_t oybox = ld_hm_oy_box(x28, x26);
-            uintptr_t leftbox = ld_hm_ptr(cfg, 0x3b, x28);
-            if (oybox && base->oy_valid) {
-                double cury = 0;
-                __builtin_memcpy(&cury, (const void *)(oybox + 7), sizeof cury);
-                if (cury != oy) __builtin_memcpy((void *)(oybox + 7), &oy, sizeof oy);
+    if (dt != 0.0 || db != 0.0) {
+        if (!base->oy_valid) {
+            /* 启动早期 Rx 链还没挂好，originY 会读到 0；拿 0 当基准会把整个网格顶上去。 */
+            uintptr_t b = ld_hm_oy_box(x28, x26);
+            double v = 0;
+            if (b) __builtin_memcpy(&v, (const void *)(b + 7), sizeof v);
+            if (isfinite(v) && v > 1.0) { base->oy = v; base->oy_valid = 1; }
+        }
+        if (rows > 0 && isfinite(base->ch) && base->ch > 1.0) {
+            double ch = base->ch - (dt + db) / (double)rows;
+            double oy = base->oy + dt;
+            if (isfinite(ch) && isfinite(oy) && ch > 1.0) {
+                double cur = 0;
+                __builtin_memcpy(&cur, (const void *)(cfg + 0x33), sizeof cur);
+                if (cur != ch) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
+                uintptr_t oybox = ld_hm_oy_box(x28, x26);
+                uintptr_t leftbox = ld_hm_ptr(cfg, 0x3b, x28);
+                if (oybox && base->oy_valid) {
+                    double cury = 0;
+                    __builtin_memcpy(&cury, (const void *)(oybox + 7), sizeof cury);
+                    if (cury != oy) __builtin_memcpy((void *)(oybox + 7), &oy, sizeof oy);
+                }
+                if ((n % 500u) == 0u)
+                    ld_blog("home margin vertical dir=%d cellH %.2f->%.2f originY %.2f->%.2f t=%.1f b=%.1f cid=%x/%x",
+                            landscape, base->ch, ch, base->oy, oy, dt, db, ld_hm_cid(oybox), ld_hm_cid(leftbox));
             }
-            if ((n % 500u) == 0u)
-                ld_blog("home margin vertical dir=%d cellH %.2f->%.2f originY %.2f->%.2f t=%.1f b=%.1f cid=%x/%x",
-                        landscape, base->ch, ch, base->oy, oy, dt, db, ld_hm_cid(oybox), ld_hm_cid(leftbox));
         }
     }
 #endif /* LD_HM_VERTICAL */
@@ -271,7 +273,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     /* 指示器底边距：GridController.workspaceIndicatorMarginBottom = hotSeatsMarginBottom()
      * + cfg+0x4b，再减去 getEditIndicatorMarginBottom。改 cfg+0x4b 即整条链路跟着动。 */
     double di = o->indicator_y;
-    if (isfinite(base->ind)) {
+    if (di != 0.0 && isfinite(base->ind)) {
         double ind = base->ind + di;
         if (isfinite(ind)) {
             double cur = 0;
@@ -331,8 +333,23 @@ static void ld_home_margins_install(const struct native_api *api, ld_lib_info *l
             lo->horizontal, lo->top, lo->bottom, lo->indicator_y,
             po->horizontal, po->top, po->bottom, po->indicator_y);
     uintptr_t cc = 0;
-    if (!ld_vaddr_to_runtime(lib, LD_HM_CC_VADDR, &cc)) {
-        ld_blog("home margin: currentConfig address unavailable");
+    static const uint32_t cc_pat[8] = {
+        0xa9bf79fdu, 0xaa0f03fdu, 0xd10021efu, 0xf9403f40u,
+        0xf9400000u, 0x6b16001fu, 0x540001a1u, 0xf9403f40u,
+    };
+    cc = ld_find_aot_pattern(lib, LD_HM_CC_VADDR, cc_pat, 8);
+    if (!cc) cc = ld_find_aot_pattern(lib, 0xb72cb8u, cc_pat, 8);
+    if (cc) {
+        const uint32_t *w = (const uint32_t *)cc;
+        uint32_t inst = w[4];
+        if ((inst & 0xffc00000u) == 0xf9400000u) {
+            g_hm_ctrl_offset = ((inst >> 10) & 0xfffu) * 8;
+            g_grid_ctrl_offset = g_hm_ctrl_offset;
+            ld_blog("home margin: currentConfig decoded ctrl_offset=0x%lx", (unsigned long)g_hm_ctrl_offset);
+        }
+    }
+    if (!cc) {
+        ld_blog("home margin: currentConfig address unavailable or prologue mismatch");
         return;
     }
     void *backup = NULL;

@@ -16,28 +16,40 @@ static int ld_dock_background(const struct ld_dock_conf *o,double *width,double 
 static int ld_dock_active(struct ld_dart_context *c)
 {
     if(!g_hook_pin_ok || !g_home_options.dock.enabled) return 0;
-    uintptr_t fields=0,controller=0,fullscreen=0,sentinel=0;
-    if(!ld_read_heap(c->x[26]+0x78,&fields,8) || !fields
-            || !ld_read_heap(fields+0x27d8,&controller,8)
-            || !ld_read_heap(c->x[27]+0x40,&sentinel,8)
-            || !(controller&1) || controller==c->x[22] || controller==sentinel) return 0;
-    /* HotSeatsConstants2._isLaptopMode: static+25d0 -> Rx+73 -> value+13.
-     * Its vendor exception path is false, so an uninitialized owner is normal. */
-    uintptr_t laptop_owner=0;
-    if(ld_read_heap(fields+0x25d0,&laptop_owner,8) && (laptop_owner&1)
-            && laptop_owner!=sentinel && laptop_owner!=c->x[22]) {
-        uintptr_t laptop_rx=ld_heap_pointer(c,laptop_owner,0x73);
-        if(laptop_rx && ld_heap_u32(laptop_rx,0x13)==(uint32_t)(c->x[22]+0x20)) return 0;
+    uintptr_t controller = ld_get_grid_controller(c);
+    if (!controller) return 0;
+
+    uintptr_t fields = 0, sentinel = 0;
+    ld_read_heap(c->x[26] + 0x78, &fields, 8);
+    ld_read_heap(c->x[27] + 0x40, &sentinel, 8);
+
+    /* HotSeatsConstants2._isLaptopMode: try 9239 (0x2628) then 8604 (0x25d0) */
+    uintptr_t laptop_owner = 0;
+    if (fields && ((ld_read_heap(fields + 0x2628u, &laptop_owner, 8) || ld_read_heap(fields + 0x25d0u, &laptop_owner, 8))
+            && (laptop_owner & 1) && laptop_owner != sentinel && laptop_owner != c->x[22])) {
+        uintptr_t laptop_rx = ld_heap_pointer(c, laptop_owner, 0x73);
+        if (laptop_rx && ld_heap_u32(laptop_rx, 0x13) == (uint32_t)(c->x[22] + 0x20)) return 0;
     }
-    uintptr_t rx=ld_heap_pointer(c,controller,0x2b),grid=ld_heap_pointer(c,rx,0x13);
-    uintptr_t variables=ld_heap_pointer(c,grid,0x8f);
-    uintptr_t orientation=ld_heap_pointer(c,variables,0x23);
-    int64_t direction=ld_heap_i64(orientation,7);
-    uint32_t mode=0;
-    return rx && grid && variables && orientation && (direction==0 || direction==1)
-        && ld_read_heap(variables+0x27,&mode,4)
-        && ld_read_heap(c->x[27]+0xef60,&fullscreen,8)
-        && (mode&1) && (fullscreen&1) && mode==(uint32_t)fullscreen;
+
+    uintptr_t rx = ld_heap_pointer(c, controller, 0x2b);
+    uintptr_t grid = rx ? ld_heap_pointer(c, rx, 0x13) : 0;
+    uintptr_t variables = grid ? ld_heap_pointer(c, grid, 0x8f) : 0;
+    uintptr_t orientation = variables ? ld_heap_pointer(c, variables, 0x23) : 0;
+    int64_t direction = orientation ? ld_heap_i64(orientation, 7) : -1;
+    uint32_t mode = 0;
+    if (!rx || !grid || !variables || !orientation || (direction != 0 && direction != 1)) return 0;
+    if (!ld_read_heap(variables + 0x27, &mode, 4) || !(mode & 1)) return 0;
+
+    if (ld_is_fullscreen_layout(c, mode)) return 1;
+
+    if (g_grid_cols > 0 && g_grid_rows > 0) {
+        int64_t cl = ld_heap_i64(grid, 0x1b), r = ld_heap_i64(grid, 0x23);
+        if ((direction == 0 && cl == g_grid_cols && r == g_grid_rows) ||
+            (direction == 1 && cl == g_grid_rows && r == g_grid_cols)) {
+            return 1;
+        }
+    }
+    return 1;
 }
 
 static void *g_orig_dock_background __attribute__((used));

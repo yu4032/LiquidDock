@@ -21,14 +21,10 @@ static inline void ld_apply_home_icons(struct ld_dart_context *c,uintptr_t grid)
     int percent=g_home_options.icon_size_percent;
     if(!g_hook_pin_ok || !g_home_options.icon_size_enabled || percent<80 || percent>120 || percent==100
             || !(grid&1) || grid==c->x[22]) return;
-    uintptr_t variables=ld_heap_pointer(c,grid,0x8f),icons=ld_heap_pointer(c,grid,0x6b),fullscreen=0;
+    uintptr_t variables=ld_heap_pointer(c,grid,0x8f),icons=ld_heap_pointer(c,grid,0x6b);
     uint32_t layout=0;
-    /* Verified against GridController.isSplit and List.isEmpty: +0x20 is true.
-     * isSplit returns true on NE, so equality with PP+0xef60 is fullscreen. */
     if(!variables || !icons || !ld_read_heap(variables+0x27,&layout,sizeof layout)
-            || !ld_read_heap(c->x[27]+0xef60,&fullscreen,sizeof fullscreen)
-            || !(layout&1) || !(fullscreen&1) || layout==(uint32_t)c->x[22]
-            || layout!=(uint32_t)fullscreen) return;
+            || !ld_is_fullscreen_layout(c, layout)) return;
     double size=0,top=0;
     if(!ld_read_heap(icons+0x17,&size,sizeof size) || !ld_read_heap(icons+0x1f,&top,sizeof top)
             || !isfinite(size) || size<=0 || !isfinite(top)) return;

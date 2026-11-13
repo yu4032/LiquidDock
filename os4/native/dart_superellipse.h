@@ -85,6 +85,7 @@ static void ld_dart_superellipse_install(const struct native_api *api, ld_lib_in
     uintptr_t rrect = 0, super = 0;
     if (!ld_vaddr_to_runtime(lib, LD_DSE_RRECT_PAINT_VADDR, &rrect) ||
         !ld_vaddr_to_runtime(lib, LD_DSE_SUPER_PAINT_VADDR, &super)) return;
+    if (*(const uint32_t *)rrect != 0xa9bf79fdu || *(const uint32_t *)super != 0xa9bf79fdu) return;
     if (!g_orig_dse_rrect_paint) {
         void *backup = NULL;
         if (api->hook((void *)rrect, (void *)repl_dse_rrect_paint, &backup) == 0 && backup) {

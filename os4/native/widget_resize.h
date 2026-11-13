@@ -22,6 +22,7 @@
 #include "bootlog.h"
 #include "native_api.h"
 #include "lib_base.h"
+#include "executable_range.h"
 
 #define LD_WIDGET_RESIZE_MARKER \
     "/data/user_de/0/com.miui.home/files/liquiddock-widget-resize"
@@ -43,9 +44,28 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
 {
     static int state;
     if (state || !api || !api->hook || !lib) return;
-    if (access(LD_WIDGET_RESIZE_MARKER, F_OK) != 0) { state = 2; return; }
+    if (access(LD_WIDGET_RESIZE_MARKER, F_OK) != 0 &&
+        !g_home_options.widget_overrides &&
+        !(g_home_options.glass_enabled && g_home_options.glass_widgets)) {
+        state = 2;
+        return;
+    }
     uintptr_t fn = 0;
-    if (!ld_vaddr_to_runtime(lib, LD_WIDGET_RESIZE_VADDR, &fn)) return;
+    static const uintptr_t resizes[] = { 0x1a30504u, 0x19dc714u };
+    for (size_t i = 0; i < sizeof(resizes)/sizeof(resizes[0]); i++) {
+        uintptr_t cand = 0;
+        if (ld_vaddr_to_runtime(lib, resizes[i], &cand) &&
+            executable_range(cand, 16) &&
+            *(const uint32_t *)cand == 0xa9bf79fdu) {
+            fn = cand;
+            break;
+        }
+    }
+    if (!fn) {
+        static const uint32_t resize_pat[3] = {0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu};
+        fn = ld_find_aot_pattern(lib, 0x1a30504u, resize_pat, 3);
+    }
+    if (!fn) return;
     static const uint32_t prologue[3] = {0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu};
     if (memcmp((const void *)fn, prologue, sizeof prologue) != 0) {
         state = 2;
@@ -64,15 +84,31 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
     /* Corner handles: force the two axis predicates to TRUE so a 1x1 widget can
      * grow. Same Dart TRUE singleton, same leaf ABI. */
     static const uint32_t pro_v[3] = {0xb8423022u, 0x8b1c8042u, 0xf9402370u};
+    static const uintptr_t vert_addrs[] = { 0x1132940u, 0x11d0c5cu };
+    static const uintptr_t horiz_addrs[] = { 0x11329a8u, 0x11d0cc4u };
     uintptr_t fv = 0, fh = 0;
-    if (ld_vaddr_to_runtime(lib, LD_WIDGET_CAN_RESIZE_V_VADDR, &fv) &&
-        memcmp((const void *)fv, pro_v, sizeof pro_v) == 0) {
+    for (size_t i = 0; i < sizeof(vert_addrs)/sizeof(vert_addrs[0]); i++) {
+        uintptr_t cand = 0;
+        if (ld_vaddr_to_runtime(lib, vert_addrs[i], &cand) &&
+            memcmp((const void *)cand, pro_v, sizeof pro_v) == 0) {
+            fv = cand;
+            break;
+        }
+    }
+    if (fv) {
         void *b = NULL;
         if (api->hook((void *)fv, (void *)ld_widget_can_resize_always, &b) == 0)
             ld_blog("widget resize: vertical axis predicate forced at %p", (void *)fv);
     }
-    if (ld_vaddr_to_runtime(lib, LD_WIDGET_CAN_RESIZE_H_VADDR, &fh) &&
-        memcmp((const void *)fh, pro_v, sizeof pro_v) == 0) {
+    for (size_t i = 0; i < sizeof(horiz_addrs)/sizeof(horiz_addrs[0]); i++) {
+        uintptr_t cand = 0;
+        if (ld_vaddr_to_runtime(lib, horiz_addrs[i], &cand) &&
+            memcmp((const void *)cand, pro_v, sizeof pro_v) == 0) {
+            fh = cand;
+            break;
+        }
+    }
+    if (fh) {
         void *b = NULL;
         if (api->hook((void *)fh, (void *)ld_widget_can_resize_always, &b) == 0)
             ld_blog("widget resize: horizontal axis predicate forced at %p", (void *)fh);

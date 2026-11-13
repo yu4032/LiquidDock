@@ -36,9 +36,11 @@
 #include "native_api.h"
 #include "lib_base.h"
 #include "dart_observer.h"
+#include "aot_scanner.h"
 
 #define LD_DP_MARKER "/data/user_de/0/com.miui.home/files/liquiddock-divider-force"
 #define LD_DP_CONF   "/data/user/0/com.miui.home/files/liquiddock-native.conf"
+#define LD_DP_CONF_EARLY "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
 
 #define LD_DP_BGPAINT  0x15af7b4u
 #define LD_DP_GETPAINT 0x15af990u
@@ -92,10 +94,15 @@ static int ld_dp_read(uintptr_t address, void *out, size_t len)
 static void ld_dp_load_cfg(void)
 {
     if (g_dp_cfg.loaded) return;
-    g_dp_cfg.loaded = 1;
     char buf[8192];
-    FILE *f = fopen(LD_DP_CONF, "r");
+    const char *conf_path = LD_DP_CONF;
+    FILE *f = fopen(conf_path, "r");
+    if (!f) {
+        conf_path = LD_DP_CONF_EARLY;
+        f = fopen(conf_path, "r");
+    }
     if (!f) { ld_blog("divider: conf open failed"); return; }
+    g_dp_cfg.loaded = 1;
     size_t n = fread(buf, 1, sizeof buf - 1, f);
     fclose(f);
     buf[n] = '\0';
@@ -141,8 +148,8 @@ static void ld_dp_load_cfg(void)
         p = eol ? eol + 1 : NULL;
     }
     struct stat st;
-    c.stamp = stat(LD_DP_CONF, &st) == 0 ? (long)st.st_mtime : 0;
-    if (bad) { c = g_dp_cfg; c.stamp = stat(LD_DP_CONF, &st) == 0 ? (long)st.st_mtime : 0; }
+    c.stamp = stat(conf_path, &st) == 0 ? (long)st.st_mtime : 0;
+    if (bad) { c = g_dp_cfg; c.stamp = stat(conf_path, &st) == 0 ? (long)st.st_mtime : 0; }
     g_dp_cfg = c;
     ld_blog("divider: cfg enabled=%d w=%d(0.1dp) h%%=%d y=%d(0.1dp) rgb=%d,%d,%d a=%d",
             c.enabled, c.width_dp10, c.height_pct, c.y_offset_dp10,
@@ -163,7 +170,11 @@ static void *ld_dp_poll_thread(void *arg)
     for (;;) {
         usleep(500000);
         struct stat st;
-        if (stat(LD_DP_CONF, &st) != 0) continue;
+        const char *conf_path = LD_DP_CONF;
+        if (stat(conf_path, &st) != 0) {
+            conf_path = LD_DP_CONF_EARLY;
+            if (stat(conf_path, &st) != 0) continue;
+        }
         if ((long)st.st_mtime == g_dp_cfg.stamp) continue;
         g_dp_cfg.loaded = 0;
         ld_dp_load_cfg();
@@ -188,7 +199,11 @@ static void ld_dp_maybe_reload(void)
     unsigned n = __atomic_fetch_add(&g_dp_reload_ticks, 1u, __ATOMIC_RELAXED);
     if ((n % 120u) != 0u) return;
     struct stat st;
-    if (stat(LD_DP_CONF, &st) != 0) return;
+    const char *conf_path = LD_DP_CONF;
+    if (stat(conf_path, &st) != 0) {
+        conf_path = LD_DP_CONF_EARLY;
+        if (stat(conf_path, &st) != 0) return;
+    }
     if ((long)st.st_mtime == g_dp_cfg.stamp) return;
     g_dp_cfg.loaded = 0;
     ld_dp_load_cfg();
@@ -383,18 +398,25 @@ __attribute__((used)) static void ld_dp_gp_post(struct ld_dart_context *c, uintp
 
 LD_DP_POST(repl_dp_gp, ld_dp_gp_post, g_dp_gp_orig, g_dp_gp_save)
 
-/* ---- 构建期：捕获厂商 const Color（内层闭包 PP[0xd4a30]） ---- */
+/* ---- 构建期：捕获厂商 const Color（内层闭包 PP[0xd4a30 / 0xd6dc8]） ---- */
 #define LD_DP_INNER 0x18893ccu
 static void *g_dp_inner_orig __attribute__((used));
 static volatile unsigned g_dp_inner_calls;
+static uintptr_t g_dp_pp_offset = 0;
 
 __attribute__((used)) static void ld_dp_inner_cb(struct ld_dart_context *c)
 {
     unsigned n = __atomic_fetch_add(&g_dp_inner_calls, 1u, __ATOMIC_RELAXED);
     ld_dp_load_cfg();
     uintptr_t pp = (uintptr_t)c->x[27];
-    if (!g_dp_const_color && pp) ld_dp_read(pp + 0xd4a30, &g_dp_const_color, 8);
-    if (n == 0u) ld_blog("divider: inner first call const=%p", (void *)g_dp_const_color);
+    uintptr_t off = g_dp_pp_offset ? g_dp_pp_offset : 0xd4a30u;
+    if (!g_dp_const_color && pp) {
+        ld_dp_read(pp + off, &g_dp_const_color, 8);
+        if (!g_dp_const_color && off != 0xd6dc8u) {
+            ld_dp_read(pp + 0xd6dc8u, &g_dp_const_color, 8);
+        }
+    }
+    if (n == 0u) ld_blog("divider: inner first call const=%p (pp_off=0x%lx)", (void *)g_dp_const_color, (unsigned long)off);
 }
 
 LD_DART_OBSERVER(repl_dp_inner, ld_dp_inner_cb, g_dp_inner_orig)
@@ -433,8 +455,34 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
         state = 2;
         return;
     }
-    ld_dp_hook(api, lib, LD_DP_INNER, "inner", (void *)repl_dp_inner, &g_dp_inner_orig);
-    ld_dp_hook(api, lib, LD_DP_BGPAINT, "bgPaint", (void *)repl_dp_bg, &g_dp_bg_orig);
+    static const uint32_t inner_pat[8] = {
+        0xa9bf79fdu, 0xaa0f03fdu, 0xd10101efu, 0xf9400ba0u,
+        0xb8417002u, 0x8b1c8042u, 0xf81f83a2u, 0xb840b040u,
+    };
+    static const uint32_t bg_pat[8] = {
+        0xa9bf79fdu, 0xaa0f03fdu, 0xd10081efu, 0xaa0303e0u,
+        0xf81e83a3u, 0xaa0503e3u, 0xf81e03a5u, 0xaa0103e5u,
+    };
+    uintptr_t fn_inner = ld_find_aot_pattern(lib, 0x18893ccu, inner_pat, 8);
+    if (!fn_inner) fn_inner = ld_find_aot_pattern(lib, 0x188aa7cu, inner_pat, 8);
+    if (fn_inner) {
+        const uint32_t *w = (const uint32_t *)fn_inner;
+        for (int k = 0; k < 30; k++) {
+            if ((w[k] & 0xffc003e0u) == 0x91400360u && (w[k+1] & 0xffc00000u) == 0xf9400000u) {
+                uintptr_t hi = ((w[k] >> 10) & 0xfffu) << 12;
+                uintptr_t lo = ((w[k+1] >> 10) & 0xfffu) << 3;
+                g_dp_pp_offset = hi + lo;
+                ld_blog("divider: inner dynamically decoded PP offset=0x%lx", (unsigned long)g_dp_pp_offset);
+                break;
+            }
+        }
+        ld_dp_hook(api, lib, fn_inner - lib->elf_base, "inner", (void *)repl_dp_inner, &g_dp_inner_orig);
+    }
+    uintptr_t fn_bg = ld_find_aot_pattern(lib, 0x15af7b4u, bg_pat, 8);
+    if (!fn_bg) fn_bg = ld_find_aot_pattern(lib, 0x17493b8u, bg_pat, 8);
+    if (fn_bg) {
+        ld_dp_hook(api, lib, fn_bg - lib->elf_base, "bgPaint", (void *)repl_dp_bg, &g_dp_bg_orig);
+    }
     /* _getBackgroundPaint 后置钩子已停用：热路径 _paintBackgroundColor 已覆盖颜色写入，
      * 少一个裸跳板 = 少一类崩溃面。 */
     ld_dp_start_poller();

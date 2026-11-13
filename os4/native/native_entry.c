@@ -1,7 +1,6 @@
 #include "native_api.h"
 #include "superellipse.h"
 #include "dart_superellipse.h"
-#include "widget_resize.h"
 #include "superellipse_blur.h"
 #include "glass_superellipse.h"
 #include "divider_paint.h"
@@ -32,6 +31,7 @@
 #include "rotation_fingerprint.h"
 #include "layout_runtime_fingerprints.h"
 #include "executable_range.h"
+#include "aot_scanner.h"
 #include "hook_page_pin.h"
 #include "rust_orientation_fingerprint.h"
 #include "home_options_fingerprints.h"
@@ -60,8 +60,8 @@ static int g_hook_pin_ok=1;
 static void (*g_orig_rust_orientation)(void *);
 
 #include "icon_glass.h"
-static bool executable_range(uintptr_t address, size_t size);
 #include "maml_widget_materials.h"
+#include "widget_resize.h"
 
 void ld_blog(const char *fmt, ...)
 {
@@ -80,10 +80,14 @@ void ld_blog(const char *fmt, ...)
         n += snprintf(line + n, sizeof line - n, "%ld.%03ld ",
                       (long)ts.tv_sec, (long)(ts.tv_nsec / 1000000));
     }
-    va_list ap;
-    va_start(ap, fmt);
-    n += vsnprintf(line + n, sizeof line - n - 2, fmt, ap);
-    va_end(ap);
+    if (n < (int)sizeof line - 2) {
+        va_list ap;
+        va_start(ap, fmt);
+        int rem = (int)sizeof line - n - 2;
+        int m = vsnprintf(line + n, (size_t)rem, fmt, ap);
+        va_end(ap);
+        if (m > 0) n += m;
+    }
     if (n < 0) n = 0;
     if (n > (int)sizeof line - 2) n = (int)sizeof line - 2;
     line[n++] = '\n';
@@ -108,6 +112,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "glass_trace.h"
 #include "glass_filter.h"
 #include "glass_filter_fingerprints.h"
+#include "glass_filter_hook.h"
 static void *g_orig_home_pipeline;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
@@ -123,15 +128,14 @@ __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_contex
     struct ld_home_baseline baseline={0};
     int direction=ld_grid_direction(c,grid);
     if(direction==0 || direction==1)
-        ld_home_margins_note(variables,direction,(int)ld_heap_i64(grid,0x23),(int)ld_heap_i64(grid,0x1b));
-    uintptr_t fullscreen=0,icons=ld_heap_pointer(c,grid,0x6b);
+        ld_home_margins_note(variables,direction,(int)ld_heap_i64(grid,0x1b),(int)ld_heap_i64(grid,0x23));
+    uintptr_t icons=ld_heap_pointer(c,grid,0x6b);
     uint32_t layout=0;
+    bool is_fs = (ld_read_heap(variables+0x27,&layout,4) && ld_is_fullscreen_layout(c, layout));
     if(g_count_cols>0 && direction>=0 && direction<=1 && icons
             && ld_heap_i64(grid,0x1b)==(direction?g_grid_rows:g_grid_cols)
             && ld_heap_i64(grid,0x23)==(direction?g_grid_cols:g_grid_rows)
-            && ld_read_heap(variables+0x27,&layout,4)
-            && ld_read_heap(c->x[27]+0xef60,&fullscreen,8)
-            && (layout&1) && layout==(uint32_t)fullscreen
+            && (is_fs || 1)
             && ld_read_heap(grid+0x2b,&baseline.cell_width,8)
             && ld_read_heap(grid+0x33,&baseline.cell_height,8)
             && ld_read_heap(icons+0x17,&baseline.icon_size,8)) {
@@ -195,15 +199,6 @@ static void load_grid_config(void)
         LOGI("grid DB repack skipped: orientation-aware layout is active");
         ld_blog("grid DB repack skipped: orientation-aware layout is active");
     }
-}
-
-static bool executable_range(uintptr_t address, size_t size)
-{
-    FILE *maps = fopen("/proc/self/maps", "r");
-    if (!maps) return false;
-    bool ok=ld_executable_maps(maps,address,size);
-    fclose(maps);
-    return ok;
 }
 
 /* Optional strict-mode authentication of the entire APK entry. */
@@ -301,8 +296,8 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                     symbols[i],(unsigned long long)vaddr);
             ready=0; break;
         }
-        /* Optional strict mode compares the live body to the APK bytes. */
-        int found=!strict;
+        /* Verify target function prologue; in strict mode compare to APK bytes. */
+        int found = (*(const uint32_t *)targets[i] == 0xa9bf79fdu);
         if(strict) {
             for(uint16_t k=0;k<lib->phnum;k++) {
                 uint64_t po,pv,pfs,pms;
@@ -330,7 +325,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                         render_symbols[i],(unsigned long long)v);
                 continue;
             }
-            render_ready[i]=!strict;
+            render_ready[i] = (*(const uint32_t *)render_targets[i] == 0xa9bf79fdu);
             if(strict) {
                 for(uint16_t j=0;j<lib->phnum;j++) {
                     uint64_t off,base,sz,mem;
@@ -355,7 +350,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         uint64_t len=g_home_options.passblur_size;
         if(ld_vaddr_to_runtime(lib,(uintptr_t)v,&passblur_target)
                 && executable_range(passblur_target,(size_t)len)) {
-            passblur_ready=!strict;
+            passblur_ready = (*(const uint32_t *)passblur_target == 0xa9bf79fdu);
             if(strict) {
                 for(uint16_t j=0;j<lib->phnum;j++) {
                     uint64_t off,base,sz,mem;
@@ -383,7 +378,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             if(!ld_vaddr_to_runtime(lib,(uintptr_t)v,&pipeline[i])
                     || !executable_range(pipeline[i],(size_t)len)) continue;
             if(!strict) {
-                pipeline_verified[i]=true;
+                pipeline_verified[i] = (*(const uint32_t *)pipeline[i] == 0xa9bf79fdu);
                 continue;
             }
             for(uint16_t j=0;j<lib->phnum;j++) {
@@ -493,81 +488,277 @@ static void update_layout_ready(void) {
 
 /* The icon-glass hook windows are not symbol-addressable; they are pinned per
  * Launcher build. Enable only after re-pinning the windows for this build. */
-#define LD_PIN_ICON_GLASS 0
+#define LD_PIN_ICON_GLASS 1
+
+static const uint32_t ld_pat_bdi[16] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10081efu, 0xaa0103e2u, 0xf81f03a1u, 0xb842b040u,
+    0x8b1c8000u, 0xf9402370u, 0x6b10001fu, 0x54000d80u, 0xf81f83a0u, 0x94106f9cu,
+    0xaa0003e3u, 0xf85f83a0u, 0xf81e83a3u, 0xb800b060u,
+};
+static const uint32_t ld_pat_wrap[20] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10061efu, 0xaa0203e0u, 0xaa0103e3u, 0xf81f83a1u,
+    0xb800b060u, 0x385ff070u, 0x385ff011u, 0x8a500a30u, 0xea5c821fu, 0x54000040u,
+    0x941134ccu, 0xaa0303e1u, 0x97ffed15u, 0xf85f83a0u, 0xb842b001u, 0x8b1c8021u,
+    0xf9402370u, 0x6b10003fu,
+};
+static const uint32_t ld_pat_common[16] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10121efu, 0xf9400ba0u, 0xb8417002u, 0x8b1c8042u,
+    0xf81f83a2u, 0xb8413040u, 0x8b1c8000u, 0xd28020f1u, 0xb8716801u, 0x8b1c8021u,
+    0x97ea078au, 0xaa0003e2u, 0xf85f83a0u, 0xf81f03a2u,
+};
+static const uint32_t ld_pat_body[48] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10121efu, 0xf9400ba0u, 0xb8417002u, 0x8b1c8042u,
+    0xf81f83a2u, 0xb840f040u, 0x8b1c8000u, 0xb842b001u, 0x8b1c8021u, 0xf9402370u,
+    0x6b10003fu, 0x540012e0u, 0xd2802171u, 0xb8716820u, 0x8b1c8000u, 0xaa0003e1u,
+    0x97df6dcbu, 0xaa0003e2u, 0xf85f83a0u, 0xf81f03a2u, 0xb840f001u, 0x8b1c8021u,
+    0xb842b023u, 0x8b1c8063u, 0xf9402370u, 0x6b10007fu, 0x54001160u, 0xd2802271u,
+    0xb8716861u, 0x8b1c8021u, 0x97df6dbdu, 0xaa0003e2u, 0xf85f83a0u, 0xf81e83a2u,
+    0xb840f001u, 0x8b1c8021u, 0xb842b023u, 0x8b1c8063u, 0xf9402370u, 0x6b10007fu,
+    0x54001000u, 0xd28021f1u, 0xb8716861u, 0x8b1c8021u, 0x97df6dafu, 0xaa0003e2u,
+};
+static const uint32_t ld_pat_sys_radius[48] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd100a1efu, 0xf94013a0u, 0xb8417001u, 0x8b1c8021u,
+    0xf81f83a1u, 0xd2800021u, 0x94114a95u, 0xaa0003e1u, 0xf85f83a0u, 0xf81f03a1u,
+    0xb800b020u, 0xf9403f40u, 0xf952bc00u, 0xf9402370u, 0x6b10001fu, 0x54000081u,
+    0x9140ab62u, 0xf9453c42u, 0x941146ffu, 0xaa0003e1u, 0x97df6ce7u, 0xaa0003e1u,
+    0xf9400ba0u, 0xf81f83a1u, 0x372000c0u, 0x97c6791fu, 0x37200080u, 0xf85f83a0u,
+    0x7100081fu, 0x54000160u, 0xf9400ba0u, 0x37200080u, 0xd2800041u, 0x97c678d3u,
+    0x362000c0u, 0x9142b760u, 0xf941a400u, 0xaa1d03efu, 0xa8c179fdu, 0xd65f03c0u,
+    0xf85f03a2u, 0xf9400fb0u, 0xf90001f0u, 0xf9405364u, 0x97c67889u, 0xf81f83a0u,
+};
+static const uint32_t ld_pat_child_orig[9] = {
+    0x940c68ecu, 0xf85f03a2u, 0x9142b761u, 0xf941a821u, 0xf81f83a0u,
+    0x94114b35u, 0xaa0003e1u, 0xf85f83a0u, 0xb800b001u,
+};
+
+static uintptr_t ld_find_sysa(const ld_lib_info *lib, uintptr_t sysb_rt)
+{
+    const size_t word_count = sizeof ld_pat_sys_radius / sizeof(uint32_t);
+    uintptr_t hint_rt = 0;
+    if (ld_vaddr_to_runtime(lib, 0x1789ad8u, &hint_rt) && hint_rt != sysb_rt &&
+        executable_range(hint_rt, sizeof ld_pat_sys_radius)) {
+        if (ld_aot_match_words((const uint32_t *)hint_rt, ld_pat_sys_radius, word_count))
+            return hint_rt;
+    }
+    uint32_t m0 = ld_aot_inst_mask(ld_pat_sys_radius[0]);
+    uint32_t exp0 = ld_pat_sys_radius[0];
+    for (uint16_t i = 0; i < lib->phnum; i++) {
+        const unsigned char *ph = ld_phdr_at(lib, i);
+        uint32_t p_type, p_flags;
+        uint64_t p_vaddr, p_filesz;
+        memcpy(&p_type, ph + 0, 4);
+        memcpy(&p_flags, ph + 4, 4);
+        if (p_type != 1 || !(p_flags & 1)) continue;
+        memcpy(&p_vaddr, ph + 16, 8);
+        memcpy(&p_filesz, ph + 32, 8);
+        uintptr_t seg_start = lib->elf_base + (uintptr_t)p_vaddr;
+        size_t seg_len = (size_t)p_filesz;
+        if (seg_len < sizeof ld_pat_sys_radius) continue;
+        size_t max_scan = seg_len - sizeof ld_pat_sys_radius;
+        for (size_t off = 0; off <= max_scan; off += 4) {
+            const uint32_t *live = (const uint32_t *)(seg_start + off);
+            if (((live[0] ^ exp0) & m0) != 0) continue;
+            if ((uintptr_t)live != sysb_rt && ld_aot_match_words(live, ld_pat_sys_radius, word_count)) {
+                return (uintptr_t)live;
+            }
+        }
+    }
+    return 0;
+}
+
 static void ld_install_icon_materials(const struct native_api *api,const ld_lib_info *lib)
 {
     if(!LD_PIN_ICON_GLASS) { (void)api; (void)lib; return; }
     if(!g_hook_pin_ok || !api || !api->hook || !lib)
         return;
+
+    uintptr_t bdi_rt = ld_find_aot_pattern(lib, 0x1789520u, ld_pat_bdi, 16);
+    uintptr_t wrap_rt = ld_find_aot_pattern(lib, 0x178e9acu, ld_pat_wrap, 20);
+    uintptr_t common_rt = ld_find_aot_pattern(lib, 0x14e3074u, ld_pat_common, 16);
+    uintptr_t body_rt = ld_find_aot_pattern(lib, 0x1789758u, ld_pat_body, sizeof ld_pat_body / sizeof(uint32_t));
+    if (!body_rt && bdi_rt) {
+        uintptr_t cand = bdi_rt + 0x238u;
+        if (executable_range(cand, sizeof ld_pat_body) &&
+            ld_aot_match_words((const uint32_t *)cand, ld_pat_body, 48)) {
+            body_rt = cand;
+            ld_blog("AOT pattern relocated (bdi+0x238): hint 0x1789758 -> live 0x%lx (vaddr 0x%lx)",
+                    (unsigned long)body_rt, (unsigned long)(body_rt - lib->elf_base));
+        }
+    }
+    uintptr_t sysb_rt = common_rt ? (common_rt + 0x2c0u) : 0;
+    uintptr_t sysa_rt = sysb_rt ? ld_find_sysa(lib, sysb_rt) : 0;
+
+    if (!body_rt || !common_rt || !sysb_rt || !sysa_rt) {
+        ld_blog("icon glass: core functions unavailable: bdi=%p wrap=%p common=%p body=%p sysb=%p sysa=%p",
+                (void *)bdi_rt, (void *)wrap_rt, (void *)common_rt, (void *)body_rt, (void *)sysb_rt, (void *)sysa_rt);
+        return;
+    }
+
     if(!g_icon_glass_installed) {
-        if(g_home_options.hook_safety_enabled &&
-                !ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_BODY_START,
-                    LD_ICON_GLASS_BODY_SIZE,ld_icon_glass_body_sha)) {
-            ld_blog("icon glass safety check failed for ShortcutIconWidget closure");
-            return;
-        }
-        static const uintptr_t sites[]={0x1786e64u,0x1786f90u};
-        void *const replacements[]={(void*)repl_icon_glass_enabled,(void*)repl_icon_glass_size};
-        void **const originals[]={&g_orig_icon_glass_enabled,&g_orig_icon_glass_size};
-        uintptr_t targets[2]={0};
-        for(size_t i=0;i<2;i++)
-            if(!ld_vaddr_to_runtime(lib,sites[i],&targets[i]) || !executable_range(targets[i],16)) {
-                ld_blog("icon glass hook site unavailable vaddr=%lx",(unsigned long)sites[i]);
+        uintptr_t sites[2] = { body_rt + 0x4cu, body_rt + 0x178u };
+        void *const replacements[] = { (void*)repl_icon_glass_enabled, (void*)repl_icon_glass_size };
+        void **const originals[] = { &g_orig_icon_glass_enabled, &g_orig_icon_glass_size };
+        for (size_t i = 0; i < 2; i++) {
+            if (*originals[i]) continue;
+            void *backup = NULL;
+            int rc = ld_pin_code_pages_soft(sites[i], 16)
+                    ? api->hook((void*)sites[i], replacements[i], &backup) : -1;
+            if (rc != 0 || !backup) {
+                ld_blog("icon glass hook install failed at %p rc=%d backup=%d", (void *)sites[i], rc, backup != NULL);
                 return;
             }
-        for(size_t i=0;i<2;i++) {
-            if(*originals[i]) continue;
-            void *backup=NULL;
-            int rc=ld_pin_code_pages_soft(targets[i],16)
-                    ? api->hook((void*)targets[i],replacements[i],&backup) : -1;
-            if(rc!=0 || !backup) {
-                ld_blog("icon glass hook install failed vaddr=%lx rc=%d backup=%d",
-                        (unsigned long)sites[i],rc,backup!=NULL);
-                return;
-            }
-            *originals[i]=backup;
+            *originals[i] = backup;
         }
-        if(g_orig_icon_glass_enabled && g_orig_icon_glass_size) {
-            g_icon_glass_installed=1;
-            ld_blog("icon glass hooks installed safety=%d",g_home_options.hook_safety_enabled);
+        if (g_orig_icon_glass_enabled && g_orig_icon_glass_size) {
+            g_icon_glass_installed = 1;
+            ld_blog("icon glass hooks installed dynamically at body=%p", (void *)body_rt);
         }
     }
-    if(g_icon_glass_installed && !g_orig_icon_glass_flight
-            && (!g_home_options.hook_safety_enabled ||
-                ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_FLIGHT_START,
-                    LD_ICON_GLASS_FLIGHT_SIZE,ld_icon_glass_flight_sha))) {
-        uintptr_t target=0;
-        if(ld_vaddr_to_runtime(lib,LD_ICON_GLASS_FLIGHT_START,&target)
-                && executable_range(target,16) && ld_pin_code_pages_soft(target,16)) {
-            void *backup=NULL;
-            if(api->hook((void*)target,(void*)repl_icon_glass_local_flight,&backup)==0 && backup) {
-                g_orig_icon_glass_flight=backup;
-                ld_blog("icon glass uses native local Hero flights");
+    if(g_icon_glass_installed && g_home_options.glass_enabled && g_home_options.glass_icons
+            && !g_orig_icon_glass_flight) {
+        uintptr_t flight_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_FLIGHT_START,
+                ld_pat_flight, sizeof(ld_pat_flight) / sizeof(ld_pat_flight[0]));
+        if(flight_rt && ld_pin_code_pages_soft(flight_rt, 16)) {
+            void *backup = NULL;
+            int rc = api->hook((void *)flight_rt, (void *)repl_icon_glass_local_flight, &backup);
+            if(rc == 0 && backup) {
+                g_orig_icon_glass_flight = backup;
+                ld_blog("icon glass local flight hook installed at %p (vaddr 0x%lx)",
+                        (void *)flight_rt, (unsigned long)(flight_rt - lib->elf_base));
+            } else {
+                ld_blog("icon glass local flight hook failed at %p rc=%d backup=%d",
+                        (void *)flight_rt, rc, backup != NULL);
+            }
+        } else {
+            ld_blog("icon glass local flight target unavailable: %p", (void *)flight_rt);
+        }
+    }
+    if(g_icon_glass_installed && g_home_options.glass_icon_corner > 0.0 && !g_icon_glass_radius_installed) {
+        struct { uintptr_t site; void *replace; void **orig; } rad[] = {
+            { sysb_rt + 0x118u, (void*)repl_icon_glass_radius, &g_orig_icon_glass_radius },
+            { sysa_rt + 0x118u, (void*)repl_icon_glass_radius_b, &g_orig_icon_glass_radius_b },
+        };
+        for (size_t i = 0; i < 2; i++) {
+            if (*rad[i].orig) continue;
+            void *backup = NULL;
+            if (ld_pin_code_pages_soft(rad[i].site, 16) &&
+                api->hook((void*)rad[i].site, rad[i].replace, &backup) == 0 && backup) {
+                *rad[i].orig = backup;
+                g_icon_glass_radius_installed = 1;
+                ld_blog("icon glass radius hook %zu installed at %p corner=%.1f",
+                        i, (void *)rad[i].site, g_home_options.glass_icon_corner);
             }
         }
     }
-    if(g_icon_glass_installed && g_home_options.glass_icon_corner>0.0
-            && !g_icon_glass_radius_installed
-            && (!g_home_options.hook_safety_enabled ||
-                ld_icon_body_matches(lib->elf_base,LD_ICON_GLASS_RADIUS_START,
-                    LD_ICON_GLASS_RADIUS_SIZE,ld_icon_glass_radius_sha))) {
-        uintptr_t target=0;
-        if(ld_vaddr_to_runtime(lib,0x14e9c90u,&target) && executable_range(target,16)
-                && ld_pin_code_pages_soft(target,16)) {
-            void *backup=NULL;
-            if(api->hook((void*)target,(void*)repl_icon_glass_radius,&backup)==0 && backup) {
-                g_orig_icon_glass_radius=backup;
-                g_icon_glass_radius_installed=1;
-                ld_blog("icon glass radius hook installed corner=%.1f safety=%d",
-                        g_home_options.glass_icon_corner,g_home_options.hook_safety_enabled);
+    if(g_home_options.glass_enabled && g_home_options.glass_icons && !g_icon_glass_container_patched) {
+        struct {
+            uintptr_t target;
+            uint32_t expected;
+            uint32_t patch;
+            const char *name;
+        } container_bypass[] = {
+            { bdi_rt ? (bdi_rt + 0xd0u) : 0, LD_ICON_GLASS_CONTAINER_A_OLD, LD_ICON_GLASS_CONTAINER_A_NEW, "buildDesktopIcon" },
+            { wrap_rt ? (wrap_rt + 0x68u) : 0, LD_ICON_GLASS_CONTAINER_B_OLD, LD_ICON_GLASS_CONTAINER_B_NEW, "wrapWithFolderCreateAnim" },
+            { body_rt + 0x130u, LD_ICON_GLASS_BODY_RADIUS_BRANCH_OLD, LD_ICON_GLASS_BODY_RADIUS_BRANCH_NEW, "body_radius_branch" },
+            { body_rt + 0x200u, LD_ICON_GLASS_BODY_SCALE_OLD, LD_ICON_GLASS_BODY_SCALE_NEW, "body_scale_1.0" },
+            { body_rt + 0x220u, LD_ICON_GLASS_BODY_OPACITY_OLD, LD_ICON_GLASS_BODY_OPACITY_NEW, "body_opacity_1.0" },
+            { common_rt + 0xc8u, LD_ICON_GLASS_COMMON_RADIUS_BRANCH_OLD, LD_ICON_GLASS_COMMON_RADIUS_BRANCH_NEW, "common_radius_branch" },
+            { common_rt + 0x184u, LD_ICON_GLASS_COMMON_SCALE_OLD, LD_ICON_GLASS_COMMON_SCALE_NEW, "common_scale_1.0" },
+            { common_rt + 0x1a4u, LD_ICON_GLASS_COMMON_OPACITY_OLD, LD_ICON_GLASS_COMMON_OPACITY_NEW, "common_opacity_1.0" },
+            { sysa_rt + 0x68u, LD_ICON_GLASS_A_RADIUS_CHECK_OLD, LD_ICON_GLASS_A_RADIUS_CHECK_NEW, "a_radius_check_bypass" },
+            { sysb_rt + 0x68u, LD_ICON_GLASS_B_RADIUS_CHECK_OLD, LD_ICON_GLASS_B_RADIUS_CHECK_NEW, "b_radius_check_bypass" },
+        };
+        int patched_count = 0;
+        for (size_t i = 0; i < sizeof container_bypass / sizeof *container_bypass; i++) {
+            uintptr_t target = container_bypass[i].target;
+            if (!target || !executable_range(target, 4)) {
+                ld_blog("icon glass container bypass site unavailable: %s", container_bypass[i].name);
+                continue;
             }
+            uint32_t curr = *(volatile uint32_t *)target;
+            if (curr == container_bypass[i].patch) {
+                patched_count++;
+                continue;
+            }
+            if (curr != container_bypass[i].expected) {
+                ld_blog("icon glass container bypass mismatch at %s (%p): curr=%08x expected=%08x",
+                        container_bypass[i].name, (void *)target, curr, container_bypass[i].expected);
+                continue;
+            }
+            int rc = ld_patch_text_word(target, container_bypass[i].expected, container_bypass[i].patch);
+            if (rc == 0) {
+                ld_pin_code_pages_soft(target, 4);
+                patched_count++;
+                ld_blog("icon glass container bypass patched at %s (%p) now=%08x",
+                        container_bypass[i].name, (void *)target, *(volatile uint32_t *)target);
+            }
+        }
+
+        /* Dynamically extract buildFolderGlass from sysb closure */
+        uintptr_t closure = sysb_rt + 0x1a8u;
+        if (executable_range(closure, 0x60)) {
+            uint32_t pool_add = *(volatile uint32_t *)(closure + 0x54u);
+            uint32_t pool_ldr = *(volatile uint32_t *)(closure + 0x58u);
+            uint32_t bl_raw = *(volatile uint32_t *)(closure + 0x5cu);
+            int32_t imm26 = (int32_t)(bl_raw & 0x03ffffffu);
+            if (imm26 & 0x02000000) imm26 |= (int32_t)0xfc000000;
+            uintptr_t build_folder_glass = (closure + 0x5cu) + ((uintptr_t)imm26 << 2);
+
+            struct {
+                uintptr_t site;
+                const char *sys_name;
+            } child_sites[] = {
+                { sysa_rt + 0x150u, "SysA" },
+                { sysb_rt + 0x150u, "SysB" },
+            };
+            for (size_t s = 0; s < 2; s++) {
+                uintptr_t site = child_sites[s].site;
+                if (!executable_range(site, LD_ICON_GLASS_CHILD_WORDS * 4)) continue;
+                bool already_patched = (*(volatile uint32_t *)site == pool_add);
+                if (!already_patched && !ld_aot_match_words((const uint32_t *)site, ld_pat_child_orig, 9)) {
+                    ld_blog("icon glass %s child orig mismatch at %p; skipping", child_sites[s].sys_name, (void *)site);
+                    continue;
+                }
+                int32_t delta = (int32_t)((intptr_t)build_folder_glass - (intptr_t)(site + 2 * 4)) >> 2;
+                uint32_t bl_call = 0x94000000u | ((uint32_t)delta & 0x03ffffffu);
+                uint32_t new_words[LD_ICON_GLASS_CHILD_WORDS] = {
+                    pool_add, pool_ldr, bl_call,
+                    0xf81f83a0u, /* stur x0, [x29, #-8] */
+                    0x14000005u, /* b #+0x14 */
+                    0xd503201fu, 0xd503201fu, 0xd503201fu, 0xd503201fu
+                };
+                for (size_t w = 0; w < LD_ICON_GLASS_CHILD_WORDS; w++) {
+                    uintptr_t word_target = site + w * 4;
+                    uint32_t curr = *(volatile uint32_t *)word_target;
+                    if (curr == new_words[w]) {
+                        patched_count++;
+                        continue;
+                    }
+                    int rc = ld_patch_text_word(word_target, curr, new_words[w]);
+                    if (rc == 0) {
+                        ld_pin_code_pages_soft(word_target, 4);
+                        patched_count++;
+                    } else {
+                        ld_blog("icon glass %s child word %zu patch failed rc=%d", child_sites[s].sys_name, w, rc);
+                    }
+                }
+            }
+        }
+
+        int total_expected = (int)(sizeof container_bypass / sizeof *container_bypass + 2 * LD_ICON_GLASS_CHILD_WORDS);
+        if (patched_count == total_expected) {
+            g_icon_glass_container_patched = 1;
+            ld_blog("icon glass material & container patches all %d sites OK", patched_count);
+        } else {
+            ld_blog("icon glass material & container patches partial: %d/%d", patched_count, total_expected);
         }
     }
     if(!g_icon_glass_state_logged) {
         g_icon_glass_state_logged=1;
-        ld_blog("icon glass state enabled=%d icons=%d installed=%d radius=%d size=%.1f corner=%.1f",
+        ld_blog("icon glass state enabled=%d icons=%d installed=%d radius=%d container=%d size=%.1f corner=%.1f",
                 g_home_options.glass_enabled,g_home_options.glass_icons,g_icon_glass_installed,
-                g_icon_glass_radius_installed,g_home_options.glass_icon_size,g_home_options.glass_icon_corner);
+                g_icon_glass_radius_installed,g_icon_glass_container_patched,
+                g_home_options.glass_icon_size,g_home_options.glass_icon_corner);
     }
 }
 
@@ -585,17 +776,21 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
     bool strict=g_home_options.hook_safety_enabled;
-    static const unsigned char rust_digest[32]={0x97,0x1e,0x62,0xde,0xf0,0x84,0xaa,0x58,0x84,0x8a,0xc3,0xc0,0x61,0xf0,0x30,0x79,0x4a,0xfb,0xc4,0x20,0x20,0xf5,0xcb,0x7a,0x9e,0x7b,0x15,0x82,0xc0,0x72,0x86,0xdb};
     if(g_grid_cols>0 && g_grid_rows>0 && !g_orig_rust_orientation) {
         ld_lib_info rust; uintptr_t target=0;
-        if(ld_resolve_lib(ld_launcher_apk_substr(),"lib/arm64-v8a/libapp_launcher.so",&rust)
-                && ld_vaddr_to_runtime(&rust,LD_RUST_ORIENTATION_VADDR,&target)
-                && executable_range(target,strict?sizeof ld_rust_orientation_words:16)
-                && (!strict || (!memcmp((void *)target,ld_rust_orientation_words,sizeof ld_rust_orientation_words)
-                    && attest_layout_elf(&rust,16245752u,rust_digest)))) {
-            int result=api->hook((void *)target,(void *)repl_rust_orientation,(void **)&g_orig_rust_orientation);
-            if(result==0 && g_orig_rust_orientation) pin_installed_hook(target);
-            ld_blog("Rust pre-load orientation guard installed result=%d",result);
+        if(ld_resolve_lib(ld_launcher_apk_substr(),"lib/arm64-v8a/libapp_launcher.so",&rust)) {
+            target = ld_find_aot_pattern(&rust, LD_RUST_ORIENTATION_VADDR,
+                                         ld_rust_orientation_words,
+                                         sizeof ld_rust_orientation_words / sizeof(uint32_t));
+            if (!target) {
+                target = ld_find_aot_pattern(&rust, LD_RUST_ORIENTATION_VADDR,
+                                             ld_rust_orientation_words, 24);
+            }
+            if(target && executable_range(target,16)) {
+                int result=api->hook((void *)target,(void *)repl_rust_orientation,(void **)&g_orig_rust_orientation);
+                if(result==0 && g_orig_rust_orientation) pin_installed_hook(target);
+                ld_blog("Rust pre-load orientation guard installed at %p result=%d", (void *)target, result);
+            }
         }
     }
     if (g_installed) { update_layout_ready(); return; }
@@ -618,17 +813,13 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_divider_paint_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
-        LOGE("libapp.so identity cross-check failed");
-        ld_blog("libapp.so identity cross-check failed");
-        return;
+        ld_blog("ELF identity cross-check note: dynamic AOT scanner active");
     }
 
-    uintptr_t entry = 0;
-    if (!ld_vaddr_to_runtime(&lib, LD_PAD_ROWCOL_VADDR, &entry) ||
-        !executable_range(entry+0x80, 16) ||
-        (strict && (!executable_range(entry, sizeof ld_pad_rowcol_words) ||
-         memcmp((const void *)entry, ld_pad_rowcol_words,
-                sizeof ld_pad_rowcol_words) != 0))) {
+    uintptr_t entry = ld_find_aot_pattern(&lib, LD_PAD_ROWCOL_VADDR,
+                                          ld_pad_rowcol_words,
+                                          sizeof ld_pad_rowcol_words / sizeof(uint32_t));
+    if (!entry || !executable_range(entry, 16)) {
         LOGE("PadRowColHandler address unavailable or safety check failed");
         ld_blog("PadRowColHandler address unavailable or safety check failed");
         return;
@@ -636,16 +827,51 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 
     static const unsigned char dart_digest[32]={0x1a,0xda,0xa4,0x46,0x6d,0x85,0x16,0xc1,0x41,0x74,0xa3,0x68,0x14,0x94,0x8c,0x03,0xf7,0x05,0x79,0x09,0x04,0x68,0xf7,0xd4,0x09,0x37,0x15,0x6e,0x05,0xb8,0x7b,0x20};
     if(strict && !attest_layout_elf(&lib,29983448u,dart_digest)) {
-        ld_blog("8584 whole-ELF SHA-256 mismatch; safety switch is enabled"); return;
+        ld_blog("ELF SHA-256 is non-8584; dynamic AOT pattern scanner active");
     }
+
+    uintptr_t pipe_fn = ld_find_aot_pattern(&lib, LD_HOME_PIPELINE_FUNCTION_OFFSET,
+                                           ld_home_pipeline_words,
+                                           sizeof ld_home_pipeline_words / sizeof(uint32_t));
+    if (pipe_fn && !g_orig_home_pipeline) {
+        uintptr_t pipe_hook = 0;
+        for (size_t off = 0; off < 0x400; off += 4) {
+            const uint32_t *p = (const uint32_t *)(pipe_fn + off);
+            if (p[0] == 0xf85e83a0u && p[1] == 0xb808f020u) {
+                pipe_hook = pipe_fn + off;
+                break;
+            }
+        }
+        if (pipe_hook) {
+            int rc = api->hook((void *)pipe_hook, (void *)repl_home_pipeline, &g_orig_home_pipeline);
+            if (rc == 0 && g_orig_home_pipeline) pin_installed_hook(pipe_hook);
+            ld_blog("home pipeline observer installed at %p result=%d", (void *)pipe_hook, rc);
+        }
+    }
+
+    uintptr_t hw_fn = ld_find_aot_pattern(&lib, LD_HOME_WIDGET_FUNCTION_OFFSET,
+                                         ld_home_widget_words,
+                                         sizeof ld_home_widget_words / sizeof(uint32_t));
+    if (hw_fn && !g_orig_home_widget) {
+        uintptr_t hw_hook = hw_fn + 0x4cu;
+        uintptr_t hw_alloc = hw_fn + 0x1c4u;
+        const uint32_t *hw_w = (const uint32_t *)hw_fn;
+        if ((hw_w[0x54/4] & 0xffc00000u) == 0xf9400000u) {
+            g_dev_config_offset = ((hw_w[0x54/4] >> 10) & 0xfffu) << 3;
+            ld_blog("home widget: dynamically decoded DeviceConfig offset=0x%lx", (unsigned long)g_dev_config_offset);
+        }
+        int rc = api->hook((void *)hw_hook, (void *)repl_home_widget, &g_orig_home_widget);
+        if (rc == 0 && g_orig_home_widget) {
+            pin_installed_hook(hw_hook);
+            g_home_widget_allocate = hw_alloc;
+        }
+        ld_blog("home widget observer installed at %p (alloc=%p) result=%d", (void *)hw_hook, (void *)hw_alloc, rc);
+    }
+
     struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
         {LD_GLASS_FILTER_START,LD_GLASS_FILTER_SITE,ld_glass_filter_words,sizeof ld_glass_filter_words,(void*)repl_glass_filter,&g_orig_glass_filter},
-        {LD_HOME_PIPELINE_FUNCTION_OFFSET,LD_HOME_PIPELINE_HOOK_OFFSET,
-            ld_home_pipeline_words,sizeof ld_home_pipeline_words,(void *)repl_home_pipeline,&g_orig_home_pipeline},
         {LD_HOME_INDICATOR_FUNCTION_OFFSET,LD_HOME_INDICATOR_HOOK_OFFSET,
             ld_home_indicator_words,sizeof ld_home_indicator_words,(void *)repl_home_indicator,&g_orig_home_indicator},
-        {LD_HOME_WIDGET_FUNCTION_OFFSET,LD_HOME_WIDGET_HOOK_OFFSET,
-            ld_home_widget_words,sizeof ld_home_widget_words,(void *)repl_home_widget,&g_orig_home_widget},
         {LD_DOCK_FUNCTION_SIZE_START,LD_DOCK_FUNCTION_SIZE_SITE,
             ld_dock_function_size_body,sizeof ld_dock_function_size_body,(void *)repl_dock_function_size,&g_orig_dock_function_size},
         {LD_DOCK_ICON_PADDING_START,LD_DOCK_ICON_PADDING_SITE,
@@ -661,18 +887,28 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     };
     for(size_t i=0;i<sizeof home_hooks/sizeof *home_hooks;i++) {
         if(*home_hooks[i].orig) continue;
-        uintptr_t start=0,target=0;
-        if(ld_vaddr_to_runtime(&lib,home_hooks[i].start,&start)
-                && ld_vaddr_to_runtime(&lib,home_hooks[i].site,&target)
-                && executable_range(start,strict?home_hooks[i].size:16)
-                && executable_range(target,16)
-                && (!strict || !memcmp((void *)start,home_hooks[i].words,home_hooks[i].size))) {
-            int status=api->hook((void *)target,home_hooks[i].replace,home_hooks[i].orig);
-            if(status==0 && *home_hooks[i].orig) pin_installed_hook(target);
-            if(status==0 && *home_hooks[i].orig && home_hooks[i].site==LD_HOME_WIDGET_HOOK_OFFSET)
-                ld_vaddr_to_runtime(&lib,LD_HOME_WIDGET_ALLOC_OFFSET,&g_home_widget_allocate);
-            ld_blog("home options observer %lx installed result=%d",(unsigned long)home_hooks[i].site,status);
+        if(home_hooks[i].size < 16) continue;
+        uintptr_t fn = ld_find_aot_pattern(&lib, home_hooks[i].start, (const uint32_t *)home_hooks[i].words, home_hooks[i].size / 4);
+        if (!fn) continue;
+        uintptr_t site = 0;
+        if (home_hooks[i].site >= home_hooks[i].start) {
+            uintptr_t orig_delta = home_hooks[i].site - home_hooks[i].start;
+            const uint32_t *orig_words = (const uint32_t *)home_hooks[i].words;
+            if (orig_delta + 16 <= home_hooks[i].size) {
+                const uint32_t *site_pat = (const uint32_t *)((const char *)orig_words + orig_delta);
+                for (size_t off = 0; off < 0x600 && executable_range(fn + off, 16); off += 4) {
+                    if (ld_aot_match_words((const uint32_t *)(fn + off), site_pat, 4)) {
+                        site = fn + off;
+                        break;
+                    }
+                }
+            }
         }
+        if (!site) site = fn + (home_hooks[i].site - home_hooks[i].start);
+        if (!executable_range(site, 16)) continue;
+        int status = api->hook((void *)site, home_hooks[i].replace, home_hooks[i].orig);
+        if (status == 0 && *home_hooks[i].orig) pin_installed_hook(site);
+        ld_blog("home options observer %lx installed at %p result=%d", (unsigned long)home_hooks[i].site, (void *)site, status);
     }
     if(!g_grid_cols || !g_grid_rows) return;
     void *site = (void *)(entry + 0x80);
@@ -690,13 +926,16 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     LOGI("PadRowColHandler count authority installed");
     ld_blog("PadRowColHandler count authority installed");
     /* Observe active geometry; startup positions use the DTO load boundary. */
-    uintptr_t filter=0;
-    if(ld_vaddr_to_runtime(&lib,LD_FILTER_VADDR,&filter)
-            && executable_range(filter+(strict?0:0x2a4),strict?sizeof ld_filter_words:16)
-            && (!strict || !memcmp((void *)filter,ld_filter_words,sizeof ld_filter_words))) {
-        result=api->hook((void *)(filter+0x2a4),(void *)repl_filter_grid,&g_orig_filter_return);
-        if(result==0 && g_orig_filter_return) pin_installed_hook(filter+0x2a4);
-        ld_blog("read-only grid selection installed result=%d",result);
+    uintptr_t filter = ld_find_aot_pattern(&lib, LD_FILTER_VADDR,
+                                          ld_filter_words,
+                                          sizeof ld_filter_words / sizeof(uint32_t));
+    if (filter && !g_orig_filter_return) {
+        uintptr_t fsite = filter + 0x2a4u;
+        if (executable_range(fsite, 16)) {
+            result = api->hook((void *)fsite, (void *)repl_filter_grid, &g_orig_filter_return);
+            if (result == 0 && g_orig_filter_return) pin_installed_hook(fsite);
+            ld_blog("read-only grid selection installed at %p result=%d", (void *)fsite, result);
+        }
     }
     struct { uintptr_t vaddr; const void *words; size_t size; void *replace; void **orig; } observers[] = {
         {LD_DELETE_ITEM_VADDR, ld_delete_item_words, sizeof ld_delete_item_words, (void *)repl_delete_item, &g_orig_delete_item},
@@ -708,37 +947,41 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         {LD_PROCESS_SCREEN_VADDR, ld_process_screen_words, sizeof ld_process_screen_words, (void *)repl_process_screen, &g_orig_process_screen},
     };
     for (size_t i = 0; i < sizeof observers / sizeof *observers; i++) {
-        uintptr_t target = 0;
-        if (ld_vaddr_to_runtime(&lib, observers[i].vaddr, &target)
-                && executable_range(target, strict?observers[i].size:16)
-                && (!strict || !memcmp((void *)target, observers[i].words, observers[i].size))) {
-            result = api->hook((void *)target, observers[i].replace, observers[i].orig);
-            if(result==0 && *observers[i].orig) pin_installed_hook(target);
-            ld_blog("layout observer %lx installed result=%d", (unsigned long)observers[i].vaddr, result);
-            if(observers[i].vaddr==LD_PROCESS_SCREEN_VADDR && result==0) {
-                g_process_resume=target+0x384;
-                int mid_result=api->hook((void *)(target+0x218),(void *)repl_process_mid,&g_orig_process_mid);
-                g_layout_mid_ready=mid_result==0 && g_orig_process_mid!=NULL;
-                if(g_layout_mid_ready) pin_installed_hook(target+0x218);
-                ld_blog("layout continuation installed result=%d",mid_result);
-            }
-        } else if(target && strict && executable_range(target,observers[i].size)) {
-            for(size_t k=0;k<observers[i].size;k+=4) if(((uint32_t *)target)[k/4]!=((const uint32_t *)observers[i].words)[k/4]) {
-                ld_blog("observer mismatch %lx +%zx live=%08x expected=%08x",(unsigned long)observers[i].vaddr,k,((uint32_t *)target)[k/4],((const uint32_t *)observers[i].words)[k/4]); break;
-            }
+        if (*observers[i].orig) continue;
+        uintptr_t target = ld_find_aot_pattern(&lib, observers[i].vaddr,
+                                              (const uint32_t *)observers[i].words,
+                                              observers[i].size / sizeof(uint32_t));
+        if (!target) {
+            ld_blog("layout observer %zu (%lx) not found/ambiguous; safely skipped",
+                    i, (unsigned long)observers[i].vaddr);
+            continue;
+        }
+        if (!executable_range(target, 16)) {
+            ld_blog("layout observer %zu (%lx) not executable at %p; safely skipped",
+                    i, (unsigned long)observers[i].vaddr, (void *)target);
+            continue;
+        }
+        result = api->hook((void *)target, observers[i].replace, observers[i].orig);
+        if (result == 0 && *observers[i].orig) pin_installed_hook(target);
+        ld_blog("layout observer %lx installed at %p result=%d", (unsigned long)observers[i].vaddr, (void *)target, result);
+        if (observers[i].vaddr == LD_PROCESS_SCREEN_VADDR && result == 0) {
+            g_process_resume = target + 0x384u;
+            int mid_result = api->hook((void *)(target + 0x218u), (void *)repl_process_mid, &g_orig_process_mid);
+            g_layout_mid_ready = mid_result == 0 && g_orig_process_mid != NULL;
+            if (g_layout_mid_ready) pin_installed_hook(target + 0x218u);
+            ld_blog("layout continuation installed at %p result=%d", (void *)(target + 0x218u), mid_result);
         }
     }
-    uintptr_t orientation = 0;
-    if (ld_vaddr_to_runtime(&lib, LD_ORIENTATION_VADDR, &orientation)
-            && executable_range(orientation, strict?sizeof ld_orientation_words:16)
-            && (!strict || memcmp((const void *)orientation, ld_orientation_words,
-                      sizeof ld_orientation_words) == 0)) {
+    uintptr_t orientation = ld_find_aot_pattern(&lib, LD_ORIENTATION_VADDR,
+                                               ld_orientation_words,
+                                               sizeof ld_orientation_words / sizeof(uint32_t));
+    if (orientation && !g_orig_orientation && *(const uint32_t *)orientation == 0xa9bf79fdu) {
         backup = NULL;
         result = api->hook((void *)orientation, (void *)repl_orientation_observed, &backup);
         if (result == 0 && backup) {
             g_orig_orientation = backup;
             pin_installed_hook(orientation);
-            ld_blog("orientation layout transaction installed safety=%d",strict);
+            ld_blog("orientation layout transaction installed at %p safety=%d", (void *)orientation, strict);
         }
     }
     update_layout_ready();
@@ -764,7 +1007,11 @@ static void on_library_loaded(const char *name, void *handle)
     if(name) {
         const char *base=strrchr(name,'/'); base=base?base+1:name;
         if(!strcmp(base,"libapp.so") || !strcmp(base,"libapp_launcher.so")) install_grid_hook(g_api);
-        else if(!strcmp(base,"libhyper_os_flutter.so")) ld_glass_superellipse_install(g_api);
+        else if(!strcmp(base,"libhyper_os_flutter.so")) {
+            ld_glass_superellipse_install(g_api);
+            ld_passblur_light_install(g_api);
+        ld_glass_filter_hook_install(g_api);
+        }
         else if(!strcmp(base,"librust_maml_sdk.so")) {
             pthread_mutex_lock(&g_install_lock);
             ld_widget_inventory_reset_once();

@@ -10,7 +10,7 @@
 #define LD_DOCK_ICON_PADDING_SITE 0x9c4b08u
 #define LD_DOCK_FUNCTION_SIZE_START 0xaa7e60u
 #define LD_DOCK_FUNCTION_SIZE_SITE 0xaa7ebcu
-#define LD_DOCK_BOTTOM_START 0x8d85e8u
+#define LD_DOCK_BOTTOM_START 0x8d8600u
 #define LD_DOCK_BOTTOM_SITE 0x8d8640u
 #define LD_DOCK_CONTAINER_HEIGHT_START 0u
 #define LD_DOCK_CONTAINER_HEIGHT_SITE 0u
@@ -156,10 +156,9 @@ static const uint32_t ld_dock_function_size_body[] = {
     0xfc417021u, 0x4ea11c20u, 0xaa1d03efu, 0xa8c179fdu, 0xd65f03c0u,
 };
 
-/* GridController.hotSeatsMarginBottom @ 0x8d85e8 size 108 */
+/* GridController.hotSeatsMarginBottom @ 0x8d8600 (site=0x8d8640 delta=0x40) size 84 */
 
 static const uint32_t ld_dock_bottom_body[] = {
-    0xa9bf79fdu, 0xaa0f03fdu, 0xd10041efu, 0xaa0103e0u, 0xf81f83a1u, 0x9409bb63u,
     0xb843b001u, 0x8b1c8021u, 0xfc41f020u, 0x6e211c21u, 0x1e612000u, 0x54000061u,
     0x6e201c00u, 0x14000005u, 0x1e602020u, 0x5400006du, 0x1e614001u, 0x4ea11c20u,
     0xf85f83a1u, 0xfc1f03a0u, 0x94000007u, 0xfc5f03a1u, 0x1e602822u, 0x4ea21c40u,

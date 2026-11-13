@@ -281,6 +281,21 @@ internal object Os4MamlArchive {
         return changed
     }
 
+    private const val CLOCK_GLASS_PARAMS =
+        "ifelse(#__darkmode,0.5,ifelse(#isLightWallpaper,0.5,1)),1.00,0.00,1.00," +
+        "ifelse(#__darkmode,0.2,ifelse(#isLightWallpaper,0.2,0.3))," +
+        "ifelse(#__darkmode,3,2)," +
+        "ifelse(#__darkmode,0.2,ifelse(#isLightWallpaper,0.1,0.2)),0," +
+        "ifelse(#__darkmode,0.4,ifelse(#isLightWallpaper,0.6,0.4)),0.80," +
+        "ifelse(#__darkmode,0.04,0.02)," +
+        "ifelse(#__darkmode,0.06,0.90),ifelse(#__darkmode,0.06,0.90),ifelse(#__darkmode,0.06,0.90)," +
+        "ifelse(#__darkmode,0.40,1.00),0," +
+        "ifelse(#__darkmode,0.8,1),ifelse(#__darkmode,1.5,1),1,36," +
+        "ifelse(#__darkmode,2.2,ifelse(#isLightWallpaper,2.2,1.8)),80,200,1,0.8,-0.4,0.6,-0.8," +
+        "ifelse(#__darkmode,2.4,1.4),ifelse(#__darkmode,1.6,0.8),1.4,0.85,3,0,0,0,0,0,0,0,0,0"
+
+    private val CLOCK_GLASS_PARAMS_REFS = (0..41).joinToString(",") { "#ld_glass_params[$it]" }
+
     private fun ensureGlass(document: Document): Boolean {
         val root = document.documentElement
         var changed = false
@@ -292,14 +307,62 @@ internal object Os4MamlArchive {
         val allMaterials = layers.flatMap { directChildren(it, "MaterialToken") }
         // Preserve an existing native GlassConfig byte-for-byte instead of replacing an unknown token.
         if (allMaterials.any { directChildren(it, "GlassConfig").isNotEmpty() }) return changed
+
+        if (elementTag(root) == "Widget") {
+            val updater = root.getAttribute("useVariableUpdater")
+            val parts = updater.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            if ("HyperMaterial" !in parts) {
+                root.setAttribute("useVariableUpdater", (parts + "HyperMaterial").joinToString(","))
+                changed = true
+            }
+            val existingVars = directChildren(root, "Var").map { it.getAttribute("name") }.toSet()
+            val anchor = (0 until root.childNodes.length)
+                .map { root.childNodes.item(it) }
+                .firstOrNull { it.nodeType == Node.ELEMENT_NODE && isRenderedTag(elementTag(it as Element)) }
+            fun addVar(name: String, attrName: String, attrValue: String) {
+                if (name in existingVars) return
+                val el = document.createElementNS(root.namespaceURI, "Var").apply {
+                    setAttribute("name", name)
+                    setAttribute(attrName, attrValue)
+                    setAttribute("type", if (attrName == "values") "number[]" else "number")
+                }
+                if (anchor == null) root.appendChild(el) else root.insertBefore(el, anchor)
+                changed = true
+            }
+            addVar("ld_glass_params", "values", CLOCK_GLASS_PARAMS)
+            addVar("ld_glass_small_blur", "expression", "36")
+            addVar("ld_glass_big_blur", "expression", "500")
+        }
+
+        fun ensureMaterialChildren(material: Element) {
+            val blurCfg = directChildren(material, "BackgroundBlurConfig").firstOrNull()
+            if (blurCfg != null) {
+                blurCfg.setAttribute("passWindow", "true")
+                blurCfg.setAttribute("rustPassWindow", "true")
+                blurCfg.setAttribute("reuseContainer", "true")
+            } else {
+                material.appendChild(document.createElementNS(material.namespaceURI, "BackgroundBlurConfig").apply {
+                    setAttribute("blurBgMode", "0")
+                    setAttribute("blurContentMode", "1")
+                    setAttribute("blurRadius", "120")
+                    setAttribute("blurType", "0")
+                    setAttribute("disableBlur", "1")
+                    setAttribute("passWindow", "true")
+                    setAttribute("rustPassWindow", "true")
+                    setAttribute("reuseContainer", "true")
+                })
+            }
+            material.appendChild(document.createElementNS(material.namespaceURI, "GlassConfig").apply {
+                setAttribute("disableGlass", "0")
+                setAttribute("smallBlurRadius", "#ld_glass_small_blur")
+                setAttribute("bigBlurRadius", "#ld_glass_big_blur")
+                setAttribute("params", CLOCK_GLASS_PARAMS_REFS)
+            })
+        }
+
         val material = allMaterials.firstOrNull()
         if (material != null) {
-            material.setAttribute("enableBackgroundBlurConfig", "true")
-            material.appendChild(document.createElementNS(material.namespaceURI, "GlassConfig").apply {
-                setAttribute("token", "'Glass_Common_Medium_Thin_Low'")
-                setAttribute("disableGlass", "0")
-                setAttribute("rustPassWindow", "true")
-            })
+            ensureMaterialChildren(material)
             return true
         }
 
@@ -310,15 +373,10 @@ internal object Os4MamlArchive {
             setAttribute("layerType", "bottom")
         }
         val token = document.createElementNS(root.namespaceURI, "MaterialToken").apply {
-            setAttribute("tokenName", "Glass_Stroke_Regular")
+            setAttribute("tokenName", "clock_classic_material")
             setAttribute("version", "30")
-            setAttribute("enableBackgroundBlurConfig", "true")
         }
-        token.appendChild(document.createElementNS(root.namespaceURI, "GlassConfig").apply {
-            setAttribute("token", "'Glass_Common_Medium_Thin_Low'")
-            setAttribute("disableGlass", "0")
-            setAttribute("rustPassWindow", "true")
-        })
+        ensureMaterialChildren(token)
         layer.appendChild(token)
         layer.appendChild(document.createElementNS(root.namespaceURI, "ViewOutlineProvider").apply {
             setAttribute("type", "rect")

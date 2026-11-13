@@ -65,6 +65,8 @@ static inline int ld_home_widget_width(const struct ld_home_baseline *base,
     return 1;
 }
 
+static uintptr_t g_dev_config_offset = 0;
+
 __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dart_context *c)
 {
     if (!c) return;
@@ -76,14 +78,11 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
     if (c->x[29] < 8 || !(item_info & 1) || item_info == c->x[22]) return;
     memcpy((void *)(c->x[29] - 8), &item_info, sizeof item_info);
 
-    uintptr_t globals = 0, controller = 0, sentinel = 0;
+    uintptr_t globals = 0, controller = ld_get_grid_controller(c);
     if (!ld_read_heap(c->x[26] + 0x78, &globals, sizeof globals)
-            || !globals || (globals & 1)
-            || !ld_read_heap(globals + 0x27d8, &controller, sizeof controller)
-            || !ld_read_heap(c->x[27] + 0x40, &sentinel, sizeof sentinel)
-            || !(controller & 1) || controller == c->x[22] || controller == sentinel) return;
+            || !globals || (globals & 1) || !controller) return;
     uintptr_t rx = ld_heap_pointer(c, controller, 0x2b);
-    uintptr_t grid = ld_heap_pointer(c, rx, 0x13);
+    uintptr_t grid = rx ? ld_heap_pointer(c, rx, 0x13) : 0;
     if (!grid) return;
     int direction = ld_grid_direction(c, grid);
     if (direction < 0 || direction > 1) return;
@@ -91,11 +90,10 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
     if (cols != (direction ? g_grid_rows : g_grid_cols)
             || rows != (direction ? g_grid_cols : g_grid_rows)) return;
 
-    uintptr_t variables = ld_heap_pointer(c, grid, 0x8f), fullscreen = 0;
+    uintptr_t variables = ld_heap_pointer(c, grid, 0x8f);
     uint32_t layout = 0;
     if (!variables || !ld_read_heap(variables + 0x27, &layout, 4)
-            || !ld_read_heap(c->x[27] + 0xef60, &fullscreen, 8)
-            || !(layout & 1) || !(fullscreen & 1) || layout != (uint32_t)fullscreen) return;
+            || !ld_is_fullscreen_layout(c, layout)) return;
 
     int64_t span = ld_heap_i64(item_info, 0x1f);
     double current_width = 0, current_height = 0, current_icon = 0;
@@ -108,11 +106,31 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
             current_width, current_height, current_icon);
     if (!base) return;
 
-    /* DeviceConfig static entry at globals+0x2768 marks the phone width branch. */
-    uintptr_t device_config = 0;
+    /* DeviceConfig static entry marks the phone width branch.
+     * 9239: globals + 0x27c0, 8584/8604: globals + 0x2768 */
+    uintptr_t device_config = 0, sentinel = 0;
+    (void)ld_read_heap(c->x[27] + 0x40, &sentinel, sizeof sentinel);
+    if (g_dev_config_offset) {
+        uintptr_t cand = 0;
+        if (ld_read_heap(globals + g_dev_config_offset, &cand, sizeof cand)
+                && (cand & 1) && cand != c->x[22] && cand != sentinel) {
+            device_config = cand;
+        }
+    }
+    if (!device_config) {
+        static const uintptr_t dev_conf_offsets[] = { 0x27c0u, 0x2768u };
+        for (size_t i = 0; i < sizeof(dev_conf_offsets)/sizeof(dev_conf_offsets[0]); i++) {
+            uintptr_t cand = 0;
+            if (ld_read_heap(globals + dev_conf_offsets[i], &cand, sizeof cand)
+                    && (cand & 1) && cand != c->x[22] && cand != sentinel) {
+                device_config = cand;
+                if (!g_dev_config_offset) g_dev_config_offset = dev_conf_offsets[i];
+                break;
+            }
+        }
+    }
     uint8_t config_flags = 0, item_flags = 0;
-    int special_phone = ld_read_heap(globals + 0x2768, &device_config, sizeof device_config)
-            && (device_config & 1) && device_config != c->x[22] && device_config != sentinel
+    int special_phone = device_config
             && ld_read_heap(device_config + 0xe7, &config_flags, 1)
             && ld_read_heap(item_info + 0xfb, &item_flags, 1)
             && (config_flags & 0x10) && (item_flags & 0x10);
@@ -128,6 +146,11 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
     if (!g_home_widget_allocate) return;
     memcpy(&c->q[0][0], &desired, sizeof desired);
     c->reserved = g_home_widget_allocate;
+    static unsigned widget_hits = 0;
+    if (__atomic_fetch_add(&widget_hits, 1u, __ATOMIC_RELAXED) < 5u) {
+        ld_blog("home widget: span=%lld width=%.2f (base=%.2f) stretch=%d",
+                (long long)span, desired, base->cell_width, g_home_options.widget_horizontal_stretch);
+    }
 }
 
 #ifndef LD_HOME_WIDGET_TEST_NO_BRIDGE

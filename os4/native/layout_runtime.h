@@ -75,7 +75,10 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     for (int i = 0; i < n; i++) {
         uintptr_t screen = ld_heap_pointer(c, data, 0xf + i * 4);
         uintptr_t layout = ld_heap_pointer(c, screen, 0x1b);
-        uintptr_t items=ld_heap_pointer(c,layout,0xdb);
+        uintptr_t items = ld_heap_pointer(c, layout, 0xe7);
+        if (!items || (ld_heap_u32(items, (size_t)-1) >> 12 & 0xfffff) != 0x5c) {
+            items = ld_heap_pointer(c, layout, 0xdb);
+        }
         int size=(int32_t)ld_heap_u32(items,0xb)>>1;
         uintptr_t array=ld_heap_pointer(c,items,0xf);
         if(!layout || !array || size<0 || count+(size_t)size>LD_LAYOUT_MAX_ITEMS) goto done;

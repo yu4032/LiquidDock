@@ -50,58 +50,76 @@ static void ld_lmw_load_conf(void)
     ld_blog("margins-write: side=%.1f bottom=%.1f", g_lmw_side, g_lmw_bottom);
 }
 
-/* 后置写：保存 x0..x7 与 x15，调原函数，写 rules 对象字段，恢复并返回。 */
+/* 后置写：静态保存区（Dart 入口处硬件 sp 紧邻 guard page，不能压栈）。
+ * 保存 x0..x8/x15/x19/x28/x30 与 q0..q7，调原函数后由 C 回调改写 rules 字段。 */
+static unsigned char g_lmw_save[0x100] __attribute__((aligned(16), used));
+
 __attribute__((naked, used)) static void ld_lmw_hook(void)
 {
     __asm__ volatile(
-        "sub sp, sp, #96\n"
-        "stp x0, x1, [sp, #0]\n"
-        "stp x2, x3, [sp, #16]\n"
-        "stp x4, x5, [sp, #32]\n"
-        "stp x6, x7, [sp, #48]\n"
-        "str x15, [sp, #64]\n"
-        "str x30, [sp, #72]\n"
-        "adrp x16, g_lmw_calls\n"
-        "add x16, x16, :lo12:g_lmw_calls\n"
-        "ldr w17, [x16]\n"
-        "add w17, w17, #1\n"
-        "str w17, [x16]\n"
-        "adrp x16, g_lmw_orig\n"
-        "add x16, x16, :lo12:g_lmw_orig\n"
-        "ldr x16, [x16]\n"
-        "cbz x16, 9f\n"
-        /* 恢复原始参数后调用原函数 */
-        "ldp x0, x1, [sp, #0]\n"
-        "ldp x2, x3, [sp, #16]\n"
-        "ldp x4, x5, [sp, #32]\n"
-        "ldp x6, x7, [sp, #48]\n"
-        "ldr x15, [sp, #64]\n"
-        "blr x16\n"
-        /* 后置写：x1 = rules 对象 */
-        "ldr x1, [sp, #8]\n"
-        "cbz x1, 9f\n"
-        "adrp x16, g_lmw_have_side\n"
-        "add x16, x16, :lo12:g_lmw_have_side\n"
-        "ldr w17, [x16]\n"
-        "cbz w17, 3f\n"
-        "adrp x16, g_lmw_side\n"
-        "add x16, x16, :lo12:g_lmw_side\n"
-        "ldr d0, [x16]\n"
-        "stur d0, [x1, #0x1f]\n"
-        "3:\n"
-        "adrp x16, g_lmw_have_bottom\n"
-        "add x16, x16, :lo12:g_lmw_have_bottom\n"
-        "ldr w17, [x16]\n"
-        "cbz w17, 9f\n"
-        "adrp x16, g_lmw_bottom\n"
-        "add x16, x16, :lo12:g_lmw_bottom\n"
-        "ldr d0, [x16]\n"
-        "stur d0, [x1, #0x57]\n"
+        "adrp x16, g_lmw_save\n"
+        "add  x16, x16, :lo12:g_lmw_save\n"
+        "stp x0, x1, [x16, #0]\n"
+        "stp x2, x3, [x16, #16]\n"
+        "stp x4, x5, [x16, #32]\n"
+        "stp x6, x7, [x16, #48]\n"
+        "str x8, [x16, #64]\n"
+        "str x15, [x16, #72]\n"
+        "str x30, [x16, #80]\n"
+        "str x28, [x16, #248]\n"
+        "stp q0, q1, [x16, #112]\n"
+        "stp q2, q3, [x16, #144]\n"
+        "ldp x0, x1, [x16, #0]\n"
+        "ldp x2, x3, [x16, #16]\n"
+        "ldp x4, x5, [x16, #32]\n"
+        "ldp x6, x7, [x16, #48]\n"
+        "ldr x8, [x16, #64]\n"
+        "ldr x15, [x16, #72]\n"
+        "adrp x17, g_lmw_orig\n"
+        "ldr x17, [x17, :lo12:g_lmw_orig]\n"
+        "cbz x17, 9f\n"
+        "blr x17\n"
+        /* 回调：改写 rules 对象字段（x1 在保存区 +8） */
+        "adrp x16, g_lmw_save\n"
+        "add  x16, x16, :lo12:g_lmw_save\n"
+        "str x0, [x16, #88]\n"
+        "str x19, [x16, #96]\n"
+        "mov x19, sp\n"
+        "sub x17, x15, #1024\n"
+        "and x17, x17, #0xfffffffffffffff0\n"
+        "mov sp, x17\n"
+        "mov x0, x16\n"
+        "bl ld_lmw_post\n"
+        "mov sp, x19\n"
+        "adrp x16, g_lmw_save\n"
+        "add  x16, x16, :lo12:g_lmw_save\n"
+        "ldr x19, [x16, #96]\n"
+        "ldr x0, [x16, #88]\n"
         "9:\n"
-        "ldr x15, [sp, #64]\n"
-        "ldr x30, [sp, #72]\n"
-        "add sp, sp, #96\n"
+        "adrp x16, g_lmw_save\n"
+        "add  x16, x16, :lo12:g_lmw_save\n"
+        "ldr x28, [x16, #248]\n"
+        "ldr x15, [x16, #72]\n"
+        "ldr x30, [x16, #80]\n"
         "ret\n");
+}
+
+__attribute__((used)) static void ld_lmw_post(unsigned char *save, uintptr_t result)
+{
+    (void)result;
+    uintptr_t rules = 0;
+    __builtin_memcpy(&rules, save + 8, sizeof rules);
+    if (!rules) return;
+    unsigned n = __atomic_fetch_add(&g_lmw_calls, 1u, __ATOMIC_RELAXED);
+    if (n < 3u) ld_blog("margins-write: post #%u rules=%p", n + 1u, (void *)rules);
+    if (g_lmw_have_side) {
+        double v = g_lmw_side;
+        __builtin_memcpy((void *)(rules + 0x1f), &v, sizeof v);
+    }
+    if (g_lmw_have_bottom) {
+        double v = g_lmw_bottom;
+        __builtin_memcpy((void *)(rules + 0x57), &v, sizeof v);
+    }
 }
 
 static void ld_layout_margins_write_install(const struct native_api *api, ld_lib_info *lib)

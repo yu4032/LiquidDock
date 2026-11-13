@@ -50,8 +50,10 @@ static int ld_patch_text_word(uintptr_t address, uint32_t expected, uint32_t val
     size_t page = (size_t)sysconf(_SC_PAGESIZE);
     uintptr_t page_start = address & ~(uintptr_t)(page - 1);
     size_t span = (address + sizeof(uint32_t) > page_start + page) ? page * 2 : page;
-    if (mprotect((void *)page_start, span, PROT_READ | PROT_WRITE | PROT_EXEC) != 0)
-        return -errno;
+    if (mprotect((void *)page_start, span, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+        if (mprotect((void *)page_start, span, PROT_READ | PROT_WRITE) != 0)
+            return -errno;
+    }
     int rc = 0;
     if (*(volatile uint32_t *)address != expected) {
         rc = -2;
