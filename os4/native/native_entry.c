@@ -562,16 +562,57 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         };
         uintptr_t fv_fn=ld_find_aot_pattern(lib,0x1059398u,flutter_view_pat,16);
         if(fv_fn) {
+            uint32_t w_awid = *(const uint32_t *)(fv_fn + 0x48);
+            if((w_awid & 0x3bc00c00u) == 0x38400000u) {
+                int32_t imm9 = (int32_t)((w_awid >> 12) & 0x1ffu);
+                if(imm9 & 0x100) imm9 -= 512;
+                if(imm9 >= 0x80 && imm9 <= 0x120) {
+                    int32_t delta = imm9 - 0xcb;
+                    g_rv_props_app_widget_off = (size_t)(0xcb + delta);
+                    g_rv_props_view_id_off = (size_t)(0xc3 + delta);
+                    g_rv_props_bg_override_off = (size_t)(0xeb + delta);
+                    g_rv_props_bg_default_off = (size_t)(0xd7 + delta);
+                }
+            }
             int rc=api->hook((void *)fv_fn,(void *)repl_flutter_view_apply,
                     &g_orig_flutter_view_apply);
             if(rc==0 && g_orig_flutter_view_apply && ld_pin_code_pages_soft(fv_fn,16)) {
                 g_rv_hook_installed=true;
-                ld_blog("OS4 RemoteViews component hook installed at %p",(void *)fv_fn);
+                ld_blog("OS4 RemoteViews component hook installed at %p (awid=0x%zx vid=0x%zx bg=0x%zx/0x%zx)",
+                        (void *)fv_fn, g_rv_props_app_widget_off, g_rv_props_view_id_off,
+                        g_rv_props_bg_override_off, g_rv_props_bg_default_off);
             } else {
                 ld_blog("OS4 RemoteViews component hook failed rc=%d",(int)rc);
             }
         } else {
             ld_blog("OS4 RemoteViews component target not found");
+        }
+        static const uint32_t flutter_view_bg_pat[16]={
+            0xb840b022u, 0x8b1c8042u, 0xf9402370u, 0x6b10005fu,
+            0x54000160u, 0xb84eb041u, 0x8b1c8021u, 0x6b16003fu,
+            0x540000a1u, 0xb84d7043u, 0x8b1c8063u, 0xaa0303e0u,
+            0x14000002u, 0xaa0103e0u, 0xd65f03c0u, 0xa9bf79fdu,
+        };
+        uintptr_t fv_bg_fn=ld_find_aot_pattern(lib,0x17f5580u,flutter_view_bg_pat,16);
+        if(fv_bg_fn) {
+            uint32_t w_over = *(const uint32_t *)(fv_bg_fn + 0x14);
+            uint32_t w_def = *(const uint32_t *)(fv_bg_fn + 0x24);
+            if((w_over & 0x3bc00c00u) == 0x38400000u) {
+                int32_t imm9 = (int32_t)((w_over >> 12) & 0x1ffu);
+                if(imm9 & 0x100) imm9 -= 512;
+                if(imm9 >= 0x80 && imm9 <= 0x140) g_rv_props_bg_override_off = (size_t)imm9;
+            }
+            if((w_def & 0x3bc00c00u) == 0x38400000u) {
+                int32_t imm9 = (int32_t)((w_def >> 12) & 0x1ffu);
+                if(imm9 & 0x100) imm9 -= 512;
+                if(imm9 >= 0x80 && imm9 <= 0x140) g_rv_props_bg_default_off = (size_t)imm9;
+            }
+            int rc=api->hook((void *)fv_bg_fn,(void *)repl_flutter_view_bg,
+                    &g_orig_flutter_view_bg);
+            if(rc==0 && g_orig_flutter_view_bg && ld_pin_code_pages_soft(fv_bg_fn,16)) {
+                ld_blog("OS4 RemoteViews bg hook installed at %p (bg=0x%zx/0x%zx)",
+                        (void *)fv_bg_fn, g_rv_props_bg_override_off, g_rv_props_bg_default_off);
+            }
         }
     }
     static bool g_pad_widget_glass_installed = false;

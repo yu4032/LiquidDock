@@ -15,6 +15,7 @@
 #define LD_RV_MAX_HIDDEN 256
 
 static void *g_orig_flutter_view_apply __attribute__((used));
+static void *g_orig_flutter_view_bg __attribute__((used));
 
 struct ld_rv_entry {
     int64_t app_widget_id;
@@ -30,6 +31,10 @@ static size_t g_rv_hidden_count = 0;
 static time_t g_rv_hidden_mtime = 0;
 static long g_rv_hidden_nsec = 0;
 static int g_rv_log_reset = 0;
+static size_t g_rv_props_app_widget_off = 0xcb;
+static size_t g_rv_props_view_id_off = 0xc3;
+static size_t g_rv_props_bg_override_off = 0xeb;
+static size_t g_rv_props_bg_default_off = 0xd7;
 
 static inline int64_t ld_rv_int(struct ld_dart_context *c, uintptr_t obj, size_t off) {
     uint32_t word = ld_heap_u32(obj, off);
@@ -77,12 +82,12 @@ __attribute__((used)) static void ld_observe_flutter_view(struct ld_dart_context
     if (!(view & 1) || view == c->x[22]) return;
     uintptr_t props = ld_heap_pointer(c, view, 0xb);
     if (!props) return;
-    int64_t app_widget_id = ld_rv_int(c, props, 0xcb);
-    int64_t view_id = ld_rv_int(c, props, 0xc3);
+    int64_t app_widget_id = ld_rv_int(c, props, g_rv_props_app_widget_off);
+    int64_t view_id = ld_rv_int(c, props, g_rv_props_view_id_off);
     if (app_widget_id <= 0 || view_id == 0) return;
 
-    uintptr_t bg_override = ld_heap_pointer(c, props, 0xeb);
-    uintptr_t bg_default = ld_heap_pointer(c, props, 0xd7);
+    uintptr_t bg_override = ld_heap_pointer(c, props, g_rv_props_bg_override_off);
+    uintptr_t bg_default = ld_heap_pointer(c, props, g_rv_props_bg_default_off);
     int has_bg = (bg_override != 0 || bg_default != 0) ? 1 : 0;
 
     int hide = 0;
@@ -127,11 +132,12 @@ __attribute__((used)) static void ld_observe_flutter_view(struct ld_dart_context
 
     if (hide) {
         uint32_t dart_null = (uint32_t)c->x[22];
-        memcpy((void *)(props + 0xeb), &dart_null, 4);
-        memcpy((void *)(props + 0xd7), &dart_null, 4);
+        memcpy((void *)(props + g_rv_props_bg_override_off), &dart_null, 4);
+        memcpy((void *)(props + g_rv_props_bg_default_off), &dart_null, 4);
     }
 }
 
 LD_DART_OBSERVER(repl_flutter_view_apply, ld_observe_flutter_view, g_orig_flutter_view_apply)
+LD_DART_OBSERVER(repl_flutter_view_bg, ld_observe_flutter_view, g_orig_flutter_view_bg)
 
 #endif
