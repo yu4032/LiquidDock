@@ -33,7 +33,7 @@ class Os4GlassConfigTest {
     }
 
     @Test fun widgetHiddenNodesAreSuspendedWhenGlassIsDisabled() {
-        val selection = setOf("M2\\tos4:demo:widget_2x2\\thide")
+        val selection = setOf("M2\tos4:demo:widget_2x2\thide")
         val enabled = mapOf<String, Any>(
             ConfigSchema.Dock.ENABLED.name() to false,
             ConfigSchema.Glass.ENABLED.name() to true,
@@ -41,14 +41,14 @@ class Os4GlassConfigTest {
             WidgetComponentStore.SELECTION_KEY to selection,
         )
         val on = Os4MainScreenOptions.fromPreferences(enabled)
-        assertTrue(on != null && on.contains("glass_widgets=1\\n"))
-        assertTrue(on != null && on.contains("widget_overrides=1\\n"))
+        assertTrue(on != null && on.contains("glass_widgets=1\n"))
+        assertTrue(on != null && on.contains("widget_overrides=1\n"))
 
         val off = Os4MainScreenOptions.fromPreferences(
             enabled + (ConfigSchema.Glass.WIDGET_GLASS.name() to false)
         )
-        assertTrue(off != null && !off.contains("glass_widgets=1\\n"))
-        assertTrue(off != null && !off.contains("widget_overrides=1\\n"))
+        assertTrue(off != null && !off.contains("glass_widgets=1\n"))
+        assertTrue(off != null && !off.contains("widget_overrides=1\n"))
 
         val globalOff = Os4MainScreenOptions.fromPreferences(
             enabled + (ConfigSchema.Glass.ENABLED.name() to false)
