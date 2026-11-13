@@ -13,7 +13,6 @@ internal enum class Page(val titleRes: Int) {
     GridBasics(R.string.page_grid_basics),
     GridLandscape(R.string.page_grid_landscape),
     GridPortrait(R.string.page_grid_portrait),
-    GridSplit(R.string.page_grid_split),
 
     Dock(R.string.page_dock),
     DockBehavior(R.string.page_dock_behavior),
@@ -26,6 +25,11 @@ internal enum class Page(val titleRes: Int) {
     WorkstationAppsPortrait(R.string.page_workstation_apps_portrait),
     Recents(R.string.page_recents),
 
+    SoftGlass(R.string.page_soft_glass),
+    SoftGlassMaterial(R.string.page_soft_glass_material),
+    SoftGlassColor(R.string.page_soft_glass_color),
+    SoftGlassLighting(R.string.page_soft_glass_lighting),
+    SoftGlassComponents(R.string.page_soft_glass_components),
     Liquid(R.string.page_liquid),
     LiquidMaterial(R.string.page_liquid_material),
     LiquidColor(R.string.page_liquid_color),
@@ -62,16 +66,9 @@ internal enum class Page(val titleRes: Int) {
     LauncherHighlights(R.string.page_launcher_highlights),
     LauncherHighlightsCompact(R.string.page_launcher_highlights_compact),
     LauncherHighlightsLarge(R.string.page_launcher_highlights_large),
-    Stroke(R.string.page_stroke),
-    Shadow(R.string.page_shadow),
 
     SecurityCenterSidebar(R.string.page_security_center_sidebar),
-    Animation(R.string.page_animation),
-    AnimationWorkspace(R.string.page_animation_workspace),
-    AnimationInteraction(R.string.page_animation_interaction),
-    AnimationPopups(R.string.page_animation_popups),
     AnimationSystem(R.string.page_animation_system),
-    AnimationGui(R.string.page_animation_gui),
     Data(R.string.page_data),
     About(R.string.page_about),
 }
@@ -94,8 +91,7 @@ internal data class HubEntry(
 internal val overviewEntries = listOf(
     HubEntry(Page.Dock, R.string.page_dock, "Dock 外观、位置、动画与最近程序"),
     HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与性能"),
-    HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏与分屏布局"),
-    HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock 与玻璃交互动画"),
+    HubEntry(Page.Grid, R.string.page_grid, "网格尺寸与横竖屏布局"),
 )
 
 internal val layoutEntries = listOf(
@@ -107,11 +103,10 @@ internal val layoutEntries = listOf(
 )
 
 internal val glassEntries = listOf(
-    HubEntry(Page.Liquid, R.string.page_liquid, "液态玻璃材质与光学参数"),
-    HubEntry(Page.GlassComponents, R.string.page_glass_components, "图标、小组件、文件夹与菜单外观"),
-    HubEntry(Page.Stroke, R.string.page_stroke, "Dock 描边、方圆曲线与颜色"),
-    HubEntry(Page.Shadow, R.string.page_shadow, "仅开启 Dock 自定义且关闭液态玻璃时生效"),
-    HubEntry(Page.Animation, R.string.page_animation, "工作区、Dock 与玻璃交互动画"),
+    HubEntry(Page.SoftGlass, R.string.page_soft_glass, "OS4 系统桌面原生柔光玻璃参数"),
+    HubEntry(Page.SoftGlassComponents, R.string.page_soft_glass_components, "桌面图标与小组件柔光玻璃"),
+    HubEntry(Page.Liquid, R.string.page_liquid, "液态玻璃材质与光学参数（其他 Hook 应用）"),
+    HubEntry(Page.GlassComponents, R.string.page_glass_components, "图标、小组件、文件夹与菜单液态玻璃"),
     HubEntry(Page.AnimationSystem, R.string.page_animation_system, "通知与控制中心顶部模糊、系统手势手柄联动"),
     HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用适配"),
 )
@@ -124,9 +119,8 @@ internal val moreEntries = listOf(
 
 internal val gridEntries = listOf(
     HubEntry(Page.GridBasics, R.string.page_grid_basics, "图标大小、网格尺寸与小组件拉伸"),
-    HubEntry(Page.GridLandscape, R.string.page_grid_landscape, "横屏距离、行距与页面指示器"),
-    HubEntry(Page.GridPortrait, R.string.page_grid_portrait, "竖屏距离、行距与页面指示器"),
-    HubEntry(Page.GridSplit, R.string.page_grid_split, "分屏布局距离与对齐"),
+    HubEntry(Page.GridLandscape, R.string.page_grid_landscape, "横屏距离与页面指示器"),
+    HubEntry(Page.GridPortrait, R.string.page_grid_portrait, "竖屏距离与页面指示器"),
 )
 
 internal val dockEntries = listOf(
@@ -142,6 +136,12 @@ internal val workstationEntries = listOf(
     HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
 )
 
+internal val softGlassEntries = listOf(
+    HubEntry(Page.SoftGlassMaterial, R.string.page_soft_glass_material, "边缘宽度、厚度、折射率与反射偏移"),
+    HubEntry(Page.SoftGlassColor, R.string.page_soft_glass_color, "颜色、透明度、背景模糊与亮度曲线"),
+    HubEntry(Page.SoftGlassLighting, R.string.page_soft_glass_lighting, "光源方向、主光强度与环境反射"),
+)
+
 internal val liquidEntries = listOf(
     HubEntry(Page.LiquidMaterial, R.string.page_liquid_material, "模糊、厚度、透射率、折射率与边缘轮廓"),
     HubEntry(Page.LiquidColor, R.string.page_liquid_color, "亮度、染色、底色、色散、色调曲线与内阴影"),
@@ -153,20 +153,13 @@ internal val componentEntries = listOf(
     HubEntry(Page.GlassIcons, R.string.page_glass_icons, "桌面图标、Dock 功能图标与多任务胶囊"),
     HubEntry(Page.GlassWidgets, R.string.page_glass_widgets, "小组件玻璃、内容适配与组件隐藏"),
     HubEntry(Page.GlassFolders, R.string.page_glass_folders, "大小文件夹玻璃与独立尺寸"),
-    HubEntry(Page.GlassMenus, R.string.page_glass_menus, "快捷菜单、系统顶部菜单与对话弹窗"),
+    HubEntry(Page.GlassMenus, R.string.page_glass_menus, "应用顶部菜单自定义"),
     HubEntry(Page.SidebarEdge, R.string.page_sidebar_glass, "模糊、颜色、透明度、圆角与玻璃高光"),
 )
 
 internal val highlightEntries = listOf(
     HubEntry(Page.LauncherHighlightsCompact, R.string.page_launcher_highlights_compact, "天空雾光、焦散与按压辉光"),
     HubEntry(Page.LauncherHighlightsLarge, R.string.page_launcher_highlights_large, "小组件与大文件夹使用独立高光开关"),
-)
-
-internal val animationEntries = listOf(
-    HubEntry(Page.AnimationWorkspace, R.string.page_animation_workspace, "应用返回渐显时机与时长、工作区和文件夹玻璃、Dock 尺寸变化"),
-    HubEntry(Page.AnimationInteraction, R.string.page_animation_interaction, "玻璃按压进入与释放"),
-    HubEntry(Page.AnimationPopups, R.string.page_animation_popups, "快捷菜单与安全中心退出渐隐"),
-    HubEntry(Page.AnimationGui, R.string.page_animation_gui, "设置页面切换时长"),
 )
 
 // Animation option specs live in SettingsOptionSpecs.kt.

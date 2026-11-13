@@ -32,6 +32,7 @@ internal object Os4MamlArchive {
         "Button", "ImageNumber", "Time", "DateTime", "ProgressBar", "Number",
         "List", "LinearLayout", "FrameLayout", "VirtualScreen", "WebView", "Video",
         "BitmapFont", "BitmapText", "Slider", "CheckBox", "RadioButton", "MusicControl",
+        "Array",
     )
     private val logicTags = setOf(
         "VariableBinders", "Binders", "Commands", "Triggers", "Variables", "VariableUpdater",
@@ -54,8 +55,8 @@ internal object Os4MamlArchive {
             "M2", owner, name, className, hierarchyPath,
         ).joinToString("\t")
 
-        fun catalog(owner: String): String = listOf(
-            "M2", owner, name, className, hierarchyPath, "", componentType,
+        fun catalog(owner: String, label: String = ""): String = listOf(
+            "M2", owner, name, className, hierarchyPath, label.takeIf(::isSafeField).orEmpty(), componentType,
             renderOrdinal.toString(), depth.toString(), areaRatio.toString(), effectiveZ.toString(),
         ).joinToString("\t")
     }
@@ -183,6 +184,14 @@ internal object Os4MamlArchive {
     }
 
     fun isRenderedTag(tag: String): Boolean = tag in renderedTags
+
+    fun extractDescriptionTitle(bytes: ByteArray): String = runCatching {
+        if (bytes.isEmpty() || bytes.size > MAX_MANIFEST_BYTES) return@runCatching ""
+        val doc = parseManifest(bytes)
+        val titles = doc.documentElement.getElementsByTagName("title")
+        if (titles.length == 0) return@runCatching ""
+        titles.item(0).textContent?.trim().orEmpty().takeIf(::isSafeField).orEmpty()
+    }.getOrDefault("")
 
     private fun parseManifest(bytes: ByteArray): Document {
         val declarationProbe = String(bytes, Charsets.ISO_8859_1).replace("\u0000", "").uppercase()
@@ -429,7 +438,7 @@ internal object Os4MamlArchive {
         "Image", "ImageNumber" -> "image"
         "Text", "Time", "DateTime", "BitmapText" -> "text"
         "Rectangle", "Circle", "Arc", "Line" -> "background"
-        "Group", "Layer", "List", "LinearLayout", "FrameLayout" -> "container"
+        "Group", "Layer", "List", "LinearLayout", "FrameLayout", "Array" -> "container"
         "Button", "Slider", "CheckBox", "RadioButton" -> "interactive"
         else -> "other"
     }

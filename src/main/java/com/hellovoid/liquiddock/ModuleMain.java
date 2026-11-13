@@ -2,20 +2,12 @@ package com.hellovoid.liquiddock;
 
 import androidx.annotation.NonNull;
 
-import android.content.pm.ApplicationInfo;
-import android.os.Build;
-
 import com.hellovoid.liquiddock.config.ConfigSchema;
-import com.hellovoid.liquiddock.config.PresetManager;
-import com.hellovoid.liquiddock.os4.Os4LauncherIdentityPolicy;
-
-import android.content.SharedPreferences;
 
 import io.github.libxposed.api.XposedModule;
 
 /** libxposed API 102 entry point; hot reload remains disabled for owned process resources. */
 public final class ModuleMain extends XposedModule {
-    private static final String LAUNCHER_PACKAGE = "com.miui.home";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
 
     private String loadedProcessName;
@@ -84,7 +76,6 @@ public final class ModuleMain extends XposedModule {
         // Claim ownership before any install operation, including failing/partial installs.
         // In an admitted pre-install handoff the old generation must not start new hooks.
         if ((SYSTEM_UI_PACKAGE.equals(packageName)
-                || LAUNCHER_PACKAGE.equals(packageName)
                 || SecurityCenterProcessPolicy.PACKAGE.equals(packageName)
                 || ThirdPartyGlassAdapterRegistry.handles(packageName))
                 && !reloadGate.enterOwnerLifecycle()) {
@@ -180,116 +171,7 @@ public final class ModuleMain extends XposedModule {
             }
             return;
         }
-        if (!LAUNCHER_PACKAGE.equals(packageName)) return;
-        if (shouldBlockLegacyLauncherBackend(param)) {
-            // The fuxi OS4 Launcher runs in hyos_spawner without ART. Java Activity hooks
-            // cannot implement its rotation lifecycle; OS4 layout work belongs in native_init.
-            return;
-        }
-        try {
-            initializeCurrentProfileIfEmpty();
-            ClassLoader classLoader = param.getClassLoader();
-            ConfigReader configReader = ConfigReader.load();
-            GlassEdgeEffects.refresh(configReader);
-            LiquidDockConfig runtimeConfig = LiquidDockConfig.from(configReader);
-            // Independent opt-in compatibility: its own preference is the sole
-            // activation switch, not the global glass/feature master toggle.
-            LauncherMingouCompatHook.install(classLoader);
-            if (runtimeConfig.enabled) {
-                // Folder picker/model hooks are independent of the glass renderers.
-                // Establish the OEM background's stroke state before any
-                // folder view is inflated or rebound in the Launcher process.
-                LargeFolderNativeOutlineHook.install(classLoader);
-                // The picker and persisted span conversion are independent of
-                // vendor preview measurement APIs. Never hide these controls
-                // because an optional 4.50 geometry method is unavailable.
-                LauncherLargeFolderPickerHook.install(classLoader);
-                LauncherLargeFolderNativeSpanHook.install(classLoader);
-                LauncherNativeFourFolderHook.install(classLoader);
-                // Allow size toggling from Launcher widget shortcuts.
-                if (LauncherWidgetProportionalResizeHook.install(classLoader)) {
-                    LauncherWidgetResizeShortcutHook.install(classLoader);
-                    LauncherWidgetReplacementHook.install(classLoader);
-                }
-            }
-            AnimationRuntimeState.configure(runtimeConfig.animation);
-            GlassRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
-                    runtimeConfig.enabled && runtimeConfig.glass.enabled,
-                    runtimeConfig.glass.iconEnabled,
-                    runtimeConfig.glass.functionalDockIconEnabled,
-                    runtimeConfig.glass.recentsCapsuleEnabled,
-                    runtimeConfig.glass.widgetEnabled,
-                    runtimeConfig.glass.widgetDarkContent,
-                    runtimeConfig.glass.smallFolderStyle.enabled,
-                    runtimeConfig.glass.largeFolderStyle.enabled);
-            VisualRuntimeState.initialize(Api101Bridge.remotePreferences("config"),
-                    runtimeConfig.enabled,
-                    runtimeConfig.dock.enabled,
-                    runtimeConfig.dock.strokeEnabled,
-                    runtimeConfig.dock.shadowEnabled,
-                    runtimeConfig.dock.strokeShadow,
-                    runtimeConfig.divider.enabled);
-            LiveGlassConfigState.initialize(
-                    Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP), runtimeConfig);
-            // Install regardless of initial toggle state, so subsequent changes
-            // take effect without rebooting Launcher. No renderer is replaced.
-            LauncherWallpaperZoomHook.onLiveConfigChanged(runtimeConfig);
-            LauncherWallpaperZoomHook.install(classLoader);
-            DockMirrorShortcutHook.install(classLoader);
-            DockNativeShadowBridge.install(classLoader, runtimeConfig.dock);
-            Launcher450IconSizeHook.install(classLoader,
-                    runtimeConfig.enabled && runtimeConfig.grid.iconSizeEnabled,
-                    runtimeConfig.grid.iconSizePercent);
-            if (runtimeConfig.enabled && SideSlideHoldFeatureConfig.isEnabled(configReader)) {
-                Launcher450SideSlideHoldHook.install(classLoader);
-            }
-            Launcher450DockFunctionalIconRegistry.install(classLoader);
-            new MainHook().install(classLoader);
-
-            MiuixLauncherDragOverlayHook.install(classLoader, runtimeConfig);
-            MiuixFolderGlassHook.install(classLoader, runtimeConfig);
-            MiuixShortcutMenuGlassHook.install(classLoader, runtimeConfig);
-            LauncherUninstallDialogGlassHook.install(classLoader, runtimeConfig);
-            LauncherMamlRootLoadedHook.install(classLoader);
-            MiuixLauncherStaticGlassHook.install(classLoader, runtimeConfig);
-            DockIconAnimationGlassHook.install(classLoader, runtimeConfig);
-            LauncherGlassRecentsHook.install(classLoader, runtimeConfig);
-            SystemUiKeyguardGoneRuntime.install();
-            LauncherGlassHomePresentationHook.install(classLoader);
-            DockGlassDropRefreshHook.install(classLoader);
-            RecentsBackgroundBlurHook.install(classLoader, runtimeConfig);
-            DockBottomGeometryHook.install(classLoader);
-        } catch (Throwable error) {
-            Api101Bridge.errorAlways("[DC] API102 package init failed", error);
-        }
-    }
-
-    /** OS4's AOT Launcher has no dex classes, so skip the legacy Java hooks. */
-    private static boolean shouldBlockLegacyLauncherBackend(PackageReadyParam param) {
-        ApplicationInfo info = param.getApplicationInfo();
-        if (info == null) {
-            Api101Bridge.log("[DC][OS4] legacy Java backend disabled unknown metadata");
-            return true;
-        }
-        boolean hasCode = (info.flags & ApplicationInfo.FLAG_HAS_CODE) != 0;
-        if (!Os4LauncherIdentityPolicy.shouldBlockLegacyJavaBackend(hasCode)) {
-            return false;
-        }
-        Api101Bridge.log("[DC][OS4] legacy Java backend disabled for AOT Launcher");
-        return true;
-    }
-
-    /** First-install initialization, never reinterpretation of prior persisted keys. */
-    private static void initializeCurrentProfileIfEmpty() {
-        try {
-            SharedPreferences remote = Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP);
-            if (remote != null && remote.getAll().isEmpty()) {
-                PresetManager.applyDefault(remote.edit());
-            }
-        } catch (Throwable error) {
-            // A storage failure must not block Launcher hooks: snapshot defaults still work.
-            Api101Bridge.log("[DC][Config] default profile initialization unavailable", error);
-        }
+        // OS4 Launcher (com.miui.home) is handled exclusively by the Rust+Flutter native hook.
     }
 
     /**

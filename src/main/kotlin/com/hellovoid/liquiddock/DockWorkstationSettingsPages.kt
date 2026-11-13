@@ -71,22 +71,6 @@ internal fun DockPage(
                 )
             }
         }
-        item {
-            ModernFeatureCard(
-                title = stringResource(R.string.page_stroke),
-                summary = "描边样式与颜色",
-                onClick = { open(Page.Stroke) },
-                modifier = Modifier.padding(horizontal = 14.dp),
-            )
-        }
-        item {
-            ModernFeatureCard(
-                title = stringResource(R.string.page_shadow),
-                summary = "仅开启 Dock 自定义且关闭液态玻璃时生效",
-                onClick = { open(Page.Shadow) },
-                modifier = Modifier.padding(horizontal = 14.dp),
-            )
-        }
         if (!dockEnabled) {
             item {
                 ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {

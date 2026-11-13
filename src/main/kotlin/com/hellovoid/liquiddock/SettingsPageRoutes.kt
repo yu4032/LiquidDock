@@ -4,12 +4,13 @@ package com.hellovoid.liquiddock
 internal fun canonicalSettingsParent(page: Page): Page? = when (page) {
     Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub -> null
     Page.Grid, Page.Dock, Page.Workstation, Page.Recents, Page.SecurityCenterSidebar -> Page.LayoutHub
-    Page.Liquid, Page.GlassComponents, Page.Stroke, Page.Shadow, Page.Animation, Page.AnimationSystem,
-    Page.ThirdPartyApps -> Page.GlassHub
+    Page.SoftGlass, Page.SoftGlassComponents, Page.Liquid, Page.GlassComponents,
+    Page.AnimationSystem, Page.ThirdPartyApps -> Page.GlassHub
     Page.ThemePalette, Page.Data, Page.About -> Page.MoreHub
-    Page.GridBasics, Page.GridLandscape, Page.GridPortrait, Page.GridSplit -> Page.Grid
+    Page.GridBasics, Page.GridLandscape, Page.GridPortrait -> Page.Grid
     Page.DockBehavior, Page.DockGeometry, Page.DockRecentBlacklist, Page.Divider -> Page.Dock
     Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait -> Page.Workstation
+    Page.SoftGlassMaterial, Page.SoftGlassColor, Page.SoftGlassLighting -> Page.SoftGlass
     Page.LiquidMaterial, Page.LiquidColor, Page.LiquidLighting,
     Page.LiquidSampling, Page.GlassEdge -> Page.Liquid
     Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders, Page.GlassMenus, Page.SidebarEdge -> Page.GlassComponents
@@ -22,8 +23,6 @@ internal fun canonicalSettingsParent(page: Page): Page? = when (page) {
     Page.WidgetComponents -> Page.GlassWidgets
     Page.LauncherHighlights -> Page.GlassIcons
     Page.LauncherHighlightsCompact, Page.LauncherHighlightsLarge -> Page.LauncherHighlights
-    Page.AnimationWorkspace, Page.AnimationInteraction, Page.AnimationPopups,
-    Page.AnimationGui -> Page.Animation
     Page.DockEdge, Page.IconEdge, Page.WidgetEdge, Page.FolderEdge, Page.PopupEdge,
     Page.HandleMenuEdge, Page.DialogEdge, Page.GboardEdge, Page.SearchboxEdge,
     Page.SecurityCenterEdge -> Page.GlassEdge

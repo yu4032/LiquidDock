@@ -27,7 +27,7 @@ object Os4WidgetMaterials {
     private const val MAX_PATH = 511
     private const val MAX_WIDGETS = 64
 
-    private data class Source(val path: String, val sha: String, val product: String, val basename: String, val file: File)
+    private data class Source(val path: String, val sha: String, val product: String, val basename: String, val file: File, val label: String = "")
     private data class Published(val source: Source, val shadowSha: String, val shadow: File)
 
     /** Manual discovery only. The inventory is populated by the Launcher after native widget load. */
@@ -37,23 +37,27 @@ object Os4WidgetMaterials {
         val app = context.applicationContext
         val cache = File(app.filesDir, "os4-widget-sources").apply { mkdirs() }
         val entries = readInventory(cache)
-        require(entries.sumOf { it.second } <= 256L * 1024 * 1024) { "Loaded MAML sources exceed the scan budget" }
+        require(entries.sumOf { it.size } <= 256L * 1024 * 1024) { "Loaded MAML sources exceed the scan budget" }
         val sources = ArrayList<Source>()
-        for ((path, size, expectedSha) in entries) {
-            val sha = expectedSha
+        for (entry in entries) {
+            val path = entry.path
+            val size = entry.size
+            val sha = entry.sha
             val product = Os4MamlArchive.productIdFromPath(path)
                 ?: error("Could not determine MAML product id from source path")
             val base = path.substringAfterLast('/').removeSuffix(".zip")
             val local = File(cache, "$sha.zip")
             require(local.isFile && local.length() == size && sha256(local) == sha) { "Launcher MAML source changed during scan" }
-            val source = Source(path, sha, product, base, local)
+            val sizeTag = base.removePrefix("widget_").replace('x', '×')
+            val label = if (entry.title.isNotBlank()) "${entry.title} ($sizeTag)" else ""
+            val source = Source(path, sha, product, base, local, label)
             sources += source
         }
         val catalog = LinkedHashSet<String>()
         for (source in sources) {
             val owner = owner(source)
             Os4MamlArchive.inspect(Os4MamlArchive.FileLike(source.file), owner).nodes
-                .forEach { catalog += it.catalog(owner) }
+                .forEach { catalog += it.catalog(owner, source.label) }
         }
         saveCatalog(app, catalog)
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -153,7 +157,9 @@ object Os4WidgetMaterials {
 
     private fun owner(source: Source) = "os4:${source.product}:${source.basename}"
 
-    private fun readInventory(cache: File): List<Triple<String, Long, String>> {
+    private data class InventoryEntry(val path: String, val size: Long, val sha: String, val title: String)
+
+    private fun readInventory(cache: File): List<InventoryEntry> {
         val command = """
             set -eu
             P="${'$'}(pidof -s com.miui.home || true)"
@@ -176,6 +182,19 @@ object Os4WidgetMaterials {
                 printf "FILE\t%s\t%s\t%s\n" "${'$'}p" "${'$'}size" "${'$'}hash"
                 cat "${'$'}p"
                 printf "\n"
+                desc="${'$'}{p%/*}/description.xml"
+                if [ -f "${'$'}desc" ] && [ ! -L "${'$'}desc" ]; then
+                  dsize="${'$'}(stat -c %s "${'$'}desc")"
+                  if [ "${'$'}dsize" -gt 0 ] && [ "${'$'}dsize" -le 1048576 ]; then
+                    printf "DESC\t%s\n" "${'$'}dsize"
+                    cat "${'$'}desc"
+                    printf "\n"
+                  else
+                    printf "DESC\t0\n"
+                  fi
+                else
+                  printf "DESC\t0\n"
+                fi
               done < "${'$'}f"
               printf "DONE\n"
             '
@@ -189,7 +208,7 @@ object Os4WidgetMaterials {
             }, "os4-widget-inventory-timeout").apply { isDaemon = true; start() }
             val first = readLineBounded(stdout, 64)
             require(first == "WIDGETS1") { "Invalid Launcher MAML inventory" }
-            val rows = ArrayList<Triple<String, Long, String>>()
+            val rows = ArrayList<InventoryEntry>()
             var totalBytes = 0L
             while (true) {
                 val line = readLineBounded(stdout, 1024)
@@ -204,11 +223,20 @@ object Os4WidgetMaterials {
                 require(fields[3].matches(Regex("[a-f0-9]{64}")))
                 val bytes = readExactly(stdout, size.toInt())
                 require(stdout.read() == '\n'.code) { "Bad MAML inventory framing" }
+                val descLine = readLineBounded(stdout, 64)
+                val descFields = descLine.split('\t')
+                require(descFields.size == 2 && descFields[0] == "DESC") { "Invalid MAML description row" }
+                val descSize = descFields[1].toInt().also { require(it in 0..1048576) }
+                val title = if (descSize > 0) {
+                    val descBytes = readExactly(stdout, descSize)
+                    require(stdout.read() == '\n'.code) { "Bad MAML description framing" }
+                    Os4MamlArchive.extractDescriptionTitle(descBytes)
+                } else ""
                 val sha = sha256(bytes)
                 require(sha == fields[3]) { "Launcher MAML inventory hash mismatch" }
                 val sink = File(cache, "$sha.zip")
                 if (!sink.isFile || sha256(sink) != sha) sink.writeBytes(bytes)
-                rows += Triple(path, size, sha)
+                rows += InventoryEntry(path, size, sha, title)
                 require(rows.size <= MAX_WIDGETS)
             }
             require(process.waitFor(60, TimeUnit.SECONDS) && process.exitValue() == 0) { "Launcher MAML inventory read failed" }

@@ -1,8 +1,11 @@
 package com.hellovoid.liquiddock
 
 import android.content.SharedPreferences
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
@@ -15,7 +18,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.os4.Os4NativeGlassOptions
@@ -81,13 +85,22 @@ private fun Os4NativeGlassFieldSetting(
                 insideMargin = ModernPreferenceMargin,
             )
             if (overridden) {
+                val integerStep = field.max - field.min >= 50.0
+                val step = if (integerStep) 1.0 else 0.01
+                val scaledMin = ceil(field.min / step - 1e-6).toInt()
+                val scaledMax = floor(field.max / step + 1e-6).toInt()
+                var sliderPreview by remember(field.id) { mutableStateOf<Float?>(null) }
+                val shownValue = sliderPreview?.toDouble() ?: value
+                val scaledValue = (value / step).roundToInt().coerceIn(scaledMin, scaledMax)
+                val sliderSteps = ((field.max - field.min) / step).roundToInt().coerceIn(0, 200)
                 BasicComponent(
                     title = "数值",
+                    summary = "${Os4NativeGlassOptions.format(field.min)} – ${Os4NativeGlassOptions.format(field.max)}",
                     enabled = enabled,
                     insideMargin = ModernPreferenceMargin,
                     endActions = {
                         SliderValueReadout(
-                            text = Os4NativeGlassOptions.format(value),
+                            text = Os4NativeGlassOptions.format(shownValue),
                             enabled = enabled,
                             onClick = { editing = true },
                         )
@@ -97,37 +110,50 @@ private fun Os4NativeGlassFieldSetting(
                     value = value.toFloat(),
                     onValueChange = { next ->
                         if (next.isFinite()) {
-                            val rounded = (next * 100f).roundToInt() / 100.0
-                            write(overrides + (field.id to rounded))
+                            val rounded = ((next / step).roundToInt() * step * 100.0).roundToInt() / 100.0
+                            write(overrides + (field.id to rounded.coerceIn(field.min, field.max)))
                         }
                     },
                     valueRange = field.min.toFloat()..field.max.toFloat(),
-                    visibilityThreshold = 0.01f,
-                    snapIncrement = 0.01f,
+                    visibilityThreshold = step.toFloat(),
+                    steps = sliderSteps,
+                    snapIncrement = step.toFloat(),
+                    onValuePreview = { preview ->
+                        sliderPreview = preview
+                        if (preview != null && enabled && preview.isFinite()) {
+                            val rounded = ((preview / step).roundToInt() * step * 100.0).roundToInt() / 100.0
+                            write(overrides + (field.id to rounded.coerceIn(field.min, field.max)))
+                        }
+                    },
                     enabled = enabled,
-                    modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 8.dp),
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        "${Os4NativeGlassOptions.format(field.min)} – ${Os4NativeGlassOptions.format(field.max)}",
-                        fontSize = 12.sp,
-                        modifier = Modifier.weight(1f),
-                    )
                     top.yukonga.miuix.kmp.basic.Button(
                         onClick = { write(overrides - field.id) },
                         enabled = enabled,
                         minWidth = 56.dp,
                         minHeight = 36.dp,
-                        insideMargin = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 10.dp,
-                            vertical = 4.dp,
-                        ),
+                        insideMargin = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                     ) {
                         Text("还原原生")
                     }
+                    Spacer(Modifier.padding(horizontal = 4.dp))
+                    ModernGlassStepper(
+                        value = scaledValue,
+                        valueRange = scaledMin..scaledMax,
+                        enabled = enabled,
+                        onValueChange = { next ->
+                            val stepped = ((next * step) * 100.0).roundToInt() / 100.0
+                            write(overrides + (field.id to stepped.coerceIn(field.min, field.max)))
+                        },
+                    )
                 }
             }
         }

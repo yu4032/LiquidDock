@@ -409,7 +409,7 @@ internal fun ModernFeatureCard(
                 Text(
                     text = when (state) {
                         PagePortState.READY -> summary
-                        PagePortState.TESTING -> "测试入口 · OS4 Hook 尚未接通"
+                        PagePortState.TESTING -> "测试入口"
                         PagePortState.UNAVAILABLE -> "尚未移植 · HyperOS 4"
                     },
                     modifier = Modifier.padding(top = 5.dp),
@@ -548,7 +548,7 @@ internal fun ArrowPreference(
         title = if (state == PagePortState.TESTING) "$title · 实验中" else title,
         summary = when (state) {
             PagePortState.READY -> summary
-            PagePortState.TESTING -> "测试入口 · OS4 Hook 尚未接通"
+            PagePortState.TESTING -> "测试入口"
             PagePortState.UNAVAILABLE -> "尚未移植 · HyperOS 4"
         },
         enabled = effectiveEnabled,
