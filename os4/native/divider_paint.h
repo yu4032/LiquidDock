@@ -61,6 +61,14 @@ static pthread_mutex_t g_dp_cfg_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_dp_enabled_fast;  /* atomic publication for disabled paint hot path */
 static volatile unsigned g_dp_reload_ticks;
 static uint64_t g_dp_const_color;
+/* Read-only liveness check: never repatch a live Dart function from the
+ * background thread. A changed trampoline is recorded for diagnosis. */
+struct ld_dp_hook_watch {
+    uintptr_t site;
+    uint8_t entry[16];
+    int warned;
+};
+static struct ld_dp_hook_watch g_dp_hook_watch[2];
 static volatile unsigned g_dp_hits, g_dp_rect_writes, g_dp_color_writes;
 static volatile int g_dp_color_off;
 
@@ -203,8 +211,23 @@ static void ld_dp_load_cfg(void)
 static void *ld_dp_poll_thread(void *arg)
 {
     (void)arg;
+    unsigned ticks = 0;
     for (;;) {
         usleep(500000);
+        if (++ticks % 10u == 0u) {
+            for (unsigned i = 0; i < 2; ++i) {
+                struct ld_dp_hook_watch *w = &g_dp_hook_watch[i];
+                uintptr_t site = __atomic_load_n(&w->site, __ATOMIC_ACQUIRE);
+                if (!site || w->warned) continue;
+                unsigned char current[16];
+                if (!ld_dp_read(site, current, sizeof current) ||
+                        memcmp(current, w->entry, sizeof current) != 0) {
+                    w->warned = 1;
+                    ld_blog("divider: %s hook entry changed after install at %p; needs diagnostics",
+                            i == 0 ? "inner" : "bgPaint", (void *)site);
+                }
+            }
+        }
         struct stat st;
         const char *conf_path = LD_DP_CONF;
         if (stat(conf_path, &st) != 0) {
@@ -483,6 +506,10 @@ static void ld_dp_hook(const struct native_api *api, ld_lib_info *lib, uintptr_t
     void *backup = NULL;
     if (api->hook((void *)fn, repl, &backup) == 0 && backup) {
         *orig = backup;
+        unsigned index = strcmp(tag, "inner") == 0 ? 0u : 1u;
+        struct ld_dp_hook_watch *w = &g_dp_hook_watch[index];
+        memcpy(w->entry, (const void *)fn, sizeof w->entry);
+        __atomic_store_n(&w->site, fn, __ATOMIC_RELEASE);
         ld_blog("divider: %s installed and pinned at %p", tag, (void *)fn);
     } else {
         ld_blog("divider: %s hook failed", tag);
