@@ -531,13 +531,14 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         } else ld_blog("OS4 glass pipeline skipped %s: hook/pin rc=%d",label[i],rc);
     }
     if(!g_widget_init_miui_attr_installed) {
-        static const uint32_t init_miui_attr_pat[16]={
+        static const uint32_t init_miui_attr_pat[20]={
             0xa9bf79fdu, 0xaa0f03fdu, 0xd10061efu, 0xf81f83b6u,
             0xf81f03a1u, 0xaa0203f0u, 0xaa0103e2u, 0xaa1003e1u,
             0xf81e83a1u, 0xf9402f60u, 0x97fdf66eu, 0xf85e83a1u,
             0x94000040u, 0xaa0003e1u, 0xf81e83a1u, 0x97fdf5dau,
+            0xaa0003e2u, 0x6b16005fu, 0x54000700u, 0xf85f03a3u,
         };
-        uintptr_t init_fn=ld_find_aot_pattern(lib,0x19f399cu,init_miui_attr_pat,16);
+        uintptr_t init_fn=ld_find_aot_pattern(lib,0x19f399cu,init_miui_attr_pat,20);
         if(init_fn) {
             int rc=api->hook((void *)init_fn,(void *)repl_widget_init_miui_attr,
                     &g_orig_widget_init_miui_attr);
@@ -553,10 +554,13 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     }
     static bool g_rv_hook_installed = false;
     if(!g_rv_hook_installed) {
-        static const uint32_t flutter_view_pat[4]={
+        static const uint32_t flutter_view_pat[16]={
             0xa9bf79fdu, 0xaa0f03fdu, 0xd10581efu, 0xf81f83a1u,
+            0xf81f03a2u, 0xd28004e1u, 0x942f9e01u, 0xaa0003e4u,
+            0xf85f83a3u, 0xf81e83a4u, 0xb800f083u, 0xf85f03a0u,
+            0xb8013080u, 0xb840b060u, 0x8b1c8000u, 0xf9402370u,
         };
-        uintptr_t fv_fn=ld_find_aot_pattern(lib,0x1059398u,flutter_view_pat,4);
+        uintptr_t fv_fn=ld_find_aot_pattern(lib,0x1059398u,flutter_view_pat,16);
         if(fv_fn) {
             int rc=api->hook((void *)fv_fn,(void *)repl_flutter_view_apply,
                     &g_orig_flutter_view_apply);
@@ -572,10 +576,51 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     }
     static bool g_pad_widget_glass_installed = false;
     if(!g_pad_widget_glass_installed) {
-        static const uint32_t pad_wc_pat[4]={
+        static const uint32_t pad_wc_pat[80]={
             0xa9bf79fdu, 0xaa0f03fdu, 0xd10081efu, 0xf81f83a1u,
+            0xf81f03a2u, 0xfc1e03a0u, 0xd2800061u, 0x941eb79du,
+            0xaa0003e1u, 0xf85f83a0u, 0xf81e83a1u, 0xb800f020u,
+            0xf85f03a0u, 0xb8013020u, 0xfc5e03a0u, 0xa9460b40u,
+            0x91004000u, 0xeb00005fu, 0x54000289u, 0xf9003340u,
+            0xd1003c00u, 0xd29c2b82u, 0xf2a00062u, 0xf81ff002u,
+            0xfc007000u, 0xb8017020u, 0x9419190du, 0xf85e83a2u,
+            0x9141fb61u, 0xf9451021u, 0xf81f83a0u, 0x941eb876u,
+            0xaa0003e1u, 0xf85f83a0u, 0xb800b001u, 0xaa1d03efu,
+            0xa8c179fdu, 0xd65f03c0u, 0x3c9f0de0u, 0xf81f8de1u,
+            0x941ebb76u, 0xf84085e1u, 0x3cc105e0u, 0x17ffffedu,
+            0xa9bf79fdu, 0xaa0f03fdu, 0xd10161efu, 0xf9400ba0u,
+            0xb8417001u, 0x8b1c8021u, 0xf81f83a1u, 0xd28000e1u,
+            0x941eb770u, 0xaa0003e2u, 0xf85f83a0u, 0xf81f03a2u,
+            0xb800b040u, 0xb840f001u, 0x8b1c8021u, 0xb8413023u,
+            0x8b1c8063u, 0xaa0303e1u, 0x97fff736u, 0xaa0003e1u,
+            0xf85f83a0u, 0xb840f002u, 0x8b1c8042u, 0xb8413043u,
+            0x8b1c8063u, 0xaa0103e2u, 0xaa0303e1u, 0x97fabb11u,
+            0xaa0003e3u, 0xf85f83a2u, 0xf81d83a3u, 0xb8413041u,
+            0x8b1c8021u, 0xfc407021u, 0xfc1b03a1u, 0xa9460344u,
         };
-        uintptr_t wc_fn=ld_find_aot_pattern(lib,0x1492d24u,pad_wc_pat,4);
+        static const uint32_t phone_wc_pat[80]={
+            0xa9bf79fdu, 0xaa0f03fdu, 0xd10081efu, 0xf81f83a1u,
+            0xf81f03a2u, 0xfc1e03a0u, 0xd2800061u, 0x941ec468u,
+            0xaa0003e1u, 0xf85f83a0u, 0xf81e83a1u, 0xb800f020u,
+            0xf85f03a0u, 0xb8013020u, 0xfc5e03a0u, 0xa9460b40u,
+            0x91004000u, 0xeb00005fu, 0x54000289u, 0xf9003340u,
+            0xd1003c00u, 0xd29c2b82u, 0xf2a00062u, 0xf81ff002u,
+            0xfc007000u, 0xb8017020u, 0x941925d8u, 0xf85e83a2u,
+            0x9141fb61u, 0xf943a421u, 0xf81f83a0u, 0x941ec541u,
+            0xaa0003e1u, 0xf85f83a0u, 0xb800b001u, 0xaa1d03efu,
+            0xa8c179fdu, 0xd65f03c0u, 0x3c9f0de0u, 0xf81f8de1u,
+            0x941ec841u, 0xf84085e1u, 0x3cc105e0u, 0x17ffffedu,
+            0xa9bf79fdu, 0xaa0f03fdu, 0xd10201efu, 0xf9400ba0u,
+            0xb8417001u, 0x8b1c8021u, 0xf81f83a1u, 0xd28000a1u,
+            0x941ec43bu, 0xaa0003e2u, 0xf85f83a0u, 0xf81f03a2u,
+            0xb800b040u, 0xb840f001u, 0x8b1c8021u, 0xb8413023u,
+            0x8b1c8063u, 0xaa0303e1u, 0x94000401u, 0xaa0003e1u,
+            0xf85f83a0u, 0xb840f002u, 0x8b1c8042u, 0xb8413043u,
+            0x8b1c8063u, 0xaa0103e2u, 0xaa0303e1u, 0x97fac7dcu,
+            0xaa0003e2u, 0xf85f83a0u, 0xf81e83a2u, 0xb840f001u,
+            0x8b1c8021u, 0xb8413023u, 0x8b1c8063u, 0xaa0303e1u,
+        };
+        uintptr_t wc_fn=ld_find_aot_pattern(lib,0x1492d24u,pad_wc_pat,80);
         if(wc_fn) {
             int rc=api->hook((void *)wc_fn,(void *)repl_pad_widget_container,
                     &g_orig_pad_widget_container);
@@ -588,13 +633,15 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         } else {
             ld_blog("OS4 Pad widget container glass target not found");
         }
-        uintptr_t phone_wc_fn=ld_find_aot_pattern(lib,0x148f9f8u,pad_wc_pat,4);
+        uintptr_t phone_wc_fn=ld_find_aot_pattern(lib,0x148f9f8u,phone_wc_pat,80);
         if(phone_wc_fn) {
             int rc=api->hook((void *)phone_wc_fn,(void *)repl_phone_widget_container,
                     &g_orig_phone_widget_container);
             if(rc==0 && g_orig_phone_widget_container && ld_pin_code_pages_soft(phone_wc_fn,16)) {
                 ld_blog("OS4 Phone widget container glass hook installed at %p",(void *)phone_wc_fn);
             }
+        } else {
+            ld_blog("OS4 Phone widget container glass target not found");
         }
     }
 }
