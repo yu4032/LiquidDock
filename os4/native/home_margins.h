@@ -330,12 +330,17 @@ static void ld_home_margins_install(const struct native_api *api, ld_lib_info *l
             lo->horizontal, lo->top, lo->bottom, lo->indicator_y,
             po->horizontal, po->top, po->bottom, po->indicator_y);
     uintptr_t cc = 0;
-    static const uint32_t cc_pat[8] = {
+    static const uint32_t cc_pat[25] = {
         0xa9bf79fdu, 0xaa0f03fdu, 0xd10021efu, 0xf9403f40u,
-        0xf9400000u, 0x6b16001fu, 0x540001a1u, 0xf9403f40u,
+        0xf953e400u, 0x6b16001fu, 0x540001a1u, 0xf9403f40u,
+        0xf94e8000u, 0xf9402370u, 0x6b10001fu, 0x54000061u,
+        0xf97bf362u, 0x94425156u, 0x91402370u, 0xf947d210u,
+        0xf90001f0u, 0xf9402b64u, 0x940015bcu, 0xb842b001u,
+        0x8b1c8021u, 0x94107745u, 0xaa1d03efu, 0xa8c179fdu,
+        0xd65f03c0u,
     };
-    cc = ld_find_aot_pattern(lib, LD_HM_CC_VADDR, cc_pat, 8);
-    if (!cc) cc = ld_find_aot_pattern(lib, 0xb72cb8u, cc_pat, 8);
+    cc = ld_find_aot_pattern(lib, LD_HM_CC_VADDR, cc_pat, 25);
+    if (!cc) cc = ld_find_aot_pattern(lib, 0xb72cb8u, cc_pat, 25);
     if (cc) {
         const uint32_t *w = (const uint32_t *)cc;
         uint32_t inst = w[4];

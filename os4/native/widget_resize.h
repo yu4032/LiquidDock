@@ -51,7 +51,7 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
         return;
     }
     uintptr_t fn = 0;
-    static const uintptr_t resizes[] = { 0x1a30504u, 0x19dc714u };
+    static const uintptr_t resizes[] = { 0x1a30504u, 0x19dc714u, 0x1a318acu };
     for (size_t i = 0; i < sizeof(resizes)/sizeof(resizes[0]); i++) {
         uintptr_t cand = 0;
         if (ld_vaddr_to_runtime(lib, resizes[i], &cand) &&
@@ -62,8 +62,13 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
         }
     }
     if (!fn) {
-        static const uint32_t resize_pat[3] = {0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu};
-        fn = ld_find_aot_pattern(lib, 0x1a30504u, resize_pat, 3);
+        static const uint32_t resize_pat[16] = {
+            0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu, 0xd2800000u,
+            0xf81a03a0u, 0xf9403f41u, 0xf954f021u, 0x6b16003fu,
+            0x540001c1u, 0xf9403f40u, 0xf94e8000u, 0xf9402370u,
+            0x6b10001fu, 0x54000061u, 0xf97bf362u, 0x9406a80bu,
+        };
+        fn = ld_find_aot_pattern(lib, 0x1a30504u, resize_pat, 16);
     }
     if (!fn) return;
     static const uint32_t prologue[3] = {0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu};
@@ -84,8 +89,8 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
     /* Corner handles: force the two axis predicates to TRUE so a 1x1 widget can
      * grow. Same Dart TRUE singleton, same leaf ABI. */
     static const uint32_t pro_v[3] = {0xb8423022u, 0x8b1c8042u, 0xf9402370u};
-    static const uintptr_t vert_addrs[] = { 0x1132940u, 0x11d0c5cu };
-    static const uintptr_t horiz_addrs[] = { 0x11329a8u, 0x11d0cc4u };
+    static const uintptr_t vert_addrs[] = { 0x1132940u, 0x11d0c5cu, 0x11d0e94u };
+    static const uintptr_t horiz_addrs[] = { 0x11329a8u, 0x11d0cc4u, 0x11d0efcu };
     uintptr_t fv = 0, fh = 0;
     for (size_t i = 0; i < sizeof(vert_addrs)/sizeof(vert_addrs[0]); i++) {
         uintptr_t cand = 0;
@@ -95,11 +100,6 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
             break;
         }
     }
-    if (fv) {
-        void *b = NULL;
-        if (api->hook((void *)fv, (void *)ld_widget_can_resize_always, &b) == 0)
-            ld_blog("widget resize: vertical axis predicate forced at %p", (void *)fv);
-    }
     for (size_t i = 0; i < sizeof(horiz_addrs)/sizeof(horiz_addrs[0]); i++) {
         uintptr_t cand = 0;
         if (ld_vaddr_to_runtime(lib, horiz_addrs[i], &cand) &&
@@ -107,6 +107,24 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
             fh = cand;
             break;
         }
+    }
+    if (!fv || !fh) {
+        uintptr_t base = 0;
+        if (ld_vaddr_to_runtime(lib, 0x11d0c5cu, &base) && executable_range(base - 0x80000u, 0x100000u)) {
+            for (uintptr_t p = base - 0x80000u; p <= base + 0x80000u; p += 4) {
+                if (memcmp((const void *)p, pro_v, sizeof pro_v) == 0 &&
+                    memcmp((const void *)(p + 0x68u), pro_v, sizeof pro_v) == 0) {
+                    if (!fv) fv = p;
+                    if (!fh) fh = p + 0x68u;
+                    break;
+                }
+            }
+        }
+    }
+    if (fv) {
+        void *b = NULL;
+        if (api->hook((void *)fv, (void *)ld_widget_can_resize_always, &b) == 0)
+            ld_blog("widget resize: vertical axis predicate forced at %p", (void *)fv);
     }
     if (fh) {
         void *b = NULL;
