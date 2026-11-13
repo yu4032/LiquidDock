@@ -33,6 +33,8 @@
 #include <unistd.h>
 #include "bootlog.h"
 #include "divider_conf.h"
+#include "grid_conf.h"
+#include "hook_page_pin.h"
 #include "native_api.h"
 #include "lib_base.h"
 #include "dart_observer.h"
@@ -103,16 +105,25 @@ static void ld_dp_load_cfg_locked(int force)
         conf_path = LD_DP_CONF_EARLY;
         f = fopen(conf_path, "r");
     }
-    if (!f) { ld_blog("divider: conf open failed"); return; }
-    g_dp_cfg.loaded = 1;
+    struct ld_dp_cfg c = {0, -1, -1, 0, -1, -1, -1, -1, 1, 0, 0};
+    if (!f) {
+        ld_blog("divider: conf missing; restoring factory divider");
+        g_dp_cfg = c;
+        return;
+    }
     size_t n = fread(buf, 1, sizeof buf - 1, f);
+    int complete = fgetc(f) == EOF && !ferror(f);
     fclose(f);
     buf[n] = '\0';
-    struct ld_dp_cfg c = g_dp_cfg;
+    /* The main parser authenticates the entire snapshot, including end=1.
+     * Never retain removed keys from the previous generation. */
+    struct ld_grid_conf checked;
+    int valid = complete && ld_grid_conf_parse(buf, n, &checked);
+    if (!valid) ld_blog("divider: malformed/truncated snapshot; fail closed");
     uint32_t seen = 0;
     int bad = 0;
     const char *p = buf;
-    while (p && *p) {
+    while (valid && p && *p) {
         const char *eol = strchr(p, '\n');
         size_t len = eol ? (size_t)(eol - p) : strlen(p);
         /* 与主解析器共用 divider_conf.h 的字段定义：名称精确匹配、纯整数、
@@ -152,7 +163,10 @@ static void ld_dp_load_cfg_locked(int force)
     struct stat st;
     long sec = stat(conf_path, &st) == 0 ? (long)st.st_mtime : 0;
     long nsec = sec ? (long)st.st_mtim.tv_nsec : 0;
-    if (bad) { c = g_dp_cfg; }
+    if (bad) {
+        ld_blog("divider: malformed field; restoring factory divider");
+        c = (struct ld_dp_cfg){0, -1, -1, 0, -1, -1, -1, -1, 1, 0, 0};
+    }
     c.stamp = sec;
     c.stamp_ns = nsec;
     g_dp_cfg = c;
@@ -177,10 +191,9 @@ static void ld_dp_load_cfg(void)
     pthread_mutex_unlock(&g_dp_cfg_lock);
 }
 
-/* painter -> 是否分隔符 的直接映射缓存，避免每帧对每个装饰盒做两次读调用。 */
-static uintptr_t g_dp_cache_key[64];
-static signed char g_dp_cache_val[64];
-static int g_dp_cache_n;
+/* The Dart GC can recycle painter addresses. A pointer-keyed cache would
+ * classify a new painter using a dead object's result; identify each live
+ * painter instead (two local loads, no process_vm_readv syscall). */
 
 
 /* 后台轮询：桌面静止时 paint 钩子不会触发，热加载必须独立于绘制。
@@ -212,10 +225,11 @@ static void ld_dp_start_poller(void)
 {
     static int started;
     if (started) return;
-    started = 1;
     pthread_t t;
-    if (pthread_create(&t, NULL, ld_dp_poll_thread, NULL) == 0) pthread_detach(t);
-    else ld_blog("divider: poller thread failed");
+    if (pthread_create(&t, NULL, ld_dp_poll_thread, NULL) == 0) {
+        started = 1;
+        pthread_detach(t);
+    } else ld_blog("divider: poller thread failed");
 }
 
 /* GUI 改完 conf 后热加载：绘制路径每 120 次再兜底检查一次 mtime。 */
@@ -239,21 +253,7 @@ static void ld_dp_maybe_reload(void)
     ld_blog("divider: cfg reloaded (mtime=%ld.%09ld)", (long)st.st_mtime, (long)st.st_mtim.tv_nsec);
 }
 
-static int ld_dp_is_divider_uncached(uintptr_t painter, uintptr_t heap);
-
 static int ld_dp_is_divider(uintptr_t painter, uintptr_t heap)
-{
-    unsigned slot = (unsigned)((painter >> 4) & 63u);
-    if (g_dp_cache_val[slot] >= 0 && g_dp_cache_key[slot] == painter)
-        return g_dp_cache_val[slot];
-    int v = ld_dp_is_divider_uncached(painter, heap);
-    g_dp_cache_key[slot] = painter;
-    g_dp_cache_val[slot] = (signed char)v;
-    if (g_dp_cache_n < 64) g_dp_cache_n++;
-    return v;
-}
-
-static int ld_dp_is_divider_uncached(uintptr_t painter, uintptr_t heap)
 {
     if (!painter) return 0;
     uint32_t dref = ld_dp_ld32(painter + 0xc);
@@ -262,7 +262,7 @@ static int ld_dp_is_divider_uncached(uintptr_t painter, uintptr_t heap)
     uint32_t cref = ld_dp_ld32(deco + 8);
     if (!cref) return 0;
     uintptr_t color = heap + ((uintptr_t)cref & ~(uintptr_t)1);
-    return color == ((uintptr_t)g_dp_const_color & ~(uintptr_t)1);
+    return color == ((uintptr_t)__atomic_load_n(&g_dp_const_color, __ATOMIC_ACQUIRE) & ~(uintptr_t)1);
 }
 
 static void ld_dp_apply_rect(uintptr_t rect, const struct ld_dp_cfg *cfg)
@@ -440,11 +440,14 @@ __attribute__((used)) static void ld_dp_inner_cb(struct ld_dart_context *c)
     ld_dp_load_cfg();
     uintptr_t pp = (uintptr_t)c->x[27];
     uintptr_t off = g_dp_pp_offset ? g_dp_pp_offset : 0xd4a30u;
-    if (!g_dp_const_color && pp) {
-        ld_dp_read(pp + off, &g_dp_const_color, 8);
-        if (!g_dp_const_color && off != 0xd6dc8u) {
-            ld_dp_read(pp + 0xd6dc8u, &g_dp_const_color, 8);
-        }
+    /* Refresh from the live object pool every time this closure executes.
+     * Keeping the first Dart object address for the process lifetime can
+     * silently stop matching after a VM heap/object-pool transition. */
+    if (pp) {
+        uint64_t current = 0;
+        if ((!ld_dp_read(pp + off, &current, 8) || !current) && off != 0xd6dc8u)
+            (void)ld_dp_read(pp + 0xd6dc8u, &current, 8);
+        if (current) __atomic_store_n(&g_dp_const_color, current, __ATOMIC_RELEASE);
     }
     if (n == 0u) ld_blog("divider: inner first call const=%p (pp_off=0x%lx)", (void *)g_dp_const_color, (unsigned long)off);
 }
@@ -464,10 +467,18 @@ static void ld_dp_hook(const struct native_api *api, ld_lib_info *lib, uintptr_t
         ld_blog("divider: %s prologue mismatch at %p", tag, (void *)fn);
         return;
     }
+    if (*orig) return;
+    /* Reserve the executable COW page BEFORE patching. On this launcher,
+     * an unpinned inline hook can disappear after a file-page discard.
+     * Do not treat ENOMEM as success (unlike the best-effort legacy policy). */
+    if (!ld_pin_code_pages(fn, 16)) {
+        ld_blog("divider: %s cannot pin executable page at %p errno=%d", tag, (void *)fn, errno);
+        return;
+    }
     void *backup = NULL;
     if (api->hook((void *)fn, repl, &backup) == 0 && backup) {
         *orig = backup;
-        ld_blog("divider: %s installed at %p", tag, (void *)fn);
+        ld_blog("divider: %s installed and pinned at %p", tag, (void *)fn);
     } else {
         ld_blog("divider: %s hook failed", tag);
     }
@@ -477,13 +488,10 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
 {
     static int state;
     if (state || !api || !api->hook || !lib) return;
-    /* 不再依赖手工 marker：是否生效完全由 conf 的 dock_divider_enabled 决定，
-     * 这样 GUI 里开关/拖滑块能热生效。marker 仍保留为“强制安装”开关。 */
-    struct ld_dp_cfg cfg = ld_dp_cfg_snapshot();
-    if (!cfg.enabled && access(LD_DP_MARKER, F_OK) != 0) {
-        ld_blog("divider: disabled in conf; hooks skipped");
-        return;
-    }
+    /* Install lightweight observers even when disabled, so enabling the
+     * setting later does not require restarting the Launcher. The callbacks
+     * stay inert while dock_divider_enabled=0. */
+    (void)ld_dp_cfg_snapshot();
     static const uint32_t inner_pat[24] = {
         0xa9bf79fdu, 0xaa0f03fdu, 0xd10101efu, 0xf9400ba0u,
         0xb8417002u, 0x8b1c8042u, 0xf81f83a2u, 0xb840b040u,
@@ -523,7 +531,9 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
     /* _getBackgroundPaint 后置钩子已停用：热路径 _paintBackgroundColor 已覆盖颜色写入，
      * 少一个裸跳板 = 少一类崩溃面。 */
     ld_dp_start_poller();
-    state = 1;
+    if (g_dp_inner_orig && g_dp_bg_orig) state = 1;
+    else ld_blog("divider: partial install inner=%d bg=%d; retry on next library event",
+        g_dp_inner_orig != NULL, g_dp_bg_orig != NULL);
 }
 
 #endif
