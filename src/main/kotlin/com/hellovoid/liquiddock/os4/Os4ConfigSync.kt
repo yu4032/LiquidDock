@@ -59,7 +59,7 @@ object Os4ConfigSync {
 
     private fun publishNow(context: Context, reason: String) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        val previousWidgetGlass = Os4WidgetMaterials.wasGlassPublished(context)
+        val previousWidgetGlass = Os4WidgetMaterials.lastReloadRequestedGlass(context)
         if (reason == "install") {
             Os4WidgetMaterials.scan(context)
         }
@@ -98,16 +98,17 @@ object Os4ConfigSync {
         } else conf
         val published = Os4RootConfWriter.write(context, resolved ?: "")
         Log.i(TAG, "[$reason] options published=$published cleared=${conf.isNullOrEmpty()}")
-        /* init_maml redirects only new loads; an existing renderer retains the
-         * old manifest with hidden backgrounds. After BOTH snapshots have been
-         * published, restart only for an actual glass-on -> glass-off transition. */
-        if (widgetPublished && published && previousWidgetGlass &&
-            !Os4WidgetMaterials.isGlassRequested(prefs)) {
+        /* init_maml only redirects new loads; existing renderers retain the
+         * previous manifest. Reload on either transition, but only after BOTH
+         * snapshots have been published. Failed writes/requests are retriable. */
+        val requestedWidgetGlass = Os4WidgetMaterials.isGlassRequested(prefs)
+        if (widgetPublished && published && previousWidgetGlass != requestedWidgetGlass) {
             if (LiquidDockRestart.request()) {
+                Os4WidgetMaterials.recordReloadRequested(context, requestedWidgetGlass)
                 LiquidDockRestart.pullHomeForward(context)
-                Log.i(TAG, "[$reason] widget glass disabled; requested Launcher reload to restore original MAML backgrounds")
+                Log.i(TAG, "[$reason] requested Launcher reload for MAML widget glass=$requestedWidgetGlass")
             } else {
-                Log.e(TAG, "[$reason] original MAML mapping published but Launcher reload request failed")
+                Log.e(TAG, "[$reason] widget resources published but Launcher reload request failed")
             }
         }
     }
