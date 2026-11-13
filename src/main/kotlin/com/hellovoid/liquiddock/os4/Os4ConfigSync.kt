@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
+import com.hellovoid.liquiddock.LiquidDockRestart
 import java.util.concurrent.Executors
 
 /** Publishes main-screen preferences to the OS4 native backend. */
@@ -58,6 +59,7 @@ object Os4ConfigSync {
 
     private fun publishNow(context: Context, reason: String) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        val previousWidgetGlass = Os4WidgetMaterials.wasGlassPublished(context)
         if (reason == "install") {
             Os4WidgetMaterials.scan(context)
         }
@@ -96,5 +98,17 @@ object Os4ConfigSync {
         } else conf
         val published = Os4RootConfWriter.write(context, resolved ?: "")
         Log.i(TAG, "[$reason] options published=$published cleared=${conf.isNullOrEmpty()}")
+        /* init_maml redirects only new loads; an existing renderer retains the
+         * old manifest with hidden backgrounds. After BOTH snapshots have been
+         * published, restart only for an actual glass-on -> glass-off transition. */
+        if (widgetPublished && published && previousWidgetGlass &&
+            !Os4WidgetMaterials.isGlassRequested(prefs)) {
+            if (LiquidDockRestart.request()) {
+                LiquidDockRestart.pullHomeForward(context)
+                Log.i(TAG, "[$reason] widget glass disabled; requested Launcher reload to restore original MAML backgrounds")
+            } else {
+                Log.e(TAG, "[$reason] original MAML mapping published but Launcher reload request failed")
+            }
+        }
     }
 }
