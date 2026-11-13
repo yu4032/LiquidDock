@@ -31,6 +31,7 @@ object Os4NativeConfPublisher {
         if (options.glassEnabled && options.glassIcons &&
             (!options.glassIconSize.isFinite() || options.glassIconSize !in -40.0..40.0 ||
                 !options.glassIconCorner.isFinite() || options.glassIconCorner !in 0.0..128.0)) return null
+        if (options.recentsBlurPercent !in 0..100) return null
         return buildString {
             append("hook_safety_enabled=").append(if (options.hookSafetyEnabled) 1 else 0).append('\n')
             if (grid) {
@@ -86,6 +87,9 @@ object Os4NativeConfPublisher {
             append("dock_divider_color_g=").append(divider.colorG.coerceIn(0, 255)).append('\n')
             append("dock_divider_color_b=").append(divider.colorB.coerceIn(0, 255)).append('\n')
             append("dock_divider_alpha=").append(divider.alpha.coerceIn(0, 255)).append('\n')
+            }
+            if (options.recentsBlurPercent != 100) {
+                append("recents_blur_percent=").append(options.recentsBlurPercent).append('\n')
             }
             append("end=1\n")
         }

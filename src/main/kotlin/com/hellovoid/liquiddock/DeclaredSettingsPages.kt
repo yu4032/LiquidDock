@@ -102,10 +102,6 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     ))
     page(Page.Recents, text(R.string.recents_header_summary), listOf(
         row(recentsBlurSpec),
-        toggle(ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM, "禁用壁纸缩放",
-            "阻止桌面/多任务切换时系统壁纸的缩放目标，保留壁纸平移及其他过渡；首次安装该功能需重启桌面，之后切换即时生效"),
-        toggle(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING, "取消壁纸压暗",
-            "取消多任务壁纸与转场的额外压暗，保留原生模糊、缩放和动画；下次切换起生效，无需重启桌面"),
     ))
     page(Page.AnimationSystem, "控制通知与控制中心顶部模糊及系统界面联动。", listOf(
         toggle(ConfigSchema.Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR,

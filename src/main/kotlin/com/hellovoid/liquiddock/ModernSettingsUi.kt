@@ -399,7 +399,7 @@ internal fun ModernFeatureCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (state == PagePortState.TESTING) "$title · 实验中" else title,
+                    text = title,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = onSurface,
@@ -408,8 +408,7 @@ internal fun ModernFeatureCard(
                 )
                 Text(
                     text = when (state) {
-                        PagePortState.READY -> summary
-                        PagePortState.TESTING -> "测试入口"
+                        PagePortState.READY, PagePortState.TESTING -> summary
                         PagePortState.UNAVAILABLE -> "尚未移植 · HyperOS 4"
                     },
                     modifier = Modifier.padding(top = 5.dp),
@@ -545,10 +544,9 @@ internal fun ArrowPreference(
     val state = targetPage?.let(LocalSettingsAvailability.current::status) ?: PagePortState.READY
     val effectiveEnabled = enabled && state != PagePortState.UNAVAILABLE
     BasicComponent(
-        title = if (state == PagePortState.TESTING) "$title · 实验中" else title,
+        title = title,
         summary = when (state) {
-            PagePortState.READY -> summary
-            PagePortState.TESTING -> "测试入口"
+            PagePortState.READY, PagePortState.TESTING -> summary
             PagePortState.UNAVAILABLE -> "尚未移植 · HyperOS 4"
         },
         enabled = effectiveEnabled,

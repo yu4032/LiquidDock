@@ -16,6 +16,7 @@ class SettingsAvailabilityTest {
             Page.SoftGlass, Page.SoftGlassMaterial,
             Page.SoftGlassColor, Page.SoftGlassLighting,
             Page.SoftGlassComponents, Page.WidgetComponents,
+            Page.Recents,
         )
         testing.forEach {
             assertEquals("OS4 test route ${it.name}", PagePortState.TESTING, os4.status(it))
@@ -28,7 +29,7 @@ class SettingsAvailabilityTest {
             Page.DockBehavior,
             Page.DockRecentBlacklist,
             Page.Workstation, Page.WorkstationDock,
-            Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait, Page.Recents,
+            Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
             Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
             Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
             Page.DialogCustomization, Page.DialogAll, Page.PopupEdge, Page.DialogEdge,
@@ -51,7 +52,7 @@ class SettingsAvailabilityTest {
             Page.GlassComponents, Page.GlassMenus, Page.SidebarEdge,
             Page.HandleMenuCustomization, Page.HandleMenuAll, Page.HandleMenuEdge,
             Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.GboardEdge,
-            Page.SearchboxEdge, Page.SecurityCenterSidebar, Page.SecurityCenterEdge,
+            Page.SearchboxEdge, Page.SecurityCenterEdge,
             Page.AnimationSystem,
         )
         ready.forEach {

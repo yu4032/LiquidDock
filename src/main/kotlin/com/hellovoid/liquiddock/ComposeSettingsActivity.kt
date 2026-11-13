@@ -226,9 +226,8 @@ private fun LiquidDockSettings(
     }
 
     ModernSettingsScaffold(
-        title = if (searchOpen) "搜索设置" else (declaredPages[visiblePage]?.title
-            ?: stringResource(visiblePage.titleRes)) +
-            if (availability.status(visiblePage) == PagePortState.TESTING) " · 实验中" else "",
+        title = if (searchOpen) "搜索设置" else declaredPages[visiblePage]?.title
+            ?: stringResource(visiblePage.titleRes),
         glassEnabled = uiGlassEnabled,
         showBack = searchOpen || !root,
         backLabel = stringResource(R.string.action_back),
@@ -239,7 +238,6 @@ private fun LiquidDockSettings(
                 onClick = {
                     selectedRestartScopes = when (visiblePage) {
                         Page.Gboard -> setOf("com.google.android.inputmethod.latin")
-                        Page.SecurityCenterSidebar,
                         Page.SidebarEdge -> setOf(
                             "com.miui.home",
                             "com.miui.securitycenter",
@@ -514,12 +512,6 @@ private fun LiquidDockSettings(
                         padding, prefs, masterEnabled, compact = false,
                     )
 
-                    Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
-                        padding = padding,
-                        prefs = prefs,
-                        masterEnabled = masterEnabled,
-                    )
-
                     Page.ThemePalette -> SettingsUiPalettePage(
                         padding = padding,
                         selected = selectedPalette,
@@ -543,7 +535,6 @@ private fun HomePage(
     onMasterChanged: (Boolean) -> Unit,
     open: (Page) -> Unit,
 ) {
-    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -563,11 +554,6 @@ private fun HomePage(
                 ) { onMasterChanged(it) }
             }
         }
-        if (os4Launcher) {
-            item {
-                PageHeader("", "HyperOS 4：部分功能已完成移植，具体支持项见各页面说明。实验中页面用于真机验证；尚未开展的页面置灰。")
-            }
-        }
         item { ModernSectionLabel("快捷入口") }
         overviewEntries.forEach { entry ->
             item {
@@ -585,15 +571,12 @@ private fun HomePage(
                 modifier = Modifier.padding(start = 14.dp, top = 4.dp, end = 14.dp),
             ) {
                 Text(
-                    text = if (os4Launcher) "LiquidDock4 开发模式" else
-                        if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
+                    text = if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = if (os4Launcher) {
-                        "实验页面仅供测试配置界面，尚不代表 OS4 功能生效；其他应用的独立 Hook 保持原有逻辑。"
-                    } else if (masterEnabled) {
+                    text = if (masterEnabled) {
                         "可即时生效的外观设置会立即更新；需要重启的项目会在说明中明确标注。"
                     } else {
                         "LiquidDock 已暂停，已保存的设置不会丢失。"

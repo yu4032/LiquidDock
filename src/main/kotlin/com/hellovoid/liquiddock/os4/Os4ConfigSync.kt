@@ -78,16 +78,18 @@ object Os4ConfigSync {
             val addresses = Os4GlassSymbols.fromInstalledLauncher(context, safetyEnabled)
             if (addresses == null) conf
             else {
-                val parts = addresses.split('|', limit = 4)
+                val parts = addresses.split('|', limit = 5)
                 val gates = parts[0]
                 val probes = parts.getOrElse(1) { "" }
                 val passBlur = parts.getOrElse(2) { "" }
                 val renderGates = parts.getOrElse(3) { "" }
+                val recentsBlur = parts.getOrElse(4) { "" }
                 val lines = buildString {
                     append("glass_targets=").append(gates).append('\n')
                     if (probes.isNotEmpty()) append("glass_observers=").append(probes).append('\n')
                     if (passBlur.isNotEmpty()) append("passblur_target=").append(passBlur).append('\n')
                     if (renderGates.isNotEmpty()) append("render_targets=").append(renderGates).append('\n')
+                    if (recentsBlur.isNotEmpty()) append("recents_blur_target=").append(recentsBlur).append('\n')
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }

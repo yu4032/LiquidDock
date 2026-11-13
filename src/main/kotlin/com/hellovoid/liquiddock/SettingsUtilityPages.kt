@@ -28,50 +28,6 @@ import com.hellovoid.liquiddock.config.PresetManager
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 
-// Independent sidebar, data import/export and license pages. These share only
-// the existing settings chrome; restoration still uses the original dialog and
-// reset helper, and remains subject to the explicit user confirmation.
-@Composable
-internal fun SecurityCenterSidebarPage(
-    padding: PaddingValues,
-    prefs: SharedPreferences,
-    masterEnabled: Boolean,
-) {
-    val liquidGlassEnabled = prefs.getBoolean(
-        ConfigSchema.Glass.ENABLED.name(),
-        ConfigSchema.Glass.ENABLED.uiDefault(),
-    )
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item {
-            PageHeader(
-                stringResource(R.string.page_security_center_sidebar),
-                stringResource(R.string.security_center_sidebar_header_summary),
-            )
-        }
-        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_gesture)) }
-        item {
-            SettingsCard {
-                // The Launcher 4.50 gesture interception does not run in OS4's AOT process.
-                SideSlideHoldSetting(
-                    prefs, masterEnabled && !LocalSettingsAvailability.current.isOs4Launcher(),
-                )
-            }
-        }
-        item { SmallTitle(stringResource(R.string.security_center_sidebar_category_appearance)) }
-        item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.SECURITY_CENTER_GLASS,
-                    stringResource(R.string.liquid_security_center_glass_enable),
-                    stringResource(R.string.liquid_security_center_glass_enable_summary),
-                    masterEnabled && liquidGlassEnabled,
-                )
-            }
-        }
-    }
-}
-
 @Composable
 internal fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity) {
     var confirmDefaultReset by rememberSaveable { mutableStateOf(false) }

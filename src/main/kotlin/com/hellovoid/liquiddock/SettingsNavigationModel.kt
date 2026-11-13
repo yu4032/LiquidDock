@@ -67,7 +67,6 @@ internal enum class Page(val titleRes: Int) {
     LauncherHighlightsCompact(R.string.page_launcher_highlights_compact),
     LauncherHighlightsLarge(R.string.page_launcher_highlights_large),
 
-    SecurityCenterSidebar(R.string.page_security_center_sidebar),
     AnimationSystem(R.string.page_animation_system),
     Data(R.string.page_data),
     About(R.string.page_about),
@@ -90,7 +89,7 @@ internal data class HubEntry(
 
 internal val overviewEntries = listOf(
     HubEntry(Page.Dock, R.string.page_dock, "Dock 外观、位置、动画与最近程序"),
-    HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与性能"),
+    HubEntry(Page.SoftGlass, R.string.page_soft_glass, "OS4 系统桌面原生柔光玻璃参数"),
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸与横竖屏布局"),
 )
 
@@ -99,14 +98,12 @@ internal val layoutEntries = listOf(
     HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、尺寸、位置与最近程序"),
     HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock 与所有应用布局"),
     HubEntry(Page.Recents, R.string.page_recents, "多任务壁纸背景与模糊"),
-    HubEntry(Page.SecurityCenterSidebar, R.string.page_security_center_sidebar, "侧滑呼出、工具箱与侧边栏设置"),
 )
 
 internal val glassEntries = listOf(
     HubEntry(Page.SoftGlass, R.string.page_soft_glass, "OS4 系统桌面原生柔光玻璃参数"),
     HubEntry(Page.SoftGlassComponents, R.string.page_soft_glass_components, "桌面图标与小组件柔光玻璃"),
     HubEntry(Page.Liquid, R.string.page_liquid, "液态玻璃材质与光学参数（其他 Hook 应用）"),
-    HubEntry(Page.GlassComponents, R.string.page_glass_components, "图标、小组件、文件夹与菜单液态玻璃"),
     HubEntry(Page.AnimationSystem, R.string.page_animation_system, "通知与控制中心顶部模糊、系统手势手柄联动"),
     HubEntry(Page.ThirdPartyApps, R.string.page_third_party_apps, "Gboard 等第三方应用适配"),
 )

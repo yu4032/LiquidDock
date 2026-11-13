@@ -21,7 +21,7 @@
     <string name="page_workstation">Custom workstation</string>
     <string name="page_recents">Recents</string>
     <string name="page_liquid">Liquid glass</string>
-    <string name="page_sidebar_glass">Sidebar glass</string>
+    <string name="page_sidebar_glass">Security Center sidebar glass</string>
     <string name="page_soft_glass">Soft-light glass</string>
     <string name="page_soft_glass_material">Refraction &amp; contour</string>
     <string name="page_soft_glass_color">Color &amp; background</string>

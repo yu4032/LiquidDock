@@ -65,6 +65,7 @@ data class Os4MainScreenOptions(
     val hookSafetyEnabled: Boolean = false,
     val glassIconSize: Double = 0.0,
     val glassIconCorner: Double = 0.0,
+    val recentsBlurPercent: Int = 100,
 ) {
     companion object {
         val offsetKeys = listOf(
@@ -109,6 +110,7 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Divider.COLOR_GREEN, ConfigSchema.Divider.COLOR_BLUE,
                 ConfigSchema.Divider.ALPHA,
             ).forEach { add(it.name()); add("${it.name()}_tenths") }
+            add(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name())
         }
 
         /** Empty means disabled; null means corrupt active settings and must clear stale state. */
@@ -150,7 +152,9 @@ data class Os4MainScreenOptions(
                     Os4NativeGlassOptions.parse(string(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES))
                         ?: return null
                 } else emptyMap()
-                if (!grid && !icons && !dockEnabled && !dividerEnabled && !glassEnabled && !widgetOverrides) ""
+                val recentsBlurPercent = integer(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT)
+                if (!grid && !icons && !dockEnabled && !dividerEnabled && !glassEnabled &&
+                    !widgetOverrides && recentsBlurPercent == 100) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
                         enabled = true,
@@ -192,6 +196,7 @@ data class Os4MainScreenOptions(
                             hookSafetyEnabled = boolean(ConfigSchema.Grid.NATIVE_HOOK_SAFETY),
                             glassIconSize = if (glassIcons) dp(ConfigSchema.Glass.ICON_SIZE_OFFSET) else 0.0,
                             glassIconCorner = if (glassIcons) dp(ConfigSchema.Glass.ICON_CORNER_RADIUS) else 0.0,
+                            recentsBlurPercent = recentsBlurPercent,
                         ),
                     )
                 }

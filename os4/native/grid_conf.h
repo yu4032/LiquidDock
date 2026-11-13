@@ -89,6 +89,11 @@ struct ld_grid_conf {
     int glass_observers_present;
     uint64_t glass_obs_vaddr[4];
     size_t glass_obs_size[4];
+    int recents_blur_percent;
+    int recents_blur_target_present;
+    size_t recents_blur_target_count;
+    uint64_t recents_blur_vaddr[2];
+    size_t recents_blur_size[2];
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -223,6 +228,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
 {
     struct ld_grid_conf c = {0};
     c.icon_size_percent = 100;
+    c.recents_blur_percent = 100;
     uint64_t seen = 0;  /* bit0=dock_offset_y bit1=dock_offset_x bit2=glass bit3=icons
                            bit4=grid_cols bit5=grid_rows bit6=end */
     uint32_t divider_seen = 0;   /* 分隔线字段查重（定义见 divider_conf.h） */
@@ -308,6 +314,22 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.render_targets_present=1;
                     seen |= 1ull << 36;
+                } else if (strcmp(key, "recents_blur_percent") == 0) {
+                    int value;
+                    if ((seen & (1ull << 37)) || !ld_grid_parse_int(val, 0, 100, &value)) {
+                        bad=1; break;
+                    }
+                    c.recents_blur_percent=value;
+                    seen |= 1ull << 37;
+                } else if (strcmp(key, "recents_blur_target") == 0) {
+                    size_t n = strchr(val, ',') ? 2 : 1;
+                    if ((seen & (1ull << 38)) ||
+                        !ld_grid_parse_aot_targets(val, c.recents_blur_vaddr, c.recents_blur_size, n)) {
+                        bad=1; break;
+                    }
+                    c.recents_blur_target_present=1;
+                    c.recents_blur_target_count=n;
+                    seen |= 1ull << 38;
                 } else if (strcmp(key, "glass_enabled") == 0) {
                     int value;
                     if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {

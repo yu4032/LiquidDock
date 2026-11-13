@@ -46,6 +46,8 @@ internal object Os4GlassSymbols {
         "_HyperMaterialWidgetState._computeEffective",
     )
     private const val PASS_BLUR_SUPPORTED = "PassBlurBackgroundLight.supported"
+    private const val RECENTS_BLUR_RADIUS = "BlurLayerParams._getRecentBlurRadius"
+    private const val RECENTS_HOME_HOLD_PARAMS = "BlurLayerParams.getHomeHoldParams"
     @Volatile private var cached: Pair<Pair<String, Boolean>, String>? = null
 
     fun fromInstalledLauncher(context: Context, strictFingerprint: Boolean): String? = runCatching {
@@ -156,6 +158,8 @@ internal object Os4GlassSymbols {
             (found + probes).map { pair -> pair.first }.distinct().size == 7
         val pipeline = if (pipelineTargets) format(probes) else ""
         val passBlurHits = mutableSetOf<Pair<Long, Long>>()
+        val recentsBlurHits = mutableSetOf<Pair<Long, Long>>()
+        val recentsHoldHits = mutableSetOf<Pair<Long, Long>>()
         for (table in sections) {
             if (table.type != 2L || table.link !in sections.indices ||
                 table.entrySize != 24L) continue
@@ -172,6 +176,10 @@ internal object Os4GlassSymbols {
                     vaddr < 0x4000L || vaddr % 4L != 0L || size !in 16L..2048L) continue
                 if (elf.equalsString(strings, strOff, PASS_BLUR_SUPPORTED))
                     passBlurHits.add(vaddr to size)
+                else if (elf.equalsString(strings, strOff, RECENTS_BLUR_RADIUS))
+                    recentsBlurHits.add(vaddr to size)
+                else if (elf.equalsString(strings, strOff, RECENTS_HOME_HOLD_PARAMS))
+                    recentsHoldHits.add(vaddr to size)
             }
         }
         val passBlur = passBlurHits.singleOrNull()
@@ -179,6 +187,19 @@ internal object Os4GlassSymbols {
             found.none { pair -> pair.first == target.first } &&
                 probes.none { pair -> pair.first == target.first }
         }?.let { target -> format(listOf(target)) } ?: ""
+        val recentsBlur = recentsBlurHits.singleOrNull()?.takeIf { target ->
+            found.none { pair -> pair.first == target.first } &&
+                probes.none { pair -> pair.first == target.first } &&
+                passBlur?.first != target.first
+        }
+        val recentsHold = recentsHoldHits.singleOrNull()?.takeIf { target ->
+            found.none { pair -> pair.first == target.first } &&
+                probes.none { pair -> pair.first == target.first } &&
+                passBlur?.first != target.first &&
+                recentsBlur?.first != target.first
+        }
+        val recentsTargets = listOfNotNull(recentsBlur, recentsHold)
+        val recentsBlurTarget = if (recentsTargets.isNotEmpty()) format(recentsTargets) else ""
         val result = gate + "|" + pipeline + "|" + passBlurTarget
         val renderGates = mutableListOf<Pair<Long, Long>>()
         var renderGatesComplete = true
@@ -208,11 +229,11 @@ internal object Os4GlassSymbols {
             }
             renderGates.add(hit)
         }
-        val allTargets = found + probes + listOfNotNull(passBlur) + renderGates
+        val allTargets = found + probes + listOfNotNull(passBlur, recentsBlur, recentsHold) + renderGates
         if (!renderGatesComplete || renderGates.size != renderGateNames.size ||
             allTargets.map { pair -> pair.first }.distinct().size != allTargets.size)
-            return (result + "||").trimEnd('|')
-        return (result + "|" + format(renderGates)).trimEnd('|')
+            return (result + "||" + recentsBlurTarget).trimEnd('|')
+        return (result + "|" + format(renderGates) + "|" + recentsBlurTarget).trimEnd('|')
     }
 
     private class Elf64(private val data: ByteArray) {

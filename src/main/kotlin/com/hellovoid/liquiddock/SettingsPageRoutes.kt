@@ -3,7 +3,7 @@ package com.hellovoid.liquiddock
 /** Canonical ownership is independent of shortcut cards and traversal order. */
 internal fun canonicalSettingsParent(page: Page): Page? = when (page) {
     Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub -> null
-    Page.Grid, Page.Dock, Page.Workstation, Page.Recents, Page.SecurityCenterSidebar -> Page.LayoutHub
+    Page.Grid, Page.Dock, Page.Workstation, Page.Recents -> Page.LayoutHub
     Page.SoftGlass, Page.SoftGlassComponents, Page.Liquid, Page.GlassComponents,
     Page.AnimationSystem, Page.ThirdPartyApps -> Page.GlassHub
     Page.ThemePalette, Page.Data, Page.About -> Page.MoreHub

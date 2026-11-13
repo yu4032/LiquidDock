@@ -18,6 +18,11 @@ static volatile uint16_t g_os4_render_gate_mask __attribute__((used));
 static bool g_os4_render_gates_installed;
 static void *g_orig_passblur_supported __attribute__((used));
 static bool g_passblur_supported_installed;
+static volatile uint32_t g_os4_recents_blur_percent __attribute__((used)) = 100;
+static void *g_orig_recents_blur_radius __attribute__((used));
+static void *g_orig_recents_home_hold __attribute__((used));
+static bool g_recents_blur_installed;
+static bool g_recents_blur_attempted;
 
 #define LD_OS4_BOOL_GATE(fn, offset, orig_off, retval) \
 __attribute__((used,naked)) static void fn(void) { \
@@ -103,6 +108,60 @@ __attribute__((used,naked)) static void repl_os4_passblur_supported(void)
         "cbz w9, 3f\n"
         "add x0, x22, #0x20\n"
         "3: mov x15, x29\n"
+        "ldp x29, x30, [x15], #0x10\n"
+        "ret\n"
+    );
+}
+
+/* BlurLayerParams._getRecentBlurRadius returns an unboxed double in d0.
+ * Scale it by g_os4_recents_blur_percent / 100.0 when < 100. */
+__attribute__((used,naked)) static void repl_os4_recents_blur_radius(void)
+{
+    __asm__ volatile(
+        "stp x29, x30, [x15, #-0x10]!\n"
+        "mov x29, x15\n"
+        "adrp x16, g_orig_recents_blur_radius\n"
+        "add x16, x16, :lo12:g_orig_recents_blur_radius\n"
+        "ldr x16, [x16]\n"
+        "cbz x16, 1f\n"
+        "blr x16\n"
+        "1: adrp x9, g_os4_recents_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_recents_blur_percent\n"
+        "ldr w9, [x9]\n"
+        "cmp w9, #100\n"
+        "b.hs 2f\n"
+        "ucvtf d1, w9\n"
+        "movz x10, #0x4059, lsl #48\n"
+        "fmov d2, x10\n"
+        "fdiv d1, d1, d2\n"
+        "fmul d0, d0, d1\n"
+        "2: mov x15, x29\n"
+        "ldp x29, x30, [x15], #0x10\n"
+        "ret\n"
+    );
+}
+
+/* BlurLayerParams.getHomeHoldParams returns a BlurLayerParams* in x0 with
+ * blurRadius (double) at [x0, #7]. The 16-byte hook trampoline clobbers x17
+ * across the target's `add x17, x27, ...`, so recompute blurRadius via
+ * repl_os4_recents_blur_radius and store it at [x0, #7]. */
+__attribute__((used,naked)) static void repl_os4_recents_home_hold(void)
+{
+    __asm__ volatile(
+        "stp x29, x30, [x15, #-0x10]!\n"
+        "mov x29, x15\n"
+        "sub x15, x15, #0x10\n"
+        "adrp x16, g_orig_recents_home_hold\n"
+        "add x16, x16, :lo12:g_orig_recents_home_hold\n"
+        "ldr x16, [x16]\n"
+        "cbz x16, 2f\n"
+        "blr x16\n"
+        "cbz x0, 2f\n"
+        "stur x0, [x29, #-8]\n"
+        "bl repl_os4_recents_blur_radius\n"
+        "ldur x0, [x29, #-8]\n"
+        "stur d0, [x0, #7]\n"
+        "2: mov x15, x29\n"
         "ldp x29, x30, [x15], #0x10\n"
         "ret\n"
     );

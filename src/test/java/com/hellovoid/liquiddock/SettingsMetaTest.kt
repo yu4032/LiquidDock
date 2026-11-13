@@ -162,7 +162,7 @@ class SettingsMetaTest {
             it.key == com.hellovoid.liquiddock.config.ConfigSchema.Dock.FRAME_SYNC.name()
         }.page)
         assertTrue(pages.getValue(Page.Recents).indexOfKey(
-            com.hellovoid.liquiddock.config.ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM.name()) >= 0)
+            com.hellovoid.liquiddock.config.ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name()) >= 0)
     }
 
     @Test(expected = IllegalArgumentException::class)

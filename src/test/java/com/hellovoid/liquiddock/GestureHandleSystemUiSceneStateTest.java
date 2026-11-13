@@ -33,18 +33,32 @@ public class GestureHandleSystemUiSceneStateTest {
     }
 
     @Test
-    public void homeHidesOnlyAfterRecentsAnimationSettles() {
+    public void homeHidesImmediatelyDuringRecentsAnimation() {
         GestureHandleSystemUiSceneState state = new GestureHandleSystemUiSceneState();
 
         assertFalse(state.onRecentsAnimationChanged(true));
-        assertFalse(state.onTaskMovedToFront(true));
+        assertTrue(state.onTaskMovedToFront(true));
         assertTrue(state.snapshot().home);
         assertTrue(state.snapshot().recentsAnimation);
+        assertTrue(state.shouldHide());
 
         assertTrue(state.onRecentsAnimationChanged(false));
         assertTrue(state.shouldHide());
         assertTrue(state.snapshot().home);
         assertFalse(state.snapshot().recentsAnimation);
+    }
+
+    @Test
+    public void foregroundPackageUpdatesHomeAndClearsOverviewWhenLeaving() {
+        GestureHandleSystemUiSceneState state = new GestureHandleSystemUiSceneState();
+
+        assertTrue(state.onForegroundPackage(true));
+        assertTrue(state.shouldHide());
+        assertTrue(state.onOverviewShown());
+        assertFalse(state.onForegroundPackage(false));
+        assertFalse(state.snapshot().home);
+        assertFalse(state.snapshot().overview);
+        assertFalse(state.shouldHide());
     }
 
     @Test

@@ -26,6 +26,12 @@ final class GestureHandleSystemUiSceneState {
         return shouldHideLocked();
     }
 
+    synchronized boolean onForegroundPackage(boolean homePackage) {
+        home = homePackage;
+        if (!homePackage) overview = false;
+        return shouldHideLocked();
+    }
+
     synchronized boolean onRecentsAnimationChanged(boolean running) {
         recentsAnimation = running;
         if (running) overview = false;
@@ -59,8 +65,8 @@ final class GestureHandleSystemUiSceneState {
     }
 
     private boolean shouldHideLocked() {
-        // During swipe-up / recents transition, SystemUI still owns the moving gesture handle.
-        // Hide only after Overview is actually shown, or after a HOME transition has settled.
-        return overview || (home && !recentsAnimation);
+        // Hide immediately once HOME/RECENTS becomes foreground instead of waiting for
+        // recentsAnimation to finish, which otherwise adds a noticeable hide delay.
+        return overview || home;
     }
 }

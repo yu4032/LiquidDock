@@ -218,6 +218,75 @@ static void pin_installed_hook(uintptr_t site) {
     ld_blog("hook page pinned site=%llx ok=%d errno=%d",(unsigned long long)site,ok,ok?0:errno);
 }
 
+static void ld_install_os4_recents_blur_one(const struct native_api *api,
+        const ld_lib_info *lib, uint64_t v, uint64_t len, void *repl, void **orig,
+        const char *label)
+{
+    uintptr_t target = 0;
+    if (!ld_vaddr_to_runtime(lib, (uintptr_t)v, &target) ||
+            !executable_range(target, (size_t)len) ||
+            *(const uint32_t *)target != 0xa9bf79fdu) {
+        ld_blog("OS4 Recents %s skipped: target invalid or prologue mismatch", label);
+        return;
+    }
+    if (g_home_options.hook_safety_enabled) {
+        char apk[256];
+        uint8_t file_bytes[2048];
+        bool match = false;
+        if (len <= sizeof(file_bytes) && ld_apk_real_path(ld_launcher_apk_substr(), apk, sizeof apk)) {
+            int fd = open(apk, O_RDONLY | O_CLOEXEC);
+            if (fd >= 0) {
+                for (uint16_t j = 0; j < lib->phnum; j++) {
+                    uint64_t off, base, sz, mem;
+                    if (!ld_phdr_load(lib, j, &off, &base, &sz, &mem)) continue;
+                    if (v < base || v - base > sz || len > sz - (v - base)) continue;
+                    uint64_t at = lib->entry_off + off + (v - base);
+                    ssize_t rd = pread(fd, file_bytes, (size_t)len, (off_t)at);
+                    if (rd == (ssize_t)len && memcmp((const void *)target, file_bytes, (size_t)len) == 0) {
+                        match = true;
+                    }
+                    break;
+                }
+                close(fd);
+            }
+        }
+        if (!match) {
+            ld_blog("OS4 Recents %s skipped: strict ELF body mismatch", label);
+            return;
+        }
+    }
+    int rc = api->hook((void *)target, repl, orig);
+    if (rc == 0 && *orig && ld_pin_code_pages_soft(target, 16)) {
+        g_recents_blur_installed = true;
+        ld_blog("OS4 Recents %s installed: percent=%u", label,
+                (unsigned)__atomic_load_n(&g_os4_recents_blur_percent, __ATOMIC_RELAXED));
+    } else {
+        ld_blog("OS4 Recents %s install failed rc=%d backup=%d", label, rc, *orig != NULL);
+    }
+}
+
+static void ld_install_os4_recents_blur(const struct native_api *api, const ld_lib_info *lib)
+{
+    if (g_recents_blur_installed || g_recents_blur_attempted) return;
+    g_recents_blur_attempted = true;
+    int percent = g_home_options.recents_blur_percent;
+    if (percent < 0 || percent > 100) percent = 100;
+    __atomic_store_n(&g_os4_recents_blur_percent, (uint32_t)percent, __ATOMIC_RELEASE);
+    if (percent == 100) return;
+    if (!g_home_options.recents_blur_target_present || g_home_options.recents_blur_target_count == 0) {
+        ld_blog("OS4 Recents blur gate unavailable: recents_blur_target was not published");
+        return;
+    }
+    ld_install_os4_recents_blur_one(api, lib,
+            g_home_options.recents_blur_vaddr[0], g_home_options.recents_blur_size[0],
+            (void *)repl_os4_recents_blur_radius, &g_orig_recents_blur_radius, "blur gate");
+    if (g_home_options.recents_blur_target_count >= 2) {
+        ld_install_os4_recents_blur_one(api, lib,
+                g_home_options.recents_blur_vaddr[1], g_home_options.recents_blur_size[1],
+                (void *)repl_os4_recents_home_hold, &g_orig_recents_home_hold, "home-hold gate");
+    }
+}
+
 /* Direct Dart AOT gates, resolved by name from the installed Launcher ELF. */
 static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info *lib)
 {
@@ -809,6 +878,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_widget_inventory_reset_once();
     (void)ld_maml_install(api);
     ld_install_os4_glass(api,&lib);
+    ld_install_os4_recents_blur(api,&lib);
     ld_widget_resize_install(api,&lib);
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);
@@ -1001,7 +1071,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 static void install_grid_hook(const struct native_api *api) {
     if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled
             && !g_home_options.dock.enabled && !g_home_options.glass_enabled
-            && !g_home_options.widget_overrides) return;
+            && !g_home_options.widget_overrides
+            && g_home_options.recents_blur_percent == 100) return;
     pthread_mutex_lock(&g_install_lock);
     install_grid_hook_unlocked(api);
     if((g_installed || g_os4_glass_installed) && !g_trace_started) {
