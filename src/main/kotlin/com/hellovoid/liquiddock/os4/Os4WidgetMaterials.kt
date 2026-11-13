@@ -19,7 +19,7 @@ object Os4WidgetMaterials {
     private const val PREFS = "os4_widget_materials"
     private const val SOURCES = "sources_v1"
     private const val PUBLISH_KEY = "publish_key"
-    private const val LAST_GLASS_PUBLISHED = "last_widget_glass_published"
+    private const val LAST_GLASS_RELOAD_REQUESTED = "last_widget_glass_reload_requested"
     private const val CACHE_PREFIX = "shadow_"
     private const val TRANSFORM_VERSION = "maml-glass-clock-config-v13"
     private const val CE_PREFIX = "/data/user/0/com.miui.home/files/maml/res/"
@@ -71,21 +71,25 @@ object Os4WidgetMaterials {
         clearMapping()
     }
 
-    /* A MAML instance retains its parsed render tree after the mapping changes.
-     * Track the last successfully published glass state so the config worker can
-     * restart only for the enabled -> disabled resource transition. */
-    internal fun wasGlassPublished(context: Context): Boolean =
+    /* MAML instances retain their parsed render tree after a mapping change.
+     * Track a successful restart request separately from file publication, so
+     * a failed config publish does not suppress the next reload attempt. */
+    internal fun lastReloadRequestedGlass(context: Context): Boolean =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(LAST_GLASS_PUBLISHED, false)
+            .getBoolean(LAST_GLASS_RELOAD_REQUESTED, false)
+
+    internal fun recordReloadRequested(context: Context, glass: Boolean) {
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(LAST_GLASS_RELOAD_REQUESTED, glass).apply()
+    }
 
     internal fun isGlassRequested(preferences: SharedPreferences): Boolean =
         preferences.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault()) &&
             preferences.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault()) &&
             preferences.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())
 
-    private fun rememberPublication(state: SharedPreferences, fingerprint: String, glass: Boolean) {
-        state.edit().putString(PUBLISH_KEY, fingerprint)
-            .putBoolean(LAST_GLASS_PUBLISHED, glass).apply()
+    private fun rememberPublication(state: SharedPreferences, fingerprint: String) {
+        state.edit().putString(PUBLISH_KEY, fingerprint).apply()
     }
 
     /** Rebuilds the active mapping from cached scan results and current exact M2 selections. */
@@ -124,7 +128,7 @@ object Os4WidgetMaterials {
          * either widget glass or the module is turned off. */
         if (!glass) {
             val cleared = clearMapping()
-            if (cleared) rememberPublication(state, fingerprint, false)
+            if (cleared) rememberPublication(state, fingerprint)
             return cleared
         }
         return try {
@@ -152,11 +156,11 @@ object Os4WidgetMaterials {
             }
             if (published.isEmpty()) {
                 val cleared = clearMapping()
-                if (cleared) rememberPublication(state, fingerprint, glass)
+                if (cleared) rememberPublication(state, fingerprint)
                 cleared
             } else {
                 val result = deploy(published)
-                if (result) rememberPublication(state, fingerprint, glass)
+                if (result) rememberPublication(state, fingerprint)
                 if (!result) clearMapping() else true
             }
         } catch (error: Throwable) {
