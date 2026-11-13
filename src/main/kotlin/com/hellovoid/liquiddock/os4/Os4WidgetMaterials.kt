@@ -120,13 +120,14 @@ object Os4WidgetMaterials {
             val descriptor = WidgetComponentStore.parseSelector(encoded) ?: continue
             if (!descriptor.isExactMamlRender() || !descriptor.owner.startsWith("os4:")) continue
             val known = knownSelectors[descriptor.selectorKey()] ?: continue
+            if (!Os4MamlHidePolicy.shouldApply(known, glass)) continue
             val match = sourceList.firstOrNull { owner(it) == known.owner } ?: continue
             selectedPaths.getOrPut(match.sha) { linkedSetOf() } += known.hierarchyPath
         }
-        /* Hide rules belong to the OS4 widget glass presentation. Keep the
-         * user's selections persisted, but restore the stock MAML archive when
-         * either widget glass or the module is turned off. */
-        if (!glass) {
+        /* Only background suppression belongs to widget glass. Other
+         * explicitly hidden MAML nodes remain active across glass toggles. */
+        val rulesExist = selectedPaths.isNotEmpty() || glass
+        if (!active || !rulesExist) {
             val cleared = clearMapping()
             if (cleared) rememberPublication(state, fingerprint)
             return cleared
