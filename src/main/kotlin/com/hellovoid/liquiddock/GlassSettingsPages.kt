@@ -22,13 +22,152 @@ import top.yukonga.miuix.kmp.basic.Text
 // Pure relocation of the existing Liquid, component-glass, and highlight pages.
 // Prismal rendering, settings writes, toggled dependencies and routing are unchanged.
 @Composable
+internal fun SoftGlassPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
+    val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
+    var liquidGlass by remember(liquidRevision) {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.ENABLED.name(),
+                ConfigSchema.Glass.ENABLED.uiDefault(),
+            ),
+        )
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            PageHeader(
+                stringResource(R.string.page_soft_glass),
+                "仅作用于 OS4 系统桌面的原生柔光玻璃；其他 Hook 应用仍使用「液态玻璃」。重启桌面生效，背景模糊设为 0 可观察清晰折射。",
+            )
+        }
+        item {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.ENABLED,
+                    "开启自定义",
+                    "开启后自定义桌面原生柔光玻璃与液态玻璃参数；重启桌面生效。",
+                    masterEnabled,
+                ) { liquidGlass = it }
+            }
+        }
+        softGlassEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+            }
+        }
+        if (!liquidGlass) {
+            item {
+                ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
+                    Text(
+                        "开启自定义后应用这些柔光玻璃参数。",
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SoftGlassComponentsPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    open: (Page) -> Unit,
+) {
+    val liquidEnabled = prefs.getBoolean(
+        ConfigSchema.Glass.ENABLED.name(),
+        ConfigSchema.Glass.ENABLED.uiDefault(),
+    )
+    var iconGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.ICON_GLASS.name(),
+                ConfigSchema.Glass.ICON_GLASS.uiDefault(),
+            ),
+        )
+    }
+    var widgetGlass by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Glass.WIDGET_GLASS.name(),
+                ConfigSchema.Glass.WIDGET_GLASS.uiDefault(),
+            ),
+        )
+    }
+    DenseSettingsList(
+        padding,
+        stringResource(R.string.page_soft_glass_components),
+        "OS4 系统桌面原生柔光玻璃组件：普通桌面图标、Dock 应用图标、小部件玻璃与 MAML 小组件隐藏规则。",
+    ) {
+        item(key = "soft-icons-heading") { SmallTitle("图标与控件") }
+        item(key = "soft-icons-toggle") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.ICON_GLASS,
+                    "图标玻璃",
+                    "控制普通桌面图标与 Dock 应用图标；重启桌面生效。",
+                    masterEnabled && liquidEnabled,
+                ) { iconGlass = it }
+            }
+        }
+        item(key = "soft-icons-geometry") {
+            SettingsCard {
+                IntSetting(prefs, iconSizeOffsetSpec, masterEnabled && liquidEnabled && iconGlass)
+                ModernListDivider()
+                IntSetting(prefs, iconCornerRadiusSpec, masterEnabled && liquidEnabled && iconGlass)
+            }
+        }
+        item(key = "soft-widgets-heading") { SmallTitle("小组件") }
+        item(key = "soft-widgets-toggle") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.WIDGET_GLASS,
+                    "小部件玻璃",
+                    "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容；重启桌面生效。",
+                    masterEnabled && liquidEnabled,
+                ) { widgetGlass = it }
+            }
+        }
+        item(key = "soft-widgets-maml") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "已载入的 MAML 小组件组件管理",
+                    summary = "手动载入当前已挂载的 MAML 小组件，按精确节点设置隐藏规则；不依赖小部件玻璃开关。",
+                    enabled = true,
+                    onClick = { open(Page.WidgetComponents) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 internal fun LiquidPage(
     padding: PaddingValues,
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
 ) {
-    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
     var liquidGlass by remember(liquidRevision) {
         mutableStateOf(
@@ -49,8 +188,7 @@ internal fun LiquidPage(
         item {
             PageHeader(
                 stringResource(R.string.page_liquid),
-                if (os4Launcher) "背景由桌面原生采样；可独立调整原生玻璃参数。重启桌面生效，背景模糊设为 0 可观察清晰折射。"
-                else stringResource(R.string.liquid_header_summary),
+                stringResource(R.string.liquid_header_summary),
             )
         }
         item {
@@ -58,27 +196,23 @@ internal fun LiquidPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.ENABLED,
-                    if (os4Launcher) "开启自定义" else stringResource(R.string.liquid_enable),
-                    if (os4Launcher) "开启后自定义桌面原生玻璃的参数；重启桌面生效。"
-                    else stringResource(R.string.liquid_enable_summary),
+                    stringResource(R.string.liquid_enable),
+                    stringResource(R.string.liquid_enable_summary),
                     masterEnabled,
                 ) { liquidGlass = it }
             }
         }
-        if (!os4Launcher) {
-            item(key = "continuous-glass-corners") {
-                SettingsCard {
-                    BooleanSetting(
-                        prefs,
-                        ConfigSchema.Glass.CONTINUOUS_CORNERS,
-                        "iPadOS 风格连续圆角",
-                        "替换所有柔光玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
-                        masterEnabled && liquidGlass,
-                    )
-                }
+        item(key = "continuous-glass-corners") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.CONTINUOUS_CORNERS,
+                    "iPadOS 风格连续圆角",
+                    "替换所有液态玻璃的圆角轮廓，并同步折射、高光与阴影；关闭恢复原轮廓，重启目标应用生效",
+                    masterEnabled && liquidGlass,
+                )
             }
         }
-        // 柔光玻璃按功能分为子页面；OS4 与非 OS4 共用同一套入口。
         liquidEntries.forEach { entry ->
             item {
                 ModernFeatureCard(
@@ -86,15 +220,17 @@ internal fun LiquidPage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }
         item {
             ModernFeatureCard(
                 title = stringResource(R.string.page_glass_components),
-                summary = "管理图标、小组件、文件夹与菜单玻璃",
+                summary = "管理图标、小组件、文件夹与菜单液态玻璃",
                 onClick = { open(Page.GlassComponents) },
                 modifier = Modifier.padding(horizontal = 14.dp),
+                page = Page.GlassComponents,
             )
         }
         if (!liquidGlass) {
@@ -111,27 +247,14 @@ internal fun LiquidPage(
 }
 
 @Composable
-
 internal fun GlassComponentsPage(
     padding: PaddingValues,
     open: (Page) -> Unit,
 ) {
-    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
-    val entries = if (os4Launcher) {
-        componentEntries.map { entry ->
-            when (entry.page) {
-                Page.GlassIcons -> entry.copy(summary = "普通桌面图标与 Dock 应用图标")
-                Page.GlassWidgets -> entry.copy(summary = "小部件玻璃与已载入的 MAML 小组件隐藏规则")
-                else -> entry
-            }
-        }
-    } else componentEntries
     HubPage(
         padding = padding,
-        summary = if (os4Launcher) {
-            "OS4 可配置普通桌面图标、Dock 应用图标、小部件玻璃和已载入的 MAML 小组件隐藏规则。"
-        } else "选择需要调整的玻璃组件。",
-        entries = entries,
+        summary = "选择需要调整的液态玻璃组件。",
+        entries = componentEntries,
         open = open,
     )
 }

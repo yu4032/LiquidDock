@@ -36,11 +36,13 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
         private val OS4_READY_PAGES = setOf(
             Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub,
             Page.ThemePalette, Page.Data, Page.About,
-            Page.GlassComponents, Page.GlassMenus,
+            Page.Liquid, Page.LiquidMaterial, Page.LiquidColor,
+            Page.LiquidLighting, Page.LiquidSampling, Page.GlassEdge,
+            Page.GlassComponents, Page.GlassMenus, Page.SidebarEdge,
             Page.HandleMenuCustomization, Page.HandleMenuAll, Page.HandleMenuEdge,
             Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.GboardEdge,
             Page.SearchboxEdge, Page.SecurityCenterSidebar, Page.SecurityCenterEdge,
-            Page.Animation, Page.AnimationPopups, Page.AnimationSystem, Page.AnimationGui,
+            Page.AnimationSystem,
         )
 
         // Available for iterative GUI/port testing, but they are not claims of
@@ -50,10 +52,9 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
             Page.Dock, Page.DockBehavior, Page.DockGeometry,
             Page.Divider,
-            Page.Liquid, Page.LiquidMaterial,
-            Page.LiquidColor, Page.LiquidLighting,
-            Page.LiquidSampling, Page.GlassEdge,
-            Page.GlassIcons, Page.GlassWidgets, Page.WidgetComponents,
+            Page.SoftGlass, Page.SoftGlassMaterial,
+            Page.SoftGlassColor, Page.SoftGlassLighting,
+            Page.SoftGlassComponents, Page.WidgetComponents,
         )
 
         /** Detect the AOT desktop independently of its release and SDK version. */

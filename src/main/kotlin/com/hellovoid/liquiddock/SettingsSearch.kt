@@ -162,15 +162,6 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         )
         Page.Divider -> listOf(toggle(ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线")) +
             dividerSpecs.map(::number)
-        Page.Stroke -> listOf(
-            toggle(ConfigSchema.Dock.STROKE_ENABLED, "显示完整描边"),
-            toggle(ConfigSchema.Dock.SQUIRCLE, "方圆形连续曲线"),
-            toggle(ConfigSchema.Dock.FILL_DIFF, "Fill-Diff 描边"),
-        ) + strokeSpecs.map(::number)
-        Page.Shadow -> listOf(
-            toggle(ConfigSchema.Dock.SHADOW_ENABLED, "Dock 原生阴影"),
-            toggle(ConfigSchema.Dock.STROKE_SHADOW, "原生描边阴影"),
-        ) + shadowSpecs.map(::number)
         else -> emptyList()
     }
     return rows
@@ -245,24 +236,6 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
         }
         Page.Divider -> if (key == ConfigSchema.Divider.ENABLED.name()) 0
             else dividerSpecs.indexOfFirst { it.key == key }.takeIf { it >= 0 }?.plus(1) ?: -1
-        Page.Stroke -> when (key) {
-            ConfigSchema.Dock.STROKE_ENABLED.name() -> 0
-            ConfigSchema.Dock.SQUIRCLE.name() -> 1
-            ConfigSchema.Dock.FILL_DIFF.name() -> 2
-            else -> {
-                val background = strokeSpecs.filter { it.section == IntSection.StrokeBackground }
-                val geometry = strokeSpecs.filter { it.section == IntSection.StrokeGeometry }
-                val b = background.indexOfFirst { it.key == key }
-                if (b >= 0) 4 + b else geometry.indexOfFirst { it.key == key }
-                    .takeIf { it >= 0 }?.plus(5 + background.size) ?: -1
-            }
-        }
-        Page.Shadow -> when (key) {
-            ConfigSchema.Dock.SHADOW_ENABLED.name() -> 1
-            ConfigSchema.Dock.STROKE_SHADOW.name() -> 3
-            else -> shadowSpecs.indexOfFirst { it.key == key }
-                .takeIf { it >= 0 }?.plus(4) ?: -1
-        }
         else -> -1
     }
     return index.takeIf { it >= 0 }

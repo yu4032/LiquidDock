@@ -16,6 +16,7 @@ internal sealed interface SettingsBlock {
         val toggle: ConfigKey<Boolean>? = null,
         val scope: String? = null,
         val requires: List<Pair<ConfigKey<Boolean>, Boolean>> = emptyList(),
+        val os4Unavailable: Boolean = false,
     ) : SettingsBlock {
         init { require((number != null) xor (toggle != null)) }
     }

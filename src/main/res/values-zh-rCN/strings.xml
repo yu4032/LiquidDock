@@ -20,9 +20,13 @@
     <string name="page_divider">Dock 分隔线</string>
     <string name="page_workstation">自定义工作台</string>
     <string name="page_recents">多任务</string>
-    <string name="page_liquid">柔光玻璃</string>
+    <string name="page_liquid">液态玻璃</string>
     <string name="page_sidebar_glass">侧边栏玻璃</string>
-    <string name="page_soft_glass">柔光玻璃参数</string>
+    <string name="page_soft_glass">柔光玻璃</string>
+    <string name="page_soft_glass_material">折射与轮廓</string>
+    <string name="page_soft_glass_color">色彩与背景</string>
+    <string name="page_soft_glass_lighting">光照与反射</string>
+    <string name="page_soft_glass_components">柔光玻璃组件</string>
     <string name="page_security_center_sidebar">安全中心侧边栏</string>
     <string name="security_center_sidebar_header_summary">集中管理 Launcher 侧滑呼出与安全中心侧边栏材质；需要重新加载时，在右上角“重启作用域”中选择桌面与安全中心。</string>
     <string name="security_center_sidebar_category_gesture">侧滑呼出</string>
@@ -36,8 +40,6 @@
     <string name="page_widget_component_detail">小组件组件详情</string>
     <string name="widget_components_entry">小组件部件管理</string>
     <string name="widget_components_entry_summary">手动载入小组件，可隐藏内部部件或选择文字与图像白化</string>
-    <string name="page_stroke">Dock描边</string>
-    <string name="page_shadow">原生Dock阴影</string>
     <string name="page_animation">动画与过渡</string>
     <string name="page_data">预设</string>
     <string name="page_about">许可</string>
@@ -98,10 +100,9 @@
     <string name="page_grid_basics">网格基础</string>
     <string name="page_grid_landscape">横屏布局</string>
     <string name="page_grid_portrait">竖屏布局</string>
-    <string name="page_grid_split">分屏布局</string>
     <string name="page_dock_behavior">Dock 行为</string>
     <string name="page_dock_geometry">Dock 几何</string>
-    <string name="page_glass_components">玻璃组件</string>
+    <string name="page_glass_components">液态玻璃组件</string>
     <string name="page_glass_icons">图标与控件</string>
     <string name="page_glass_widgets">小组件</string>
     <string name="page_glass_folders">文件夹</string>

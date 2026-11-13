@@ -20,9 +20,13 @@
     <string name="page_divider">Dock divider</string>
     <string name="page_workstation">Custom workstation</string>
     <string name="page_recents">Recents</string>
-    <string name="page_liquid">Soft-light glass</string>
+    <string name="page_liquid">Liquid glass</string>
     <string name="page_sidebar_glass">Sidebar glass</string>
-    <string name="page_soft_glass">Soft glass</string>
+    <string name="page_soft_glass">Soft-light glass</string>
+    <string name="page_soft_glass_material">Refraction &amp; contour</string>
+    <string name="page_soft_glass_color">Color &amp; background</string>
+    <string name="page_soft_glass_lighting">Lighting &amp; reflection</string>
+    <string name="page_soft_glass_components">Soft-light glass components</string>
     <string name="page_security_center_sidebar">Security Center sidebar</string>
     <string name="security_center_sidebar_header_summary">Manage Launcher side-slide behavior and Security Center sidebar material; when a reload is required, use Restart scopes and select Desktop and Security Center.</string>
     <string name="security_center_sidebar_category_gesture">Side-slide launch</string>
@@ -36,8 +40,6 @@
     <string name="page_widget_component_detail">Widget component detail</string>
     <string name="widget_components_entry">Widget component styling</string>
     <string name="widget_components_entry_summary">Load widgets to hide components or turn selected text/icons white</string>
-    <string name="page_stroke">Dock stroke</string>
-    <string name="page_shadow">Native Dock shadow</string>
     <string name="page_animation">Animations &amp; transitions</string>
     <string name="page_data">Presets</string>
     <string name="page_about">Licenses</string>
@@ -100,10 +102,9 @@
     <string name="page_grid_basics">Grid basics</string>
     <string name="page_grid_landscape">Landscape layout</string>
     <string name="page_grid_portrait">Portrait layout</string>
-    <string name="page_grid_split">Split-screen layout</string>
     <string name="page_dock_behavior">Dock behavior</string>
     <string name="page_dock_geometry">Dock geometry</string>
-    <string name="page_glass_components">Glass components</string>
+    <string name="page_glass_components">Liquid glass components</string>
     <string name="page_glass_icons">Icons &amp; controls</string>
     <string name="page_glass_widgets">Widgets</string>
     <string name="page_glass_folders">Folders</string>

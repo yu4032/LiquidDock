@@ -73,8 +73,7 @@ class SettingsMetaTest {
 
     @Test fun fixedCustomComponentPagesIndexAllTheirRenderedStaticControls() {
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
-        for (page in listOf(Page.GlassIcons, Page.GlassWidgets, Page.Stroke,
-                Page.Shadow, Page.Divider)) {
+        for (page in listOf(Page.GlassIcons, Page.GlassWidgets, Page.Divider)) {
             val rows = customGlassSearchRows(page)
             assertTrue(rows.isNotEmpty())
             assertEquals(rows.size, rows.map { it.key }.toSet().size)
@@ -85,8 +84,6 @@ class SettingsMetaTest {
                     customDenseFocusIndex(page, it.key) != null)
             }
         }
-        assertEquals(strokeSpecs.size + 3, customGlassSearchRows(Page.Stroke).size)
-        assertEquals(shadowSpecs.size + 2, customGlassSearchRows(Page.Shadow).size)
         assertEquals(dividerSpecs.size + 1, customGlassSearchRows(Page.Divider).size)
     }
 
@@ -134,7 +131,6 @@ class SettingsMetaTest {
     @Test fun canonicalParentsDoNotDependOnOverviewShortcutOrder() {
         assertEquals(Page.LayoutHub, canonicalSettingsParent(Page.Dock))
         assertEquals(Page.GlassHub, canonicalSettingsParent(Page.Liquid))
-        assertEquals(Page.GlassHub, canonicalSettingsParent(Page.Animation))
         Page.entries.forEach { page ->
             val path = settingsPagePath(page)
             assertEquals(page, path.last())
@@ -161,51 +157,18 @@ class SettingsMetaTest {
         assertEquals(0f, settingsCenterScrollDelta(0, 1200, 0, 800))
     }
     @Test fun movedOptionsAndAnimationDependenciesComeFromTheirOwningPage() {
-        val config = com.hellovoid.liquiddock.config.ConfigSchema.Animation.DOCK_RESIZE
-        val resize = pages.getValue(Page.AnimationWorkspace).blocks
-            .filterIsInstance<SettingsBlock.Row>().single { it.key == config.name() }
-        assertTrue(resize.requires.contains(com.hellovoid.liquiddock.config.ConfigSchema.Dock.ENABLED to true))
-        assertTrue(resize.requires.contains(com.hellovoid.liquiddock.config.ConfigSchema.Dock.RESIZE_ANIMATION to false))
-        assertTrue(resize.requires.contains(com.hellovoid.liquiddock.config.ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION to true))
-        assertEquals(-1, pages.getValue(Page.DockBehavior).indexOfKey(config.name()))
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
-        assertEquals(Page.GlassMenus, catalog.single { it.title == "壁纸闪烁修复" }.page)
         assertEquals(Page.LiquidSampling, catalog.single {
             it.key == com.hellovoid.liquiddock.config.ConfigSchema.Dock.FRAME_SYNC.name()
         }.page)
         assertTrue(pages.getValue(Page.Recents).indexOfKey(
             com.hellovoid.liquiddock.config.ConfigSchema.Animation.DISABLE_WALLPAPER_ZOOM.name()) >= 0)
-        val owners = mapOf(
-            Page.AnimationWorkspace to listOf(
-                animationAppReturnGlassFadeStartSpec, animationAppReturnGlassFadeDurationSpec,
-                animationWorkspaceVisibilitySpec, animationUnlockGlassFadeSpec,
-                animationDockResizeSpec),
-            Page.AnimationInteraction to listOf(animationPressInSpec, animationPressOutSpec),
-            Page.AnimationPopups to listOf(animationShortcutDismissSpec, animationSecurityCenterExitSpec),
-            Page.AnimationGui to listOf(animationSettingsPageSpec),
-        )
-        owners.forEach { (page, specs) ->
-            assertEquals(specs.map { it.key }, pages.getValue(page).blocks
-                .filterIsInstance<SettingsBlock.Row>().filter { it.number != null }.map { it.key })
-        }
-        val animation = pages.getValue(Page.AnimationWorkspace).blocks
-            .filterIsInstance<SettingsBlock.Row>()
-        val expectedToggles = listOf(
-            com.hellovoid.liquiddock.config.ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP,
-            com.hellovoid.liquiddock.config.ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP,
-        )
-        assertEquals(expectedToggles.map { it.name() },
-            animation.filter { it.toggle != null }.map { it.key })
-        expectedToggles.forEach { option ->
-            assertEquals(Page.AnimationWorkspace,
-                catalog.single { it.key == option.name() }.page)
-        }
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun duplicateRowKeysAreRejectedAtDeclarationTime() {
         val spec = animationSettingsPageSpec
-        SettingsMeta(Page.AnimationGui, "动画", listOf(
+        SettingsMeta(Page.DockBehavior, "动画", listOf(
             SettingsBlock.Row("a", spec.key, spec.title, number = spec),
             SettingsBlock.Row("b", spec.key, spec.title, number = spec),
         ))

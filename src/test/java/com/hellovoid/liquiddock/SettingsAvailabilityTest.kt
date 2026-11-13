@@ -13,10 +13,9 @@ class SettingsAvailabilityTest {
         val testing = listOf(
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
             Page.Dock, Page.DockBehavior, Page.DockGeometry, Page.Divider,
-            Page.GlassIcons, Page.GlassWidgets, Page.WidgetComponents,
-            Page.Liquid, Page.LiquidMaterial,
-            Page.LiquidColor, Page.LiquidLighting,
-            Page.LiquidSampling, Page.GlassEdge,
+            Page.SoftGlass, Page.SoftGlassMaterial,
+            Page.SoftGlassColor, Page.SoftGlassLighting,
+            Page.SoftGlassComponents, Page.WidgetComponents,
         )
         testing.forEach {
             assertEquals("OS4 test route ${it.name}", PagePortState.TESTING, os4.status(it))
@@ -26,16 +25,15 @@ class SettingsAvailabilityTest {
 
     @Test fun unrelatedLauncherFeaturesStillGrayOut() {
         val unavailable = listOf(
-            Page.GridSplit, Page.DockRecentBlacklist,
+            Page.DockRecentBlacklist,
             Page.Workstation, Page.WorkstationDock,
             Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait, Page.Recents,
-            Page.GlassFolders,
+            Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
             Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
             Page.DialogCustomization, Page.DialogAll, Page.PopupEdge, Page.DialogEdge,
             Page.DockEdge, Page.IconEdge, Page.WidgetEdge, Page.FolderEdge,
             Page.LauncherHighlights, Page.LauncherHighlightsCompact,
-            Page.LauncherHighlightsLarge, Page.Stroke, Page.Shadow,
-            Page.AnimationWorkspace, Page.AnimationInteraction,
+            Page.LauncherHighlightsLarge,
         )
         unavailable.forEach {
             assertEquals("OS4 unavailable ${it.name}", PagePortState.UNAVAILABLE, os4.status(it))
@@ -47,11 +45,13 @@ class SettingsAvailabilityTest {
         val ready = listOf(
             Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub,
             Page.ThemePalette, Page.Data, Page.About,
-            Page.GlassComponents, Page.GlassMenus,
+            Page.Liquid, Page.LiquidMaterial, Page.LiquidColor,
+            Page.LiquidLighting, Page.LiquidSampling, Page.GlassEdge,
+            Page.GlassComponents, Page.GlassMenus, Page.SidebarEdge,
             Page.HandleMenuCustomization, Page.HandleMenuAll, Page.HandleMenuEdge,
             Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.GboardEdge,
             Page.SearchboxEdge, Page.SecurityCenterSidebar, Page.SecurityCenterEdge,
-            Page.Animation, Page.AnimationPopups, Page.AnimationSystem, Page.AnimationGui,
+            Page.AnimationSystem,
         )
         ready.forEach {
             assertEquals("OS4 available ${it.name}", PagePortState.READY, os4.status(it))

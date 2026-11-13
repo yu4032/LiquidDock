@@ -9,11 +9,11 @@ import com.hellovoid.liquiddock.config.ConfigSchema
  * 光影决定光的来源与边缘；采样页不承载原生字段。
  */
 internal val liquidNativeSections: Map<Page, List<Pair<String, List<String>>>> = mapOf(
-    Page.LiquidMaterial to listOf(
+    Page.SoftGlassMaterial to listOf(
         "模糊与厚度" to listOf("blur_background", "blur_refract", "thickness_px"),
         "折射与轮廓" to listOf("ior", "edge_px", "edge_pow"),
     ),
-    Page.LiquidColor to listOf(
+    Page.SoftGlassColor to listOf(
         "颜色与透明度" to listOf("glass_r", "glass_g", "glass_b", "glass_a", "alpha"),
         "色调与饱和度" to listOf("unshade", "color_pow", "saturation", "brightness",
             "bg_saturation", "bg_brightness"),
@@ -21,13 +21,12 @@ internal val liquidNativeSections: Map<Page, List<Pair<String, List<String>>>> =
             "luminance_c0", "luminance_c1", "luminance_c2", "luminance_c3"),
         "内层阴影" to listOf("inner_white", "inner_mix", "burn"),
     ),
-    Page.LiquidLighting to listOf(
+    Page.SoftGlassLighting to listOf(
         "光源" to listOf("light_x", "light_y", "light_z", "light_intensity", "light_opposite",
             "light_range", "light_edge_pow"),
         "反射与内光" to listOf("reflection_strength", "reflection_lighten", "inner_bottom",
             "reflect_offset_px"),
     ),
-    Page.LiquidSampling to emptyList(),
 )
 
 internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMeta> = buildMap {
@@ -38,8 +37,10 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     fun row(spec: IntSpec, requires: List<Pair<ConfigKey<Boolean>, Boolean>> = emptyList()) =
         SettingsBlock.Row(spec.key, spec.key, spec.title, spec.summary, number = spec, requires = requires)
     fun toggle(config: ConfigKey<Boolean>, title: String, summary: String = "",
-               requires: List<Pair<ConfigKey<Boolean>, Boolean>> = emptyList()) =
-        SettingsBlock.Row(config.name(), config.name(), title, summary, toggle = config, requires = requires)
+               requires: List<Pair<ConfigKey<Boolean>, Boolean>> = emptyList(),
+               os4Unavailable: Boolean = false) =
+        SettingsBlock.Row(config.name(), config.name(), title, summary, toggle = config,
+            requires = requires, os4Unavailable = os4Unavailable)
     fun page(page: Page, summary: String, blocks: List<SettingsBlock>,
              requires: List<Pair<ConfigKey<Boolean>, Boolean>> = emptyList()) {
         put(page, SettingsMeta(page, text(page.titleRes),
@@ -51,6 +52,9 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     fun groups(groups: List<LiquidSpecGroup>): List<SettingsBlock> = groups.flatMapIndexed { i, group ->
         listOf(SettingsBlock.Header("group.$i", group.title)) + group.specs.map { row(it) }
     }
+    page(Page.SoftGlassMaterial, "OS4 系统桌面原生柔光玻璃的折射与轮廓参数。", emptyList(), glass)
+    page(Page.SoftGlassColor, "OS4 系统桌面原生柔光玻璃的颜色、背景模糊与色调曲线。", emptyList(), glass)
+    page(Page.SoftGlassLighting, "OS4 系统桌面原生柔光玻璃的光源方向与反射参数。", emptyList(), glass)
     page(Page.LiquidMaterial, "玻璃本体与几何：模糊、厚度、透射率、折射率、法线位移与边缘轮廓。",
         groups(liquidSoftLightMaterialGroups), glass)
     page(Page.LiquidColor, "显色与阴影：亮度、染色、底色透明度、色散、饱和度、色调曲线与内阴影。",
@@ -65,20 +69,18 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
         groups(liquidSoftLightSamplingGroups) + listOf(
             SettingsBlock.Header("sampling.performance", "实时背景采样与帧同步"),
             row(passBlurCaptureScaleSpec), row(passBlurRenderFpsSpec),
-            toggle(ConfigSchema.Dock.FRAME_SYNC, text(R.string.dock_frame_sync), text(R.string.dock_frame_sync_summary)),
+            toggle(ConfigSchema.Dock.FRAME_SYNC, text(R.string.dock_frame_sync),
+                text(R.string.dock_frame_sync_summary), os4Unavailable = true),
             SettingsBlock.Header("sampling.debug", "调试显示"),
             toggle(ConfigSchema.Glass.PRISMAL_SHOW_NORMALS, "OS4 法线与方向光可视化",
                 "内部显示玻璃表面法线，边缘显示 OS4 反射使用的 SDF 法线；亮度反映 OS4 方向光，不包含背景反射纹理"),
         ), glass)
     numbers(Page.DockGeometry, "调整 Dock 的尺寸、位置、圆角与图标间距。", dockSpecs, dock)
-    numbers(Page.GridSplit, "分屏使用系统 pane 作为边界，只在这里调整额外距离。", splitGridSpecs, grid)
     listOf(Page.GridLandscape to "landscape", Page.GridPortrait to "portrait").forEach { (p, orientation) ->
         val specs = gridSpecs.filter { it.key.startsWith("grid_$orientation") || it.key == "indicator_${orientation}_y" }
         page(p, "调整${if (orientation == "landscape") "横" else "竖"}屏桌面的间距与页面指示器位置。", buildList {
             add(SettingsBlock.Header("grid.position", "工作区位置"))
-            addAll(specs.filterNot { it.key.endsWith("row_gap") || it.key.startsWith("indicator_") }.map { row(it) })
-            add(SettingsBlock.Header("grid.gap", "图标行间距"))
-            addAll(specs.filter { it.key.endsWith("row_gap") }.map { row(it) })
+            addAll(specs.filterNot { it.key.startsWith("indicator_") }.map { row(it) })
             add(SettingsBlock.Header("grid.indicator", "页面指示器"))
             addAll(specs.filter { it.key.startsWith("indicator_") }.map { row(it) })
         }, grid)
@@ -105,21 +107,6 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
         toggle(ConfigSchema.Recents.DISABLE_WALLPAPER_DIMMING, "取消壁纸压暗",
             "取消多任务壁纸与转场的额外压暗，保留原生模糊、缩放和动画；下次切换起生效，无需重启桌面"),
     ))
-    page(Page.AnimationWorkspace, "按工作区、应用返回和文件夹分别调整玻璃过渡时间。", listOf(
-        SettingsBlock.Header("animation.workspace", "应用返回、工作区与文件夹"),
-        toggle(ConfigSchema.Animation.HIDE_WORKSPACE_GLASS_DURING_APP, "应用动画时隐藏工作区玻璃",
-            "只隐藏其他工作区图标、小组件和文件夹玻璃；正在启动或返回的图标始终跟随原生代理"),
-        row(animationAppReturnGlassFadeStartSpec), row(animationAppReturnGlassFadeDurationSpec),
-        row(animationWorkspaceVisibilitySpec),
-        row(animationUnlockGlassFadeSpec),
-        SettingsBlock.Header("animation.dock", "Dock 与图标"),
-        toggle(ConfigSchema.Animation.HIDE_DOCK_ICONS_DURING_APP, "应用动画时隐藏其他 Dock 图标玻璃",
-            "保留 Dock 背景和动画目标图标玻璃；目标图标始终跟随原生代理显隐"),
-        row(animationDockResizeSpec, dock + listOf(ConfigSchema.Dock.RESIZE_ANIMATION to false, ConfigSchema.Dock.SMOOTH_RESIZE_ANIMATION to true)),
-    ))
-    numbers(Page.AnimationInteraction, "玻璃按下与释放反馈独立调节；0 ms 表示立即完成。", listOf(animationPressInSpec, animationPressOutSpec))
-    numbers(Page.AnimationPopups, "调整快捷菜单与安全中心玻璃的退出渐隐。", listOf(animationShortcutDismissSpec, animationSecurityCenterExitSpec))
-    numbers(Page.AnimationGui, "调整设置页面的切换动画。", listOf(animationSettingsPageSpec))
     page(Page.AnimationSystem, "控制通知与控制中心顶部模糊及系统界面联动。", listOf(
         toggle(ConfigSchema.Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR,
             "控制中心/通知中心顶部渐变模糊",
@@ -127,14 +114,9 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
         toggle(ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS, "桌面/多任务隐藏手势小白条",
             "进入桌面或多任务后隐藏手势手柄，离开后交还系统原生显示时序；开关即时生效，首次安装此版本需重启系统界面"),
     ))
-    page(Page.GlassMenus, "菜单与弹窗按组件设置，系统级壁纸修复独立放置。", listOf(
+    page(Page.GlassMenus, "应用顶部控制器的菜单玻璃与独立光学参数。", listOf(
         SettingsBlock.Header("menus.heading", "菜单与弹窗"),
         SettingsBlock.Link("menus.handle", text(R.string.page_handle_menu), "应用顶部控制器的菜单玻璃、颜色、模糊与独立光学参数", Page.HandleMenuCustomization),
-        SettingsBlock.Link("menus.shortcut", text(R.string.page_shortcut_popup), "长按快捷菜单的玻璃、深色模式、模糊、颜色及独立光学参数", Page.ShortcutPopupCustomization),
-        SettingsBlock.Link("menus.dialog", text(R.string.page_dialog_customization), "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色", Page.DialogCustomization),
-        SettingsBlock.Header("menus.compatibility", "系统兼容性"),
-        toggle(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX, "壁纸闪烁修复",
-            "仅在壁纸闪烁时开启；需要为 LiquidDock 启用 System Framework（system）作用域并重启设备"),
     ), glass)
     glassEdgePageScopes.forEach { (p, scope) ->
         val label = glassEdgeScopeLabels.getValue(scope)

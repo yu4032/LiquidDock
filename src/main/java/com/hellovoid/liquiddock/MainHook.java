@@ -1,102 +1,10 @@
 package com.hellovoid.liquiddock;
 
 /**
- * Launcher process composition root.
- *
- * <p>Feature-specific state and hook implementation live in their typed owners. MainHook only
- * loads runtime configuration, preserves the established installation order and exposes the
- * process-wide logging / temporary workstation compatibility facade.</p>
+ * Process-wide logging and shared workstation state facade.
+ * Legacy Launcher Java hook installation has been removed in favor of OS4 native hooks.
  */
 public class MainHook {
-    public void install(ClassLoader classLoader) {
-        // Sequence guard makes future hook-order drift fail fast in tests and debug builds.
-        LauncherInstallSequence order = new LauncherInstallSequence();
-
-        // Preserve the historical order: Workstation capability detection is installed before the
-        // master preference read because vendor mode callbacks may arrive during Launcher startup.
-        WorkstationModeHook.install(classLoader);
-        order.advance(LauncherInstallSequence.Stage.WORKSTATION_RUNTIME);
-
-        LiquidDockConfig config = LiquidDockConfig.load();
-        order.advance(LauncherInstallSequence.Stage.CONFIG_LOADED);
-        WidgetGridSizing.setCustomGridEnabled(
-                config.enabled && config.grid.enabled);
-        debugLogging = config.debugLog;
-        Api101Bridge.setDebugLogging(debugLogging);
-        log("[DC] LiquidDock " + (debugLogging ? "debug logging ON" : "loaded"));
-        if (!config.enabled) {
-            log("[DC] LiquidDock master switch disabled");
-            order.finishAfterConfigWhenDisabled();
-            return;
-        }
-
-        float density =
-                android.content.res.Resources.getSystem().getDisplayMetrics().density;
-
-        // Workstation / Dock foundation.
-        DockStrokeRenderer.installNativeHook(classLoader, config.dock);
-        WorkstationDockCustomizationHook.install(classLoader, config.workstation);
-        WorkstationDockGeometryHook.install(classLoader, config.workstation);
-        if (!config.dock.resizeAnimation) {
-            DockResizeAnimationHook.install(
-                    classLoader,
-                    config.dock.smoothResizeAnimation,
-                    config.animation.dockResizeMs);
-        }
-        if (WorkstationRuntimeState.isActive()) {
-            log("[DC] workstation active; using isolated workstation parameters");
-        }
-        order.advance(LauncherInstallSequence.Stage.DOCK_FOUNDATION);
-
-        // Keep the GUI's 4x2 widget preflight available even when no Dock or
-        // widget host has finished inflating. SetupViews registers a live receiver.
-        LauncherManualDiscoveryBridge.installGridPreflightRegistration(classLoader);
-
-        // Independent of the visual owner: filter only the vendor Dock recommendation source.
-        DockRecentAppBlacklistHook.install(classLoader, config.dock.hideRecentTaskIcons);
-
-        // Grid feature.
-        DockDividerHook.install(classLoader);
-        LauncherGridInstallConfig grid = LauncherGridInstallConfig.from(config, density);
-        HomeGridHook.install(classLoader, grid.home);
-        HomeGridHook.setWorkstationGeometryConfig(grid.workstation);
-        WorkstationAllAppsIndicatorHook.install(classLoader, grid.workstation);
-        order.advance(LauncherInstallSequence.Stage.GRID);
-
-        // Vendor Dock presentation ownership must exist before glass/fallback customization.
-        DockShadowOwnership.install(classLoader, config.dock);
-        order.advance(LauncherInstallSequence.Stage.DOCK_SHADOW);
-
-        // Keep the existing zero-copy early return exactly where it was: when this pipeline owns
-        // the Dock, legacy/fallback customization hooks remain uninstalled.
-        boolean zeroCopyOwned = false;
-        if (config.glass.enabled) {
-            zeroCopyOwned = MiuixMaterialPipeline.install(classLoader, config);
-            if (zeroCopyOwned) {
-                log("[DC] MiuiX 307 zero-copy material active");
-            } else {
-                log("[DC] MiuiX 307 zero-copy material unavailable; liquid glass disabled");
-            }
-        }
-        order.advance(LauncherInstallSequence.Stage.GLASS_DECISION);
-        if (zeroCopyOwned) {
-            order.finishAtGlassOwner();
-            return;
-        }
-
-        if (!config.dock.enabled) {
-            log("[DC] Dock customization disabled; legacy hooks installed inertly");
-        }
-        DockCustomizationHook.install(
-                classLoader, DockInstallConfig.from(config.dock, density));
-        order.advance(LauncherInstallSequence.Stage.FALLBACK_DOCK);
-        order.finishFallback();
-    }
-
-    /**
-     * Short-term compatibility facade while domain callers migrate independently.
-     * MainHook no longer stores or mutates Workstation state.
-     */
     static boolean isWorkstationMode() {
         return WorkstationRuntimeState.isActive();
     }

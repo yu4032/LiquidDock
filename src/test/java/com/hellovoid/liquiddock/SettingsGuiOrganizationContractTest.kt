@@ -10,27 +10,28 @@ class SettingsGuiOrganizationContractTest {
     private val declared get() = declaredSettingsPages { "resource:$it" }
 
     private val declaredRoutes = setOf(
+        Page.SoftGlassMaterial, Page.SoftGlassColor, Page.SoftGlassLighting,
         Page.LiquidMaterial, Page.LiquidColor,
         Page.LiquidLighting, Page.LiquidSampling,
-        Page.DockGeometry, Page.DockBehavior, Page.GridSplit,
+        Page.DockGeometry, Page.DockBehavior,
         Page.GridLandscape, Page.GridPortrait,
         Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
-        Page.Recents, Page.AnimationWorkspace, Page.AnimationInteraction,
-        Page.AnimationPopups, Page.AnimationSystem, Page.AnimationGui, Page.GlassMenus,
+        Page.Recents, Page.AnimationSystem, Page.GlassMenus,
     ) + glassEdgePageScopes.keys
 
     private val customRoutes = setOf(
         Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub, Page.ThemePalette,
         Page.Grid, Page.GridBasics, Page.Dock, Page.DockRecentBlacklist,
-        Page.Divider, Page.Workstation, Page.Liquid, Page.SidebarEdge,
+        Page.Divider, Page.Workstation, Page.SoftGlass, Page.SoftGlassComponents,
+        Page.Liquid, Page.SidebarEdge,
         Page.GlassComponents, Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
         Page.HandleMenuCustomization, Page.HandleMenuAll,
         Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
         Page.DialogCustomization, Page.DialogAll,
         Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.WidgetComponents,
         Page.LauncherHighlights, Page.LauncherHighlightsCompact,
-        Page.LauncherHighlightsLarge, Page.Stroke, Page.Shadow,
-        Page.SecurityCenterSidebar, Page.Animation, Page.Data, Page.About,
+        Page.LauncherHighlightsLarge,
+        Page.SecurityCenterSidebar, Page.Data, Page.About,
     )
 
     @Test fun everyPageHasExactlyOneDeclaredOrCustomGuiOwner() {
@@ -50,7 +51,7 @@ class SettingsGuiOrganizationContractTest {
             Page.HandleMenuAll, Page.ShortcutPopupAll, Page.DialogAll, Page.GboardAll,
             Page.HandleMenuCustomization, Page.ShortcutPopupCustomization,
             Page.DialogCustomization, Page.Gboard, Page.GridBasics,
-            Page.Divider, Page.Stroke, Page.Shadow,
+            Page.Divider,
         )
         val catalog = settingsSearchCatalog({ "resource:$it" }, declared)
         customSearchPages.forEach { page ->

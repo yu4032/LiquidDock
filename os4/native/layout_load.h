@@ -29,7 +29,10 @@ static int ld_read_dto_item(struct ld_dart_context *c,uintptr_t dto,struct ld_la
     if (cid != 0xf26 && cid < 0x100) return 0;
     int64_t id=ld_dto_number(c,dto,7),container=ld_dto_number(c,dto,0x2b);
     if(id<0 || container==INT64_MIN) return 0;
-    if(container!=-100) { *item=(struct ld_layout_item){.id=id,.screen=-1}; return 1; }
+    int64_t extend_container=ld_dto_number(c,dto,0x2f);
+    if(container!=-100 || (extend_container!=INT64_MIN && extend_container>0)) {
+        *item=(struct ld_layout_item){.id=id,.screen=-1}; return 1;
+    }
     int64_t page=ld_dto_number(c,dto,0x1f),x=ld_dto_number(c,dto,0x23),y=ld_dto_number(c,dto,0x27);
     int64_t sx=ld_dto_number(c,dto,0x17),sy=ld_dto_number(c,dto,0x1b);
     if(page<0 || page>INT32_MAX/2 || x<INT32_MIN+1LL || x>INT32_MAX

@@ -44,6 +44,8 @@ internal fun DeclaredSettingsPage(
     val state = rememberLazyListState()
     val focusGlow = remember(meta.page) { Animatable(0f) }
     var generation by remember(meta.page) { mutableIntStateOf(0) }
+    val availability = LocalSettingsAvailability.current
+    val os4Launcher = availability.isOs4Launcher()
     val revisions = LocalSettingsPreferenceRevisions.current
     fun matches(requirements: List<Pair<ConfigKey<Boolean>, Boolean>>) = requirements.all { (config, expected) ->
         revisions[config.name()]
@@ -89,8 +91,13 @@ internal fun DeclaredSettingsPage(
                 is SettingsBlock.Info -> PageHeader(meta.title, block.text)
                 is SettingsBlock.Header -> SmallTitle(block.title)
                 is SettingsBlock.Link -> SettingsCard {
-                    ArrowPreference(block.title, block.summary, enabled = active,
-                        onClick = { open(block.destination) })
+                    val linkAvailable = availability.allows(block.destination)
+                    ArrowPreference(
+                        block.title,
+                        if (linkAvailable) block.summary else "尚未移植 · HyperOS 4",
+                        enabled = active && linkAvailable,
+                        onClick = { open(block.destination) },
+                    )
                 }
                 is SettingsBlock.ResetEdge -> {
                     val hasOverrides = revisions.let { generation.let {
@@ -128,10 +135,12 @@ internal fun DeclaredSettingsPage(
                         }
                     }) {
                         SettingsCard {
-                            val enabled = active && matches(block.requires)
+                            val rowUnavailable = os4Launcher && block.os4Unavailable
+                            val enabled = active && matches(block.requires) && !rowUnavailable
+                            val rowSummary = if (rowUnavailable) "仅旧版桌面 Dock 有效 · HyperOS 4 已失效" else block.summary
                             if (block.scope == null) {
                                 block.number?.let { IntSetting(prefs, it, enabled) }
-                                block.toggle?.let { BooleanSetting(prefs, it, block.title, block.summary, enabled) }
+                                block.toggle?.let { BooleanSetting(prefs, it, block.title, rowSummary, enabled) }
                             } else {
                                 block.number?.let { spec ->
                                     ScopedGlassSlider(prefs = prefs, key = block.key,

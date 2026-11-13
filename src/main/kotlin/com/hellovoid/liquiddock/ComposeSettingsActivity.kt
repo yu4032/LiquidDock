@@ -240,9 +240,7 @@ private fun LiquidDockSettings(
                     selectedRestartScopes = when (visiblePage) {
                         Page.Gboard -> setOf("com.google.android.inputmethod.latin")
                         Page.SecurityCenterSidebar,
-                        Page.SidebarEdge,
-                        Page.Animation,
-                        Page.AnimationPopups -> setOf(
+                        Page.SidebarEdge -> setOf(
                             "com.miui.home",
                             "com.miui.securitycenter",
                         )
@@ -376,8 +374,7 @@ private fun LiquidDockSettings(
                         SettingsFocusRequest(target, it, searchFocusSequence)
                     }, ::navigateTo,
                     nativeGlass = {
-                        // OS4 的柔光玻璃子页按功能展示原生玻璃参数；非 OS4 只展示 Prismal 参数。
-                        if (liquidNative != null && availability.isOs4Launcher()) {
+                        if (liquidNative != null) {
                             os4NativeGlassSettings(
                                 prefs,
                                 masterEnabled && prefs.getBoolean(
@@ -388,7 +385,7 @@ private fun LiquidDockSettings(
                             )
                         }
                     },
-                    hideRows = liquidNative != null && availability.isOs4Launcher(),
+                    hideRows = liquidNative != null,
                 ) else when (target) {
                     Page.Home -> HomePage(
                         padding,
@@ -433,6 +430,8 @@ private fun LiquidDockSettings(
                             ?.let { SettingsFocusRequest(Page.Divider, it, searchFocusSequence) })
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
 
+                    Page.SoftGlass -> SoftGlassPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.SoftGlassComponents -> SoftGlassComponentsPage(padding, prefs, masterEnabled, ::navigateTo)
                     Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
 
                     Page.SidebarEdge -> SidebarGlassSettingsPage(
@@ -514,18 +513,12 @@ private fun LiquidDockSettings(
                     Page.LauncherHighlightsLarge -> LauncherHighlightTogglePage(
                         padding, prefs, masterEnabled, compact = false,
                     )
-                    Page.Stroke -> StrokePage(padding, prefs, masterEnabled, searchFocusKey?.takeIf { searchFocusPage == Page.Stroke.name }
-                            ?.let { SettingsFocusRequest(Page.Stroke, it, searchFocusSequence) })
-                    Page.Shadow -> ShadowPage(padding, prefs, masterEnabled, ::navigateTo,
-                        searchFocusKey?.takeIf { searchFocusPage == Page.Shadow.name }
-                            ?.let { SettingsFocusRequest(Page.Shadow, it, searchFocusSequence) })
 
                     Page.SecurityCenterSidebar -> SecurityCenterSidebarPage(
                         padding = padding,
                         prefs = prefs,
                         masterEnabled = masterEnabled,
                     )
-                    Page.Animation -> AnimationPage(padding, ::navigateTo)
 
                     Page.ThemePalette -> SettingsUiPalettePage(
                         padding = padding,
@@ -682,21 +675,6 @@ private fun MoreHubPage(
         }
     }
 }
-
-@Composable
-private fun AnimationPage(
-    padding: PaddingValues,
-    open: (Page) -> Unit,
-) {
-    HubPage(
-        padding = padding,
-        summary = "调整工作区、Dock、弹出界面与系统界面动画",
-        entries = animationEntries,
-        open = open,
-    )
-}
-
-// Animation leaf pages live in AnimationSettingsPages.kt.
 
 // Grid settings and 4×2 widget preflight remain together in GridSettingsPages.kt.
 
