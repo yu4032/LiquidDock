@@ -444,13 +444,12 @@ internal fun GlassWidgetsPage(
                 }
             }
         }
-        item(key = "widget-related-heading") { SmallTitle(if (os4Launcher) "已载入的 MAML 小组件" else "独立外观与组件管理") }
+        item(key = "widget-related-heading") { SmallTitle(if (os4Launcher) "已载入小组件" else "独立外观与组件管理") }
         item(key = "widget-components") {
             SettingsCard {
                 ArrowPreference(
-                    title = if (os4Launcher) "已载入的 MAML 小组件组件管理" else stringResource(R.string.widget_components_entry),
-                    summary = if (os4Launcher) "手动载入当前已挂载的 MAML 小组件，按精确节点设置隐藏规则；不依赖小部件玻璃开关。"
-                    else stringResource(R.string.widget_components_entry_summary),
+                    title = stringResource(R.string.widget_components_entry),
+                    summary = stringResource(R.string.widget_components_entry_summary),
                     enabled = os4Launcher || (masterEnabled && liquidEnabled && widgetGlass),
                     onClick = { open(Page.WidgetComponents) },
                 )

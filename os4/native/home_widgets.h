@@ -39,6 +39,18 @@ static inline const struct ld_home_baseline *ld_home_baseline_find(
                 || memcmp(&found->cell_height, &entry->cell_height, sizeof entry->cell_height)
                 || memcmp(&found->icon_size, &entry->icon_size, sizeof entry->icon_size)) return 0;
     }
+    if (found) return found;
+    /* home_margins.h modifies grid cell_width/cell_height after baseline capture,
+     * so fall back to matching (direction, current_icon) when margins are active. */
+    for (size_t i = 0; i < count; ++i) {
+        const struct ld_home_baseline *entry = &entries[i];
+        if (!entry->valid || entry->direction != direction
+                || memcmp(&entry->current_icon, &current_icon, sizeof current_icon)) continue;
+        if (!found) found = entry;
+        else if (memcmp(&found->cell_width, &entry->cell_width, sizeof entry->cell_width)
+                || memcmp(&found->cell_height, &entry->cell_height, sizeof entry->cell_height)
+                || memcmp(&found->icon_size, &entry->icon_size, sizeof entry->icon_size)) return 0;
+    }
     return found;
 }
 
@@ -52,11 +64,11 @@ static inline int ld_home_widget_width(const struct ld_home_baseline *base,
             || !isfinite(base->icon_size) || base->icon_size <= 0
             || !isfinite(current_cell_width) || current_cell_width <= 0) return 0;
     double width;
-    if (stretch && span > 1) {
-        width = (double)span * current_cell_width;
-    } else if (special_phone) {
-        width = base->cell_width * ((double)span - 2.0)
-                + base->cell_height + base->icon_size;
+    if (span > 1) {
+        width = (double)span * current_cell_width
+                - (2.0 * base->cell_width - (base->cell_height + base->icon_size));
+        (void)stretch;
+        (void)special_phone;
     } else {
         return 0;
     }
@@ -91,9 +103,7 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
             || rows != (direction ? g_grid_cols : g_grid_rows)) return;
 
     uintptr_t variables = ld_heap_pointer(c, grid, 0x8f);
-    uint32_t layout = 0;
-    if (!variables || !ld_read_heap(variables + 0x27, &layout, 4)
-            || !ld_is_fullscreen_layout(c, layout)) return;
+    if (!variables) return;
 
     int64_t span = ld_heap_i64(item_info, 0x1f);
     double current_width = 0, current_height = 0, current_icon = 0;

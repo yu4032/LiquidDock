@@ -23,6 +23,8 @@ static void *g_orig_recents_blur_radius __attribute__((used));
 static void *g_orig_recents_home_hold __attribute__((used));
 static bool g_recents_blur_installed;
 static bool g_recents_blur_attempted;
+static void *g_orig_widget_init_miui_attr __attribute__((used));
+static bool g_widget_init_miui_attr_installed;
 
 #define LD_OS4_BOOL_GATE(fn, offset, orig_off, retval) \
 __attribute__((used,naked)) static void fn(void) { \
@@ -82,7 +84,7 @@ LD_OS4_RENDER_GATE(repl_os4_blur_supported, 0)
  * avoid unclipped square fill; OS4 widget glass is gated by isGlassOs4SupportedSync. */
 LD_OS4_RENDER_GATE_VAR(repl_os4_maml_blur_supported, 8, g_os4_maml_blur_override)
 LD_OS4_RENDER_GATE(repl_os4_any_material_active, 16)
-LD_OS4_RENDER_GATE_VAR(repl_os4_widget_material_active, 24, g_os4_maml_blur_override)
+LD_OS4_WIDGET_RENDER_GATE(repl_os4_widget_material_active, 24)
 LD_OS4_RENDER_GATE(repl_os4_three_layer_blur_supported, 32)
 LD_OS4_RENDER_GATE(repl_os4_folder_blur_supported, 40)
 LD_OS4_WIDGET_RENDER_GATE(repl_os4_widget_glass_supported, 48)
@@ -166,4 +168,50 @@ __attribute__((used,naked)) static void repl_os4_recents_home_hold(void)
         "ret\n"
     );
 }
+
+/* Extend OS4 widget glass & rounded-corner clipping to all Android AppWidgets
+ * (including third-party providers without MIUI metadata) when widget glass is enabled. */
+__attribute__((used,naked)) static void repl_widget_init_miui_attr(void)
+{
+    __asm__ volatile(
+        "stp x29, x30, [x15, #-0x10]!\n"
+        "mov x29, x15\n"
+        "str x1, [x15, #-0x10]!\n"
+        "adrp x16, g_orig_widget_init_miui_attr\n"
+        "add x16, x16, :lo12:g_orig_widget_init_miui_attr\n"
+        "ldr x16, [x16]\n"
+        "cbz x16, 1f\n"
+        "blr x16\n"
+        "1: ldr x1, [x15], #0x10\n"
+        "adrp x9, g_os4_widget_glass_override\n"
+        "ldrb w9, [x9, :lo12:g_os4_widget_glass_override]\n"
+        "cbz w9, 2f\n"
+        "add x9, x22, #0x20\n"
+        "stur w9, [x1, #0xfb]\n"
+        "mov x10, #0x10f\n"
+        "str w9, [x1, x10]\n"
+        "2: mov x15, x29\n"
+        "ldp x29, x30, [x15], #0x10\n"
+        "ret\n"
+    );
+}
+
+static void *g_orig_pad_widget_container __attribute__((used));
+static void *g_orig_phone_widget_container __attribute__((used));
+__attribute__((used)) static void ld_observe_pad_widget_container(struct ld_dart_context *c) {
+    if (!c || !g_os4_widget_glass_override) return;
+    uintptr_t container = c->x[1];
+    if (!(container & 1) || container == c->x[22]) return;
+    uintptr_t item = ld_heap_pointer(c, container, 0xb);
+    if (!item) {
+        uintptr_t ctrl = ld_heap_pointer(c, container, 0xf);
+        item = ctrl ? ld_heap_pointer(c, ctrl, 0xb) : 0;
+    }
+    if (!item) return;
+    uint32_t dart_true = (uint32_t)(c->x[22] + 0x20);
+    memcpy((void *)(item + 0xfb), &dart_true, 4);
+    memcpy((void *)(item + 0x10f), &dart_true, 4);
+}
+LD_DART_OBSERVER(repl_pad_widget_container, ld_observe_pad_widget_container, g_orig_pad_widget_container)
+LD_DART_OBSERVER(repl_phone_widget_container, ld_observe_pad_widget_container, g_orig_phone_widget_container)
 #endif

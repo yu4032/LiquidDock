@@ -149,7 +149,11 @@ public final class ModuleMain extends XposedModule {
             }
             return;
         }
-        // OS4 Launcher (com.miui.home) is handled exclusively by the Rust+Flutter native hook.
+        // OS4 Launcher (com.miui.home) native hooks run in C/Rust; install framework-level
+        // AppWidgetHostView hooks here for RemoteViews discovery and component hiding.
+        if ("com.miui.home".equals(packageName)) {
+            Os4RemoteWidgetHook.install(param.getClassLoader());
+        }
     }
 
     /**

@@ -89,7 +89,7 @@ public final class WidgetComponentStore {
         }
     }
 
-    static Descriptor remoteDescriptor(
+    public static Descriptor remoteDescriptor(
             String provider,
             String action,
             String resourceName,
@@ -100,7 +100,7 @@ public final class WidgetComponentStore {
                 componentType, "");
     }
 
-    static Descriptor remoteDescriptor(
+    public static Descriptor remoteDescriptor(
             String provider,
             String action,
             String resourceName,

@@ -59,11 +59,8 @@ internal fun WidgetComponentsPage(
         }
     }
 
-    val descriptors = remember(catalogRevision, os4Launcher) {
-        loadWidgetCatalog(catalogPrefs).let { catalog ->
-            if (os4Launcher) catalog.filter { it.isMaml() && it.owner.startsWith("os4:") }
-            else catalog
-        }
+    val descriptors = remember(catalogRevision) {
+        loadWidgetCatalog(catalogPrefs)
     }
     val selected = remember(selectionRevision) {
         prefs.getStringSet(WidgetComponentStore.SELECTION_KEY, emptySet())?.toSet().orEmpty()
@@ -79,8 +76,7 @@ internal fun WidgetComponentsPage(
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item {
             Text(
-                if (os4Launcher) "仅在手动载入时扫描当前已挂载的 MAML 小组件；普通桌面重启不会扫描内部组件。"
-                else "仅在手动载入时扫描当前桌面小组件；普通桌面重启不会扫描内部组件。",
+                "仅在手动载入时扫描当前桌面小组件（包含 MAML 与 RemoteViews 小组件）；普通桌面重启不会扫描内部组件。",
                 fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
@@ -88,16 +84,32 @@ internal fun WidgetComponentsPage(
         item {
             Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                 ArrowPreference(
-                    title = if (os4Launcher) "载入当前 MAML 小组件" else "载入当前小组件",
+                    title = "载入当前小组件",
                     summary = when {
-                        scanning -> "正在扫描当前已挂载的 MAML 小组件…"
-                        os4Launcher -> "手动扫描当前已挂载的 MAML 小组件并载入隐藏目录"
+                        scanning -> "正在扫描当前已挂载的小组件…"
                         else -> "扫描当前已挂载小组件，保持设置页前台，完成后自动关闭扫描"
                     },
                     enabled = !scanning,
                     onClick = {
+                        val request = UUID.randomUUID().toString()
+                        val stored = prefs.edit()
+                            .putString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, request)
+                            .commit()
+                        val synced = stored && LiquidDockApp.syncToRemote(prefs)
+                        val token = prefs.getString(
+                            WidgetComponentStore.DISCOVERY_TOKEN_KEY,
+                            "",
+                        ).orEmpty()
                         if (os4Launcher) {
                             scanning = true
+                            val keptOs4 = catalogPrefs.getStringSet(WidgetComponentStore.CATALOG_KEY, emptySet())
+                                .orEmpty()
+                                .filter { row -> WidgetComponentStore.parseCatalog(row)?.owner?.startsWith("os4:") == true }
+                                .toSet()
+                            catalogPrefs.edit().putStringSet(WidgetComponentStore.CATALOG_KEY, keptOs4).commit()
+                            if (synced) {
+                                LauncherManualDiscoveryBridge.requestWidgetScan(activity, token)
+                            }
                             coroutineScope.launch {
                                 val result = runCatching {
                                     withContext(Dispatchers.IO) {
@@ -110,7 +122,7 @@ internal fun WidgetComponentsPage(
                                         catalogRevision++
                                         Toast.makeText(
                                             activity,
-                                            "已载入 $count 个 MAML 小组件",
+                                            "已载入 $count 个小组件部件",
                                             Toast.LENGTH_SHORT,
                                         ).show()
                                     },
@@ -125,11 +137,6 @@ internal fun WidgetComponentsPage(
                             }
                             return@ArrowPreference
                         }
-                        val request = UUID.randomUUID().toString()
-                        val stored = prefs.edit()
-                            .putString(WidgetComponentStore.DISCOVERY_REQUEST_KEY, request)
-                            .commit()
-                        val synced = stored && LiquidDockApp.syncToRemote(prefs)
                         if (!synced) {
                             prefs.edit().remove(WidgetComponentStore.DISCOVERY_REQUEST_KEY).commit()
                             Toast.makeText(activity, "Xposed 服务未连接，无法载入小组件", Toast.LENGTH_SHORT).show()
@@ -137,10 +144,6 @@ internal fun WidgetComponentsPage(
                         }
                         catalogPrefs.edit().remove(WidgetComponentStore.CATALOG_KEY).commit()
                         catalogRevision++
-                        val token = prefs.getString(
-                            WidgetComponentStore.DISCOVERY_TOKEN_KEY,
-                            "",
-                        ).orEmpty()
                         if (!LauncherManualDiscoveryBridge.requestWidgetScan(activity, token)) {
                             prefs.edit().remove(WidgetComponentStore.DISCOVERY_REQUEST_KEY).commit()
                             LiquidDockApp.syncToRemote(prefs)
@@ -187,7 +190,7 @@ internal fun WidgetComponentsPage(
                 }
             }
         } else {
-            item { SmallTitle(if (os4Launcher) "已载入的 MAML 小组件" else "已载入小组件") }
+            item { SmallTitle("已载入小组件") }
             // Bound each LazyColumn item rather than composing every discovered provider
             // into one giant card. Keep grouping and the exact node-navigation keys.
             groups.chunked(6).forEach { batch ->

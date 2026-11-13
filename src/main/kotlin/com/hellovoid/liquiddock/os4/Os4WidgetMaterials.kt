@@ -59,6 +59,7 @@ object Os4WidgetMaterials {
             Os4MamlArchive.inspect(Os4MamlArchive.FileLike(source.file), owner).nodes
                 .forEach { catalog += it.catalog(owner, source.label) }
         }
+        catalog += Os4RemoteWidgetCatalog.scan(app)
         saveCatalog(app, catalog)
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs.edit().putString(SOURCES, encodeSources(sources)).remove(PUBLISH_KEY).apply()
@@ -76,6 +77,7 @@ object Os4WidgetMaterials {
     @Synchronized
     fun publish(context: Context, preferences: SharedPreferences, force: Boolean = false): Boolean {
         val app = context.applicationContext
+        Os4RemoteWidgetCatalog.deployHiddenRules(app, preferences)
         val state = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val selected = try {
             (preferences.all[WidgetComponentStore.SELECTION_KEY] as? Set<*>)
@@ -150,7 +152,10 @@ object Os4WidgetMaterials {
     private fun saveCatalog(context: Context, os4Rows: Set<String>) {
         val prefs = context.getSharedPreferences(WidgetComponentStore.CATALOG_PREFS, Context.MODE_PRIVATE)
         val kept = prefs.getStringSet(WidgetComponentStore.CATALOG_KEY, emptySet()).orEmpty()
-            .filterNot { row -> WidgetComponentStore.parseCatalog(row)?.owner?.startsWith("os4:") == true }
+            .filterNot { row ->
+                val o = WidgetComponentStore.parseCatalog(row)?.owner ?: ""
+                o.startsWith("os4:") || o.startsWith(Os4RemoteWidgetCatalog.OWNER_PREFIX)
+            }
             .toMutableSet()
         kept.addAll(os4Rows)
         prefs.edit().putStringSet(WidgetComponentStore.CATALOG_KEY, kept).apply()

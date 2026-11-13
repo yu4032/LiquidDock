@@ -25,8 +25,12 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
 {
     uintptr_t receiver = c->x[1];
     int direction=ld_grid_direction(c,c->x[2]);
-    g_rotation_direction=direction;
     int livecols=(int)ld_heap_i64(c->x[2],0x1b),liverows=(int)ld_heap_i64(c->x[2],0x23);
+    if(g_grid_cols>0 && g_grid_rows>0 && g_grid_cols!=g_grid_rows) {
+        if(livecols==g_grid_cols && liverows==g_grid_rows) direction=0;
+        else if(livecols==g_grid_rows && liverows==g_grid_cols) direction=1;
+    }
+    g_rotation_direction=direction;
     if(direction>=0 && direction<=1 && livecols==(direction?g_grid_rows:g_grid_cols)
             && liverows==(direction?g_grid_cols:g_grid_rows)) {
         g_runtime_columns=livecols; g_runtime_rows=liverows; g_runtime_direction=direction;

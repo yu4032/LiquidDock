@@ -28,6 +28,7 @@
 #include "layout_fingerprints.h"
 #include "lib_base.h"
 #include "pad_counts_wrapper.h"
+#include "remote_views_components.h"
 #include "rotation_fingerprint.h"
 #include "layout_runtime_fingerprints.h"
 #include "executable_range.h"
@@ -528,6 +529,73 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             g_os4_pipeline_mask|=1u<<i;
             ld_blog("OS4 glass pipeline installed %s",label[i]);
         } else ld_blog("OS4 glass pipeline skipped %s: hook/pin rc=%d",label[i],rc);
+    }
+    if(!g_widget_init_miui_attr_installed) {
+        static const uint32_t init_miui_attr_pat[16]={
+            0xa9bf79fdu, 0xaa0f03fdu, 0xd10061efu, 0xf81f83b6u,
+            0xf81f03a1u, 0xaa0203f0u, 0xaa0103e2u, 0xaa1003e1u,
+            0xf81e83a1u, 0xf9402f60u, 0x97fdf66eu, 0xf85e83a1u,
+            0x94000040u, 0xaa0003e1u, 0xf81e83a1u, 0x97fdf5dau,
+        };
+        uintptr_t init_fn=ld_find_aot_pattern(lib,0x19f399cu,init_miui_attr_pat,16);
+        if(init_fn) {
+            int rc=api->hook((void *)init_fn,(void *)repl_widget_init_miui_attr,
+                    &g_orig_widget_init_miui_attr);
+            if(rc==0 && g_orig_widget_init_miui_attr && ld_pin_code_pages_soft(init_fn,16)) {
+                g_widget_init_miui_attr_installed=true;
+                ld_blog("OS4 widget glass scope hook installed at %p",(void *)init_fn);
+            } else {
+                ld_blog("OS4 widget glass scope hook failed rc=%d",(int)rc);
+            }
+        } else {
+            ld_blog("OS4 widget glass scope target not found");
+        }
+    }
+    static bool g_rv_hook_installed = false;
+    if(!g_rv_hook_installed) {
+        static const uint32_t flutter_view_pat[4]={
+            0xa9bf79fdu, 0xaa0f03fdu, 0xd10581efu, 0xf81f83a1u,
+        };
+        uintptr_t fv_fn=ld_find_aot_pattern(lib,0x1059398u,flutter_view_pat,4);
+        if(fv_fn) {
+            int rc=api->hook((void *)fv_fn,(void *)repl_flutter_view_apply,
+                    &g_orig_flutter_view_apply);
+            if(rc==0 && g_orig_flutter_view_apply && ld_pin_code_pages_soft(fv_fn,16)) {
+                g_rv_hook_installed=true;
+                ld_blog("OS4 RemoteViews component hook installed at %p",(void *)fv_fn);
+            } else {
+                ld_blog("OS4 RemoteViews component hook failed rc=%d",(int)rc);
+            }
+        } else {
+            ld_blog("OS4 RemoteViews component target not found");
+        }
+    }
+    static bool g_pad_widget_glass_installed = false;
+    if(!g_pad_widget_glass_installed) {
+        static const uint32_t pad_wc_pat[4]={
+            0xa9bf79fdu, 0xaa0f03fdu, 0xd10081efu, 0xf81f83a1u,
+        };
+        uintptr_t wc_fn=ld_find_aot_pattern(lib,0x1492d24u,pad_wc_pat,4);
+        if(wc_fn) {
+            int rc=api->hook((void *)wc_fn,(void *)repl_pad_widget_container,
+                    &g_orig_pad_widget_container);
+            if(rc==0 && g_orig_pad_widget_container && ld_pin_code_pages_soft(wc_fn,16)) {
+                g_pad_widget_glass_installed=true;
+                ld_blog("OS4 Pad widget container glass hook installed at %p",(void *)wc_fn);
+            } else {
+                ld_blog("OS4 Pad widget container glass hook failed rc=%d",(int)rc);
+            }
+        } else {
+            ld_blog("OS4 Pad widget container glass target not found");
+        }
+        uintptr_t phone_wc_fn=ld_find_aot_pattern(lib,0x148f9f8u,pad_wc_pat,4);
+        if(phone_wc_fn) {
+            int rc=api->hook((void *)phone_wc_fn,(void *)repl_phone_widget_container,
+                    &g_orig_phone_widget_container);
+            if(rc==0 && g_orig_phone_widget_container && ld_pin_code_pages_soft(phone_wc_fn,16)) {
+                ld_blog("OS4 Phone widget container glass hook installed at %p",(void *)phone_wc_fn);
+            }
+        }
     }
 }
 
