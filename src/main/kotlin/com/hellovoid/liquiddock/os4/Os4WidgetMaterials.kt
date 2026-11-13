@@ -21,7 +21,7 @@ object Os4WidgetMaterials {
     private const val PUBLISH_KEY = "publish_key"
     private const val LAST_GLASS_RELOAD_REQUESTED = "last_widget_glass_reload_requested"
     private const val CACHE_PREFIX = "shadow_"
-    private const val TRANSFORM_VERSION = "maml-glass-clock-config-v13"
+    private const val TRANSFORM_VERSION = "maml-glass-clock-config-v14-background-restore"
     private const val CE_PREFIX = "/data/user/0/com.miui.home/files/maml/res/"
     private const val DE_PREFIX = "/data/user_de/0/com.miui.home/files/maml/res/"
     private const val SHADOW_DIR = "/data/user_de/0/com.miui.home/files/liquiddock-widget-shadows"
