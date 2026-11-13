@@ -43,6 +43,15 @@ object Os4SafeMode {
         flag.exists() || File("/sdcard/Android/data/com.hellovoid.liquiddock/files/safe_mode.flag").exists()
     }.getOrDefault(false)
 
+    /** 标记进入安全模式；重启桌面后生效。 */
+    fun enter(): Boolean = runCatching {
+        val dir = File(DIR)
+        if (!dir.exists()) dir.mkdirs()
+        exitMark.delete()
+        flag.writeText("1")
+        true
+    }.getOrDefault(false)
+
     /** 标记退出；重启桌面后生效。 */
     fun exit(): Boolean = runCatching {
         val dir = File(DIR)

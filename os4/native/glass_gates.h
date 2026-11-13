@@ -7,6 +7,8 @@
  * bodies first so cache initialization and Flutter reactive dependencies stay
  * registered, then remove the capability result as a rendering gate. */
 static volatile uint8_t g_os4_glass_override __attribute__((used));
+static volatile uint8_t g_os4_widget_glass_override __attribute__((used));
+static volatile uint8_t g_os4_maml_blur_override __attribute__((used));
 static volatile unsigned g_os4_glass_calls[3] __attribute__((used));
 static void *g_os4_glass_original[3] __attribute__((used));
 static bool g_os4_glass_installed;
@@ -43,7 +45,7 @@ LD_OS4_BOOL_GATE(repl_os4_glass_supported, 0, 0, 0x20)
 LD_OS4_BOOL_GATE(repl_os4_hyper_supported, 4, 8, 0x20)
 LD_OS4_BOOL_GATE(repl_os4_material_enabled, 8, 16, 0x30)
 
-#define LD_OS4_RENDER_GATE(fn, orig_off) \
+#define LD_OS4_RENDER_GATE_VAR(fn, orig_off, var) \
 __attribute__((used,naked)) static void fn(void) { \
     __asm__ volatile( \
         "stp x29, x30, [x15, #-0x10]!\n" \
@@ -55,8 +57,8 @@ __attribute__((used,naked)) static void fn(void) { \
         "blr x16\n" \
         "b 2f\n" \
         "1: add x0, x22, #0x20\n" \
-        "2: adrp x9, g_os4_glass_override\n" \
-        "ldrb w9, [x9, :lo12:g_os4_glass_override]\n" \
+        "2: adrp x9, " #var "\n" \
+        "ldrb w9, [x9, :lo12:" #var "]\n" \
         "cbz w9, 3f\n" \
         "add x0, x22, #0x20\n" \
         "3: mov x15, x29\n" \
@@ -65,13 +67,20 @@ __attribute__((used,naked)) static void fn(void) { \
     ); \
 }
 
+#define LD_OS4_RENDER_GATE(fn, orig_off) \
+    LD_OS4_RENDER_GATE_VAR(fn, orig_off, g_os4_glass_override)
+#define LD_OS4_WIDGET_RENDER_GATE(fn, orig_off) \
+    LD_OS4_RENDER_GATE_VAR(fn, orig_off, g_os4_widget_glass_override)
+
 LD_OS4_RENDER_GATE(repl_os4_blur_supported, 0)
-LD_OS4_RENDER_GATE(repl_os4_maml_blur_supported, 8)
+/* Keep Flutter-side MAML/widget blur backdrop at vendor value so special-shape widgets
+ * avoid unclipped square fill; OS4 widget glass is gated by isGlassOs4SupportedSync. */
+LD_OS4_RENDER_GATE_VAR(repl_os4_maml_blur_supported, 8, g_os4_maml_blur_override)
 LD_OS4_RENDER_GATE(repl_os4_any_material_active, 16)
-LD_OS4_RENDER_GATE(repl_os4_widget_material_active, 24)
+LD_OS4_RENDER_GATE_VAR(repl_os4_widget_material_active, 24, g_os4_maml_blur_override)
 LD_OS4_RENDER_GATE(repl_os4_three_layer_blur_supported, 32)
 LD_OS4_RENDER_GATE(repl_os4_folder_blur_supported, 40)
-LD_OS4_RENDER_GATE(repl_os4_widget_glass_supported, 48)
+LD_OS4_WIDGET_RENDER_GATE(repl_os4_widget_glass_supported, 48)
 LD_OS4_RENDER_GATE(repl_os4_press_light_supported, 56)
 LD_OS4_RENDER_GATE(repl_os4_hyper_material_effective, 64)
 

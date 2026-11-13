@@ -89,13 +89,12 @@ static int ld_safe_mode_tick(void)
         ld_blog("safe mode: exited by user");
         return 0;
     }
-    if (ld_sm_exists(LD_SM_FLAG)) {
+    if (ld_sm_exists(LD_SM_FLAG) || ld_sm_exists(LD_SM_EXT_FLAG)) {
         ld_blog("safe mode: active, all hooks disabled");
+        if (!ld_sm_exists(LD_SM_FLAG)) ld_sm_touch(LD_SM_FLAG, 1);
         if (!ld_sm_exists(LD_SM_EXT_FLAG)) ld_sm_touch(LD_SM_EXT_FLAG, 1); /* 外置通道丢失时补写 */
         return 1;
     }
-    /* 正常启动：清掉可能残留的 UI 标记，保证横幅状态与内部状态永远一致。 */
-    if (ld_sm_exists(LD_SM_EXT_FLAG)) unlink(LD_SM_EXT_FLAG);
     time_t now = time(NULL);
     if (now < 1600000000) return 0;   /* 时钟未同步，不做统计，避免误判 */
 

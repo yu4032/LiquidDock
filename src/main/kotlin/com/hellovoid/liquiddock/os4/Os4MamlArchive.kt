@@ -292,13 +292,12 @@ internal object Os4MamlArchive {
 
     private const val CLOCK_GLASS_PARAMS =
         "ifelse(#__darkmode,0.5,ifelse(#isLightWallpaper,0.5,1)),1.00,0.00,1.00," +
-        "ifelse(#__darkmode,0.2,ifelse(#isLightWallpaper,0.2,0.3))," +
+        "0," +
         "ifelse(#__darkmode,3,2)," +
-        "ifelse(#__darkmode,0.2,ifelse(#isLightWallpaper,0.1,0.2)),0," +
-        "ifelse(#__darkmode,0.4,ifelse(#isLightWallpaper,0.6,0.4)),0.80," +
+        "0,0," +
+        "0,0.80," +
         "ifelse(#__darkmode,0.04,0.02)," +
-        "ifelse(#__darkmode,0.06,0.90),ifelse(#__darkmode,0.06,0.90),ifelse(#__darkmode,0.06,0.90)," +
-        "ifelse(#__darkmode,0.40,1.00),0," +
+        "0,0,0,0,0," +
         "ifelse(#__darkmode,0.8,1),ifelse(#__darkmode,1.5,1),1,36," +
         "ifelse(#__darkmode,2.2,ifelse(#isLightWallpaper,2.2,1.8)),80,200,1,0.8,-0.4,0.6,-0.8," +
         "ifelse(#__darkmode,2.4,1.4),ifelse(#__darkmode,1.6,0.8),1.4,0.85,3,0,0,0,0,0,0,0,0,0"
@@ -307,15 +306,18 @@ internal object Os4MamlArchive {
 
     private fun ensureGlass(document: Document): Boolean {
         val root = document.documentElement
+        val layers = findElements(root, "Layer")
+        val allMaterials = layers.flatMap { directChildren(it, "MaterialToken") }
+        // Skip widgets that natively already define GlassConfig.
+        if (allMaterials.any { directChildren(it, "GlassConfig").isNotEmpty() }) {
+            return false
+        }
+        val isSpecialShape = root.getAttribute("specialShapeWidget") == "1"
         var changed = false
-        if (elementTag(root) == "Widget" && root.getAttribute("supportBackgroundBlur") != "true") {
+        if (elementTag(root) == "Widget" && !isSpecialShape && root.getAttribute("supportBackgroundBlur") != "true") {
             root.setAttribute("supportBackgroundBlur", "true")
             changed = true
         }
-        val layers = findElements(root, "Layer")
-        val allMaterials = layers.flatMap { directChildren(it, "MaterialToken") }
-        // Preserve an existing native GlassConfig byte-for-byte instead of replacing an unknown token.
-        if (allMaterials.any { directChildren(it, "GlassConfig").isNotEmpty() }) return changed
 
         if (elementTag(root) == "Widget") {
             val updater = root.getAttribute("useVariableUpdater")
@@ -355,7 +357,7 @@ internal object Os4MamlArchive {
                     setAttribute("blurContentMode", "1")
                     setAttribute("blurRadius", "120")
                     setAttribute("blurType", "0")
-                    setAttribute("disableBlur", "1")
+                    setAttribute("disableBlur", "0")
                     setAttribute("passWindow", "true")
                     setAttribute("rustPassWindow", "true")
                     setAttribute("reuseContainer", "true")
@@ -372,6 +374,20 @@ internal object Os4MamlArchive {
         val material = allMaterials.firstOrNull()
         if (material != null) {
             ensureMaterialChildren(material)
+            val parentLayer = material.parentNode as? Element
+            if (parentLayer != null &&
+                root.getAttribute("specialShapeWidget") != "1" &&
+                directChildren(parentLayer, "ViewOutlineProvider").isEmpty()
+            ) {
+                parentLayer.appendChild(document.createElementNS(root.namespaceURI, "ViewOutlineProvider").apply {
+                    setAttribute("type", "rect")
+                    setAttribute("left", "0")
+                    setAttribute("top", "0")
+                    setAttribute("right", "#view_width")
+                    setAttribute("bottom", "#view_height")
+                    setAttribute("radius", "ifelse(#widget_radius,(#widget_radius / #__scale_factor),60)")
+                })
+            }
             return true
         }
 

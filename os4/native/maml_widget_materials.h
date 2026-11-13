@@ -196,9 +196,11 @@ static int ld_widget_inventory_add(const char *path)
     return ok;
 }
 
-static const char *ld_widget_match(const char *source)
+static int ld_widget_match(const char *source, char *out_shadow, size_t out_size)
 {
-    if(!ld_widget_map_load()) { ld_blog("MAML override mapping unavailable/invalid"); return NULL; }
+    if(!out_shadow || out_size==0) return 0;
+    out_shadow[0]=0;
+    if(!ld_widget_map_load()) { ld_blog("MAML override mapping unavailable/invalid"); return 0; }
     for(size_t i=0;i<g_widget_map_count;i++) {
         struct ld_widget_map_entry *e=&g_widget_map[i];
         if(strcmp(e->source,source)) continue;
@@ -207,13 +209,16 @@ static const char *ld_widget_match(const char *source)
             int source_ok=ld_widget_hash(e->source,source_hash);
             int shadow_ok=ld_widget_hash(e->shadow,shadow_hash);
             if(!source_ok || !shadow_ok || strcmp(source_hash,e->source_hash) || strcmp(shadow_hash,e->shadow_hash)) {
-                ld_blog("MAML override hash rejection source_read=%d shadow_read=%d",source_ok,shadow_ok); return NULL;
+                ld_blog("MAML override hash rejection source_read=%d shadow_read=%d",source_ok,shadow_ok); return 0;
             }
             e->verified=1;
         }
-        return e->shadow;
+        size_t len=strlen(e->shadow);
+        if(len>=out_size) return 0;
+        memcpy(out_shadow,e->shadow,len+1);
+        return 1;
     }
-    return NULL;
+    return 0;
 }
 
 static void ld_maml_init_replacement(const void *request)
@@ -221,7 +226,7 @@ static void ld_maml_init_replacement(const void *request)
     if(!g_maml_init_original) return;
     if(!request) { g_maml_init_original(request); return; }
     uintptr_t base=(uintptr_t)request;
-    char source[LD_WIDGET_PATH],kind[LD_WIDGET_PATH];
+    char source[LD_WIDGET_PATH],kind[LD_WIDGET_PATH],shadow_path[LD_WIDGET_PATH];
     uint32_t id=0;
     if(!ld_read_heap(base,&id,4) || !ld_widget_read_string(base,0x04,0x08,source)
             || !ld_widget_read_string(base,0x30,0x38,kind)) {
@@ -233,18 +238,20 @@ static void ld_maml_init_replacement(const void *request)
         (void)ld_widget_inventory_add(source);
         pthread_mutex_unlock(&g_widget_materials_lock);
     }
-    const char *shadow=NULL;
+    int matched=0;
+    size_t map_count=0;
     if(is_widget && (g_home_options.widget_overrides || (g_home_options.glass_enabled && g_home_options.glass_widgets))) {
         pthread_mutex_lock(&g_widget_materials_lock);
-        shadow=ld_widget_match(source);
+        matched=ld_widget_match(source,shadow_path,sizeof shadow_path);
+        map_count=g_widget_map_count;
         pthread_mutex_unlock(&g_widget_materials_lock);
     }
     if(is_widget) ld_blog("MAML widget id=%u overrides=%d glass=%d redirect=%d entries=%zu",
-        id,g_home_options.widget_overrides,g_home_options.glass_widgets,shadow!=NULL,g_widget_map_count);
-    if(shadow) {
+        id,g_home_options.widget_overrides,g_home_options.glass_widgets,matched,map_count);
+    if(matched) {
         unsigned char copy[0x68] __attribute__((aligned(16)));
         if(ld_read_heap(base,copy,sizeof copy)) {
-            uint32_t n=(uint32_t)strlen(shadow); uintptr_t p=(uintptr_t)shadow;
+            uint32_t n=(uint32_t)strlen(shadow_path); uintptr_t p=(uintptr_t)shadow_path;
             memcpy(copy+0x04,&n,4); memcpy(copy+0x08,&p,8);
             g_maml_init_original(copy); return;
         }

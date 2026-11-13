@@ -60,7 +60,15 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
     if(!source || !target || !objects || !memory) goto done;
     for(int i=0;i<n;i++) {
         uintptr_t dto=ld_heap_pointer(c,data,0xf+4*i);
-        if(!ld_read_dto_item(c,dto,&source[count])) goto done;
+        if(!ld_read_dto_item(c,dto,&source[count])) {
+            ld_blog("load-items bail read_dto i=%d dto=%llx cid=%x id=%lld cont=%lld ext=%lld page=%lld x=%lld y=%lld sx=%lld sy=%lld",
+                i,(unsigned long long)dto,(ld_heap_u32(dto,(size_t)-1)>>12)&0xfffff,
+                (long long)ld_dto_number(c,dto,7),(long long)ld_dto_number(c,dto,0x2b),
+                (long long)ld_dto_number(c,dto,0x2f),(long long)ld_dto_number(c,dto,0x1f),
+                (long long)ld_dto_number(c,dto,0x23),(long long)ld_dto_number(c,dto,0x27),
+                (long long)ld_dto_number(c,dto,0x17),(long long)ld_dto_number(c,dto,0x1b));
+            goto done;
+        }
         if(source[count].screen<0) continue;
         objects[count++]=dto;
     }
@@ -85,11 +93,21 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
         memcpy(memory->items[source_direction],source,count*sizeof *source);
         memory->count[source_direction]=(uint32_t)count;
     }
-    if(!ld_layout_plan(source,count,cols,rows,memory->items[direction],memory->count[direction],target)) goto done;
-    for(size_t i=0;i<count;i++) if(target[i].screen>INT32_MAX/2) goto done;
+    if(!ld_layout_plan(source,count,cols,rows,memory->items[direction],memory->count[direction],target)) {
+        ld_blog("load-items bail plan count=%zu cols=%d rows=%d dir=%d known=%d mem_cnt=%u",
+            count,cols,rows,direction,known,memory->count[direction]);
+        goto done;
+    }
+    for(size_t i=0;i<count;i++) if(target[i].screen>INT32_MAX/2) {
+        ld_blog("load-items bail screen i=%zu scr=%lld",i,(long long)target[i].screen);
+        goto done;
+    }
     memcpy(memory->items[direction],target,count*sizeof *target); memory->count[direction]=(uint32_t)count;
     memory->active_direction=direction;
-    if(!ld_layout_save(LD_LAYOUT_FILE,memory)) goto done;
+    if(!ld_layout_save(LD_LAYOUT_FILE,memory)) {
+        ld_blog("load-items bail save");
+        goto done;
+    }
     for(size_t i=0;i<count;i++) {
         /* ItemInfo DTO fields are compressed nullable ints, unlike the unboxed
          * ItemInfoModel. Small coordinates are immediate Smis, never pointers. */

@@ -39,33 +39,49 @@ static void *ld_unwrap_glass_hook(void *filter, int depth)
 
 static void ld_glass_filter_hook_install(const struct native_api *api)
 {
-    static bool installed;
-    if (installed || !api || !api->hook || !g_home_options.glass_enabled) return;
+    static bool unwrap_installed;
+    static bool acq_installed;
+    if ((unwrap_installed && acq_installed) || !api || !api->hook || !g_home_options.glass_enabled) return;
     ld_lib_info lib = {0};
     if (!ld_resolve_so("libhyper_os_flutter.so", &lib) || !lib.elf_base) return;
-    static const uint32_t pat[8] = {
-        0xa9bd5ffeu, 0xa90157f6u, 0xa9024ff4u, 0x2a0103f3u,
-        0xaa0003f4u, 0xaa1f03e0u, 0xb4000ad4u, 0x7100427fu,
-    };
-    uintptr_t target = ld_find_aot_pattern(&lib, 0xc42840u, pat, 8);
-    if (!target) { ld_blog("glass Unwrap pattern not found"); return; }
-    g_glass_vt_expect = lib.elf_base + 0x1190e98u;
-    void *backup = NULL;
-    if (api->hook((void *)target, (void *)ld_unwrap_glass_hook, &backup) == 0 && backup) {
-        g_orig_unwrap_glass = (void *(*)(void *, int))backup;
-        installed = true;
-        ld_blog("glass Unwrap hook installed at %p", (void *)target);
+    if (!unwrap_installed) {
+        static const uint32_t pat[8] = {
+            0xa9bd5ffeu, 0xa90157f6u, 0xa9024ff4u, 0x2a0103f3u,
+            0xaa0003f4u, 0xaa1f03e0u, 0xb4000ad4u, 0x7100427fu,
+        };
+        uintptr_t target = ld_find_aot_pattern(&lib, 0xc42840u, pat, 8);
+        if (!target) {
+            ld_blog("glass Unwrap pattern not found");
+        } else {
+            g_glass_vt_expect = lib.elf_base + 0x1190e98u;
+            void *backup = NULL;
+            if (api->hook((void *)target, (void *)ld_unwrap_glass_hook, &backup) == 0 && backup) {
+                g_orig_unwrap_glass = (void *(*)(void *, int))backup;
+                unwrap_installed = true;
+                ld_blog("glass Unwrap hook installed at %p", (void *)target);
+            } else {
+                ld_blog("glass Unwrap hook failed");
+            }
+        }
     }
-    static const uint32_t pat_acq[8] = {
-        0x6db63befu, 0x6d0133edu, 0x6d022bebu, 0x6d0323e9u,
-        0xa9047bfdu, 0xa9056ffcu, 0xa90667fau, 0xa9075ff8u,
-    };
-    uintptr_t acq = ld_find_aot_pattern(&lib, 0xc45964u, pat_acq, 8);
-    if (!acq) { ld_blog("glass AcquireBlur pattern not found"); return; }
-    void *abak = NULL;
-    if (api->hook((void *)acq, (void *)ld_acquire_blur_hook, &abak) == 0 && abak) {
-        g_orig_acquire_blur = (bool (*)(void *, void *, void *, void *, void *, void *, int, float))abak;
-        ld_blog("glass AcquireBlur hook installed at %p", (void *)acq);
+    if (!acq_installed) {
+        static const uint32_t pat_acq[8] = {
+            0x6db63befu, 0x6d0133edu, 0x6d022bebu, 0x6d0323e9u,
+            0xa9047bfdu, 0xa9056ffcu, 0xa90667fau, 0xa9075ff8u,
+        };
+        uintptr_t acq = ld_find_aot_pattern(&lib, 0xc45964u, pat_acq, 8);
+        if (!acq) {
+            ld_blog("glass AcquireBlur pattern not found");
+        } else {
+            void *abak = NULL;
+            if (api->hook((void *)acq, (void *)ld_acquire_blur_hook, &abak) == 0 && abak) {
+                g_orig_acquire_blur = (bool (*)(void *, void *, void *, void *, void *, void *, int, float))abak;
+                acq_installed = true;
+                ld_blog("glass AcquireBlur hook installed at %p", (void *)acq);
+            } else {
+                ld_blog("glass AcquireBlur hook failed");
+            }
+        }
     }
 }
 #endif

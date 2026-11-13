@@ -68,6 +68,7 @@ internal fun DockPage(
                     summary = entry.summary,
                     onClick = { open(entry.page) },
                     modifier = Modifier.padding(horizontal = 14.dp),
+                    page = entry.page,
                 )
             }
         }

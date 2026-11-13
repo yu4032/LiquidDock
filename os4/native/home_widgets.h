@@ -81,7 +81,7 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
     uintptr_t globals = 0, controller = ld_get_grid_controller(c);
     if (!ld_read_heap(c->x[26] + 0x78, &globals, sizeof globals)
             || !globals || (globals & 1) || !controller) return;
-    uintptr_t rx = ld_heap_pointer(c, controller, 0x2b);
+    uintptr_t rx = ld_heap_pointer(c, controller, ld_get_grid_rx_offset());
     uintptr_t grid = rx ? ld_heap_pointer(c, rx, 0x13) : 0;
     if (!grid) return;
     int direction = ld_grid_direction(c, grid);

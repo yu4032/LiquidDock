@@ -52,9 +52,11 @@ struct ld_dp_cfg {
     int y_offset_dp10;
     int color_r, color_g, color_b, alpha;
     int loaded;
-    long stamp;             /* conf mtime，用于热加载 */
+    long stamp;             /* conf mtime sec，用于热加载 */
+    long stamp_ns;          /* conf mtime nsec，用于亚秒级热加载 */
 };
-static struct ld_dp_cfg g_dp_cfg = {0, -1, -1, 0, -1, -1, -1, -1, 0, 0};
+static struct ld_dp_cfg g_dp_cfg = {0, -1, -1, 0, -1, -1, -1, -1, 0, 0, 0};
+static pthread_mutex_t g_dp_cfg_lock = PTHREAD_MUTEX_INITIALIZER;
 static volatile unsigned g_dp_reload_ticks;
 static uint64_t g_dp_const_color;
 static volatile unsigned g_dp_hits, g_dp_rect_writes, g_dp_color_writes;
@@ -91,9 +93,9 @@ static int ld_dp_read(uintptr_t address, void *out, size_t len)
     return syscall(SYS_process_vm_readv, getpid(), &local, 1, &remote, 1, 0) == (long)len;
 }
 
-static void ld_dp_load_cfg(void)
+static void ld_dp_load_cfg_locked(int force)
 {
-    if (g_dp_cfg.loaded) return;
+    if (g_dp_cfg.loaded && !force) return;
     char buf[8192];
     const char *conf_path = LD_DP_CONF;
     FILE *f = fopen(conf_path, "r");
@@ -148,12 +150,31 @@ static void ld_dp_load_cfg(void)
         p = eol ? eol + 1 : NULL;
     }
     struct stat st;
-    c.stamp = stat(conf_path, &st) == 0 ? (long)st.st_mtime : 0;
-    if (bad) { c = g_dp_cfg; c.stamp = stat(conf_path, &st) == 0 ? (long)st.st_mtime : 0; }
+    long sec = stat(conf_path, &st) == 0 ? (long)st.st_mtime : 0;
+    long nsec = sec ? (long)st.st_mtim.tv_nsec : 0;
+    if (bad) { c = g_dp_cfg; }
+    c.stamp = sec;
+    c.stamp_ns = nsec;
     g_dp_cfg = c;
     ld_blog("divider: cfg enabled=%d w=%d(0.1dp) h%%=%d y=%d(0.1dp) rgb=%d,%d,%d a=%d",
             c.enabled, c.width_dp10, c.height_pct, c.y_offset_dp10,
             c.color_r, c.color_g, c.color_b, c.alpha);
+}
+
+static struct ld_dp_cfg ld_dp_cfg_snapshot(void)
+{
+    pthread_mutex_lock(&g_dp_cfg_lock);
+    if (!g_dp_cfg.loaded) ld_dp_load_cfg_locked(0);
+    struct ld_dp_cfg snap = g_dp_cfg;
+    pthread_mutex_unlock(&g_dp_cfg_lock);
+    return snap;
+}
+
+static void ld_dp_load_cfg(void)
+{
+    pthread_mutex_lock(&g_dp_cfg_lock);
+    ld_dp_load_cfg_locked(0);
+    pthread_mutex_unlock(&g_dp_cfg_lock);
 }
 
 /* painter -> 是否分隔符 的直接映射缓存，避免每帧对每个装饰盒做两次读调用。 */
@@ -175,10 +196,14 @@ static void *ld_dp_poll_thread(void *arg)
             conf_path = LD_DP_CONF_EARLY;
             if (stat(conf_path, &st) != 0) continue;
         }
-        if ((long)st.st_mtime == g_dp_cfg.stamp) continue;
-        g_dp_cfg.loaded = 0;
-        ld_dp_load_cfg();
-        ld_blog("divider: cfg reloaded (mtime=%ld)", (long)st.st_mtime);
+        pthread_mutex_lock(&g_dp_cfg_lock);
+        if ((long)st.st_mtime == g_dp_cfg.stamp && (long)st.st_mtim.tv_nsec == g_dp_cfg.stamp_ns) {
+            pthread_mutex_unlock(&g_dp_cfg_lock);
+            continue;
+        }
+        ld_dp_load_cfg_locked(1);
+        pthread_mutex_unlock(&g_dp_cfg_lock);
+        ld_blog("divider: cfg reloaded (mtime=%ld.%09ld)", (long)st.st_mtime, (long)st.st_mtim.tv_nsec);
     }
     return NULL;
 }
@@ -204,10 +229,14 @@ static void ld_dp_maybe_reload(void)
         conf_path = LD_DP_CONF_EARLY;
         if (stat(conf_path, &st) != 0) return;
     }
-    if ((long)st.st_mtime == g_dp_cfg.stamp) return;
-    g_dp_cfg.loaded = 0;
-    ld_dp_load_cfg();
-    ld_blog("divider: cfg reloaded (mtime=%ld)", (long)st.st_mtime);
+    pthread_mutex_lock(&g_dp_cfg_lock);
+    if ((long)st.st_mtime == g_dp_cfg.stamp && (long)st.st_mtim.tv_nsec == g_dp_cfg.stamp_ns) {
+        pthread_mutex_unlock(&g_dp_cfg_lock);
+        return;
+    }
+    ld_dp_load_cfg_locked(1);
+    pthread_mutex_unlock(&g_dp_cfg_lock);
+    ld_blog("divider: cfg reloaded (mtime=%ld.%09ld)", (long)st.st_mtime, (long)st.st_mtim.tv_nsec);
 }
 
 static int ld_dp_is_divider_uncached(uintptr_t painter, uintptr_t heap);
@@ -236,7 +265,7 @@ static int ld_dp_is_divider_uncached(uintptr_t painter, uintptr_t heap)
     return color == ((uintptr_t)g_dp_const_color & ~(uintptr_t)1);
 }
 
-static void ld_dp_apply_rect(uintptr_t rect)
+static void ld_dp_apply_rect(uintptr_t rect, const struct ld_dp_cfg *cfg)
 {
     double l = ld_dp_ldd(rect + 8), t = ld_dp_ldd(rect + 16);
     double r = ld_dp_ldd(rect + 24), b = ld_dp_ldd(rect + 32);
@@ -244,19 +273,19 @@ static void ld_dp_apply_rect(uintptr_t rect)
     if (!(w > 0.0) || !(h > 0.0)) return;
     double nl = l, nr = r, nt = t, nb = b;
     double cx = (l + r) * 0.5;
-    if (g_dp_cfg.width_dp10 >= 0) {
-        double dw = (double)g_dp_cfg.width_dp10 / 10.0;   /* GUI: dp×10 */
+    if (cfg->width_dp10 >= 0) {
+        double dw = (double)cfg->width_dp10 / 10.0;   /* GUI: dp×10 */
         nl = cx - dw * 0.5;
         nr = cx + dw * 0.5;                               /* 0 => 不可见 */
     }
-    if (g_dp_cfg.height_pct >= 0) {
+    if (cfg->height_pct >= 0) {
         double cy = (t + b) * 0.5;
-        double nh = h * (double)g_dp_cfg.height_pct / 100.0;  /* 0 => 不可见 */
+        double nh = h * (double)cfg->height_pct / 100.0;  /* 0 => 不可见 */
         nt = cy - nh * 0.5;
         nb = cy + nh * 0.5;
     }
-    if (g_dp_cfg.y_offset_dp10 != 0) {
-        double dy = (double)g_dp_cfg.y_offset_dp10 / 10.0;
+    if (cfg->y_offset_dp10 != 0) {
+        double dy = (double)cfg->y_offset_dp10 / 10.0;
         nt += dy;
         nb += dy;
     }
@@ -268,13 +297,13 @@ static void ld_dp_apply_rect(uintptr_t rect)
     unsigned n = __atomic_fetch_add(&g_dp_rect_writes, 1u, __ATOMIC_RELAXED);
     if (n < 3u)
         ld_blog("divider: rect #%u %.2f,%.2f %.2fx%.2f -> %.2fx%.2f y%+d",
-                n + 1u, l, t, w, h, nr - nl, nb - nt, g_dp_cfg.y_offset_dp10);
+                n + 1u, l, t, w, h, nr - nl, nb - nt, cfg->y_offset_dp10);
 }
 
-static void ld_dp_apply_color(uintptr_t painter, uintptr_t heap)
+static void ld_dp_apply_color(uintptr_t painter, uintptr_t heap, const struct ld_dp_cfg *cfg)
 {
     if (g_dp_color_off) return;
-    if (g_dp_cfg.color_r < 0 && g_dp_cfg.color_g < 0 && g_dp_cfg.color_b < 0 && g_dp_cfg.alpha < 0)
+    if (cfg->color_r < 0 && cfg->color_g < 0 && cfg->color_b < 0 && cfg->alpha < 0)
         return;
     /* painter.field_0x10 是 **压缩指针(u32)**：_getBackgroundPaint 里 `ldur w0,[x1,#0xf]`
      * 后 `add x0,x0,x28,lsl#32`。上一版按 8 字节读，拿到两个相邻字段拼成的
@@ -294,10 +323,10 @@ static void ld_dp_apply_color(uintptr_t painter, uintptr_t heap)
     int o = (int)(int32_t)off >> 1;
     if (o < 0 || o > 600) return;
     float *dst = (float *)(buf + o);
-    if (g_dp_cfg.color_r >= 0) dst[1] = (float)g_dp_cfg.color_r / 255.0f;
-    if (g_dp_cfg.color_g >= 0) dst[2] = (float)g_dp_cfg.color_g / 255.0f;
-    if (g_dp_cfg.color_b >= 0) dst[3] = (float)g_dp_cfg.color_b / 255.0f;
-    if (g_dp_cfg.alpha >= 0) dst[4] = 1.0f - (float)g_dp_cfg.alpha / 255.0f;
+    if (cfg->color_r >= 0) dst[1] = (float)cfg->color_r / 255.0f;
+    if (cfg->color_g >= 0) dst[2] = (float)cfg->color_g / 255.0f;
+    if (cfg->color_b >= 0) dst[3] = (float)cfg->color_b / 255.0f;
+    if (cfg->alpha >= 0) dst[4] = 1.0f - (float)cfg->alpha / 255.0f;
     unsigned n = __atomic_fetch_add(&g_dp_color_writes, 1u, __ATOMIC_RELAXED);
     if (n < 3u)
         ld_blog("divider: color #%u buf=%p off=%d -> %.3f,%.3f,%.3f,%.3f", n + 1u,
@@ -309,9 +338,9 @@ static void *g_dp_bg_orig __attribute__((used));
 
 __attribute__((used)) static void ld_dp_bg_cb(struct ld_dart_context *c)
 {
-    ld_dp_load_cfg();
     ld_dp_maybe_reload();
-    if (!g_dp_cfg.enabled) return;
+    struct ld_dp_cfg cfg = ld_dp_cfg_snapshot();
+    if (!cfg.enabled) return;
     if (!g_dp_const_color) return;
     uintptr_t heap = (uintptr_t)((uint64_t)c->x[28] << 32);
     uintptr_t painter = (uintptr_t)c->x[1] & ~(uintptr_t)1;
@@ -322,8 +351,8 @@ __attribute__((used)) static void ld_dp_bg_cb(struct ld_dart_context *c)
     if (!ld_dp_is_divider(painter, heap)) return;
     unsigned n = __atomic_fetch_add(&g_dp_hits, 1u, __ATOMIC_RELAXED);
     if (n < 3u) ld_blog("divider: hit #%u painter=%p", n + 1u, (void *)painter);
-    ld_dp_apply_rect((uintptr_t)c->x[3] & ~(uintptr_t)1);
-    ld_dp_apply_color(painter, heap);
+    ld_dp_apply_rect((uintptr_t)c->x[3] & ~(uintptr_t)1, &cfg);
+    ld_dp_apply_color(painter, heap, &cfg);
 }
 
 LD_DART_OBSERVER(repl_dp_bg, ld_dp_bg_cb, g_dp_bg_orig)
@@ -393,7 +422,8 @@ __attribute__((used)) static void ld_dp_gp_post(struct ld_dart_context *c, uintp
     double h = ld_dp_ldd(rectp + 32) - ld_dp_ldd(rectp + 16);
     if (!(w > 0.0 && w <= 3.0 && h >= 18.0 && h <= 90.0)) return;
     if (!ld_dp_is_divider(painter, heap)) return;
-    ld_dp_apply_color(painter, heap);
+    struct ld_dp_cfg cfg = ld_dp_cfg_snapshot();
+    ld_dp_apply_color(painter, heap, &cfg);
 }
 
 LD_DP_POST(repl_dp_gp, ld_dp_gp_post, g_dp_gp_orig, g_dp_gp_save)
@@ -449,8 +479,8 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
     if (state || !api || !api->hook || !lib) return;
     /* 不再依赖手工 marker：是否生效完全由 conf 的 dock_divider_enabled 决定，
      * 这样 GUI 里开关/拖滑块能热生效。marker 仍保留为“强制安装”开关。 */
-    ld_dp_load_cfg();
-    if (!g_dp_cfg.enabled && access(LD_DP_MARKER, F_OK) != 0) {
+    struct ld_dp_cfg cfg = ld_dp_cfg_snapshot();
+    if (!cfg.enabled && access(LD_DP_MARKER, F_OK) != 0) {
         ld_blog("divider: disabled in conf; hooks skipped");
         return;
     }

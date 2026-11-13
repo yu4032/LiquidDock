@@ -407,6 +407,9 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     }
     __atomic_store_n(&g_os4_glass_override,
             g_home_options.glass_enabled ? 1u : 0u,__ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_widget_glass_override,
+            (g_home_options.glass_enabled && g_home_options.glass_widgets) ? 1u : 0u,
+            __ATOMIC_RELEASE);
     g_os4_glass_installed=true;
     ld_blog("OS4 glass gates installed: 3 vendor predicates enabled=%d",
             g_home_options.glass_enabled);
@@ -813,7 +816,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_divider_paint_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
-        ld_blog("ELF identity cross-check note: dynamic AOT scanner active");
+        ld_blog("ELF identity cross-check failed in strict mode; aborting layout hooks");
+        return;
     }
 
     uintptr_t entry = ld_find_aot_pattern(&lib, LD_PAD_ROWCOL_VADDR,
@@ -827,7 +831,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 
     static const unsigned char dart_digest[32]={0x1a,0xda,0xa4,0x46,0x6d,0x85,0x16,0xc1,0x41,0x74,0xa3,0x68,0x14,0x94,0x8c,0x03,0xf7,0x05,0x79,0x09,0x04,0x68,0xf7,0xd4,0x09,0x37,0x15,0x6e,0x05,0xb8,0x7b,0x20};
     if(strict && !attest_layout_elf(&lib,29983448u,dart_digest)) {
-        ld_blog("ELF SHA-256 is non-8584; dynamic AOT pattern scanner active");
+        ld_blog("ELF SHA-256 attestation failed in strict mode; aborting layout hooks");
+        return;
     }
 
     uintptr_t pipe_fn = ld_find_aot_pattern(&lib, LD_HOME_PIPELINE_FUNCTION_OFFSET,
@@ -880,8 +885,14 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             ld_dock_bottom_body,sizeof ld_dock_bottom_body,(void *)repl_dock_bottom,&g_orig_dock_bottom},
         {LD_DOCK_CONTAINER_HEIGHT_START,LD_DOCK_CONTAINER_HEIGHT_SITE,
             ld_dock_container_height_body,sizeof ld_dock_container_height_body,(void *)repl_dock_container_height,&g_orig_dock_container_height},
+        {LD_DOCK_STABLE_HEIGHT_START,LD_DOCK_STABLE_HEIGHT_SITE,
+            ld_dock_stable_height_words,sizeof ld_dock_stable_height_words,(void *)repl_dock_stable_height,&g_orig_dock_stable_height},
+        {LD_DOCK_WINDOW_HEIGHT_START,LD_DOCK_WINDOW_HEIGHT_SITE,
+            ld_dock_window_height_words,sizeof ld_dock_window_height_words,(void *)repl_dock_window_height,&g_orig_dock_window_height},
         {LD_DOCK_BACKGROUND_START,LD_DOCK_BACKGROUND_SITE,
             ld_dock_background_words,sizeof ld_dock_background_words,(void *)repl_dock_background,&g_orig_dock_background},
+        {LD_DOCK_DIFF_BG_START,LD_DOCK_DIFF_BG_SITE,
+            ld_dock_diff_bg_words,sizeof ld_dock_diff_bg_words,(void *)repl_dock_diff_bg,&g_orig_dock_diff_bg},
         {LD_DOCK_SPACING_START,LD_DOCK_SPACING_SITE,
             ld_dock_spacing_words,sizeof ld_dock_spacing_words,(void *)repl_dock_spacing,&g_orig_dock_spacing},
     };
@@ -896,7 +907,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             const uint32_t *orig_words = (const uint32_t *)home_hooks[i].words;
             if (orig_delta + 16 <= home_hooks[i].size) {
                 const uint32_t *site_pat = (const uint32_t *)((const char *)orig_words + orig_delta);
-                for (size_t off = 0; off < 0x600 && executable_range(fn + off, 16); off += 4) {
+                for (size_t off = 0; off < 0x1000 && executable_range(fn + off, 16); off += 4) {
                     if (ld_aot_match_words((const uint32_t *)(fn + off), site_pat, 4)) {
                         site = fn + off;
                         break;

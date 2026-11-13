@@ -50,7 +50,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
         // Keep the set narrow; enroll other pages as their implementation begins.
         private val OS4_TESTING_PAGES = setOf(
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
-            Page.Dock, Page.DockBehavior, Page.DockGeometry,
+            Page.Dock, Page.DockGeometry,
             Page.Divider,
             Page.SoftGlass, Page.SoftGlassMaterial,
             Page.SoftGlassColor, Page.SoftGlassLighting,

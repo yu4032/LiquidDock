@@ -20,28 +20,6 @@ public final class ModuleMain extends XposedModule {
         loadedProcessName = param.getProcessName();
         Api101Bridge.log("[DC] API102 module loaded process=" + loadedProcessName
                 + " framework=" + getFrameworkName() + " api=" + getApiVersion());
-        if ("system".equals(loadedProcessName)) {
-            // Acquiring a wallpaper listener or renderer makes this process non-reloadable.
-            if (!reloadGate.enterOwnerLifecycle()) return;
-            RustSpawnerCompatHook.install();
-            try {
-                ConfigReader config = ConfigReader.load();
-                boolean enabled = config.b(
-                        ConfigSchema.Core.ENABLED.name(),
-                        ConfigSchema.Core.ENABLED.runtimeFallback());
-                boolean liquidGlassEnabled = config.b(
-                        ConfigSchema.Glass.ENABLED.name(),
-                        ConfigSchema.Glass.ENABLED.runtimeFallback());
-                boolean wallpaperFlickerFixEnabled = config.b(
-                        ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name(),
-                        ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
-                WallpaperClientCompositionHook.initialize(
-                        Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP),
-                        enabled && liquidGlassEnabled && wallpaperFlickerFixEnabled);
-            } catch (Throwable error) {
-                Api101Bridge.log("[DC][WallpaperClientComposition] config gate failed", error);
-            }
-        }
     }
 
     @Override

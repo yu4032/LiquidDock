@@ -66,7 +66,7 @@ public class SecurityCenterSettingsRestartContractTest {
         String scope = Files.readString(
                 MAIN.resolve("resources/META-INF/xposed/scope.list"));
 
-        assertTrue(scope.contains("system"));
+        assertFalse(java.util.Arrays.asList(scope.split("\\R")).contains("system"));
         assertTrue(compose.contains("RestartScopeItem(\"com.miui.home\""));
         assertTrue(compose.contains("RestartScopeItem(\"com.android.systemui\""));
         assertTrue(compose.contains("RestartScopeItem(\"com.miui.securitycenter\""));

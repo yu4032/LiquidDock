@@ -22,13 +22,12 @@ static void ld_apply_home_geometry(struct ld_dart_context *c,uintptr_t grid)
     #define GEOM_BAIL(code) do{ if(diag<20u) ld_blog("home geometry bail "#code); return; }while(0)
     if(diag<20u) ld_blog("home geometry call #%u",diag+1u);
     if(!g_hook_pin_ok || g_count_cols<=0 || g_grid_cols<=0) GEOM_BAIL(counts);
-    uintptr_t variables=ld_heap_pointer(c,grid,0x8f),fullscreen=0;
+    uintptr_t variables=ld_heap_pointer(c,grid,0x8f);
     uint32_t layout=0;
     if(!variables) GEOM_BAIL(variables);
-    if(!ld_read_heap(variables+0x27,&layout,4)
-            || !ld_read_heap(c->x[27]+0xef60,&fullscreen,8)) GEOM_BAIL(read);
-    if(!(layout&1) || !(fullscreen&1) || layout!=(uint32_t)fullscreen) {
-        if(diag<20u) ld_blog("home geometry flags layout=%#x fullscreen=%#lx",layout,fullscreen);
+    if(!ld_read_heap(variables+0x27,&layout,4)) GEOM_BAIL(read);
+    if(!ld_is_fullscreen_layout(c,layout)) {
+        if(diag<20u) ld_blog("home geometry flags layout=%#x",layout);
         return;
     }
     int direction=ld_grid_direction(c,grid);

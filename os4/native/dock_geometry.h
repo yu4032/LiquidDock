@@ -19,19 +19,7 @@ static int ld_dock_active(struct ld_dart_context *c)
     uintptr_t controller = ld_get_grid_controller(c);
     if (!controller) return 0;
 
-    uintptr_t fields = 0, sentinel = 0;
-    ld_read_heap(c->x[26] + 0x78, &fields, 8);
-    ld_read_heap(c->x[27] + 0x40, &sentinel, 8);
-
-    /* HotSeatsConstants2._isLaptopMode: try 9239 (0x2628) then 8604 (0x25d0) */
-    uintptr_t laptop_owner = 0;
-    if (fields && ((ld_read_heap(fields + 0x2628u, &laptop_owner, 8) || ld_read_heap(fields + 0x25d0u, &laptop_owner, 8))
-            && (laptop_owner & 1) && laptop_owner != sentinel && laptop_owner != c->x[22])) {
-        uintptr_t laptop_rx = ld_heap_pointer(c, laptop_owner, 0x73);
-        if (laptop_rx && ld_heap_u32(laptop_rx, 0x13) == (uint32_t)(c->x[22] + 0x20)) return 0;
-    }
-
-    uintptr_t rx = ld_heap_pointer(c, controller, 0x2b);
+    uintptr_t rx = ld_heap_pointer(c, controller, ld_get_grid_rx_offset());
     uintptr_t grid = rx ? ld_heap_pointer(c, rx, 0x13) : 0;
     uintptr_t variables = grid ? ld_heap_pointer(c, grid, 0x8f) : 0;
     uintptr_t orientation = variables ? ld_heap_pointer(c, variables, 0x23) : 0;
@@ -53,6 +41,7 @@ static int ld_dock_active(struct ld_dart_context *c)
 }
 
 static void *g_orig_dock_background __attribute__((used));
+static void *g_orig_dock_diff_bg __attribute__((used));
 static void *g_orig_dock_spacing __attribute__((used));
 __attribute__((used)) static void ld_observe_dock_background(struct ld_dart_context *c)
 {
@@ -125,6 +114,8 @@ __attribute__((used)) static void ld_observe_dock_bottom(struct ld_dart_context 
     if(isfinite(margin)) memcpy(c->q[1],&margin,8);
 }
 static void *g_orig_dock_container_height __attribute__((used));
+static void *g_orig_dock_stable_height __attribute__((used));
+static void *g_orig_dock_window_height __attribute__((used));
 __attribute__((used)) static void ld_observe_dock_container_height(struct ld_dart_context *c)
 {
     if(g_home_options.dock.height<=0 || !ld_dock_active(c)) return;
@@ -133,12 +124,22 @@ __attribute__((used)) static void ld_observe_dock_container_height(struct ld_dar
     height+=g_home_options.dock.height;
     if(isfinite(height)) memcpy((void *)(box+7),&height,8);
 }
+__attribute__((used)) static void ld_observe_dock_window_height(struct ld_dart_context *c)
+{
+    if(g_home_options.dock.height<=0 || !ld_dock_active(c)) return;
+    double height=0; memcpy(&height,c->q[0],8);
+    height+=g_home_options.dock.height;
+    if(isfinite(height)) memcpy(c->q[0],&height,8);
+}
 #ifndef LD_DOCK_NO_BRIDGE
 LD_DART_OBSERVER(repl_dock_function_size,ld_observe_dock_function_size,g_orig_dock_function_size)
 LD_DART_OBSERVER(repl_dock_icon_padding,ld_observe_dock_icon_padding,g_orig_dock_icon_padding)
 LD_DART_OBSERVER(repl_dock_bottom,ld_observe_dock_bottom,g_orig_dock_bottom)
 LD_DART_OBSERVER(repl_dock_container_height,ld_observe_dock_container_height,g_orig_dock_container_height)
+LD_DART_OBSERVER(repl_dock_stable_height,ld_observe_dock_window_height,g_orig_dock_stable_height)
+LD_DART_OBSERVER(repl_dock_window_height,ld_observe_dock_window_height,g_orig_dock_window_height)
 LD_DART_OBSERVER(repl_dock_background,ld_observe_dock_background,g_orig_dock_background)
+LD_DART_OBSERVER(repl_dock_diff_bg,ld_observe_dock_background,g_orig_dock_diff_bg)
 LD_DART_OBSERVER(repl_dock_spacing,ld_observe_dock_spacing,g_orig_dock_spacing)
 #endif
 #endif

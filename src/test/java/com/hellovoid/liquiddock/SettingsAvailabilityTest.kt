@@ -12,7 +12,7 @@ class SettingsAvailabilityTest {
     @Test fun os4PortPagesAreNavigableForTestingWithoutBeingMarkedReady() {
         val testing = listOf(
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
-            Page.Dock, Page.DockBehavior, Page.DockGeometry, Page.Divider,
+            Page.Dock, Page.DockGeometry, Page.Divider,
             Page.SoftGlass, Page.SoftGlassMaterial,
             Page.SoftGlassColor, Page.SoftGlassLighting,
             Page.SoftGlassComponents, Page.WidgetComponents,
@@ -25,6 +25,7 @@ class SettingsAvailabilityTest {
 
     @Test fun unrelatedLauncherFeaturesStillGrayOut() {
         val unavailable = listOf(
+            Page.DockBehavior,
             Page.DockRecentBlacklist,
             Page.Workstation, Page.WorkstationDock,
             Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait, Page.Recents,

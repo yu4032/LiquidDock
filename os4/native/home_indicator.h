@@ -19,7 +19,7 @@ __attribute__((used)) static void ld_observe_home_indicator(struct ld_dart_conte
     if (g_grid_cols <= 0 || g_count_cols <= 0 || !g_hook_pin_ok) return;
     uintptr_t controller = ld_get_grid_controller(c);
     if (!controller) return;
-    uintptr_t rx=ld_heap_pointer(c,controller,0x2b);
+    uintptr_t rx=ld_heap_pointer(c,controller,ld_get_grid_rx_offset());
     uintptr_t grid=rx?ld_heap_pointer(c,rx,0x13):0;
     uintptr_t variables=grid?ld_heap_pointer(c,grid,0x8f):0;
     uint32_t layout=0;

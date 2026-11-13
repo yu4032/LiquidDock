@@ -662,6 +662,20 @@ private fun MoreHubPage(
                 )
             }
         }
+        item {
+            var safeModeEnabled by remember { mutableStateOf(Os4SafeMode.isActive()) }
+            SettingsCard {
+                SwitchPreference(
+                    checked = safeModeEnabled,
+                    onCheckedChange = { enabled ->
+                        val ok = if (enabled) Os4SafeMode.enter() else Os4SafeMode.exit()
+                        if (ok) safeModeEnabled = enabled
+                    },
+                    title = "安全模式",
+                    summary = "开启后下次重启桌面将跳过全部 Native Hook；关闭并重启桌面恢复正常",
+                )
+            }
+        }
         moreEntries.forEach { entry ->
             item {
                 ModernFeatureCard(

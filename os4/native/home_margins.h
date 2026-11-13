@@ -96,6 +96,7 @@ static uintptr_t ld_hm_ptr(uintptr_t obj, size_t off, uintptr_t x28)
 }
 
 static uintptr_t g_hm_ctrl_offset = 0;
+static uintptr_t g_hm_oy_offset = 0;
 
 /* originY 的真值不在 cfg 上：cellToCenterOffset 用的是 GridController 单例的
  * controller+0xeb -> Rx -> (+0x13) 值对象 -> +7。控制器取自 [x26+0x78]+0x27c8 (v8604) / +0x2828 (v9239)。 */
@@ -111,8 +112,11 @@ static uintptr_t ld_hm_oy_box(uintptr_t x28, uintptr_t x26)
         __builtin_memcpy(&ctrl, (const void *)(fields + 0x2828u), sizeof ctrl);
     }
     if (!ctrl) return 0;
-    uintptr_t rx = ld_hm_ptr(ctrl, 0xef, x28);
-    if (!rx) rx = ld_hm_ptr(ctrl, 0xeb, x28);
+    uintptr_t rx = g_hm_oy_offset ? ld_hm_ptr(ctrl, g_hm_oy_offset, x28) : 0;
+    if (!rx && !g_hm_oy_offset) {
+        rx = ld_hm_ptr(ctrl, 0xef, x28);
+        if (!rx) rx = ld_hm_ptr(ctrl, 0xeb, x28);
+    }
     return rx ? ld_hm_ptr(rx, 0x13, x28) : 0;
 }
 
@@ -348,6 +352,24 @@ static void ld_home_margins_install(const struct native_api *api, ld_lib_info *l
             g_hm_ctrl_offset = ((inst >> 10) & 0xfffu) * 8;
             g_grid_ctrl_offset = g_hm_ctrl_offset;
             ld_blog("home margin: currentConfig decoded ctrl_offset=0x%lx", (unsigned long)g_hm_ctrl_offset);
+        }
+        uint32_t rx_inst = w[19];
+        if ((rx_inst & 0xffe00fffu) == 0xb8400001u) {
+            g_grid_rx_offset = (rx_inst >> 12) & 0x1ffu;
+            ld_blog("home margin: currentConfig decoded rx_offset=0x%lx", (unsigned long)g_grid_rx_offset);
+        }
+    }
+    static const uint32_t oy_pat[11] = {
+        0x1e612802u, 0xfc1f03a2u, 0xb84eb001u, 0x8b1c8021u,
+        0x9419a98fu, 0xfc407001u, 0xfc5f03a2u, 0x1e613840u,
+        0xaa1d03efu, 0xa8c179fdu, 0xd65f03c0u,
+    };
+    uintptr_t oy_fn = ld_find_aot_pattern(lib, 0x8fa880u, oy_pat, 11);
+    if (oy_fn) {
+        uint32_t oy_inst = ((const uint32_t *)oy_fn)[2];
+        if ((oy_inst & 0xffe00fffu) == 0xb8400001u) {
+            g_hm_oy_offset = (oy_inst >> 12) & 0x1ffu;
+            ld_blog("home margin: gridHeight decoded oy_offset=0x%lx", (unsigned long)g_hm_oy_offset);
         }
     }
     if (!cc) {

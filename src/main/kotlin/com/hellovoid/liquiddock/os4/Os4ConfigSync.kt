@@ -11,27 +11,39 @@ import java.util.concurrent.Executors
 /** Publishes main-screen preferences to the OS4 native backend. */
 object Os4ConfigSync {
     private const val TAG = "LiquidDock-OS4Sync"
-    private val worker = Executors.newSingleThreadExecutor {
+    private const val PREF_DEBOUNCE_MS = 120L
+    private val worker = Executors.newSingleThreadScheduledExecutor {
         Thread(it, "os4-grid-sync").apply { isDaemon = true }
     }
+    private val lock = Any()
+    private var pendingFuture: java.util.concurrent.ScheduledFuture<*>? = null
+    private var latestReason: String? = null
     private val watched = Os4MainScreenOptions.watchedKeys
 
     @JvmStatic
     fun install(context: Context) {
-        request(context.applicationContext, "install")
+        request(context.applicationContext, "install", 0L)
     }
 
     @JvmStatic
     fun onPreferenceChanged(context: Context, key: String?) {
-        if (key in watched) request(context.applicationContext, "pref:$key")
+        if (key in watched) request(context.applicationContext, "pref:$key", PREF_DEBOUNCE_MS)
     }
 
-    private fun request(context: Context, reason: String) {
+    private fun request(context: Context, reason: String, delayMs: Long) {
         // Root publishing must never run on legacy or unknown OS4 launchers.
         if (!supportsPublisher(context)) return
-        worker.execute {
-            runCatching { publishNow(context, reason) }
-                .onFailure { Log.e(TAG, "[$reason] publish failed", it) }
+        synchronized(lock) {
+            latestReason = reason
+            pendingFuture?.cancel(false)
+            pendingFuture = worker.schedule({
+                val runReason = synchronized(lock) {
+                    pendingFuture = null
+                    latestReason ?: reason
+                }
+                runCatching { publishNow(context, runReason) }
+                    .onFailure { Log.e(TAG, "[$runReason] publish failed", it) }
+            }, delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
         }
     }
 
@@ -46,6 +58,9 @@ object Os4ConfigSync {
 
     private fun publishNow(context: Context, reason: String) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        if (reason == "install") {
+            Os4WidgetMaterials.scan(context)
+        }
         var widgetPublished = Os4WidgetMaterials.publish(context, prefs)
         if (!widgetPublished) {
             Log.w(TAG, "[$reason] MAML widget override publish returned false; scanning inventory...")
