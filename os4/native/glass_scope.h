@@ -26,6 +26,11 @@ static void *g_orig_glass_v7_entry __attribute__((used));
 static void *g_orig_glass_widget_build_filter __attribute__((used));
 static void *g_orig_build_folder_glass __attribute__((used));
 static void *g_orig_folder_light_gate __attribute__((used));
+static void *g_orig_recents_glass_entry __attribute__((used));
+
+static inline void ld_glass_scope_set_pending(int scope) {
+    g_ld_pending_glass_scope = scope;
+}
 
 static int g_glass_scope_installed;
 
@@ -86,19 +91,16 @@ static inline void ld_glass_scope_on_image_filter_entry(struct ld_dart_context *
 }
 
 __attribute__((used)) static void ld_on_glass_widget_build_filter(struct ld_dart_context *c) {
-    uintptr_t widget = (uintptr_t)c->x[2];
-    int scope = LD_GLASS_SCOPE_WIDGET;
-    if (widget > 4096) {
-        uint64_t radius_bits = 0;
-        if (ld_read_heap(widget + 0x3f, &radius_bits, sizeof radius_bits)) {
-            int tag = (int)(radius_bits & 7ull);
-            if (tag == LD_GLASS_SCOPE_LARGE_FOLDER || tag == LD_GLASS_SCOPE_ICON ||
-                tag == LD_GLASS_SCOPE_WIDGET) {
-                scope = tag;
-            }
-        }
+    (void)c;
+    if (g_ld_widget_build_scope != LD_GLASS_SCOPE_LARGE_FOLDER &&
+        g_ld_widget_build_scope != LD_GLASS_SCOPE_ICON) {
+        g_ld_widget_build_scope = LD_GLASS_SCOPE_WIDGET;
     }
-    g_ld_widget_build_scope = scope;
+}
+
+__attribute__((used)) static void ld_on_recents_glass_entry(struct ld_dart_context *c) {
+    (void)c;
+    g_ld_pending_glass_scope = LD_GLASS_SCOPE_RECENTS;
 }
 
 __attribute__((used)) static void ld_on_build_folder_glass(struct ld_dart_context *c) {
@@ -128,6 +130,7 @@ LD_DART_OBSERVER(repl_glass_v7_entry, ld_on_glass_v7_entry, g_orig_glass_v7_entr
 LD_DART_OBSERVER(repl_glass_widget_build_filter, ld_on_glass_widget_build_filter, g_orig_glass_widget_build_filter)
 LD_DART_OBSERVER(repl_build_folder_glass, ld_on_build_folder_glass, g_orig_build_folder_glass)
 LD_DART_OBSERVER(repl_folder_light_gate, ld_on_folder_light_gate, g_orig_folder_light_gate)
+LD_DART_OBSERVER(repl_recents_glass_entry, ld_on_recents_glass_entry, g_orig_recents_glass_entry)
 
 static const uint32_t ld_pat_glass_widget_build_filter[] = {
     0xa9bf79fdu, 0xaa0f03fdu, 0xd107e1efu, 0xaa0103e2u, 0xf81f03a1u, 0xb840b040u,
@@ -184,33 +187,39 @@ static void ld_glass_scope_install(
     uintptr_t build_filter = ld_find_aot_pattern(lib, 0x12e8730u, ld_pat_glass_widget_build_filter, 20);
 
     int ok = 0;
-    if (v7_entry && !g_orig_glass_v7_entry) {
+    if (v7_entry && !g_orig_glass_v7_entry && ld_hook_site_safe(v7_entry, "glass_v7")) {
         if (api->hook((void *)v7_entry, (void *)repl_glass_v7_entry, &g_orig_glass_v7_entry) == 0 &&
             g_orig_glass_v7_entry) {
             ld_pin_code_pages_soft(v7_entry, 16);
             ok++;
         }
     }
-    if (build_filter && !g_orig_glass_widget_build_filter) {
+    if (build_filter && !g_orig_glass_widget_build_filter && ld_hook_site_safe(build_filter, "build_filter")) {
         if (api->hook((void *)build_filter, (void *)repl_glass_widget_build_filter, &g_orig_glass_widget_build_filter) == 0 &&
             g_orig_glass_widget_build_filter) {
             ld_pin_code_pages_soft(build_filter, 16);
             ok++;
         }
     }
-    if (build_folder_glass && !g_orig_build_folder_glass) {
+    if (build_folder_glass && !g_orig_build_folder_glass && ld_hook_site_safe(build_folder_glass, "build_folder_glass")) {
         if (api->hook((void *)build_folder_glass, (void *)repl_build_folder_glass, &g_orig_build_folder_glass) == 0 &&
             g_orig_build_folder_glass) {
             ld_pin_code_pages_soft(build_folder_glass, 16);
             ok++;
         }
     }
-    if (folder_light && !g_orig_folder_light_gate) {
+    if (folder_light && !g_orig_folder_light_gate && ld_hook_site_safe(folder_light, "folder_light")) {
         uintptr_t gate = folder_light;
         if (api->hook((void *)gate, (void *)repl_folder_light_gate, &g_orig_folder_light_gate) == 0 &&
             g_orig_folder_light_gate) {
             ld_pin_code_pages_soft(gate, 16);
             ok++;
+        }
+    }
+    if (recents && !g_orig_recents_glass_entry && ld_hook_site_safe(recents, "recents_glass")) {
+        if (api->hook((void *)recents, (void *)repl_recents_glass_entry, &g_orig_recents_glass_entry) == 0 &&
+            g_orig_recents_glass_entry) {
+            ld_pin_code_pages_soft(recents, 16);
         }
     }
 

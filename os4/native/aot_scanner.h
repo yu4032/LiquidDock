@@ -190,4 +190,44 @@ static uintptr_t ld_find_aot_pattern(const ld_lib_info *lib, uintptr_t hint_vadd
     return 0;
 }
 
+/* Verify the 16-byte detour prologue does not clobber x17 (used by the
+ * trampoline) or contain PC-relative branches/loads that break relocation. */
+static inline int ld_hook_site_safe(uintptr_t site, const char *label)
+{
+    if (!site || !executable_range(site, 16)) return 0;
+    const uint32_t *insns = (const uint32_t *)site;
+    for (int i = 0; i < 4; i++) {
+        uint32_t w = insns[i];
+        int pc_rel =
+            ((w & 0x7c000000u) == 0x14000000u) || /* B / BL */
+            ((w & 0xff000010u) == 0x54000000u) || /* B.cond */
+            ((w & 0x7e000000u) == 0x34000000u) || /* CBZ / CBNZ */
+            ((w & 0x7e000000u) == 0x36000000u) || /* TBZ / TBNZ */
+            ((w & 0x1f000000u) == 0x10000000u) || /* ADR / ADRP */
+            ((w & 0x3b000000u) == 0x18000000u);   /* LDR literal */
+        if (pc_rel) {
+            ld_blog("hook site unsafe (%s +0x%x): pc-rel insn %08x",
+                    label ? label : "?", i * 4, w);
+            return 0;
+        }
+        uint32_t rd = w & 0x1fu;
+        uint32_t rn = (w >> 5) & 0x1fu;
+        int writes_x17 =
+            (rd == 17u) && (
+                ((w & 0x1f800000u) == 0x12800000u) || /* MOVZ / MOVN / MOVK */
+                ((w & 0x1f000000u) == 0x11000000u) || /* ADD / SUB imm */
+                ((w & 0x1f000000u) == 0x0b000000u) || /* ADD / SUB reg */
+                ((w & 0x3b000000u) == 0x39000000u) || /* LDR / STR uimm */
+                ((w & 0x3b600c00u) == 0x38400000u)    /* LDUR */
+            );
+        int reads_x17 = (rn == 17u) && ((w & 0x3a000000u) == 0x38000000u);
+        if (writes_x17 || reads_x17) {
+            ld_blog("hook site unsafe (%s +0x%x): x17 used by insn %08x",
+                    label ? label : "?", i * 4, w);
+            return 0;
+        }
+    }
+    return 1;
+}
+
 #endif /* LIQUIDDOCK_AOT_SCANNER_H */

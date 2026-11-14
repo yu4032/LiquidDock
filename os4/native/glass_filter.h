@@ -30,10 +30,18 @@ __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context
     int scope = g_ld_active_glass_scope;
     g_ld_active_glass_scope = LD_GLASS_SCOPE_GLOBAL;
     if(!g_hook_pin_ok || !g_home_options.glass_enabled || !g_native_glass_engine_ready) return;
-    const struct ld_native_glass_options *opts = &g_home_options.native_glass;
+    struct ld_native_glass_options merged = g_home_options.native_glass;
+    const struct ld_native_glass_options *opts = &merged;
     if(scope > LD_GLASS_SCOPE_GLOBAL && scope < LD_GLASS_SCOPE_COUNT
             && g_home_options.scoped_glass[scope].mask) {
-        opts = &g_home_options.scoped_glass[scope];
+        const struct ld_native_glass_options *sc = &g_home_options.scoped_glass[scope];
+        uint64_t sm = sc->mask;
+        for (size_t i = 0; i < LD_NATIVE_GLASS_COUNT; i++) {
+            if (sm & (1ull << i)) {
+                merged.values[i] = sc->values[i];
+            }
+        }
+        merged.mask |= sm;
     }
     if(!opts->mask) return;
     int strict=g_home_options.hook_safety_enabled;
@@ -51,7 +59,7 @@ __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context
     }
     int result=ld_native_glass_apply(filter,opts,ld_read_heap,ld_native_glass_write);
     static unsigned reported;
-    if(__atomic_fetch_add(&reported,1u,__ATOMIC_RELAXED)<3)ld_blog("native glass configured fields=%d",result);
+    if(__atomic_fetch_add(&reported,1u,__ATOMIC_RELAXED)<8)ld_blog("native glass configured scope=%d fields=%d",scope,result);
 }
 #ifndef LD_GLASS_FILTER_NO_BRIDGE
 LD_DART_OBSERVER(repl_glass_filter,ld_observe_native_glass,g_orig_glass_filter)

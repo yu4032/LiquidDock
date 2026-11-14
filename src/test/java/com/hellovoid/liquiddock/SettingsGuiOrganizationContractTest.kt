@@ -88,4 +88,26 @@ class SettingsGuiOrganizationContractTest {
         assertEquals(FolderGlassCell.entries.map { it.id }, folderGlassCellOrder)
         assertEquals(folderGlassCellOrder.size, folderGlassCellOrder.toSet().size)
     }
+
+    @Test fun os4ExposedPagesAreAllowedByAvailability() {
+        val os4 = SettingsAvailability(os4Launcher = true)
+        val exposed = buildList {
+            softGlassEntries.forEach { add(it.page) }
+            softGlassScopeEntries.forEach { add(it.page) }
+            add(Page.SoftGlass)
+            add(Page.SoftGlassComponents)
+            add(Page.WidgetComponents)
+            add(Page.Grid)
+            add(Page.GridBasics)
+            add(Page.GridLandscape)
+            add(Page.GridPortrait)
+            add(Page.Dock)
+            add(Page.DockGeometry)
+            add(Page.Divider)
+            add(Page.Recents)
+        }
+        exposed.forEach { page ->
+            assertTrue("OS4 exposed page $page must be allowed by SettingsAvailability", os4.allows(page))
+        }
+    }
 }

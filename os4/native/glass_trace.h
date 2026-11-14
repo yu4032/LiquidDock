@@ -51,14 +51,19 @@ static void ld_os4_collect_light_sample(struct ld_dart_context *c)
 }
 
 
+static inline void ld_glass_scope_on_image_filter_entry(struct ld_dart_context *c);
+static inline void ld_glass_scope_set_pending(int scope);
+
 __attribute__((used)) static void ld_observe_glass_light(struct ld_dart_context *c) {
-    (void)c; __atomic_add_fetch(&g_os4_pipeline_counts[0],1u,__ATOMIC_RELAXED);
+    (void)c;
+    __atomic_add_fetch(&g_os4_pipeline_counts[0],1u,__ATOMIC_RELAXED);
+    ld_glass_scope_set_pending(LD_GLASS_SCOPE_DOCK);
 }
 __attribute__((used)) static void ld_observe_glass_dark(struct ld_dart_context *c) {
-    (void)c; __atomic_add_fetch(&g_os4_pipeline_counts[1],1u,__ATOMIC_RELAXED);
+    (void)c;
+    __atomic_add_fetch(&g_os4_pipeline_counts[1],1u,__ATOMIC_RELAXED);
+    ld_glass_scope_set_pending(LD_GLASS_SCOPE_DOCK);
 }
-static inline void ld_glass_scope_on_image_filter_entry(struct ld_dart_context *c);
-
 __attribute__((used)) static void ld_observe_glass_filter(struct ld_dart_context *c) {
     __atomic_add_fetch(&g_os4_pipeline_counts[2],1u,__ATOMIC_RELAXED);
     ld_glass_scope_on_image_filter_entry(c);
