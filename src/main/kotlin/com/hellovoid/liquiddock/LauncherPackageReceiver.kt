@@ -9,8 +9,12 @@ import java.util.concurrent.Executors
 class LauncherPackageReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null || intent == null) return
+        val action = intent.action
         val pkg = intent.data?.schemeSpecificPart
-        if (pkg == "com.miui.home") {
+        val shouldSync = pkg == "com.miui.home"
+                || action == Intent.ACTION_BOOT_COMPLETED
+                || action == Intent.ACTION_MY_PACKAGE_REPLACED
+        if (shouldSync) {
             val appContext = context.applicationContext
             val pending = goAsync()
             executor.execute {

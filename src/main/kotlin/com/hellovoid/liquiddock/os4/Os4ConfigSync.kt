@@ -21,6 +21,7 @@ object Os4ConfigSync {
     private var latestReason: String? = null
     private val watched = Os4MainScreenOptions.watchedKeys
     @Volatile private var lastLauncherStamp: String? = null
+    @Volatile private var suppressAutoRestartUntilMs: Long = 0L
 
     @JvmStatic
     fun install(context: Context) {
@@ -43,6 +44,20 @@ object Os4ConfigSync {
     /** Synchronously waits for any pending/needed launcher-switch sync (safe for BroadcastReceiver.goAsync). */
     @JvmStatic
     fun syncIfLauncherChangedBlocking(context: Context) {
+        syncIfLauncherChangedBlocking(context, requestRestart = true)
+    }
+
+    /**
+     * Prepares native config before a manual launcher restart (e.g. from Settings UI).
+     * Waits for any in-flight sync and suppresses a redundant delayed watchdog restart.
+     */
+    @JvmStatic
+    fun prepareForManualLauncherRestart(context: Context) {
+        suppressAutoRestartUntilMs = System.currentTimeMillis() + 15_000L
+        syncIfLauncherChangedBlocking(context, requestRestart = false)
+    }
+
+    private fun syncIfLauncherChangedBlocking(context: Context, requestRestart: Boolean) {
         val app = context.applicationContext
         if (!supportsPublisher(app)) return
         val current = readLauncherStamp(app) ?: return
@@ -51,7 +66,7 @@ object Os4ConfigSync {
                 .getString("last_synced_launcher_stamp", null)
             if (current != persisted) {
                 lastLauncherStamp = current
-                runCatching { publishNow(app, "launcher_changed") }
+                runCatching { publishNow(app, "launcher_changed", requestRestart) }
                     .onFailure { Log.e(TAG, "[launcher_changed] blocking publish failed", it) }
             }
         }
@@ -96,7 +111,7 @@ object Os4ConfigSync {
         }.getOrDefault(false)
     }
 
-    private fun publishNow(context: Context, reason: String) {
+    private fun publishNow(context: Context, reason: String, requestRestart: Boolean = true) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         val syncPrefs = context.getSharedPreferences("os4_sync_state", Context.MODE_PRIVATE)
         val currentStamp = readLauncherStamp(context)
@@ -162,7 +177,9 @@ object Os4ConfigSync {
             syncPrefs.edit().putString("last_synced_launcher_stamp", currentStamp).apply()
         }
         if (launcherSwitched && published) {
-            if (LiquidDockRestart.request()) {
+            if (!requestRestart || System.currentTimeMillis() < suppressAutoRestartUntilMs) {
+                Log.i(TAG, "[$reason] skipped auto restart after version switch (manual restart pending)")
+            } else if (LiquidDockRestart.request()) {
                 Log.i(TAG, "[$reason] requested Launcher restart after version switch")
             } else {
                 Log.w(TAG, "[$reason] Launcher version switched but restart request failed")
