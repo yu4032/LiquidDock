@@ -583,6 +583,15 @@ private fun HomePage(
                 ) { onMasterChanged(it) }
             }
         }
+        item {
+            ModernSectionLabel("监控台")
+            HookMonitorCard(
+                prefs = prefs,
+                masterEnabled = masterEnabled,
+                onOpenLogs = { open(Page.Logs) },
+                modifier = Modifier.padding(horizontal = 14.dp),
+            )
+        }
         item { ModernSectionLabel("快捷入口") }
         overviewEntries.forEach { entry ->
             item {
