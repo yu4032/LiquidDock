@@ -53,7 +53,6 @@ jobs:
       - name: Unit + debug assembly
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - name: Package installable OS4 debug APK
-        if: github.ref == 'refs/heads/liquiddock4' || github.head_ref == 'liquiddock4'
         shell: bash
         run: |
           set -euo pipefail
@@ -134,14 +133,6 @@ jobs:
           if-no-files-found: error
           retention-days: 3
       - uses: actions/upload-artifact@v4
-        if: github.ref != 'refs/heads/liquiddock4' && github.head_ref != 'liquiddock4'
-        with:
-          name: LiquidDock-api102-debug
-          path: build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 7
-      - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/liquiddock4' || github.head_ref == 'liquiddock4'
         with:
           name: LiquidDock4-fuxi-debug-${{ github.sha }}
           path: os4/out/LiquidDock4-fuxi-debug.apk
