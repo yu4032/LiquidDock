@@ -55,6 +55,11 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 
 class ComposeSettingsActivity : SettingsActivity() {
 
+    override fun onResume() {
+        super.onResume()
+        com.hellovoid.liquiddock.os4.Os4ConfigSync.syncIfLauncherChanged(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -122,25 +127,8 @@ private fun LiquidDockSettings(
         )
     }
     val availability = LocalSettingsAvailability.current
-    var page by rememberSaveable {
-        mutableStateOf(
-            uiPrefs.getString(SETTINGS_UI_LAST_PAGE, null)
-                ?.let { name -> runCatching { Page.valueOf(name) }.getOrNull() } ?: Page.Home,
-        )
-    }
-    var navigationStack by rememberSaveable {
-        mutableStateOf(
-            ArrayList(
-                (uiPrefs.getString(SETTINGS_UI_NAV_STACK, "") ?: "")
-                    .split('\u0001')
-                    .filter { it.isNotBlank() && runCatching { Page.valueOf(it) }.isSuccess },
-            ),
-        )
-    }
-    LaunchedEffect(page) { uiPrefs.edit().putString(SETTINGS_UI_LAST_PAGE, page.name).apply() }
-    LaunchedEffect(navigationStack) {
-        uiPrefs.edit().putString(SETTINGS_UI_NAV_STACK, navigationStack.joinToString("\u0001")).apply()
-    }
+    var page by rememberSaveable { mutableStateOf(Page.Home) }
+    var navigationStack by rememberSaveable { mutableStateOf(ArrayList<String>()) }
     // Saved navigation from another Launcher build must never expose unsupported controls.
     val visiblePage = if (availability.allows(page)) page else Page.Home
     val root = isRootPage(visiblePage)
@@ -429,7 +417,11 @@ private fun LiquidDockSettings(
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
 
                     Page.SoftGlass -> SoftGlassPage(padding, prefs, masterEnabled, ::navigateTo)
-                    Page.SoftGlassComponents -> SoftGlassComponentsPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.SoftGlassComponents -> SoftGlassComponentsPage(
+                        padding, prefs, masterEnabled, ::navigateTo,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.SoftGlassComponents.name }
+                            ?.let { SettingsFocusRequest(Page.SoftGlassComponents, it, searchFocusSequence) },
+                    )
                     Page.Liquid -> LiquidPage(padding, prefs, masterEnabled, ::navigateTo)
 
                     Page.SidebarEdge -> SidebarGlassSettingsPage(
@@ -503,7 +495,11 @@ private fun LiquidDockSettings(
                         searchFocus = searchFocusKey?.takeIf { searchFocusPage == Page.GboardAll.name }
                             ?.let { SettingsFocusRequest(Page.GboardAll, it, searchFocusSequence) },
                 )
-                    Page.WidgetComponents -> WidgetComponentsPage(padding, activity, prefs)
+                    Page.WidgetComponents -> WidgetComponentsPage(
+                        padding, activity, prefs,
+                        searchFocusKey?.takeIf { searchFocusPage == Page.WidgetComponents.name }
+                            ?.let { SettingsFocusRequest(Page.WidgetComponents, it, searchFocusSequence) },
+                    )
                     Page.LauncherHighlights -> LauncherHighlightsPage(padding, ::navigateTo)
                     Page.LauncherHighlightsCompact -> LauncherHighlightTogglePage(
                         padding, prefs, masterEnabled, compact = true,

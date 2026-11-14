@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.UUID
@@ -33,6 +34,7 @@ internal fun WidgetComponentsPage(
     padding: PaddingValues,
     activity: ComposeSettingsActivity,
     prefs: SharedPreferences,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     val coroutineScope = rememberCoroutineScope()
@@ -73,16 +75,15 @@ internal fun WidgetComponentsPage(
         .entries
         .sortedBy { it.value.firstOrNull()?.displayOwner().orEmpty() }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item {
-            Text(
-                "仅在手动载入时扫描当前桌面小组件（包含 MAML 与 RemoteViews 小组件）；普通桌面重启不会扫描内部组件。",
-                fontSize = 13.sp,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            )
-        }
-        item {
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+    DenseSettingsList(
+        padding,
+        stringResource(R.string.widget_components_entry),
+        "仅在手动载入时扫描当前桌面小组件（包含 MAML 与 RemoteViews 小组件）；普通桌面重启不会扫描内部组件。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.WidgetComponents, it.key) },
+        focusSequence = searchFocus?.sequence,
+    ) {
+        item(key = "widget-scan-card") {
+            SettingsCard {
                 ArrowPreference(
                     title = "载入当前小组件",
                     summary = when {
@@ -158,15 +159,16 @@ internal fun WidgetComponentsPage(
             }
         }
 
-        item { SmallTitle("隐藏规则备份") }
-        item {
-            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+        item(key = "widget-backup-heading") { SmallTitle("隐藏规则备份") }
+        item(key = "widget-backup-card") {
+            SettingsCard {
                 Column {
                     ArrowPreference(
                         title = "导出隐藏规则",
                         summary = "仅保存已选择的小组件隐藏规则，不包含扫描目录",
                         onClick = { activity.launchWidgetHiddenExport() },
                     )
+                    ModernListDivider()
                     ArrowPreference(
                         title = "导入隐藏规则",
                         summary = "覆盖当前隐藏规则并重启桌面，不重新扫描小组件",

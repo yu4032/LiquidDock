@@ -20,11 +20,50 @@ object Os4ConfigSync {
     private var pendingFuture: java.util.concurrent.ScheduledFuture<*>? = null
     private var latestReason: String? = null
     private val watched = Os4MainScreenOptions.watchedKeys
+    @Volatile private var lastLauncherStamp: String? = null
 
     @JvmStatic
     fun install(context: Context) {
+        lastLauncherStamp = readLauncherStamp(context)
         request(context.applicationContext, "install", 0L)
     }
+
+    @JvmStatic
+    fun syncIfLauncherChanged(context: Context) {
+        val app = context.applicationContext
+        val current = readLauncherStamp(app) ?: return
+        val persisted = app.getSharedPreferences("os4_sync_state", Context.MODE_PRIVATE)
+            .getString("last_synced_launcher_stamp", null)
+        if (current != lastLauncherStamp || current != persisted) {
+            lastLauncherStamp = current
+            request(app, "launcher_changed", 0L)
+        }
+    }
+
+    /** Synchronously waits for any pending/needed launcher-switch sync (safe for BroadcastReceiver.goAsync). */
+    @JvmStatic
+    fun syncIfLauncherChangedBlocking(context: Context) {
+        val app = context.applicationContext
+        if (!supportsPublisher(app)) return
+        val current = readLauncherStamp(app) ?: return
+        val future = worker.submit {
+            val persisted = app.getSharedPreferences("os4_sync_state", Context.MODE_PRIVATE)
+                .getString("last_synced_launcher_stamp", null)
+            if (current != persisted) {
+                lastLauncherStamp = current
+                runCatching { publishNow(app, "launcher_changed") }
+                    .onFailure { Log.e(TAG, "[launcher_changed] blocking publish failed", it) }
+            }
+        }
+        runCatching { future.get(8L, java.util.concurrent.TimeUnit.SECONDS) }
+            .onFailure { Log.w(TAG, "syncIfLauncherChangedBlocking timed out or failed", it) }
+    }
+
+    private fun readLauncherStamp(context: Context): String? = runCatching {
+        val pkg = context.packageManager.getPackageInfo("com.miui.home", 0)
+        val src = pkg.applicationInfo?.sourceDir.orEmpty()
+        "$src:${pkg.lastUpdateTime}"
+    }.getOrNull()
 
     @JvmStatic
     fun onPreferenceChanged(context: Context, key: String?) {
@@ -59,8 +98,13 @@ object Os4ConfigSync {
 
     private fun publishNow(context: Context, reason: String) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        val syncPrefs = context.getSharedPreferences("os4_sync_state", Context.MODE_PRIVATE)
+        val currentStamp = readLauncherStamp(context)
+        val prevStamp = syncPrefs.getString("last_synced_launcher_stamp", null)
+        val launcherChanged = currentStamp != null && currentStamp != prevStamp
+        val launcherSwitched = prevStamp != null && launcherChanged
         val previousWidgetGlass = Os4WidgetMaterials.lastReloadRequestedGlass(context)
-        if (reason == "install") {
+        if (reason == "install" || launcherChanged) {
             Os4WidgetMaterials.scan(context)
         }
         var widgetPublished = Os4WidgetMaterials.publish(context, prefs)
@@ -70,6 +114,13 @@ object Os4ConfigSync {
             widgetPublished = Os4WidgetMaterials.publish(context, prefs, force = true)
         }
         if (!widgetPublished) Log.e(TAG, "[$reason] MAML widget override publish failed")
+        if (reason == "install" || launcherChanged) {
+            runCatching {
+                Os4RemoteWidgetCatalog.scan(context)
+                val rvOk = Os4RemoteWidgetCatalog.deployHiddenRules(context, prefs)
+                Log.i(TAG, "[$reason] RemoteViews catalog synced & deployed=$rvOk")
+            }.onFailure { Log.w(TAG, "[$reason] RemoteViews auto-sync failed", it) }
+        }
         val conf = Os4MainScreenOptions.fromPreferences(prefs.all)
         if (conf == null) Log.e(TAG, "[$reason] invalid options; native snapshot cleared")
         // The vendor's named Dart AOT symbols live in XZ .gnu_debugdata.
@@ -77,10 +128,10 @@ object Os4ConfigSync {
         val resolved = if (!conf.isNullOrEmpty()) {
             val safetyEnabled = prefs.getBoolean(ConfigSchema.Grid.NATIVE_HOOK_SAFETY.name(),
                 ConfigSchema.Grid.NATIVE_HOOK_SAFETY.uiDefault())
-            val addresses = Os4GlassSymbols.fromInstalledLauncher(context, safetyEnabled)
-            if (addresses == null) conf
+            val resolvedTargets = Os4GlassSymbols.fromInstalledLauncherResolved(context, safetyEnabled)
+            if (resolvedTargets == null) conf
             else {
-                val parts = addresses.split('|', limit = 5)
+                val parts = resolvedTargets.glass.split('|', limit = 5)
                 val gates = parts[0]
                 val probes = parts.getOrElse(1) { "" }
                 val passBlur = parts.getOrElse(2) { "" }
@@ -92,12 +143,31 @@ object Os4ConfigSync {
                     if (passBlur.isNotEmpty()) append("passblur_target=").append(passBlur).append('\n')
                     if (renderGates.isNotEmpty()) append("render_targets=").append(renderGates).append('\n')
                     if (recentsBlur.isNotEmpty()) append("recents_blur_target=").append(recentsBlur).append('\n')
+                    if (resolvedTargets.layoutTargets.isNotEmpty()) {
+                        append("layout_targets=").append(resolvedTargets.layoutTargets).append('\n')
+                    }
+                    if (resolvedTargets.homeMarginTarget.isNotEmpty()) {
+                        append("home_margin_target=").append(resolvedTargets.homeMarginTarget).append('\n')
+                    }
+                    if (resolvedTargets.rvTargets.isNotEmpty()) {
+                        append("rv_targets=").append(resolvedTargets.rvTargets).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }
         } else conf
         val published = Os4RootConfWriter.write(context, resolved ?: "")
         Log.i(TAG, "[$reason] options published=$published cleared=${conf.isNullOrEmpty()}")
+        if (published && currentStamp != null && currentStamp != prevStamp) {
+            syncPrefs.edit().putString("last_synced_launcher_stamp", currentStamp).apply()
+        }
+        if (launcherSwitched && published) {
+            if (LiquidDockRestart.request()) {
+                Log.i(TAG, "[$reason] requested Launcher restart after version switch")
+            } else {
+                Log.w(TAG, "[$reason] Launcher version switched but restart request failed")
+            }
+        }
         /* init_maml only redirects new loads; existing renderers retain the
          * previous manifest. Reload on either transition, but only after BOTH
          * snapshots have been published. Failed writes/requests are retriable. */

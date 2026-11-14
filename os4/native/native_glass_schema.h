@@ -11,7 +11,7 @@ static const struct ld_native_glass_field ld_native_glass_fields[LD_NATIVE_GLASS
     {"edge_pow",0x40,0,0,0.1,8.0},
     {"thickness_px",0x44,0,0,0.0,480.0},
     {"reflect_offset_px",0x48,0,0,0.0,400.0},
-    {"ior",0x90,0,0,1.0,3.0},
+    {"ior",0x90,0,0,1.0,5.0},
     {"light_x",0x50,3,0,-2.0,2.0},
     {"light_y",0x50,3,1,-2.0,2.0},
     {"light_z",0x50,3,2,-2.0,2.0},

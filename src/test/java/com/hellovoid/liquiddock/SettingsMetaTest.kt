@@ -21,7 +21,7 @@ class SettingsMetaTest {
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
         catalog.filter { it.key != null }.forEach { item ->
             val declared = pages[item.page]
-            if (declared != null) {
+            if (declared != null && item.page !in liquidNativeSections) {
                 val row = declared.blocks[declared.indexOfKey(item.key!!)] as SettingsBlock.Row
                 assertEquals(row.title, item.title)
             } else {

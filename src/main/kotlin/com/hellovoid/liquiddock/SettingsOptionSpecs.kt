@@ -145,12 +145,12 @@ internal val launcher450IconSizeSpec = IntSpec(
     ConfigSchema.Grid.ICON_SIZE_PERCENT,
     "图标大小",
     "%",
-    summary = "调整工作区、Dock 和小文件夹中的图标大小；100% 为系统默认",
+    summary = "调整工作区、Dock 和小文件夹中的图标大小；100% 为系统默认；重启桌面生效",
 )
 
 internal val gridDimensionSpecs = listOf(
-    IntSpec(ConfigSchema.Grid.COLUMNS, "横屏列数", "列", summary = "2–10 列；竖屏自动交换为行数"),
-    IntSpec(ConfigSchema.Grid.ROWS, "横屏行数", "行", summary = "2–10 行；竖屏自动交换为列数"),
+    IntSpec(ConfigSchema.Grid.COLUMNS, "横屏列数", "列", summary = "2–10 列；竖屏自动交换为行数；重启桌面生效"),
+    IntSpec(ConfigSchema.Grid.ROWS, "横屏行数", "行", summary = "2–10 行；竖屏自动交换为列数；重启桌面生效"),
 )
 
 internal val gridSpecs = listOf(
@@ -171,12 +171,12 @@ internal val splitGridSpecs = listOf(
     ),
 )
 internal val dockSpecs = listOf(
-    IntSpec(ConfigSchema.Dock.BLUR_RADIUS, "模糊强度", ""),
-    IntSpec(ConfigSchema.Dock.HEIGHT_OFFSET, "高度偏移"),
-    IntSpec(ConfigSchema.Dock.WIDTH_OFFSET, "宽度偏移"),
-    IntSpec(ConfigSchema.Dock.BLUR_CORNER_OFFSET, "内部模糊圆角偏移"),
-    IntSpec(ConfigSchema.Dock.SPACING, "Dock 图标间距"),
-    IntSpec(ConfigSchema.Dock.BOTTOM_OFFSET, "Dock 底部偏移"),
+    IntSpec(ConfigSchema.Dock.BLUR_RADIUS, "模糊强度", "", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Dock.HEIGHT_OFFSET, "高度偏移", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Dock.WIDTH_OFFSET, "宽度偏移", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Dock.BLUR_CORNER_OFFSET, "内部模糊圆角偏移", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Dock.SPACING, "Dock 图标间距", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Dock.BOTTOM_OFFSET, "Dock 底部偏移", summary = "重启桌面生效"),
 )
 internal fun workstationSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> {
     val keys = configs.mapTo(hashSetOf()) { it.name() }
@@ -209,13 +209,13 @@ internal val workstationAppsPortraitSpecs by lazy {
 }
 
 internal val dividerSpecs = listOf(
-    IntSpec(ConfigSchema.Divider.WIDTH_DP, "分隔线宽度", "dp", displayTenths = true),
-    IntSpec(ConfigSchema.Divider.HEIGHT_SCALE, "分隔线高度比例", "%"),
-    IntSpec(ConfigSchema.Divider.Y_OFFSET_DP, "分隔线垂直偏移", "dp", displayTenths = true),
-    IntSpec(ConfigSchema.Divider.COLOR_RED, "分隔线颜色 · 红", ""),
-    IntSpec(ConfigSchema.Divider.COLOR_GREEN, "分隔线颜色 · 绿", ""),
-    IntSpec(ConfigSchema.Divider.COLOR_BLUE, "分隔线颜色 · 蓝", ""),
-    IntSpec(ConfigSchema.Divider.ALPHA, "分隔线不透明度", ""),
+    IntSpec(ConfigSchema.Divider.WIDTH_DP, "分隔线宽度", "dp", displayTenths = true, summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Divider.HEIGHT_SCALE, "分隔线高度比例", "%", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Divider.Y_OFFSET_DP, "分隔线垂直偏移", "dp", displayTenths = true, summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Divider.COLOR_RED, "分隔线颜色 · 红", "", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Divider.COLOR_GREEN, "分隔线颜色 · 绿", "", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Divider.COLOR_BLUE, "分隔线颜色 · 蓝", "", summary = "重启桌面生效"),
+    IntSpec(ConfigSchema.Divider.ALPHA, "分隔线不透明度", "", summary = "重启桌面生效"),
 )
 internal val dividerKeys = dividerSpecs.map { it.key }
 internal fun hasLegacyDividerConfig(prefs: SharedPreferences): Boolean = dividerKeys.any(prefs::contains)
@@ -242,10 +242,10 @@ internal val recentsBlurSpec = IntSpec(
     ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,
     "背景模糊程度",
     "%",
-    summary = "控制进入多任务界面后壁纸背景的系统模糊；保留系统过渡动画",
+    summary = "控制进入多任务界面后壁纸背景的系统模糊；保留系统过渡动画；重启桌面生效",
 )
-internal val iconSizeOffsetSpec = IntSpec(ConfigSchema.Glass.ICON_SIZE_OFFSET, "图标尺寸偏移", "dp/边")
-internal val iconCornerRadiusSpec = IntSpec(ConfigSchema.Glass.ICON_CORNER_RADIUS, "图标圆角", "dp")
+internal val iconSizeOffsetSpec = IntSpec(ConfigSchema.Glass.ICON_SIZE_OFFSET, "图标尺寸偏移", "dp/边", summary = "重启桌面生效")
+internal val iconCornerRadiusSpec = IntSpec(ConfigSchema.Glass.ICON_CORNER_RADIUS, "图标圆角", "dp", summary = "重启桌面生效")
 internal val widgetSizeOffsetSpec = IntSpec(ConfigSchema.Glass.WIDGET_SIZE_OFFSET, "小部件尺寸偏移", "dp/边")
 internal val widgetCornerRadiusSpec = IntSpec(ConfigSchema.Glass.WIDGET_CORNER_RADIUS, "小部件圆角", "dp")
 internal val smallFolderSizeOffsetSpec = IntSpec(ConfigSchema.Glass.SMALL_FOLDER_SIZE_OFFSET, "小文件夹尺寸偏移", "dp/边")

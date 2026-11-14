@@ -48,9 +48,27 @@ internal object Os4GlassSymbols {
     private const val PASS_BLUR_SUPPORTED = "PassBlurBackgroundLight.supported"
     private const val RECENTS_BLUR_RADIUS = "BlurLayerParams._getRecentBlurRadius"
     private const val RECENTS_HOME_HOLD_PARAMS = "BlurLayerParams.getHomeHoldParams"
-    @Volatile private var cached: Pair<Pair<String, Boolean>, String>? = null
+    private val layoutSymbolNames = listOf(
+        "LauncherModel.deleteItemDatabase",
+        "LauncherModel.updateItemDatabase",
+    )
+    private const val HOME_MARGIN_CURRENT_CONFIG = "GridController.currentConfig"
+    private val remoteViewsSymbolNames = listOf(
+        "FlutterView.applyViewProperties",
+        "FlutterView.background",
+    )
+    data class ResolvedTargets(
+        val glass: String,
+        val layoutTargets: String = "",
+        val homeMarginTarget: String = "",
+        val rvTargets: String = "",
+    )
+    @Volatile private var cached: Pair<Pair<String, Boolean>, ResolvedTargets>? = null
 
-    fun fromInstalledLauncher(context: Context, strictFingerprint: Boolean): String? = runCatching {
+    fun fromInstalledLauncher(context: Context, strictFingerprint: Boolean): String? =
+        fromInstalledLauncherResolved(context, strictFingerprint)?.glass
+
+    fun fromInstalledLauncherResolved(context: Context, strictFingerprint: Boolean): ResolvedTargets? = runCatching {
         val source = context.packageManager.getApplicationInfo("com.miui.home", 0).sourceDir
         val cacheKey = source to strictFingerprint
         cached?.takeIf { pair -> pair.first == cacheKey }?.second?.let { result -> return result }
@@ -67,13 +85,18 @@ internal object Os4GlassSymbols {
             val hex = actual.joinToString("") { byte -> "%02x".format(byte) }
             require(hex == EXPECTED_SHA) { "Vendor ELF SHA-256 differs" }
         }
-        val result = extract(image) ?: error("XZ mini-ELF symbols missing or ambiguous")
+        val result = extractResolved(image) ?: error("XZ mini-ELF symbols missing or ambiguous")
         cached = cacheKey to result
-        Log.i(TAG, "Resolved OS4 glass targets: " + result)
+        Log.i(TAG, "Resolved OS4 glass targets: " + result.glass +
+            (if (result.layoutTargets.isNotEmpty()) " layout=" + result.layoutTargets else "") +
+            (if (result.homeMarginTarget.isNotEmpty()) " margin=" + result.homeMarginTarget else "") +
+            (if (result.rvTargets.isNotEmpty()) " rv=" + result.rvTargets else ""))
         result
     }.onFailure { err -> Log.e(TAG, "OS4 glass target extraction failed", err) }.getOrNull()
 
-    fun extract(vendor: ByteArray): String? {
+    fun extract(vendor: ByteArray): String? = extractResolved(vendor)?.glass
+
+    fun extractResolved(vendor: ByteArray): ResolvedTargets? {
         val outer = Elf64(vendor)
         val debug = outer.sections().firstOrNull { section ->
             outer.sectionName(section) == ".gnu_debugdata"
@@ -91,7 +114,57 @@ internal object Os4GlassSymbols {
             }
             out.toByteArray()
         }
-        return fromMiniElf(mini)
+        val glass = fromMiniElf(mini) ?: return null
+        val (layoutTargets, homeMarginTarget, rvTargets) = fromMiniElfExtras(mini)
+        return ResolvedTargets(glass, layoutTargets, homeMarginTarget, rvTargets)
+    }
+
+    private fun findSingleSymbol(
+        elf: Elf64,
+        sections: List<Elf64.Section>,
+        requested: String,
+        maxSize: Long = 2048L,
+    ): Pair<Long, Long>? {
+        val hits = mutableSetOf<Pair<Long, Long>>()
+        for (table in sections) {
+            if (table.type != 2L || table.link !in sections.indices ||
+                table.entrySize != 24L) continue
+            val strings = sections[table.link]
+            if (strings.type != 3L || table.size / 24L > 200_000L) continue
+            for (i in 0 until (table.size / 24L).toInt()) {
+                val pos = table.offset + i * 24L
+                val strOff = elf.u32(pos)
+                val type = elf.u8(pos + 4) and 15
+                val shndx = elf.u16(pos + 6)
+                val vaddr = elf.u64(pos + 8)
+                val size = elf.u64(pos + 16)
+                if (strOff == 0L || (type != 0 && type != 2) ||
+                    shndx == 0 || vaddr < 0x4000L || vaddr % 4L != 0L ||
+                    size !in 16L..maxSize) continue
+                if (elf.equalsString(strings, strOff, requested)) hits.add(vaddr to size)
+            }
+        }
+        return hits.singleOrNull()
+    }
+
+    private fun fromMiniElfExtras(data: ByteArray): Triple<String, String, String> {
+        val elf = Elf64(data)
+        val sections = elf.sections()
+        val layoutPairs = layoutSymbolNames.mapNotNull { name -> findSingleSymbol(elf, sections, name) }
+        val layoutStr = if (layoutPairs.size == layoutSymbolNames.size &&
+            layoutPairs.map { it.first }.distinct().size == layoutSymbolNames.size) {
+            layoutPairs.joinToString(",") { pair -> "0x" + pair.first.toString(16) + ":" + pair.second }
+        } else ""
+        val marginPair = findSingleSymbol(elf, sections, HOME_MARGIN_CURRENT_CONFIG)
+        val marginStr = marginPair?.let { pair -> "0x" + pair.first.toString(16) + ":" + pair.second } ?: ""
+        val rvPairs = remoteViewsSymbolNames.mapNotNull { name ->
+            findSingleSymbol(elf, sections, name, maxSize = 65536L)
+        }
+        val rvStr = if (rvPairs.size == remoteViewsSymbolNames.size &&
+            rvPairs.map { it.first }.distinct().size == remoteViewsSymbolNames.size) {
+            rvPairs.joinToString(",") { pair -> "0x" + pair.first.toString(16) + ":" + pair.second }
+        } else ""
+        return Triple(layoutStr, marginStr, rvStr)
     }
 
     /** Isolated parser can be exercised against synthetic ELF in unit tests. */
