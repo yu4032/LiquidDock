@@ -53,6 +53,18 @@ internal object Os4GlassSymbols {
         "LauncherModel.updateItemDatabase",
     )
     private const val HOME_MARGIN_CURRENT_CONFIG = "GridController.currentConfig"
+    private const val FOLDER_CORNER_DRAG_TARGET = "FolderHelper.supportCornerDrag"
+    private val folderPadBypassTargets = listOf(
+        "FolderSheetGetXController.onInit" to 512L,
+        "_FolderSheetState._buildPreviewAndSelector" to 512L,
+        "FolderSheetGetXController._scrollToSelectedFolderType" to 472L,
+        "FolderIconConvertSizeUtil.getFolderSpanYFromType" to 192L,
+        "FolderIconConvertSizeUtil.getFolderSpanXFromType" to 208L,
+        "FolderLayoutStrategy.calItemSize" to 560L,
+        "BigFolderCommonStrategy.calItemSize" to 952L,
+        "FolderIconWidget._buildPreviewContainer" to 0x1200L,
+        "FolderPreviewContainer._buildOriginalPreview" to 0xb00L,
+    )
     private val remoteViewsSymbolNames = listOf(
         "FlutterView.applyViewProperties",
         "FlutterView.background",
@@ -62,6 +74,8 @@ internal object Os4GlassSymbols {
         val layoutTargets: String = "",
         val homeMarginTarget: String = "",
         val rvTargets: String = "",
+        val folderTarget: String = "",
+        val folderPadTargets: String = "",
     )
     @Volatile private var cached: Pair<Pair<String, Boolean>, ResolvedTargets>? = null
 
@@ -116,7 +130,20 @@ internal object Os4GlassSymbols {
         }
         val glass = fromMiniElf(mini) ?: return null
         val (layoutTargets, homeMarginTarget, rvTargets) = fromMiniElfExtras(mini)
-        return ResolvedTargets(glass, layoutTargets, homeMarginTarget, rvTargets)
+        val folderTarget = fromMiniElfSingle(mini, FOLDER_CORNER_DRAG_TARGET)
+        val folderPadTargets = fromMiniElfPadBypass(mini)
+        return ResolvedTargets(glass, layoutTargets, homeMarginTarget, rvTargets, folderTarget, folderPadTargets)
+    }
+
+    private fun fromMiniElfPadBypass(data: ByteArray): String {
+        val elf = Elf64(data)
+        val sections = elf.sections()
+        val entries = folderPadBypassTargets.mapNotNull { (name, minScan) ->
+            val pair = findSingleSymbol(elf, sections, name, maxSize = 65536L) ?: return@mapNotNull null
+            val scanSize = maxOf(pair.second, minScan).coerceAtMost(65536L)
+            "0x" + pair.first.toString(16) + ":" + scanSize
+        }
+        return entries.joinToString(",")
     }
 
     private fun findSingleSymbol(
@@ -165,6 +192,13 @@ internal object Os4GlassSymbols {
             rvPairs.joinToString(",") { pair -> "0x" + pair.first.toString(16) + ":" + pair.second }
         } else ""
         return Triple(layoutStr, marginStr, rvStr)
+    }
+
+    private fun fromMiniElfSingle(data: ByteArray, symbolName: String): String {
+        val elf = Elf64(data)
+        val sections = elf.sections()
+        val pair = findSingleSymbol(elf, sections, symbolName) ?: return ""
+        return "0x" + pair.first.toString(16) + ":" + pair.second
     }
 
     /** Isolated parser can be exercised against synthetic ELF in unit tests. */

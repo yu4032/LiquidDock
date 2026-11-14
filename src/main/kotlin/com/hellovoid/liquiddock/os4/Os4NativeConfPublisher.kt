@@ -39,6 +39,7 @@ object Os4NativeConfPublisher {
                 append("grid_rows=").append(gridRows).append('\n')
             }
             append("icon_size_enabled=").append(if (options.iconSizeEnabled) 1 else 0).append('\n')
+            if (options.bigFolderEnabled) append("big_folder_enabled=1\n")
             // Explicit opt-in only. An absent key preserves the stock OS4 material.
             if (options.glassEnabled) append("glass_enabled=1\n")
             if (options.glassEnabled) {

@@ -92,6 +92,7 @@ class SettingsMetaTest {
         val expected = setOf(
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
             launcher450IconSizeSpec.key,
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.BIG_FOLDER_ENABLED.name(),
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.ENABLED.name(),
         ) + gridDimensionSpecs.map { it.key }
         assertEquals(expected, rows.map { it.key }.toSet())
