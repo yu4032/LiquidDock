@@ -20,8 +20,12 @@
 
 static volatile int g_folder_grid_cols __attribute__((used));
 static volatile int g_folder_grid_rows __attribute__((used));
+static volatile uint32_t g_folder_col_field_off __attribute__((used));
 
 static void *g_orig_folder_grid_cols __attribute__((used));
+static void *g_orig_folder_cal_grid_width __attribute__((used));
+static void *g_orig_folder_cal_grid_height __attribute__((used));
+static void *g_orig_folder_build_scrollable_grid __attribute__((used));
 static void *g_orig_folder_q18_max_rows __attribute__((used));
 static void *g_orig_folder_phone_max_rows __attribute__((used));
 static void *g_orig_folder_viewport_height __attribute__((used));
@@ -33,6 +37,32 @@ static const uint32_t ld_pat_folder_grid_cols[] = {
     0xaa0003e1u, 0x14000002u, 0xaa0003e1u, 0xb84e7022u, 0x8b1c8042u, 0xf27c005fu,
     0x9a9f07e0u, 0xd1000400u, 0x927f0000u, 0x91001800u, 0xaa1d03efu, 0xa8c179fdu,
     0xd65f03c0u
+};
+
+/* FolderGridViewGetxController.calGridWidth: index 5 is ldr x0, [x0, #field_off] */
+static const uint32_t ld_pat_folder_cal_grid_width[] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10041efu, 0xf81f83a1u, 0xf9403f40u, 0xf9542000u,
+    0xf9402370u, 0x6b10001fu, 0x54000081u, 0x91403762u, 0xf9420c42u, 0x944c3440u,
+    0xf85f83a1u, 0xf81f03a0u, 0x97fffdacu, 0xf85f03a1u, 0x93417c30u, 0x1e620201u,
+    0x1e610802u, 0xf85f83a2u, 0xfc443040u, 0x93417c23u, 0xd1000461u, 0x9e620021u,
+    0x1e610803u, 0x1e632840u, 0xfc053040u, 0xaa1603e0u, 0xaa1d03efu, 0xa8c179fdu,
+    0xd65f03c0u
+};
+
+/* FolderGridViewGetxController.calGridHeight entry */
+static const uint32_t ld_pat_folder_cal_grid_height[] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10181efu, 0xf81f83a1u, 0xd2800041u, 0x944c3e17u,
+    0xaa0003e2u, 0xf85f83a0u, 0xf81f03a2u, 0xb800f040u, 0xb841f001u, 0x8b1c8021u,
+    0xf9402370u, 0x6b10003fu, 0x54005f40u, 0x97ffed01u, 0xf81e83a0u, 0xf9403f41u,
+    0xf953e021u, 0x6b16003fu, 0x540001a1u, 0xf9403f40u, 0xf94e9800u, 0xf9402370u
+};
+
+/* FolderGridView._buildScrollableGrid entry */
+static const uint32_t ld_pat_folder_build_scrollable_grid[] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu, 0xaa0103e0u, 0xaa0203e1u, 0xf81f83a2u,
+    0xd2800021u, 0x941f0d6cu, 0xf85f83a1u, 0xf81e83a0u, 0xb800f001u, 0xb84bb023u,
+    0x8b1c8063u, 0xf81f03a3u, 0x6b16007fu, 0x540018c0u, 0x940000fdu, 0xf81e03a0u,
+    0xf9403f40u, 0xf9542000u, 0xf9402370u, 0x6b10001fu, 0x54000081u, 0x91403762u
 };
 
 static const uint32_t ld_pat_folder_q18_clamp[] = {
@@ -57,6 +87,33 @@ static const uint32_t ld_pat_folder_viewport_height[] = {
     0xf85f83a0u, 0xfc5f03a1u, 0xfc4cf002u, 0x4ee2f420u, 0xaa1d03efu, 0xa8c179fdu,
     0xd65f03c0u
 };
+
+#define LD_DEFINE_SYNC_FOLDER_COL_HOOK(fn_name, orig_var)                       \
+    __attribute__((naked, used)) static void fn_name(void) {                   \
+        __asm__ volatile(                                                      \
+            "adrp x16, g_folder_grid_cols\n"                                   \
+            "ldr w17, [x16, :lo12:g_folder_grid_cols]\n"                      \
+            "cmp w17, #2\n"                                                    \
+            "b.lt 1f\n"                                                        \
+            "adrp x16, g_folder_col_field_off\n"                               \
+            "ldr w16, [x16, :lo12:g_folder_col_field_off]\n"                  \
+            "cbz w16, 1f\n"                                                    \
+            "ldr x17, [x26, #0x78]\n"                                          \
+            "cbz x17, 1f\n"                                                    \
+            "add x16, x17, x16\n"                                              \
+            "adrp x17, g_folder_grid_cols\n"                                   \
+            "ldr w17, [x17, :lo12:g_folder_grid_cols]\n"                      \
+            "lsl x17, x17, #1\n"                                               \
+            "str x17, [x16]\n"                                                 \
+            "1: adrp x16, " #orig_var "\n"                                     \
+            "ldr x16, [x16, :lo12:" #orig_var "]\n"                            \
+            "br x16\n"                                                         \
+        );                                                                     \
+    }
+
+LD_DEFINE_SYNC_FOLDER_COL_HOOK(repl_folder_sync_cal_grid_width, g_orig_folder_cal_grid_width)
+LD_DEFINE_SYNC_FOLDER_COL_HOOK(repl_folder_sync_cal_grid_height, g_orig_folder_cal_grid_height)
+LD_DEFINE_SYNC_FOLDER_COL_HOOK(repl_folder_sync_build_scrollable_grid, g_orig_folder_build_scrollable_grid)
 
 __attribute__((naked, used)) static void repl_folder_grid_cols(void) {
     __asm__ volatile(
@@ -138,11 +195,40 @@ static void ld_folder_grid_install(const struct native_api *api, const ld_lib_in
     installed = true;
 
     int ok = 0;
-    if (cols > 0 && !g_orig_folder_grid_cols) {
-        uintptr_t site = ld_find_aot_pattern(lib, 0x92c104u, ld_pat_folder_grid_cols,
-                                             sizeof ld_pat_folder_grid_cols / sizeof(uint32_t));
-        if (ld_install_folder_site(api, site, (void *)repl_folder_grid_cols,
-                                   &g_orig_folder_grid_cols, "folderGridViewCol")) ok++;
+    if (cols > 0) {
+        if (!g_orig_folder_grid_cols) {
+            uintptr_t site = ld_find_aot_pattern(lib, 0x92c104u, ld_pat_folder_grid_cols,
+                                                 sizeof ld_pat_folder_grid_cols / sizeof(uint32_t));
+            if (ld_install_folder_site(api, site, (void *)repl_folder_grid_cols,
+                                       &g_orig_folder_grid_cols, "folderGridViewCol")) ok++;
+        }
+        if (!g_orig_folder_cal_grid_width) {
+            uintptr_t site = ld_find_aot_pattern(lib, 0x932cc8u, ld_pat_folder_cal_grid_width,
+                                                 sizeof ld_pat_folder_cal_grid_width / sizeof(uint32_t));
+            if (site) {
+                uint32_t insn4 = ((const uint32_t *)site)[4];
+                uint32_t insn5 = ((const uint32_t *)site)[5];
+                if (insn4 == 0xf9403f40u && (insn5 & 0xffc003ffu) == 0xf9400000u) {
+                    uint32_t field_off = ((insn5 >> 10) & 0xfffu) << 3;
+                    __atomic_store_n(&g_folder_col_field_off, field_off, __ATOMIC_RELEASE);
+                    ld_blog("OS4 folder grid resolved col_field_off=0x%x", field_off);
+                }
+                if (ld_install_folder_site(api, site, (void *)repl_folder_sync_cal_grid_width,
+                                           &g_orig_folder_cal_grid_width, "calGridWidth.sync")) ok++;
+            }
+        }
+        if (!g_orig_folder_cal_grid_height && g_folder_col_field_off) {
+            uintptr_t site = ld_find_aot_pattern(lib, 0x931344u, ld_pat_folder_cal_grid_height,
+                                                 sizeof ld_pat_folder_cal_grid_height / sizeof(uint32_t));
+            if (ld_install_folder_site(api, site, (void *)repl_folder_sync_cal_grid_height,
+                                       &g_orig_folder_cal_grid_height, "calGridHeight.sync")) ok++;
+        }
+        if (!g_orig_folder_build_scrollable_grid && g_folder_col_field_off) {
+            uintptr_t site = ld_find_aot_pattern(lib, 0x147d5e8u, ld_pat_folder_build_scrollable_grid,
+                                                 sizeof ld_pat_folder_build_scrollable_grid / sizeof(uint32_t));
+            if (ld_install_folder_site(api, site, (void *)repl_folder_sync_build_scrollable_grid,
+                                       &g_orig_folder_build_scrollable_grid, "_buildScrollableGrid.sync")) ok++;
+        }
     }
     if (rows > 0) {
         if (!g_orig_folder_q18_max_rows) {
