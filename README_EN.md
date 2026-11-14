@@ -1,4 +1,4 @@
-# LiquidDock
+# LiquidDock4
 
 <p align="center">
   <a href="./README.md">简体中文</a> · <strong>English</strong>
@@ -10,7 +10,10 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/yu4032/LiquidDock"></a>
 </p>
 
-LiquidDock is an LSPosed module for HyperOS 3 tablets. It lets you customize the home screen, Dock, and Recents, and brings Liquid Glass styling to the launcher, system UI, and selected third-party apps.
+LiquidDock is an LSPosed module for **HyperOS 3 / HyperOS 4 (LiquidDock4)** tablets. It lets you customize the home screen, Dock, and Recents, and brings Liquid Glass and Soft Glass styling to the launcher, system UI, and selected third-party apps.
+
+- **HyperOS 4 (`v3.0.0` / `main`)**: Provides native-layer (`libliquiddock4.so`) injection for the `hyos_spawner` (Flutter/Dart + Rust AOT) launcher alongside independent-process LSPosed hooks.
+- **HyperOS 3 (legacy launcher)**: Continues to support `com.miui.home release-4.50.x.x` (the archived legacy release is also available on the [`archive/2.7.9`](https://github.com/yu4032/LiquidDock/tree/archive/2.7.9) branch).
 
 <details>
 <summary><strong>Screenshots</strong></summary>
@@ -64,7 +67,23 @@ LiquidDock is an LSPosed module for HyperOS 3 tablets. It lets you customize the
 
 ## Main features
 
-### Liquid Glass
+### HyperOS 4 (OS4) Support Status
+
+On HyperOS 4, System Launcher (`com.miui.home`) runs on a Flutter/Dart + Rust runtime without an ART VM. LiquidDock4 combines native injection with independent-process hooks to support:
+
+- **OS4 Native Soft Glass**: Overrides the launcher's native soft-glass parameters (edge band width, reflection offset, reflection strength, dark-area fill light, and directional light angles/intensities), plus icon glass materials, adaptive icon corner-radius scaling with rotation sync, and `os4:` MAML widget material overrides.
+- **Home Grid & Orientation Layout**: Supports custom grid rows/columns, layout DB repacking, and independent landscape/portrait spacing and margins (with fixed tablet orientation detection).
+- **Widget Width Policy**: Supports horizontal offset adjustments while preserving the stock native widget width when the horizontal offset is unmodified.
+- **Dock & Divider**: Supports Dock geometry/position, Recents background testing, and divider rendering configuration.
+- **Independent-Process Liquid Glass**: Split-screen/handle menus, Security Center sidebars, System Search, system gesture/animation integration, and Gboard remain supported.
+- **Operations & Safety**: Includes the **Settings UI Glass Effect** toggle under **Theme Palette**, Hook Health banners, Module Logs page, native config sync on boot and before launcher restarts, and **automatic crash-loop safe mode** (disables all hooks if Launcher restarts 8 times within 20 seconds).
+
+**Features not yet at parity with legacy HyperOS 3:**
+- In-launcher Liquid Glass components and per-component edges (icons, widgets, folders, shortcut popups, dialogs — handled on OS4 via native Soft Glass instead);
+- Dock behavior & recent-app blacklist, Workstation mode, and Launcher Highlights;
+- Native Android `RemoteViews` node scanning/hiding, forced widget-to-icon-grid scaling toggle, and breaking the landscape Dock background height visual cap (~`86.2dp`).
+
+### Liquid Glass (Independent processes & legacy launcher)
 
 With the LiquidDock and Liquid Glass master switches enabled, LiquidDock can add a consistent glass appearance to the following surfaces. Icons, widgets, folders, Recents buttons, and other integrations also require their own feature switches:
 
@@ -188,7 +207,7 @@ An optional **Hide gesture handle on Home/Recents** setting (off by default) hid
 
 The settings app uses MIUIX and Prismal styling with feature-based groups. **Pull down on any of the four top-level pages to search** for tint, solid fill, corners, folders, grid, outlines, and shadows, then navigate to the corresponding settings cell. Sliders support live dragging, numeric entry, plus/minus, and reset actions; the bottom glass capsule supports swipe navigation.
 
-The **iOS Glass Effect** switch controls the settings app's appearance. The Restart Scopes dialog supports scrolling and multiple selections, independently of the desktop glass switches.
+The **Settings UI Glass Effect** switch under **Theme Palette** controls the settings app's appearance. The Restart Scopes dialog supports scrolling and multiple selections, independently of the desktop glass switches.
 
 The settings app supports:
 
@@ -203,31 +222,35 @@ New installations load the built-in defaults; upgrades retain saved user setting
 
 Compatibility:
 
-| Item | Current range |
-| --- | --- |
-| HyperOS | HyperOS 3 tablet builds (3.0.307 and newer); HyperOS 4 integration is developed on a separate branch |
-| System Launcher | `com.miui.home` release-4.50.x.x |
-| LSPosed | A version supporting libxposed API 102 |
+| Item | Minimum / Supported Range | Verified Device Environment |
+| --- | --- | --- |
+| HyperOS | **HyperOS 4 (OS4)**; also compatible with **HyperOS 3 tablet builds (3.0.307+)** | `OS4.0` (`OS4.0.3.0.XAOCNXM`) |
+| Android | Android 13+ (`minSdk = 33`) | `Android 17` (SDK `37`) |
+| Architecture | `arm64-v8a` (16KB page-aligned for OS4 native lib) | `arm64-v8a` |
+| System Launcher (`com.miui.home`) | • **OS4**: Flutter/Dart + Rust AOT launcher<br>• **OS3**: `release-4.50.x.x` | Verified on 3 OS4 builds:<br>• `RELEASE-8.01.02.8583-260918-10161026-R`<br>• `RELEASE-8.01.02.8602-260918-10261905-R`<br>• `RELEASE-8.01.02.9239-261013-11081915-R` |
+| LSPosed | A version supporting libxposed API 102 | `v2.2.1 (7912)` |
+| Zygisk / Root | Zygisk Next + Root (`su`, for launcher restart & native config sync) | Zygisk Next `1.5.3 (880)` (KernelSU) |
 
-Updates to System Launcher, SystemUI, Security Center, Gboard, or System Search may require the corresponding integration to be adapted again.
+> Note: Functionality has been verified on the three OS4 System Launcher builds listed above; other builds may work in theory but are not guaranteed. Updates to System Launcher, SystemUI, Security Center, Gboard, or System Search may require the corresponding integration to be adapted again.
 
 ## Installation
 
 1. Download the latest APK from [GitHub Releases](https://github.com/yu4032/LiquidDock/releases).
-2. Install it and enable LiquidDock in LSPosed.
+2. Install it and enable LiquidDock4 in LSPosed.
 3. Select the scopes you need:
 
 | Scope | Purpose |
 | --- | --- |
-| `com.miui.home` | Required: core home-screen, Dock, Recents, folder, and widget features |
-| `com.android.systemui` | Required: desktop transitions and optional app-top-menu glass |
-| `com.miui.securitycenter` | Only needed for Security Center sidebars and gestures |
-| `com.google.android.inputmethod.latin` | Only needed for Gboard integration |
-| `com.android.quicksearchbox` | Only needed for MIUI System Search glass |
-| `system` (System Framework) | Only needed for the optional wallpaper GPU rendering switch; reboot the device after enabling |
+| `com.miui.home` | Required: OS4 grid, Dock, divider, Soft Glass, and MAML widgets |
+| `com.android.systemui` | Optional: desktop transitions, app top menus, and gesture bar integration |
+| `com.miui.securitycenter` | Optional: Security Center sidebars and gestures |
+| `com.google.android.inputmethod.latin` | Optional: Gboard floating-keyboard integration |
+| `com.android.quicksearchbox` | Optional: System Search glass |
 
 4. Restart the relevant processes, or reboot the device.
-5. Open LiquidDock and enable or adjust the features you want.
+5. Open LiquidDock4 and enable or adjust the features you want.
+
+> **Safe Mode Note**: If System Launcher restarts (crashes) 8 times within 20 seconds, the module automatically enters Safe Mode and disables all hooks so the launcher remains usable; you can exit Safe Mode from inside the module app. If you ever clear System Launcher's app data, open LiquidDock4 and tap **Restart Launcher** to re-push the native configuration.
 
 Most glass appearance parameters update immediately when their hooks are already loaded. Structural layout changes, newly enabled integrations, and some hook installation options still require restarting Launcher, SystemUI, or the relevant app. Use **Restart Scopes** in the settings app to select the processes to restart.
 

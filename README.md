@@ -1,4 +1,4 @@
-# LiquidDock
+# LiquidDock4
 
 <p align="center">
   <strong>简体中文</strong> · <a href="./README_EN.md">English</a>
@@ -10,7 +10,10 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/yu4032/LiquidDock"></a>
 </p>
 
-LiquidDock 是一个面向 HyperOS 3 平板体验的 LSPosed 模块，用来调整桌面布局、Dock、多任务界面，并把液态玻璃效果应用到桌面、系统界面和部分第三方应用。
+LiquidDock 是一个面向 **HyperOS 3 / HyperOS 4（LiquidDock4）** 平板体验的 LSPosed 模块，用来调整桌面布局、Dock、多任务界面，并把液态玻璃与柔光玻璃效果应用到桌面、系统界面和部分第三方应用。
+
+- **HyperOS 4（`v3.0.0` / `main`）**：针对基于 `hyos_spawner`（Flutter/Dart + Rust AOT）的新版系统桌面提供原生层（`libliquiddock4.so`）注入与独立进程 LSPosed Hook 协同适配。
+- **HyperOS 3（旧版桌面）**：继续支持 `com.miui.home release-4.50.x.x`（完整旧版归档亦见 [`archive/2.7.9`](https://github.com/yu4032/LiquidDock/tree/archive/2.7.9) 分支）。
 <p align="center">
 <strong>桌面总览</strong><br />
 <a href="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6"><img width="640" alt="桌面总览" src="https://github.com/user-attachments/assets/cca03437-d897-45ed-adcc-149d07f1c7f6" /></a>
@@ -63,7 +66,23 @@ LiquidDock 是一个面向 HyperOS 3 平板体验的 LSPosed 模块，用来调�
 
 ## 主要功能
 
-### 液态玻璃
+### HyperOS 4（OS4）支持现状
+
+在 HyperOS 4 上，系统桌面（`com.miui.home`）运行在无 ART 虚拟机的 Flutter/Dart + Rust 运行时中，LiquidDock4 通过原生注入与独立进程 Hook 提供以下能力：
+
+- **OS4 原生柔光玻璃**：接管系统桌面原生柔光玻璃参数（边缘带宽度、反射偏移、反射强度、暗部补光、方向光角度与强度），支持桌面图标玻璃材质、圆角自适应缩放与横竖屏旋转同步，以及 `os4:` MAML 小组件材质控制。
+- **桌面网格与横竖屏布局**：支持自由网格行列数、布局数据库重排、横竖屏独立间距/边距调整（修复平板横竖屏方向判定）。
+- **小组件宽度策略**：支持水平偏移调整；未修改水平偏移时沿用系统原生小组件宽度。
+- **Dock 与分割线**：支持 Dock 几何尺寸/位置、多任务背景测试及分割线绘制配置。
+- **独立进程液态玻璃**：分屏/手柄菜单、安全中心侧边栏、系统搜索框、系统动画联动及 Gboard 等独立进程适配保持可用。
+- **运维与安全保护**：提供「主题配色」内的设置界面 iOS 液态玻璃开关、Hook 健康状态横幅、模块日志页、开机与重启桌面前的原生配置同步，以及**20 秒内连续崩溃 8 次自动熔断安全模式**。
+
+**对比旧版（HyperOS 3）尚未一致的功能：**
+- 桌面内组件级液态玻璃与独立边缘（图标/小组件/文件夹/快捷菜单/对话框，桌面侧改由 OS4 原生柔光玻璃接管）；
+- Dock 行为与近期应用黑名单、工作台模式全套、桌面高亮推荐卡片；
+- 原生 Android `RemoteViews` 小组件节点扫描与隐藏、小组件强制网格缩放开关、平板横屏 Dock 背景视觉高度上限突破（当前约 `86.2dp`）。
+
+### 液态玻璃（独立进程与旧版桌面）
 
 开启 LiquidDock 和液态玻璃总开关后，可以为以下界面加入统一的液态玻璃效果；图标、小组件、文件夹、多任务按钮和各类扩展界面还需开启对应功能：
 
@@ -186,7 +205,7 @@ Gboard 支持悬浮键盘和工具栏玻璃，可独立设置染色、底色、�
 
 设置界面采用 MIUIX + Prismal 风格，设置项按功能分组。**四个根页面支持下拉搜索**，可以查找染色、底色、圆角、文件夹、网格、描边与阴影等具体参数，并定位到所属 Cell。滑块支持实时拖动、直接输入、加减与重置；底部玻璃胶囊支持滑动切换页面。
 
-可以通过「IOS玻璃效果」开关调整设置界面自身的外观；重启作用域对话框支持滚动和多选，不影响桌面玻璃功能的独立开关。
+可以在「主题配色」中通过「设置界面玻璃效果」开关调整设置界面自身的外观；重启作用域对话框支持滚动和多选，不影响桌面玻璃功能的独立开关。
 
 设置页支持：
 
@@ -201,31 +220,35 @@ Gboard 支持悬浮键盘和工具栏玻璃，可独立设置染色、底色、�
 
 兼容环境：
 
-| 项目 | 当前范围 |
-| --- | --- |
-| HyperOS | HyperOS 3 平板版本（3.0.307 及以上）；HyperOS 4 适配在独立分支开发 |
-| 系统桌面 | `com.miui.home` release-4.50.x.x |
-| LSPosed | 支持 libxposed API 102 的版本 |
+| 项目 | 最低要求 / 适配范围 | 实机验证环境 |
+| --- | --- | --- |
+| HyperOS 版本 | **HyperOS 4（OS4）**；同时兼容 **HyperOS 3 平板版本（3.0.307 及以上）** | `OS4.0`（`OS4.0.3.0.XAOCNXM`） |
+| 安卓版本 | Android 13 及以上（`minSdk = 33`） | `Android 17`（SDK `37`） |
+| 硬件架构 | `arm64-v8a`（OS4 原生库支持 16KB 页面对齐） | `arm64-v8a` |
+| 系统桌面（`com.miui.home`） | • **OS4**：Flutter/Dart + Rust AOT 桌面<br>• **OS3**：`release-4.50.x.x` | OS4 已测试通过以下三个版本：<br>• `RELEASE-8.01.02.8583-260918-10161026-R`<br>• `RELEASE-8.01.02.8602-260918-10261905-R`<br>• `RELEASE-8.01.02.9239-261013-11081915-R` |
+| LSPosed | 支持 libxposed API 102 的版本 | `v2.2.1 (7912)` |
+| Zygisk / Root | Zygisk Next + Root（`su`，用于重启桌面与原生配置同步） | Zygisk Next `1.5.3 (880)`（KernelSU） |
 
-系统桌面、SystemUI、安全中心、Gboard 或系统搜索更新后，对应功能可能需要重新适配。
+> 附注：已在上述三个系统桌面版本测试功能通过；其他桌面版本是否可用不能保证，但理论可行。系统桌面、SystemUI、安全中心、Gboard 或系统搜索更新后，对应功能可能需要重新适配。
 
 ## 安装
 
 1. 从 [GitHub Releases](https://github.com/yu4032/LiquidDock/releases) 下载最新 APK。
-2. 安装后在 LSPosed 中启用 LiquidDock。
+2. 安装后在 LSPosed 中启用 LiquidDock4。
 3. 根据需要勾选作用域：
 
 | 作用域 | 用途 |
 | --- | --- |
-| `com.miui.home` | 必选：桌面、Dock、多任务、文件夹、小组件等核心功能 |
-| `com.android.systemui` | 必选：桌面转场，以及可选的应用顶部菜单玻璃 |
-| `com.miui.securitycenter` | 仅安全中心侧边栏玻璃和手势需要 |
-| `com.google.android.inputmethod.latin` | 仅 Gboard 适配需要 |
-| `com.android.quicksearchbox` | 仅 MIUI 系统搜索玻璃需要 |
-| `system`（System Framework） | 仅可选的壁纸 GPU 渲染开关需要，启用后重启设备 |
+| `com.miui.home` | 必选：OS4 桌面网格、Dock、分割线、柔光玻璃与 MAML 小组件 |
+| `com.android.systemui` | 按需：桌面转场、分屏/手柄菜单与系统手势联动 |
+| `com.miui.securitycenter` | 按需：安全中心侧边栏玻璃与手势 |
+| `com.google.android.inputmethod.latin` | 按需：Gboard 悬浮键盘适配 |
+| `com.android.quicksearchbox` | 按需：系统搜索框玻璃 |
 
 4. 重启对应进程，或直接重启设备。
-5. 打开 LiquidDock，根据需要开启和调整功能。
+5. 打开 LiquidDock4，根据需要开启和调整功能。
+
+> **安全模式提示**：若系统桌面在 20 秒内连续启动（崩溃）达 8 次，模块会自动进入安全模式并禁用全部 Hook，确保桌面可正常恢复使用；可在模块 App 内手动退出安全模式。若清空过系统桌面数据，请打开模块 App 点击「重启系统桌面」重新下发原生配置。
 
 多数已加载 Hook 的玻璃外观参数可即时更新；结构性布局、首次启用的适配以及少数 Hook 安装选项仍需重启桌面、系统界面或对应应用。可在设置界面通过「重启作用域」勾选需要刷新的进程。
 
