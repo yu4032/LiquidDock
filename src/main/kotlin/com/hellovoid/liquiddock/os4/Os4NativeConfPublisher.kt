@@ -25,6 +25,12 @@ object Os4NativeConfPublisher {
         if (grid && (gridCols !in 2..10 || gridRows !in 2..10)) return null
         if (options.iconSizePercent !in 80..120) return null
         if (Os4NativeGlassOptions.configLines(options.glassNativeOverrides) == null) return null
+        if (Os4NativeGlassOptions.configLines(options.glassDockOverrides, "glass_native_dock_") == null) return null
+        if (Os4NativeGlassOptions.configLines(options.glassIconOverrides, "glass_native_icon_") == null) return null
+        if (Os4NativeGlassOptions.configLines(options.glassWidgetOverrides, "glass_native_widget_") == null) return null
+        if (Os4NativeGlassOptions.configLines(options.glassLargeFolderOverrides, "glass_native_large_folder_") == null) return null
+        if (options.glassEnabled && options.glassLargeFolder &&
+            (!options.glassLargeFolderCorner.isFinite() || options.glassLargeFolderCorner !in 0.0..128.0)) return null
         if (grid && (!options.landscape.isValid() || !options.portrait.isValid())) return null
         if (options.dock.enabled && !options.dock.isValid()) return null
         if (options.divider.enabled && !options.divider.isValid()) return null
@@ -47,6 +53,16 @@ object Os4NativeConfPublisher {
                 Os4NativeGlassOptions.configLines(options.glassNativeOverrides)!!.forEach {
                     append(it).append('\n')
                 }
+                listOf(
+                    "glass_native_dock_" to options.glassDockOverrides,
+                    "glass_native_icon_" to options.glassIconOverrides,
+                    "glass_native_widget_" to options.glassWidgetOverrides,
+                    "glass_native_large_folder_" to options.glassLargeFolderOverrides,
+                ).forEach { (prefix, scoped) ->
+                    Os4NativeGlassOptions.configLines(scoped, prefix)!!.forEach {
+                        append(it).append('\n')
+                    }
+                }
             }
             if (options.glassEnabled && options.glassIcons) {
                 append("glass_icons=1\n")
@@ -54,6 +70,12 @@ object Os4NativeConfPublisher {
                 append("glass_icon_corner=").append(options.glassIconCorner).append('\n')
             }
             if (options.glassEnabled && options.glassWidgets) append("glass_widgets=1\n")
+            if (options.glassEnabled) {
+                append("large_folder_glass=").append(if (options.glassLargeFolder) 1 else 0).append('\n')
+                append("large_folder_corner=").append(options.glassLargeFolderCorner).append('\n')
+                append("large_folder_native_outline=")
+                    .append(if (options.glassLargeFolderNativeOutline) 1 else 0).append('\n')
+            }
             if (options.widgetOverrides) append("widget_overrides=1\n")
             append("icon_size_percent=").append(options.iconSizePercent).append('\n')
             if (grid) {

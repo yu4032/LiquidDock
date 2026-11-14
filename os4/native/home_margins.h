@@ -176,9 +176,12 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     if (landscape < 0 || cols <= 0 || rows <= 0) return (void *)cfg;
     double cell_w_now = 0;
     __builtin_memcpy(&cell_w_now, (const void *)(cfg + 0x2b), sizeof cell_w_now);
-    if ((n % 500u) == 0u)
+    static int last_land = -1, last_cols = -1, last_rows = -1;
+    if (landscape != last_land || cols != last_cols || rows != last_rows) {
+        last_land = landscape; last_cols = cols; last_rows = rows;
         ld_blog("home margin orient land=%d cols=%d rows=%d note=%d cellW=%.2f",
                 landscape, cols, rows, note ? 1 : 0, cell_w_now);
+    }
 
     const struct ld_grid_offsets *o = landscape ? &g_home_options.landscape : &g_home_options.portrait;
     double dh = o->horizontal;

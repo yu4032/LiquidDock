@@ -167,6 +167,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "glass_filter.h"
 #include "glass_filter_fingerprints.h"
 #include "glass_filter_hook.h"
+#include "glass_scope.h"
 static void *g_orig_home_pipeline;
 __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_context *c)
 {
@@ -942,6 +943,22 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
     uintptr_t sysb_rt = common_rt ? (common_rt + 0x2c0u) : 0;
     uintptr_t sysa_rt = sysb_rt ? ld_find_sysa(lib, sysb_rt) : 0;
 
+    if (sysb_rt && !g_scope_build_folder_glass) {
+        g_scope_sysa_start = sysa_rt;
+        g_scope_sysa_end = sysa_rt ? sysa_rt + 0x300u : 0;
+        g_scope_sysb_start = sysb_rt;
+        g_scope_sysb_end = sysb_rt + 0x300u;
+        uintptr_t bfg_closure = sysb_rt + 0x1a8u;
+        if (executable_range(bfg_closure, 0x60)) {
+            uint32_t bl_raw = *(volatile uint32_t *)(bfg_closure + 0x5cu);
+            if ((bl_raw & 0xfc000000u) == 0x94000000u) {
+                int32_t imm26 = (int32_t)(bl_raw & 0x03ffffffu);
+                if (imm26 & 0x02000000) imm26 |= (int32_t)0xfc000000;
+                g_scope_build_folder_glass = (bfg_closure + 0x5cu) + ((uintptr_t)imm26 << 2);
+            }
+        }
+    }
+
     if (!body_rt || !common_rt || !sysb_rt || !sysa_rt) {
         ld_blog("icon glass: core functions unavailable: bdi=%p wrap=%p common=%p body=%p sysb=%p sysa=%p",
                 (void *)bdi_rt, (void *)wrap_rt, (void *)common_rt, (void *)body_rt, (void *)sysb_rt, (void *)sysa_rt);
@@ -1089,6 +1106,11 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             int32_t imm26 = (int32_t)(bl_raw & 0x03ffffffu);
             if (imm26 & 0x02000000) imm26 |= (int32_t)0xfc000000;
             uintptr_t build_folder_glass = (closure + 0x5cu) + ((uintptr_t)imm26 << 2);
+            g_scope_sysa_start = sysa_rt;
+            g_scope_sysa_end = sysa_rt ? sysa_rt + 0x300u : 0;
+            g_scope_sysb_start = sysb_rt;
+            g_scope_sysb_end = sysb_rt ? sysb_rt + 0x300u : 0;
+            if (!g_scope_build_folder_glass) g_scope_build_folder_glass = build_folder_glass;
 
             struct {
                 uintptr_t site;
@@ -1304,6 +1326,23 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         int status = api->hook((void *)site, home_hooks[i].replace, home_hooks[i].orig);
         if (status == 0 && *home_hooks[i].orig) pin_installed_hook(site);
         ld_blog("home options observer %lx installed at %p result=%d", (unsigned long)home_hooks[i].site, (void *)site, status);
+    }
+    if (g_home_options.glass_enabled && !g_glass_scope_installed) {
+        uintptr_t v7_entry = ld_find_aot_pattern(&lib, LD_GLASS_FILTER_START,
+                ld_glass_filter_words, sizeof ld_glass_filter_words / sizeof(uint32_t));
+        uintptr_t dock_light_start = 0, dock_light_end = 0;
+        uintptr_t dock_dark_start = 0, dock_dark_end = 0;
+        if (g_home_options.glass_observers_present) {
+            if (ld_vaddr_to_runtime(&lib, (uintptr_t)g_home_options.glass_obs_vaddr[0], &dock_light_start)) {
+                dock_light_end = dock_light_start + (uintptr_t)g_home_options.glass_obs_size[0];
+            }
+            if (ld_vaddr_to_runtime(&lib, (uintptr_t)g_home_options.glass_obs_vaddr[1], &dock_dark_start)) {
+                dock_dark_end = dock_dark_start + (uintptr_t)g_home_options.glass_obs_size[1];
+            }
+        }
+        ld_glass_scope_install(api, &lib, v7_entry, g_scope_build_folder_glass,
+                g_scope_sysa_start, g_scope_sysb_start,
+                dock_light_start, dock_light_end, dock_dark_start, dock_dark_end);
     }
     if(!g_grid_cols || !g_grid_rows) return;
     void *site = (void *)(entry + 0x80);

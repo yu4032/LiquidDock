@@ -48,7 +48,7 @@
 #include "native_glass_schema.h"
 #include "divider_conf.h"
 
-#define LD_GRID_CONF_MAX_BYTES 8192
+#define LD_GRID_CONF_MAX_BYTES 16384
 #define LD_GRID_LINE_MAX       1024  /* 含 LF；支持多目标列表如 widget_resize_targets */
 
 #define LD_GRID_COLS_MIN 2            /* 与 app 层 ConfigSchema.Grid.COLUMNS 一致 */
@@ -73,8 +73,10 @@ struct ld_grid_conf {
     struct ld_dock_conf dock;
     int glass_enabled;
     int glass_icons, glass_widgets, widget_overrides;
-    double glass_icon_size, glass_icon_corner;
+    int large_folder_glass, large_folder_native_outline;
+    double glass_icon_size, glass_icon_corner, large_folder_corner;
     struct ld_native_glass_options native_glass;
+    struct ld_native_glass_options scoped_glass[LD_GLASS_SCOPE_COUNT];
     int glass_targets_present;
     int hook_safety_enabled;
     uint64_t glass_vaddr[3];
@@ -257,6 +259,8 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                            bit4=grid_cols bit5=grid_rows bit6=end */
     uint32_t divider_seen = 0;   /* 分隔线字段查重（定义见 divider_conf.h） */
     int ok = 0;
+    c.large_folder_glass = 1;
+    c.large_folder_native_outline = 1;
 
     // A binary NUL could make strcmp/strchr accept only a prefix of an
     // otherwise invalid line. The config is a strict LF-delimited text protocol.
@@ -481,12 +485,33 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         bad = 1; break;
                     }
                     seen |= bit;
+                } else if (strcmp(key, "large_folder_glass") == 0 ||
+                           strcmp(key, "large_folder_native_outline") == 0) {
+                    int value;
+                    if (!ld_grid_parse_bool01(val, &value)) { bad = 1; break; }
+                    if (key[13] == 'g') c.large_folder_glass = value;
+                    else c.large_folder_native_outline = value;
+                } else if (strcmp(key, "large_folder_corner") == 0) {
+                    if (!ld_grid_parse_bounded_decimal(val, 0, 128, &c.large_folder_corner)) {
+                        bad = 1; break;
+                    }
                 } else if (strncmp(key,"glass_native_",13)==0) {
+                    const char *sub = key + 13;
+                    struct ld_native_glass_options *dst = &c.native_glass;
+                    if (strncmp(sub, "dock_", 5) == 0) {
+                        dst = &c.scoped_glass[LD_GLASS_SCOPE_DOCK]; sub += 5;
+                    } else if (strncmp(sub, "icon_", 5) == 0) {
+                        dst = &c.scoped_glass[LD_GLASS_SCOPE_ICON]; sub += 5;
+                    } else if (strncmp(sub, "widget_", 7) == 0) {
+                        dst = &c.scoped_glass[LD_GLASS_SCOPE_WIDGET]; sub += 7;
+                    } else if (strncmp(sub, "large_folder_", 13) == 0) {
+                        dst = &c.scoped_glass[LD_GLASS_SCOPE_LARGE_FOLDER]; sub += 13;
+                    }
                     unsigned index=0;
-                    while(index<LD_NATIVE_GLASS_COUNT && strcmp(key+13,ld_native_glass_fields[index].name)) index++;
-                    if(index==LD_NATIVE_GLASS_COUNT || (c.native_glass.mask&(1ull<<index)) ||
-                        !ld_grid_parse_plain_decimal(val,ld_native_glass_fields[index].min,ld_native_glass_fields[index].max,&c.native_glass.values[index])) {bad=1;break;}
-                    c.native_glass.mask|=1ull<<index;
+                    while(index<LD_NATIVE_GLASS_COUNT && strcmp(sub,ld_native_glass_fields[index].name)) index++;
+                    if(index==LD_NATIVE_GLASS_COUNT || (dst->mask&(1ull<<index)) ||
+                        !ld_grid_parse_plain_decimal(val,ld_native_glass_fields[index].min,ld_native_glass_fields[index].max,&dst->values[index])) {bad=1;break;}
+                    dst->mask|=1ull<<index;
                 } else if (strncmp(key, "dock_divider_", 13) == 0) {
                     /* 分隔线字段由 divider_conf.h 集中定义并校验：字段名精确匹配、
                      * 值为纯整数、落在该字段上下限内（y_offset 可为负）、同一字段不得重复。

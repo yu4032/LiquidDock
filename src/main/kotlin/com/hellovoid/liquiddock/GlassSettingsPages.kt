@@ -62,7 +62,19 @@ internal fun SoftGlassPage(
                 ) { liquidGlass = it }
             }
         }
+        item { ModernSectionLabel("全局基准") }
         softGlassEntries.forEach { entry ->
+            item {
+                ModernFeatureCard(
+                    title = stringResource(entry.titleRes),
+                    summary = entry.summary,
+                    onClick = { open(entry.page) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+            }
+        }
+        item { ModernSectionLabel("分组件独立调节") }
+        softGlassScopeEntries.forEach { entry ->
             item {
                 ModernFeatureCard(
                     title = stringResource(entry.titleRes),
@@ -154,8 +166,8 @@ internal fun SoftGlassComponentsPage(
         item(key = "soft-widgets-maml") {
             SettingsCard {
                 ArrowPreference(
-                    title = "已载入的 MAML 小组件组件管理",
-                    summary = "按精确节点隐藏 MAML 内容；背景隐藏随小组件玻璃开关恢复，其他节点的隐藏规则独立生效。",
+                    title = stringResource(R.string.widget_components_entry),
+                    summary = "扫描并按节点隐藏小组件（MAML 与 RemoteViews）内部背景或元素；背景规则随小组件玻璃开关同步恢复。",
                     enabled = true,
                     onClick = { open(Page.WidgetComponents) },
                 )
@@ -575,6 +587,14 @@ internal fun GlassFoldersPage(
                     "大文件夹玻璃", "独立控制大文件夹材质",
                     masterEnabled && liquidEnabled,
                 ) { largeFolderGlass = it }
+                ModernListDivider()
+                top.yukonga.miuix.kmp.basic.BasicComponent(
+                    title = "大文件夹玻璃参数",
+                    summary = "跟随全局基准或独立调节折射、色彩与光影",
+                    enabled = masterEnabled && liquidEnabled && largeFolderGlass,
+                    insideMargin = ModernPreferenceMargin,
+                    onClick = { open(Page.SoftGlassLargeFolder) },
+                )
             }
         }
         item(key = FolderGlassCell.LARGE_GEOMETRY.id) {

@@ -31,6 +31,10 @@ internal enum class Page(val titleRes: Int) {
     SoftGlassColor(R.string.page_soft_glass_color),
     SoftGlassLighting(R.string.page_soft_glass_lighting),
     SoftGlassComponents(R.string.page_soft_glass_components),
+    SoftGlassDock(R.string.page_soft_glass_dock),
+    SoftGlassIcons(R.string.page_soft_glass_icons),
+    SoftGlassWidgets(R.string.page_soft_glass_widgets),
+    SoftGlassLargeFolder(R.string.page_soft_glass_large_folder),
     Liquid(R.string.page_liquid),
     LiquidMaterial(R.string.page_liquid_material),
     LiquidColor(R.string.page_liquid_color),
@@ -139,6 +143,13 @@ internal val softGlassEntries = listOf(
     HubEntry(Page.SoftGlassMaterial, R.string.page_soft_glass_material, "边缘宽度、厚度、折射率与反射偏移"),
     HubEntry(Page.SoftGlassColor, R.string.page_soft_glass_color, "颜色、透明度、背景模糊与亮度曲线"),
     HubEntry(Page.SoftGlassLighting, R.string.page_soft_glass_lighting, "光源方向、主光强度与环境反射"),
+)
+
+internal val softGlassScopeEntries = listOf(
+    HubEntry(Page.SoftGlassDock, R.string.page_soft_glass_dock, "跟随全局基准或独立调节 Dock 栏玻璃"),
+    HubEntry(Page.SoftGlassIcons, R.string.page_soft_glass_icons, "跟随全局基准或独立调节图标玻璃"),
+    HubEntry(Page.SoftGlassWidgets, R.string.page_soft_glass_widgets, "跟随全局基准或独立调节小组件玻璃"),
+    HubEntry(Page.SoftGlassLargeFolder, R.string.page_soft_glass_large_folder, "跟随全局基准或独立调节大文件夹玻璃"),
 )
 
 internal val liquidEntries = listOf(

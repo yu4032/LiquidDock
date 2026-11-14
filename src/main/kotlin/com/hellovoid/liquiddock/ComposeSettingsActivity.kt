@@ -423,6 +423,34 @@ private fun LiquidDockSettings(
                     Page.Workstation -> WorkstationPage(padding, prefs, masterEnabled, ::navigateTo)
 
                     Page.SoftGlass -> SoftGlassPage(padding, prefs, masterEnabled, ::navigateTo)
+                    Page.SoftGlassDock -> SoftGlassScopedPage(
+                        padding, prefs, masterEnabled,
+                        title = stringResource(R.string.page_soft_glass_dock),
+                        summary = "仅作用于 Dock 栏原生柔光玻璃；可应用全局基准或独立调节。",
+                        customKey = ConfigSchema.Glass.OS4_DOCK_GLASS_CUSTOM,
+                        overridesKey = ConfigSchema.Glass.OS4_DOCK_GLASS_OVERRIDES,
+                    )
+                    Page.SoftGlassIcons -> SoftGlassScopedPage(
+                        padding, prefs, masterEnabled,
+                        title = stringResource(R.string.page_soft_glass_icons),
+                        summary = "仅作用于桌面图标原生柔光玻璃；可应用全局基准或独立调节。",
+                        customKey = ConfigSchema.Glass.OS4_ICON_GLASS_CUSTOM,
+                        overridesKey = ConfigSchema.Glass.OS4_ICON_GLASS_OVERRIDES,
+                    )
+                    Page.SoftGlassWidgets -> SoftGlassScopedPage(
+                        padding, prefs, masterEnabled,
+                        title = stringResource(R.string.page_soft_glass_widgets),
+                        summary = "仅作用于桌面小组件原生柔光玻璃；可应用全局基准或独立调节。",
+                        customKey = ConfigSchema.Glass.OS4_WIDGET_GLASS_CUSTOM,
+                        overridesKey = ConfigSchema.Glass.OS4_WIDGET_GLASS_OVERRIDES,
+                    )
+                    Page.SoftGlassLargeFolder -> SoftGlassScopedPage(
+                        padding, prefs, masterEnabled,
+                        title = stringResource(R.string.page_soft_glass_large_folder),
+                        summary = "仅作用于桌面大文件夹原生柔光玻璃；可应用全局基准或独立调节。",
+                        customKey = ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_CUSTOM,
+                        overridesKey = ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_OVERRIDES,
+                    )
                     Page.SoftGlassComponents -> SoftGlassComponentsPage(
                         padding, prefs, masterEnabled, ::navigateTo,
                         searchFocusKey?.takeIf { searchFocusPage == Page.SoftGlassComponents.name }

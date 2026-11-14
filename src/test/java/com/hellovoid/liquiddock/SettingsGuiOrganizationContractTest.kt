@@ -23,6 +23,7 @@ class SettingsGuiOrganizationContractTest {
         Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub, Page.ThemePalette,
         Page.Grid, Page.GridBasics, Page.Dock, Page.DockRecentBlacklist,
         Page.Divider, Page.Workstation, Page.SoftGlass, Page.SoftGlassComponents,
+        Page.SoftGlassDock, Page.SoftGlassIcons, Page.SoftGlassWidgets, Page.SoftGlassLargeFolder,
         Page.Liquid, Page.SidebarEdge,
         Page.GlassComponents, Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
         Page.HandleMenuCustomization, Page.HandleMenuAll,

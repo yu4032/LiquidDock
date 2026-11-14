@@ -50,7 +50,10 @@ static void *g_orig_w1x1_ws_on_init __attribute__((used));
 static bool g_w1x1_menu_installed;
 
 static volatile uintptr_t g_w1x1_last_widget;
+static volatile int g_w1x1_last_valid;
+static volatile int g_w1x1_last_is_1x1;
 static volatile uintptr_t g_w1x1_ws_ctrl;
+static volatile uint32_t g_w1x1_ws_ctrl_cid;
 static volatile uint32_t g_w1x1_size_adapt_cid;
 static volatile uint32_t g_w1x1_stock_title_comp;
 static uint32_t g_w1x1_app_widget_cid = 0x877;
@@ -348,7 +351,10 @@ __attribute__((used)) static int ld_w1x1_on_is_valid(struct ld_dart_context *c)
     uint32_t cid = ld_dart_cid(item);
     if (cid) g_w1x1_size_adapt_cid = cid;
     if (widget && (widget & 1) && widget != c->x[22]) {
+        int is_1x1 = 0;
         g_w1x1_last_widget = widget;
+        g_w1x1_last_valid = ld_w1x1_is_toggle_target(c, widget, &is_1x1);
+        g_w1x1_last_is_1x1 = is_1x1;
     }
     return 0;
 }
@@ -358,9 +364,12 @@ __attribute__((used)) static int ld_w1x1_on_support(struct ld_dart_context *c)
 {
     if (!g_home_options.widget_1x1_to_2x2_enabled) return 0;
     uintptr_t widget = c->x[2];
-    int match = ld_w1x1_is_toggle_target(c, widget, NULL);
+    int is_1x1 = 0;
+    int match = ld_w1x1_is_toggle_target(c, widget, &is_1x1);
     if (match) {
         g_w1x1_last_widget = widget;
+        g_w1x1_last_valid = 1;
+        g_w1x1_last_is_1x1 = is_1x1;
         c->x[0] = c->x[22] + 0x20; /* Dart TRUE */
         return 1;
     }
@@ -389,7 +398,10 @@ __attribute__((used)) static int ld_w1x1_on_title(struct ld_dart_context *c)
     uint32_t cid = ld_dart_cid(item);
     if (!cid || cid != g_w1x1_size_adapt_cid) return 0;
     int is_1x1 = 0;
-    if (!ld_w1x1_is_toggle_target(c, g_w1x1_last_widget, &is_1x1)) return 0;
+    if (!ld_w1x1_is_toggle_target(c, g_w1x1_last_widget, &is_1x1)) {
+        if (!g_w1x1_last_valid) return 0;
+        is_1x1 = g_w1x1_last_is_1x1;
+    }
 
     if (g_orig_w1x1_title) {
         uint64_t args[8] = { 0, c->x[1], c->x[2], 0, 0, 0, 0, 0 };
@@ -414,7 +426,10 @@ __attribute__((used)) static int ld_w1x1_on_menu_item_build(struct ld_dart_conte
     uint32_t title_comp = ld_heap_u32(widget, 0xf);
     if (title_comp != g_w1x1_stock_title_comp) return 0;
     int is_1x1 = 0;
-    if (!ld_w1x1_is_toggle_target(c, g_w1x1_last_widget, &is_1x1)) return 0;
+    if (!ld_w1x1_is_toggle_target(c, g_w1x1_last_widget, &is_1x1)) {
+        if (!g_w1x1_last_valid) return 0;
+        is_1x1 = g_w1x1_last_is_1x1;
+    }
     uintptr_t s = ld_w1x1_make_dart_string(c, is_1x1);
     if (s && (s & 1)) {
         uint32_t s_comp = (uint32_t)(s & 0xFFFFFFFFu);
@@ -428,6 +443,7 @@ __attribute__((used)) static int ld_w1x1_on_ws_init(struct ld_dart_context *c)
 {
     if (c->x[1] && (c->x[1] & 1) && c->x[1] != c->x[22]) {
         g_w1x1_ws_ctrl = c->x[1];
+        g_w1x1_ws_ctrl_cid = ld_dart_cid(c->x[1]);
     }
     return 0;
 }
@@ -442,8 +458,11 @@ __attribute__((used)) static int ld_w1x1_on_item_click(struct ld_dart_context *c
     uintptr_t widget = item ? ld_heap_pointer(c, item, 0x23) : 0;
     int is_1x1 = 0;
     if (!ld_w1x1_is_toggle_target(c, widget, &is_1x1)) return 0;
-    if (!g_w1x1_ws_ctrl || !g_w1x1_rt[LD_W1X1_I_ON_ITEM_CLICK]) {
-        ld_blog("widget 1x1 onItemClick: ws_ctrl=%#lx missing", (unsigned long)g_w1x1_ws_ctrl);
+    uintptr_t ws_ctrl = g_w1x1_ws_ctrl;
+    if (!ws_ctrl || !g_w1x1_rt[LD_W1X1_I_ON_ITEM_CLICK] ||
+        (g_w1x1_ws_ctrl_cid && ld_dart_cid(ws_ctrl) != g_w1x1_ws_ctrl_cid)) {
+        ld_blog("widget 1x1 onItemClick: ws_ctrl=%#lx invalid (cid=%u)",
+                (unsigned long)ws_ctrl, (unsigned)g_w1x1_ws_ctrl_cid);
         return 0;
     }
 
@@ -636,11 +655,18 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
 
 __attribute__((used)) static int ld_w1x1_on_drop(struct ld_dart_context *c)
 {
+    uintptr_t ws_ctrl = c->x[1];
+    if (ws_ctrl && (ws_ctrl & 1) && ws_ctrl != c->x[22]) {
+        uint32_t cid = ld_dart_cid(ws_ctrl);
+        if (cid && (!g_w1x1_ws_ctrl_cid || cid == g_w1x1_ws_ctrl_cid)) {
+            g_w1x1_ws_ctrl = ws_ctrl;
+            g_w1x1_ws_ctrl_cid = cid;
+        }
+    }
     if (!g_home_options.widget_1x1_to_2x2_enabled) return 0;
     /* Only intercept when invoked from popup menu (fromMenu == TRUE: !(x3 & 0x10)) */
     if (c->x[3] & 0x10u) return 0;
 
-    uintptr_t ws_ctrl = c->x[1];
     uintptr_t widget = c->x[2];
     int is_1x1 = 0;
     if (!ld_w1x1_is_toggle_target(c, widget, &is_1x1)) return 0;

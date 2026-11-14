@@ -99,7 +99,10 @@ object Os4NativeGlassOptions {
             .joinToString(";") { field -> "${field.id}:${format(overrides.getValue(field.id))}" }
     }
 
-    fun configLines(overrides: Map<String, Double>): List<String>? {
+    fun configLines(
+        overrides: Map<String, Double>,
+        keyPrefix: String = "glass_native_",
+    ): List<String>? {
         if (overrides.any { (id, value) ->
                 val field = byId[id]
                 field == null || !value.isFinite() || value !in field.min..field.max
@@ -107,7 +110,7 @@ object Os4NativeGlassOptions {
         ) return null
         return fields.asSequence()
             .filter { it.id in overrides }
-            .map { "glass_native_${it.id}=${format(overrides.getValue(it.id))}" }
+            .map { "${keyPrefix}${it.id}=${format(overrides.getValue(it.id))}" }
             .toList()
     }
 

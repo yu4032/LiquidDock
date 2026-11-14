@@ -60,8 +60,15 @@ data class Os4MainScreenOptions(
     val divider: Os4DividerOptions = Os4DividerOptions(),
     val glassEnabled: Boolean = false,
     val glassNativeOverrides: Map<String, Double> = emptyMap(),
+    val glassDockOverrides: Map<String, Double> = emptyMap(),
+    val glassIconOverrides: Map<String, Double> = emptyMap(),
+    val glassWidgetOverrides: Map<String, Double> = emptyMap(),
+    val glassLargeFolderOverrides: Map<String, Double> = emptyMap(),
     val glassIcons: Boolean = false,
     val glassWidgets: Boolean = false,
+    val glassLargeFolder: Boolean = true,
+    val glassLargeFolderCorner: Double = 0.0,
+    val glassLargeFolderNativeOutline: Boolean = true,
     val widgetOverrides: Boolean = false,
     val hookSafetyEnabled: Boolean = false,
     val glassIconSize: Double = 0.0,
@@ -97,10 +104,23 @@ data class Os4MainScreenOptions(
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Glass.ENABLED.name())
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
+            add(ConfigSchema.Glass.OS4_DOCK_GLASS_CUSTOM.name())
+            add(ConfigSchema.Glass.OS4_DOCK_GLASS_OVERRIDES.name())
+            add(ConfigSchema.Glass.OS4_ICON_GLASS_CUSTOM.name())
+            add(ConfigSchema.Glass.OS4_ICON_GLASS_OVERRIDES.name())
+            add(ConfigSchema.Glass.OS4_WIDGET_GLASS_CUSTOM.name())
+            add(ConfigSchema.Glass.OS4_WIDGET_GLASS_OVERRIDES.name())
+            add(ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_CUSTOM.name())
+            add(ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_OVERRIDES.name())
             add(ConfigSchema.Glass.ICON_GLASS.name())
             add(ConfigSchema.Glass.WIDGET_GLASS.name())
-            listOf(ConfigSchema.Glass.ICON_SIZE_OFFSET, ConfigSchema.Glass.ICON_CORNER_RADIUS)
-                .forEach { add(it.name()); add("${it.name()}_tenths") }
+            add(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name())
+            add(ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE.name())
+            listOf(
+                ConfigSchema.Glass.ICON_SIZE_OFFSET,
+                ConfigSchema.Glass.ICON_CORNER_RADIUS,
+                ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS,
+            ).forEach { add(it.name()); add("${it.name()}_tenths") }
             add(WidgetComponentStore.SELECTION_KEY)
             add(ConfigSchema.Dock.ENABLED.name())
             dockKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
@@ -150,11 +170,35 @@ data class Os4MainScreenOptions(
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
                 val glassIcons = glassEnabled && boolean(ConfigSchema.Glass.ICON_GLASS)
                 val glassWidgets = glassEnabled && boolean(ConfigSchema.Glass.WIDGET_GLASS)
+                val glassLargeFolder = !glassEnabled || boolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS)
+                val glassLargeFolderNativeOutline = boolean(ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE)
                 val widgetOverrides = selectedOs4MamlWidget(values[WidgetComponentStore.SELECTION_KEY])
                 val nativeGlassOverrides = if (glassEnabled) {
                     Os4NativeGlassOptions.parse(string(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES))
                         ?: return null
                 } else emptyMap()
+                fun scopedOverrides(
+                    customKey: ConfigKey<Boolean>,
+                    overridesKey: ConfigKey<String>,
+                ): Map<String, Double>? = if (glassEnabled && boolean(customKey)) {
+                    Os4NativeGlassOptions.parse(string(overridesKey))
+                } else emptyMap()
+                val dockGlassOverrides = scopedOverrides(
+                    ConfigSchema.Glass.OS4_DOCK_GLASS_CUSTOM,
+                    ConfigSchema.Glass.OS4_DOCK_GLASS_OVERRIDES,
+                ) ?: return null
+                val iconGlassOverrides = scopedOverrides(
+                    ConfigSchema.Glass.OS4_ICON_GLASS_CUSTOM,
+                    ConfigSchema.Glass.OS4_ICON_GLASS_OVERRIDES,
+                ) ?: return null
+                val widgetGlassOverrides = scopedOverrides(
+                    ConfigSchema.Glass.OS4_WIDGET_GLASS_CUSTOM,
+                    ConfigSchema.Glass.OS4_WIDGET_GLASS_OVERRIDES,
+                ) ?: return null
+                val largeFolderGlassOverrides = scopedOverrides(
+                    ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_CUSTOM,
+                    ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_OVERRIDES,
+                ) ?: return null
                 val recentsBlurPercent = integer(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT)
                 if (!grid && !icons && !bigFolder && !dockEnabled && !dividerEnabled && !glassEnabled &&
                     !widgetOverrides && recentsBlurPercent == 100) ""
@@ -194,8 +238,17 @@ data class Os4MainScreenOptions(
                             ),
                             glassEnabled = glassEnabled,
                             glassNativeOverrides = nativeGlassOverrides,
+                            glassDockOverrides = dockGlassOverrides,
+                            glassIconOverrides = iconGlassOverrides,
+                            glassWidgetOverrides = widgetGlassOverrides,
+                            glassLargeFolderOverrides = largeFolderGlassOverrides,
                             glassIcons = glassIcons,
                             glassWidgets = glassWidgets,
+                            glassLargeFolder = glassLargeFolder,
+                            glassLargeFolderCorner = if (glassEnabled && glassLargeFolder) {
+                                dp(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS)
+                            } else 0.0,
+                            glassLargeFolderNativeOutline = glassLargeFolderNativeOutline,
                             widgetOverrides = widgetOverrides,
                             hookSafetyEnabled = boolean(ConfigSchema.Grid.NATIVE_HOOK_SAFETY),
                             glassIconSize = if (glassIcons) dp(ConfigSchema.Glass.ICON_SIZE_OFFSET) else 0.0,

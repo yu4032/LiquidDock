@@ -54,6 +54,8 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.Divider,
             Page.SoftGlass, Page.SoftGlassMaterial,
             Page.SoftGlassColor, Page.SoftGlassLighting,
+            Page.SoftGlassDock, Page.SoftGlassIcons,
+            Page.SoftGlassWidgets, Page.SoftGlassLargeFolder,
             Page.SoftGlassComponents, Page.WidgetComponents,
             Page.Recents,
         )

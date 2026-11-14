@@ -7,6 +7,7 @@
 #include "native_glass_fingerprints.h"
 static void *g_orig_glass_filter __attribute__((used));
 static int g_native_glass_engine_ready;
+static __thread int g_ld_active_glass_scope;
 static void ld_prepare_native_glass(void)
 {
     static const unsigned char expected[32]={0x77,0xa3,0x90,0x1d,0x9d,0xf4,0x1d,0x0d,0x7d,0xb4,0x1a,0x09,0x25,0x0e,0xa1,0x62,0x70,0x52,0x22,0x5b,0xf8,0x66,0x1d,0x0c,0x99,0x2d,0x4d,0x66,0x8c,0xc1,0x5e,0x2b};
@@ -26,7 +27,15 @@ static int ld_native_glass_write(const uintptr_t *addresses,const float *values,
 }
 __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context *c)
 {
-    if(!g_hook_pin_ok || !g_home_options.glass_enabled || !g_native_glass_engine_ready || !g_home_options.native_glass.mask) return;
+    int scope = g_ld_active_glass_scope;
+    g_ld_active_glass_scope = LD_GLASS_SCOPE_GLOBAL;
+    if(!g_hook_pin_ok || !g_home_options.glass_enabled || !g_native_glass_engine_ready) return;
+    const struct ld_native_glass_options *opts = &g_home_options.native_glass;
+    if(scope > LD_GLASS_SCOPE_GLOBAL && scope < LD_GLASS_SCOPE_COUNT
+            && g_home_options.scoped_glass[scope].mask) {
+        opts = &g_home_options.scoped_glass[scope];
+    }
+    if(!opts->mask) return;
     int strict=g_home_options.hook_safety_enabled;
     uintptr_t holder=0,filter=0,vt=0;
     if(!ld_read_heap(c->x[29]-0x70,&holder,8) || !ld_read_heap(holder+0x30,&filter,8) || !ld_read_heap(filter,&vt,8)) return;
@@ -40,7 +49,7 @@ __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context
         if(!ld_read_heap(base+LD_NATIVE_GLASS_ENGINE_VADDR,live,sizeof live) || memcmp(live,ld_native_glass_engine_words,sizeof live)) return;
         __atomic_store_n(&verified_base,base,__ATOMIC_RELEASE);
     }
-    int result=ld_native_glass_apply(filter,&g_home_options.native_glass,ld_read_heap,ld_native_glass_write);
+    int result=ld_native_glass_apply(filter,opts,ld_read_heap,ld_native_glass_write);
     static unsigned reported;
     if(__atomic_fetch_add(&reported,1u,__ATOMIC_RELAXED)<3)ld_blog("native glass configured fields=%d",result);
 }

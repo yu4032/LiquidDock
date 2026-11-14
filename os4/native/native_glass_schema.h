@@ -48,4 +48,13 @@ static const struct ld_native_glass_field ld_native_glass_fields[LD_NATIVE_GLASS
     {"burn",0xf8,0,0,0.1,8.0},
 };
 struct ld_native_glass_options {uint64_t mask; double values[LD_NATIVE_GLASS_COUNT];};
+enum ld_glass_scope {
+    LD_GLASS_SCOPE_GLOBAL = 0,
+    LD_GLASS_SCOPE_DOCK = 1,
+    LD_GLASS_SCOPE_LARGE_FOLDER = 2,
+    LD_GLASS_SCOPE_WIDGET = 3,
+    LD_GLASS_SCOPE_ICON = 4,
+    LD_GLASS_SCOPE_RECENTS = 5,
+    LD_GLASS_SCOPE_COUNT = 6,
+};
 #endif

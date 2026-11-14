@@ -513,6 +513,22 @@ public final class ConfigSchema {
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<String> OS4_NATIVE_OVERRIDES = string(
                 "liquid_os4_native_overrides", "", "", "", ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> OS4_DOCK_GLASS_CUSTOM = bool(
+                "liquid_os4_dock_glass_custom", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<String> OS4_DOCK_GLASS_OVERRIDES = string(
+                "liquid_os4_dock_glass_overrides", "", "", "", ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> OS4_ICON_GLASS_CUSTOM = bool(
+                "liquid_os4_icon_glass_custom", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<String> OS4_ICON_GLASS_OVERRIDES = string(
+                "liquid_os4_icon_glass_overrides", "", "", "", ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> OS4_WIDGET_GLASS_CUSTOM = bool(
+                "liquid_os4_widget_glass_custom", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<String> OS4_WIDGET_GLASS_OVERRIDES = string(
+                "liquid_os4_widget_glass_overrides", "", "", "", ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> OS4_LARGE_FOLDER_GLASS_CUSTOM = bool(
+                "liquid_os4_large_folder_glass_custom", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<String> OS4_LARGE_FOLDER_GLASS_OVERRIDES = string(
+                "liquid_os4_large_folder_glass_overrides", "", "", "", ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_X = integer(
                 "liquid_prismal_light_dir_x", -50, -50, 100, -200, 200, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> PRISMAL_LIGHT_DIR_Y = integer(
@@ -925,6 +941,10 @@ public final class ConfigSchema {
                 Glass.OS4_DIRECTIONAL_ANGLE_RANGE, Glass.OS4_DIRECTIONAL_INTENSITY,
                 Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY,
                 Glass.OS4_NATIVE_OVERRIDES,
+                Glass.OS4_DOCK_GLASS_CUSTOM, Glass.OS4_DOCK_GLASS_OVERRIDES,
+                Glass.OS4_ICON_GLASS_CUSTOM, Glass.OS4_ICON_GLASS_OVERRIDES,
+                Glass.OS4_WIDGET_GLASS_CUSTOM, Glass.OS4_WIDGET_GLASS_OVERRIDES,
+                Glass.OS4_LARGE_FOLDER_GLASS_CUSTOM, Glass.OS4_LARGE_FOLDER_GLASS_OVERRIDES,
                 Glass.PRISMAL_LIGHT_DIR_X, Glass.PRISMAL_LIGHT_DIR_Y,
                 Glass.PRISMAL_SHADOW_RED, Glass.PRISMAL_SHADOW_GREEN,
                 Glass.PRISMAL_SHADOW_BLUE, Glass.PRISMAL_SHADOW_ALPHA,

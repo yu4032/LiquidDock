@@ -27,6 +27,10 @@
     <string name="page_soft_glass_color">色彩与背景</string>
     <string name="page_soft_glass_lighting">光照与反射</string>
     <string name="page_soft_glass_components">柔光玻璃组件</string>
+    <string name="page_soft_glass_dock">Dock 栏玻璃参数</string>
+    <string name="page_soft_glass_icons">桌面图标玻璃参数</string>
+    <string name="page_soft_glass_widgets">小组件玻璃参数</string>
+    <string name="page_soft_glass_large_folder">大文件夹玻璃参数</string>
     <string name="page_security_center_sidebar">安全中心侧边栏</string>
     <string name="security_center_sidebar_header_summary">集中管理 Launcher 侧滑呼出与安全中心侧边栏材质；需要重新加载时，在右上角“重启作用域”中选择桌面与安全中心。</string>
     <string name="security_center_sidebar_category_gesture">侧滑呼出</string>

@@ -36,14 +36,15 @@ internal fun LazyListScope.os4NativeGlassSettings(
     prefs: SharedPreferences,
     enabled: Boolean,
     sections: List<Pair<String, List<String>>>,
+    overrideKey: String = ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name(),
 ) {
     val byId = Os4NativeGlassOptions.fields.associateBy(Os4NativeGlassOptions.Field::id)
     sections.forEach { (title, ids) ->
         val fields = ids.mapNotNull(byId::get)
         if (fields.isEmpty()) return@forEach
-        item(key = "os4-native-glass-title:$title") { SmallTitle(title) }
-        items(fields, key = Os4NativeGlassOptions.Field::id) { field ->
-            Os4NativeGlassFieldSetting(prefs, field, enabled)
+        item(key = "os4-native-glass-title:$overrideKey:$title") { SmallTitle(title) }
+        items(fields, key = { "${overrideKey}:${it.id}" }) { field ->
+            Os4NativeGlassFieldSetting(prefs, field, enabled, overrideKey)
         }
     }
 }
@@ -53,8 +54,9 @@ private fun Os4NativeGlassFieldSetting(
     prefs: SharedPreferences,
     field: Os4NativeGlassOptions.Field,
     enabled: Boolean,
+    overrideKey: String = ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name(),
 ) {
-    val key = ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name()
+    val key = overrideKey
     val revision = LocalSettingsPreferenceRevisions.current[key] ?: 0
     var overrides by remember(key, revision) {
         mutableStateOf(
@@ -171,4 +173,83 @@ private fun Os4NativeGlassFieldSetting(
             editing = false
         },
     )
+}
+
+@Composable
+internal fun SoftGlassScopedPage(
+    padding: PaddingValues,
+    prefs: SharedPreferences,
+    masterEnabled: Boolean,
+    title: String,
+    summary: String,
+    customKey: com.hellovoid.liquiddock.config.ConfigKey<Boolean>,
+    overridesKey: com.hellovoid.liquiddock.config.ConfigKey<String>,
+) {
+    val glassRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
+    val glassEnabled = remember(glassRevision) {
+        prefs.getBoolean(
+            ConfigSchema.Glass.ENABLED.name(),
+            ConfigSchema.Glass.ENABLED.uiDefault(),
+        )
+    }
+    val customRevision = LocalSettingsPreferenceRevisions.current[customKey.name()] ?: 0
+    var customEnabled by remember(customKey.name(), customRevision) {
+        mutableStateOf(prefs.getBoolean(customKey.name(), customKey.uiDefault()))
+    }
+    val allSections = remember {
+        buildList {
+            liquidNativeSections[Page.SoftGlassMaterial]?.let(::addAll)
+            liquidNativeSections[Page.SoftGlassColor]?.let(::addAll)
+            liquidNativeSections[Page.SoftGlassLighting]?.let(::addAll)
+        }
+    }
+    val active = masterEnabled && glassEnabled
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 28.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item(key = "scoped-header") {
+            PageHeader(title, summary)
+        }
+        item(key = "scoped-controls") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs = prefs,
+                    config = customKey,
+                    title = "独立调节参数",
+                    summary = "关闭时跟随最外部柔光玻璃全局基准；开启后独立调整该组件参数。",
+                    enabled = active,
+                ) { customEnabled = it }
+                ModernListDivider()
+                BasicComponent(
+                    title = "应用全局设置",
+                    summary = "将最外部柔光玻璃的当前参数复制到此组件（重启桌面生效）",
+                    enabled = active,
+                    insideMargin = ModernPreferenceMargin,
+                    onClick = {
+                        val globalRaw = prefs.getString(
+                            ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name(),
+                            "",
+                        ).orEmpty()
+                        prefs.edit()
+                            .putString(overridesKey.name(), globalRaw)
+                            .putBoolean(customKey.name(), true)
+                            .apply()
+                        customEnabled = true
+                    },
+                )
+            }
+        }
+        os4NativeGlassSettings(
+            prefs = prefs,
+            enabled = active && customEnabled,
+            sections = allSections,
+            overrideKey = overridesKey.name(),
+        )
+    }
 }

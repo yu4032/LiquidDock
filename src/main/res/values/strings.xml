@@ -27,6 +27,10 @@
     <string name="page_soft_glass_color">Color &amp; background</string>
     <string name="page_soft_glass_lighting">Lighting &amp; reflection</string>
     <string name="page_soft_glass_components">Soft-light glass components</string>
+    <string name="page_soft_glass_dock">Dock glass parameters</string>
+    <string name="page_soft_glass_icons">Icon glass parameters</string>
+    <string name="page_soft_glass_widgets">Widget glass parameters</string>
+    <string name="page_soft_glass_large_folder">Large folder glass parameters</string>
     <string name="page_security_center_sidebar">Security Center sidebar</string>
     <string name="security_center_sidebar_header_summary">Manage Launcher side-slide behavior and Security Center sidebar material; when a reload is required, use Restart scopes and select Desktop and Security Center.</string>
     <string name="security_center_sidebar_category_gesture">Side-slide launch</string>
