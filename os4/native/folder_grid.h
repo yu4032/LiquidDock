@@ -186,7 +186,7 @@ static bool ld_resolve_folder_sym(const ld_lib_info *lib, size_t idx, ld_folder_
     if (!lib || !out || !g_home_options.folder_grid_targets_present || idx >= 5) return false;
     uint64_t vaddr = g_home_options.folder_grid_vaddr[idx];
     size_t size = g_home_options.folder_grid_size[idx];
-    if (!vaddr || size < 16u) return false;
+    if (!vaddr || size < 64u) return false;
     uintptr_t rt = 0;
     if (!ld_vaddr_to_runtime(lib, (uintptr_t)vaddr, &rt) || !executable_range(rt, size)) return false;
     const uint32_t *w = (const uint32_t *)rt;
@@ -233,6 +233,10 @@ static uintptr_t ld_resolve_folder_entry(const ld_lib_info *lib, size_t sym_idx,
         if (via_out) *via_out = "sym-fail";
         return 0;
     }
+    if (g_aot_strict_no_short_fallback) {
+        if (via_out) *via_out = "strict-no-sym";
+        return 0;
+    }
     if (via_out) *via_out = "aot";
     return ld_find_aot_pattern(lib, hint_vaddr, pat, pat_words);
 }
@@ -245,11 +249,13 @@ static uintptr_t ld_resolve_folder_subsite(const ld_lib_info *lib, size_t sym_id
     if (ld_resolve_folder_sym(lib, sym_idx, &sym)) {
         base = ld_scan_within_sym(&sym, pat, pat_words);
         if (via_out) *via_out = "sym-sub";
-    } else if (!g_home_options.folder_grid_targets_present) {
+    } else if (g_home_options.folder_grid_targets_present) {
+        if (via_out) *via_out = "sym-fail";
+    } else if (g_aot_strict_no_short_fallback) {
+        if (via_out) *via_out = "strict-no-sym";
+    } else {
         base = ld_find_aot_pattern(lib, hint_vaddr, pat, pat_words);
         if (via_out) *via_out = "aot";
-    } else {
-        if (via_out) *via_out = "sym-fail";
     }
     if (base_out) *base_out = base;
     return base ? (base + add_off) : 0;
@@ -261,9 +267,12 @@ static bool ld_install_folder_site(const struct native_api *api, uintptr_t site,
         ld_blog("OS4 folder grid hook %s skipped (site=%p via=%s)", label, (void *)site, via ? via : "?");
         return false;
     }
+    if (!ld_pin_code_pages_soft(site, 16u)) {
+        ld_blog("OS4 folder grid hook %s pin failed at %p via=%s", label, (void *)site, via ? via : "?");
+        return false;
+    }
     int rc = api->hook((void *)site, repl, orig);
     if (rc == 0 && *orig) {
-        ld_pin_code_pages_soft(site, 16u);
         ld_blog("OS4 folder grid hook %s installed at %p via=%s", label, (void *)site, via ? via : "?");
         return true;
     }
@@ -273,13 +282,11 @@ static bool ld_install_folder_site(const struct native_api *api, uintptr_t site,
 
 static void ld_folder_grid_install(const struct native_api *api, const ld_lib_info *lib,
                                    int cols, int rows) {
-    __atomic_store_n(&g_folder_grid_cols, cols, __ATOMIC_RELEASE);
-    __atomic_store_n(&g_folder_grid_rows, rows, __ATOMIC_RELEASE);
-    if (!api || !api->hook || !lib || (cols <= 0 && rows <= 0)) return;
-
-    static bool installed = false;
-    if (installed) return;
-    installed = true;
+    if (!api || !api->hook || !lib || (cols <= 0 && rows <= 0)) {
+        __atomic_store_n(&g_folder_grid_cols, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_folder_grid_rows, 0, __ATOMIC_RELEASE);
+        return;
+    }
 
     int ok = 0;
     /* Resolve sym[2] (calGridHeight) before calGridHeight.sync overwrites its prologue. */
@@ -300,23 +307,28 @@ static void ld_folder_grid_install(const struct native_api *api, const ld_lib_in
             uintptr_t site = ld_resolve_folder_entry(
                 lib, 1, 0x932cc8u, ld_pat_folder_cal_grid_width,
                 sizeof ld_pat_folder_cal_grid_width / sizeof(uint32_t), &via);
-            if (site) {
+            if (site && executable_range(site, 24u)) {
                 uint32_t insn4 = ((const uint32_t *)site)[4];
                 uint32_t insn5 = ((const uint32_t *)site)[5];
                 if (insn4 == 0xf9403f40u && (insn5 & 0xffc003ffu) == 0xf9400000u) {
                     uint32_t field_off = ((insn5 >> 10) & 0xfffu) << 3;
-                    __atomic_store_n(&g_folder_col_field_off, field_off, __ATOMIC_RELEASE);
-                    ld_blog("OS4 folder grid resolved col_field_off=0x%x", field_off);
+                    if (field_off != 0) {
+                        __atomic_store_n(&g_folder_col_field_off, field_off, __ATOMIC_RELEASE);
+                        ld_blog("OS4 folder grid resolved col_field_off=0x%x", field_off);
+                        if (ld_install_folder_site(api, site, (void *)repl_folder_sync_cal_grid_width,
+                                                   &g_orig_folder_cal_grid_width, "calGridWidth.sync", via)) ok++;
+                    }
+                } else {
+                    ld_blog("OS4 folder grid calGridWidth semantic mismatch at %p (via=%s)", (void *)site, via ? via : "?");
                 }
-                if (ld_install_folder_site(api, site, (void *)repl_folder_sync_cal_grid_width,
-                                           &g_orig_folder_cal_grid_width, "calGridWidth.sync", via)) ok++;
             }
         }
         if (!g_orig_folder_cal_grid_height && g_folder_col_field_off) {
             const char *via = has_cal_height_sym ? "sym" :
-                (g_home_options.folder_grid_targets_present ? "sym-fail" : "aot");
+                (g_home_options.folder_grid_targets_present ? "sym-fail" :
+                 (g_aot_strict_no_short_fallback ? "strict-no-sym" : "aot"));
             uintptr_t site = has_cal_height_sym ? cal_height_sym.runtime :
-                (g_home_options.folder_grid_targets_present ? 0 :
+                ((g_home_options.folder_grid_targets_present || g_aot_strict_no_short_fallback) ? 0 :
                  ld_find_aot_pattern(lib, 0x931344u, ld_pat_folder_cal_grid_height,
                                      sizeof ld_pat_folder_cal_grid_height / sizeof(uint32_t)));
             if (ld_install_folder_site(api, site, (void *)repl_folder_sync_cal_grid_height,
@@ -334,11 +346,12 @@ static void ld_folder_grid_install(const struct native_api *api, const ld_lib_in
     if (rows > 0) {
         if (!g_orig_folder_q18_max_rows) {
             const char *via = has_cal_height_sym ? "sym-sub" :
-                (g_home_options.folder_grid_targets_present ? "sym-fail" : "aot");
+                (g_home_options.folder_grid_targets_present ? "sym-fail" :
+                 (g_aot_strict_no_short_fallback ? "strict-no-sym" : "aot"));
             uintptr_t base = has_cal_height_sym
                 ? ld_scan_within_sym(&cal_height_sym, ld_pat_folder_q18_clamp,
                                      sizeof ld_pat_folder_q18_clamp / sizeof(uint32_t))
-                : (g_home_options.folder_grid_targets_present ? 0 :
+                : ((g_home_options.folder_grid_targets_present || g_aot_strict_no_short_fallback) ? 0 :
                    ld_find_aot_pattern(lib, 0x931bdcu, ld_pat_folder_q18_clamp,
                                        sizeof ld_pat_folder_q18_clamp / sizeof(uint32_t)));
             uintptr_t site = base ? (base + 0x18u) : 0;
@@ -347,11 +360,12 @@ static void ld_folder_grid_install(const struct native_api *api, const ld_lib_in
         }
         if (!g_orig_folder_phone_max_rows) {
             const char *via = has_cal_height_sym ? "sym-sub" :
-                (g_home_options.folder_grid_targets_present ? "sym-fail" : "aot");
+                (g_home_options.folder_grid_targets_present ? "sym-fail" :
+                 (g_aot_strict_no_short_fallback ? "strict-no-sym" : "aot"));
             uintptr_t base = has_cal_height_sym
                 ? ld_scan_within_sym(&cal_height_sym, ld_pat_folder_phone_clamp,
                                      sizeof ld_pat_folder_phone_clamp / sizeof(uint32_t))
-                : (g_home_options.folder_grid_targets_present ? 0 :
+                : ((g_home_options.folder_grid_targets_present || g_aot_strict_no_short_fallback) ? 0 :
                    ld_find_aot_pattern(lib, 0x931938u, ld_pat_folder_phone_clamp,
                                        sizeof ld_pat_folder_phone_clamp / sizeof(uint32_t)));
             uintptr_t site = base ? (base + 0x18u) : 0;
@@ -363,7 +377,7 @@ static void ld_folder_grid_install(const struct native_api *api, const ld_lib_in
             uintptr_t site = ld_resolve_folder_subsite(
                 lib, 4, 0x147ea00u, ld_pat_folder_viewport_tail,
                 sizeof ld_pat_folder_viewport_tail / sizeof(uint32_t), 0u, NULL, &via);
-            if (!site && !g_home_options.folder_grid_targets_present) {
+            if (!site && !g_home_options.folder_grid_targets_present && !g_aot_strict_no_short_fallback) {
                 uintptr_t base = ld_find_aot_pattern(lib, 0x147ea00u, ld_pat_folder_viewport_height,
                                                      sizeof ld_pat_folder_viewport_height / sizeof(uint32_t));
                 site = base ? (base + 0x90u) : 0;
@@ -373,7 +387,16 @@ static void ld_folder_grid_install(const struct native_api *api, const ld_lib_in
                                        &g_orig_folder_viewport_height, "calGridViewportHeight", via)) ok++;
         }
     }
-    ld_blog("OS4 folder grid setup cols=%d rows=%d installed=%d", cols, rows, ok);
+
+    bool cols_ready = (cols > 0) && g_orig_folder_grid_cols && g_folder_col_field_off &&
+                      g_orig_folder_cal_grid_width && g_orig_folder_cal_grid_height &&
+                      g_orig_folder_build_scrollable_grid;
+    bool rows_ready = (rows > 0) && g_orig_folder_q18_max_rows &&
+                      g_orig_folder_phone_max_rows && g_orig_folder_viewport_height;
+    __atomic_store_n(&g_folder_grid_cols, cols_ready ? cols : 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_folder_grid_rows, rows_ready ? rows : 0, __ATOMIC_RELEASE);
+    ld_blog("OS4 folder grid setup cols=%d(ready=%d) rows=%d(ready=%d) installed=%d",
+            cols, cols_ready ? 1 : 0, rows, rows_ready ? 1 : 0, ok);
 }
 
 #endif /* LIQUIDDOCK_FOLDER_GRID_H */

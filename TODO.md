@@ -2,6 +2,9 @@
 
 ## HyperOS 4 (OS4)
 
+- [ ] **OS4 文件夹展开后居中玻璃背景绘制（对齐 v2.7.9 `FolderCling` 视觉）**
+  - **背景**：`_openFolderIconBgAnim` 是文件夹图标自身的展开动画，锚点跟随桌面图标位置而非居中容器；OS4 桌面运行在纯 Flutter（`SurfaceView` + `libhyper_os_flutter.so`）下，原生 Android View 无法插在全屏模糊（`FolderClingBlurWidget`）与文件夹图标网格（`FolderGridView`）之间。
+  - **方案**：在 `libapp.so` 中通过 `.gnu_debugdata` 符号跟踪文件夹打开/关闭状态及居中宽高（`FolderClingWidget.getFolderClingWidth`、`FolderGridViewGetxController.calGridHeight`、`FolderClingGetxController.headerHeight`），并在 `libhyper_os_flutter.so` 的 `FolderClingBlurWidget` 之后、`FolderGridView` 之前调用 `Canvas::Save` → `Canvas::ClipGeometry`（居中超椭圆）→ `Canvas::DrawHyperMaterial`（复用全局 `native_glass`）→ `Canvas::Restore`。
 - [ ] **将剩余 OS4 AOT 字节指纹（含 `GetStream.add` 等）升级为 `.gnu_debugdata` 符号解析**
   - **背景**：目前 `glass_targets`、`glass_observers`、`rv_targets` 等已通过 `Os4GlassSymbols` 从 `libapp.so` 的 `.gnu_debugdata` 符号表按函数名解析；但 `GetStream.add` 及部分 `icon_glass_fingerprints.h` / 小组件容器目标仍依赖 `ld_find_aot_pattern` 字节指纹，桌面大版本升级后可能出现多处匹配歧义或 0 匹配导致功能静默退化。
   - **方案**：将 `GetStream.add` 等剩余关键符号纳入 `Os4GlassSymbols` 符号表解析并随 `liquiddock-native.conf` 下发，AOT 字节指纹仅保留作兜底。

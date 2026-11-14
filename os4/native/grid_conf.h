@@ -121,6 +121,9 @@ struct ld_grid_conf {
     int folder_grid_targets_present;
     uint64_t folder_grid_vaddr[5];
     size_t folder_grid_size[5];
+    int getstream_add_target_present;
+    uint64_t getstream_add_vaddr;
+    size_t getstream_add_size;
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -443,6 +446,13 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.folder_grid_targets_present=1;
                     seen |= 1ull << 47;
+                } else if (strcmp(key, "getstream_add_target") == 0) {
+                    if ((seen & (1ull << 48)) ||
+                        !ld_grid_parse_aot_targets(val, &c.getstream_add_vaddr, &c.getstream_add_size, 1)) {
+                        bad=1; break;
+                    }
+                    c.getstream_add_target_present=1;
+                    seen |= 1ull << 48;
                 } else if (strcmp(key, "glass_enabled") == 0) {
                     int value;
                     if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {

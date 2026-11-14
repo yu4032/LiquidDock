@@ -54,6 +54,7 @@ internal object Os4GlassSymbols {
     )
     private const val HOME_MARGIN_CURRENT_CONFIG = "GridController.currentConfig"
     private const val FOLDER_CORNER_DRAG_TARGET = "FolderHelper.supportCornerDrag"
+    private const val GETSTREAM_ADD_TARGET = "GetStream.add"
     private val folderPadBypassTargets = listOf(
         "FolderSheetGetXController.onInit" to 512L,
         "_FolderSheetState._buildPreviewAndSelector" to 512L,
@@ -108,6 +109,7 @@ internal object Os4GlassSymbols {
         val folderPadTargets: String = "",
         val widgetResizeTargets: String = "",
         val folderGridTargets: String = "",
+        val getStreamAddTarget: String = "",
     )
     @Volatile private var cached: Pair<Pair<String, Boolean>, ResolvedTargets>? = null
 
@@ -166,6 +168,7 @@ internal object Os4GlassSymbols {
         val folderPadTargets = fromMiniElfPadBypass(mini)
         val widgetResizeTargets = fromMiniElfSymbolList(mini, widgetResizeSymbolNames)
         val folderGridTargets = fromMiniElfSymbolList(mini, folderGridSymbolNames)
+        val getStreamAddTarget = fromMiniElfSingle(mini, GETSTREAM_ADD_TARGET)
         return ResolvedTargets(
             glass,
             layoutTargets,
@@ -175,6 +178,7 @@ internal object Os4GlassSymbols {
             folderPadTargets,
             widgetResizeTargets,
             folderGridTargets,
+            getStreamAddTarget,
         )
     }
 

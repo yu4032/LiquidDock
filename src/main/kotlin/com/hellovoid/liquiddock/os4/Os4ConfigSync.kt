@@ -180,6 +180,9 @@ object Os4ConfigSync {
                     if (resolvedTargets.folderGridTargets.isNotEmpty()) {
                         append("folder_grid_targets=").append(resolvedTargets.folderGridTargets).append('\n')
                     }
+                    if (resolvedTargets.getStreamAddTarget.isNotEmpty()) {
+                        append("getstream_add_target=").append(resolvedTargets.getStreamAddTarget).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }

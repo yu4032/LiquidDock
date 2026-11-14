@@ -1019,8 +1019,24 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
     }
     if(g_icon_glass_installed && g_home_options.glass_icon_corner > 0.0 && !g_orig_icon_glass_dock_scale) {
         if (!g_getstream_add_rt) {
-            g_getstream_add_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_GETSTREAM_ADD_START,
-                    ld_pat_getstream_add, sizeof(ld_pat_getstream_add) / sizeof(ld_pat_getstream_add[0]));
+            if (g_home_options.getstream_add_target_present &&
+                g_home_options.getstream_add_vaddr &&
+                g_home_options.getstream_add_size >= 16u) {
+                uintptr_t sym_rt = 0;
+                if (ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.getstream_add_vaddr, &sym_rt) &&
+                    executable_range(sym_rt, g_home_options.getstream_add_size)) {
+                    const uint32_t *w = (const uint32_t *)sym_rt;
+                    if (w[0] == 0xa9bf79fdu && w[1] == 0xaa0f03fdu) {
+                        g_getstream_add_rt = sym_rt;
+                        ld_blog("icon glass GetStream.add resolved via sym at %p", (void *)sym_rt);
+                    }
+                }
+            }
+            if (!g_getstream_add_rt && !g_home_options.getstream_add_target_present &&
+                !g_home_options.hook_safety_enabled) {
+                g_getstream_add_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_GETSTREAM_ADD_START,
+                        ld_pat_getstream_add, sizeof(ld_pat_getstream_add) / sizeof(ld_pat_getstream_add[0]));
+            }
         }
         uintptr_t dock_scale_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_DOCK_SCALE_START,
                 ld_pat_dock_scaled_size, sizeof(ld_pat_dock_scaled_size) / sizeof(ld_pat_dock_scaled_size[0]));
@@ -1479,6 +1495,7 @@ static void ld_write_hook_status(void) {
 static void install_grid_hook(const struct native_api *api) {
     if (!api || !api->hook) return;
     pthread_mutex_lock(&g_install_lock);
+    ld_aot_set_strict(g_home_options.hook_safety_enabled);
     /* The divider needs to work when it is the sole enabled feature, and
      * must already be hooked when the user switches it on at runtime.
      * Install its two protected observers ahead of nonessential AOT hooks,
