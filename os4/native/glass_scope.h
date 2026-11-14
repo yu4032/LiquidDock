@@ -27,6 +27,7 @@ static void *g_orig_glass_widget_build_filter __attribute__((used));
 static void *g_orig_build_folder_glass __attribute__((used));
 static void *g_orig_folder_light_gate __attribute__((used));
 static void *g_orig_recents_glass_entry __attribute__((used));
+static void *g_orig_hyper_glass_build __attribute__((used));
 
 static inline void ld_glass_scope_set_pending(int scope) {
     g_ld_pending_glass_scope = scope;
@@ -103,6 +104,17 @@ __attribute__((used)) static void ld_on_recents_glass_entry(struct ld_dart_conte
     g_ld_pending_glass_scope = LD_GLASS_SCOPE_RECENTS;
 }
 
+__attribute__((used)) static void ld_on_hyper_glass_build(struct ld_dart_context *c) {
+    (void)c;
+    int scope = g_ld_widget_build_scope;
+    if (scope == LD_GLASS_SCOPE_LARGE_FOLDER || scope == LD_GLASS_SCOPE_ICON) {
+        g_ld_widget_build_scope = 0;
+        g_ld_pending_glass_scope = scope;
+    } else {
+        g_ld_pending_glass_scope = LD_GLASS_SCOPE_WIDGET;
+    }
+}
+
 __attribute__((used)) static void ld_on_build_folder_glass(struct ld_dart_context *c) {
     uintptr_t lr = (uintptr_t)c->x[30];
     int scope = LD_GLASS_SCOPE_WIDGET;
@@ -131,6 +143,13 @@ LD_DART_OBSERVER(repl_glass_widget_build_filter, ld_on_glass_widget_build_filter
 LD_DART_OBSERVER(repl_build_folder_glass, ld_on_build_folder_glass, g_orig_build_folder_glass)
 LD_DART_OBSERVER(repl_folder_light_gate, ld_on_folder_light_gate, g_orig_folder_light_gate)
 LD_DART_OBSERVER(repl_recents_glass_entry, ld_on_recents_glass_entry, g_orig_recents_glass_entry)
+LD_DART_OBSERVER(repl_hyper_glass_build, ld_on_hyper_glass_build, g_orig_hyper_glass_build)
+
+static const uint32_t ld_pat_hyper_glass_build[] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10821efu, 0xaa0103e0u, 0xf81d03a1u, 0xb840b001u,
+    0x8b1c8021u, 0x6b16003fu, 0x54002d80u, 0xfc413020u, 0xfc1a03a0u, 0xfc41b021u,
+    0xfc1a83a1u, 0xfc423025u, 0xfc1b03a5u, 0xf842b026u,
+};
 
 static const uint32_t ld_pat_glass_widget_build_filter[] = {
     0xa9bf79fdu, 0xaa0f03fdu, 0xd107e1efu, 0xaa0103e2u, 0xf81f03a1u, 0xb840b040u,
@@ -185,6 +204,7 @@ static void ld_glass_scope_install(
     }
 
     uintptr_t build_filter = ld_find_aot_pattern(lib, 0x12e8730u, ld_pat_glass_widget_build_filter, 20);
+    uintptr_t hyper_glass = ld_find_aot_pattern(lib, 0x12d148cu, ld_pat_hyper_glass_build, 16);
 
     int ok = 0;
     if (v7_entry && !g_orig_glass_v7_entry && ld_hook_site_safe(v7_entry, "glass_v7")) {
@@ -220,6 +240,12 @@ static void ld_glass_scope_install(
         if (api->hook((void *)recents, (void *)repl_recents_glass_entry, &g_orig_recents_glass_entry) == 0 &&
             g_orig_recents_glass_entry) {
             ld_pin_code_pages_soft(recents, 16);
+        }
+    }
+    if (hyper_glass && !g_orig_hyper_glass_build && ld_hook_site_safe(hyper_glass, "hyper_glass")) {
+        if (api->hook((void *)hyper_glass, (void *)repl_hyper_glass_build, &g_orig_hyper_glass_build) == 0 &&
+            g_orig_hyper_glass_build) {
+            ld_pin_code_pages_soft(hyper_glass, 16);
         }
     }
 
