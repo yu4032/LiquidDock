@@ -35,6 +35,7 @@
 #include "aot_scanner.h"
 #include "hook_page_pin.h"
 #include "rust_orientation_fingerprint.h"
+#include "rust_symbol_resolver.h"
 #include "home_options_fingerprints.h"
 #include "home_geometry_fingerprints.h"
 #include "dock_geometry_fingerprints.h"
@@ -1188,19 +1189,45 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     if (!api || !api->hook) return;
     bool strict=g_home_options.hook_safety_enabled;
     if(g_grid_cols>0 && g_grid_rows>0 && !g_orig_rust_orientation) {
-        ld_lib_info rust; uintptr_t target=0;
+        ld_lib_info rust; uintptr_t target=0; const char *source="none";
         if(ld_resolve_lib(ld_launcher_apk_substr(),"lib/arm64-v8a/libapp_launcher.so",&rust)) {
-            target = ld_find_aot_pattern(&rust, LD_RUST_ORIENTATION_VADDR,
-                                         ld_rust_orientation_words,
-                                         sizeof ld_rust_orientation_words / sizeof(uint32_t));
-            if (!target) {
-                target = ld_find_aot_pattern(&rust, LD_RUST_ORIENTATION_VADDR,
-                                             ld_rust_orientation_words, 24);
+            static const char kRustOrientPath[] =
+                "12app_launcher8launcher4data23launcher_model_internal44check_database_data_orientation_when_loading";
+            ld_rust_sym_result_t sym_res;
+            if (ld_resolve_rust_symbol(&rust, ld_launcher_apk_substr(), kRustOrientPath, &sym_res)) {
+                if (ld_verify_rust_orientation_fn(&rust, &sym_res)) {
+                    target = sym_res.runtime;
+                    source = "sym+semantic";
+                } else {
+                    ld_blog("Rust orientation symbol %p (size=%zu) failed semantic/strict check; disabling",
+                            (void *)sym_res.vaddr, sym_res.size);
+                }
+            } else if (!strict) {
+                uintptr_t pat = ld_find_aot_pattern(&rust, LD_RUST_ORIENTATION_VADDR,
+                                                    ld_rust_orientation_words,
+                                                    sizeof ld_rust_orientation_words / sizeof(uint32_t));
+                if (pat) {
+                    ld_rust_sym_result_t pat_res = {
+                        .vaddr = pat - rust.elf_base,
+                        .size = LD_RUST_ORIENTATION_SIZE,
+                        .runtime = pat,
+                        .from_debugdata = false
+                    };
+                    if (ld_verify_rust_orientation_fn(&rust, &pat_res)) {
+                        target = pat;
+                        source = "pattern+semantic";
+                    } else {
+                        ld_blog("Rust orientation pattern %p failed semantic check; disabling", (void *)pat);
+                    }
+                }
+            } else {
+                ld_blog("Rust orientation symbol unavailable in strict mode; disabling");
             }
             if(target && executable_range(target,16)) {
                 int result=api->hook((void *)target,(void *)repl_rust_orientation,(void **)&g_orig_rust_orientation);
                 if(result==0 && g_orig_rust_orientation) pin_installed_hook(target);
-                ld_blog("Rust pre-load orientation guard installed at %p result=%d", (void *)target, result);
+                ld_blog("Rust pre-load orientation guard installed at %p via %s result=%d",
+                        (void *)target, source, result);
             }
         }
     }
