@@ -64,6 +64,7 @@ internal object Os4GlassSymbols {
         "BigFolderCommonStrategy.calItemSize" to 952L,
         "FolderIconWidget._buildPreviewContainer" to 0x1200L,
         "FolderPreviewContainer._buildOriginalPreview" to 0xb00L,
+        "CellLayoutGetxController._isPadSwapMode" to 512L,
     )
     private val widgetResizeSymbolNames = listOf(
         "ValidSizeAdaptShortcutMenu.isValid",
