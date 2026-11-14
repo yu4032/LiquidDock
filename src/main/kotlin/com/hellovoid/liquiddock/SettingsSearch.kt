@@ -189,8 +189,10 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         Page.Divider -> listOf(toggle(ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线")) +
             dividerSpecs.map(::number)
         Page.MoreHub -> listOf(
-            CustomGlassSearchRow("settings_glass_effect", "设置界面玻璃效果", "开启后设置界面使用液态玻璃材质"),
             CustomGlassSearchRow("safe_mode", "安全模式", "开启后下次重启桌面将跳过全部 Native Hook；关闭并重启桌面恢复正常"),
+        )
+        Page.ThemePalette -> listOf(
+            CustomGlassSearchRow("settings_glass_effect", "设置界面玻璃效果", "开启后设置界面使用液态玻璃材质"),
         )
         Page.Data -> listOf(
             CustomGlassSearchRow("export", "导出参数", "备份当前 LiquidDock4 配置为 JSON"),

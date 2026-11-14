@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -128,45 +131,68 @@ internal fun SettingsUiPalettePage(
     padding: PaddingValues,
     selected: SettingsUiPalette,
     onSelect: (SettingsUiPalette) -> Unit,
+    glassEnabled: Boolean,
+    onGlassEnabledChange: (Boolean) -> Unit,
 ) {
     val dark = isSystemInDarkTheme()
     val systemPaletteController = remember { ThemeController(ColorSchemeMode.MonetSystem) }
     val systemAccent = systemPaletteController.currentColors().primary
-    SettingsList(
-        padding,
-        stringResource(R.string.page_theme_palette),
-        stringResource(R.string.theme_palette_summary),
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = padding,
     ) {
-        SettingsUiPalette.values().forEachIndexed { index, palette ->
-            if (index > 0) ModernListDivider()
-            val chosen = palette == selected
-            val swatch = palette.getSeedArgb(dark)?.let { Color(it) } ?: systemAccent
-            BasicComponent(
-                title = stringResource(paletteLabel(palette)),
-                summary = if (chosen) stringResource(R.string.theme_palette_selected) else null,
-                insideMargin = ModernPreferenceMargin,
-                endActions = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier.size(23.dp)
-                                .clip(CircleShape)
-                                .background(swatch)
-                                .border(
-                                    1.dp,
-                                    MiuixTheme.colorScheme.onSurface.copy(alpha = 0.22f),
-                                    CircleShape,
-                                ),
-                        )
-                        if (chosen) {
-                            Text("✓", color = MiuixTheme.colorScheme.primary)
-                        }
-                    }
-                },
-                onClick = { onSelect(palette) },
+        item {
+            PageHeader(
+                stringResource(R.string.page_theme_palette),
+                stringResource(R.string.theme_palette_summary),
             )
+        }
+        item { SmallTitle("界面材质") }
+        item {
+            SettingsCard {
+                SwitchPreference(
+                    checked = glassEnabled,
+                    onCheckedChange = onGlassEnabledChange,
+                    title = stringResource(R.string.settings_glass_effect),
+                    summary = stringResource(R.string.settings_glass_effect_summary),
+                )
+            }
+        }
+        item { SmallTitle("主题配色") }
+        item {
+            SettingsCard {
+                SettingsUiPalette.values().forEachIndexed { index, palette ->
+                    if (index > 0) ModernListDivider()
+                    val chosen = palette == selected
+                    val swatch = palette.getSeedArgb(dark)?.let { Color(it) } ?: systemAccent
+                    BasicComponent(
+                        title = stringResource(paletteLabel(palette)),
+                        summary = if (chosen) stringResource(R.string.theme_palette_selected) else null,
+                        insideMargin = ModernPreferenceMargin,
+                        endActions = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(23.dp)
+                                        .clip(CircleShape)
+                                        .background(swatch)
+                                        .border(
+                                            1.dp,
+                                            MiuixTheme.colorScheme.onSurface.copy(alpha = 0.22f),
+                                            CircleShape,
+                                        ),
+                                )
+                                if (chosen) {
+                                    Text("✓", color = MiuixTheme.colorScheme.primary)
+                                }
+                            }
+                        },
+                        onClick = { onSelect(palette) },
+                    )
+                }
+            }
         }
     }
 }

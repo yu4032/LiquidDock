@@ -145,10 +145,8 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
             && ld_read_heap(item_info + 0xfb, &item_flags, 1)
             && (config_flags & 0x10) && (item_flags & 0x10);
 
-    if(special_phone
-            && !memcmp(&base->cell_width,&current_width,sizeof current_width)
-            && !memcmp(&base->cell_height,&current_height,sizeof current_height)
-            && !memcmp(&base->icon_size,&current_icon,sizeof current_icon)) return;
+    if (!memcmp(&base->cell_width, &current_width, sizeof current_width)
+            || fabs(current_width - base->cell_width) < 1e-6) return;
 
     double desired = 0;
     if (!ld_home_widget_width(base, span, current_width,

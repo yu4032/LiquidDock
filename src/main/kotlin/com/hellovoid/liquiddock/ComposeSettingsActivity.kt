@@ -407,13 +407,6 @@ private fun LiquidDockSettings(
                     )
                     Page.MoreHub -> MoreHubPage(
                         padding = padding,
-                        glassEnabled = uiGlassEnabled,
-                        onGlassEnabledChange = { enabled ->
-                            uiGlassEnabled = enabled
-                            uiPrefs.edit()
-                                .putBoolean(SETTINGS_UI_GLASS_ENABLED, enabled)
-                                .apply()
-                        },
                         open = ::navigateTo,
                     )
 
@@ -525,6 +518,13 @@ private fun LiquidDockSettings(
                         padding = padding,
                         selected = selectedPalette,
                         onSelect = onPaletteSelected,
+                        glassEnabled = uiGlassEnabled,
+                        onGlassEnabledChange = { enabled ->
+                            uiGlassEnabled = enabled
+                            uiPrefs.edit()
+                                .putBoolean(SETTINGS_UI_GLASS_ENABLED, enabled)
+                                .apply()
+                        },
                     )
                     Page.Data -> DataPage(padding, activity)
                     Page.Logs -> ModuleLogsPage(padding, activity, prefs)
@@ -651,8 +651,6 @@ internal fun HubPage(
 @Composable
 private fun MoreHubPage(
     padding: PaddingValues,
-    glassEnabled: Boolean,
-    onGlassEnabledChange: (Boolean) -> Unit,
     open: (Page) -> Unit,
 ) {
     LazyColumn(
@@ -664,16 +662,6 @@ private fun MoreHubPage(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { PageHeader("", "设置界面、预设与开源许可") }
-        item {
-            SettingsCard {
-                SwitchPreference(
-                    checked = glassEnabled,
-                    onCheckedChange = onGlassEnabledChange,
-                    title = stringResource(R.string.settings_glass_effect),
-                    summary = stringResource(R.string.settings_glass_effect_summary),
-                )
-            }
-        }
         item {
             var safeModeEnabled by remember { mutableStateOf(Os4SafeMode.isActive()) }
             SettingsCard {
