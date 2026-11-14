@@ -53,6 +53,7 @@ static volatile uintptr_t g_w1x1_last_widget;
 static volatile uintptr_t g_w1x1_ws_ctrl;
 static volatile uint32_t g_w1x1_size_adapt_cid;
 static volatile uint32_t g_w1x1_stock_title_comp;
+static uint32_t g_w1x1_app_widget_cid = 0x877;
 
 static struct {
     int active;
@@ -576,7 +577,7 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
     }
 
     uint32_t cid = ld_dart_cid(widget);
-    if (cid == 0x877) {
+    if (cid == g_w1x1_app_widget_cid) {
         uintptr_t mgr = ld_heap_pointer(c, ws_ctrl, 0x1d7);
         if (!mgr || !g_w1x1_rt[LD_W1X1_ADD_RESIZE_FRAME] || !g_w1x1_rt[LD_W1X1_COMMIT_WIDGET_RESIZE]) {
             ld_blog("widget 1x1->2x2: resize manager unavailable");
@@ -696,6 +697,19 @@ static void ld_w1x1_menu_install(const struct native_api *api, const ld_lib_info
             return;
         }
         g_w1x1_rt[i] = (void *)rt;
+    }
+
+    /* Decode LauncherAppWidgetInfoModel cid dynamically from supportSizeAdapt (cmp x1, #imm12) */
+    const uint32_t *sup_insns = (const uint32_t *)g_w1x1_rt[LD_W1X1_SUPPORT_SIZE_ADAPT];
+    for (size_t i = 0; i < 16; i++) {
+        uint32_t insn = sup_insns[i];
+        if ((insn & 0xffc003ffu) == 0xf100003fu) {
+            uint32_t imm = (insn >> 10) & 0xfffu;
+            if (imm > 0x100u) {
+                g_w1x1_app_widget_cid = imm;
+                break;
+            }
+        }
     }
 
     int ok = 0;
