@@ -97,6 +97,13 @@ static uintptr_t ld_scan_aot_pass(const ld_lib_info *lib, uintptr_t hint_vaddr,
     return 0;
 }
 
+static bool g_aot_strict_no_short_fallback = false;
+
+static inline void ld_aot_set_strict(bool strict)
+{
+    g_aot_strict_no_short_fallback = strict;
+}
+
 /* Find pattern in libapp.so:
  * 1. Checks hint_vaddr (0-cost fast path if address matches).
  * 1b. Secondary fast path for known version migrations.
@@ -149,8 +156,8 @@ static uintptr_t ld_find_aot_pattern(const ld_lib_info *lib, uintptr_t hint_vadd
         return single;
     }
 
-    /* 3. Adaptive prefix fallback if word_count > 24 */
-    if (match_count == 0 && word_count > 24) {
+    /* 3. Adaptive prefix fallback if word_count > 24 (disabled in strict mode) */
+    if (!g_aot_strict_no_short_fallback && match_count == 0 && word_count > 24) {
         static const size_t prefixes[] = { 48, 32, 24 };
         for (size_t p = 0; p < sizeof prefixes / sizeof prefixes[0]; p++) {
             if (prefixes[p] >= word_count) continue;

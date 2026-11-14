@@ -92,6 +92,14 @@ internal object Os4GlassSymbols {
         "FlutterView.applyViewProperties",
         "FlutterView.background",
     )
+    private val folderGridSymbolNames = listOf(
+        "GridController.folderGridViewCol",
+        "FolderGridViewGetxController.calGridWidth",
+        "FolderGridViewGetxController.calGridHeight",
+        "FolderGridView._buildScrollableGrid",
+        "FolderGridViewGetxController.calGridViewportHeight",
+        "FolderAnimController._openFolderIconBgAnim",
+    )
     data class ResolvedTargets(
         val glass: String,
         val layoutTargets: String = "",
@@ -100,6 +108,7 @@ internal object Os4GlassSymbols {
         val folderTarget: String = "",
         val folderPadTargets: String = "",
         val widgetResizeTargets: String = "",
+        val folderGridTargets: String = "",
     )
     @Volatile private var cached: Pair<Pair<String, Boolean>, ResolvedTargets>? = null
 
@@ -157,7 +166,17 @@ internal object Os4GlassSymbols {
         val folderTarget = fromMiniElfSingle(mini, FOLDER_CORNER_DRAG_TARGET)
         val folderPadTargets = fromMiniElfPadBypass(mini)
         val widgetResizeTargets = fromMiniElfSymbolList(mini, widgetResizeSymbolNames)
-        return ResolvedTargets(glass, layoutTargets, homeMarginTarget, rvTargets, folderTarget, folderPadTargets, widgetResizeTargets)
+        val folderGridTargets = fromMiniElfSymbolList(mini, folderGridSymbolNames)
+        return ResolvedTargets(
+            glass,
+            layoutTargets,
+            homeMarginTarget,
+            rvTargets,
+            folderTarget,
+            folderPadTargets,
+            widgetResizeTargets,
+            folderGridTargets,
+        )
     }
 
     private fun fromMiniElfSymbolList(data: ByteArray, names: List<String>): String {

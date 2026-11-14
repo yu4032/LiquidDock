@@ -76,8 +76,9 @@ object Os4ConfigSync {
 
     private fun readLauncherStamp(context: Context): String? = runCatching {
         val pkg = context.packageManager.getPackageInfo("com.miui.home", 0)
+        val selfPkg = context.packageManager.getPackageInfo(context.packageName, 0)
         val src = pkg.applicationInfo?.sourceDir.orEmpty()
-        "$src:${pkg.lastUpdateTime}"
+        "$src:${pkg.lastUpdateTime}:${selfPkg.lastUpdateTime}"
     }.getOrNull()
 
     @JvmStatic
@@ -175,6 +176,9 @@ object Os4ConfigSync {
                     }
                     if (resolvedTargets.widgetResizeTargets.isNotEmpty()) {
                         append("widget_resize_targets=").append(resolvedTargets.widgetResizeTargets).append('\n')
+                    }
+                    if (resolvedTargets.folderGridTargets.isNotEmpty()) {
+                        append("folder_grid_targets=").append(resolvedTargets.folderGridTargets).append('\n')
                     }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")

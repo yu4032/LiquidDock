@@ -35,7 +35,6 @@
 #include "aot_scanner.h"
 #include "hook_page_pin.h"
 #include "rust_symbol_resolver.h"
-#include "folder_grid.h"
 #include "home_options_fingerprints.h"
 #include "home_geometry_fingerprints.h"
 #include "dock_geometry_fingerprints.h"
@@ -62,6 +61,7 @@ static void *trace_thread(void *unused);
 static int g_hook_pin_ok=1;
 static void (*g_orig_rust_orientation)(void *);
 
+#include "folder_grid.h"
 #include "icon_glass.h"
 #include "maml_widget_materials.h"
 #include "widget_resize.h"
@@ -408,6 +408,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         /* Verify target function prologue; in strict mode compare to APK bytes. */
         int found = (*(const uint32_t *)targets[i] == 0xa9bf79fdu);
         if(strict) {
+            found=0;
             for(uint16_t k=0;k<lib->phnum;k++) {
                 uint64_t po,pv,pfs,pms;
                 if(!ld_phdr_load(lib,k,&po,&pv,&pfs,&pms)) continue;
@@ -1181,6 +1182,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
     bool strict=g_home_options.hook_safety_enabled;
+    ld_aot_set_strict(strict);
     if(g_grid_cols>0 && g_grid_rows>0 && !g_orig_rust_orientation) {
         ld_lib_info rust; uintptr_t target=0; const char *source="none";
         if(ld_resolve_lib(ld_launcher_apk_substr(),"lib/arm64-v8a/libapp_launcher.so",&rust)) {
