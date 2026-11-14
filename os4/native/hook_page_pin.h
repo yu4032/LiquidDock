@@ -5,11 +5,32 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h>
+
+enum ld_pin_status {
+    LD_PIN_FAILED = 0,
+    LD_PIN_LOCKED = 1,
+    LD_PIN_UNLOCKED_ENOMEM = 2,
+};
+
+struct ld_pin_patch_site {
+    uintptr_t site;
+    uint32_t w0;
+    uint32_t w1;
+};
+
+static unsigned g_pin_locked_count = 0;
+static unsigned g_pin_enomem_count = 0;
+static unsigned g_pin_failed_count = 0;
+static pthread_mutex_t g_pin_sites_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct ld_pin_patch_site g_pin_sites[128];
+static unsigned g_pin_site_count = 0;
+
 /* Inline hooks modify MAP_PRIVATE file-backed executable pages. Discarding
  * those pages restores the APK bytes and silently removes the hooks. Keep only
  * the pages containing each 16-byte entry patch resident for this process.
  * Linux rejects MADV_DONTNEED on VM_LOCKED pages; normal unmapping at process
- * exit releases the lock. The fuxi process limit is 64 MiB, well above this set. */
+ * exit releases the lock. */
 static inline int ld_pin_code_pages(uintptr_t address,size_t size) {
     long raw=sysconf(_SC_PAGESIZE);
     if(raw<=0 || !size || address>UINTPTR_MAX-size) return 0;
@@ -19,12 +40,59 @@ static inline int ld_pin_code_pages(uintptr_t address,size_t size) {
     if(last==UINTPTR_MAX) return 0;
     return mlock((void *)start,(size_t)(last+1-start))==0;
 }
+
+static inline int ld_pin_code_pages_status(uintptr_t address, size_t size) {
+    if (ld_pin_code_pages(address, size)) {
+        __atomic_fetch_add(&g_pin_locked_count, 1u, __ATOMIC_RELAXED);
+        return LD_PIN_LOCKED;
+    }
+    if (errno == ENOMEM) {
+        __atomic_fetch_add(&g_pin_enomem_count, 1u, __ATOMIC_RELAXED);
+        return LD_PIN_UNLOCKED_ENOMEM;
+    }
+    __atomic_fetch_add(&g_pin_failed_count, 1u, __ATOMIC_RELAXED);
+    return LD_PIN_FAILED;
+}
+
 /* Launcher processes on this platform cap RLIMIT_MEMLOCK at 64 KiB, far below
- * the hook set. The COW copy of an AOT code page stays resident because the
- * launcher never madvises its own executable mapping, so a locked-memory
- * refusal is not a reason to drop an otherwise valid hook. */
+ * the hook set. Returns LD_PIN_LOCKED (1) or LD_PIN_UNLOCKED_ENOMEM (2) on
+ * allowable outcomes, and LD_PIN_FAILED (0) on other errors. */
 static inline int ld_pin_code_pages_soft(uintptr_t address,size_t size) {
-    if(ld_pin_code_pages(address,size)) return 1;
-    return errno==ENOMEM;
+    return ld_pin_code_pages_status(address, size);
+}
+
+static inline void ld_record_hook_site(uintptr_t site) {
+    if (!site || (site & 3u)) return;
+    const uint32_t *words = (const uint32_t *)site;
+    uint32_t w0 = words[0];
+    uint32_t w1 = words[1];
+    pthread_mutex_lock(&g_pin_sites_lock);
+    for (unsigned i = 0; i < g_pin_site_count; ++i) {
+        if (g_pin_sites[i].site == site) {
+            g_pin_sites[i].w0 = w0;
+            g_pin_sites[i].w1 = w1;
+            pthread_mutex_unlock(&g_pin_sites_lock);
+            return;
+        }
+    }
+    if (g_pin_site_count < (unsigned)(sizeof(g_pin_sites) / sizeof(g_pin_sites[0]))) {
+        g_pin_sites[g_pin_site_count++] = (struct ld_pin_patch_site){ site, w0, w1 };
+    }
+    pthread_mutex_unlock(&g_pin_sites_lock);
+}
+
+static inline void ld_verify_hook_sites(unsigned *out_total, unsigned *out_intact) {
+    unsigned total = 0, intact = 0;
+    pthread_mutex_lock(&g_pin_sites_lock);
+    total = g_pin_site_count;
+    for (unsigned i = 0; i < g_pin_site_count; ++i) {
+        const uint32_t *words = (const uint32_t *)g_pin_sites[i].site;
+        if (words[0] == g_pin_sites[i].w0 && words[1] == g_pin_sites[i].w1) {
+            ++intact;
+        }
+    }
+    pthread_mutex_unlock(&g_pin_sites_lock);
+    if (out_total) *out_total = total;
+    if (out_intact) *out_intact = intact;
 }
 #endif

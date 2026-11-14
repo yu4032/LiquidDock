@@ -27,8 +27,11 @@ static void ld_write_4x2_widget_state(const struct ld_layout_item *items, size_t
     int fd = open("/data/user/0/com.miui.home/files/liquiddock-grid-4x2.state",
                   O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd >= 0) {
-        const char ch = has_4x2 ? '1' : '0';
-        (void)write(fd, &ch, 1);
+        char buf[64];
+        int len = snprintf(buf, sizeof(buf), "v1 %d %d\n", has_4x2 ? 1 : 0, (int)getpid());
+        if (len > 0) {
+            (void)write(fd, buf, (size_t)len);
+        }
         close(fd);
     }
 }

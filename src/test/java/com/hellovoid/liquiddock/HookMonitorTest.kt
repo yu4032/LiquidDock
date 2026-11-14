@@ -124,4 +124,58 @@ class HookMonitorTest {
         assertEquals(HookProbeState.MISSING, snapshot.items.first { it.id == "divider" }.state)
         assertEquals(HookProbeState.MISSING, snapshot.items.first { it.id == "folder_grid" }.state)
     }
+
+    @Test
+    fun evaluateHookMonitor_detectsStalePidWhenBootLogHasNewerPid() {
+        val status = parseStatusKeyValues(
+            """
+            pid=1001
+            glass=1
+            patch_total=10
+            patch_intact=10
+            """.trimIndent(),
+        )
+        val bootLog = """
+            100.000 native_init enter pid=1001
+            200.000 native_init enter pid=2002
+            200.100 OS4 glass pipeline installed
+        """.trimIndent()
+        val snapshot = evaluateHookMonitor(allEnabledConfig(), status, bootLog)
+        val glass = snapshot.items.first { it.id == "glass" }
+        assertEquals(HookProbeState.MISSING, glass.state)
+        assertTrue(glass.detail.contains("状态已过期"))
+    }
+
+    @Test
+    fun evaluateHookMonitor_detectsPatchDegradedAndMemlockEnomem() {
+        val statusEnomem = parseStatusKeyValues(
+            """
+            pid=25282
+            glass=1
+            pin_locked=8
+            pin_enomem=2
+            pin_failed=0
+            patch_total=10
+            patch_intact=10
+            """.trimIndent(),
+        )
+        val snapshotEnomem = evaluateHookMonitor(allEnabledConfig(), statusEnomem, "100.000 native_init enter pid=25282")
+        assertEquals("已验证生效（部分页受 memlock 限制）", snapshotEnomem.items.first { it.id == "glass" }.detail)
+
+        val statusDegraded = parseStatusKeyValues(
+            """
+            pid=25282
+            glass=1
+            pin_locked=8
+            pin_enomem=2
+            pin_failed=0
+            patch_total=10
+            patch_intact=9
+            """.trimIndent(),
+        )
+        val snapshotDegraded = evaluateHookMonitor(allEnabledConfig(), statusDegraded, "100.000 native_init enter pid=25282")
+        val glassDegraded = snapshotDegraded.items.first { it.id == "glass" }
+        assertEquals(HookProbeState.ACTIVE, glassDegraded.state)
+        assertEquals("代码页校验异常 (9/10)", glassDegraded.detail)
+    }
 }

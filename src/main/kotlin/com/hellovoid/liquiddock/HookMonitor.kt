@@ -110,6 +110,7 @@ data class HookMonitorSnapshot(
 
 private val PAD_BYPASS_REGEX = Regex("""OS4 big folder Pad bypass installed: patched=(\d+)""")
 private val WIDGET_1X1_MENU_REGEX = Regex("""OS4 widget 1x1<->2x2 menu installed=(\d+)/(\d+)""")
+private val BOOT_PID_REGEX = Regex("""native_init enter pid=(\d+)""")
 
 internal fun parseStatusKeyValues(text: String): Map<String, String> {
     if (text.isBlank()) return emptyMap()
@@ -130,12 +131,33 @@ internal fun evaluateHookMonitor(
     statusMap: Map<String, String>,
     bootLog: String,
 ): HookMonitorSnapshot {
-    val pid = statusMap["pid"]?.toIntOrNull()
+    val statusPid = statusMap["pid"]?.toIntOrNull()
+    val bootLogPid = BOOT_PID_REGEX.findAll(bootLog).lastOrNull()
+        ?.groupValues?.getOrNull(1)?.toIntOrNull()
+    val statusStale = statusPid != null && bootLogPid != null && statusPid != bootLogPid
+    val pid = if (statusStale) bootLogPid else (statusPid ?: bootLogPid)
+
+    val patchTotal = statusMap["patch_total"]?.toIntOrNull() ?: 0
+    val patchIntact = statusMap["patch_intact"]?.toIntOrNull() ?: 0
+    val pinEnomem = statusMap["pin_enomem"]?.toIntOrNull() ?: 0
+    val pinFailed = statusMap["pin_failed"]?.toIntOrNull() ?: 0
+    val patchDegraded = !statusStale && patchTotal > 0 && patchIntact < patchTotal
+    val activeDetail = when {
+        patchDegraded -> "代码页校验异常 ($patchIntact/$patchTotal)"
+        !statusStale && patchTotal > 0 && patchIntact == patchTotal && pinFailed > 0 ->
+            "已验证生效（部分锁页失败）"
+        !statusStale && patchTotal > 0 && patchIntact == patchTotal && pinEnomem > 0 ->
+            "已验证生效（部分页受 memlock 限制）"
+        !statusStale && patchTotal > 0 && patchIntact == patchTotal ->
+            "已验证生效（代码页锁定）"
+        else -> "Hook 已生效"
+    }
 
     fun resolve(enabled: Boolean, hooked: Boolean): HookProbeState = when {
         !config.masterEnabled -> HookProbeState.PAUSED
         !enabled -> HookProbeState.DISABLED
-        hooked -> HookProbeState.ACTIVE
+        statusStale -> HookProbeState.MISSING
+        hooked && (!patchDegraded || patchIntact > 0) -> HookProbeState.ACTIVE
         else -> HookProbeState.MISSING
     }
 
@@ -148,16 +170,16 @@ internal fun evaluateHookMonitor(
     ): HookProbeItem {
         val state = resolve(enabled, hooked)
         val detail = when (state) {
-            HookProbeState.ACTIVE -> "Hook 已生效"
+            HookProbeState.ACTIVE -> activeDetail
             HookProbeState.DISABLED -> "开关未开启"
             HookProbeState.PAUSED -> "总开关已暂停"
-            HookProbeState.MISSING -> missingDetail
+            HookProbeState.MISSING -> if (statusStale) "桌面重启后状态已过期，请重启桌面" else missingDetail
         }
         return HookProbeItem(id = id, title = title, state = state, detail = detail)
     }
 
     fun resolveHooked(key: String, fallbackLog: () -> Boolean): Boolean =
-        if (statusMap.containsKey(key)) statusMap[key] == "1" else fallbackLog()
+        if (!statusStale && statusMap.containsKey(key)) statusMap[key] == "1" else fallbackLog()
 
     val glassHooked = resolveHooked("glass") {
         bootLog.contains("OS4 glass pipeline installed") ||

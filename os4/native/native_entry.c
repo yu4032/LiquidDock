@@ -248,13 +248,18 @@ static void load_grid_config(void)
 }
 
 static void pin_installed_hook(uintptr_t site) {
-    int ok=ld_pin_code_pages_soft(site,16);
-    if(!ok) {
+    int pin_rc=ld_pin_code_pages_status(site,16);
+    if(pin_rc==LD_PIN_FAILED) {
         g_hook_pin_ok=0; g_layout_hooks_ready=0;
         g_grid_cols=0; g_grid_rows=0; g_count_cols=0; g_count_rows=0;
         ld_blog("hook pin failed; custom grid and placement disabled");
+    } else {
+        ld_record_hook_site(site);
     }
-    ld_blog("hook page pinned site=%llx ok=%d errno=%d",(unsigned long long)site,ok,ok?0:errno);
+    ld_blog("hook page pinned site=%llx ok=%d pin=%s errno=%d",
+            (unsigned long long)site, pin_rc!=LD_PIN_FAILED,
+            pin_rc==LD_PIN_LOCKED?"locked":(pin_rc==LD_PIN_UNLOCKED_ENOMEM?"enomem":"failed"),
+            pin_rc==LD_PIN_LOCKED?0:errno);
 }
 
 static void ld_install_os4_recents_blur_one(const struct native_api *api,
@@ -924,6 +929,16 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
     if(!LD_PIN_ICON_GLASS) { (void)api; (void)lib; return; }
     if(!g_hook_pin_ok || !api || !api->hook || !lib)
         return;
+    int need_radius = g_home_options.glass_icon_corner > 0.0;
+    int need_container = g_home_options.glass_icon_size > 0.0;
+    if (g_icon_glass_installed &&
+        (!need_radius || (g_icon_glass_radius_installed && g_orig_icon_glass_dock_scale)) &&
+        (!need_container || g_icon_glass_container_patched)) {
+        return;
+    }
+    static unsigned s_attempts = 0;
+    if (s_attempts >= 8u) return;
+    ++s_attempts;
 
     uintptr_t bdi_rt = ld_find_aot_pattern(lib, 0x1789520u, ld_pat_bdi, 16);
     uintptr_t wrap_rt = ld_find_aot_pattern(lib, 0x178e9acu, ld_pat_wrap, 20);
@@ -1229,11 +1244,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         LOGI("libapp.so not mapped yet");
         return;
     }
-    /* Retry folder grid hooks independently of g_installed so partial failures recover. */
+    /* Retry independent rendering/feature modules on every entry regardless of g_installed. */
     ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
-    if (g_installed) { update_layout_ready(); return; }
-    /* Rendering hooks use their own resolved AOT symbols and safety checks.
-     * Install them before the unrelated grid-layout address checks below. */
     ld_install_icon_materials(api,&lib);
     ld_widget_inventory_reset_once();
     (void)ld_maml_install(api);
@@ -1245,6 +1257,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_glass_superellipse_install(api);
     ld_home_margins_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
+    if (g_installed) { update_layout_ready(); return; }
 
     uintptr_t entry = ld_find_aot_pattern(&lib, LD_PAD_ROWCOL_VADDR,
                                           ld_pad_rowcol_words,
@@ -1461,12 +1474,49 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     update_layout_ready();
 }
 
+static void ld_read_proc_starttime(char *out, size_t cap) {
+    if (!out || !cap) return;
+    snprintf(out, cap, "0");
+    FILE *sf = fopen("/proc/self/stat", "r");
+    if (!sf) return;
+    char buf[512];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, sf);
+    fclose(sf);
+    if (!n) return;
+    buf[n] = '\0';
+    const char *rp = strrchr(buf, ')');
+    if (!rp) return;
+    const char *p = rp + 1;
+    int field = 0;
+    while (*p) {
+        while (*p == ' ') ++p;
+        if (!*p) break;
+        ++field;
+        const char *start = p;
+        while (*p && *p != ' ') ++p;
+        if (field == 20) {
+            size_t len = (size_t)(p - start);
+            if (len >= cap) len = cap - 1;
+            memcpy(out, start, len);
+            out[len] = '\0';
+            return;
+        }
+    }
+}
+
 static void ld_write_hook_status(void) {
     mkdir(LD_SM_EXT_DIR, 0770);
     const char *tmp = LD_SM_EXT_DIR "/hook_status.conf.tmp";
     const char *dst = LD_SM_EXT_DIR "/hook_status.conf";
     FILE *fp = fopen(tmp, "w");
     if (!fp) return;
+    char starttime[32];
+    ld_read_proc_starttime(starttime, sizeof(starttime));
+    unsigned patch_total = 0, patch_intact = 0;
+    ld_verify_hook_sites(&patch_total, &patch_intact);
+    unsigned pin_locked = __atomic_load_n(&g_pin_locked_count, __ATOMIC_RELAXED);
+    unsigned pin_enomem = __atomic_load_n(&g_pin_enomem_count, __ATOMIC_RELAXED);
+    unsigned pin_failed = __atomic_load_n(&g_pin_failed_count, __ATOMIC_RELAXED);
     int glass_ok = g_os4_glass_installed ? 1 : 0;
     int icons_ok = g_icon_glass_installed ? 1 : 0;
     int radius_ok = (g_icon_glass_radius_installed && g_getstream_add_rt != 0) ? 1 : 0;
@@ -1486,6 +1536,12 @@ static void ld_write_hook_status(void) {
             && (folder_cols_ready || folder_rows_ready)) ? 1 : 0;
     fprintf(fp,
             "pid=%d\n"
+            "proc_starttime=%s\n"
+            "pin_locked=%u\n"
+            "pin_enomem=%u\n"
+            "pin_failed=%u\n"
+            "patch_total=%u\n"
+            "patch_intact=%u\n"
             "glass=%d\n"
             "glass_icons=%d\n"
             "glass_icon_radius=%d\n"
@@ -1500,7 +1556,10 @@ static void ld_write_hook_status(void) {
             "folder_grid=%d\n"
             "folder_cols_ready=%d\n"
             "folder_rows_ready=%d\n",
-            (int)getpid(), glass_ok, icons_ok, radius_ok, widgets_ok,
+            (int)getpid(), starttime,
+            pin_locked, pin_enomem, pin_failed,
+            patch_total, patch_intact,
+            glass_ok, icons_ok, radius_ok, widgets_ok,
             grid_ok, dock_ok, divider_ok, recents_ok,
             home_icons_ok, big_folder_ok, widget_1x1_ok, folder_grid_ok,
             folder_cols_ready, folder_rows_ready);

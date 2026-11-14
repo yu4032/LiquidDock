@@ -22,6 +22,16 @@ final class Os4RemoteWidgetHook {
                 : AppWidgetHostView.class.getClassLoader();
         try {
             HookUtil.hookMethod(targetLoader,
+                    "android.app.Application", "onCreate",
+                    chain -> {
+                        Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));
+                        Object self = chain.getThisObject();
+                        if (self instanceof android.content.Context) {
+                            LauncherManualDiscoveryBridge.ensureRegistered((android.content.Context) self);
+                        }
+                        return result;
+                    });
+            HookUtil.hookMethod(targetLoader,
                     "android.appwidget.AppWidgetHostView", "updateAppWidget",
                     chain -> {
                         Object result = chain.proceed(chain.getArgs().toArray(new Object[0]));

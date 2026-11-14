@@ -267,13 +267,16 @@ static bool ld_install_folder_site(const struct native_api *api, uintptr_t site,
         ld_blog("OS4 folder grid hook %s skipped (site=%p via=%s)", label, (void *)site, via ? via : "?");
         return false;
     }
-    if (!ld_pin_code_pages_soft(site, 16u)) {
+    int pin_rc = ld_pin_code_pages_status(site, 16u);
+    if (pin_rc == LD_PIN_FAILED) {
         ld_blog("OS4 folder grid hook %s pin failed at %p via=%s", label, (void *)site, via ? via : "?");
         return false;
     }
     int rc = api->hook((void *)site, repl, orig);
     if (rc == 0 && *orig) {
-        ld_blog("OS4 folder grid hook %s installed at %p via=%s", label, (void *)site, via ? via : "?");
+        ld_record_hook_site(site);
+        ld_blog("OS4 folder grid hook %s installed at %p via=%s pin=%s", label, (void *)site,
+                via ? via : "?", pin_rc == LD_PIN_LOCKED ? "locked" : "enomem");
         return true;
     }
     ld_blog("OS4 folder grid hook %s failed at %p via=%s rc=%d", label, (void *)site, via ? via : "?", rc);

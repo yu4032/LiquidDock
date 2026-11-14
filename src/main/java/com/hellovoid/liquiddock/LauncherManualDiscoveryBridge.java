@@ -189,9 +189,21 @@ public final class LauncherManualDiscoveryBridge {
         File stateFile = new File(context.getFilesDir(), "liquiddock-grid-4x2.state");
         if (!stateFile.isFile()) return GridWidget4x2PreflightClient.UNKNOWN;
         try (FileInputStream in = new FileInputStream(stateFile)) {
-            int ch = in.read();
-            if (ch == '1') return GridWidget4x2PreflightClient.BLOCKED;
-            if (ch == '0') return GridWidget4x2PreflightClient.CLEAR;
+            byte[] buf = new byte[64];
+            int n = in.read(buf);
+            if (n <= 0) return GridWidget4x2PreflightClient.UNKNOWN;
+            String text = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
+            if ("1".equals(text)) return GridWidget4x2PreflightClient.BLOCKED;
+            if ("0".equals(text)) return GridWidget4x2PreflightClient.CLEAR;
+            String[] parts = text.split("\\s+");
+            if (parts.length >= 3 && "v1".equals(parts[0])) {
+                int pid = Integer.parseInt(parts[2]);
+                if (pid != android.os.Process.myPid()) {
+                    return GridWidget4x2PreflightClient.UNKNOWN;
+                }
+                if ("1".equals(parts[1])) return GridWidget4x2PreflightClient.BLOCKED;
+                if ("0".equals(parts[1])) return GridWidget4x2PreflightClient.CLEAR;
+            }
         } catch (Throwable ignored) {}
         return GridWidget4x2PreflightClient.UNKNOWN;
     }
