@@ -30,19 +30,8 @@ __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context
     int scope = g_ld_active_glass_scope;
     g_ld_active_glass_scope = LD_GLASS_SCOPE_GLOBAL;
     if(!g_hook_pin_ok || !g_home_options.glass_enabled || !g_native_glass_engine_ready) return;
-    struct ld_native_glass_options merged = g_home_options.native_glass;
-    const struct ld_native_glass_options *opts = &merged;
-    if(scope > LD_GLASS_SCOPE_GLOBAL && scope < LD_GLASS_SCOPE_COUNT
-            && g_home_options.scoped_glass[scope].mask) {
-        const struct ld_native_glass_options *sc = &g_home_options.scoped_glass[scope];
-        uint64_t sm = sc->mask;
-        for (size_t i = 0; i < LD_NATIVE_GLASS_COUNT; i++) {
-            if (sm & (1ull << i)) {
-                merged.values[i] = sc->values[i];
-            }
-        }
-        merged.mask |= sm;
-    }
+    (void)scope;
+    const struct ld_native_glass_options *opts = &g_home_options.native_glass;
     if(!opts->mask) return;
     int strict=g_home_options.hook_safety_enabled;
     uintptr_t holder=0,filter=0,vt=0;

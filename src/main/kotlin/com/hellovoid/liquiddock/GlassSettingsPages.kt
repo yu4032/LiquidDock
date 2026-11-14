@@ -73,17 +73,6 @@ internal fun SoftGlassPage(
                 )
             }
         }
-        item { ModernSectionLabel("分组件独立调节") }
-        softGlassScopeEntries.forEach { entry ->
-            item {
-                ModernFeatureCard(
-                    title = stringResource(entry.titleRes),
-                    summary = entry.summary,
-                    onClick = { open(entry.page) },
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                )
-            }
-        }
         if (!liquidGlass) {
             item {
                 ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
@@ -590,10 +579,10 @@ internal fun GlassFoldersPage(
                 ModernListDivider()
                 top.yukonga.miuix.kmp.basic.BasicComponent(
                     title = "大文件夹玻璃参数",
-                    summary = "跟随全局基准或独立调节折射、色彩与光影",
+                    summary = "统一使用最外部柔光玻璃全局参数；点击前往调节",
                     enabled = masterEnabled && liquidEnabled && largeFolderGlass,
                     insideMargin = ModernPreferenceMargin,
-                    onClick = { open(Page.SoftGlassLargeFolder) },
+                    onClick = { open(Page.SoftGlass) },
                 )
             }
         }

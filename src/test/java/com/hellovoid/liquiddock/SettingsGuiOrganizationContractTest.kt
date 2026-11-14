@@ -93,7 +93,6 @@ class SettingsGuiOrganizationContractTest {
         val os4 = SettingsAvailability(os4Launcher = true)
         val exposed = buildList {
             softGlassEntries.forEach { add(it.page) }
-            softGlassScopeEntries.forEach { add(it.page) }
             add(Page.SoftGlass)
             add(Page.SoftGlassComponents)
             add(Page.WidgetComponents)
