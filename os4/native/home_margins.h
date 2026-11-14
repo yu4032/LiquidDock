@@ -209,7 +209,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         ld_blog("home margin base dir=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
                 landscape, base->cw, base->ox, base->ch, base->oy, base->ind, cols, dh);
     }
-    if ((n % 500u) == 0u) {
+    if (n == 0u || n == 1000u || n == 100000u) {
         double cw = 0, ch = 0;
         __builtin_memcpy(&cw, (const void *)(cfg + 0x2b), sizeof cw);
         __builtin_memcpy(&ch, (const void *)(cfg + 0x33), sizeof ch);

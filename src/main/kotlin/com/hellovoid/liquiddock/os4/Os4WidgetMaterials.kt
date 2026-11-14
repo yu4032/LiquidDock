@@ -129,18 +129,24 @@ object Os4WidgetMaterials {
         /* Only background suppression belongs to widget glass. Other
          * explicitly hidden MAML nodes remain active across glass toggles. */
         val rulesExist = selectedPaths.isNotEmpty() || glass
+        val cache = File(app.filesDir, "os4-widget-shadows")
         if (!active || !rulesExist) {
             val cleared = clearMapping()
-            if (cleared) rememberPublication(state, fingerprint)
+            if (cleared) {
+                rememberPublication(state, fingerprint)
+                pruneShadowCache(cache, state, emptySet())
+            }
             return cleared
         }
         return try {
-            val cache = File(app.filesDir, "os4-widget-shadows").apply { mkdirs() }
+            cache.mkdirs()
             val published = ArrayList<Published>()
+            val activeKeys = HashSet<String>()
             for (source in sourceList) {
                 val paths = selectedPaths[source.sha].orEmpty()
                 if (paths.isEmpty() && !glass) continue
                 val key = sha256((TRANSFORM_VERSION + "\n" + source.sha + "\n" + paths.sorted().joinToString("\n") + "\nglass=$glass").toByteArray())
+                activeKeys += key
                 val shadow = File(cache, "$key.zip")
                 val outputSha = state.getString(CACHE_PREFIX + key, null)
                 val outSha = if (!shadow.exists() || outputSha == null || sha256(shadow) != outputSha) {
@@ -157,6 +163,7 @@ object Os4WidgetMaterials {
                 }
                 published += Published(source, outSha, shadow)
             }
+            pruneShadowCache(cache, state, activeKeys)
             if (published.isEmpty()) {
                 val cleared = clearMapping()
                 if (cleared) rememberPublication(state, fingerprint)
@@ -367,6 +374,23 @@ EOF
             val output = process.inputStream.bufferedReader().readText()
             process.waitFor(20, TimeUnit.SECONDS) && process.exitValue() == 0 && output.lineSequence().any { it == "RESULT_OK" }
         }.getOrDefault(false)
+    }
+
+    private fun pruneShadowCache(cache: File, state: SharedPreferences, activeKeys: Set<String>) {
+        val activeFileNames = activeKeys.mapTo(HashSet(activeKeys.size)) { "$it.zip" }
+        cache.listFiles()?.forEach { file ->
+            if (file.isFile && file.name !in activeFileNames) {
+                file.delete()
+            }
+        }
+        val stalePrefs = state.all.keys.filter { key ->
+            key.startsWith(CACHE_PREFIX) && key.removePrefix(CACHE_PREFIX) !in activeKeys
+        }
+        if (stalePrefs.isNotEmpty()) {
+            state.edit().apply {
+                stalePrefs.forEach { remove(it) }
+            }.apply()
+        }
     }
 
     private fun encodeSources(sources: List<Source>): String = sources.joinToString("\n") {

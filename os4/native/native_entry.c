@@ -65,23 +65,51 @@ static void (*g_orig_rust_orientation)(void *);
 #include "maml_widget_materials.h"
 #include "widget_resize.h"
 
+#define LD_BLOG_MAX_BYTES (512 * 1024)
+
+static int ld_blog_open_capped(const char *path, const char *prev_path, mode_t mode,
+                               off_t *bytes_out)
+{
+    struct stat st;
+    if (stat(path, &st) == 0 && st.st_size >= LD_BLOG_MAX_BYTES) {
+        (void)rename(path, prev_path);
+    }
+    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, mode);
+    if (fd >= 0 && fstat(fd, &st) == 0) {
+        *bytes_out = st.st_size;
+    } else {
+        *bytes_out = 0;
+    }
+    return fd;
+}
+
+static void ld_blog_write_capped(int *fd, off_t *bytes, const char *path,
+                                 const char *prev_path, mode_t mode,
+                                 const char *line, size_t n)
+{
+    if (*fd < 0) return;
+    if (*bytes + (off_t)n > LD_BLOG_MAX_BYTES) {
+        close(*fd);
+        (void)rename(path, prev_path);
+        *fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, mode);
+        *bytes = 0;
+        if (*fd < 0) return;
+    }
+    ssize_t w = write(*fd, line, n);
+    if (w > 0) *bytes += w;
+}
+
 void ld_blog(const char *fmt, ...)
 {
+    static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
     static int fd = -2;
     static int media_fd = -2;
-    if (fd == -2) {
-        const char *path = "/data/user_de/0/com.miui.home/files/liquiddock4-boot.log";
-        mkdir("/data/user_de/0/com.miui.home/files", 0700);
-        fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
-    }
-    if (media_fd == -2) {
-        const char *media_dir = "/sdcard/Android/media/com.hellovoid.liquiddock";
-        const char *media_path = "/sdcard/Android/media/com.hellovoid.liquiddock/liquiddock4-boot.log";
-        mkdir("/sdcard/Android/media", 0775);
-        mkdir(media_dir, 0775);
-        media_fd = open(media_path, O_WRONLY | O_CREAT | O_APPEND, 0664);
-    }
-    if (fd < 0 && media_fd < 0) return;
+    static off_t fd_bytes = 0;
+    static off_t media_bytes = 0;
+    static const char *const path = "/data/user_de/0/com.miui.home/files/liquiddock4-boot.log";
+    static const char *const prev_path = "/data/user_de/0/com.miui.home/files/liquiddock4-boot.log.prev";
+    static const char *const media_path = "/sdcard/Android/media/com.hellovoid.liquiddock/liquiddock4-boot.log";
+    static const char *const media_prev = "/sdcard/Android/media/com.hellovoid.liquiddock/liquiddock4-boot.log.prev";
 
     char line[512];
     int n = 0;
@@ -101,8 +129,22 @@ void ld_blog(const char *fmt, ...)
     if (n < 0) n = 0;
     if (n > (int)sizeof line - 2) n = (int)sizeof line - 2;
     line[n++] = '\n';
-    if (fd >= 0) (void)write(fd, line, (size_t)n);
-    if (media_fd >= 0) (void)write(media_fd, line, (size_t)n);
+
+    pthread_mutex_lock(&log_lock);
+    if (fd == -2) {
+        mkdir("/data/user_de/0/com.miui.home/files", 0700);
+        fd = ld_blog_open_capped(path, prev_path, 0600, &fd_bytes);
+    }
+    if (media_fd == -2) {
+        mkdir("/sdcard/Android/media", 0775);
+        mkdir("/sdcard/Android/media/com.hellovoid.liquiddock", 0775);
+        media_fd = ld_blog_open_capped(media_path, media_prev, 0664, &media_bytes);
+    }
+    if (fd >= 0 || media_fd >= 0) {
+        ld_blog_write_capped(&fd, &fd_bytes, path, prev_path, 0600, line, (size_t)n);
+        ld_blog_write_capped(&media_fd, &media_bytes, media_path, media_prev, 0664, line, (size_t)n);
+    }
+    pthread_mutex_unlock(&log_lock);
 }
 
 /* Macro order is (columns, rows): the launcher's x0 receives the column count
@@ -1409,7 +1451,7 @@ static void *trace_thread(void *unused)
         unsigned gc=__atomic_load_n(&g_os4_glass_calls[0],__ATOMIC_RELAXED)
             + __atomic_load_n(&g_os4_glass_calls[1],__ATOMIC_RELAXED)
             + __atomic_load_n(&g_os4_glass_calls[2],__ATOMIC_RELAXED);
-        if(gc!=last_glass_calls) {
+        if(last_glass_calls==0 && gc>0) {
             last_glass_calls=gc;
             ld_blog("OS4 glass gate calls=%u",gc);
         }
@@ -1417,7 +1459,7 @@ static void *trace_thread(void *unused)
         for(size_t i=0;i<4;i++) {
             if(!(g_os4_pipeline_mask & (1u<<i))) continue;
             unsigned now=__atomic_load_n(&g_os4_pipeline_counts[i],__ATOMIC_RELAXED);
-            if(now!=last_pipeline[i]) {
+            if(last_pipeline[i]==0 && now>0) {
                 last_pipeline[i]=now;
                 ld_blog("OS4 glass pipeline %s calls=%u",labels[i],now);
             }
