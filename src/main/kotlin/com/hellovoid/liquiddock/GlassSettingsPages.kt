@@ -143,7 +143,7 @@ internal fun SoftGlassComponentsPage(
                     prefs,
                     ConfigSchema.Glass.WIDGET_GLASS,
                     "小部件玻璃",
-                    "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容；重启桌面生效。",
+                    "替换小组件背景；关闭时恢复原生背景并自动刷新桌面，保留其他独立隐藏规则。",
                     masterEnabled && liquidEnabled,
                 ) { widgetGlass = it }
             }
@@ -152,7 +152,7 @@ internal fun SoftGlassComponentsPage(
             SettingsCard {
                 ArrowPreference(
                     title = "已载入的 MAML 小组件组件管理",
-                    summary = "手动载入当前已挂载的 MAML 小组件，按精确节点设置隐藏规则；不依赖小部件玻璃开关。",
+                    summary = "按精确节点隐藏 MAML 内容；背景隐藏随小组件玻璃开关恢复，其他节点的隐藏规则独立生效。",
                     enabled = true,
                     onClick = { open(Page.WidgetComponents) },
                 )
@@ -398,7 +398,7 @@ internal fun GlassWidgetsPage(
     DenseSettingsList(
         padding,
         stringResource(R.string.page_glass_widgets),
-        if (os4Launcher) "控制小部件玻璃；组件隐藏规则独立于玻璃开关。重启桌面生效。"
+        if (os4Launcher) "关闭小部件玻璃将恢复隐藏的背景层；其他手动隐藏规则保持生效，切换后自动刷新桌面。"
         else "小组件玻璃、内容适配与独立外观分开调整。",
         focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GlassWidgets, it.key) },
         focusSequence = searchFocus?.sequence,
@@ -410,7 +410,7 @@ internal fun GlassWidgetsPage(
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃",
-                    "只替换小组件背景，保留 RemoteViews / MAML 的文字、图标与交互内容",
+                    "替换小组件背景；关闭后恢复隐藏的背景层并自动刷新桌面",
                     masterEnabled && liquidEnabled,
                 ) { widgetGlass = it }
             }

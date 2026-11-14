@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import androidx.preference.PreferenceManager
 import com.hellovoid.liquiddock.config.ConfigSchema
+import com.hellovoid.liquiddock.LiquidDockRestart
 import java.util.concurrent.Executors
 
 /** Publishes main-screen preferences to the OS4 native backend. */
@@ -58,6 +59,7 @@ object Os4ConfigSync {
 
     private fun publishNow(context: Context, reason: String) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        val previousWidgetGlass = Os4WidgetMaterials.lastReloadRequestedGlass(context)
         if (reason == "install") {
             Os4WidgetMaterials.scan(context)
         }
@@ -96,5 +98,18 @@ object Os4ConfigSync {
         } else conf
         val published = Os4RootConfWriter.write(context, resolved ?: "")
         Log.i(TAG, "[$reason] options published=$published cleared=${conf.isNullOrEmpty()}")
+        /* init_maml only redirects new loads; existing renderers retain the
+         * previous manifest. Reload on either transition, but only after BOTH
+         * snapshots have been published. Failed writes/requests are retriable. */
+        val requestedWidgetGlass = Os4WidgetMaterials.isGlassRequested(prefs)
+        if (widgetPublished && published && previousWidgetGlass != requestedWidgetGlass) {
+            if (LiquidDockRestart.request()) {
+                Os4WidgetMaterials.recordReloadRequested(context, requestedWidgetGlass)
+                LiquidDockRestart.pullHomeForward(context)
+                Log.i(TAG, "[$reason] requested Launcher reload for MAML widget glass=$requestedWidgetGlass")
+            } else {
+                Log.e(TAG, "[$reason] widget resources published but Launcher reload request failed")
+            }
+        }
     }
 }

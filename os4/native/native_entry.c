@@ -1039,7 +1039,6 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);
     ld_home_margins_install(api,&lib);
-    ld_divider_paint_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
         ld_blog("ELF identity cross-check failed in strict mode; aborting layout hooks");
@@ -1225,12 +1224,19 @@ static void install_grid_hook_unlocked(const struct native_api *api)
 }
 
 static void install_grid_hook(const struct native_api *api) {
-    if((!g_grid_cols || !g_grid_rows) && !g_home_options.icon_size_enabled
-            && !g_home_options.dock.enabled && !g_home_options.glass_enabled
-            && !g_home_options.widget_overrides
-            && g_home_options.recents_blur_percent == 100) return;
+    if (!api || !api->hook) return;
     pthread_mutex_lock(&g_install_lock);
-    install_grid_hook_unlocked(api);
+    /* The divider needs to work when it is the sole enabled feature, and
+     * must already be hooked when the user switches it on at runtime.
+     * Install its two protected observers ahead of nonessential AOT hooks,
+     * before the process's small RLIMIT_MEMLOCK budget is exhausted. */
+    ld_lib_info divider_lib = {0};
+    if (ld_resolve_lib(ld_launcher_apk_substr(), "lib/arm64-v8a/libapp.so", &divider_lib))
+        ld_divider_paint_install(api, &divider_lib);
+    if (((g_grid_cols > 0 && g_grid_rows > 0) || g_home_options.icon_size_enabled
+            || g_home_options.dock.enabled || g_home_options.glass_enabled
+            || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100))
+        install_grid_hook_unlocked(api);
     if((g_installed || g_os4_glass_installed) && !g_trace_started) {
         pthread_t thread;
         if(pthread_create(&thread,NULL,trace_thread,NULL)==0) {

@@ -19,8 +19,9 @@ object Os4WidgetMaterials {
     private const val PREFS = "os4_widget_materials"
     private const val SOURCES = "sources_v1"
     private const val PUBLISH_KEY = "publish_key"
+    private const val LAST_GLASS_RELOAD_REQUESTED = "last_widget_glass_reload_requested"
     private const val CACHE_PREFIX = "shadow_"
-    private const val TRANSFORM_VERSION = "maml-glass-clock-config-v13"
+    private const val TRANSFORM_VERSION = "maml-glass-clock-config-v14-background-restore"
     private const val CE_PREFIX = "/data/user/0/com.miui.home/files/maml/res/"
     private const val DE_PREFIX = "/data/user_de/0/com.miui.home/files/maml/res/"
     private const val SHADOW_DIR = "/data/user_de/0/com.miui.home/files/liquiddock-widget-shadows"
@@ -71,6 +72,27 @@ object Os4WidgetMaterials {
         clearMapping()
     }
 
+    /* MAML instances retain their parsed render tree after a mapping change.
+     * Track a successful restart request separately from file publication, so
+     * a failed config publish does not suppress the next reload attempt. */
+    internal fun lastReloadRequestedGlass(context: Context): Boolean =
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(LAST_GLASS_RELOAD_REQUESTED, false)
+
+    internal fun recordReloadRequested(context: Context, glass: Boolean) {
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(LAST_GLASS_RELOAD_REQUESTED, glass).apply()
+    }
+
+    internal fun isGlassRequested(preferences: SharedPreferences): Boolean =
+        preferences.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault()) &&
+            preferences.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault()) &&
+            preferences.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())
+
+    private fun rememberPublication(state: SharedPreferences, fingerprint: String) {
+        state.edit().putString(PUBLISH_KEY, fingerprint).apply()
+    }
+
     /** Rebuilds the active mapping from cached scan results and current exact M2 selections. */
     @JvmStatic
     @JvmOverloads
@@ -83,10 +105,8 @@ object Os4WidgetMaterials {
             (preferences.all[WidgetComponentStore.SELECTION_KEY] as? Set<*>)
                 ?.filterIsInstance<String>()?.toSet().orEmpty()
         } catch (_: Throwable) { emptySet() }
-        val globalGlass = preferences.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
-        val widgetGlass = globalGlass && preferences.getBoolean(ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())
         val active = preferences.getBoolean(ConfigSchema.Core.ENABLED.name(), ConfigSchema.Core.ENABLED.uiDefault())
-        val glass = active && widgetGlass
+        val glass = isGlassRequested(preferences)
         val sourceState = state.getString(SOURCES, "").orEmpty()
         val fingerprint = sha256(("permissions-v2\ntransform=" + TRANSFORM_VERSION + "\n" + sourceState + "\nselected=" + selected.sorted().joinToString("\n") +
             "\nglass=$glass\nactive=$active").toByteArray())
@@ -102,13 +122,16 @@ object Os4WidgetMaterials {
             val descriptor = WidgetComponentStore.parseSelector(encoded) ?: continue
             if (!descriptor.isExactMamlRender() || !descriptor.owner.startsWith("os4:")) continue
             val known = knownSelectors[descriptor.selectorKey()] ?: continue
+            if (!Os4MamlHidePolicy.shouldApply(known, glass)) continue
             val match = sourceList.firstOrNull { owner(it) == known.owner } ?: continue
             selectedPaths.getOrPut(match.sha) { linkedSetOf() } += known.hierarchyPath
         }
+        /* Only background suppression belongs to widget glass. Other
+         * explicitly hidden MAML nodes remain active across glass toggles. */
         val rulesExist = selectedPaths.isNotEmpty() || glass
         if (!active || !rulesExist) {
             val cleared = clearMapping()
-            if (cleared) state.edit().putString(PUBLISH_KEY, fingerprint).apply()
+            if (cleared) rememberPublication(state, fingerprint)
             return cleared
         }
         return try {
@@ -136,11 +159,11 @@ object Os4WidgetMaterials {
             }
             if (published.isEmpty()) {
                 val cleared = clearMapping()
-                if (cleared) state.edit().putString(PUBLISH_KEY, fingerprint).apply()
+                if (cleared) rememberPublication(state, fingerprint)
                 cleared
             } else {
                 val result = deploy(published)
-                if (result) state.edit().putString(PUBLISH_KEY, fingerprint).apply()
+                if (result) rememberPublication(state, fingerprint)
                 if (!result) clearMapping() else true
             }
         } catch (error: Throwable) {
