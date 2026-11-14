@@ -29,7 +29,6 @@ static void *g_orig_folder_build_scrollable_grid __attribute__((used));
 static void *g_orig_folder_q18_max_rows __attribute__((used));
 static void *g_orig_folder_phone_max_rows __attribute__((used));
 static void *g_orig_folder_viewport_height __attribute__((used));
-static void *g_orig_folder_open_bg_anim __attribute__((used));
 
 static const uint32_t ld_pat_folder_grid_cols[] = {
     0xa9bf79fdu, 0xaa0f03fdu, 0xd10021efu, 0xf9403f40u, 0xf953e000u, 0x6b16001fu,
@@ -93,14 +92,6 @@ static const uint32_t ld_pat_folder_viewport_height[] = {
 static const uint32_t ld_pat_folder_viewport_tail[] = {
     0xf85f83a0u, 0xfc5f03a1u, 0xfc4cf002u, 0x4ee2f420u, 0xaa1d03efu, 0xa8c179fdu,
     0xd65f03c0u
-};
-
-/* FolderAnimController._openFolderIconBgAnim tail: index 16 is eor v2.16b (d2 = 0.0) */
-static const uint32_t ld_pat_folder_open_bg_anim[] = {
-    0xaa0103e5u, 0x1400000au, 0xf9403f40u, 0xf94f4400u, 0xf9402370u, 0x6b10001fu,
-    0x54000081u, 0x91402362u, 0xf9417042u, 0x9446d4a0u, 0xaa0003e5u, 0xf85f83a1u,
-    0xf85f03a2u, 0xfc5d03a0u, 0xfc5c83a1u, 0xf85e83a3u, 0x6e221c42u, 0x91406764u,
-    0xf941a084u, 0x97fffe5eu, 0xaa1603e0u, 0xaa1d03efu, 0xa8c179fdu
 };
 
 #define LD_DEFINE_SYNC_FOLDER_COL_HOOK(fn_name, orig_var)                       \
@@ -192,7 +183,7 @@ typedef struct {
 } ld_folder_sym_t;
 
 static bool ld_resolve_folder_sym(const ld_lib_info *lib, size_t idx, ld_folder_sym_t *out) {
-    if (!lib || !out || !g_home_options.folder_grid_targets_present || idx >= 6) return false;
+    if (!lib || !out || !g_home_options.folder_grid_targets_present || idx >= 5) return false;
     uint64_t vaddr = g_home_options.folder_grid_vaddr[idx];
     size_t size = g_home_options.folder_grid_size[idx];
     if (!vaddr || size < 16u) return false;
@@ -280,31 +271,8 @@ static bool ld_install_folder_site(const struct native_api *api, uintptr_t site,
     return false;
 }
 
-__attribute__((naked, used)) static void repl_folder_open_keep_bg_glass(void) {
-    __asm__ volatile(
-        "fmov d2, #1.00000000\n"
-        "adrp x16, g_orig_folder_open_bg_anim\n"
-        "ldr x16, [x16, :lo12:g_orig_folder_open_bg_anim]\n"
-        "br x16\n"
-    );
-}
-
-static void ld_folder_open_glass_install(const struct native_api *api, const ld_lib_info *lib) {
-    if (!api || !api->hook || !lib || g_orig_folder_open_bg_anim) return;
-    const char *via = NULL;
-    uintptr_t base = 0;
-    uintptr_t site = ld_resolve_folder_subsite(
-        lib, 5, 0xa8aae8u, ld_pat_folder_open_bg_anim,
-        sizeof ld_pat_folder_open_bg_anim / sizeof(uint32_t), 0x44u, &base, &via);
-    if (base && site && ((const uint32_t *)base)[16] == 0x6e221c42u) {
-        (void)ld_install_folder_site(api, site, (void *)repl_folder_open_keep_bg_glass,
-                                     &g_orig_folder_open_bg_anim, "_openFolderIconBgAnim.keepGlass", via);
-    }
-}
-
 static void ld_folder_grid_install(const struct native_api *api, const ld_lib_info *lib,
                                    int cols, int rows) {
-    ld_folder_open_glass_install(api, lib);
     __atomic_store_n(&g_folder_grid_cols, cols, __ATOMIC_RELEASE);
     __atomic_store_n(&g_folder_grid_rows, rows, __ATOMIC_RELEASE);
     if (!api || !api->hook || !lib || (cols <= 0 && rows <= 0)) return;

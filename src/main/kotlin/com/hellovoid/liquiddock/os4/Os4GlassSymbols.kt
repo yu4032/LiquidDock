@@ -98,7 +98,6 @@ internal object Os4GlassSymbols {
         "FolderGridViewGetxController.calGridHeight",
         "FolderGridView._buildScrollableGrid",
         "FolderGridViewGetxController.calGridViewportHeight",
-        "FolderAnimController._openFolderIconBgAnim",
     )
     data class ResolvedTargets(
         val glass: String,

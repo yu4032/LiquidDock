@@ -119,8 +119,8 @@ struct ld_grid_conf {
     uint64_t widget_resize_vaddr[20];
     size_t widget_resize_size[20];
     int folder_grid_targets_present;
-    uint64_t folder_grid_vaddr[6];
-    size_t folder_grid_size[6];
+    uint64_t folder_grid_vaddr[5];
+    size_t folder_grid_size[5];
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -438,7 +438,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     seen |= 1ull << 46;
                 } else if (strcmp(key, "folder_grid_targets") == 0) {
                     if ((seen & (1ull << 47)) ||
-                        !ld_grid_parse_aot_targets_max(val, c.folder_grid_vaddr, c.folder_grid_size, 6, 65536)) {
+                        !ld_grid_parse_aot_targets_max(val, c.folder_grid_vaddr, c.folder_grid_size, 5, 65536)) {
                         bad=1; break;
                     }
                     c.folder_grid_targets_present=1;
