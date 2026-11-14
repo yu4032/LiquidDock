@@ -20,7 +20,10 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -127,6 +131,8 @@ private fun LiquidDockSettings(
         )
     }
     val availability = LocalSettingsAvailability.current
+    val hookStatus = rememberOs4HookStatus(availability.isOs4Launcher())
+    val layoutDirection = LocalLayoutDirection.current
     var page by rememberSaveable { mutableStateOf(Page.Home) }
     var navigationStack by rememberSaveable { mutableStateOf(ArrayList<String>()) }
     // Saved navigation from another Launcher build must never expose unsupported controls.
@@ -354,6 +360,13 @@ private fun LiquidDockSettings(
                 val meta = declaredPages[target]
                 // 只有柔光玻璃子页承载原生玻璃字段；其他声明式页面保留自己的设置项。
                 val liquidNative = liquidNativeSections[target]
+                val unhookedMessage = Os4HookHealth.detachedMessage(
+                    target,
+                    prefs,
+                    hookStatus,
+                    availability.isOs4Launcher(),
+                )
+                val renderTargetPage: @Composable (PaddingValues) -> Unit = { padding ->
                 if (meta != null) DeclaredSettingsPage(
                     padding, meta, prefs, masterEnabled,
                     searchFocusKey?.takeIf { searchFocusPage == target.name }?.let {
@@ -514,8 +527,28 @@ private fun LiquidDockSettings(
                         onSelect = onPaletteSelected,
                     )
                     Page.Data -> DataPage(padding, activity)
+                    Page.Logs -> ModuleLogsPage(padding, activity, prefs)
                     Page.About -> AboutPage(padding, activity, prefs)
                     else -> error("Missing settings declaration for $target")
+                }
+                }
+                if (unhookedMessage != null) {
+                    Column(Modifier.fillMaxSize()) {
+                        HookUnhookedBanner(
+                            message = unhookedMessage,
+                            modifier = Modifier.padding(top = padding.calculateTopPadding()),
+                        )
+                        renderTargetPage(
+                            PaddingValues(
+                                start = padding.calculateStartPadding(layoutDirection),
+                                top = 0.dp,
+                                end = padding.calculateEndPadding(layoutDirection),
+                                bottom = padding.calculateBottomPadding(),
+                            ),
+                        )
+                    }
+                } else {
+                    renderTargetPage(padding)
                 }
                 }
             }

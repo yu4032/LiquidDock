@@ -196,7 +196,10 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             CustomGlassSearchRow("export", "导出参数", "备份当前 LiquidDock 配置为 JSON"),
             CustomGlassSearchRow("import", "导入参数", "校验并恢复参数；完成后自动重启桌面"),
             CustomGlassSearchRow("reset", "恢复默认", "重置内置配置与开关并重启桌面"),
+        )
+        Page.Logs -> listOf(
             CustomGlassSearchRow("diag_log", "诊断日志", "将运行诊断写入日志文件；重启对应作用域生效"),
+            CustomGlassSearchRow("module_logs", "模块日志", "查看、复制与导出模块诊断日志"),
         )
         else -> emptyList()
     }

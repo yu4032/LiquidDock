@@ -212,12 +212,15 @@ static const uint32_t ld_pat_dock_scaled_size[11] = {
 };
 
 /* GetStream.add (0x897800, 16 words) used by RxObjectMixin.refresh to notify Obx. */
-#define LD_ICON_GLASS_GETSTREAM_ADD_START 0x897800u
-static const uint32_t ld_pat_getstream_add[16] = {
+#define LD_ICON_GLASS_GETSTREAM_ADD_START 0x8b2904u
+static const uint32_t ld_pat_getstream_add[26] = {
     0xa9bf79fdu, 0xaa0f03fdu, 0xd10041efu, 0xaa0103e4u,
     0xaa0203e3u, 0xf81f83a1u, 0xf81f03a2u, 0xb8407082u,
     0x8b1c8042u, 0xaa0303e0u, 0xaa1603e1u, 0x6b16005fu,
     0x540000e0u, 0xb8417044u, 0x8b1c8084u, 0xf940f768u,
+    0xf8407089u, 0xf97d2b63u, 0xd63f0120u, 0xf85f83a1u,
+    0xf85f03a2u, 0x94000005u, 0xaa1603e0u, 0xaa1d03efu,
+    0xa8c179fdu, 0xd65f03c0u,
 };
 
 #endif

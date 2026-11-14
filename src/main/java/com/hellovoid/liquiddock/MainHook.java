@@ -24,7 +24,9 @@ public class MainHook {
             String line = new java.text.SimpleDateFormat(
                     "HH:mm:ss.SSS", java.util.Locale.ROOT)
                     .format(new java.util.Date()) + " " + message + "\n";
-            java.io.File dir = new java.io.File("/sdcard/Download");
+            java.io.File dir = new java.io.File("/sdcard/Android/media/com.hellovoid.liquiddock");
+            if (!dir.exists()) dir.mkdirs();
+            if (!dir.canWrite()) dir = new java.io.File("/sdcard/Download");
             if (!dir.canWrite()) dir = new java.io.File("/data/local/tmp");
             java.io.FileOutputStream out = new java.io.FileOutputStream(
                     new java.io.File(dir, "liquiddock.log"), true);

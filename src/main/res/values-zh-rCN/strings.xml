@@ -42,6 +42,7 @@
     <string name="widget_components_entry_summary">手动载入小组件，可隐藏内部部件或选择文字与图像白化</string>
     <string name="page_animation">动画与过渡</string>
     <string name="page_data">预设</string>
+    <string name="page_logs">模块日志</string>
     <string name="page_about">许可</string>
     <string name="page_theme_palette">主题配色</string>
     <string name="theme_palette_summary">使用 Apple iOS 标准系统强调色，自动匹配浅色与深色模式；跟随系统时使用壁纸动态配色。选择即时生效，不修改桌面或玻璃材质。</string>

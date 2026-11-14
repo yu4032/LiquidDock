@@ -31,7 +31,7 @@ class SettingsGuiOrganizationContractTest {
         Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.WidgetComponents,
         Page.LauncherHighlights, Page.LauncherHighlightsCompact,
         Page.LauncherHighlightsLarge,
-        Page.Data, Page.About,
+        Page.Data, Page.Logs, Page.About,
     )
 
     @Test fun everyPageHasExactlyOneDeclaredOrCustomGuiOwner() {

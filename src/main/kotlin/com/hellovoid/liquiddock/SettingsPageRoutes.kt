@@ -6,7 +6,7 @@ internal fun canonicalSettingsParent(page: Page): Page? = when (page) {
     Page.Grid, Page.Dock, Page.Workstation, Page.Recents -> Page.LayoutHub
     Page.SoftGlass, Page.SoftGlassComponents, Page.Liquid, Page.GlassComponents,
     Page.AnimationSystem, Page.ThirdPartyApps -> Page.GlassHub
-    Page.ThemePalette, Page.Data, Page.About -> Page.MoreHub
+    Page.ThemePalette, Page.Data, Page.Logs, Page.About -> Page.MoreHub
     Page.GridBasics, Page.GridLandscape, Page.GridPortrait -> Page.Grid
     Page.DockBehavior, Page.DockGeometry, Page.DockRecentBlacklist, Page.Divider -> Page.Dock
     Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait -> Page.Workstation

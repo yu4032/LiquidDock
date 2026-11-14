@@ -226,7 +226,7 @@ static void ld_call_dart_2(struct ld_dart_context *c, uintptr_t fn, uintptr_t ar
     );
 }
 
-enum { LD_HOTSEAT_RX_MAX = 32 };
+enum { LD_HOTSEAT_RX_MAX = 128 };
 struct ld_hotseat_rx_entry {
     uintptr_t rx;
     uint32_t rx_cid;
@@ -243,15 +243,40 @@ static void ld_hotseat_cache_rx(struct ld_dart_context *c, uintptr_t owner)
     uint32_t rx_cid = ld_icon_owner_class_id(rx);
     uint32_t subj_cid = ld_icon_owner_class_id(subject);
     if (rx_cid == UINT32_MAX || subj_cid == UINT32_MAX) return;
+    int free_slot = -1;
     for (int i = 0; i < LD_HOTSEAT_RX_MAX; i++) {
-        if (g_hotseat_rx_cache[i].rx == rx) return;
-        if (g_hotseat_rx_cache[i].rx == 0) {
-            g_hotseat_rx_cache[i].rx = rx;
-            g_hotseat_rx_cache[i].rx_cid = rx_cid;
-            g_hotseat_rx_cache[i].subj_cid = subj_cid;
-            return;
+        uintptr_t cur = g_hotseat_rx_cache[i].rx;
+        if (cur == rx) return;
+        if (free_slot < 0 && (cur == 0 || ld_icon_owner_class_id(cur) != g_hotseat_rx_cache[i].rx_cid)) {
+            free_slot = i;
         }
     }
+    if (free_slot >= 0) {
+        g_hotseat_rx_cache[free_slot].rx = rx;
+        g_hotseat_rx_cache[free_slot].rx_cid = rx_cid;
+        g_hotseat_rx_cache[free_slot].subj_cid = subj_cid;
+    }
+}
+
+static int ld_icon_refresh_cached_rx(struct ld_dart_context *c)
+{
+    if (!g_getstream_add_rt) return 0;
+    int refreshed = 0;
+    for (int i = 0; i < LD_HOTSEAT_RX_MAX; i++) {
+        uintptr_t rx = g_hotseat_rx_cache[i].rx;
+        if (!rx) continue;
+        if (ld_icon_owner_class_id(rx) != g_hotseat_rx_cache[i].rx_cid) {
+            g_hotseat_rx_cache[i].rx = 0;
+            continue;
+        }
+        uintptr_t subject = ld_heap_pointer(c, rx, g_off_rx_subject);
+        uintptr_t val = ld_heap_pointer(c, rx, g_off_rx_val);
+        if (!subject || !val) continue;
+        if (ld_icon_owner_class_id(subject) != g_hotseat_rx_cache[i].subj_cid) continue;
+        ld_call_dart_2(c, g_getstream_add_rt, subject, val);
+        refreshed++;
+    }
+    return refreshed;
 }
 
 __attribute__((used)) static void ld_icon_record_dock_size(struct ld_dart_context *c)
@@ -279,18 +304,7 @@ __attribute__((used)) static void ld_icon_record_dock_size(struct ld_dart_contex
     s_bounce_prev = prev_d;
     s_bounce_until_ns = now_ns + 250000000ULL;
     __atomic_store_n(&s_in_refresh, 1, __ATOMIC_RELAXED);
-    int refreshed = 0;
-    for (int i = 0; i < LD_HOTSEAT_RX_MAX; i++) {
-        uintptr_t rx = g_hotseat_rx_cache[i].rx;
-        if (!rx) break;
-        if (ld_icon_owner_class_id(rx) != g_hotseat_rx_cache[i].rx_cid) continue;
-        uintptr_t subject = ld_heap_pointer(c, rx, g_off_rx_subject);
-        uintptr_t val = ld_heap_pointer(c, rx, g_off_rx_val);
-        if (!subject || !val) continue;
-        if (ld_icon_owner_class_id(subject) != g_hotseat_rx_cache[i].subj_cid) continue;
-        ld_call_dart_2(c, g_getstream_add_rt, subject, val);
-        refreshed++;
-    }
+    int refreshed = ld_icon_refresh_cached_rx(c);
     __atomic_store_n(&s_in_refresh, 0, __ATOMIC_RELAXED);
     if (refreshed > 0) {
         ld_blog("icon glass dock refresh %.1f -> %.1f count=%d", prev_d, d, refreshed);
@@ -447,12 +461,12 @@ static void ld_icon_adjust_radius_site(struct ld_dart_context *c,unsigned site)
     double min_dim=0.0, scale=1.0;
     bool hit = ld_icon_lookup_size(owner, &min_dim, &scale);
     bool is_hotseat = ld_icon_is_hotseat_owner(c, owner);
+    ld_hotseat_cache_rx(c, owner);
     static double s_ref_dim = 0.0;
     if (!is_hotseat && hit && isfinite(min_dim) && min_dim > s_ref_dim && min_dim < 256.0) {
         s_ref_dim = min_dim;
     }
     if (is_hotseat) {
-        ld_hotseat_cache_rx(c, owner);
         double dock_dim = ld_icon_get_dock_size();
         if (dock_dim > 1.0) {
             min_dim = dock_dim;

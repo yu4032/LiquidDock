@@ -95,17 +95,6 @@ internal fun AboutPage(
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
         item { PageHeader("许可", "LiquidDock 使用的第三方开源项目与许可证") }
-        item { SmallTitle("运行诊断") }
-        item {
-            SettingsCard {
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Debug.LOGGING,
-                    "诊断日志",
-                    "将 LiquidDock 运行诊断写入日志文件；修改后重启对应 Hook 作用域生效",
-                )
-            }
-        }
         item { SmallTitle("界面与运行框架") }
         item {
             SettingsCard {

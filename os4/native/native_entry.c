@@ -68,12 +68,20 @@ static void (*g_orig_rust_orientation)(void *);
 void ld_blog(const char *fmt, ...)
 {
     static int fd = -2;
+    static int media_fd = -2;
     if (fd == -2) {
         const char *path = "/data/user_de/0/com.miui.home/files/liquiddock4-boot.log";
         mkdir("/data/user_de/0/com.miui.home/files", 0700);
         fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
     }
-    if (fd < 0) return;
+    if (media_fd == -2) {
+        const char *media_dir = "/sdcard/Android/media/com.hellovoid.liquiddock";
+        const char *media_path = "/sdcard/Android/media/com.hellovoid.liquiddock/liquiddock4-boot.log";
+        mkdir("/sdcard/Android/media", 0775);
+        mkdir(media_dir, 0775);
+        media_fd = open(media_path, O_WRONLY | O_CREAT | O_APPEND, 0664);
+    }
+    if (fd < 0 && media_fd < 0) return;
 
     char line[512];
     int n = 0;
@@ -93,7 +101,8 @@ void ld_blog(const char *fmt, ...)
     if (n < 0) n = 0;
     if (n > (int)sizeof line - 2) n = (int)sizeof line - 2;
     line[n++] = '\n';
-    (void)write(fd, line, (size_t)n);
+    if (fd >= 0) (void)write(fd, line, (size_t)n);
+    if (media_fd >= 0) (void)write(media_fd, line, (size_t)n);
 }
 
 /* Macro order is (columns, rows): the launcher's x0 receives the column count
@@ -539,6 +548,9 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
 
 /* Widget scope, RemoteViews component hiding, and widget container glass hooks
  * use AOT / rv_targets resolution and must stay decoupled from glass_targets. */
+static bool g_rv_hook_installed = false;
+static bool g_pad_widget_glass_installed = false;
+
 static void ld_install_os4_widget_hooks(const struct native_api *api, const ld_lib_info *lib) {
     if (!api || !api->hook || !lib) return;
     if (!g_widget_init_miui_attr_installed) {
@@ -563,7 +575,6 @@ static void ld_install_os4_widget_hooks(const struct native_api *api, const ld_l
             ld_blog("OS4 widget glass scope target not found");
         }
     }
-    static bool g_rv_hook_installed = false;
     if(!g_rv_hook_installed) {
         static const uint32_t flutter_view_pat[16]={
             0xa9bf79fdu, 0xaa0f03fdu, 0xd10581efu, 0xf81f83a1u,
@@ -646,7 +657,6 @@ static void ld_install_os4_widget_hooks(const struct native_api *api, const ld_l
             }
         }
     }
-    static bool g_pad_widget_glass_installed = false;
     if(!g_pad_widget_glass_installed) {
         static const uint32_t pad_wc_pat[80]={
             0xa9bf79fdu, 0xaa0f03fdu, 0xd10081efu, 0xf81f83a1u,
@@ -1313,6 +1323,37 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     update_layout_ready();
 }
 
+static void ld_write_hook_status(void) {
+    mkdir(LD_SM_EXT_DIR, 0770);
+    const char *tmp = LD_SM_EXT_DIR "/hook_status.conf.tmp";
+    const char *dst = LD_SM_EXT_DIR "/hook_status.conf";
+    FILE *fp = fopen(tmp, "w");
+    if (!fp) return;
+    int glass_ok = g_os4_glass_installed ? 1 : 0;
+    int icons_ok = g_icon_glass_installed ? 1 : 0;
+    int radius_ok = (g_icon_glass_radius_installed && g_getstream_add_rt != 0) ? 1 : 0;
+    int widgets_ok = (g_widget_init_miui_attr_installed && g_rv_hook_installed
+            && g_pad_widget_glass_installed) ? 1 : 0;
+    int grid_ok = g_layout_hooks_ready ? 1 : 0;
+    int dock_ok = (g_orig_dock_background != NULL && g_orig_dock_spacing != NULL) ? 1 : 0;
+    int divider_ok = (g_dp_inner_orig != NULL && g_dp_bg_orig != NULL) ? 1 : 0;
+    int recents_ok = g_recents_blur_installed ? 1 : 0;
+    fprintf(fp,
+            "pid=%d\n"
+            "glass=%d\n"
+            "glass_icons=%d\n"
+            "glass_icon_radius=%d\n"
+            "glass_widgets=%d\n"
+            "grid=%d\n"
+            "dock=%d\n"
+            "divider=%d\n"
+            "recents=%d\n",
+            (int)getpid(), glass_ok, icons_ok, radius_ok, widgets_ok,
+            grid_ok, dock_ok, divider_ok, recents_ok);
+    fclose(fp);
+    rename(tmp, dst);
+}
+
 static void install_grid_hook(const struct native_api *api) {
     if (!api || !api->hook) return;
     pthread_mutex_lock(&g_install_lock);
@@ -1321,12 +1362,14 @@ static void install_grid_hook(const struct native_api *api) {
      * Install its two protected observers ahead of nonessential AOT hooks,
      * before the process's small RLIMIT_MEMLOCK budget is exhausted. */
     ld_lib_info divider_lib = {0};
-    if (ld_resolve_lib(ld_launcher_apk_substr(), "lib/arm64-v8a/libapp.so", &divider_lib))
+    int app_loaded = ld_resolve_lib(ld_launcher_apk_substr(), "lib/arm64-v8a/libapp.so", &divider_lib);
+    if (app_loaded)
         ld_divider_paint_install(api, &divider_lib);
     if (((g_grid_cols > 0 && g_grid_rows > 0) || g_home_options.icon_size_enabled
             || g_home_options.dock.enabled || g_home_options.glass_enabled
             || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100))
         install_grid_hook_unlocked(api);
+    if (app_loaded) ld_write_hook_status();
     if((g_installed || g_os4_glass_installed) && !g_trace_started) {
         pthread_t thread;
         if(pthread_create(&thread,NULL,trace_thread,NULL)==0) {

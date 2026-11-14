@@ -35,7 +35,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
         // separately classified; independent process hooks need no port.
         private val OS4_READY_PAGES = setOf(
             Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub,
-            Page.ThemePalette, Page.Data, Page.About,
+            Page.ThemePalette, Page.Data, Page.Logs, Page.About,
             Page.Liquid, Page.LiquidMaterial, Page.LiquidColor,
             Page.LiquidLighting, Page.LiquidSampling, Page.GlassEdge,
             Page.GlassComponents, Page.GlassMenus, Page.SidebarEdge,
