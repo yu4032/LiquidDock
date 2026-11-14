@@ -1224,13 +1224,14 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             }
         }
     }
-    if (g_installed) { update_layout_ready(); return; }
-
     static ld_lib_info lib;
     if (!ld_resolve_lib(ld_launcher_apk_substr(), "lib/arm64-v8a/libapp.so", &lib)) {
         LOGI("libapp.so not mapped yet");
         return;
     }
+    /* Retry folder grid hooks independently of g_installed so partial failures recover. */
+    ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
+    if (g_installed) { update_layout_ready(); return; }
     /* Rendering hooks use their own resolved AOT symbols and safety checks.
      * Install them before the unrelated grid-layout address checks below. */
     ld_install_icon_materials(api,&lib);
@@ -1243,7 +1244,6 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);
     ld_home_margins_install(api,&lib);
-    ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
     ld_dart_superellipse_install(api,&lib);
 
     uintptr_t entry = ld_find_aot_pattern(&lib, LD_PAD_ROWCOL_VADDR,
@@ -1479,9 +1479,11 @@ static void ld_write_hook_status(void) {
     int home_icons_ok = (g_hm_cc_orig != NULL) ? 1 : 0;
     int big_folder_ok = g_folder_corner_drag_installed ? 1 : 0;
     int widget_1x1_ok = g_w1x1_menu_installed ? 1 : 0;
-    int folder_grid_ok = ((g_home_options.folder_grid_cols <= 0 || g_folder_grid_cols > 0)
-            && (g_home_options.folder_grid_rows <= 0 || g_folder_grid_rows > 0)
-            && (g_folder_grid_cols > 0 || g_folder_grid_rows > 0)) ? 1 : 0;
+    int folder_cols_ready = (g_home_options.folder_grid_cols > 0 && g_folder_grid_cols > 0) ? 1 : 0;
+    int folder_rows_ready = (g_home_options.folder_grid_rows > 0 && g_folder_grid_rows > 0) ? 1 : 0;
+    int folder_grid_ok = ((g_home_options.folder_grid_cols <= 0 || folder_cols_ready)
+            && (g_home_options.folder_grid_rows <= 0 || folder_rows_ready)
+            && (folder_cols_ready || folder_rows_ready)) ? 1 : 0;
     fprintf(fp,
             "pid=%d\n"
             "glass=%d\n"
@@ -1495,10 +1497,13 @@ static void ld_write_hook_status(void) {
             "home_icons=%d\n"
             "big_folder=%d\n"
             "widget_1x1=%d\n"
-            "folder_grid=%d\n",
+            "folder_grid=%d\n"
+            "folder_cols_ready=%d\n"
+            "folder_rows_ready=%d\n",
             (int)getpid(), glass_ok, icons_ok, radius_ok, widgets_ok,
             grid_ok, dock_ok, divider_ok, recents_ok,
-            home_icons_ok, big_folder_ok, widget_1x1_ok, folder_grid_ok);
+            home_icons_ok, big_folder_ok, widget_1x1_ok, folder_grid_ok,
+            folder_cols_ready, folder_rows_ready);
     fclose(fp);
     rename(tmp, dst);
 }

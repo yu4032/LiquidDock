@@ -144,13 +144,14 @@ internal fun evaluateHookMonitor(
         title: String,
         enabled: Boolean,
         hooked: Boolean,
+        missingDetail: String = "偏移或 Hook 异常",
     ): HookProbeItem {
         val state = resolve(enabled, hooked)
         val detail = when (state) {
             HookProbeState.ACTIVE -> "Hook 已生效"
             HookProbeState.DISABLED -> "开关未开启"
             HookProbeState.PAUSED -> "总开关已暂停"
-            HookProbeState.MISSING -> "偏移或 Hook 异常"
+            HookProbeState.MISSING -> missingDetail
         }
         return HookProbeItem(id = id, title = title, state = state, detail = detail)
     }
@@ -210,6 +211,14 @@ internal fun evaluateHookMonitor(
         bootLog.contains("OS4 Recents blur gate installed:")
     }
 
+    val folderGridMissingDetail = when {
+        statusMap["folder_cols_ready"] == "1" && statusMap["folder_rows_ready"] == "0" ->
+            "列已就绪，行 Hook 异常"
+        statusMap["folder_cols_ready"] == "0" && statusMap["folder_rows_ready"] == "1" ->
+            "行已就绪，列 Hook 异常"
+        else -> "偏移或 Hook 异常"
+    }
+
     val items = listOf(
         probe("glass", "柔光玻璃", config.glassEnabled, glassHooked),
         probe("glass_icons", "图标玻璃", config.iconGlassEnabled, iconGlassHooked),
@@ -217,7 +226,7 @@ internal fun evaluateHookMonitor(
         probe("grid", "桌面网格", config.gridEnabled, gridHooked),
         probe("home_icons", "图标与边距", config.iconSizeEnabled, homeIconsHooked),
         probe("big_folder", "大文件夹", config.bigFolderEnabled, folderHooked),
-        probe("folder_grid", "文件夹行列", config.folderGridEnabled, folderGridHooked),
+        probe("folder_grid", "文件夹行列", config.folderGridEnabled, folderGridHooked, folderGridMissingDetail),
         probe("widget_1x1", "1×1↔2×2", config.widget1x1Enabled, widget1x1Hooked),
         probe("dock", "Dock 布局", config.dockEnabled, dockHooked),
         probe("divider", "分割线", config.dividerEnabled, dividerHooked),

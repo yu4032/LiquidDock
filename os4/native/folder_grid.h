@@ -289,9 +289,15 @@ static void ld_folder_grid_install(const struct native_api *api, const ld_lib_in
     }
 
     int ok = 0;
-    /* Resolve sym[2] (calGridHeight) before calGridHeight.sync overwrites its prologue. */
-    ld_folder_sym_t cal_height_sym;
-    bool has_cal_height_sym = ld_resolve_folder_sym(lib, 2, &cal_height_sym);
+    /* Cache sym[2] (calGridHeight) before calGridHeight.sync overwrites its prologue,
+     * so retries for calGridHeight.q18/phone still work even if sync already hooked. */
+    static ld_folder_sym_t s_cal_height_sym;
+    static bool s_has_cal_height_sym;
+    if (!s_has_cal_height_sym) {
+        s_has_cal_height_sym = ld_resolve_folder_sym(lib, 2, &s_cal_height_sym);
+    }
+    ld_folder_sym_t cal_height_sym = s_cal_height_sym;
+    bool has_cal_height_sym = s_has_cal_height_sym;
 
     if (cols > 0) {
         if (!g_orig_folder_grid_cols) {

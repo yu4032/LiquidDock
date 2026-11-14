@@ -111,14 +111,22 @@ internal object Os4GlassSymbols {
         val folderGridTargets: String = "",
         val getStreamAddTarget: String = "",
     )
-    @Volatile private var cached: Pair<Pair<String, Boolean>, ResolvedTargets>? = null
+    private data class CacheKey(
+        val source: String,
+        val lastUpdateTime: Long,
+        val versionCode: Long,
+        val strictFingerprint: Boolean,
+    )
+    @Volatile private var cached: Pair<CacheKey, ResolvedTargets>? = null
 
     fun fromInstalledLauncher(context: Context, strictFingerprint: Boolean): String? =
         fromInstalledLauncherResolved(context, strictFingerprint)?.glass
 
     fun fromInstalledLauncherResolved(context: Context, strictFingerprint: Boolean): ResolvedTargets? = runCatching {
-        val source = context.packageManager.getApplicationInfo("com.miui.home", 0).sourceDir
-        val cacheKey = source to strictFingerprint
+        val pkg = context.packageManager.getPackageInfo("com.miui.home", 0)
+        val source = pkg.applicationInfo?.sourceDir
+            ?: context.packageManager.getApplicationInfo("com.miui.home", 0).sourceDir
+        val cacheKey = CacheKey(source, pkg.lastUpdateTime, pkg.longVersionCode, strictFingerprint)
         cached?.takeIf { pair -> pair.first == cacheKey }?.second?.let { result -> return result }
         val image = ZipFile(source).use { zip ->
             val entry = zip.getEntry(LIB) ?: error("Launcher has no Dart AOT libapp.so")
