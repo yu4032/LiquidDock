@@ -11,6 +11,28 @@ __attribute__((used)) static void ld_filter_grid(struct ld_dart_context *c) {
     int raw_dir=ld_grid_direction(c,c->x[0]);
     g_load_direction=(raw_dir==0 || raw_dir==1)?(1-raw_dir):-1;
 }
+#include <fcntl.h>
+#include <unistd.h>
+
+static void ld_write_4x2_widget_state(const struct ld_layout_item *items, size_t count) {
+    bool has_4x2 = false;
+    for (size_t i = 0; i < count; i++) {
+        if (items[i].screen >= 0 &&
+            ((items[i].sx == 4 && items[i].sy == 2) ||
+             (items[i].sx == 2 && items[i].sy == 4))) {
+            has_4x2 = true;
+            break;
+        }
+    }
+    int fd = open("/data/user/0/com.miui.home/files/liquiddock-grid-4x2.state",
+                  O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd >= 0) {
+        const char ch = has_4x2 ? '1' : '0';
+        (void)write(fd, &ch, 1);
+        close(fd);
+    }
+}
+
 static int64_t ld_dto_number(struct ld_dart_context *c,uintptr_t object,size_t offset) {
     uint32_t word=ld_heap_u32(object,offset);
     if(!(word&1)) return (int32_t)word/2;
@@ -73,6 +95,7 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
         if(source[count].screen<0) continue;
         objects[count++]=dto;
     }
+    ld_write_4x2_widget_state(source, count);
     int known=ld_layout_load(LD_LAYOUT_FILE,memory) && memory->columns==g_grid_cols && memory->rows==g_grid_rows;
     if(!known) { memset(memory,0,sizeof *memory); memory->active_direction=-1; }
     int source_direction=memory->active_direction;

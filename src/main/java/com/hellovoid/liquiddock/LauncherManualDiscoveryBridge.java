@@ -9,6 +9,8 @@ import android.net.Uri;
 import java.lang.reflect.Field;
 import android.os.Build;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -163,7 +165,10 @@ public final class LauncherManualDiscoveryBridge {
                 }
             }
         } catch (Throwable error) {
-            MainHook.log("[DC][Grid4x2] preflight unavailable: " + error);
+            result = readOs4GridWidget4x2State(context);
+            if (result == GridWidget4x2PreflightClient.UNKNOWN) {
+                MainHook.log("[DC][Grid4x2] preflight unavailable: " + error);
+            }
         } finally {
             if (cursor != null) cursor.close();
         }
@@ -177,6 +182,18 @@ public final class LauncherManualDiscoveryBridge {
         } catch (Throwable error) {
             MainHook.log("[DC][Grid4x2] reply failed: " + error);
         }
+    }
+
+    private static int readOs4GridWidget4x2State(Context context) {
+        if (context == null) return GridWidget4x2PreflightClient.UNKNOWN;
+        File stateFile = new File(context.getFilesDir(), "liquiddock-grid-4x2.state");
+        if (!stateFile.isFile()) return GridWidget4x2PreflightClient.UNKNOWN;
+        try (FileInputStream in = new FileInputStream(stateFile)) {
+            int ch = in.read();
+            if (ch == '1') return GridWidget4x2PreflightClient.BLOCKED;
+            if (ch == '0') return GridWidget4x2PreflightClient.CLEAR;
+        } catch (Throwable ignored) {}
+        return GridWidget4x2PreflightClient.UNKNOWN;
     }
 
     private static boolean send(Context context, String kind, String token) {

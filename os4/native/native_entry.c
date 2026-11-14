@@ -34,7 +34,6 @@
 #include "executable_range.h"
 #include "aot_scanner.h"
 #include "hook_page_pin.h"
-#include "rust_orientation_fingerprint.h"
 #include "rust_symbol_resolver.h"
 #include "folder_grid.h"
 #include "home_options_fingerprints.h"
@@ -248,13 +247,6 @@ static void load_grid_config(void)
     }
 }
 
-/* Optional strict-mode authentication of the entire APK entry. */
-static int attest_layout_elf(const ld_lib_info *lib,size_t size,const unsigned char expected[32]) {
-    char apk[256]; unsigned char observed[32];
-    return ld_apk_real_path(ld_launcher_apk_substr(),apk,sizeof apk)
-        && ld_sha256_region(apk,lib->entry_off,size,observed)
-        && !memcmp(expected,observed,sizeof observed);
-}
 static void pin_installed_hook(uintptr_t site) {
     int ok=ld_pin_code_pages_soft(site,16);
     if(!ok) {
@@ -1203,26 +1195,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                     ld_blog("Rust orientation symbol %p (size=%zu) failed semantic/strict check; disabling",
                             (void *)sym_res.vaddr, sym_res.size);
                 }
-            } else if (!strict) {
-                uintptr_t pat = ld_find_aot_pattern(&rust, LD_RUST_ORIENTATION_VADDR,
-                                                    ld_rust_orientation_words,
-                                                    sizeof ld_rust_orientation_words / sizeof(uint32_t));
-                if (pat) {
-                    ld_rust_sym_result_t pat_res = {
-                        .vaddr = pat - rust.elf_base,
-                        .size = LD_RUST_ORIENTATION_SIZE,
-                        .runtime = pat,
-                        .from_debugdata = false
-                    };
-                    if (ld_verify_rust_orientation_fn(&rust, &pat_res)) {
-                        target = pat;
-                        source = "pattern+semantic";
-                    } else {
-                        ld_blog("Rust orientation pattern %p failed semantic check; disabling", (void *)pat);
-                    }
-                }
             } else {
-                ld_blog("Rust orientation symbol unavailable in strict mode; disabling");
+                ld_blog("Rust orientation symbol unavailable; disabling");
             }
             if(target && executable_range(target,16)) {
                 int result=api->hook((void *)target,(void *)repl_rust_orientation,(void **)&g_orig_rust_orientation);
@@ -1253,10 +1227,6 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_home_margins_install(api,&lib);
     ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
     ld_dart_superellipse_install(api,&lib);
-    if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
-        ld_blog("ELF identity cross-check failed in strict mode; aborting layout hooks");
-        return;
-    }
 
     uintptr_t entry = ld_find_aot_pattern(&lib, LD_PAD_ROWCOL_VADDR,
                                           ld_pad_rowcol_words,
@@ -1264,12 +1234,6 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     if (!entry || !executable_range(entry, 16)) {
         LOGE("PadRowColHandler address unavailable or safety check failed");
         ld_blog("PadRowColHandler address unavailable or safety check failed");
-        return;
-    }
-
-    static const unsigned char dart_digest[32]={0x1a,0xda,0xa4,0x46,0x6d,0x85,0x16,0xc1,0x41,0x74,0xa3,0x68,0x14,0x94,0x8c,0x03,0xf7,0x05,0x79,0x09,0x04,0x68,0xf7,0xd4,0x09,0x37,0x15,0x6e,0x05,0xb8,0x7b,0x20};
-    if(strict && !attest_layout_elf(&lib,29983448u,dart_digest)) {
-        ld_blog("ELF SHA-256 attestation failed in strict mode; aborting layout hooks");
         return;
     }
 

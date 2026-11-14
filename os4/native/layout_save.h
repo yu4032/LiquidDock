@@ -27,6 +27,10 @@ static void ld_capture_saved_items(const struct ld_layout_item *items,size_t cou
     }
     if(ld_layout_finalize_changes(&g_pending_layout_mem) && ld_layout_save(LD_LAYOUT_FILE,&g_pending_layout_mem)) {
         g_pending_layout_valid=0;
+        int d = g_pending_layout_mem.active_direction;
+        if (d >= 0 && d <= 1) {
+            ld_write_4x2_widget_state(g_pending_layout_mem.items[d], g_pending_layout_mem.count[d]);
+        }
         ld_blog("layout save captured %zu HOME changes direction=%d",count,g_pending_layout_mem.active_direction);
     } else {
         g_pending_layout_valid=1;
