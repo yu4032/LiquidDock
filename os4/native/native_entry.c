@@ -1318,8 +1318,8 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             ld_dock_bottom_body,sizeof ld_dock_bottom_body,(void *)repl_dock_bottom,&g_orig_dock_bottom},
         {LD_DOCK_CONTAINER_HEIGHT_START,LD_DOCK_CONTAINER_HEIGHT_SITE,
             ld_dock_container_height_body,sizeof ld_dock_container_height_body,(void *)repl_dock_container_height,&g_orig_dock_container_height},
-        {LD_DOCK_STABLE_HEIGHT_START,LD_DOCK_STABLE_HEIGHT_SITE,
-            ld_dock_stable_height_words,sizeof ld_dock_stable_height_words,(void *)repl_dock_stable_height,&g_orig_dock_stable_height},
+        /* _DockLightContentState._stableHeight is intentionally excluded: hooking it
+         * makes the Workstation Floating Dock invisible until a popup menu rebuilds it. */
         {LD_DOCK_WINDOW_HEIGHT_START,LD_DOCK_WINDOW_HEIGHT_SITE,
             ld_dock_window_height_words,sizeof ld_dock_window_height_words,(void *)repl_dock_window_height,&g_orig_dock_window_height},
         {LD_DOCK_BACKGROUND_START,LD_DOCK_BACKGROUND_SITE,

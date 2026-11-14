@@ -114,7 +114,6 @@ __attribute__((used)) static void ld_observe_dock_bottom(struct ld_dart_context 
     if(isfinite(margin)) memcpy(c->q[1],&margin,8);
 }
 static void *g_orig_dock_container_height __attribute__((used));
-static void *g_orig_dock_stable_height __attribute__((used));
 static void *g_orig_dock_window_height __attribute__((used));
 __attribute__((used)) static void ld_observe_dock_container_height(struct ld_dart_context *c)
 {
@@ -136,7 +135,6 @@ LD_DART_OBSERVER(repl_dock_function_size,ld_observe_dock_function_size,g_orig_do
 LD_DART_OBSERVER(repl_dock_icon_padding,ld_observe_dock_icon_padding,g_orig_dock_icon_padding)
 LD_DART_OBSERVER(repl_dock_bottom,ld_observe_dock_bottom,g_orig_dock_bottom)
 LD_DART_OBSERVER(repl_dock_container_height,ld_observe_dock_container_height,g_orig_dock_container_height)
-LD_DART_OBSERVER(repl_dock_stable_height,ld_observe_dock_window_height,g_orig_dock_stable_height)
 LD_DART_OBSERVER(repl_dock_window_height,ld_observe_dock_window_height,g_orig_dock_window_height)
 LD_DART_OBSERVER(repl_dock_background,ld_observe_dock_background,g_orig_dock_background)
 LD_DART_OBSERVER(repl_dock_diff_bg,ld_observe_dock_background,g_orig_dock_diff_bg)
