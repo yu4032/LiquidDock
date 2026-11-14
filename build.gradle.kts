@@ -23,6 +23,9 @@ android {
             "boolean",
             "WORKSPACE_GLASS_HWUI_PROBE",
             workspaceGlassHwuiProbeEnabled.toString())
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     signingConfigs {

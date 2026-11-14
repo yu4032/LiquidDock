@@ -238,30 +238,12 @@ static inline uint32_t ld_dart_cid(uintptr_t obj)
     return (uint32_t)((hdr >> 12) & 0xfffffu);
 }
 
-static inline uint64_t ld_widget_key(struct ld_dart_context *c, uintptr_t widget)
+static inline uint64_t ld_w1x1_pos_key(int64_t screen_id, int64_t x, int64_t y)
 {
-    uint32_t raw = ld_heap_u32(widget, 0x117);
-    if (!(raw & 1)) {
-        return (uint64_t)(int64_t)((int32_t)raw >> 1);
-    }
-    uintptr_t obj = (uintptr_t)raw + (c->x[28] << 32);
-    if (!obj || obj == c->x[22]) return (uint64_t)widget;
-    uint32_t smi_len = ld_heap_u32(obj, 0xb);
-    if (!(smi_len & 1)) {
-        uint32_t len = smi_len >> 1;
-        if (len > 0 && len <= 128) {
-            uint8_t buf[128];
-            if (ld_read_heap(obj + 0xf, buf, len)) {
-                uint64_t h = 14695981039346656037ull;
-                for (uint32_t i = 0; i < len; i++) {
-                    h ^= buf[i];
-                    h *= 1099511628211ull;
-                }
-                return h ? h : 1;
-            }
-        }
-    }
-    return (uint64_t)ld_heap_i64(obj, 0x7);
+    uint64_t k = ((uint64_t)(uint32_t)screen_id << 32) |
+                 ((uint64_t)(uint16_t)x << 16) |
+                 (uint16_t)y;
+    return k ? k : 1;
 }
 
 static void ld_w1x1_load_enlarged(void)
@@ -350,7 +332,7 @@ static inline int ld_w1x1_is_toggle_target(struct ld_dart_context *c, uintptr_t 
         if (is_1x1_out) *is_1x1_out = 1;
         return 1;
     }
-    if (sx == 2 && sy == 2 && ld_w1x1_find_enlarged(ld_widget_key(c, widget), NULL, NULL)) {
+    if (sx == 2 && sy == 2) {
         if (is_1x1_out) *is_1x1_out = 0;
         return 1;
     }
@@ -520,9 +502,9 @@ static const uint8_t ld_w1x1_empty_args_desc[64] __attribute__((aligned(16))) = 
 
 static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl, uintptr_t widget, int is_1x1)
 {
+    int64_t screen_id = ld_heap_i64(widget, 0x2f);
     int64_t cx = ld_heap_i64(widget, 0x37);
     int64_t cy = ld_heap_i64(widget, 0x3f);
-    uint64_t wkey = ld_widget_key(c, widget);
 
     int64_t target_x = cx, target_y = cy, target_sx = 1, target_sy = 1;
 
@@ -561,15 +543,36 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
         }
         target_sx = 2;
         target_sy = 2;
-        ld_w1x1_add_enlarged(wkey, (int32_t)cx, (int32_t)cy);
+        ld_w1x1_add_enlarged(ld_w1x1_pos_key(screen_id, target_x, target_y), (int32_t)cx, (int32_t)cy);
     } else {
+        uint64_t cur_key = ld_w1x1_pos_key(screen_id, cx, cy);
         int32_t ox = (int32_t)cx, oy = (int32_t)cy;
-        (void)ld_w1x1_find_enlarged(wkey, &ox, &oy);
-        target_x = ox;
-        target_y = oy;
+        int has_saved = ld_w1x1_find_enlarged(cur_key, &ox, &oy);
+        const int64_t restore_cand[5][2] = {
+            { has_saved ? (int64_t)ox : cx, has_saved ? (int64_t)oy : cy },
+            { cx, cy },
+            { cx + 1, cy },
+            { cx, cy + 1 },
+            { cx + 1, cy + 1 }
+        };
+        if (cl && g_w1x1_rt[LD_W1X1_IS_LEGAL_XY] && g_w1x1_rt[LD_W1X1_IS_CELL_OCCUPIED_EXCEPT]) {
+            for (int i = 0; i < 5; i++) {
+                int64_t rx = restore_cand[i][0], ry = restore_cand[i][1];
+                if (rx < 0 || ry < 0) continue;
+                uint64_t a_legal[8] = { 0, cl, (uint64_t)rx, (uint64_t)ry, 0, (uint64_t)(1 << 1), (uint64_t)(1 << 1), 0 };
+                uint64_t legal = ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_IS_LEGAL_XY], a_legal, 0);
+                if (legal & 0x10u) continue; /* FALSE */
+                uint64_t a_occ[8] = { 0, cl, (uint64_t)rx, (uint64_t)ry, 0, (uint64_t)(1 << 1), (uint64_t)(1 << 1), widget };
+                uint64_t occ = ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_IS_CELL_OCCUPIED_EXCEPT], a_occ, 0);
+                if (!(occ & 0x10u)) continue; /* TRUE = occupied */
+                target_x = rx;
+                target_y = ry;
+                break;
+            }
+        }
         target_sx = 1;
         target_sy = 1;
-        ld_w1x1_remove_enlarged(wkey);
+        if (has_saved) ld_w1x1_remove_enlarged(cur_key);
     }
 
     uint32_t cid = ld_dart_cid(widget);
