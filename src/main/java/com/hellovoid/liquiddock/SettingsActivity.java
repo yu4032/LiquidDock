@@ -265,11 +265,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         Set<String> selected = Set.copyOf(scopes);
-        boolean wantsHome = selected.contains("com.miui.home");
-        if (wantsHome) LiquidDockRestart.requestLauncher(this);
-        Set<String> remaining = new java.util.HashSet<>(selected);
-        remaining.remove("com.miui.home");
-        if (remaining.isEmpty()) return;   // 只选了桌面：已由看门狗重启，无需 su
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         boolean diagnostic = preferences.getBoolean(
                 com.hellovoid.liquiddock.config.ConfigSchema.Debug.LOGGING.name(),
@@ -282,7 +277,7 @@ public class SettingsActivity extends AppCompatActivity {
                         .redirectErrorStream(true)
                         .start();
                 try (DataOutputStream os = new DataOutputStream(p.getOutputStream())) {
-                    os.writeBytes(HookScopeRestartShell.buildScript(remaining, diagnostic));
+                    os.writeBytes(HookScopeRestartShell.buildScript(selected, diagnostic));
                     os.flush();
                 }
                 if (!p.waitFor(45, TimeUnit.SECONDS)) {
@@ -303,7 +298,7 @@ public class SettingsActivity extends AppCompatActivity {
                     throw new IOException("root shell failed (code " + p.exitValue() + ")");
                 }
                 Map<String, String> outcomes = HookScopeRestartShell.parseResults(
-                        remaining, stdout.toString());
+                        selected, stdout.toString());
                 if (diagnostic) ((LiquidDockApp) getApplication()).logScopedRestart(
                         "UI_RESULT|" + outcomes);
                 // No confirmation dialog for successful restarts. Only surface
@@ -332,8 +327,17 @@ public class SettingsActivity extends AppCompatActivity {
             } catch (Exception e) {
                 if (diagnostic) ((LiquidDockApp) getApplication()).logScopedRestart(
                         "UI_FAILED|" + e);
-                runOnUiThread(() -> Toast.makeText(this,
-                        "作用域重启失败：" + e.getMessage(), Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> {
+                    boolean wantsHome = selected.contains(HookScopeRestartShell.HOME);
+                    if (wantsHome) {
+                        // Fall back to the in-launcher native watchdog when su is unavailable.
+                        LiquidDockRestart.requestLauncher(this);
+                    }
+                    if (!wantsHome || selected.size() > 1) {
+                        Toast.makeText(this,
+                                "作用域重启失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                });
             }
         }).start();
     }
@@ -350,10 +354,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     void restartLauncher() {
-        // Remote Preferences 已同步；重启请求通过 launcher 内的原生看门狗执行，
-        // 不依赖 root（本机 app 命名空间里没有 su）。
-        LiquidDockApp.syncToRemote(PreferenceManager.getDefaultSharedPreferences(this));
-        LiquidDockRestart.requestLauncher(this);
+        restartHookScopes(Set.of(HookScopeRestartShell.HOME));
     }
 
     void restartPackageProcess(String packageName, String displayName) {
