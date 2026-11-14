@@ -101,4 +101,27 @@ class HookMonitorTest {
         assertTrue(snapshot.items.all { it.state == HookProbeState.PAUSED })
         assertEquals(0, snapshot.activeCount)
     }
+
+    @Test
+    fun evaluateHookMonitor_statusZeroOverridesStaleBootLog() {
+        val status = parseStatusKeyValues(
+            """
+            pid=25282
+            glass=0
+            divider=0
+            folder_grid=0
+            """.trimIndent(),
+        )
+        val staleBootLog = """
+            OS4 glass pipeline installed
+            divider: inner installed
+            divider: bgPaint installed
+            OS4 folder grid setup cols=5 rows=3 ready=1 installed=7
+        """.trimIndent()
+        val config = allEnabledConfig().copy(folderGridEnabled = true)
+        val snapshot = evaluateHookMonitor(config, status, staleBootLog)
+        assertEquals(HookProbeState.MISSING, snapshot.items.first { it.id == "glass" }.state)
+        assertEquals(HookProbeState.MISSING, snapshot.items.first { it.id == "divider" }.state)
+        assertEquals(HookProbeState.MISSING, snapshot.items.first { it.id == "folder_grid" }.state)
+    }
 }

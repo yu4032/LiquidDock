@@ -1476,6 +1476,12 @@ static void ld_write_hook_status(void) {
     int dock_ok = (g_orig_dock_background != NULL && g_orig_dock_spacing != NULL) ? 1 : 0;
     int divider_ok = (g_dp_inner_orig != NULL && g_dp_bg_orig != NULL) ? 1 : 0;
     int recents_ok = g_recents_blur_installed ? 1 : 0;
+    int home_icons_ok = (g_hm_cc_orig != NULL) ? 1 : 0;
+    int big_folder_ok = g_folder_corner_drag_installed ? 1 : 0;
+    int widget_1x1_ok = g_w1x1_menu_installed ? 1 : 0;
+    int folder_grid_ok = ((g_home_options.folder_grid_cols <= 0 || g_folder_grid_cols > 0)
+            && (g_home_options.folder_grid_rows <= 0 || g_folder_grid_rows > 0)
+            && (g_folder_grid_cols > 0 || g_folder_grid_rows > 0)) ? 1 : 0;
     fprintf(fp,
             "pid=%d\n"
             "glass=%d\n"
@@ -1485,9 +1491,14 @@ static void ld_write_hook_status(void) {
             "grid=%d\n"
             "dock=%d\n"
             "divider=%d\n"
-            "recents=%d\n",
+            "recents=%d\n"
+            "home_icons=%d\n"
+            "big_folder=%d\n"
+            "widget_1x1=%d\n"
+            "folder_grid=%d\n",
             (int)getpid(), glass_ok, icons_ok, radius_ok, widgets_ok,
-            grid_ok, dock_ok, divider_ok, recents_ok);
+            grid_ok, dock_ok, divider_ok, recents_ok,
+            home_icons_ok, big_folder_ok, widget_1x1_ok, folder_grid_ok);
     fclose(fp);
     rename(tmp, dst);
 }

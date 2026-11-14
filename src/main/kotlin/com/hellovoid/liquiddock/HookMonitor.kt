@@ -16,7 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +63,7 @@ data class HookFeatureConfig(
     val gridEnabled: Boolean,
     val iconSizeEnabled: Boolean,
     val bigFolderEnabled: Boolean,
+    val folderGridEnabled: Boolean = false,
     val widget1x1Enabled: Boolean,
     val dockEnabled: Boolean,
     val dividerEnabled: Boolean,
@@ -83,6 +88,7 @@ data class HookFeatureConfig(
                 gridEnabled = bool(ConfigSchema.Grid.ENABLED),
                 iconSizeEnabled = bool(ConfigSchema.Grid.ICON_SIZE_ENABLED),
                 bigFolderEnabled = bool(ConfigSchema.Grid.BIG_FOLDER_ENABLED),
+                folderGridEnabled = bool(ConfigSchema.Grid.FOLDER_GRID_ENABLED),
                 widget1x1Enabled = bool(ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED),
                 dockEnabled = bool(ConfigSchema.Dock.ENABLED),
                 dividerEnabled = bool(ConfigSchema.Divider.ENABLED),
@@ -149,40 +155,60 @@ internal fun evaluateHookMonitor(
         return HookProbeItem(id = id, title = title, state = state, detail = detail)
     }
 
-    val glassHooked = statusMap["glass"] == "1" ||
+    fun resolveHooked(key: String, fallbackLog: () -> Boolean): Boolean =
+        if (statusMap.containsKey(key)) statusMap[key] == "1" else fallbackLog()
+
+    val glassHooked = resolveHooked("glass") {
         bootLog.contains("OS4 glass pipeline installed") ||
-        bootLog.contains("OS4 glass gates installed")
+            bootLog.contains("OS4 glass gates installed")
+    }
 
-    val iconGlassHooked = statusMap["glass_icons"] == "1" ||
+    val iconGlassHooked = resolveHooked("glass_icons") {
         bootLog.contains("icon glass hooks installed")
+    }
 
-    val widgetGlassHooked = statusMap["glass_widgets"] == "1" ||
-        (bootLog.contains("OS4 RemoteViews component hook installed") &&
-            bootLog.contains("OS4 RemoteViews bg hook installed"))
+    val widgetGlassHooked = resolveHooked("glass_widgets") {
+        bootLog.contains("OS4 RemoteViews component hook installed") &&
+            bootLog.contains("OS4 RemoteViews bg hook installed")
+    }
 
-    val gridHooked = statusMap["grid"] == "1" ||
+    val gridHooked = resolveHooked("grid") {
         bootLog.contains("complete layout pipeline ready=1")
+    }
 
-    val homeIconsHooked = bootLog.contains("home icons applied:") ||
-        bootLog.contains("home margin currentConfig hooked")
+    val homeIconsHooked = resolveHooked("home_icons") {
+        bootLog.contains("home icons applied:") ||
+            bootLog.contains("home margin currentConfig hooked")
+    }
 
-    val folderGateHooked = bootLog.contains("OS4 big folder gate installed:")
-    val padBypassMatch = PAD_BYPASS_REGEX.findAll(bootLog).lastOrNull()
-    val folderBypassPatched = padBypassMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
-    val folderHooked = folderGateHooked || (folderBypassPatched != null && folderBypassPatched > 0)
+    val folderHooked = resolveHooked("big_folder") {
+        val folderGateHooked = bootLog.contains("OS4 big folder gate installed:")
+        val padBypassMatch = PAD_BYPASS_REGEX.findAll(bootLog).lastOrNull()
+        val folderBypassPatched = padBypassMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
+        folderGateHooked || (folderBypassPatched != null && folderBypassPatched > 0)
+    }
 
-    val widget1x1Match = WIDGET_1X1_MENU_REGEX.findAll(bootLog).lastOrNull()
-    val widget1x1Installed = widget1x1Match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
-    val widget1x1Resize = bootLog.contains("widget resize: 1x1 enlarge enabled")
-    val widget1x1Hooked = widget1x1Installed > 0 || widget1x1Resize
+    val folderGridHooked = resolveHooked("folder_grid") {
+        bootLog.contains("OS4 folder grid setup") &&
+            (bootLog.contains("ready=1") || bootLog.contains("installed=7"))
+    }
+
+    val widget1x1Hooked = resolveHooked("widget_1x1") {
+        val widget1x1Match = WIDGET_1X1_MENU_REGEX.findAll(bootLog).lastOrNull()
+        val widget1x1Installed = widget1x1Match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+        val widget1x1Resize = bootLog.contains("widget resize: 1x1 enlarge enabled")
+        widget1x1Installed > 0 || widget1x1Resize
+    }
 
     val dockHooked = statusMap["dock"] == "1"
 
-    val dividerHooked = statusMap["divider"] == "1" ||
-        (bootLog.contains("divider: inner installed") && bootLog.contains("divider: bgPaint installed"))
+    val dividerHooked = resolveHooked("divider") {
+        bootLog.contains("divider: inner installed") && bootLog.contains("divider: bgPaint installed")
+    }
 
-    val recentsHooked = statusMap["recents"] == "1" ||
+    val recentsHooked = resolveHooked("recents") {
         bootLog.contains("OS4 Recents blur gate installed:")
+    }
 
     val items = listOf(
         probe("glass", "柔光玻璃", config.glassEnabled, glassHooked),
@@ -191,6 +217,7 @@ internal fun evaluateHookMonitor(
         probe("grid", "桌面网格", config.gridEnabled, gridHooked),
         probe("home_icons", "图标与边距", config.iconSizeEnabled, homeIconsHooked),
         probe("big_folder", "大文件夹", config.bigFolderEnabled, folderHooked),
+        probe("folder_grid", "文件夹行列", config.folderGridEnabled, folderGridHooked),
         probe("widget_1x1", "1×1↔2×2", config.widget1x1Enabled, widget1x1Hooked),
         probe("dock", "Dock 布局", config.dockEnabled, dockHooked),
         probe("divider", "分割线", config.dividerEnabled, dividerHooked),
@@ -217,14 +244,9 @@ object HookMonitorStore {
         }.getOrDefault("")
         val statusMap = parseStatusKeyValues(statusText)
 
-        val bootLog = buildString {
-            runCatching {
-                if (bootLogPrevFile.isFile) append(bootLogPrevFile.readText()).append('\n')
-            }
-            runCatching {
-                if (bootLogFile.isFile) append(bootLogFile.readText())
-            }
-        }
+        val bootLog = runCatching {
+            if (bootLogFile.isFile) bootLogFile.readText() else ""
+        }.getOrDefault("")
         return evaluateHookMonitor(config, statusMap, bootLog)
     }
 }
@@ -238,6 +260,15 @@ fun HookMonitorCard(
 ) {
     var refreshTick by remember { mutableIntStateOf(0) }
     var snapshot by remember { mutableStateOf<HookMonitorSnapshot?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(masterEnabled, refreshTick) {
         snapshot = withContext(Dispatchers.IO) {
