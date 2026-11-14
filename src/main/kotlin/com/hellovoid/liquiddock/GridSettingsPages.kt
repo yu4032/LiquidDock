@@ -128,6 +128,14 @@ internal fun GridBasicsPage(
             ),
         )
     }
+    var folderGridEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Grid.FOLDER_GRID_ENABLED.name(),
+                ConfigSchema.Grid.FOLDER_GRID_ENABLED.uiDefault(),
+            ),
+        )
+    }
     DenseSettingsList(
         padding,
         stringResource(R.string.page_grid_basics),
@@ -256,6 +264,28 @@ internal fun GridBasicsPage(
                         fontSize = 13.sp,
                     )
                 }
+            }
+        }
+        item(key = "folder-grid-heading") { SmallTitle("文件夹展开网格") }
+        item(key = "folder-grid-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.FOLDER_GRID_ENABLED,
+                    "自定义文件夹展开行列",
+                    "修复文件夹打开后仅显示 2 行的限制，自定义展开列数与最大行数；重启桌面后生效",
+                    masterEnabled,
+                ) { folderGridEnabled = it }
+            }
+        }
+        items(folderGridDimensionSpecs, key = { it.key }) { spec ->
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    spec,
+                    masterEnabled && folderGridEnabled,
+                    steps = DiscreteSliderSteps.forIntegerRange(spec.min, spec.max(context)),
+                )
             }
         }
     }

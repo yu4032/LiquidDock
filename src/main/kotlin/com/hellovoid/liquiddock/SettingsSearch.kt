@@ -160,7 +160,9 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             toggle(ConfigSchema.Grid.BIG_FOLDER_ENABLED, "启用桌面大文件夹"),
             toggle(ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED, "1×1 小组件放大成 2×2"),
             toggle(ConfigSchema.Grid.ENABLED, "自由主界面网格"),
-        ) + gridDimensionSpecs.map(::number)
+        ) + gridDimensionSpecs.map(::number) + listOf(
+            toggle(ConfigSchema.Grid.FOLDER_GRID_ENABLED, "自定义文件夹展开行列"),
+        ) + folderGridDimensionSpecs.map(::number)
         Page.SoftGlass -> listOf(
             CustomGlassSearchRow(ConfigSchema.Glass.ENABLED.name(), "开启自定义", "开启后自定义桌面原生柔光玻璃参数；重启桌面生效"),
         )
@@ -262,8 +264,12 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
             ConfigSchema.Grid.BIG_FOLDER_ENABLED.name() -> 5
             ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED.name() -> 7
             ConfigSchema.Grid.ENABLED.name() -> 9
+            ConfigSchema.Grid.FOLDER_GRID_ENABLED.name() -> 10 + gridDimensionSpecs.size + 1
             else -> gridDimensionSpecs.indexOfFirst { it.key == key }
-                .takeIf { it >= 0 }?.plus(10) ?: -1
+                .takeIf { it >= 0 }?.plus(10)
+                ?: folderGridDimensionSpecs.indexOfFirst { it.key == key }
+                    .takeIf { it >= 0 }?.plus(10 + gridDimensionSpecs.size + 2)
+                ?: -1
         }
         Page.GlassIcons -> when (key) {
             ConfigSchema.Glass.ICON_GLASS.name(),

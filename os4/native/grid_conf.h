@@ -105,6 +105,8 @@ struct ld_grid_conf {
     uint64_t rv_vaddr[2];
     size_t rv_size[2];
     int big_folder_enabled;
+    int folder_grid_cols;
+    int folder_grid_rows;
     int folder_target_present;
     uint64_t folder_target_vaddr;
     size_t folder_target_size;
@@ -386,6 +388,18 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.big_folder_enabled=value;
                     seen |= 1ull << 42;
+                } else if (strcmp(key, "folder_grid_cols") == 0) {
+                    int value;
+                    if (!ld_grid_parse_int(val, 2, 8, &value)) {
+                        bad=1; break;
+                    }
+                    c.folder_grid_cols = value;
+                } else if (strcmp(key, "folder_grid_rows") == 0) {
+                    int value;
+                    if (!ld_grid_parse_int(val, 2, 8, &value)) {
+                        bad=1; break;
+                    }
+                    c.folder_grid_rows = value;
                 } else if (strcmp(key, "folder_target") == 0) {
                     if ((seen & (1ull << 43)) ||
                         !ld_grid_parse_aot_targets(val, &c.folder_target_vaddr, &c.folder_target_size, 1)) {

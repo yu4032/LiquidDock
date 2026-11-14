@@ -23,6 +23,8 @@ object Os4NativeConfPublisher {
         if ((gridCols == null) != (gridRows == null)) return null
         val grid = gridCols != null
         if (grid && (gridCols !in 2..10 || gridRows !in 2..10)) return null
+        if (options.folderGridCols != 0 && options.folderGridCols !in 2..8) return null
+        if (options.folderGridRows != 0 && options.folderGridRows !in 2..8) return null
         if (options.iconSizePercent !in 80..120) return null
         if (Os4NativeGlassOptions.configLines(options.glassNativeOverrides) == null) return null
         if (Os4NativeGlassOptions.configLines(options.glassDockOverrides, "glass_native_dock_") == null) return null
@@ -46,6 +48,8 @@ object Os4NativeConfPublisher {
             }
             append("icon_size_enabled=").append(if (options.iconSizeEnabled) 1 else 0).append('\n')
             if (options.bigFolderEnabled) append("big_folder_enabled=1\n")
+            if (options.folderGridCols > 0) append("folder_grid_cols=").append(options.folderGridCols).append('\n')
+            if (options.folderGridRows > 0) append("folder_grid_rows=").append(options.folderGridRows).append('\n')
             if (options.widget1x1To2x2Enabled) append("widget_1x1_to_2x2=1\n")
             // Explicit opt-in only. An absent key preserves the stock OS4 material.
             if (options.glassEnabled) append("glass_enabled=1\n")

@@ -153,6 +153,11 @@ internal val gridDimensionSpecs = listOf(
     IntSpec(ConfigSchema.Grid.ROWS, "横屏行数", "行", summary = "2–10 行；竖屏自动交换为列数；重启桌面生效"),
 )
 
+internal val folderGridDimensionSpecs = listOf(
+    IntSpec(ConfigSchema.Grid.FOLDER_GRID_COLUMNS, "文件夹展开列数", "列", summary = "2–8 列；重启桌面生效"),
+    IntSpec(ConfigSchema.Grid.FOLDER_GRID_ROWS, "文件夹最大展开行数", "行", summary = "2–8 行；重启桌面生效"),
+)
+
 internal val gridSpecs = listOf(
     IntSpec(ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE, "横屏水平距离偏移"),
     IntSpec(ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE, "横屏顶部距离偏移"),

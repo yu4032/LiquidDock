@@ -36,6 +36,7 @@
 #include "hook_page_pin.h"
 #include "rust_orientation_fingerprint.h"
 #include "rust_symbol_resolver.h"
+#include "folder_grid.h"
 #include "home_options_fingerprints.h"
 #include "home_geometry_fingerprints.h"
 #include "dock_geometry_fingerprints.h"
@@ -1250,6 +1251,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);
     ld_home_margins_install(api,&lib);
+    ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
     ld_dart_superellipse_install(api,&lib);
     if (strict && !ld_cross_check_strict(&lib, LD_PAD_ROWCOL_VADDR, LD_FILTER_VADDR)) {
         ld_blog("ELF identity cross-check failed in strict mode; aborting layout hooks");
@@ -1521,6 +1523,7 @@ static void install_grid_hook(const struct native_api *api) {
         ld_divider_paint_install(api, &divider_lib);
     if (((g_grid_cols > 0 && g_grid_rows > 0) || g_home_options.icon_size_enabled
             || g_home_options.big_folder_enabled || g_home_options.widget_1x1_to_2x2_enabled
+            || g_home_options.folder_grid_cols > 0 || g_home_options.folder_grid_rows > 0
             || g_home_options.dock.enabled || g_home_options.glass_enabled
             || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100))
         install_grid_hook_unlocked(api);

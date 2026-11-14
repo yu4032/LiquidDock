@@ -95,7 +95,8 @@ class SettingsMetaTest {
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.BIG_FOLDER_ENABLED.name(),
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED.name(),
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.ENABLED.name(),
-        ) + gridDimensionSpecs.map { it.key }
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.FOLDER_GRID_ENABLED.name(),
+        ) + gridDimensionSpecs.map { it.key } + folderGridDimensionSpecs.map { it.key }
         assertEquals(expected, rows.map { it.key }.toSet())
         rows.forEach { assertTrue(customDenseFocusIndex(Page.GridBasics, it.key) != null) }
     }
