@@ -483,6 +483,41 @@ static uintptr_t ld_w1x1_find_cell_layout(struct ld_dart_context *c, uintptr_t w
     return cl;
 }
 
+static int ld_w1x1_list_contains(struct ld_dart_context *c, uintptr_t list, uintptr_t target)
+{
+    if (!list || !(list & 1) || list == c->x[22]) return 0;
+    uint32_t len_smi = ld_heap_u32(list, 0xf);
+    if ((len_smi & 1) != 0) return 0;
+    uint32_t len = len_smi >> 1;
+    if (len == 0 || len > 256) return 0;
+    uintptr_t data = ld_heap_pointer(c, list, 0x17);
+    if (!data || !(data & 1) || data == c->x[22]) return 0;
+    uint32_t cap_smi = ld_heap_u32(data, 0x7);
+    if ((cap_smi & 1) != 0 || (cap_smi >> 1) < len) return 0;
+    for (uint32_t i = 0; i < len; i++) {
+        if (ld_heap_pointer(c, data, 0xf + (size_t)i * 4) == target) return 1;
+    }
+    return 0;
+}
+
+static uintptr_t ld_w1x1_find_cl_items(struct ld_dart_context *c, uintptr_t cl, uintptr_t widget)
+{
+    for (size_t off = 0x4b; off <= 0x93; off += 4) {
+        uintptr_t cand = ld_heap_pointer(c, cl, off);
+        if (!cand || !(cand & 1) || cand == c->x[22]) continue;
+        if (ld_w1x1_list_contains(c, cand, widget)) return cand;
+        /* RxList wraps an inner _GrowableList */
+        static const size_t rx_offs[3] = { 0xb, 0xf, 0x13 };
+        for (size_t j = 0; j < 3; j++) {
+            uintptr_t inner = ld_heap_pointer(c, cand, rx_offs[j]);
+            if (ld_w1x1_list_contains(c, inner, widget)) return cand;
+        }
+    }
+    return ld_heap_pointer(c, cl, 0x5f);
+}
+
+static const uint8_t ld_w1x1_empty_args_desc[64] __attribute__((aligned(16))) = { 0 };
+
 static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl, uintptr_t widget, int is_1x1)
 {
     int64_t cx = ld_heap_i64(widget, 0x37);
@@ -566,9 +601,13 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
         memcpy((void *)(widget + 0x27), &target_sy, sizeof target_sy);
 
         if (cl && g_w1x1_rt[LD_W1X1_UPDATE_OCCUPIED_MARKS]) {
-            uintptr_t items = ld_heap_pointer(c, cl, 0x5f);
+            uintptr_t items = ld_w1x1_find_cl_items(c, cl, widget);
             if (items) {
-                uint64_t a_occ[8] = { 0, cl, items, 0, 0, 0, 0, 0 };
+                uint64_t a_occ[8] = {
+                    0, cl, items, 0,
+                    (uint64_t)(uintptr_t)(ld_w1x1_empty_args_desc + 1),
+                    0, 0, 0
+                };
                 (void)ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_UPDATE_OCCUPIED_MARKS], a_occ, 0);
             }
         }
