@@ -156,6 +156,18 @@ internal fun GridBasicsPage(
                 )
             }
         }
+        item(key = "grid-big-folder-heading") { SmallTitle("大文件夹") }
+        item(key = "grid-big-folder-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.BIG_FOLDER_ENABLED,
+                    "启用桌面大文件夹",
+                    "解锁平板桌面文件夹角标拖拽与 2×2 / 4×2 大文件夹样式；重启桌面后生效",
+                    masterEnabled,
+                )
+            }
+        }
         item(key = "grid-dimensions-heading") { SmallTitle("自由主界面网格") }
         item(key = "grid-dimensions-enabled") {
             SettingsCard {

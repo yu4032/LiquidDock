@@ -25,6 +25,25 @@ static bool g_recents_blur_installed;
 static bool g_recents_blur_attempted;
 static void *g_orig_widget_init_miui_attr __attribute__((used));
 static bool g_widget_init_miui_attr_installed;
+static volatile uint8_t g_os4_big_folder_enabled __attribute__((used));
+static void *g_orig_folder_corner_drag __attribute__((used));
+static bool g_folder_corner_drag_installed;
+
+__attribute__((used,naked)) static void repl_os4_folder_corner_drag(void) {
+    __asm__ volatile(
+        "adrp x16, g_os4_big_folder_enabled\n"
+        "ldrb w16, [x16, :lo12:g_os4_big_folder_enabled]\n"
+        "cbz w16, 1f\n"
+        "add x0, x22, #0x20\n"
+        "ret\n"
+        "1: adrp x16, g_orig_folder_corner_drag\n"
+        "ldr x16, [x16, :lo12:g_orig_folder_corner_drag]\n"
+        "cbz x16, 2f\n"
+        "br x16\n"
+        "2: add x0, x22, #0x30\n"
+        "ret\n"
+    );
+}
 
 #define LD_OS4_BOOL_GATE(fn, offset, orig_off, retval) \
 __attribute__((used,naked)) static void fn(void) { \

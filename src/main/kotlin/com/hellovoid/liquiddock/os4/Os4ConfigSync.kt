@@ -167,6 +167,12 @@ object Os4ConfigSync {
                     if (resolvedTargets.rvTargets.isNotEmpty()) {
                         append("rv_targets=").append(resolvedTargets.rvTargets).append('\n')
                     }
+                    if (resolvedTargets.folderTarget.isNotEmpty()) {
+                        append("folder_target=").append(resolvedTargets.folderTarget).append('\n')
+                    }
+                    if (resolvedTargets.folderPadTargets.isNotEmpty()) {
+                        append("folder_pad_targets=").append(resolvedTargets.folderPadTargets).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }

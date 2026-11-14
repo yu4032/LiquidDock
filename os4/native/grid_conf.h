@@ -102,6 +102,14 @@ struct ld_grid_conf {
     int rv_targets_present;
     uint64_t rv_vaddr[2];
     size_t rv_size[2];
+    int big_folder_enabled;
+    int folder_target_present;
+    uint64_t folder_target_vaddr;
+    size_t folder_target_size;
+    int folder_pad_targets_present;
+    size_t folder_pad_target_count;
+    uint64_t folder_pad_vaddr[16];
+    size_t folder_pad_size[16];
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -363,6 +371,32 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.rv_targets_present=1;
                     seen |= 1ull << 41;
+                } else if (strcmp(key, "big_folder_enabled") == 0) {
+                    int value;
+                    if ((seen & (1ull << 42)) || !ld_grid_parse_bool01(val,&value)) {
+                        bad=1; break;
+                    }
+                    c.big_folder_enabled=value;
+                    seen |= 1ull << 42;
+                } else if (strcmp(key, "folder_target") == 0) {
+                    if ((seen & (1ull << 43)) ||
+                        !ld_grid_parse_aot_targets(val, &c.folder_target_vaddr, &c.folder_target_size, 1)) {
+                        bad=1; break;
+                    }
+                    c.folder_target_present=1;
+                    seen |= 1ull << 43;
+                } else if (strcmp(key, "folder_pad_targets") == 0) {
+                    size_t n = 1;
+                    for (const char *q = val; *q; q++) {
+                        if (*q == ',') n++;
+                    }
+                    if ((seen & (1ull << 44)) || n == 0 || n > 16 ||
+                        !ld_grid_parse_aot_targets_max(val, c.folder_pad_vaddr, c.folder_pad_size, n, 65536)) {
+                        bad=1; break;
+                    }
+                    c.folder_pad_targets_present=1;
+                    c.folder_pad_target_count=n;
+                    seen |= 1ull << 44;
                 } else if (strcmp(key, "glass_enabled") == 0) {
                     int value;
                     if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {

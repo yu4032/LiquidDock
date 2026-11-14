@@ -526,6 +526,8 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     __atomic_store_n(&g_os4_widget_glass_override,
             (g_home_options.glass_enabled && g_home_options.glass_widgets) ? 1u : 0u,
             __ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_big_folder_enabled,
+            g_home_options.big_folder_enabled ? 1u : 0u,__ATOMIC_RELEASE);
     g_os4_glass_installed=true;
     ld_blog("OS4 glass gates installed: 3 vendor predicates enabled=%d",
             g_home_options.glass_enabled);
@@ -556,6 +558,53 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         } else {
             ld_blog("OS4 PassBlur gate install failed rc=%d backup=%d",rc,
                     g_orig_passblur_supported!=NULL);
+        }
+    }
+    if(g_home_options.folder_target_present && g_home_options.big_folder_enabled && !g_folder_corner_drag_installed) {
+        uintptr_t folder_target=0;
+        if(ld_vaddr_to_runtime(lib,(uintptr_t)g_home_options.folder_target_vaddr,&folder_target)
+                && executable_range(folder_target,(size_t)g_home_options.folder_target_size)) {
+            int rc=api->hook((void *)folder_target,(void *)repl_os4_folder_corner_drag,
+                    &g_orig_folder_corner_drag);
+            if(rc==0 && g_orig_folder_corner_drag && ld_pin_code_pages_soft(folder_target,16)) {
+                g_folder_corner_drag_installed=true;
+                ld_blog("OS4 big folder gate installed: target=%p", (void *)folder_target);
+            } else {
+                ld_blog("OS4 big folder gate install failed rc=%d", rc);
+            }
+        } else {
+            ld_blog("OS4 big folder gate unmapped at %llx",
+                    (unsigned long long)g_home_options.folder_target_vaddr);
+        }
+    }
+    if(g_home_options.folder_pad_targets_present && g_home_options.big_folder_enabled) {
+        static bool g_folder_pad_bypass_installed = false;
+        if(!g_folder_pad_bypass_installed) {
+            size_t patched = 0;
+            for(size_t i = 0; i < g_home_options.folder_pad_target_count && i < 16; i++) {
+                uintptr_t fn_rt = 0;
+                size_t fn_sz = g_home_options.folder_pad_size[i];
+                if(fn_sz < 8 || !ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.folder_pad_vaddr[i], &fn_rt)
+                        || !executable_range(fn_rt, fn_sz)) {
+                    continue;
+                }
+                for(size_t off = 0; off + 8 <= fn_sz; off += 4) {
+                    uintptr_t site = fn_rt + off;
+                    uint32_t w0 = *(volatile uint32_t *)site;
+                    if((w0 & 0xfffffc00u) != 0xb84e7000u) continue; /* ldur wRt, [xRn, #0xe7] */
+                    uint32_t rt_reg = w0 & 0x1fu;
+                    uint32_t w1 = *(volatile uint32_t *)(site + 4);
+                    if(w1 != (0x8b1c8000u | (rt_reg << 5) | rt_reg)) continue; /* add xRt, xRt, x28, lsl #32 */
+                    uint32_t patch = 0x1100c2c0u | rt_reg; /* add wRt, w22, #0x30 (Dart false) */
+                    if(ld_patch_text_word(site, w0, patch) == 0) {
+                        ld_pin_code_pages_soft(site, 4);
+                        patched++;
+                    }
+                }
+            }
+            g_folder_pad_bypass_installed = true;
+            ld_blog("OS4 big folder Pad bypass installed: patched=%zu targets=%zu",
+                    patched, g_home_options.folder_pad_target_count);
         }
     }
     const char *label[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};

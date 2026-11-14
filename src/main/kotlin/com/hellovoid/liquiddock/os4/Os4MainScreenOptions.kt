@@ -51,6 +51,7 @@ data class Os4DividerOptions(
 /** Pure preference extraction, independent from Android/root and launcher identity checks. */
 data class Os4MainScreenOptions(
     val iconSizeEnabled: Boolean = false,
+    val bigFolderEnabled: Boolean = false,
     val iconSizePercent: Int = 100,
     val landscape: Os4GridOffsets = Os4GridOffsets(),
     val portrait: Os4GridOffsets = Os4GridOffsets(),
@@ -90,7 +91,8 @@ data class Os4MainScreenOptions(
             addAll(listOf(ConfigSchema.Core.ENABLED, ConfigSchema.Grid.ENABLED,
                 ConfigSchema.Grid.NATIVE_HOOK_SAFETY,
                 ConfigSchema.Grid.COLUMNS, ConfigSchema.Grid.ROWS,
-                ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT).map { it.name() })
+                ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
+                ConfigSchema.Grid.BIG_FOLDER_ENABLED).map { it.name() })
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Glass.ENABLED.name())
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
@@ -140,6 +142,7 @@ data class Os4MainScreenOptions(
             else {
                 val grid = boolean(ConfigSchema.Grid.ENABLED)
                 val icons = boolean(ConfigSchema.Grid.ICON_SIZE_ENABLED)
+                val bigFolder = boolean(ConfigSchema.Grid.BIG_FOLDER_ENABLED)
                 val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
                 val dividerEnabled = boolean(ConfigSchema.Divider.ENABLED)
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
@@ -151,7 +154,7 @@ data class Os4MainScreenOptions(
                         ?: return null
                 } else emptyMap()
                 val recentsBlurPercent = integer(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT)
-                if (!grid && !icons && !dockEnabled && !dividerEnabled && !glassEnabled &&
+                if (!grid && !icons && !bigFolder && !dockEnabled && !dividerEnabled && !glassEnabled &&
                     !widgetOverrides && recentsBlurPercent == 100) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
@@ -171,6 +174,7 @@ data class Os4MainScreenOptions(
                         if (grid) integer(ConfigSchema.Grid.ROWS) else null,
                         Os4MainScreenOptions(
                             iconSizeEnabled = icons,
+                            bigFolderEnabled = bigFolder,
                             iconSizePercent = if (icons) integer(ConfigSchema.Grid.ICON_SIZE_PERCENT) else 100,
                             landscape = if (grid) offsets(0) else Os4GridOffsets(),
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),
