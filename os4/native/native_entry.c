@@ -528,6 +528,9 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     __atomic_store_n(&g_os4_widget_glass_override,
             (g_home_options.glass_enabled && g_home_options.glass_widgets) ? 1u : 0u,
             __ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_large_folder_glass_override,
+            (g_home_options.glass_enabled && g_home_options.large_folder_glass) ? 1u : 0u,
+            __ATOMIC_RELEASE);
     __atomic_store_n(&g_os4_big_folder_enabled,
             g_home_options.big_folder_enabled ? 1u : 0u,__ATOMIC_RELEASE);
     __atomic_store_n(&g_os4_widget_1x1_to_2x2_enabled,

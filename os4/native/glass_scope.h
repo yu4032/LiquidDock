@@ -120,9 +120,8 @@ __attribute__((used)) static void ld_on_build_folder_glass(struct ld_dart_contex
 }
 
 __attribute__((used)) static void ld_on_folder_light_gate(struct ld_dart_context *c) {
-    if (g_home_options.glass_enabled && !g_home_options.large_folder_glass) {
-        c->x[0] = c->x[22] + 0x30u;
-    }
+    (void)c;
+    g_ld_widget_build_scope = LD_GLASS_SCOPE_LARGE_FOLDER;
 }
 
 LD_DART_OBSERVER(repl_glass_v7_entry, ld_on_glass_v7_entry, g_orig_glass_v7_entry)
@@ -207,7 +206,7 @@ static void ld_glass_scope_install(
         }
     }
     if (folder_light && !g_orig_folder_light_gate) {
-        uintptr_t gate = folder_light + 0x48u;
+        uintptr_t gate = folder_light;
         if (api->hook((void *)gate, (void *)repl_folder_light_gate, &g_orig_folder_light_gate) == 0 &&
             g_orig_folder_light_gate) {
             ld_pin_code_pages_soft(gate, 16);

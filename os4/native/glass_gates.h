@@ -8,6 +8,7 @@
  * registered, then remove the capability result as a rendering gate. */
 static volatile uint8_t g_os4_glass_override __attribute__((used));
 static volatile uint8_t g_os4_widget_glass_override __attribute__((used));
+static volatile uint8_t g_os4_large_folder_glass_override __attribute__((used));
 static volatile uint8_t g_os4_maml_blur_override __attribute__((used));
 static volatile unsigned g_os4_glass_calls[3] __attribute__((used));
 static void *g_os4_glass_original[3] __attribute__((used));
@@ -132,7 +133,7 @@ LD_OS4_RENDER_GATE_VAR(repl_os4_maml_blur_supported, 8, g_os4_maml_blur_override
 LD_OS4_RENDER_GATE(repl_os4_any_material_active, 16)
 LD_OS4_WIDGET_RENDER_GATE(repl_os4_widget_material_active, 24)
 LD_OS4_RENDER_GATE(repl_os4_three_layer_blur_supported, 32)
-LD_OS4_RENDER_GATE(repl_os4_folder_blur_supported, 40)
+LD_OS4_RENDER_GATE_VAR(repl_os4_folder_blur_supported, 40, g_os4_large_folder_glass_override)
 LD_OS4_WIDGET_RENDER_GATE(repl_os4_widget_glass_supported, 48)
 LD_OS4_RENDER_GATE(repl_os4_press_light_supported, 56)
 LD_OS4_RENDER_GATE(repl_os4_hyper_material_effective, 64)
