@@ -65,6 +65,28 @@ internal object Os4GlassSymbols {
         "FolderIconWidget._buildPreviewContainer" to 0x1200L,
         "FolderPreviewContainer._buildOriginalPreview" to 0xb00L,
     )
+    private val widgetResizeSymbolNames = listOf(
+        "ValidSizeAdaptShortcutMenu.isValid",
+        "ValidSizeAdaptShortcutMenu.supportSizeAdapt",
+        "ShortcutMenuUtils._resolveWidgetMenuTitle",
+        "WorkspaceGetxController.checkAppWidgetResizeFrameWhenDropOnOriginScreen",
+        "CellLayoutGetxController.isLegalXY",
+        "CellLayoutGetxController.isCellOccupiedExceptItem",
+        "CellLayoutGetxController.showNoSpaceToast",
+        "WidgetResizeFrameManager.addResizeFrame",
+        "WidgetResizeFrameManager.commitWidgetResize",
+        "ResizeFrameController.resizeWidgetIfNeeded",
+        "allocateTwoByteString",
+        "ValidSizeAdaptShortcutMenu.onItemClick",
+        "IShortcutMenu.onItemClick",
+        "_IconTitleWidgetShortcutMenuItemState.build",
+        "CellLayoutGetxController.updateCellOccupiedMarks",
+        "MamlWidgetInfoModel.copy",
+        "WorkspaceGetxController.isMoveOverShortcutMenuMoveThreshold",
+        "WorkspaceGetxController.getCellLayoutById",
+        "CellLayoutGetxController.requestUpdateGridCells",
+        "LauncherModelManager.updateItemDatabase",
+    )
     private val remoteViewsSymbolNames = listOf(
         "FlutterView.applyViewProperties",
         "FlutterView.background",
@@ -76,6 +98,7 @@ internal object Os4GlassSymbols {
         val rvTargets: String = "",
         val folderTarget: String = "",
         val folderPadTargets: String = "",
+        val widgetResizeTargets: String = "",
     )
     @Volatile private var cached: Pair<Pair<String, Boolean>, ResolvedTargets>? = null
 
@@ -132,7 +155,17 @@ internal object Os4GlassSymbols {
         val (layoutTargets, homeMarginTarget, rvTargets) = fromMiniElfExtras(mini)
         val folderTarget = fromMiniElfSingle(mini, FOLDER_CORNER_DRAG_TARGET)
         val folderPadTargets = fromMiniElfPadBypass(mini)
-        return ResolvedTargets(glass, layoutTargets, homeMarginTarget, rvTargets, folderTarget, folderPadTargets)
+        val widgetResizeTargets = fromMiniElfSymbolList(mini, widgetResizeSymbolNames)
+        return ResolvedTargets(glass, layoutTargets, homeMarginTarget, rvTargets, folderTarget, folderPadTargets, widgetResizeTargets)
+    }
+
+    private fun fromMiniElfSymbolList(data: ByteArray, names: List<String>): String {
+        val elf = Elf64(data)
+        val sections = elf.sections()
+        val pairs = names.mapNotNull { name -> findSingleSymbol(elf, sections, name, maxSize = 65536L) }
+        return if (pairs.size == names.size && pairs.map { it.first }.distinct().size == names.size) {
+            pairs.joinToString(",") { "0x" + it.first.toString(16) + ":" + it.second }
+        } else ""
     }
 
     private fun fromMiniElfPadBypass(data: ByteArray): String {

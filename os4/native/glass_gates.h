@@ -28,6 +28,33 @@ static bool g_widget_init_miui_attr_installed;
 static volatile uint8_t g_os4_big_folder_enabled __attribute__((used));
 static void *g_orig_folder_corner_drag __attribute__((used));
 static bool g_folder_corner_drag_installed;
+static volatile uint8_t g_os4_widget_1x1_to_2x2_enabled __attribute__((used));
+static void *g_orig_widget_resize[5] __attribute__((used));
+static bool g_widget_resize_unlock_installed;
+
+#define LD_OS4_WIDGET_INT_GATE(fn, idx, val) \
+__attribute__((used,naked)) static void fn(void) { \
+    __asm__ volatile( \
+        "adrp x16, g_os4_widget_1x1_to_2x2_enabled\n" \
+        "ldrb w16, [x16, :lo12:g_os4_widget_1x1_to_2x2_enabled]\n" \
+        "cbz w16, 1f\n" \
+        "mov x0, #" #val "\n" \
+        "ret\n" \
+        "1: adrp x16, g_orig_widget_resize\n" \
+        "add x16, x16, :lo12:g_orig_widget_resize\n" \
+        "ldr x16, [x16, #" #idx " * 8]\n" \
+        "cbz x16, 2f\n" \
+        "br x16\n" \
+        "2: mov x0, #0\n" \
+        "ret\n" \
+    ); \
+}
+
+LD_OS4_WIDGET_INT_GATE(repl_os4_widget_resize_mode, 0, 3)
+LD_OS4_WIDGET_INT_GATE(repl_os4_widget_min_w, 1, 1)
+LD_OS4_WIDGET_INT_GATE(repl_os4_widget_min_h, 2, 1)
+LD_OS4_WIDGET_INT_GATE(repl_os4_widget_max_w, 3, 4096)
+LD_OS4_WIDGET_INT_GATE(repl_os4_widget_max_h, 4, 4096)
 
 __attribute__((used,naked)) static void repl_os4_folder_corner_drag(void) {
     __asm__ volatile(

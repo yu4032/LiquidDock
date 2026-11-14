@@ -34,5 +34,11 @@ static inline void ld_apply_home_icons(struct ld_dart_context *c,uintptr_t grid)
     if(!isfinite(scaled) || scaled<=0 || !isfinite(shifted)) return;
     memcpy((void *)(icons+0x17),&scaled,sizeof scaled);
     memcpy((void *)(icons+0x1f),&shifted,sizeof shifted);
+    static volatile int logged = 0;
+    if (!logged) {
+        logged = 1;
+        ld_blog("home icons applied: percent=%d size=%.2f->%.2f top=%.2f->%.2f",
+                percent, size, scaled, top, shifted);
+    }
 }
 #endif

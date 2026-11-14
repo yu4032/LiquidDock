@@ -52,6 +52,7 @@ data class Os4DividerOptions(
 data class Os4MainScreenOptions(
     val iconSizeEnabled: Boolean = false,
     val bigFolderEnabled: Boolean = false,
+    val widget1x1To2x2Enabled: Boolean = false,
     val iconSizePercent: Int = 100,
     val landscape: Os4GridOffsets = Os4GridOffsets(),
     val portrait: Os4GridOffsets = Os4GridOffsets(),
@@ -92,7 +93,7 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Grid.NATIVE_HOOK_SAFETY,
                 ConfigSchema.Grid.COLUMNS, ConfigSchema.Grid.ROWS,
                 ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
-                ConfigSchema.Grid.BIG_FOLDER_ENABLED).map { it.name() })
+                ConfigSchema.Grid.BIG_FOLDER_ENABLED, ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED).map { it.name() })
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Glass.ENABLED.name())
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
@@ -143,6 +144,7 @@ data class Os4MainScreenOptions(
                 val grid = boolean(ConfigSchema.Grid.ENABLED)
                 val icons = boolean(ConfigSchema.Grid.ICON_SIZE_ENABLED)
                 val bigFolder = boolean(ConfigSchema.Grid.BIG_FOLDER_ENABLED)
+                val widget1x1To2x2 = boolean(ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED)
                 val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
                 val dividerEnabled = boolean(ConfigSchema.Divider.ENABLED)
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
@@ -175,6 +177,7 @@ data class Os4MainScreenOptions(
                         Os4MainScreenOptions(
                             iconSizeEnabled = icons,
                             bigFolderEnabled = bigFolder,
+                            widget1x1To2x2Enabled = widget1x1To2x2,
                             iconSizePercent = if (icons) integer(ConfigSchema.Grid.ICON_SIZE_PERCENT) else 100,
                             landscape = if (grid) offsets(0) else Os4GridOffsets(),
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),

@@ -168,6 +168,18 @@ internal fun GridBasicsPage(
                 )
             }
         }
+        item(key = "grid-widget-resize-heading") { SmallTitle("小组件尺寸") }
+        item(key = "grid-widget-1x1-to-2x2-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED,
+                    "1×1 小组件放大成 2×2",
+                    "解锁 1×1 小组件尺寸限制，长按小组件通过弹出菜单切换 1×1 与 2×2；重启桌面后生效",
+                    masterEnabled,
+                )
+            }
+        }
         item(key = "grid-dimensions-heading") { SmallTitle("自由主界面网格") }
         item(key = "grid-dimensions-enabled") {
             SettingsCard {

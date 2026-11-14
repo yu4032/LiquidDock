@@ -96,6 +96,8 @@ public final class ConfigSchema {
                 "launcher450_icon_size_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> BIG_FOLDER_ENABLED = bool(
                 "os4_big_folder_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> WIDGET_1X1_TO_2X2_ENABLED = bool(
+                "os4_widget_1x1_to_2x2_enabled", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ICON_SIZE_PERCENT = integer(
                 "launcher450_icon_size_percent", 100, 100, 100, 80, 120,
                 ConfigKey.ExportMode.ALWAYS);
@@ -848,7 +850,8 @@ public final class ConfigSchema {
                 Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR,
                 Animation.DISABLE_WALLPAPER_ZOOM);
         add(keys, Grid.ENABLED, Grid.NATIVE_HOOK_SAFETY, Grid.COLUMNS, Grid.ROWS,
-                Grid.ICON_SIZE_ENABLED, Grid.BIG_FOLDER_ENABLED, Grid.ICON_SIZE_PERCENT,
+                Grid.ICON_SIZE_ENABLED, Grid.BIG_FOLDER_ENABLED, Grid.WIDGET_1X1_TO_2X2_ENABLED,
+                Grid.ICON_SIZE_PERCENT,
                 Grid.LANDSCAPE_HORIZONTAL_DISTANCE, Grid.LANDSCAPE_TOP_DISTANCE,
                 Grid.LANDSCAPE_BOTTOM_DISTANCE, Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 Grid.PORTRAIT_TOP_DISTANCE, Grid.PORTRAIT_BOTTOM_DISTANCE,

@@ -17,7 +17,8 @@ static inline int ld_grid_direction(struct ld_dart_context *c,uintptr_t grid) {
 
 static inline int ld_is_fullscreen_layout(struct ld_dart_context *c, uint32_t layout) {
     if (!c || !(layout & 1) || layout == (uint32_t)c->x[22]) return 0;
-    return ld_heap_i64(layout, 7) == 0;
+    uintptr_t full = (uintptr_t)layout + (c->x[28] << 32);
+    return ld_heap_i64(full, 7) == 0;
 }
 
 static inline uintptr_t ld_get_grid_controller(struct ld_dart_context *c) {

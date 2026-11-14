@@ -40,6 +40,7 @@ object Os4NativeConfPublisher {
             }
             append("icon_size_enabled=").append(if (options.iconSizeEnabled) 1 else 0).append('\n')
             if (options.bigFolderEnabled) append("big_folder_enabled=1\n")
+            if (options.widget1x1To2x2Enabled) append("widget_1x1_to_2x2=1\n")
             // Explicit opt-in only. An absent key preserves the stock OS4 material.
             if (options.glassEnabled) append("glass_enabled=1\n")
             if (options.glassEnabled) {

@@ -48,8 +48,8 @@
 #include "native_glass_schema.h"
 #include "divider_conf.h"
 
-#define LD_GRID_CONF_MAX_BYTES 4096
-#define LD_GRID_LINE_MAX       255   /* 含 LF；对齐 hooks_dock.c 的 fgets(line,256) */
+#define LD_GRID_CONF_MAX_BYTES 8192
+#define LD_GRID_LINE_MAX       1024  /* 含 LF；支持多目标列表如 widget_resize_targets */
 
 #define LD_GRID_COLS_MIN 2            /* 与 app 层 ConfigSchema.Grid.COLUMNS 一致 */
 #define LD_GRID_COLS_MAX 10
@@ -110,6 +110,10 @@ struct ld_grid_conf {
     size_t folder_pad_target_count;
     uint64_t folder_pad_vaddr[16];
     size_t folder_pad_size[16];
+    int widget_1x1_to_2x2_enabled;
+    int widget_resize_targets_present;
+    uint64_t widget_resize_vaddr[20];
+    size_t widget_resize_size[20];
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -202,7 +206,7 @@ static inline int ld_grid_parse_aot_targets_max(const char *s,uint64_t *vaddr,si
 {
     if(!s || !*s) return 0;
     const char *p=s;
-    if(count<1 || count>16) return 0;
+    if(count<1 || count>32) return 0;
     for(size_t i=0;i<count;i++) {
         if(p[0]!='0' || p[1]!='x') return 0;
         p+=2;
@@ -397,6 +401,20 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     c.folder_pad_targets_present=1;
                     c.folder_pad_target_count=n;
                     seen |= 1ull << 44;
+                } else if (strcmp(key, "widget_1x1_to_2x2") == 0) {
+                    int value;
+                    if ((seen & (1ull << 45)) || !ld_grid_parse_bool01(val,&value)) {
+                        bad=1; break;
+                    }
+                    c.widget_1x1_to_2x2_enabled=value;
+                    seen |= 1ull << 45;
+                } else if (strcmp(key, "widget_resize_targets") == 0) {
+                    if ((seen & (1ull << 46)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.widget_resize_vaddr, c.widget_resize_size, 20, 65536)) {
+                        bad=1; break;
+                    }
+                    c.widget_resize_targets_present=1;
+                    seen |= 1ull << 46;
                 } else if (strcmp(key, "glass_enabled") == 0) {
                     int value;
                     if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {

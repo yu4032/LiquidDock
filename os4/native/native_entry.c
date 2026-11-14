@@ -64,6 +64,7 @@ static void (*g_orig_rust_orientation)(void *);
 #include "icon_glass.h"
 #include "maml_widget_materials.h"
 #include "widget_resize.h"
+#include "widget_1x1_menu.h"
 
 #define LD_BLOG_MAX_BYTES (512 * 1024)
 
@@ -528,6 +529,8 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             __ATOMIC_RELEASE);
     __atomic_store_n(&g_os4_big_folder_enabled,
             g_home_options.big_folder_enabled ? 1u : 0u,__ATOMIC_RELEASE);
+    __atomic_store_n(&g_os4_widget_1x1_to_2x2_enabled,
+            g_home_options.widget_1x1_to_2x2_enabled ? 1u : 0u,__ATOMIC_RELEASE);
     g_os4_glass_installed=true;
     ld_blog("OS4 glass gates installed: 3 vendor predicates enabled=%d",
             g_home_options.glass_enabled);
@@ -607,6 +610,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                     patched, g_home_options.folder_pad_target_count);
         }
     }
+    ld_w1x1_menu_install(api, lib);
     const char *label[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};
     void *wrapper[4]={(void *)repl_os4_trace_light,(void *)repl_os4_trace_dark,
         (void *)repl_os4_trace_filter,(void *)repl_os4_trace_apply};
@@ -1447,6 +1451,7 @@ static void install_grid_hook(const struct native_api *api) {
     if (app_loaded)
         ld_divider_paint_install(api, &divider_lib);
     if (((g_grid_cols > 0 && g_grid_rows > 0) || g_home_options.icon_size_enabled
+            || g_home_options.big_folder_enabled || g_home_options.widget_1x1_to_2x2_enabled
             || g_home_options.dock.enabled || g_home_options.glass_enabled
             || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100))
         install_grid_hook_unlocked(api);

@@ -158,6 +158,7 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             toggle(ConfigSchema.Grid.ICON_SIZE_ENABLED, "自定义图标大小"),
             number(launcher450IconSizeSpec),
             toggle(ConfigSchema.Grid.BIG_FOLDER_ENABLED, "启用桌面大文件夹"),
+            toggle(ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED, "1×1 小组件放大成 2×2"),
             toggle(ConfigSchema.Grid.ENABLED, "自由主界面网格"),
         ) + gridDimensionSpecs.map(::number)
         Page.SoftGlass -> listOf(
@@ -259,9 +260,10 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
             ConfigSchema.Grid.ICON_SIZE_ENABLED.name() -> 2
             launcher450IconSizeSpec.key -> 3
             ConfigSchema.Grid.BIG_FOLDER_ENABLED.name() -> 5
-            ConfigSchema.Grid.ENABLED.name() -> 7
+            ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED.name() -> 7
+            ConfigSchema.Grid.ENABLED.name() -> 9
             else -> gridDimensionSpecs.indexOfFirst { it.key == key }
-                .takeIf { it >= 0 }?.plus(8) ?: -1
+                .takeIf { it >= 0 }?.plus(10) ?: -1
         }
         Page.GlassIcons -> when (key) {
             ConfigSchema.Glass.ICON_GLASS.name(),

@@ -173,6 +173,9 @@ object Os4ConfigSync {
                     if (resolvedTargets.folderPadTargets.isNotEmpty()) {
                         append("folder_pad_targets=").append(resolvedTargets.folderPadTargets).append('\n')
                     }
+                    if (resolvedTargets.widgetResizeTargets.isNotEmpty()) {
+                        append("widget_resize_targets=").append(resolvedTargets.widgetResizeTargets).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }
