@@ -48,7 +48,7 @@ internal fun SoftGlassPage(
         item {
             PageHeader(
                 stringResource(R.string.page_soft_glass),
-                "仅作用于 OS4 系统桌面的原生柔光玻璃；其他 Hook 应用仍使用「液态玻璃」。重启桌面生效，背景模糊设为 0 可观察清晰折射。",
+                "仅作用于 OS4 系统桌面的原生柔光玻璃。重启桌面生效，背景模糊设为 0 可观察清晰折射。",
             )
         }
         item {
@@ -57,7 +57,7 @@ internal fun SoftGlassPage(
                     prefs,
                     ConfigSchema.Glass.ENABLED,
                     "开启自定义",
-                    "开启后自定义桌面原生柔光玻璃与液态玻璃参数；重启桌面生效。",
+                    "开启后自定义桌面原生柔光玻璃参数；重启桌面生效。",
                     masterEnabled,
                 ) { liquidGlass = it }
             }

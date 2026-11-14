@@ -162,7 +162,7 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             toggle(ConfigSchema.Grid.ENABLED, "自由主界面网格"),
         ) + gridDimensionSpecs.map(::number)
         Page.SoftGlass -> listOf(
-            CustomGlassSearchRow(ConfigSchema.Glass.ENABLED.name(), "开启自定义", "开启后自定义桌面原生柔光玻璃与液态玻璃参数；重启桌面生效"),
+            CustomGlassSearchRow(ConfigSchema.Glass.ENABLED.name(), "开启自定义", "开启后自定义桌面原生柔光玻璃参数；重启桌面生效"),
         )
         Page.SoftGlassComponents -> listOf(
             CustomGlassSearchRow(ConfigSchema.Glass.ICON_GLASS.name(), "图标玻璃", "控制普通桌面图标与 Dock 应用图标；重启桌面生效"),
