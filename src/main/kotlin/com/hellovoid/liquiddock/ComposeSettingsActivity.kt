@@ -600,7 +600,7 @@ private fun HomePage(
                 modifier = Modifier.padding(start = 14.dp, top = 4.dp, end = 14.dp),
             ) {
                 Text(
-                    text = if (masterEnabled) "LiquidDock 正在运行" else "LiquidDock 已暂停",
+                    text = if (masterEnabled) "LiquidDock4 正在运行" else "LiquidDock4 已暂停",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -608,7 +608,7 @@ private fun HomePage(
                     text = if (masterEnabled) {
                         "可即时生效的外观设置会立即更新；需要重启的项目会在说明中明确标注。"
                     } else {
-                        "LiquidDock 已暂停，已保存的设置不会丢失。"
+                        "LiquidDock4 已暂停，已保存的设置不会丢失。"
                     },
                     modifier = Modifier.padding(top = 6.dp),
                     fontSize = 12.sp,

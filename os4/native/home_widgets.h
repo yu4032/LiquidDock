@@ -99,8 +99,8 @@ __attribute__((used, noinline)) static void ld_observe_home_widget(struct ld_dar
     int direction = ld_grid_direction(c, grid);
     if (direction < 0 || direction > 1) return;
     int64_t cols = ld_heap_i64(grid, 0x1b), rows = ld_heap_i64(grid, 0x23);
-    if (cols != (direction ? g_grid_rows : g_grid_cols)
-            || rows != (direction ? g_grid_cols : g_grid_rows)) return;
+    if (cols != (direction ? g_grid_cols : g_grid_rows)
+            || rows != (direction ? g_grid_rows : g_grid_cols)) return;
 
     uintptr_t variables = ld_heap_pointer(c, grid, 0x8f);
     if (!variables) return;

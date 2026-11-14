@@ -32,14 +32,14 @@ static void ld_apply_home_geometry(struct ld_dart_context *c,uintptr_t grid)
     }
     int direction=ld_grid_direction(c,grid);
     if(direction<0 || direction>1) GEOM_BAIL(direction);
-    /* direction 0=横屏（layout_runtime/layout_load 同约定）：横屏取 landscape 值。 */
-    const struct ld_grid_offsets *o=direction?&g_home_options.portrait:&g_home_options.landscape;
+    /* ld_grid_direction: 1=横屏，0=竖屏。 */
+    const struct ld_grid_offsets *o=direction?&g_home_options.landscape:&g_home_options.portrait;
     if(diag<20u) ld_blog("home geometry dir=%d off h=%.1f t=%.1f b=%.1f gap=%.1f",
         direction,o->horizontal,o->top,o->bottom,o->row_gap);
     if(o->horizontal==0 && o->top==0 && o->bottom==0) GEOM_BAIL(offsets-zero);
     int cols=(int)ld_heap_i64(grid,0x23),rows=(int)ld_heap_i64(grid,0x1b);   /* 该对象 0x23=列 0x1b=行 */
     if(diag<20u) ld_blog("home geometry cols=%d rows=%d want %dx%d",cols,rows,g_grid_cols,g_grid_rows);
-    if(cols!=(direction?g_grid_rows:g_grid_cols) || rows!=(direction?g_grid_cols:g_grid_rows)) GEOM_BAIL(grid-size);
+    if(cols!=(direction?g_grid_cols:g_grid_rows) || rows!=(direction?g_grid_rows:g_grid_cols)) GEOM_BAIL(grid-size);
     if(diag==0u) {
         /* 扫描对象里的压缩指针，找类 ID == 0x80b（GridConfig getter 的哨兵类）的子对象 */
         unsigned char buf[0x120];

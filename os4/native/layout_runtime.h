@@ -24,7 +24,9 @@ static void *g_orig_process_screen __attribute__((used));
 __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context *c)
 {
     uintptr_t receiver = c->x[1];
-    int direction=ld_grid_direction(c,c->x[2]);
+    int raw_dir=ld_grid_direction(c,c->x[2]);
+    /* layout_memory slots: 0=landscape(g_grid_cols x g_grid_rows), 1=portrait; ld_grid_direction is 1=landscape, 0=portrait. */
+    int direction=(raw_dir==0 || raw_dir==1)?(1-raw_dir):-1;
     int livecols=(int)ld_heap_i64(c->x[2],0x1b),liverows=(int)ld_heap_i64(c->x[2],0x23);
     if(g_grid_cols>0 && g_grid_rows>0 && g_grid_cols!=g_grid_rows) {
         if(livecols==g_grid_cols && liverows==g_grid_rows) direction=0;

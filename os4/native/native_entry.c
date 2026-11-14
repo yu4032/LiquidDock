@@ -144,8 +144,8 @@ __attribute__((used)) static void ld_observe_home_pipeline(struct ld_dart_contex
     uint32_t layout=0;
     bool is_fs = (ld_read_heap(variables+0x27,&layout,4) && ld_is_fullscreen_layout(c, layout));
     if(g_count_cols>0 && direction>=0 && direction<=1 && icons
-            && ld_heap_i64(grid,0x1b)==(direction?g_grid_rows:g_grid_cols)
-            && ld_heap_i64(grid,0x23)==(direction?g_grid_cols:g_grid_rows)
+            && ld_heap_i64(grid,0x1b)==(direction?g_grid_cols:g_grid_rows)
+            && ld_heap_i64(grid,0x23)==(direction?g_grid_rows:g_grid_cols)
             && (is_fs || 1)
             && ld_read_heap(grid+0x2b,&baseline.cell_width,8)
             && ld_read_heap(grid+0x33,&baseline.cell_height,8)
@@ -193,16 +193,6 @@ static void load_grid_config(void)
 
     g_grid_cols = conf.cols;
     g_grid_rows = conf.rows;
-    /* 规范为「横屏语义」（列 >= 行）。PadRowCol wrapper 会按方向转置：
-     * 竖屏得到 (rows, cols)，横屏得到 (cols, rows)。若 GUI 在竖屏保存了 4x8，
-     * 这里补一次转置，避免横屏变成 8 行 4 列被切页。 */
-    if (g_grid_cols < g_grid_rows) {
-        int swapped = g_grid_cols;
-        g_grid_cols = g_grid_rows;
-        g_grid_rows = swapped;
-        ld_blog("grid config normalized to landscape canonical %dx%d (was %dx%d)",
-                g_grid_cols, g_grid_rows, conf.cols, conf.rows);
-    }
     g_home_options=conf;
     LOGI("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     ld_blog("grid config %dx%d source=%s", conf.cols, conf.rows, source);

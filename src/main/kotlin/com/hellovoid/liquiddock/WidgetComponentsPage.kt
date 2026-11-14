@@ -184,7 +184,7 @@ internal fun WidgetComponentsPage(
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("尚未载入小组件")
                         Text(
-                            "点击上方“载入当前小组件”；LiquidDock 只会在这次手动触发后扫描一次。",
+                            "点击上方“载入当前小组件”；LiquidDock4 只会在这次手动触发后扫描一次。",
                             fontSize = 13.sp,
                             modifier = Modifier.padding(top = 5.dp),
                         )

@@ -32,8 +32,8 @@ static int ld_dock_active(struct ld_dart_context *c)
 
     if (g_grid_cols > 0 && g_grid_rows > 0) {
         int64_t cl = ld_heap_i64(grid, 0x1b), r = ld_heap_i64(grid, 0x23);
-        if ((direction == 0 && cl == g_grid_cols && r == g_grid_rows) ||
-            (direction == 1 && cl == g_grid_rows && r == g_grid_cols)) {
+        if ((direction == 1 && cl == g_grid_cols && r == g_grid_rows) ||
+            (direction == 0 && cl == g_grid_rows && r == g_grid_cols)) {
             return 1;
         }
     }

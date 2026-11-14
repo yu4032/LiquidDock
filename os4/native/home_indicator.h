@@ -28,7 +28,7 @@ __attribute__((used)) static void ld_observe_home_indicator(struct ld_dart_conte
         !ld_is_fullscreen_layout(c, layout)) return;
     int direction=ld_grid_direction(c,grid);
     if (direction!=0 && direction!=1) return;
-    double delta=direction==0 ? g_home_options.landscape.indicator_y :
+    double delta=direction==1 ? g_home_options.landscape.indicator_y :
                                 g_home_options.portrait.indicator_y;
     if (!isfinite(delta) || delta==0.0) return;
 

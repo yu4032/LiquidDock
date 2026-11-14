@@ -8,7 +8,8 @@ static int g_load_prepared;
 __attribute__((used)) static void ld_filter_grid(struct ld_dart_context *c) {
     g_load_columns=(int)ld_heap_i64(c->x[0],0x1b);
     g_load_rows=(int)ld_heap_i64(c->x[0],0x23);
-    g_load_direction=ld_grid_direction(c,c->x[0]);
+    int raw_dir=ld_grid_direction(c,c->x[0]);
+    g_load_direction=(raw_dir==0 || raw_dir==1)?(1-raw_dir):-1;
 }
 static int64_t ld_dto_number(struct ld_dart_context *c,uintptr_t object,size_t offset) {
     uint32_t word=ld_heap_u32(object,offset);

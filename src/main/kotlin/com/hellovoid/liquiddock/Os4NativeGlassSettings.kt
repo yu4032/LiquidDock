@@ -80,7 +80,7 @@ private fun Os4NativeGlassFieldSetting(
                     else write(overrides - field.id)
                 },
                 title = field.label,
-                summary = if (overridden) "自定义此项；重启桌面生效" else "沿用桌面原生值；重启桌面生效",
+                summary = "${field.summary} · ${if (overridden) "已自定义" else "沿用原生"}（重启桌面生效）",
                 enabled = enabled,
                 insideMargin = ModernPreferenceMargin,
             )

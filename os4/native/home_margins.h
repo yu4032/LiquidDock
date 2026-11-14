@@ -155,18 +155,19 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     if (cfg_cols >= 2 && cfg_cols <= 16 && cfg_rows >= 2 && cfg_rows <= 16) {
         cols = (int)cfg_cols;
         rows = (int)cfg_rows;
-        if (cols != rows) landscape = (cols > rows);
-        else if (dir_raw == 0 || dir_raw == 1) landscape = (dir_raw == 0);
+        if (dir_raw == 0 || dir_raw == 1) {
+            landscape = (dir_raw == 1);
+        }
     }
     if (landscape < 0 && note) {
-        landscape = (note->dir == 0);   /* ld_grid_direction: 0=横屏 1=竖屏 */
+        landscape = (note->dir == 1);   /* ld_grid_direction: 1=横屏 0=竖屏 */
         if (cols <= 0) { cols = note->cols; rows = note->rows; }
     } else if (landscape < 0 && (g_hm_cur_dir == 0 || g_hm_cur_dir == 1)) {
-        landscape = (g_hm_cur_dir == 0);
+        landscape = (g_hm_cur_dir == 1);
         if (cols <= 0) { cols = g_hm_cur_cols; rows = g_hm_cur_rows; }
     }
     if (landscape < 0 && (dir_raw == 0 || dir_raw == 1)) {
-        landscape = (dir_raw == 0);
+        landscape = (dir_raw == 1);
         if (cols <= 0) {
             cols = landscape ? g_grid_cols : g_grid_rows;
             rows = landscape ? g_grid_rows : g_grid_cols;

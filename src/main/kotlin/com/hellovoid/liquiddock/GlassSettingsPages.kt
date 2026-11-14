@@ -604,7 +604,7 @@ internal fun GlassFoldersPage(
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT,
                     "绵狗修改版桌面适配",
-                    "默认关闭。开启后对含 LiquidDock 标记且数据库保存为 2×2 的大文件夹恢复网格尺寸；不检测桌面版本。修改后重启桌面生效",
+                    "默认关闭。开启后对含 LiquidDock4 标记且数据库保存为 2×2 的大文件夹恢复网格尺寸；不检测桌面版本。修改后重启桌面生效",
                     enabled = true, // This compatibility repair has its own master switch.
                 )
             }

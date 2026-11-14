@@ -749,31 +749,31 @@ internal val animationDockResizeSpec = IntSpec(
     ConfigSchema.Animation.DOCK_RESIZE,
     "Dock 尺寸变化",
     "ms",
-    summary = "LiquidDock 顺滑尺寸动画的时长；需关闭系统 Dock 尺寸过渡并开启 LiquidDock 顺滑尺寸动画；重启桌面后生效",
+    summary = "LiquidDock4 顺滑尺寸动画的时长；需关闭系统 Dock 尺寸过渡并开启 LiquidDock4 顺滑尺寸动画；重启桌面后生效",
 )
 internal val animationPressInSpec = IntSpec(
     ConfigSchema.Animation.PRESS_IN,
     "按压进入",
     "ms",
-    summary = "LiquidDock 玻璃按下反馈速度；已加载的桌面 Hook 即时生效",
+    summary = "LiquidDock4 玻璃按下反馈速度；已加载的桌面 Hook 即时生效",
 )
 internal val animationPressOutSpec = IntSpec(
     ConfigSchema.Animation.PRESS_OUT,
     "按压释放",
     "ms",
-    summary = "LiquidDock 玻璃松手恢复速度；已加载的桌面 Hook 即时生效",
+    summary = "LiquidDock4 玻璃松手恢复速度；已加载的桌面 Hook 即时生效",
 )
 internal val animationShortcutDismissSpec = IntSpec(
     ConfigSchema.Animation.SHORTCUT_POPUP_DISMISS_FADE,
     "快捷菜单退出渐隐",
     "ms",
-    summary = "桌面快捷菜单关闭时 LiquidDock 玻璃的快速淡出；已加载的桌面 Hook 即时生效",
+    summary = "桌面快捷菜单关闭时 LiquidDock4 玻璃的快速淡出；已加载的桌面 Hook 即时生效",
 )
 internal val animationSecurityCenterExitSpec = IntSpec(
     ConfigSchema.Animation.SECURITY_CENTER_EXIT_FADE,
     "安全中心退出渐隐",
     "ms",
-    summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock 淡出；已加载的安全中心 Hook 即时生效",
+    summary = "安全中心侧边栏与工具箱玻璃退出时的 LiquidDock4 淡出；已加载的安全中心 Hook 即时生效",
 )
 internal val animationSettingsPageSpec = IntSpec(
     ConfigSchema.Animation.SETTINGS_PAGE,

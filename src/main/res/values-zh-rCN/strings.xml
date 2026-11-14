@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">LiquidDock</string>
+    <string name="app_name">LiquidDock4</string>
     <string name="action_back">返回</string>
     <string name="page_grid">主屏幕布局</string>
     <string name="page_dock">Dock 尺寸与模糊</string>
@@ -54,15 +54,15 @@
     <string name="theme_palette_red">红色</string>
     <string name="theme_palette_orange">橙色</string>
     <string name="theme_palette_green">绿色</string>
-    <string name="enable_liquiddock">启用 LiquidDock</string>
-    <string name="enable_liquiddock_summary">控制 LiquidDock 的整体视觉效果；部分设置需重启桌面生效</string>
+    <string name="enable_liquiddock">启用 LiquidDock4</string>
+    <string name="enable_liquiddock_summary">控制 LiquidDock4 的整体视觉效果；部分设置需重启桌面生效</string>
     <string name="enable_grid_8x4">启用自定义布局</string>
     <string name="enable_grid_8x4_summary">关闭时完全使用 MIUI 原生布局；下方全部参数仅在开启后生效；重启桌面生效</string>
     <string name="dock_customization">自定义 Dock 几何与外观</string>
     <string name="dock_customization_summary">控制尺寸、位置、描边和阴影</string>
     <string name="dock_resize_animation">Dock 尺寸过渡动画</string>
     <string name="dock_resize_animation_summary">宽度、高度和圆角变化时播放 200 ms 动画；关闭后立即应用最终尺寸；重启桌面生效</string>
-    <string name="dock_smooth_resize_animation">LiquidDock 顺滑尺寸动画</string>
+    <string name="dock_smooth_resize_animation">LiquidDock4 顺滑尺寸动画</string>
     <string name="dock_smooth_resize_animation_summary">使用连续的 180 ms 缓出过渡，不会出现系统动画先扩张再缩回的行为；重启桌面生效</string>
     <string name="dock_frame_sync">Dock帧同步</string>
     <string name="dock_frame_sync_summary">使Dock玻璃背景与屏幕刷新同步，改善高刷新率下背景更新不跟手的问题；开关即时生效</string>
@@ -73,7 +73,7 @@
     <string name="liquid_enable">启用液态玻璃</string>
     <string name="liquid_enable_summary">关闭会立即移除当前玻璃效果；重新启用后部分场景需重启桌面生效</string>
     <string name="liquid_security_center_glass_enable">安全中心侧边栏玻璃</string>
-    <string name="liquid_security_center_glass_enable_summary">为已支持的全局侧边栏与所有应用使用 LiquidDock 液态玻璃；LiquidDock 释放所有权后由安全中心自行恢复原生材质或背景模糊。</string>
+    <string name="liquid_security_center_glass_enable_summary">为已支持的全局侧边栏与所有应用使用 LiquidDock4 液态玻璃；LiquidDock4 释放所有权后由安全中心自行恢复原生材质或背景模糊。</string>
     <string name="liquid_blur_method">模糊方法</string>
     <string name="liquid_shader_blur">Shader 双环模糊</string>
     <string name="liquid_native_blur">系统原生 Self Blur</string>

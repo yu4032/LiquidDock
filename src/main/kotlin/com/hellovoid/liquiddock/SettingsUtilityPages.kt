@@ -38,7 +38,7 @@ internal fun DataPage(padding: PaddingValues, activity: ComposeSettingsActivity)
         item { SmallTitle("备份与应用") }
         item {
             SettingsCard {
-                ArrowPreference("导出当前参数", summary = "保存为 LiquidDock JSON", onClick = activity::launchExport)
+                ArrowPreference("导出当前参数", summary = "保存为 LiquidDock4 JSON", onClick = activity::launchExport)
                 ArrowPreference("导入参数", summary = "校验并恢复参数；完成后自动重启桌面", onClick = activity::launchImport)
             }
         }
@@ -94,7 +94,7 @@ internal fun AboutPage(
     prefs: SharedPreferences,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = padding) {
-        item { PageHeader("许可", "LiquidDock 使用的第三方开源项目与许可证") }
+        item { PageHeader("许可", "LiquidDock4 使用的第三方开源项目与许可证") }
         item { SmallTitle("界面与运行框架") }
         item {
             SettingsCard {

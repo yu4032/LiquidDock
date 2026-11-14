@@ -74,7 +74,7 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         return nativeSections.flatMap { (sectionTitle, ids) ->
             ids.mapNotNull { id ->
                 byId[id]?.let { field ->
-                    CustomGlassSearchRow(field.id, field.label, "$sectionTitle · 重启桌面生效")
+                    CustomGlassSearchRow(field.id, field.label, "$sectionTitle · ${field.summary}")
                 }
             }
         }
@@ -193,7 +193,7 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             CustomGlassSearchRow("safe_mode", "安全模式", "开启后下次重启桌面将跳过全部 Native Hook；关闭并重启桌面恢复正常"),
         )
         Page.Data -> listOf(
-            CustomGlassSearchRow("export", "导出参数", "备份当前 LiquidDock 配置为 JSON"),
+            CustomGlassSearchRow("export", "导出参数", "备份当前 LiquidDock4 配置为 JSON"),
             CustomGlassSearchRow("import", "导入参数", "校验并恢复参数；完成后自动重启桌面"),
             CustomGlassSearchRow("reset", "恢复默认", "重置内置配置与开关并重启桌面"),
         )

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">LiquidDock</string>
+    <string name="app_name">LiquidDock4</string>
     <string name="action_back">Back</string>
     <string name="page_grid">Home screen layout</string>
     <string name="page_dock">Dock size and blur</string>
@@ -54,15 +54,15 @@
     <string name="theme_palette_red">Red</string>
     <string name="theme_palette_orange">Orange</string>
     <string name="theme_palette_green">Green</string>
-    <string name="enable_liquiddock">Enable LiquidDock</string>
-    <string name="enable_liquiddock_summary">Controls LiquidDock visual effects; some settings require a launcher restart to take effect</string>
+    <string name="enable_liquiddock">Enable LiquidDock4</string>
+    <string name="enable_liquiddock_summary">Controls LiquidDock4 visual effects; some settings require a launcher restart to take effect</string>
     <string name="enable_grid_8x4">Enable custom home grid</string>
     <string name="enable_grid_8x4_summary">Uses the stock MIUI layout when disabled; choose the grid layout below when enabled; requires a launcher restart</string>
     <string name="dock_customization">Customize Dock geometry and appearance</string>
     <string name="dock_customization_summary">Controls size, position, stroke, and shadow</string>
     <string name="dock_resize_animation">Dock size transition</string>
     <string name="dock_resize_animation_summary">Animates width, height, and corner changes for 200 ms; disable to apply the final size immediately; requires a launcher restart</string>
-    <string name="dock_smooth_resize_animation">Smooth LiquidDock size transition</string>
+    <string name="dock_smooth_resize_animation">Smooth LiquidDock4 size transition</string>
     <string name="dock_smooth_resize_animation_summary">Uses a continuous 180 ms ease-out transition without the system expansion-and-shrink behavior; requires a launcher restart</string>
     <string name="dock_frame_sync">Dock frame sync</string>
     <string name="dock_frame_sync_summary">Keep the Dock glass background synchronized with the display refresh rate for smoother high-refresh-rate background updates; changes apply immediately</string>
@@ -73,7 +73,7 @@
     <string name="liquid_enable">Enable liquid glass</string>
     <string name="liquid_enable_summary">Turning off removes the current glass effect immediately; after enabling, some scenes require a launcher restart to take effect</string>
     <string name="liquid_security_center_glass_enable">Security Center sidebar glass</string>
-    <string name="liquid_security_center_glass_enable_summary">Use LiquidDock glass for the supported Global Dock and All Apps sidebar; Security Center restores its native material or blur when LiquidDock releases ownership.</string>
+    <string name="liquid_security_center_glass_enable_summary">Use LiquidDock4 glass for the supported Global Dock and All Apps sidebar; Security Center restores its native material or blur when LiquidDock4 releases ownership.</string>
     <string name="liquid_folder_glass_enable">Enable folder glass</string>
     <string name="liquid_folder_glass_enable_summary">Controls supported folder glass at runtime when the Launcher hook is already loaded; restart only if the required hook is missing</string>
     <string name="liquid_blur_method">Blur method</string>

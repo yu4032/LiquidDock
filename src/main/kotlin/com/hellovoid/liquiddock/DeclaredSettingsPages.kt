@@ -106,7 +106,7 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     page(Page.AnimationSystem, "控制通知与控制中心顶部模糊及系统界面联动。", listOf(
         toggle(ConfigSchema.Animation.SYSTEM_UI_HEADER_GRADIENT_BLUR,
             "控制中心/通知中心顶部渐变模糊",
-            "只影响面板顶部渐变模糊，不改变面板主体背景模糊；需启用 LiquidDock 的 SystemUI 作用域，切换后重启系统界面生效"),
+            "只影响面板顶部渐变模糊，不改变面板主体背景模糊；需启用 LiquidDock4 的 SystemUI 作用域，切换后重启系统界面生效"),
         toggle(ConfigSchema.Animation.HIDE_GESTURE_HANDLE_HOME_RECENTS, "桌面/多任务隐藏手势小白条",
             "进入桌面或多任务后隐藏手势手柄，离开后交还系统原生显示时序；开关即时生效，首次安装此版本需重启系统界面"),
     ))

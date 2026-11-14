@@ -170,7 +170,7 @@ internal fun ModuleLogsPage(
                         prefs,
                         ConfigSchema.Debug.LOGGING,
                         "诊断日志",
-                        "将 LiquidDock 运行诊断写入日志文件；修改后重启对应 Hook 作用域生效",
+                        "将 LiquidDock4 运行诊断写入日志文件；修改后重启对应 Hook 作用域生效",
                     )
                 }
             }
@@ -294,7 +294,7 @@ internal fun ModuleLogsPage(
                         Toast.makeText(activity, "当前没有可复制的日志", Toast.LENGTH_SHORT).show()
                     } else {
                         val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("LiquidDock Logs", latest))
+                        cm.setPrimaryClip(ClipData.newPlainText("LiquidDock4 Logs", latest))
                         Toast.makeText(activity, "日志已复制到剪贴板", Toast.LENGTH_SHORT).show()
                     }
                 },
