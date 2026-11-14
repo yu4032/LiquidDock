@@ -272,6 +272,9 @@ public class SettingsActivity extends AppCompatActivity {
         LiquidDockApp.syncToRemote(preferences);
         if (diagnostic) ((LiquidDockApp) getApplication()).logScopedRestart("UI_REQUEST|" + selected);
         new Thread(() -> {
+            if (selected.contains(HookScopeRestartShell.HOME)) {
+                com.hellovoid.liquiddock.os4.Os4ConfigSync.prepareForManualLauncherRestart(this);
+            }
             try {
                 Process p = new ProcessBuilder("su")
                         .redirectErrorStream(true)
