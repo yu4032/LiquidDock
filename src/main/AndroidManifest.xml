@@ -38,5 +38,21 @@
         <receiver
             android:name=".DockRecentAppReceiver"
             android:exported="true" />
+        <provider
+            android:name=".os4.Os4SyncProvider"
+            android:authorities="com.hellovoid.liquiddock.os4sync"
+            android:exported="true"
+            android:directBootAware="true" />
+        <receiver
+            android:name=".LauncherPackageReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
+                <action android:name="android.intent.action.PACKAGE_CHANGED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

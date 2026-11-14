@@ -57,16 +57,36 @@ internal fun DeclaredSettingsPage(
     val request = focus?.takeIf { it.page == meta.page }
     LaunchedEffect(meta.page, request) {
         focusGlow.snapTo(0f)
-        val index = request?.let { meta.indexOfKey(it.key) } ?: -1
-        if (index < 0) return@LaunchedEffect
+        val blockIndex = request?.let { meta.indexOfKey(it.key) } ?: -1
+        val nativeSections = liquidNativeSections[meta.page].orEmpty()
+        var targetIndex = blockIndex
+        var targetItemKey: Any? = if (blockIndex >= 0) meta.blocks[blockIndex].id else null
+        if (targetIndex < 0 && request != null && nativeSections.isNotEmpty()) {
+            val baseCount = if (hideRows) meta.blocks.count { it !is SettingsBlock.Row && it !is SettingsBlock.Header }
+            else meta.blocks.size
+            var offset = baseCount
+            for ((_, ids) in nativeSections) {
+                val present = ids.filter { id -> com.hellovoid.liquiddock.os4.Os4NativeGlassOptions.fields.any { it.id == id } }
+                if (present.isEmpty()) continue
+                offset++ // SmallTitle
+                val pos = present.indexOf(request.key)
+                if (pos >= 0) {
+                    targetIndex = offset + pos
+                    targetItemKey = request.key
+                    break
+                }
+                offset += present.size
+            }
+        }
+        if (targetIndex < 0 || targetItemKey == null) return@LaunchedEffect
         // Position addressing works before a lazy row exists. Wait for that
         // specific stable item, then calculate in the lazy viewport coordinates.
-        state.scrollToItem(index)
-        snapshotFlow { state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == meta.blocks[index].id } }
+        state.scrollToItem(targetIndex)
+        snapshotFlow { state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == targetItemKey } }
             .first { it != null }
         withFrameNanos { }
         val layout = state.layoutInfo
-        val item = layout.visibleItemsInfo.firstOrNull { it.key == meta.blocks[index].id }
+        val item = layout.visibleItemsInfo.firstOrNull { it.key == targetItemKey }
             ?: return@LaunchedEffect
         state.scrollBy(settingsCenterScrollDelta(item.offset, item.size,
             layout.viewportStartOffset, layout.viewportEndOffset))

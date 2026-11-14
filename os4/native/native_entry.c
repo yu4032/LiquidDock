@@ -38,6 +38,7 @@
 #include "home_options_fingerprints.h"
 #include "home_geometry_fingerprints.h"
 #include "dock_geometry_fingerprints.h"
+#include "sync_trigger.h"
 
 #define LD_PRIMARY_CONF "/data/user/0/com.miui.home/files/liquiddock-native.conf"
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
@@ -293,7 +294,8 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
 {
     if(g_os4_glass_installed || g_os4_glass_attempted) return;
     if(!g_home_options.glass_targets_present) {
-        ld_blog("OS4 glass gate unavailable: glass_targets not published; open LiquidDock settings");
+        ld_blog("OS4 glass gate unavailable: glass_targets not published; requesting auto-sync");
+        ld_request_os4_sync_async();
         return;
     }
     g_os4_glass_attempted=true;
@@ -465,7 +467,10 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         }
     }
     if(mapping!=MAP_FAILED) munmap(mapping,(size_t)st.st_size);
-    if(!ready) return;
+    if(!ready) {
+        ld_request_os4_sync_async();
+        return;
+    }
     for(size_t i=0;i<3;i++) {
         int rc=api->hook((void *)targets[i],replacements[i],&g_os4_glass_original[i]);
         if(rc!=0 || !g_os4_glass_original[i]
@@ -530,7 +535,13 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             ld_blog("OS4 glass pipeline installed %s",label[i]);
         } else ld_blog("OS4 glass pipeline skipped %s: hook/pin rc=%d",label[i],rc);
     }
-    if(!g_widget_init_miui_attr_installed) {
+}
+
+/* Widget scope, RemoteViews component hiding, and widget container glass hooks
+ * use AOT / rv_targets resolution and must stay decoupled from glass_targets. */
+static void ld_install_os4_widget_hooks(const struct native_api *api, const ld_lib_info *lib) {
+    if (!api || !api->hook || !lib) return;
+    if (!g_widget_init_miui_attr_installed) {
         static const uint32_t init_miui_attr_pat[20]={
             0xa9bf79fdu, 0xaa0f03fdu, 0xd10061efu, 0xf81f83b6u,
             0xf81f03a1u, 0xaa0203f0u, 0xaa0103e2u, 0xaa1003e1u,
@@ -560,7 +571,17 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             0xf85f83a3u, 0xf81e83a4u, 0xb800f083u, 0xf85f03a0u,
             0xb8013080u, 0xb840b060u, 0x8b1c8000u, 0xf9402370u,
         };
-        uintptr_t fv_fn=ld_find_aot_pattern(lib,0x1059398u,flutter_view_pat,16);
+        uintptr_t fv_fn = 0;
+        if (g_home_options.rv_targets_present && g_home_options.rv_vaddr[0]) {
+            uintptr_t sym_fv = 0;
+            if (ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.rv_vaddr[0], &sym_fv) &&
+                executable_range(sym_fv, 16) && *(const uint32_t *)sym_fv == 0xa9bf79fdu) {
+                fv_fn = sym_fv;
+                ld_blog("OS4 RemoteViews component resolved via symbol at %p (vaddr 0x%lx)",
+                        (void *)fv_fn, (unsigned long)g_home_options.rv_vaddr[0]);
+            }
+        }
+        if (!fv_fn) fv_fn=ld_find_aot_pattern(lib,0x1059398u,flutter_view_pat,16);
         if(fv_fn) {
             uint32_t w_awid = *(const uint32_t *)(fv_fn + 0x48);
             if((w_awid & 0x3bc00c00u) == 0x38400000u) {
@@ -593,7 +614,17 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             0x540000a1u, 0xb84d7043u, 0x8b1c8063u, 0xaa0303e0u,
             0x14000002u, 0xaa0103e0u, 0xd65f03c0u, 0xa9bf79fdu,
         };
-        uintptr_t fv_bg_fn=ld_find_aot_pattern(lib,0x17f5580u,flutter_view_bg_pat,16);
+        uintptr_t fv_bg_fn = 0;
+        if (g_home_options.rv_targets_present && g_home_options.rv_vaddr[1]) {
+            uintptr_t sym_bg = 0;
+            if (ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.rv_vaddr[1], &sym_bg) &&
+                executable_range(sym_bg, 16)) {
+                fv_bg_fn = sym_bg;
+                ld_blog("OS4 RemoteViews bg resolved via symbol at %p (vaddr 0x%lx)",
+                        (void *)fv_bg_fn, (unsigned long)g_home_options.rv_vaddr[1]);
+            }
+        }
+        if (!fv_bg_fn) fv_bg_fn=ld_find_aot_pattern(lib,0x17f5580u,flutter_view_bg_pat,16);
         if(fv_bg_fn) {
             uint32_t w_over = *(const uint32_t *)(fv_bg_fn + 0x14);
             uint32_t w_def = *(const uint32_t *)(fv_bg_fn + 0x24);
@@ -823,6 +854,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
     }
 
     if(!g_icon_glass_installed) {
+        ld_resolve_icon_field_offsets(bdi_rt, body_rt);
         uintptr_t sites[2] = { body_rt + 0x4cu, body_rt + 0x178u };
         void *const replacements[] = { (void*)repl_icon_glass_enabled, (void*)repl_icon_glass_size };
         void **const originals[] = { &g_orig_icon_glass_enabled, &g_orig_icon_glass_size };
@@ -842,6 +874,20 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             ld_blog("icon glass hooks installed dynamically at body=%p", (void *)body_rt);
         }
     }
+    if (g_icon_glass_installed && bdi_rt && !g_orig_icon_glass_bdi && ld_pin_code_pages_soft(bdi_rt, 16)) {
+        void *backup = NULL;
+        if (api->hook((void *)bdi_rt, (void *)repl_icon_glass_bdi, &backup) == 0 && backup) {
+            g_orig_icon_glass_bdi = backup;
+            ld_blog("icon glass owner observer (bdi) installed at %p", (void *)bdi_rt);
+        }
+    }
+    if (g_icon_glass_installed && wrap_rt && !g_orig_icon_glass_wrap && ld_pin_code_pages_soft(wrap_rt, 16)) {
+        void *backup = NULL;
+        if (api->hook((void *)wrap_rt, (void *)repl_icon_glass_wrap, &backup) == 0 && backup) {
+            g_orig_icon_glass_wrap = backup;
+            ld_blog("icon glass owner observer (wrap) installed at %p", (void *)wrap_rt);
+        }
+    }
     if(g_icon_glass_installed && g_home_options.glass_enabled && g_home_options.glass_icons
             && !g_orig_icon_glass_flight) {
         uintptr_t flight_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_FLIGHT_START,
@@ -859,6 +905,23 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             }
         } else {
             ld_blog("icon glass local flight target unavailable: %p", (void *)flight_rt);
+        }
+    }
+    if(g_icon_glass_installed && g_home_options.glass_icon_corner > 0.0 && !g_orig_icon_glass_dock_scale) {
+        if (!g_getstream_add_rt) {
+            g_getstream_add_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_GETSTREAM_ADD_START,
+                    ld_pat_getstream_add, sizeof(ld_pat_getstream_add) / sizeof(ld_pat_getstream_add[0]));
+        }
+        uintptr_t dock_scale_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_DOCK_SCALE_START,
+                ld_pat_dock_scaled_size, sizeof(ld_pat_dock_scaled_size) / sizeof(ld_pat_dock_scaled_size[0]));
+        if(dock_scale_rt && ld_pin_code_pages_soft(dock_scale_rt + 0x08u, 16)) {
+            void *backup = NULL;
+            if(api->hook((void *)(dock_scale_rt + 0x08u), (void *)repl_icon_glass_dock_scale, &backup) == 0 && backup) {
+                g_orig_icon_glass_dock_scale = backup;
+                ld_blog("icon glass dock scale observer installed at %p (vaddr 0x%lx) gs=%p",
+                        (void *)(dock_scale_rt + 0x08u), (unsigned long)(dock_scale_rt + 0x08u - lib->elf_base),
+                        (void *)g_getstream_add_rt);
+            }
         }
     }
     if(g_icon_glass_installed && g_home_options.glass_icon_corner > 0.0 && !g_icon_glass_radius_installed) {
@@ -1034,6 +1097,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_widget_inventory_reset_once();
     (void)ld_maml_install(api);
     ld_install_os4_glass(api,&lib);
+    ld_install_os4_widget_hooks(api,&lib);
     ld_install_os4_recents_blur(api,&lib);
     ld_widget_resize_install(api,&lib);
     ld_superellipse_blur_install();
@@ -1182,11 +1246,31 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         {LD_NO_VACANT_VADDR, ld_no_vacant_words, sizeof ld_no_vacant_words, (void *)repl_free_place, &g_orig_no_vacant},
         {LD_PROCESS_SCREEN_VADDR, ld_process_screen_words, sizeof ld_process_screen_words, (void *)repl_process_screen, &g_orig_process_screen},
     };
-    for (size_t i = 0; i < sizeof observers / sizeof *observers; i++) {
+    const size_t n_obs = sizeof observers / sizeof *observers;
+    uintptr_t obs_targets[sizeof observers / sizeof *observers] = {0};
+    /* Phase 1: resolve all targets before patching any prologue so twin/shared scans see clean code. */
+    for (size_t i = 0; i < n_obs; i++) {
         if (*observers[i].orig) continue;
-        uintptr_t target = ld_find_aot_pattern(&lib, observers[i].vaddr,
-                                              (const uint32_t *)observers[i].words,
-                                              observers[i].size / sizeof(uint32_t));
+        uintptr_t target = 0;
+        if (g_home_options.layout_targets_present &&
+            (observers[i].vaddr == LD_DELETE_ITEM_VADDR || observers[i].vaddr == LD_SAVE_SINGLE_VADDR)) {
+            size_t sym_idx = (observers[i].vaddr == LD_DELETE_ITEM_VADDR) ? 0 : 1;
+            uintptr_t sym_rt = 0;
+            size_t word_count = observers[i].size / sizeof(uint32_t);
+            if (ld_vaddr_to_runtime(&lib, (uintptr_t)g_home_options.layout_vaddr[sym_idx], &sym_rt) &&
+                executable_range(sym_rt, observers[i].size) &&
+                ld_aot_match_words((const uint32_t *)sym_rt, (const uint32_t *)observers[i].words, word_count)) {
+                target = sym_rt;
+                ld_blog("layout observer %lx resolved via symbol at %p (vaddr 0x%lx)",
+                        (unsigned long)observers[i].vaddr, (void *)target,
+                        (unsigned long)g_home_options.layout_vaddr[sym_idx]);
+            }
+        }
+        if (!target) {
+            target = ld_find_aot_pattern(&lib, observers[i].vaddr,
+                                         (const uint32_t *)observers[i].words,
+                                         observers[i].size / sizeof(uint32_t));
+        }
         if (!target) {
             ld_blog("layout observer %zu (%lx) not found/ambiguous; safely skipped",
                     i, (unsigned long)observers[i].vaddr);
@@ -1197,6 +1281,12 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                     i, (unsigned long)observers[i].vaddr, (void *)target);
             continue;
         }
+        obs_targets[i] = target;
+    }
+    /* Phase 2: install hooks on all resolved targets. */
+    for (size_t i = 0; i < n_obs; i++) {
+        uintptr_t target = obs_targets[i];
+        if (!target || *observers[i].orig) continue;
         result = api->hook((void *)target, observers[i].replace, observers[i].orig);
         if (result == 0 && *observers[i].orig) pin_installed_hook(target);
         ld_blog("layout observer %lx installed at %p result=%d", (unsigned long)observers[i].vaddr, (void *)target, result);

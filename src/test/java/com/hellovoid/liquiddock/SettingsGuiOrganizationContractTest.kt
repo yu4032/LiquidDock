@@ -70,9 +70,11 @@ class SettingsGuiOrganizationContractTest {
                 assertTrue("Indexed setting without a navigable Cell: $page/${row.key}", ownerExists)
             }
         }
-        // Dynamic widget catalog and app blacklist use page-level navigation rather
-        // than inventing stable keys for a changing set of runtime entries.
-        assertTrue(customGlassSearchRows(Page.WidgetComponents).isEmpty())
+        // Dynamic widget entries and app blacklist use page-level navigation rather
+        // than inventing stable keys for a changing set of runtime entries;
+        // WidgetComponents only indexes its static action rows.
+        assertEquals(setOf("widget_scan", "widget_export", "widget_import"),
+            customGlassSearchRows(Page.WidgetComponents).map { it.key }.toSet())
         assertTrue(customGlassSearchRows(Page.DockRecentBlacklist).isEmpty())
     }
 

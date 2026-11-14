@@ -93,6 +93,15 @@ struct ld_grid_conf {
     size_t recents_blur_target_count;
     uint64_t recents_blur_vaddr[2];
     size_t recents_blur_size[2];
+    int layout_targets_present;
+    uint64_t layout_vaddr[2];
+    size_t layout_size[2];
+    int home_margin_target_present;
+    uint64_t home_margin_vaddr;
+    size_t home_margin_size;
+    int rv_targets_present;
+    uint64_t rv_vaddr[2];
+    size_t rv_size[2];
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -181,7 +190,7 @@ static inline int ld_grid_parse_plain_decimal(const char *s, double lo, double h
 /* AOT addresses extracted from the installed Launcher .gnu_debugdata by the
  * module app. Address bounds are checked against mapped executable segments;
  * optional exact-build checks are controlled by hook_safety_enabled. */
-static inline int ld_grid_parse_aot_targets(const char *s,uint64_t *vaddr,size_t *bytes,size_t count)
+static inline int ld_grid_parse_aot_targets_max(const char *s,uint64_t *vaddr,size_t *bytes,size_t count,size_t max_bytes)
 {
     if(!s || !*s) return 0;
     const char *p=s;
@@ -197,19 +206,19 @@ static inline int ld_grid_parse_aot_targets(const char *s,uint64_t *vaddr,size_t
         if(errno || end==p || *end!=':' || address<0x4000 || address%4
                 || (size_t)(end-start)>12) return 0;
         p=end+1;
-        int length=0;
+        size_t length=0;
         const char *last=p;
         while(*p>='0' && *p<='9') {
-            if(length>2048) return 0;
-            length=length*10+(*p-'0');
+            if(length>max_bytes) return 0;
+            length=length*10+(size_t)(*p-'0');
             p++;
         }
-        if(p==last || (*last=='0' && p-last>1) || length<16 || length>2048
+        if(p==last || (*last=='0' && p-last>1) || length<16 || length>max_bytes
                 || address>UINTPTR_MAX
                 || (uintptr_t)length>UINTPTR_MAX-(uintptr_t)address)
             return 0;
         vaddr[i]=(uint64_t)address;
-        bytes[i]=(size_t)length;
+        bytes[i]=length;
         if(i+1<count) {
             if(*p!=',') return 0;
             p++;
@@ -219,6 +228,10 @@ static inline int ld_grid_parse_aot_targets(const char *s,uint64_t *vaddr,size_t
         for(size_t j=i+1;j<count;j++)
             if(vaddr[i]==vaddr[j]) return 0;
     return 1;
+}
+static inline int ld_grid_parse_aot_targets(const char *s,uint64_t *vaddr,size_t *bytes,size_t count)
+{
+    return ld_grid_parse_aot_targets_max(s,vaddr,bytes,count,2048);
 }
 
 /* 解析整份配置文本（内存版）。成功 = 1 并写 *out；任何违规 = 0 且 *out 清零。
@@ -329,6 +342,27 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     c.recents_blur_target_present=1;
                     c.recents_blur_target_count=n;
                     seen |= 1ull << 38;
+                } else if (strcmp(key, "layout_targets") == 0) {
+                    if ((seen & (1ull << 39)) ||
+                        !ld_grid_parse_aot_targets(val, c.layout_vaddr, c.layout_size, 2)) {
+                        bad=1; break;
+                    }
+                    c.layout_targets_present=1;
+                    seen |= 1ull << 39;
+                } else if (strcmp(key, "home_margin_target") == 0) {
+                    if ((seen & (1ull << 40)) ||
+                        !ld_grid_parse_aot_targets(val, &c.home_margin_vaddr, &c.home_margin_size, 1)) {
+                        bad=1; break;
+                    }
+                    c.home_margin_target_present=1;
+                    seen |= 1ull << 40;
+                } else if (strcmp(key, "rv_targets") == 0) {
+                    if ((seen & (1ull << 41)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.rv_vaddr, c.rv_size, 2, 65536)) {
+                        bad=1; break;
+                    }
+                    c.rv_targets_present=1;
+                    seen |= 1ull << 41;
                 } else if (strcmp(key, "glass_enabled") == 0) {
                     int value;
                     if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {

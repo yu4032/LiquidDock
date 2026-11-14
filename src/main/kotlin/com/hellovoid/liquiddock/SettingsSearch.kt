@@ -68,6 +68,17 @@ internal val expandedFolderSearchSpecs: List<IntSpec> = listOf(
 
 /** Custom page search never creates a focus key for an item not rendered by that page. */
 internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
+    val nativeSections = liquidNativeSections[page]
+    if (!nativeSections.isNullOrEmpty()) {
+        val byId = com.hellovoid.liquiddock.os4.Os4NativeGlassOptions.fields.associateBy { it.id }
+        return nativeSections.flatMap { (sectionTitle, ids) ->
+            ids.mapNotNull { id ->
+                byId[id]?.let { field ->
+                    CustomGlassSearchRow(field.id, field.label, "$sectionTitle · 重启桌面生效")
+                }
+            }
+        }
+    }
     val scope = when (page) {
         Page.HandleMenuAll -> ScopedGlassOptics.HANDLE_MENU
         Page.ShortcutPopupAll -> ScopedGlassOptics.POPUP
@@ -148,6 +159,16 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             number(launcher450IconSizeSpec),
             toggle(ConfigSchema.Grid.ENABLED, "自由主界面网格"),
         ) + gridDimensionSpecs.map(::number)
+        Page.SoftGlass -> listOf(
+            CustomGlassSearchRow(ConfigSchema.Glass.ENABLED.name(), "开启自定义", "开启后自定义桌面原生柔光玻璃与液态玻璃参数；重启桌面生效"),
+        )
+        Page.SoftGlassComponents -> listOf(
+            CustomGlassSearchRow(ConfigSchema.Glass.ICON_GLASS.name(), "图标玻璃", "控制普通桌面图标与 Dock 应用图标；重启桌面生效"),
+            number(iconSizeOffsetSpec),
+            number(iconCornerRadiusSpec),
+            CustomGlassSearchRow(ConfigSchema.Glass.WIDGET_GLASS.name(), "小部件玻璃", "替换小组件背景；重启桌面生效"),
+            CustomGlassSearchRow("widget_components", "已载入的 MAML 小组件组件管理", "按精确节点隐藏 MAML 与 RemoteViews 内容"),
+        )
         Page.GlassIcons -> listOf(
             toggle(ConfigSchema.Glass.ICON_GLASS, "图标玻璃"),
             toggle(ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS, "仅 Dock 功能图标玻璃"),
@@ -158,9 +179,25 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             toggle(ConfigSchema.Glass.WIDGET_GLASS, "小部件玻璃"),
             toggle(ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配"),
             number(widgetSizeOffsetSpec), number(widgetCornerRadiusSpec),
+            CustomGlassSearchRow("widget_components", "小组件隐藏与组件管理", "按精确节点隐藏 MAML 与 RemoteViews 小组件内容"),
+        )
+        Page.WidgetComponents -> listOf(
+            CustomGlassSearchRow("widget_scan", "载入当前小组件", "扫描当前已挂载的 MAML 与 RemoteViews 小组件"),
+            CustomGlassSearchRow("widget_export", "导出隐藏规则", "仅保存已选择的小组件隐藏规则"),
+            CustomGlassSearchRow("widget_import", "导入隐藏规则", "覆盖当前隐藏规则并重启桌面"),
         )
         Page.Divider -> listOf(toggle(ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线")) +
             dividerSpecs.map(::number)
+        Page.MoreHub -> listOf(
+            CustomGlassSearchRow("settings_glass_effect", "设置界面玻璃效果", "开启后设置界面使用液态玻璃材质"),
+            CustomGlassSearchRow("safe_mode", "安全模式", "开启后下次重启桌面将跳过全部 Native Hook；关闭并重启桌面恢复正常"),
+        )
+        Page.Data -> listOf(
+            CustomGlassSearchRow("export", "导出参数", "备份当前 LiquidDock 配置为 JSON"),
+            CustomGlassSearchRow("import", "导入参数", "校验并恢复参数；完成后自动重启桌面"),
+            CustomGlassSearchRow("reset", "恢复默认", "重置内置配置与开关并重启桌面"),
+            CustomGlassSearchRow("diag_log", "诊断日志", "将运行诊断写入日志文件；重启对应作用域生效"),
+        )
         else -> emptyList()
     }
     return rows
@@ -226,10 +263,23 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
             iconSizeOffsetSpec.key, iconCornerRadiusSpec.key -> 4
             else -> -1
         }
+        Page.SoftGlassComponents -> when (key) {
+            ConfigSchema.Glass.ICON_GLASS.name() -> 2
+            iconSizeOffsetSpec.key, iconCornerRadiusSpec.key -> 3
+            ConfigSchema.Glass.WIDGET_GLASS.name() -> 5
+            "widget_components" -> 6
+            else -> -1
+        }
         Page.GlassWidgets -> when (key) {
             ConfigSchema.Glass.WIDGET_GLASS.name() -> 2
             ConfigSchema.Glass.WIDGET_DARK_CONTENT.name() -> 3
             widgetSizeOffsetSpec.key, widgetCornerRadiusSpec.key -> 5
+            "widget_components" -> 8
+            else -> -1
+        }
+        Page.WidgetComponents -> when (key) {
+            "widget_scan" -> 1
+            "widget_export", "widget_import" -> 3
             else -> -1
         }
         Page.Divider -> if (key == ConfigSchema.Divider.ENABLED.name()) 0

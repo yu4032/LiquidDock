@@ -18,7 +18,7 @@ object Os4NativeGlassOptions {
         Field("edge_pow", "边缘衰减", "折射与轮廓", 0.1, 5.0, 2.2),
         Field("thickness_px", "折射厚度（px）", "折射与轮廓", 0.0, 200.0, 100.0),
         Field("reflect_offset_px", "反射偏移（px）", "折射与轮廓", 0.0, 300.0, 200.0),
-        Field("ior", "折射率", "折射与轮廓", 1.0, 2.5, 2.0),
+        Field("ior", "折射率", "折射与轮廓", 1.0, 5.0, 2.0),
 
         Field("light_x", "光源 X", "光照与反射", -1.5, 1.5, 0.0),
         Field("light_y", "光源 Y", "光照与反射", -1.5, 1.5, 0.0),

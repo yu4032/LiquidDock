@@ -91,6 +91,7 @@ internal fun SoftGlassComponentsPage(
     prefs: SharedPreferences,
     masterEnabled: Boolean,
     open: (Page) -> Unit,
+    searchFocus: SettingsFocusRequest? = null,
 ) {
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
@@ -116,6 +117,8 @@ internal fun SoftGlassComponentsPage(
         padding,
         stringResource(R.string.page_soft_glass_components),
         "OS4 系统桌面原生柔光玻璃组件：普通桌面图标、Dock 应用图标、小部件玻璃与 MAML 小组件隐藏规则。",
+        focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.SoftGlassComponents, it.key) },
+        focusSequence = searchFocus?.sequence,
     ) {
         item(key = "soft-icons-heading") { SmallTitle("图标与控件") }
         item(key = "soft-icons-toggle") {
@@ -143,7 +146,7 @@ internal fun SoftGlassComponentsPage(
                     prefs,
                     ConfigSchema.Glass.WIDGET_GLASS,
                     "小部件玻璃",
-                    "替换小组件背景；关闭时恢复原生背景并自动刷新桌面，保留其他独立隐藏规则。",
+                    "替换小组件背景；关闭时恢复原生背景，保留其他独立隐藏规则；重启桌面生效",
                     masterEnabled && liquidEnabled,
                 ) { widgetGlass = it }
             }

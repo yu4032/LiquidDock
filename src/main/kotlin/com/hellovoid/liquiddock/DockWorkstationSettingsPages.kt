@@ -92,7 +92,7 @@ internal fun DividerPage(padding: PaddingValues, prefs: SharedPreferences,
         focusSequence = searchFocus?.sequence) {
         item(key = "divider-enabled") {
             SettingsCard {
-                BooleanSetting(prefs, ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线", "独立于 Dock 尺寸、模糊和单位开关；宽度与偏移固定使用 dp", masterEnabled, default = legacyDefault) {
+                BooleanSetting(prefs, ConfigSchema.Divider.ENABLED, "自定义 Dock 分隔线", "独立于 Dock 尺寸、模糊和单位开关；宽度与偏移固定使用 dp；重启桌面生效", masterEnabled, default = legacyDefault) {
                     enabled = it
                     if (it) ensureDividerDefaults(prefs)
                 }

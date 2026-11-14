@@ -202,4 +202,22 @@ static const uint32_t ld_pat_flight[34] = {
     0xa8c179fdu, 0xd65f03c0u,
 };
 
+/* AppItemFactory.build around bl HotSeatsConstants2.calcScaledIconSize (0x183ebe4, 11 words).
+ * Hook site is +0x08 (0x183ebec: mov v1.16b, v0.16b) where d0 holds the scaled Dock icon size. */
+#define LD_ICON_GLASS_DOCK_SCALE_START 0x183ebe4u
+static const uint32_t ld_pat_dock_scaled_size[11] = {
+    0xfc40f000u, 0x97c9a6c6u, 0x4ea01c01u, 0x1e621000u,
+    0xfc1e03a1u, 0x1e602822u, 0xf85f83a0u, 0xb840f001u,
+    0x8b1c8021u, 0xf81f03a1u, 0xa9460b40u,
+};
+
+/* GetStream.add (0x897800, 16 words) used by RxObjectMixin.refresh to notify Obx. */
+#define LD_ICON_GLASS_GETSTREAM_ADD_START 0x897800u
+static const uint32_t ld_pat_getstream_add[16] = {
+    0xa9bf79fdu, 0xaa0f03fdu, 0xd10041efu, 0xaa0103e4u,
+    0xaa0203e3u, 0xf81f83a1u, 0xf81f03a2u, 0xb8407082u,
+    0x8b1c8042u, 0xaa0303e0u, 0xaa1603e1u, 0x6b16005fu,
+    0x540000e0u, 0xb8417044u, 0x8b1c8084u, 0xf940f768u,
+};
+
 #endif

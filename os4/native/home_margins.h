@@ -343,7 +343,17 @@ static void ld_home_margins_install(const struct native_api *api, ld_lib_info *l
         0x8b1c8021u, 0x94107745u, 0xaa1d03efu, 0xa8c179fdu,
         0xd65f03c0u,
     };
-    cc = ld_find_aot_pattern(lib, LD_HM_CC_VADDR, cc_pat, 25);
+    if (g_home_options.home_margin_target_present && g_home_options.home_margin_vaddr) {
+        uintptr_t sym_cc = 0;
+        if (ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.home_margin_vaddr, &sym_cc) &&
+            executable_range(sym_cc, sizeof cc_pat) &&
+            ld_aot_match_words((const uint32_t *)sym_cc, cc_pat, 25)) {
+            cc = sym_cc;
+            ld_blog("home margin: currentConfig resolved via symbol at %p (vaddr 0x%lx)",
+                    (void *)cc, (unsigned long)g_home_options.home_margin_vaddr);
+        }
+    }
+    if (!cc) cc = ld_find_aot_pattern(lib, LD_HM_CC_VADDR, cc_pat, 25);
     if (!cc) cc = ld_find_aot_pattern(lib, 0xb72cb8u, cc_pat, 25);
     if (cc) {
         const uint32_t *w = (const uint32_t *)cc;
