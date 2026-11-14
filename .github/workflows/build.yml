@@ -1,4 +1,4 @@
-name: API102 migration build
+name: LiquidDock Build
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: api102-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: liquiddock-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -81,11 +81,11 @@ jobs:
             --v1-signing-enabled false \
             --v2-signing-enabled true \
             --alignment-preserved true \
-            --out os4/out/LiquidDock4-fuxi-debug.apk \
+            --out os4/out/LiquidDock-os4-debug.apk \
             os4/out/LiquidDock4-unsigned.apk
-          "$TOOLS/apksigner" verify --verbose --print-certs os4/out/LiquidDock4-fuxi-debug.apk
+          "$TOOLS/apksigner" verify --verbose --print-certs os4/out/LiquidDock-os4-debug.apk
           python3 os4/tools/verify_installer.py \
-            os4/out/LiquidDock4-fuxi-debug.apk os4/out/libliquiddock4.so
+            os4/out/LiquidDock-os4-debug.apk os4/out/libliquiddock4.so
       # PR-only A/B experiment: build the optimized Release variant, but sign it
       # with the SAME public debug key as assembleDebug. The resulting two APKs
       # differ by build type/R8, not by signing identity.
@@ -134,8 +134,8 @@ jobs:
           retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
-          name: LiquidDock4-fuxi-debug-${{ github.sha }}
-          path: os4/out/LiquidDock4-fuxi-debug.apk
+          name: LiquidDock-os4-debug-${{ github.sha }}
+          path: os4/out/LiquidDock-os4-debug.apk
           if-no-files-found: error
           retention-days: 5
           compression-level: 0
