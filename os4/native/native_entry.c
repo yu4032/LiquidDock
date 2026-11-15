@@ -8,6 +8,7 @@
 #include "sha256_region.h"
 
 #include <android/log.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <pthread.h>
@@ -606,6 +607,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                     uint32_t patch = 0x1100c2c0u | rt_reg; /* add wRt, w22, #0x30 (Dart false) */
                     if(ld_patch_text_word(site, w0, patch) == 0) {
                         ld_pin_code_pages_soft(site, 4);
+                        ld_record_hook_site(site);
                         patched++;
                     }
                 }
@@ -1121,6 +1123,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             int rc = ld_patch_text_word(target, container_bypass[i].expected, container_bypass[i].patch);
             if (rc == 0) {
                 ld_pin_code_pages_soft(target, 4);
+                ld_record_hook_site(target);
                 patched_count++;
                 ld_blog("icon glass container bypass patched at %s (%p) now=%08x",
                         container_bypass[i].name, (void *)target, *(volatile uint32_t *)target);
@@ -1175,6 +1178,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
                     int rc = ld_patch_text_word(word_target, curr, new_words[w]);
                     if (rc == 0) {
                         ld_pin_code_pages_soft(word_target, 4);
+                        ld_record_hook_site(word_target);
                         patched_count++;
                     } else {
                         ld_blog("icon glass %s child word %zu patch failed rc=%d", child_sites[s].sys_name, w, rc);
@@ -1210,9 +1214,89 @@ static void ld_widget_inventory_reset_once(void)
     if(ok) g_widget_inventory_reset=1;
 }
 
+static int (*g_orig_madvise)(void *addr, size_t length, int advice) = NULL;
+static uint64_t g_madvise_guard_hits = 0;
+
+static int repl_madvise(void *addr, size_t length, int advice)
+{
+    if (!g_orig_madvise) return 0;
+    if ((advice != MADV_DONTNEED
+#ifdef MADV_REMOVE
+         && advice != MADV_REMOVE
+#endif
+        ) || length == 0 || !addr) {
+        return g_orig_madvise(addr, length, advice);
+    }
+    static uintptr_t cached_page = 0;
+    uintptr_t page = __atomic_load_n(&cached_page, __ATOMIC_RELAXED);
+    if (!page) {
+        long raw = sysconf(_SC_PAGESIZE);
+        page = (raw > 0 && (raw & (raw - 1)) == 0) ? (uintptr_t)raw : 4096u;
+        __atomic_store_n(&cached_page, page, __ATOMIC_RELAXED);
+    }
+    uintptr_t mask = ~(page - 1u);
+    uintptr_t raw_start = (uintptr_t)addr;
+    if (raw_start > UINTPTR_MAX - length - page) {
+        return g_orig_madvise(addr, length, advice);
+    }
+    uintptr_t start = raw_start & mask;
+    uintptr_t end = (raw_start + length + page - 1u) & mask;
+    if (end <= start || !ld_range_has_protected_page_lockfree(start, end, mask)) {
+        return g_orig_madvise(addr, length, advice);
+    }
+
+    size_t skipped = 0;
+    int rc = 0;
+    uintptr_t run_start = 0;
+    for (uintptr_t cur = start; cur < end; cur += page) {
+        if (ld_is_page_protected_lockfree(cur, mask)) {
+            if (run_start) {
+                int r = g_orig_madvise((void *)run_start, cur - run_start, advice);
+                if (r != 0) rc = r;
+                run_start = 0;
+            }
+            skipped++;
+        } else if (!run_start) {
+            run_start = cur;
+        }
+    }
+    if (run_start) {
+        int r = g_orig_madvise((void *)run_start, end - run_start, advice);
+        if (r != 0) rc = r;
+    }
+    if (skipped > 0) {
+        uint64_t hit = __atomic_add_fetch(&g_madvise_guard_hits, 1u, __ATOMIC_RELAXED);
+        if (hit <= 16 || (hit & (hit - 1u)) == 0) {
+            ld_blog("OS4 madvise guard #%llu: skipped %zu protected page(s) advice=%d range=%p+0x%zx",
+                    (unsigned long long)hit, skipped, advice, addr, length);
+        }
+    }
+    return rc;
+}
+
+static void ld_madvise_guard_install(const struct native_api *api)
+{
+    if (!api || !api->hook || g_orig_madvise) return;
+    void *sym = dlsym(RTLD_DEFAULT, "madvise");
+    if (!sym) {
+        void *libc = dlopen("libc.so", RTLD_NOLOAD);
+        if (libc) sym = dlsym(libc, "madvise");
+    }
+    if (!sym || !executable_range((uintptr_t)sym, 16)) {
+        ld_blog("OS4 madvise guard unavailable sym=%p", sym);
+        return;
+    }
+    int rc = api->hook(sym, (void *)repl_madvise, (void **)&g_orig_madvise);
+    if (rc == 0 && g_orig_madvise) {
+        pin_installed_hook((uintptr_t)sym);
+    }
+    ld_blog("OS4 madvise guard installed sym=%p rc=%d orig=%p", sym, rc, (void *)g_orig_madvise);
+}
+
 static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
+    ld_madvise_guard_install(api);
     bool strict=g_home_options.hook_safety_enabled;
     ld_aot_set_strict(strict);
     if(g_grid_cols>0 && g_grid_rows>0 && !g_orig_rust_orientation) {

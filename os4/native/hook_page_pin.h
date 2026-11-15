@@ -23,7 +23,7 @@ static unsigned g_pin_locked_count = 0;
 static unsigned g_pin_enomem_count = 0;
 static unsigned g_pin_failed_count = 0;
 static pthread_mutex_t g_pin_sites_lock = PTHREAD_MUTEX_INITIALIZER;
-static struct ld_pin_patch_site g_pin_sites[128];
+static struct ld_pin_patch_site g_pin_sites[256];
 static unsigned g_pin_site_count = 0;
 
 /* Inline hooks modify MAP_PRIVATE file-backed executable pages. Discarding
@@ -67,7 +67,8 @@ static inline void ld_record_hook_site(uintptr_t site) {
     uint32_t w0 = words[0];
     uint32_t w1 = words[1];
     pthread_mutex_lock(&g_pin_sites_lock);
-    for (unsigned i = 0; i < g_pin_site_count; ++i) {
+    unsigned cnt = __atomic_load_n(&g_pin_site_count, __ATOMIC_RELAXED);
+    for (unsigned i = 0; i < cnt; ++i) {
         if (g_pin_sites[i].site == site) {
             g_pin_sites[i].w0 = w0;
             g_pin_sites[i].w1 = w1;
@@ -75,10 +76,32 @@ static inline void ld_record_hook_site(uintptr_t site) {
             return;
         }
     }
-    if (g_pin_site_count < (unsigned)(sizeof(g_pin_sites) / sizeof(g_pin_sites[0]))) {
-        g_pin_sites[g_pin_site_count++] = (struct ld_pin_patch_site){ site, w0, w1 };
+    if (cnt < (unsigned)(sizeof(g_pin_sites) / sizeof(g_pin_sites[0]))) {
+        g_pin_sites[cnt] = (struct ld_pin_patch_site){ site, w0, w1 };
+        __atomic_store_n(&g_pin_site_count, cnt + 1u, __ATOMIC_RELEASE);
     }
     pthread_mutex_unlock(&g_pin_sites_lock);
+}
+
+static inline int ld_is_page_protected_lockfree(uintptr_t page_start, uintptr_t page_mask) {
+    unsigned cnt = __atomic_load_n(&g_pin_site_count, __ATOMIC_ACQUIRE);
+    for (unsigned i = 0; i < cnt; ++i) {
+        if ((g_pin_sites[i].site & page_mask) == page_start) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static inline int ld_range_has_protected_page_lockfree(uintptr_t start, uintptr_t end, uintptr_t page_mask) {
+    unsigned cnt = __atomic_load_n(&g_pin_site_count, __ATOMIC_ACQUIRE);
+    for (unsigned i = 0; i < cnt; ++i) {
+        uintptr_t p = g_pin_sites[i].site & page_mask;
+        if (p >= start && p < end) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static inline void ld_verify_hook_sites(unsigned *out_total, unsigned *out_intact) {
