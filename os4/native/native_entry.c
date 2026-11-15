@@ -1466,7 +1466,6 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         {LD_DOCK_SPACING_START,LD_DOCK_SPACING_SITE,
             ld_dock_spacing_words,sizeof ld_dock_spacing_words,(void *)repl_dock_spacing,&g_orig_dock_spacing},
     };
-    uintptr_t resolved_home_opt[11] = {0};
     for(size_t i=0;i<sizeof home_hooks/sizeof *home_hooks;i++) {
         if(*home_hooks[i].orig) continue;
         if(home_hooks[i].size < 16) continue;
@@ -1476,21 +1475,18 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                 &lib, 1, g_home_options.glass_scope_vaddr[4], g_home_options.glass_scope_size[4],
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
                 home_hooks[i].size / 4, "home_opt glass_v7");
-        } else if (i == 3 && g_home_options.home_opt_targets_present) {
+        } else if (i == 4 && g_home_options.home_opt_targets_present) {
             fn = ld_resolve_sym_scan_or_aot(
                 &lib, 1, g_home_options.home_opt_vaddr[5], g_home_options.home_opt_size[5], 0x100u,
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
                 home_hooks[i].size / 4, "home_opt margin_bottom");
-        } else if ((i >= 1 && i <= 8) && g_home_options.home_opt_targets_present) {
-            size_t opt_idx = (i == 8) ? 9 : (i + 2); /* [1..7] -> [3..9], [8] -> _defaultIconSize */
-            fn = resolved_home_opt[opt_idx];
-            if (!fn) {
-                fn = ld_resolve_sym_prologue_or_aot(
-                    &lib, 1, g_home_options.home_opt_vaddr[opt_idx], g_home_options.home_opt_size[opt_idx],
-                    home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
-                    home_hooks[i].size / 4, "home_opt");
-                resolved_home_opt[opt_idx] = fn;
-            }
+        } else if (g_home_options.home_opt_targets_present &&
+                   (i == 2 || i == 3 || i == 6 || i == 7 || i == 8 || i == 9)) {
+            int opt_idx = (i == 2) ? 3 : (i == 3) ? 4 : (i == 6) ? 6 : (i == 7) ? 7 : (i == 8) ? 8 : 9;
+            fn = ld_resolve_sym_prologue_or_aot(
+                &lib, 1, g_home_options.home_opt_vaddr[opt_idx], g_home_options.home_opt_size[opt_idx],
+                home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
+                home_hooks[i].size / 4, "home_opt");
         } else {
             fn = ld_find_aot_pattern(&lib, home_hooks[i].start,
                                      (const uint32_t *)home_hooks[i].words, home_hooks[i].size / 4);
