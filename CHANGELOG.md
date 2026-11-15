@@ -8,15 +8,22 @@
 
 ## v3.0.1（2026-11-15）
 
-### HyperOS 4 (OS4) 架构与稳定性
+### 大文件夹与小组件
+
+- **平板大文件夹支持**：支持手机样式大文件夹及尺寸选择器，绕过 `CellLayoutGetxController._isPadSwapMode` 实现跨格挤压适配。[#521](https://github.com/yu4032/LiquidDock/pull/521)
+- **文件夹内部网格自定义**：新增展开文件夹后的内部行列数自定义，并支持文件夹展开时保持玻璃背景（移除偏移的 `_openFolderIconBgAnim.keepGlass` 复用）。
+- **1×1 ↔ 2×2 小组件菜单切换与 4×2 状态检测**：单格小组件长按菜单新增「放大到 2×2 / 还原为 1×1」，完善占位同步与碰撞检测；原生加载阶段新增 `liquiddock-grid-4x2.state` 预检查状态记录。
+
+### 玻璃材质与工作台修复
+
+- **柔光玻璃统一与分组件扩展**：将原生玻璃参数统一收归全局 SoftGlass 设置，支持桌面分组件原生玻璃、大文件夹玻璃及小组件作用域 `HyperMaterial` 玻璃构建器 Hook。
+- **修复工作台模式下 Dock 不可见问题**：移除会导致 `_DockLightContentState._stableHeight` 触发工作台 `Floating Dock` 渲染隐藏的 Hook，恢复工作台 Dock 与液态玻璃正常显示。
+
+### 架构迁移、监控与稳定性加固
 
 - **FRB Boundary Adapter 接管自由网格加载边界**：新增零硬编码 FRB 边界适配器，通过 `libapp_launcher.so` 的 `.dynsym` 与 `.gnu_debugdata` 自动绑定 `launcher_model_*` `func_id` 及 `ItemInfo` 内存步长/字段偏移，在 `Vec<ItemInfo>::sse_encode` 边界直接完成自由网格规划与 `4×2` 小组件检测，旁路 `layout_load.h` 中的 Dart DTO 堆偏移读写。
-- **修复工作台模式下 Dock 不可见问题**：移除会导致 `_DockLightContentState._stableHeight` 触发工作台 `Floating Dock` 渲染隐藏的 Hook，恢复工作台 Dock 与液态玻璃正常显示。
-- **Hook 安全性、锁页状态与监控可信度加固**：
-  - 区分 `LOCKED` / `UNLOCKED_ENOMEM` / `FAILED` 锁页状态，并增加已安装补丁的运行时字节完整性校验（`patch_total` / `patch_intact`）。
-  - `hook_status.conf` 与 `liquiddock-grid-4x2.state` 绑定当前桌面 `pid` 与 `proc_starttime`，消除桌面重启后的过期状态误报。
-  - `HookMonitor` 优先基于实时进程态展示各模块状态，`Os4GlassSymbols` 符号缓存纳入桌面 `lastUpdateTime` 与 `versionCode`。
-  - 修复文件夹行列 Hook 部分安装失败后的重试链路，并支持 `Os4GlassSymbols` 与 Rust `.gnu_debugdata` 符号解析。
+- **Rust / Dart 运行时符号化**：新增 `.gnu_debugdata` XZ 符号解析与语义校验，替换 Rust 方向检查、`GetStream.add` 与 `folder_grid` 的机器码指纹依赖。
+- **Hook 监控台与可信度加固**：主页新增实时 Hook 监控台；区分 `LOCKED` / `UNLOCKED_ENOMEM` / `FAILED` 锁页状态并上报补丁字节完整性（`patch_total` / `patch_intact`）；状态文件绑定桌面 `pid` 与 `proc_starttime`；`Os4GlassSymbols` 缓存键纳入 `lastUpdateTime` 与 `versionCode`；修复文件夹 Hook 部分失败后的重试链路并限制原生日志/缓存体积。
 
 ## v2.7.9（2026-11-10）
 
