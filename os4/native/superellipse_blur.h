@@ -60,6 +60,7 @@ static int ld_patch_text_word(uintptr_t address, uint32_t expected, uint32_t val
     } else {
         *(volatile uint32_t *)address = value;
         __builtin___clear_cache((char *)address, (char *)(address + 4));
+        ld_record_hook_site(address);
     }
     if (mprotect((void *)page_start, span, PROT_READ | PROT_EXEC) != 0 && rc == 0)
         rc = -errno;

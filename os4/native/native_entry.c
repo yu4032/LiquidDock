@@ -1,4 +1,5 @@
 #include "native_api.h"
+#include "hook_page_pin.h"
 #include "superellipse.h"
 #include "dart_superellipse.h"
 #include "superellipse_blur.h"
@@ -34,7 +35,6 @@
 #include "layout_runtime_fingerprints.h"
 #include "executable_range.h"
 #include "aot_scanner.h"
-#include "hook_page_pin.h"
 #include "rust_symbol_resolver.h"
 #include "home_options_fingerprints.h"
 #include "home_geometry_fingerprints.h"
@@ -1293,9 +1293,25 @@ static void ld_madvise_guard_install(const struct native_api *api)
     ld_blog("OS4 madvise guard installed sym=%p rc=%d orig=%p", sym, rc, (void *)g_orig_madvise);
 }
 
+static int (*g_real_hook)(void *target, void *replace, void **original) = NULL;
+
+static int ld_guarded_hook(void *target, void *replace, void **original)
+{
+    if (!g_real_hook) return -1;
+    int rc = g_real_hook(target, replace, original);
+    if (rc == 0 && target) {
+        ld_record_hook_site((uintptr_t)target);
+    }
+    return rc;
+}
+
 static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
+    g_real_hook = api->hook;
+    struct native_api guarded_api = *api;
+    guarded_api.hook = ld_guarded_hook;
+    api = &guarded_api;
     ld_madvise_guard_install(api);
     bool strict=g_home_options.hook_safety_enabled;
     ld_aot_set_strict(strict);
