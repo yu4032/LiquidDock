@@ -17,6 +17,7 @@ struct ld_pin_patch_site {
     uintptr_t site;
     uint32_t w0;
     uint32_t w1;
+    uint8_t n_words;
 };
 
 static unsigned g_pin_locked_count = 0;
@@ -61,26 +62,33 @@ static inline int ld_pin_code_pages_soft(uintptr_t address,size_t size) {
     return ld_pin_code_pages_status(address, size);
 }
 
-static inline void ld_record_hook_site(uintptr_t site) {
+static inline void ld_record_hook_site_words(uintptr_t site, uint8_t n_words) {
     if (!site || (site & 3u)) return;
+    if (n_words < 1u) n_words = 1u;
+    if (n_words > 2u) n_words = 2u;
     const uint32_t *words = (const uint32_t *)site;
     uint32_t w0 = words[0];
-    uint32_t w1 = words[1];
+    uint32_t w1 = (n_words >= 2u) ? words[1] : 0u;
     pthread_mutex_lock(&g_pin_sites_lock);
     unsigned cnt = __atomic_load_n(&g_pin_site_count, __ATOMIC_RELAXED);
     for (unsigned i = 0; i < cnt; ++i) {
         if (g_pin_sites[i].site == site) {
             g_pin_sites[i].w0 = w0;
             g_pin_sites[i].w1 = w1;
+            g_pin_sites[i].n_words = n_words;
             pthread_mutex_unlock(&g_pin_sites_lock);
             return;
         }
     }
     if (cnt < (unsigned)(sizeof(g_pin_sites) / sizeof(g_pin_sites[0]))) {
-        g_pin_sites[cnt] = (struct ld_pin_patch_site){ site, w0, w1 };
+        g_pin_sites[cnt] = (struct ld_pin_patch_site){ site, w0, w1, n_words };
         __atomic_store_n(&g_pin_site_count, cnt + 1u, __ATOMIC_RELEASE);
     }
     pthread_mutex_unlock(&g_pin_sites_lock);
+}
+
+static inline void ld_record_hook_site(uintptr_t site) {
+    ld_record_hook_site_words(site, 2u);
 }
 
 static inline int ld_is_page_protected_lockfree(uintptr_t page_start, uintptr_t page_mask) {
@@ -110,7 +118,8 @@ static inline void ld_verify_hook_sites(unsigned *out_total, unsigned *out_intac
     total = g_pin_site_count;
     for (unsigned i = 0; i < g_pin_site_count; ++i) {
         const uint32_t *words = (const uint32_t *)g_pin_sites[i].site;
-        if (words[0] == g_pin_sites[i].w0 && words[1] == g_pin_sites[i].w1) {
+        if (words[0] == g_pin_sites[i].w0 &&
+            (g_pin_sites[i].n_words < 2u || words[1] == g_pin_sites[i].w1)) {
             ++intact;
         }
     }

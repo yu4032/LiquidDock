@@ -607,7 +607,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                     uint32_t patch = 0x1100c2c0u | rt_reg; /* add wRt, w22, #0x30 (Dart false) */
                     if(ld_patch_text_word(site, w0, patch) == 0) {
                         ld_pin_code_pages_soft(site, 4);
-                        ld_record_hook_site(site);
+                        ld_record_hook_site_words(site, 1u);
                         patched++;
                     }
                 }
@@ -1152,7 +1152,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             int rc = ld_patch_text_word(target, container_bypass[i].expected, container_bypass[i].patch);
             if (rc == 0) {
                 ld_pin_code_pages_soft(target, 4);
-                ld_record_hook_site(target);
+                ld_record_hook_site_words(target, 1u);
                 patched_count++;
                 ld_blog("icon glass container bypass patched at %s (%p) now=%08x",
                         container_bypass[i].name, (void *)target, *(volatile uint32_t *)target);
@@ -1207,7 +1207,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
                     int rc = ld_patch_text_word(word_target, curr, new_words[w]);
                     if (rc == 0) {
                         ld_pin_code_pages_soft(word_target, 4);
-                        ld_record_hook_site(word_target);
+                        ld_record_hook_site_words(word_target, 1u);
                         patched_count++;
                     } else {
                         ld_blog("icon glass %s child word %zu patch failed rc=%d", child_sites[s].sys_name, w, rc);
