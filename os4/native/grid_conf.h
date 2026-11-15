@@ -131,8 +131,8 @@ struct ld_grid_conf {
     uint64_t widget_glass_vaddr[3];
     size_t widget_glass_size[3];
     int icon_glass_targets_present;
-    uint64_t icon_glass_vaddr[3];
-    size_t icon_glass_size[3];
+    uint64_t icon_glass_vaddr[6];
+    size_t icon_glass_size[6];
     int divider_targets_present;
     uint64_t divider_vaddr[2];
     size_t divider_size[2];
@@ -490,7 +490,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     seen |= 1ull << 50;
                 } else if (strcmp(key, "icon_glass_targets") == 0) {
                     if ((seen & (1ull << 51)) ||
-                        !ld_grid_parse_aot_targets_max(val, c.icon_glass_vaddr, c.icon_glass_size, 3, 65536)) {
+                        !ld_grid_parse_aot_targets_max(val, c.icon_glass_vaddr, c.icon_glass_size, 6, 65536)) {
                         bad=1; break;
                     }
                     c.icon_glass_targets_present=1;

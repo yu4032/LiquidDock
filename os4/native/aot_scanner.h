@@ -289,4 +289,26 @@ static uintptr_t ld_resolve_sym_scan_or_aot(const ld_lib_info *lib, int sym_pres
     return ld_find_aot_pattern(lib, hint_vaddr, words, word_count);
 }
 
+static uintptr_t ld_resolve_sym_prologue_or_aot(const ld_lib_info *lib, int sym_present,
+                                                uint64_t sym_vaddr, size_t sym_size,
+                                                uintptr_t hint_vaddr,
+                                                const uint32_t *words, size_t word_count,
+                                                const char *tag)
+{
+    (void)sym_size;
+    if (lib && sym_present && sym_vaddr) {
+        uintptr_t sym_rt = 0;
+        if (ld_vaddr_to_runtime(lib, (uintptr_t)sym_vaddr, &sym_rt) &&
+            executable_range(sym_rt, 16u)) {
+            const uint32_t *w = (const uint32_t *)sym_rt;
+            if (w[0] == 0xa9bf79fdu && w[1] == 0xaa0f03fdu) {
+                ld_blog("%s resolved via symbol at %p (vaddr 0x%lx)",
+                        tag ? tag : "target", (void *)sym_rt, (unsigned long)sym_vaddr);
+                return sym_rt;
+            }
+        }
+    }
+    return ld_find_aot_pattern(lib, hint_vaddr, words, word_count);
+}
+
 #endif /* LIQUIDDOCK_AOT_SCANNER_H */

@@ -960,7 +960,10 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
         lib, g_home_options.icon_glass_targets_present,
         g_home_options.icon_glass_vaddr[1], g_home_options.icon_glass_size[1],
         0x178e9acu, ld_pat_wrap, 20, "icon glass wrap");
-    uintptr_t common_rt = ld_find_aot_pattern(lib, 0x14e3074u, ld_pat_common, 16);
+    uintptr_t common_rt = ld_resolve_sym_scan_or_aot(
+        lib, g_home_options.icon_glass_targets_present,
+        g_home_options.icon_glass_vaddr[3], g_home_options.icon_glass_size[3], 0x300u,
+        0x14e3074u, ld_pat_common, 16, "icon glass common");
     uintptr_t body_rt = ld_resolve_sym_scan_or_aot(
         lib, g_home_options.icon_glass_targets_present,
         g_home_options.icon_glass_vaddr[2], g_home_options.icon_glass_size[2], 0x100u,
@@ -1036,8 +1039,12 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
     }
     if(g_icon_glass_installed && g_home_options.glass_enabled && g_home_options.glass_icons
             && !g_orig_icon_glass_flight) {
-        uintptr_t flight_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_FLIGHT_START,
-                ld_pat_flight, sizeof(ld_pat_flight) / sizeof(ld_pat_flight[0]));
+        uintptr_t flight_rt = ld_resolve_sym_prologue_or_aot(
+            lib, g_home_options.icon_glass_targets_present,
+            g_home_options.icon_glass_vaddr[5], g_home_options.icon_glass_size[5],
+            LD_ICON_GLASS_FLIGHT_START,
+            ld_pat_flight, sizeof(ld_pat_flight) / sizeof(ld_pat_flight[0]),
+            "icon glass flight");
         if(flight_rt && ld_pin_code_pages_soft(flight_rt, 16)) {
             void *backup = NULL;
             int rc = api->hook((void *)flight_rt, (void *)repl_icon_glass_local_flight, &backup);
@@ -1074,8 +1081,12 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
                         ld_pat_getstream_add, sizeof(ld_pat_getstream_add) / sizeof(ld_pat_getstream_add[0]));
             }
         }
-        uintptr_t dock_scale_rt = ld_find_aot_pattern(lib, LD_ICON_GLASS_DOCK_SCALE_START,
-                ld_pat_dock_scaled_size, sizeof(ld_pat_dock_scaled_size) / sizeof(ld_pat_dock_scaled_size[0]));
+        uintptr_t dock_scale_rt = ld_resolve_sym_scan_or_aot(
+            lib, g_home_options.icon_glass_targets_present,
+            g_home_options.icon_glass_vaddr[4], g_home_options.icon_glass_size[4], 0x200u,
+            LD_ICON_GLASS_DOCK_SCALE_START,
+            ld_pat_dock_scaled_size, sizeof(ld_pat_dock_scaled_size) / sizeof(ld_pat_dock_scaled_size[0]),
+            "icon glass dock scale");
         if(dock_scale_rt && ld_pin_code_pages_soft(dock_scale_rt + 0x08u, 16)) {
             void *backup = NULL;
             if(api->hook((void *)(dock_scale_rt + 0x08u), (void *)repl_icon_glass_dock_scale, &backup) == 0 && backup) {
@@ -1455,6 +1466,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         {LD_DOCK_SPACING_START,LD_DOCK_SPACING_SITE,
             ld_dock_spacing_words,sizeof ld_dock_spacing_words,(void *)repl_dock_spacing,&g_orig_dock_spacing},
     };
+    uintptr_t resolved_home_opt[11] = {0};
     for(size_t i=0;i<sizeof home_hooks/sizeof *home_hooks;i++) {
         if(*home_hooks[i].orig) continue;
         if(home_hooks[i].size < 16) continue;
@@ -1464,12 +1476,21 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                 &lib, 1, g_home_options.glass_scope_vaddr[4], g_home_options.glass_scope_size[4],
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
                 home_hooks[i].size / 4, "home_opt glass_v7");
-        } else if (i >= 1 && i <= 7 && g_home_options.home_opt_targets_present) {
-            size_t opt_idx = i + 2; /* [1..7] -> home_opt_vaddr[3..9] */
-            fn = ld_resolve_sym_or_aot(
-                &lib, 1, g_home_options.home_opt_vaddr[opt_idx], g_home_options.home_opt_size[opt_idx],
+        } else if (i == 3 && g_home_options.home_opt_targets_present) {
+            fn = ld_resolve_sym_scan_or_aot(
+                &lib, 1, g_home_options.home_opt_vaddr[5], g_home_options.home_opt_size[5], 0x100u,
                 home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
-                home_hooks[i].size / 4, "home_opt");
+                home_hooks[i].size / 4, "home_opt margin_bottom");
+        } else if ((i >= 1 && i <= 8) && g_home_options.home_opt_targets_present) {
+            size_t opt_idx = (i == 8) ? 9 : (i + 2); /* [1..7] -> [3..9], [8] -> _defaultIconSize */
+            fn = resolved_home_opt[opt_idx];
+            if (!fn) {
+                fn = ld_resolve_sym_prologue_or_aot(
+                    &lib, 1, g_home_options.home_opt_vaddr[opt_idx], g_home_options.home_opt_size[opt_idx],
+                    home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
+                    home_hooks[i].size / 4, "home_opt");
+                resolved_home_opt[opt_idx] = fn;
+            }
         } else {
             fn = ld_find_aot_pattern(&lib, home_hooks[i].start,
                                      (const uint32_t *)home_hooks[i].words, home_hooks[i].size / 4);

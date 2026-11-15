@@ -116,6 +116,9 @@ internal object Os4GlassSymbols {
         "ShortcutIconWidget.buildDesktopIcon",
         "ShortcutIconWidget.wrapWithFolderCreateAnim",
         "ShortcutIconWidget._addFolderBgAnim",
+        "ProgressWaveWidget.snapSizeToPhysicalPixels",
+        "HotseatLayerGetxControllerPadNew.loadDataCompleteVersion",
+        "SfAnimConfig._checkSystemSupport",
     )
     private val dividerSymbolNames = listOf(
         "DividerItemFactory.build",
