@@ -124,6 +124,27 @@ struct ld_grid_conf {
     int getstream_add_target_present;
     uint64_t getstream_add_vaddr;
     size_t getstream_add_size;
+    int glass_scope_targets_present;
+    uint64_t glass_scope_vaddr[5];
+    size_t glass_scope_size[5];
+    int widget_glass_targets_present;
+    uint64_t widget_glass_vaddr[3];
+    size_t widget_glass_size[3];
+    int icon_glass_targets_present;
+    uint64_t icon_glass_vaddr[3];
+    size_t icon_glass_size[3];
+    int divider_targets_present;
+    uint64_t divider_vaddr[2];
+    size_t divider_size[2];
+    int home_opt_targets_present;
+    uint64_t home_opt_vaddr[11];
+    size_t home_opt_size[11];
+    int layout_extra_targets_present;
+    uint64_t layout_extra_vaddr[7];
+    size_t layout_extra_size[7];
+    int widget_resize_clear_target_present;
+    uint64_t widget_resize_clear_vaddr;
+    size_t widget_resize_clear_size;
 };
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -453,6 +474,55 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.getstream_add_target_present=1;
                     seen |= 1ull << 48;
+                } else if (strcmp(key, "glass_scope_targets") == 0) {
+                    if ((seen & (1ull << 49)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.glass_scope_vaddr, c.glass_scope_size, 5, 65536)) {
+                        bad=1; break;
+                    }
+                    c.glass_scope_targets_present=1;
+                    seen |= 1ull << 49;
+                } else if (strcmp(key, "widget_glass_targets") == 0) {
+                    if ((seen & (1ull << 50)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.widget_glass_vaddr, c.widget_glass_size, 3, 65536)) {
+                        bad=1; break;
+                    }
+                    c.widget_glass_targets_present=1;
+                    seen |= 1ull << 50;
+                } else if (strcmp(key, "icon_glass_targets") == 0) {
+                    if ((seen & (1ull << 51)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.icon_glass_vaddr, c.icon_glass_size, 3, 65536)) {
+                        bad=1; break;
+                    }
+                    c.icon_glass_targets_present=1;
+                    seen |= 1ull << 51;
+                } else if (strcmp(key, "divider_targets") == 0) {
+                    if ((seen & (1ull << 52)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.divider_vaddr, c.divider_size, 2, 65536)) {
+                        bad=1; break;
+                    }
+                    c.divider_targets_present=1;
+                    seen |= 1ull << 52;
+                } else if (strcmp(key, "home_opt_targets") == 0) {
+                    if ((seen & (1ull << 53)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.home_opt_vaddr, c.home_opt_size, 11, 65536)) {
+                        bad=1; break;
+                    }
+                    c.home_opt_targets_present=1;
+                    seen |= 1ull << 53;
+                } else if (strcmp(key, "layout_extra_targets") == 0) {
+                    if ((seen & (1ull << 54)) ||
+                        !ld_grid_parse_aot_targets_max(val, c.layout_extra_vaddr, c.layout_extra_size, 7, 65536)) {
+                        bad=1; break;
+                    }
+                    c.layout_extra_targets_present=1;
+                    seen |= 1ull << 54;
+                } else if (strcmp(key, "widget_resize_clear_target") == 0) {
+                    if ((seen & (1ull << 55)) ||
+                        !ld_grid_parse_aot_targets(val, &c.widget_resize_clear_vaddr, &c.widget_resize_clear_size, 1)) {
+                        bad=1; break;
+                    }
+                    c.widget_resize_clear_target_present=1;
+                    seen |= 1ull << 55;
                 } else if (strcmp(key, "glass_enabled") == 0) {
                     int value;
                     if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {

@@ -237,4 +237,56 @@ static inline int ld_hook_site_safe(uintptr_t site, const char *label)
     return 1;
 }
 
+static uintptr_t ld_resolve_sym_or_aot(const ld_lib_info *lib, int sym_present,
+                                       uint64_t sym_vaddr, size_t sym_size,
+                                       uintptr_t hint_vaddr,
+                                       const uint32_t *words, size_t word_count,
+                                       const char *tag)
+{
+    if (lib && sym_present && sym_vaddr && words && word_count > 0) {
+        uintptr_t sym_rt = 0;
+        size_t check_words = word_count;
+        if (sym_size >= 16u && sym_size / 4u < check_words) {
+            check_words = sym_size / 4u;
+        }
+        if (check_words > 16u) check_words = 16u;
+        if (check_words >= 4u &&
+            ld_vaddr_to_runtime(lib, (uintptr_t)sym_vaddr, &sym_rt) &&
+            executable_range(sym_rt, check_words * sizeof(uint32_t)) &&
+            ld_aot_match_words((const uint32_t *)sym_rt, words, check_words)) {
+            ld_blog("%s resolved via symbol at %p (vaddr 0x%lx)",
+                    tag ? tag : "target", (void *)sym_rt, (unsigned long)sym_vaddr);
+            return sym_rt;
+        }
+    }
+    return ld_find_aot_pattern(lib, hint_vaddr, words, word_count);
+}
+
+static uintptr_t ld_resolve_sym_scan_or_aot(const ld_lib_info *lib, int sym_present,
+                                            uint64_t sym_vaddr, size_t sym_size,
+                                            size_t scan_pad, uintptr_t hint_vaddr,
+                                            const uint32_t *words, size_t word_count,
+                                            const char *tag)
+{
+    if (lib && sym_present && sym_vaddr && words && word_count > 0) {
+        uintptr_t sym_rt = 0;
+        size_t window = sym_size + scan_pad;
+        if (window < 0x200u) window = 0x200u;
+        if (window > 0x2000u) window = 0x2000u;
+        size_t pat_bytes = word_count * sizeof(uint32_t);
+        if (ld_vaddr_to_runtime(lib, (uintptr_t)sym_vaddr, &sym_rt) && window >= pat_bytes) {
+            for (size_t off = 0; off + pat_bytes <= window; off += 4u) {
+                uintptr_t cand = sym_rt + off;
+                if (!executable_range(cand, pat_bytes)) break;
+                if (ld_aot_match_words((const uint32_t *)cand, words, word_count)) {
+                    ld_blog("%s resolved via symbol+0x%zx at %p (vaddr 0x%lx)",
+                            tag ? tag : "target", off, (void *)cand, (unsigned long)(sym_vaddr + off));
+                    return cand;
+                }
+            }
+        }
+    }
+    return ld_find_aot_pattern(lib, hint_vaddr, words, word_count);
+}
+
 #endif /* LIQUIDDOCK_AOT_SCANNER_H */

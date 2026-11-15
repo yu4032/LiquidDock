@@ -192,19 +192,37 @@ static void ld_glass_scope_install(
     g_scope_dock_dark_start = dock_dark_start;
     g_scope_dock_dark_end = dock_dark_end;
 
-    uintptr_t recents = ld_find_aot_pattern(lib, 0x11de554u, ld_pat_recents_glass_build, 16);
+    uintptr_t recents = ld_resolve_sym_or_aot(
+        lib, g_home_options.glass_scope_targets_present,
+        g_home_options.glass_scope_vaddr[0], g_home_options.glass_scope_size[0],
+        0x11de554u, ld_pat_recents_glass_build, 16, "glass_scope recents");
     if (recents) {
         g_scope_recents_start = recents;
-        g_scope_recents_end = recents + 0x500u;
+        g_scope_recents_end = recents +
+            (g_home_options.glass_scope_targets_present && g_home_options.glass_scope_size[0]
+                 ? (uintptr_t)g_home_options.glass_scope_size[0]
+                 : 0x500u);
     }
-    uintptr_t folder_light = ld_find_aot_pattern(lib, 0x11b26c0u, ld_pat_folder_light_build, 20);
+    uintptr_t folder_light = ld_resolve_sym_or_aot(
+        lib, g_home_options.glass_scope_targets_present,
+        g_home_options.glass_scope_vaddr[1], g_home_options.glass_scope_size[1],
+        0x11b26c0u, ld_pat_folder_light_build, 20, "glass_scope folder_light");
     if (folder_light) {
         g_scope_folder_light_start = folder_light;
-        g_scope_folder_light_end = folder_light + 0x100u;
+        g_scope_folder_light_end = folder_light +
+            (g_home_options.glass_scope_targets_present && g_home_options.glass_scope_size[1]
+                 ? (uintptr_t)g_home_options.glass_scope_size[1]
+                 : 0x100u);
     }
 
-    uintptr_t build_filter = ld_find_aot_pattern(lib, 0x12e8730u, ld_pat_glass_widget_build_filter, 20);
-    uintptr_t hyper_glass = ld_find_aot_pattern(lib, 0x12d148cu, ld_pat_hyper_glass_build, 16);
+    uintptr_t build_filter = ld_resolve_sym_or_aot(
+        lib, g_home_options.glass_scope_targets_present,
+        g_home_options.glass_scope_vaddr[2], g_home_options.glass_scope_size[2],
+        0x12e8730u, ld_pat_glass_widget_build_filter, 20, "glass_scope build_filter");
+    uintptr_t hyper_glass = ld_resolve_sym_or_aot(
+        lib, g_home_options.glass_scope_targets_present,
+        g_home_options.glass_scope_vaddr[3], g_home_options.glass_scope_size[3],
+        0x12d148cu, ld_pat_hyper_glass_build, 16, "glass_scope hyper_glass");
 
     int ok = 0;
     if (v7_entry && !g_orig_glass_v7_entry && ld_hook_site_safe(v7_entry, "glass_v7")) {

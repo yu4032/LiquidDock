@@ -68,7 +68,10 @@ static void ld_widget_resize_install(const struct native_api *api, ld_lib_info *
             0x540001c1u, 0xf9403f40u, 0xf94e8000u, 0xf9402370u,
             0x6b10001fu, 0x54000061u, 0xf97bf362u, 0x9406a80bu,
         };
-        fn = ld_find_aot_pattern(lib, 0x1a30504u, resize_pat, 16);
+        fn = ld_resolve_sym_or_aot(
+            lib, g_home_options.widget_resize_clear_target_present,
+            g_home_options.widget_resize_clear_vaddr, g_home_options.widget_resize_clear_size,
+            0x1a30504u, resize_pat, 16, "widget resize");
     }
     if (!fn) return;
     static const uint32_t prologue[3] = {0xa9bf79fdu, 0xaa0f03fdu, 0xd10241efu};

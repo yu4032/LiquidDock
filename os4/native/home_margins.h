@@ -378,7 +378,10 @@ static void ld_home_margins_install(const struct native_api *api, ld_lib_info *l
         0x9419a98fu, 0xfc407001u, 0xfc5f03a2u, 0x1e613840u,
         0xaa1d03efu, 0xa8c179fdu, 0xd65f03c0u,
     };
-    uintptr_t oy_fn = ld_find_aot_pattern(lib, 0x8fa880u, oy_pat, 11);
+    uintptr_t oy_fn = ld_resolve_sym_scan_or_aot(
+        lib, g_home_options.home_opt_targets_present,
+        g_home_options.home_opt_vaddr[10], g_home_options.home_opt_size[10], 0x200u,
+        0x8fa880u, oy_pat, 11, "home margin gridHeight");
     if (oy_fn) {
         uint32_t oy_inst = ((const uint32_t *)oy_fn)[2];
         if ((oy_inst & 0xffe00fffu) == 0xb8400001u) {

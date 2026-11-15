@@ -183,6 +183,27 @@ object Os4ConfigSync {
                     if (resolvedTargets.getStreamAddTarget.isNotEmpty()) {
                         append("getstream_add_target=").append(resolvedTargets.getStreamAddTarget).append('\n')
                     }
+                    if (resolvedTargets.glassScopeTargets.isNotEmpty()) {
+                        append("glass_scope_targets=").append(resolvedTargets.glassScopeTargets).append('\n')
+                    }
+                    if (resolvedTargets.widgetGlassTargets.isNotEmpty()) {
+                        append("widget_glass_targets=").append(resolvedTargets.widgetGlassTargets).append('\n')
+                    }
+                    if (resolvedTargets.iconGlassTargets.isNotEmpty()) {
+                        append("icon_glass_targets=").append(resolvedTargets.iconGlassTargets).append('\n')
+                    }
+                    if (resolvedTargets.dividerTargets.isNotEmpty()) {
+                        append("divider_targets=").append(resolvedTargets.dividerTargets).append('\n')
+                    }
+                    if (resolvedTargets.homeOptTargets.isNotEmpty()) {
+                        append("home_opt_targets=").append(resolvedTargets.homeOptTargets).append('\n')
+                    }
+                    if (resolvedTargets.layoutExtraTargets.isNotEmpty()) {
+                        append("layout_extra_targets=").append(resolvedTargets.layoutExtraTargets).append('\n')
+                    }
+                    if (resolvedTargets.widgetResizeClearTarget.isNotEmpty()) {
+                        append("widget_resize_clear_target=").append(resolvedTargets.widgetResizeClearTarget).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }

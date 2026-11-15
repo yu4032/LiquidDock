@@ -2,15 +2,14 @@
 
 ## HyperOS 4 (OS4)
 
-- [ ] **继续消除 `layout_runtime.h` 中对 `ItemInfoModel` 的 Dart 堆偏移读写（FRB 落库边界迁移）**
-  - **现状**：已通过 `os4/native/frb_boundary_adapter.h` 拦截 `Vec<ItemInfo>::sse_encode` 接管冷启动加载推送与 `4×2` 小组件状态写入，旁路了 `layout_load.h` 中的 Dart `ItemInfo` DTO 堆偏移读写（`+0x1f/+0x23/+0x27`）。
-  - **方案**：在 `Vec<ItemInfo>::sse_decode`（Dart → Rust 批量落库 `launcher_model_update_item_database_batch`）边界接入同样的零硬编码结构体布局解析，将旋转/保存时的权威布局同步与事务写回迁移至 FRB 边界，逐步淘汰 `layout_runtime.h` 中的 `ld_process_mid` 及 `ItemInfoModel` 堆偏移读写；同步评估将 `glass_filter_hook.h` 与 `glass_superellipse.h` 整理为独立的 Engine 材质适配层。
+- [x] **继续消除 `layout_runtime.h` 中对 `ItemInfoModel` 的 Dart 堆偏移读写（FRB 落库边界迁移）**
+  - **现状**：已在 `os4/native/frb_boundary_adapter.h` 同时接管 `Vec<ItemInfo>::sse_encode`（冷启动推送）与 `Vec<ItemInfo>::sse_decode`（Dart → Rust 批量落库 `launcher_model_update_item_database_batch`，自动同步并持久化 `LD_LAYOUT_FILE` 至当前网格方向，零硬编码 `ItemInfo` 偏移）。`layout_runtime.h` 中的 `ld_observe_process` / `ld_process_mid` 仅保留作转屏瞬时 `GridOccupancyController._processScreenList` 内存坐标事务兜底。
+  - **Engine 材质层评估**：`glass_filter_hook.h`（材质/模糊参数）与 `glass_superellipse.h`（超椭圆裁剪）均已聚焦于 `libhyper_os_flutter.so` 且体积精简、职责正交，现阶段保持各自独立模块即可，待后续实现 TODO #2（文件夹展开居中 `Canvas::DrawHyperMaterial` 绘制）时再按需抽离共享 Engine Canvas/Material 适配层。
 - [ ] **OS4 文件夹展开后居中玻璃背景绘制（对齐 v2.7.9 `FolderCling` 视觉）**
   - **背景**：`_openFolderIconBgAnim` 是文件夹图标自身的展开动画，锚点跟随桌面图标位置而非居中容器；OS4 桌面运行在纯 Flutter（`SurfaceView` + `libhyper_os_flutter.so`）下，原生 Android View 无法插在全屏模糊（`FolderClingBlurWidget`）与文件夹图标网格（`FolderGridView`）之间。
   - **方案**：在 `libapp.so` 中通过 `.gnu_debugdata` 符号跟踪文件夹打开/关闭状态及居中宽高（`FolderClingWidget.getFolderClingWidth`、`FolderGridViewGetxController.calGridHeight`、`FolderClingGetxController.headerHeight`），并在 `libhyper_os_flutter.so` 的 `FolderClingBlurWidget` 之后、`FolderGridView` 之前调用 `Canvas::Save` → `Canvas::ClipGeometry`（居中超椭圆）→ `Canvas::DrawHyperMaterial`（复用全局 `native_glass`）→ `Canvas::Restore`。
-- [ ] **将剩余 OS4 AOT 字节指纹（含 `GetStream.add` 等）升级为 `.gnu_debugdata` 符号解析**
-  - **背景**：目前 `glass_targets`、`glass_observers`、`rv_targets` 等已通过 `Os4GlassSymbols` 从 `libapp.so` 的 `.gnu_debugdata` 符号表按函数名解析；但 `GetStream.add` 及部分 `icon_glass_fingerprints.h` / 小组件容器目标仍依赖 `ld_find_aot_pattern` 字节指纹，桌面大版本升级后可能出现多处匹配歧义或 0 匹配导致功能静默退化。
-  - **方案**：将 `GetStream.add` 等剩余关键符号纳入 `Os4GlassSymbols` 符号表解析并随 `liquiddock-native.conf` 下发，AOT 字节指纹仅保留作兜底。
+- [x] **将剩余 OS4 AOT 字节指纹（含 `GetStream.add` 等）升级为 `.gnu_debugdata` 符号解析**
+  - **现状**：已将 `glass_scope_targets`（`_RecentsGlassWidgetState.build`、`FolderGlassLightWidgetState.build`、`_GlassWidgetState._buildGlassFilter`、`_GlassWidgetState.build` 按 size≥1024 消歧、`_ImageFilter.__initGlassV7$Method$FfiNative`）、`widget_glass_targets`、`icon_glass_targets`、`divider_targets`、`home_opt_targets`（11 个首页/Dock/边距符号）、`layout_extra_targets`（7 个网格/布局符号）、`widget_resize_clear_target` 及 `GetStream.add` 全部纳入 `Os4GlassSymbols` `.gnu_debugdata` 符号解析，经 `Os4ConfigSync` 下发 `liquiddock-native.conf` 并在 `aot_scanner.h`（`ld_resolve_sym_or_aot` / `ld_resolve_sym_scan_or_aot`）优先使用，原 AOT 字节指纹仅保留作兜底。
 - [ ] **原生 Android `RemoteViews` 小组件扫描与隐藏支持**（如智能助理 `com.miui.personalassistant` 的股票行情、快捷功能，以及日历 `com.android.calendar` 等）
   - **背景**：OS4 桌面（`com.miui.home`）运行在 `hyos_spawner`（纯 Flutter/Dart + Rust，无 ART 虚拟机），Java 层 Xposed Hook 不加载；且其 `RemoteViews` 小组件由 `libapp.so` 内的 Dart 代码（`LauncherAppWidgetHostViewState` / `[AppWidgetHostView] updateAppWidgetImpl: INFLATE path`）直接解析和渲染，不使用系统 `android.appwidget.AppWidgetHostView` View 树。
   - **方案**：在 `os4/native`（`libliquiddock4.so`）中逆向 `libapp.so` 的 Dart AOT `AppWidgetHostView` / `updateAppWidgetImpl` 解析与渲染管线，实现原生层的组件节点扫描、名称映射与隐藏/样式规则下发。

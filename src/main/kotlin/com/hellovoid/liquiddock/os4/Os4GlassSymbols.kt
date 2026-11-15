@@ -100,6 +100,52 @@ internal object Os4GlassSymbols {
         "FolderGridView._buildScrollableGrid",
         "FolderGridViewGetxController.calGridViewportHeight",
     )
+    private val glassScopeSymbolSpecs = listOf(
+        "_RecentsGlassWidgetState.build" to 16L,
+        "_FolderGlassLightWidgetState.build" to 16L,
+        "_GlassWidgetState._buildGlassFilter" to 16L,
+        "_GlassWidgetState.build" to 1024L,
+        "_ImageFilter.__initGlassV7\$Method\$FfiNative" to 16L,
+    )
+    private val widgetGlassSymbolNames = listOf(
+        "MiuiAppWidgetInfoModel.initMiuiAttribute",
+        "MiuiWidgetContainer._buildPadWidgetContainer",
+        "MiuiWidgetContainer._buildPhoneWidgetContainer",
+    )
+    private val iconGlassSymbolNames = listOf(
+        "ShortcutIconWidget.buildDesktopIcon",
+        "ShortcutIconWidget.wrapWithFolderCreateAnim",
+        "ShortcutIconWidget._addFolderBgAnim",
+    )
+    private val dividerSymbolNames = listOf(
+        "DividerItemFactory.build",
+        "_BoxDecorationPainter._paintBackgroundColor",
+    )
+    private val homeOptSymbolNames = listOf(
+        "PadRowColHandler.handle",
+        "ComputePipeline.compute",
+        "WidgetContainerWidget.widgetContainerWidth",
+        "HotSeatsConstants2.calcScaledIconSize",
+        "HotseatLayoutCalculator.calculate",
+        "GridController.hotSeatsMarginBottom",
+        "GlobalHotseatWindowManager.dockWindowHeight",
+        "_HotseatWidgetPadState._recomputeDockBgParams",
+        "_HotseatWidgetPadState._applyDiffWithAnimation",
+        "_HotseatWidgetPadState._defaultIconSize",
+        "GridController.gridHeight",
+    )
+    private val layoutExtraSymbolNames = listOf(
+        "GridController._filterActiveGridConfig",
+        "RustLibApiImpl.sse_encode_list_item_info",
+        "ItemDataProcessor.processItems",
+        "LayoutDropRuleForSwapPlaces.isLegalXY",
+        "CellLayoutGetxController._usesNoVacantMode",
+        "GridOccupancyController._processScreenList",
+        "GridOccupancyController.onOrientationChanged",
+    )
+    private const val WIDGET_RESIZE_CLEAR_TARGET =
+        "WorkspaceGetxController.clearWorkspaceGridCellState"
+
     data class ResolvedTargets(
         val glass: String,
         val layoutTargets: String = "",
@@ -110,6 +156,13 @@ internal object Os4GlassSymbols {
         val widgetResizeTargets: String = "",
         val folderGridTargets: String = "",
         val getStreamAddTarget: String = "",
+        val glassScopeTargets: String = "",
+        val widgetGlassTargets: String = "",
+        val iconGlassTargets: String = "",
+        val dividerTargets: String = "",
+        val homeOptTargets: String = "",
+        val layoutExtraTargets: String = "",
+        val widgetResizeClearTarget: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -177,6 +230,13 @@ internal object Os4GlassSymbols {
         val widgetResizeTargets = fromMiniElfSymbolList(mini, widgetResizeSymbolNames)
         val folderGridTargets = fromMiniElfSymbolList(mini, folderGridSymbolNames)
         val getStreamAddTarget = fromMiniElfSingle(mini, GETSTREAM_ADD_TARGET)
+        val glassScopeTargets = fromMiniElfSymbolSpecs(mini, glassScopeSymbolSpecs)
+        val widgetGlassTargets = fromMiniElfSymbolList(mini, widgetGlassSymbolNames)
+        val iconGlassTargets = fromMiniElfSymbolList(mini, iconGlassSymbolNames)
+        val dividerTargets = fromMiniElfSymbolList(mini, dividerSymbolNames)
+        val homeOptTargets = fromMiniElfSymbolList(mini, homeOptSymbolNames)
+        val layoutExtraTargets = fromMiniElfSymbolList(mini, layoutExtraSymbolNames)
+        val widgetResizeClearTarget = fromMiniElfSingle(mini, WIDGET_RESIZE_CLEAR_TARGET)
         return ResolvedTargets(
             glass,
             layoutTargets,
@@ -187,7 +247,25 @@ internal object Os4GlassSymbols {
             widgetResizeTargets,
             folderGridTargets,
             getStreamAddTarget,
+            glassScopeTargets,
+            widgetGlassTargets,
+            iconGlassTargets,
+            dividerTargets,
+            homeOptTargets,
+            layoutExtraTargets,
+            widgetResizeClearTarget,
         )
+    }
+
+    private fun fromMiniElfSymbolSpecs(data: ByteArray, specs: List<Pair<String, Long>>): String {
+        val elf = Elf64(data)
+        val sections = elf.sections()
+        val pairs = specs.mapNotNull { (name, minSize) ->
+            findSingleSymbol(elf, sections, name, minSize = minSize, maxSize = 65536L)
+        }
+        return if (pairs.size == specs.size && pairs.map { it.first }.distinct().size == specs.size) {
+            pairs.joinToString(",") { "0x" + it.first.toString(16) + ":" + it.second }
+        } else ""
     }
 
     private fun fromMiniElfSymbolList(data: ByteArray, names: List<String>): String {
@@ -214,6 +292,7 @@ internal object Os4GlassSymbols {
         elf: Elf64,
         sections: List<Elf64.Section>,
         requested: String,
+        minSize: Long = 16L,
         maxSize: Long = 2048L,
     ): Pair<Long, Long>? {
         val hits = mutableSetOf<Pair<Long, Long>>()
@@ -231,7 +310,7 @@ internal object Os4GlassSymbols {
                 val size = elf.u64(pos + 16)
                 if (strOff == 0L || (type != 0 && type != 2) ||
                     shndx == 0 || vaddr < 0x4000L || vaddr % 4L != 0L ||
-                    size !in 16L..maxSize) continue
+                    size !in minSize..maxSize) continue
                 if (elf.equalsString(strings, strOff, requested)) hits.add(vaddr to size)
             }
         }

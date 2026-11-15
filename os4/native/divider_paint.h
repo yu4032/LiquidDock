@@ -540,7 +540,10 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
         0x540000a1u, 0xb841b022u, 0x8b1c8042u, 0x6b16005fu,
         0x540001e0u, 0xaa0503e1u, 0xaa0003e2u, 0x940000c9u,
     };
-    uintptr_t fn_inner = ld_find_aot_pattern(lib, 0x18893ccu, inner_pat, 24);
+    uintptr_t fn_inner = ld_resolve_sym_scan_or_aot(
+        lib, g_home_options.divider_targets_present,
+        g_home_options.divider_vaddr[0], g_home_options.divider_size[0], 0x400u,
+        0x18893ccu, inner_pat, 24, "divider inner");
     if (!fn_inner) fn_inner = ld_find_aot_pattern(lib, 0x188aa7cu, inner_pat, 24);
     if (fn_inner) {
         const uint32_t *w = (const uint32_t *)fn_inner;
@@ -555,7 +558,10 @@ static void ld_divider_paint_install(const struct native_api *api, ld_lib_info *
         }
         ld_dp_hook(api, lib, fn_inner - lib->elf_base, "inner", (void *)repl_dp_inner, &g_dp_inner_orig);
     }
-    uintptr_t fn_bg = ld_find_aot_pattern(lib, 0x15af7b4u, bg_pat, 24);
+    uintptr_t fn_bg = ld_resolve_sym_or_aot(
+        lib, g_home_options.divider_targets_present,
+        g_home_options.divider_vaddr[1], g_home_options.divider_size[1],
+        0x15af7b4u, bg_pat, 24, "divider bgPaint");
     if (!fn_bg) fn_bg = ld_find_aot_pattern(lib, 0x17493b8u, bg_pat, 24);
     if (fn_bg) {
         ld_dp_hook(api, lib, fn_bg - lib->elf_base, "bgPaint", (void *)repl_dp_bg, &g_dp_bg_orig);

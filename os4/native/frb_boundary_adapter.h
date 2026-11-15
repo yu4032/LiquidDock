@@ -50,7 +50,9 @@ static ld_frb_launcher_ids_t g_frb_ids = {-1, -1, -1, -1, -1, -1};
 static ld_frb_item_layout_t g_frb_item_layout = {0};
 static void (*g_orig_frb_primary_adapter)(int32_t, int64_t, uint8_t *, int32_t, int32_t) = NULL;
 static void (*g_orig_frb_vec_item_encode)(void *, void *) = NULL;
+static void (*g_orig_frb_vec_item_decode)(void *, void *) = NULL;
 static bool g_frb_adapter_installed = false;
+static bool g_frb_sse_decode_synced = false;
 static volatile int g_frb_start_cols = 0;
 static volatile int g_frb_start_rows = 0;
 static volatile int g_frb_start_dir = -1;
@@ -441,6 +443,93 @@ done:
     free(memory);
 }
 
+static void ld_frb_sync_decoded_vec(void *out_vec) {
+    if (!out_vec || !g_frb_item_layout.valid || !g_layout_hooks_ready ||
+        g_grid_cols <= 0 || g_grid_rows <= 0) return;
+
+    uint64_t data_addr = 0, len = 0;
+    memcpy(&data_addr, (const uint8_t *)out_vec + 8u, 8);
+    memcpy(&len, (const uint8_t *)out_vec + 16u, 8);
+    if (!data_addr || len == 0 || len > 4096u) return;
+
+    int cols = g_runtime_columns ? g_runtime_columns : (g_load_columns ? g_load_columns : g_frb_start_cols);
+    int rows = g_runtime_rows ? g_runtime_rows : (g_load_rows ? g_load_rows : g_frb_start_rows);
+    int direction = g_grid_cols == g_grid_rows
+        ? (g_runtime_columns ? g_runtime_direction : (g_load_columns ? g_load_direction : g_frb_start_dir))
+        : (cols == g_grid_cols && rows == g_grid_rows ? 0 : 1);
+    if (direction < 0 || direction > 1) return;
+    if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
+    if (!cols || !rows) { cols = direction ? g_grid_rows : g_grid_cols; rows = direction ? g_grid_cols : g_grid_rows; }
+
+    struct ld_layout_memory *memory = calloc(1, sizeof *memory);
+    if (!memory) return;
+    if (!ld_layout_load(LD_LAYOUT_FILE, memory) ||
+        memory->columns != g_grid_cols || memory->rows != g_grid_rows) {
+        memset(memory, 0, sizeof *memory);
+        memory->columns = g_grid_cols;
+        memory->rows = g_grid_rows;
+        memory->active_direction = direction;
+    }
+
+    const ld_frb_item_layout_t *L = &g_frb_item_layout;
+    uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
+    size_t upserted = 0;
+    for (uint64_t i = 0; i < len; i++) {
+        uint8_t *it = base + i * L->stride;
+        uint64_t disc = 0;
+        memcpy(&disc, it, 8);
+        if (disc == 2u) continue;
+        int64_t id = 0, cont = 0;
+        int32_t scr = 0, cx = 0, cy = 0, sx = 1, sy = 1;
+        if (!ld_frb_read_opt_i64(it, L->id_off, &id) || id <= 0) continue;
+        if (!ld_frb_read_opt_i64(it, L->container_off, &cont) || cont != -100) continue;
+        if (!ld_frb_read_opt_i32_def(it, L->screen_off, -1, &scr) || scr < 0) continue;
+        if (!ld_frb_read_opt_i32_def(it, L->x_off, 0, &cx) ||
+            !ld_frb_read_opt_i32_def(it, L->y_off, 0, &cy) ||
+            !ld_frb_read_opt_i32_def(it, L->sx_off, 1, &sx) ||
+            !ld_frb_read_opt_i32_def(it, L->sy_off, 1, &sy)) continue;
+        if (cx < 0 || cy < 0 || sx <= 0 || sy <= 0 || cx + sx > cols || cy + sy > rows) continue;
+
+        int found = 0;
+        for (uint32_t j = 0; j < memory->count[direction]; j++) {
+            if (memory->items[direction][j].id == id) {
+                memory->items[direction][j].screen = scr;
+                memory->items[direction][j].x = cx;
+                memory->items[direction][j].y = cy;
+                memory->items[direction][j].sx = sx;
+                memory->items[direction][j].sy = sy;
+                found = 1;
+                break;
+            }
+        }
+        if (!found && memory->count[direction] < LD_LAYOUT_MAX_ITEMS) {
+            uint32_t k = memory->count[direction]++;
+            memory->items[direction][k].id = id;
+            memory->items[direction][k].screen = scr;
+            memory->items[direction][k].x = cx;
+            memory->items[direction][k].y = cy;
+            memory->items[direction][k].sx = sx;
+            memory->items[direction][k].sy = sy;
+        }
+        upserted++;
+    }
+
+    if (upserted > 0) {
+        memory->active_direction = direction;
+        if (ld_layout_save(LD_LAYOUT_FILE, memory)) {
+            g_frb_sse_decode_synced = true;
+            ld_blog("FRB vec_decode sync: len=%llu upserted=%zu dir=%d (%dx%d)",
+                    (unsigned long long)len, upserted, direction, cols, rows);
+        }
+    }
+    free(memory);
+}
+
+static void repl_frb_vec_item_decode(void *out_vec, void *deser) {
+    if (g_orig_frb_vec_item_decode) g_orig_frb_vec_item_decode(out_vec, deser);
+    ld_frb_sync_decoded_vec(out_vec);
+}
+
 static void repl_frb_vec_item_encode(void *vec_ptr, void *serializer) {
     ld_frb_plan_vec_items(vec_ptr);
     g_orig_frb_vec_item_encode(vec_ptr, serializer);
@@ -504,6 +593,7 @@ static void ld_frb_adapter_init(int (*hook_fn)(void *, void *, void **),
         {"launcher_model_move_item_in_database_impl", true, &g_frb_ids.move_item, 0, 0},
         {"database_info8ItemInfoENtB6_9SseEncode10sse_encode", true, NULL, 0, 0},
         {"database_info8ItemInfoNtB6_9SseEncode10sse_encode", true, NULL, 0, 0},
+        {"database_info8ItemInfoENtB6_9SseDecode10sse_decode", true, NULL, 0, 0},
     };
     size_t ntargets = sizeof(targets) / sizeof(targets[0]);
 
@@ -525,17 +615,22 @@ static void ld_frb_adapter_init(int (*hook_fn)(void *, void *, void **),
                     (void **)&g_orig_frb_primary_adapter);
 
     int r_vec = -1;
-    uintptr_t vec_enc_rt = 0, item_enc_rt = 0;
+    int r_vec_dec = -1;
+    uintptr_t vec_enc_rt = 0, item_enc_rt = 0, vec_dec_rt = 0;
     if (targets[6].vaddr && targets[7].vaddr &&
         ld_vaddr_to_runtime(rust, targets[6].vaddr, &vec_enc_rt) &&
         ld_vaddr_to_runtime(rust, targets[7].vaddr, &item_enc_rt) &&
         ld_frb_extract_item_layout(vec_enc_rt, targets[6].size, item_enc_rt, targets[7].size, &g_frb_item_layout)) {
         r_vec = hook_fn((void *)vec_enc_rt, (void *)repl_frb_vec_item_encode,
                         (void **)&g_orig_frb_vec_item_encode);
+        if (targets[8].vaddr && ld_vaddr_to_runtime(rust, targets[8].vaddr, &vec_dec_rt)) {
+            r_vec_dec = hook_fn((void *)vec_dec_rt, (void *)repl_frb_vec_item_decode,
+                                (void **)&g_orig_frb_vec_item_decode);
+        }
     }
 
-    ld_blog("FRB adapter ready=%d hook_res=%d vec_hook=%d layout_valid=%d stride=%zu offs={id=%zu,cont=%zu,scr=%zu,x=%zu,y=%zu,sx=%zu,sy=%zu} ids={start=%d,bind_items=%d,bind_scr=%d,batch=%d,upd=%d,mov=%d}",
-            r == 0 ? 1 : 0, r, r_vec, g_frb_item_layout.valid ? 1 : 0, g_frb_item_layout.stride,
+    ld_blog("FRB adapter ready=%d hook_res=%d vec_hook=%d vec_dec_hook=%d layout_valid=%d stride=%zu offs={id=%zu,cont=%zu,scr=%zu,x=%zu,y=%zu,sx=%zu,sy=%zu} ids={start=%d,bind_items=%d,bind_scr=%d,batch=%d,upd=%d,mov=%d}",
+            r == 0 ? 1 : 0, r, r_vec, r_vec_dec, g_frb_item_layout.valid ? 1 : 0, g_frb_item_layout.stride,
             g_frb_item_layout.id_off, g_frb_item_layout.container_off, g_frb_item_layout.screen_off,
             g_frb_item_layout.x_off, g_frb_item_layout.y_off, g_frb_item_layout.sx_off, g_frb_item_layout.sy_off,
             g_frb_ids.start_load, g_frb_ids.bind_items_sub, g_frb_ids.bind_screens,

@@ -4,7 +4,6 @@
 #include "dart_superellipse.h"
 #include "superellipse_blur.h"
 #include "glass_superellipse.h"
-#include "divider_paint.h"
 #include "process_gate.h"
 #include "sha256_region.h"
 
@@ -50,6 +49,7 @@ static volatile int g_grid_cols;
 static volatile int g_grid_rows;
 static volatile int g_count_cols,g_count_rows;
 static struct ld_grid_conf g_home_options;
+#include "divider_paint.h"
 static volatile unsigned g_pad_trace[5] __attribute__((used));
 static volatile uintptr_t g_pad_pool __attribute__((used));
 static void *g_orig_pad_counts;
@@ -653,7 +653,10 @@ static void ld_install_os4_widget_hooks(const struct native_api *api, const ld_l
             0x94000040u, 0xaa0003e1u, 0xf81e83a1u, 0x97fdf5dau,
             0xaa0003e2u, 0x6b16005fu, 0x54000700u, 0xf85f03a3u,
         };
-        uintptr_t init_fn=ld_find_aot_pattern(lib,0x19f399cu,init_miui_attr_pat,20);
+        uintptr_t init_fn = ld_resolve_sym_or_aot(
+            lib, g_home_options.widget_glass_targets_present,
+            g_home_options.widget_glass_vaddr[0], g_home_options.widget_glass_size[0],
+            0x19f399cu, init_miui_attr_pat, 20, "widget glass scope");
         if(init_fn) {
             int rc=api->hook((void *)init_fn,(void *)repl_widget_init_miui_attr,
                     &g_orig_widget_init_miui_attr);
@@ -794,7 +797,10 @@ static void ld_install_os4_widget_hooks(const struct native_api *api, const ld_l
             0xaa0003e2u, 0xf85f83a0u, 0xf81e83a2u, 0xb840f001u,
             0x8b1c8021u, 0xb8413023u, 0x8b1c8063u, 0xaa0303e1u,
         };
-        uintptr_t wc_fn=ld_find_aot_pattern(lib,0x1492d24u,pad_wc_pat,80);
+        uintptr_t wc_fn = ld_resolve_sym_or_aot(
+            lib, g_home_options.widget_glass_targets_present,
+            g_home_options.widget_glass_vaddr[1], g_home_options.widget_glass_size[1],
+            0x1492d24u, pad_wc_pat, 80, "pad widget container");
         if(wc_fn) {
             int rc=api->hook((void *)wc_fn,(void *)repl_pad_widget_container,
                     &g_orig_pad_widget_container);
@@ -807,7 +813,10 @@ static void ld_install_os4_widget_hooks(const struct native_api *api, const ld_l
         } else {
             ld_blog("OS4 Pad widget container glass target not found");
         }
-        uintptr_t phone_wc_fn=ld_find_aot_pattern(lib,0x148f9f8u,phone_wc_pat,80);
+        uintptr_t phone_wc_fn = ld_resolve_sym_or_aot(
+            lib, g_home_options.widget_glass_targets_present,
+            g_home_options.widget_glass_vaddr[2], g_home_options.widget_glass_size[2],
+            0x148f9f8u, phone_wc_pat, 80, "phone widget container");
         if(phone_wc_fn) {
             int rc=api->hook((void *)phone_wc_fn,(void *)repl_phone_widget_container,
                     &g_orig_phone_widget_container);
@@ -943,10 +952,19 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
     if (s_attempts >= 8u) return;
     ++s_attempts;
 
-    uintptr_t bdi_rt = ld_find_aot_pattern(lib, 0x1789520u, ld_pat_bdi, 16);
-    uintptr_t wrap_rt = ld_find_aot_pattern(lib, 0x178e9acu, ld_pat_wrap, 20);
+    uintptr_t bdi_rt = ld_resolve_sym_or_aot(
+        lib, g_home_options.icon_glass_targets_present,
+        g_home_options.icon_glass_vaddr[0], g_home_options.icon_glass_size[0],
+        0x1789520u, ld_pat_bdi, 16, "icon glass bdi");
+    uintptr_t wrap_rt = ld_resolve_sym_or_aot(
+        lib, g_home_options.icon_glass_targets_present,
+        g_home_options.icon_glass_vaddr[1], g_home_options.icon_glass_size[1],
+        0x178e9acu, ld_pat_wrap, 20, "icon glass wrap");
     uintptr_t common_rt = ld_find_aot_pattern(lib, 0x14e3074u, ld_pat_common, 16);
-    uintptr_t body_rt = ld_find_aot_pattern(lib, 0x1789758u, ld_pat_body, sizeof ld_pat_body / sizeof(uint32_t));
+    uintptr_t body_rt = ld_resolve_sym_scan_or_aot(
+        lib, g_home_options.icon_glass_targets_present,
+        g_home_options.icon_glass_vaddr[2], g_home_options.icon_glass_size[2], 0x100u,
+        0x1789758u, ld_pat_body, 24, "icon glass body");
     if (!body_rt && bdi_rt) {
         uintptr_t cand = bdi_rt + 0x238u;
         if (executable_range(cand, sizeof ld_pat_body) &&
@@ -1361,18 +1379,22 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_dart_superellipse_install(api,&lib);
     if (g_installed) { update_layout_ready(); return; }
 
-    uintptr_t entry = ld_find_aot_pattern(&lib, LD_PAD_ROWCOL_VADDR,
-                                          ld_pad_rowcol_words,
-                                          sizeof ld_pad_rowcol_words / sizeof(uint32_t));
+    uintptr_t entry = ld_resolve_sym_or_aot(
+        &lib, g_home_options.home_opt_targets_present,
+        g_home_options.home_opt_vaddr[0], g_home_options.home_opt_size[0],
+        LD_PAD_ROWCOL_VADDR, ld_pad_rowcol_words,
+        sizeof ld_pad_rowcol_words / sizeof(uint32_t), "pad rowcol");
     if (!entry || !executable_range(entry, 16)) {
         LOGE("PadRowColHandler address unavailable or safety check failed");
         ld_blog("PadRowColHandler address unavailable or safety check failed");
         return;
     }
 
-    uintptr_t pipe_fn = ld_find_aot_pattern(&lib, LD_HOME_PIPELINE_FUNCTION_OFFSET,
-                                           ld_home_pipeline_words,
-                                           sizeof ld_home_pipeline_words / sizeof(uint32_t));
+    uintptr_t pipe_fn = ld_resolve_sym_or_aot(
+        &lib, g_home_options.home_opt_targets_present,
+        g_home_options.home_opt_vaddr[1], g_home_options.home_opt_size[1],
+        LD_HOME_PIPELINE_FUNCTION_OFFSET, ld_home_pipeline_words,
+        sizeof ld_home_pipeline_words / sizeof(uint32_t), "home pipeline");
     if (pipe_fn && !g_orig_home_pipeline) {
         uintptr_t pipe_hook = 0;
         for (size_t off = 0; off < 0x400; off += 4) {
@@ -1389,9 +1411,11 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         }
     }
 
-    uintptr_t hw_fn = ld_find_aot_pattern(&lib, LD_HOME_WIDGET_FUNCTION_OFFSET,
-                                         ld_home_widget_words,
-                                         sizeof ld_home_widget_words / sizeof(uint32_t));
+    uintptr_t hw_fn = ld_resolve_sym_or_aot(
+        &lib, g_home_options.home_opt_targets_present,
+        g_home_options.home_opt_vaddr[2], g_home_options.home_opt_size[2],
+        LD_HOME_WIDGET_FUNCTION_OFFSET, ld_home_widget_words,
+        sizeof ld_home_widget_words / sizeof(uint32_t), "home widget");
     if (hw_fn && !g_orig_home_widget) {
         uintptr_t hw_hook = hw_fn + 0x4cu;
         uintptr_t hw_alloc = hw_fn + 0x1c4u;
@@ -1434,7 +1458,22 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     for(size_t i=0;i<sizeof home_hooks/sizeof *home_hooks;i++) {
         if(*home_hooks[i].orig) continue;
         if(home_hooks[i].size < 16) continue;
-        uintptr_t fn = ld_find_aot_pattern(&lib, home_hooks[i].start, (const uint32_t *)home_hooks[i].words, home_hooks[i].size / 4);
+        uintptr_t fn = 0;
+        if (i == 0 && g_home_options.glass_scope_targets_present) {
+            fn = ld_resolve_sym_or_aot(
+                &lib, 1, g_home_options.glass_scope_vaddr[4], g_home_options.glass_scope_size[4],
+                home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
+                home_hooks[i].size / 4, "home_opt glass_v7");
+        } else if (i >= 1 && i <= 7 && g_home_options.home_opt_targets_present) {
+            size_t opt_idx = i + 2; /* [1..7] -> home_opt_vaddr[3..9] */
+            fn = ld_resolve_sym_or_aot(
+                &lib, 1, g_home_options.home_opt_vaddr[opt_idx], g_home_options.home_opt_size[opt_idx],
+                home_hooks[i].start, (const uint32_t *)home_hooks[i].words,
+                home_hooks[i].size / 4, "home_opt");
+        } else {
+            fn = ld_find_aot_pattern(&lib, home_hooks[i].start,
+                                     (const uint32_t *)home_hooks[i].words, home_hooks[i].size / 4);
+        }
         if (!fn) continue;
         uintptr_t site = 0;
         if (home_hooks[i].site >= home_hooks[i].start) {
@@ -1457,8 +1496,11 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         ld_blog("home options observer %lx installed at %p result=%d", (unsigned long)home_hooks[i].site, (void *)site, status);
     }
     if (g_home_options.glass_enabled && !g_glass_scope_installed) {
-        uintptr_t v7_entry = ld_find_aot_pattern(&lib, LD_GLASS_FILTER_START,
-                ld_glass_filter_words, sizeof ld_glass_filter_words / sizeof(uint32_t));
+        uintptr_t v7_entry = ld_resolve_sym_or_aot(
+            &lib, g_home_options.glass_scope_targets_present,
+            g_home_options.glass_scope_vaddr[4], g_home_options.glass_scope_size[4],
+            LD_GLASS_FILTER_START, ld_glass_filter_words,
+            sizeof ld_glass_filter_words / sizeof(uint32_t), "glass_v7_entry");
         uintptr_t dock_light_start = 0, dock_light_end = 0;
         uintptr_t dock_dark_start = 0, dock_dark_end = 0;
         if (g_home_options.glass_observers_present) {
@@ -1489,9 +1531,11 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     LOGI("PadRowColHandler count authority installed");
     ld_blog("PadRowColHandler count authority installed");
     /* Observe active geometry; startup positions use the DTO load boundary. */
-    uintptr_t filter = ld_find_aot_pattern(&lib, LD_FILTER_VADDR,
-                                          ld_filter_words,
-                                          sizeof ld_filter_words / sizeof(uint32_t));
+    uintptr_t filter = ld_resolve_sym_or_aot(
+        &lib, g_home_options.layout_extra_targets_present,
+        g_home_options.layout_extra_vaddr[0], g_home_options.layout_extra_size[0],
+        LD_FILTER_VADDR, ld_filter_words,
+        sizeof ld_filter_words / sizeof(uint32_t), "filter_grid");
     if (filter && !g_orig_filter_return) {
         uintptr_t fsite = filter + 0x2a4u;
         if (executable_range(fsite, 16)) {
@@ -1529,6 +1573,21 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                         (unsigned long)g_home_options.layout_vaddr[sym_idx]);
             }
         }
+        if (!target && g_home_options.layout_extra_targets_present) {
+            int extra_idx = -1;
+            if (observers[i].vaddr == LD_SAVE_BATCH_VADDR) extra_idx = 1;
+            else if (observers[i].vaddr == LD_LOAD_ITEMS_VADDR) extra_idx = 2;
+            else if (observers[i].vaddr == LD_WIDGET_LATTICE_VADDR) extra_idx = 3;
+            else if (observers[i].vaddr == LD_NO_VACANT_VADDR) extra_idx = 4;
+            else if (observers[i].vaddr == LD_PROCESS_SCREEN_VADDR) extra_idx = 5;
+            if (extra_idx >= 0) {
+                target = ld_resolve_sym_or_aot(
+                    &lib, 1, g_home_options.layout_extra_vaddr[extra_idx],
+                    g_home_options.layout_extra_size[extra_idx],
+                    observers[i].vaddr, (const uint32_t *)observers[i].words,
+                    observers[i].size / sizeof(uint32_t), "layout extra");
+            }
+        }
         if (!target) {
             target = ld_find_aot_pattern(&lib, observers[i].vaddr,
                                          (const uint32_t *)observers[i].words,
@@ -1561,9 +1620,11 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             ld_blog("layout continuation installed at %p result=%d", (void *)(target + 0x218u), mid_result);
         }
     }
-    uintptr_t orientation = ld_find_aot_pattern(&lib, LD_ORIENTATION_VADDR,
-                                               ld_orientation_words,
-                                               sizeof ld_orientation_words / sizeof(uint32_t));
+    uintptr_t orientation = ld_resolve_sym_or_aot(
+        &lib, g_home_options.layout_extra_targets_present,
+        g_home_options.layout_extra_vaddr[6], g_home_options.layout_extra_size[6],
+        LD_ORIENTATION_VADDR, ld_orientation_words,
+        sizeof ld_orientation_words / sizeof(uint32_t), "orientation");
     if (orientation && !g_orig_orientation && *(const uint32_t *)orientation == 0xa9bf79fdu) {
         backup = NULL;
         result = api->hook((void *)orientation, (void *)repl_orientation_observed, &backup);
