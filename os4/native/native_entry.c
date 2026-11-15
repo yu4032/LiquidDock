@@ -35,6 +35,7 @@
 #include "aot_scanner.h"
 #include "hook_page_pin.h"
 #include "rust_symbol_resolver.h"
+#include "frb_boundary_adapter.h"
 #include "home_options_fingerprints.h"
 #include "home_geometry_fingerprints.h"
 #include "dock_geometry_fingerprints.h"
@@ -1217,6 +1218,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     if(g_grid_cols>0 && g_grid_rows>0 && !g_orig_rust_orientation) {
         ld_lib_info rust; uintptr_t target=0; const char *source="none";
         if(ld_resolve_lib(ld_launcher_apk_substr(),"lib/arm64-v8a/libapp_launcher.so",&rust)) {
+            ld_frb_adapter_init(api->hook, &rust, ld_launcher_apk_substr());
             static const char kRustOrientPath[] =
                 "12app_launcher8launcher4data23launcher_model_internal44check_database_data_orientation_when_loading";
             ld_rust_sym_result_t sym_res;
@@ -1553,6 +1555,7 @@ static void ld_write_hook_status(void) {
             "home_icons=%d\n"
             "big_folder=%d\n"
             "widget_1x1=%d\n"
+            "frb_adapter=%d\n"
             "folder_grid=%d\n"
             "folder_cols_ready=%d\n"
             "folder_rows_ready=%d\n",
@@ -1561,8 +1564,8 @@ static void ld_write_hook_status(void) {
             patch_total, patch_intact,
             glass_ok, icons_ok, radius_ok, widgets_ok,
             grid_ok, dock_ok, divider_ok, recents_ok,
-            home_icons_ok, big_folder_ok, widget_1x1_ok, folder_grid_ok,
-            folder_cols_ready, folder_rows_ready);
+            home_icons_ok, big_folder_ok, widget_1x1_ok, ld_frb_adapter_ready(),
+            folder_grid_ok, folder_cols_ready, folder_rows_ready);
     fclose(fp);
     rename(tmp, dst);
 }

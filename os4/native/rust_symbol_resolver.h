@@ -122,12 +122,13 @@ static bool ld_elf64_read_exact(FILE *f, uint64_t off, void *dst, size_t len) {
     return fread(dst, 1, len, f) == len;
 }
 
-static bool ld_resolve_rust_symbol(const ld_lib_info *lib,
-                                   const char *apk_substr,
-                                   const char *path_suffix,
-                                   ld_rust_sym_result_t *out) {
-    if (!lib || !apk_substr || !path_suffix || !out) return false;
-    memset(out, 0, sizeof(*out));
+static bool ld_rust_decompress_debugdata(const ld_lib_info *lib,
+                                         const char *apk_substr,
+                                         uint8_t **out_elf,
+                                         size_t *out_len) {
+    if (!lib || !apk_substr || !out_elf || !out_len) return false;
+    *out_elf = NULL;
+    *out_len = 0;
 
     char apk_path[512];
     if (!ld_apk_real_path(apk_substr, apk_path, sizeof apk_path)) return false;
@@ -202,11 +203,21 @@ static bool ld_resolve_rust_symbol(const ld_lib_info *lib,
     }
     fclose(f);
 
+    bool decomp_ok = xz_mini_decompress(xz_buf, (size_t)dbg_size, out_elf, out_len);
+    free(xz_buf);
+    return decomp_ok;
+}
+
+static bool ld_resolve_rust_symbol(const ld_lib_info *lib,
+                                   const char *apk_substr,
+                                   const char *path_suffix,
+                                   ld_rust_sym_result_t *out) {
+    if (!lib || !apk_substr || !path_suffix || !out) return false;
+    memset(out, 0, sizeof(*out));
+
     uint8_t *mini_elf = NULL;
     size_t mini_len = 0;
-    bool decomp_ok = xz_mini_decompress(xz_buf, (size_t)dbg_size, &mini_elf, &mini_len);
-    free(xz_buf);
-    if (!decomp_ok) return false;
+    if (!ld_rust_decompress_debugdata(lib, apk_substr, &mini_elf, &mini_len)) return false;
 
     uintptr_t vaddr = 0;
     size_t sym_size = 0, matches = 0;
