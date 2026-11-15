@@ -2,6 +2,9 @@
 
 ## HyperOS 4 (OS4)
 
+- [ ] **继续消除 `layout_runtime.h` 中对 `ItemInfoModel` 的 Dart 堆偏移读写（FRB 落库边界迁移）**
+  - **现状**：已通过 `os4/native/frb_boundary_adapter.h` 拦截 `Vec<ItemInfo>::sse_encode` 接管冷启动加载推送与 `4×2` 小组件状态写入，旁路了 `layout_load.h` 中的 Dart `ItemInfo` DTO 堆偏移读写（`+0x1f/+0x23/+0x27`）。
+  - **方案**：在 `Vec<ItemInfo>::sse_decode`（Dart → Rust 批量落库 `launcher_model_update_item_database_batch`）边界接入同样的零硬编码结构体布局解析，将旋转/保存时的权威布局同步与事务写回迁移至 FRB 边界，逐步淘汰 `layout_runtime.h` 中的 `ld_process_mid` 及 `ItemInfoModel` 堆偏移读写；同步评估将 `glass_filter_hook.h` 与 `glass_superellipse.h` 整理为独立的 Engine 材质适配层。
 - [ ] **OS4 文件夹展开后居中玻璃背景绘制（对齐 v2.7.9 `FolderCling` 视觉）**
   - **背景**：`_openFolderIconBgAnim` 是文件夹图标自身的展开动画，锚点跟随桌面图标位置而非居中容器；OS4 桌面运行在纯 Flutter（`SurfaceView` + `libhyper_os_flutter.so`）下，原生 Android View 无法插在全屏模糊（`FolderClingBlurWidget`）与文件夹图标网格（`FolderGridView`）之间。
   - **方案**：在 `libapp.so` 中通过 `.gnu_debugdata` 符号跟踪文件夹打开/关闭状态及居中宽高（`FolderClingWidget.getFolderClingWidth`、`FolderGridViewGetxController.calGridHeight`、`FolderClingGetxController.headerHeight`），并在 `libhyper_os_flutter.so` 的 `FolderClingBlurWidget` 之后、`FolderGridView` 之前调用 `Canvas::Save` → `Canvas::ClipGeometry`（居中超椭圆）→ `Canvas::DrawHyperMaterial`（复用全局 `native_glass`）→ `Canvas::Restore`。

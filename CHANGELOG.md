@@ -6,6 +6,18 @@
 
 暂无新增条目。
 
+## v3.0.1（2026-11-15）
+
+### HyperOS 4 (OS4) 架构与稳定性
+
+- **FRB Boundary Adapter 接管自由网格加载边界**：新增零硬编码 FRB 边界适配器，通过 `libapp_launcher.so` 的 `.dynsym` 与 `.gnu_debugdata` 自动绑定 `launcher_model_*` `func_id` 及 `ItemInfo` 内存步长/字段偏移，在 `Vec<ItemInfo>::sse_encode` 边界直接完成自由网格规划与 `4×2` 小组件检测，旁路 `layout_load.h` 中的 Dart DTO 堆偏移读写。
+- **修复工作台模式下 Dock 不可见问题**：移除会导致 `_DockLightContentState._stableHeight` 触发工作台 `Floating Dock` 渲染隐藏的 Hook，恢复工作台 Dock 与液态玻璃正常显示。
+- **Hook 安全性、锁页状态与监控可信度加固**：
+  - 区分 `LOCKED` / `UNLOCKED_ENOMEM` / `FAILED` 锁页状态，并增加已安装补丁的运行时字节完整性校验（`patch_total` / `patch_intact`）。
+  - `hook_status.conf` 与 `liquiddock-grid-4x2.state` 绑定当前桌面 `pid` 与 `proc_starttime`，消除桌面重启后的过期状态误报。
+  - `HookMonitor` 优先基于实时进程态展示各模块状态，`Os4GlassSymbols` 符号缓存纳入桌面 `lastUpdateTime` 与 `versionCode`。
+  - 修复文件夹行列 Hook 部分安装失败后的重试链路，并支持 `Os4GlassSymbols` 与 Rust `.gnu_debugdata` 符号解析。
+
 ## v2.7.9（2026-11-10）
 
 ### 小组件
