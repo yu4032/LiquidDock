@@ -139,17 +139,14 @@ internal fun evaluateHookMonitor(
 
     val patchTotal = statusMap["patch_total"]?.toIntOrNull() ?: 0
     val patchIntact = statusMap["patch_intact"]?.toIntOrNull() ?: 0
-    val pinEnomem = statusMap["pin_enomem"]?.toIntOrNull() ?: 0
     val pinFailed = statusMap["pin_failed"]?.toIntOrNull() ?: 0
     val patchDegraded = !statusStale && patchTotal > 0 && patchIntact < patchTotal
     val activeDetail = when {
         patchDegraded -> "代码页校验异常 ($patchIntact/$patchTotal)"
         !statusStale && patchTotal > 0 && patchIntact == patchTotal && pinFailed > 0 ->
-            "已验证生效（部分锁页失败）"
-        !statusStale && patchTotal > 0 && patchIntact == patchTotal && pinEnomem > 0 ->
-            "已验证生效（部分页受 memlock 限制）"
+            "已生效 ($patchIntact/$patchTotal，锁页失败 $pinFailed)"
         !statusStale && patchTotal > 0 && patchIntact == patchTotal ->
-            "已验证生效（代码页锁定）"
+            "已生效 ($patchIntact/$patchTotal)"
         else -> "Hook 已生效"
     }
 
