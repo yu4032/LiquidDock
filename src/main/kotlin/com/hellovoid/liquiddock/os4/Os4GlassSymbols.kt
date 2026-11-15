@@ -148,6 +148,22 @@ internal object Os4GlassSymbols {
     )
     private const val WIDGET_RESIZE_CLEAR_TARGET =
         "WorkspaceGetxController.clearWorkspaceGridCellState"
+    private val folderClingSymbolNames = listOf(
+        "FolderClingGetxController.open",
+        "FolderClingGetxController.onClose",
+        "FolderClingGetxController.handleFolderClingCloseImmediately",
+        "FolderClingGetxController.bgOpacity",
+        "FolderClingWidget.getFolderClingWidth",
+        "FolderClingGetxController.calGridHeight",
+        "FolderClingGetxController.headerHeight",
+        "FolderClingGetxController.folderGridViewLoc",
+        "FolderClingGetxController.gridViewWidth",
+        "FolderClingGetxController.gridViewHeight",
+        "FolderClingGetxController.desktopFolderIconLoc",
+        "FolderClingGetxController.folderIconWidth",
+        "FolderClingGetxController.folderIconHeight",
+        "FolderAnimController._openFolderIconBgAnim",
+    )
 
     data class ResolvedTargets(
         val glass: String,
@@ -166,6 +182,7 @@ internal object Os4GlassSymbols {
         val homeOptTargets: String = "",
         val layoutExtraTargets: String = "",
         val widgetResizeClearTarget: String = "",
+        val folderClingTargets: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -240,6 +257,7 @@ internal object Os4GlassSymbols {
         val homeOptTargets = fromMiniElfSymbolList(mini, homeOptSymbolNames)
         val layoutExtraTargets = fromMiniElfSymbolList(mini, layoutExtraSymbolNames)
         val widgetResizeClearTarget = fromMiniElfSingle(mini, WIDGET_RESIZE_CLEAR_TARGET)
+        val folderClingTargets = fromMiniElfSymbolList(mini, folderClingSymbolNames)
         return ResolvedTargets(
             glass,
             layoutTargets,
@@ -257,6 +275,7 @@ internal object Os4GlassSymbols {
             homeOptTargets,
             layoutExtraTargets,
             widgetResizeClearTarget,
+            folderClingTargets,
         )
     }
 

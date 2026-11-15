@@ -204,6 +204,9 @@ object Os4ConfigSync {
                     if (resolvedTargets.widgetResizeClearTarget.isNotEmpty()) {
                         append("widget_resize_clear_target=").append(resolvedTargets.widgetResizeClearTarget).append('\n')
                     }
+                    if (resolvedTargets.folderClingTargets.isNotEmpty()) {
+                        append("folder_cling_targets=").append(resolvedTargets.folderClingTargets).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }
