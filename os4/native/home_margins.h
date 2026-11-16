@@ -202,9 +202,15 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         uintptr_t box0 = ld_hm_ptr(cfg, 0x3b, x28);
         base->ox = 0;
         if (box0) __builtin_memcpy(&base->ox, (const void *)(box0 + 7), sizeof base->ox);
-        uintptr_t oybox0 = ld_hm_oy_box(x28, x26);
+        /* cfg+0x3b is the per-config workspace EdgeInsets. Its top stays native
+         * while the controller's shared Rx can still hold the previous
+         * orientation during currentConfig. Capture both origins from cfg. */
         base->oy = 0;
-        if (oybox0) __builtin_memcpy(&base->oy, (const void *)(oybox0 + 7), sizeof base->oy);
+        base->oy_valid = 0;
+        if (box0) {
+            __builtin_memcpy(&base->oy, (const void *)(box0 + 0xf), sizeof base->oy);
+            base->oy_valid = isfinite(base->oy);
+        }
         base->ind = 0;
         __builtin_memcpy(&base->ind, (const void *)(cfg + 0x4b), sizeof base->ind);
         base->cols = cols; base->rows = rows;
@@ -247,14 +253,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
 
 #if LD_HM_VERTICAL
     double dt = o->top, db = o->bottom;
-    if (dt != 0.0 || db != 0.0) {
-        if (!base->oy_valid) {
-            /* 启动早期 Rx 链还没挂好，originY 会读到 0；拿 0 当基准会把整个网格顶上去。 */
-            uintptr_t b = ld_hm_oy_box(x28, x26);
-            double v = 0;
-            if (b) __builtin_memcpy(&v, (const void *)(b + 7), sizeof v);
-            if (isfinite(v) && v > 1.0) { base->oy = v; base->oy_valid = 1; }
-        }
+    if ((dt != 0.0 || db != 0.0) && base->oy_valid) {
         if (rows > 0 && isfinite(base->ch) && base->ch > 1.0) {
             double ch = base->ch - (dt + db) / (double)rows;
             double oy = base->oy + dt;
