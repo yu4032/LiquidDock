@@ -17,6 +17,7 @@ class SettingsAvailabilityTest {
             Page.SoftGlassColor, Page.SoftGlassLighting,
             Page.SoftGlassComponents, Page.WidgetComponents,
             Page.Recents,
+            Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
         )
         testing.forEach {
             assertEquals("OS4 test route ${it.name}", PagePortState.TESTING, os4.status(it))
@@ -28,8 +29,6 @@ class SettingsAvailabilityTest {
         val unavailable = listOf(
             Page.DockBehavior,
             Page.DockRecentBlacklist,
-            Page.Workstation, Page.WorkstationDock,
-            Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
             Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
             Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
             Page.DialogCustomization, Page.DialogAll, Page.PopupEdge, Page.DialogEdge,

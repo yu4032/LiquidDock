@@ -42,7 +42,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.HandleMenuCustomization, Page.HandleMenuAll, Page.HandleMenuEdge,
             Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.GboardEdge,
             Page.SearchboxEdge, Page.SecurityCenterEdge,
-            Page.AnimationSystem,
+            Page.AnimationSystem, Page.Workstation,
         )
 
         // Available for iterative GUI/port testing, but they are not claims of
@@ -56,6 +56,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.SoftGlassColor, Page.SoftGlassLighting,
             Page.SoftGlassComponents, Page.WidgetComponents,
             Page.Recents,
+            Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
         )
 
         /** Detect the AOT desktop independently of its release and SDK version. */

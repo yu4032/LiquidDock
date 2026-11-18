@@ -88,7 +88,9 @@ static inline void ld_glass_scope_on_image_filter_entry(struct ld_dart_context *
         scope = g_ld_widget_build_scope;
         g_ld_widget_build_scope = 0;
     }
-    g_ld_pending_glass_scope = scope;
+    if (scope != LD_GLASS_SCOPE_GLOBAL) {
+        g_ld_pending_glass_scope = scope;
+    }
 }
 
 __attribute__((used)) static void ld_on_glass_widget_build_filter(struct ld_dart_context *c) {

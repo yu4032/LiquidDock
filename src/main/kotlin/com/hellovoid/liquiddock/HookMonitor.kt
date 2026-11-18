@@ -68,6 +68,7 @@ data class HookFeatureConfig(
     val dockEnabled: Boolean,
     val dividerEnabled: Boolean,
     val recentsBlurEnabled: Boolean,
+    val workstationEnabled: Boolean = false,
 ) {
     companion object {
         fun fromPrefs(prefs: SharedPreferences): HookFeatureConfig {
@@ -93,6 +94,7 @@ data class HookFeatureConfig(
                 dockEnabled = bool(ConfigSchema.Dock.ENABLED),
                 dividerEnabled = bool(ConfigSchema.Divider.ENABLED),
                 recentsBlurEnabled = recentsBlur,
+                workstationEnabled = bool(ConfigSchema.Workstation.DOCK_CUSTOMIZATION),
             )
         }
     }
@@ -125,6 +127,8 @@ internal fun parseStatusKeyValues(text: String): Map<String, String> {
     }
     return map
 }
+
+private val WORKSTATION_HOOKS_REGEX = Regex("""workstation hooks installed=(\d+)/""")
 
 internal fun evaluateHookMonitor(
     config: HookFeatureConfig,
@@ -164,10 +168,11 @@ internal fun evaluateHookMonitor(
         enabled: Boolean,
         hooked: Boolean,
         missingDetail: String = "偏移或 Hook 异常",
+        activeDetailOverride: String? = null,
     ): HookProbeItem {
         val state = resolve(enabled, hooked)
         val detail = when (state) {
-            HookProbeState.ACTIVE -> activeDetail
+            HookProbeState.ACTIVE -> if (patchDegraded) activeDetail else (activeDetailOverride ?: "Hook 已生效")
             HookProbeState.DISABLED -> "开关未开启"
             HookProbeState.PAUSED -> "总开关已暂停"
             HookProbeState.MISSING -> if (statusStale) "桌面重启后状态已过期，请重启桌面" else missingDetail
@@ -230,6 +235,19 @@ internal fun evaluateHookMonitor(
         bootLog.contains("OS4 Recents blur gate installed:")
     }
 
+    val wsMatch = WORKSTATION_HOOKS_REGEX.findAll(bootLog).lastOrNull()
+    val wsInstalled = wsMatch?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+    val workstationHooked = resolveHooked("workstation") {
+        wsInstalled > 0
+    }
+    val wsDetail = if (wsInstalled > 0) "已生效 ($wsInstalled 个 Hook)" else null
+
+    val widget1x1Match = Regex("""widget 1x1<->2x2 menu hooks=(\d+)""").findAll(bootLog).lastOrNull()
+    val widget1x1Count = widget1x1Match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+    val widget1x1Detail = if (widget1x1Count > 0) "已生效 ($widget1x1Count 个 Hook)" else null
+
+    val folderGridDetail = if (bootLog.contains("installed=7")) "已生效 (7 个 Hook)" else null
+
     val folderGridMissingDetail = when {
         statusMap["folder_cols_ready"] == "1" && statusMap["folder_rows_ready"] == "0" ->
             "列已就绪，行 Hook 异常"
@@ -245,11 +263,12 @@ internal fun evaluateHookMonitor(
         probe("grid", "桌面网格", config.gridEnabled, gridHooked),
         probe("home_icons", "图标与边距", config.iconSizeEnabled, homeIconsHooked),
         probe("big_folder", "大文件夹", config.bigFolderEnabled, folderHooked),
-        probe("folder_grid", "文件夹行列", config.folderGridEnabled, folderGridHooked, folderGridMissingDetail),
-        probe("widget_1x1", "1×1↔2×2", config.widget1x1Enabled, widget1x1Hooked),
+        probe("folder_grid", "文件夹行列", config.folderGridEnabled, folderGridHooked, folderGridMissingDetail, folderGridDetail),
+        probe("widget_1x1", "1×1↔2×2", config.widget1x1Enabled, widget1x1Hooked, activeDetailOverride = widget1x1Detail),
         probe("dock", "Dock 布局", config.dockEnabled, dockHooked),
         probe("divider", "分割线", config.dividerEnabled, dividerHooked),
         probe("recents", "最近任务模糊", config.recentsBlurEnabled, recentsHooked),
+        probe("workstation", "工作台", config.workstationEnabled, workstationHooked, activeDetailOverride = wsDetail),
     )
 
     return HookMonitorSnapshot(

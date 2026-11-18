@@ -207,6 +207,30 @@ object Os4ConfigSync {
                     if (resolvedTargets.widgetResizeClearTarget.isNotEmpty()) {
                         append("widget_resize_clear_target=").append(resolvedTargets.widgetResizeClearTarget).append('\n')
                     }
+                    if (resolvedTargets.workstationTargets.isNotEmpty()) {
+                        append("workstation_targets=").append(resolvedTargets.workstationTargets).append('\n')
+                    }
+                    if (resolvedTargets.workstationAllAppsIndTarget.isNotEmpty()) {
+                        append("workstation_allapps_ind_target=").append(resolvedTargets.workstationAllAppsIndTarget).append('\n')
+                    }
+                    if (resolvedTargets.workstationHotseatBottomTarget.isNotEmpty()) {
+                        append("workstation_hotseat_bottom_target=").append(resolvedTargets.workstationHotseatBottomTarget).append('\n')
+                    }
+                    if (resolvedTargets.workstationCalOffsetTarget.isNotEmpty()) {
+                        append("workstation_cal_offset_target=").append(resolvedTargets.workstationCalOffsetTarget).append('\n')
+                    }
+                    if (resolvedTargets.allAppsBlurTarget.isNotEmpty()) {
+                        append("allapps_blur_target=").append(resolvedTargets.allAppsBlurTarget).append('\n')
+                    }
+                    if (resolvedTargets.widgetGeometryTargets.isNotEmpty()) {
+                        append("widget_geometry_targets=").append(resolvedTargets.widgetGeometryTargets).append('\n')
+                    }
+                    if (resolvedTargets.blurDegradeTarget.isNotEmpty()) {
+                        append("blur_degrade_target=").append(resolvedTargets.blurDegradeTarget).append('\n')
+                    }
+                    if (resolvedTargets.blurBetterDownTarget.isNotEmpty()) {
+                        append("blur_better_down_target=").append(resolvedTargets.blurBetterDownTarget).append('\n')
+                    }
                 }
                 conf.replace("end=1\n",lines + "end=1\n")
             }

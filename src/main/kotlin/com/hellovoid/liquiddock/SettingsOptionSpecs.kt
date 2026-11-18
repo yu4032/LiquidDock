@@ -66,12 +66,12 @@ internal fun optionSummary(key: String): String = when (key) {
     "dock_divider_color_g" -> "分隔竖线颜色 · 绿"
     "dock_divider_color_b" -> "分隔竖线颜色 · 蓝"
     "dock_divider_alpha" -> "分隔竖线不透明度"
-    "workstation_all_apps_landscape_horizontal_offset" -> "直接设置工作台所有应用横屏图标区左右间距；不叠加系统默认位置"
-    "workstation_all_apps_landscape_top_spacing" -> "直接设置工作台所有应用横屏图标区上间距；不叠加系统默认位置"
-    "workstation_all_apps_landscape_bottom_spacing" -> "直接设置工作台所有应用横屏图标区下间距；不叠加系统默认位置"
-    "workstation_all_apps_portrait_horizontal_offset" -> "直接设置工作台所有应用竖屏图标区左右间距；不叠加系统默认位置"
-    "workstation_all_apps_portrait_top_spacing" -> "直接设置工作台所有应用竖屏图标区上间距；不叠加系统默认位置"
-    "workstation_all_apps_portrait_bottom_spacing" -> "直接设置工作台所有应用竖屏图标区下间距；不叠加系统默认位置"
+    "workstation_all_apps_landscape_horizontal_offset" -> "在系统默认位置基础上叠加工作台所有应用横屏图标区水平偏移"
+    "workstation_all_apps_landscape_top_spacing" -> "在系统默认位置基础上叠加工作台所有应用横屏图标区顶部偏移"
+    "workstation_all_apps_landscape_bottom_spacing" -> "在系统默认位置基础上叠加工作台所有应用横屏图标区底部偏移"
+    "workstation_all_apps_portrait_horizontal_offset" -> "在系统默认位置基础上叠加工作台所有应用竖屏图标区水平偏移"
+    "workstation_all_apps_portrait_top_spacing" -> "在系统默认位置基础上叠加工作台所有应用竖屏图标区顶部偏移"
+    "workstation_all_apps_portrait_bottom_spacing" -> "在系统默认位置基础上叠加工作台所有应用竖屏图标区底部偏移"
     "workstation_all_apps_landscape_indicator_y" -> "工作台所有应用横屏页面指示器的垂直偏移；正值下移，负值上移，不影响普通桌面"
     "workstation_all_apps_portrait_indicator_y" -> "工作台所有应用竖屏页面指示器的垂直偏移；正值下移，负值上移，不影响普通桌面"
     "workstation_dock_vertical_offset" -> "同时移动工作台 Dock 背景和全部图标，正值向下、负值向上；横竖屏共用"
@@ -197,10 +197,7 @@ internal fun workstationSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> 
 
 internal val workstationDockSpecs by lazy {
     workstationSpecsFor(
-        ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
         ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET,
-        ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
-        ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
     )
 }
 internal val workstationAppsLandscapeSpecs by lazy {
@@ -238,12 +235,12 @@ internal fun ensureDividerDefaults(prefs: SharedPreferences) {
 }
 internal val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS, "工作台 Dock 图标玻璃圆角", "dp"),
-    IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, "所有应用 · 横屏水平间距"),
-    IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING, "所有应用 · 横屏上间距"),
-    IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING, "所有应用 · 横屏下间距"),
-    IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, "所有应用 · 竖屏水平间距"),
-    IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING, "所有应用 · 竖屏上间距"),
-    IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, "所有应用 · 竖屏下间距"),
+    IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET, "所有应用 · 横屏水平偏移"),
+    IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING, "所有应用 · 横屏顶部偏移"),
+    IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING, "所有应用 · 横屏底部偏移"),
+    IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET, "所有应用 · 竖屏水平偏移"),
+    IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING, "所有应用 · 竖屏顶部偏移"),
+    IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, "所有应用 · 竖屏底部偏移"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y, "所有应用 · 横屏指示器高度"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y, "所有应用 · 竖屏指示器高度"),
     IntSpec(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET, "整个 Dock 垂直平移"),

@@ -67,6 +67,7 @@ static void (*g_orig_rust_orientation)(void *);
 #include "folder_size.h"
 #include "maml_widget_materials.h"
 #include "widget_resize.h"
+#include "workstation.h"
 #include "widget_1x1_menu.h"
 
 #define LD_BLOG_MAX_BYTES (512 * 1024)
@@ -316,6 +317,7 @@ static void ld_install_os4_recents_blur(const struct native_api *api, const ld_l
 {
     if (g_recents_blur_installed || g_recents_blur_attempted) return;
     g_recents_blur_attempted = true;
+    __atomic_store_n(&g_os4_allapps_blur_percent, (uint32_t)g_home_options.allapps_blur_percent, __ATOMIC_RELEASE);
     int percent = g_home_options.recents_blur_percent;
     if (percent < 0 || percent > 100) percent = 100;
     __atomic_store_n(&g_os4_recents_blur_percent, (uint32_t)percent, __ATOMIC_RELEASE);
@@ -590,6 +592,36 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
     if(g_home_options.folder_pad_targets_present && g_home_options.big_folder_enabled) {
         static bool g_folder_pad_bypass_installed = false;
         if(!g_folder_pad_bypass_installed) {
+            int32_t pad_imm = -1;
+            if (g_home_options.folder_pad_target_count >= 5) {
+                uintptr_t fn_y = 0, fn_x = 0;
+                size_t sz_y = g_home_options.folder_pad_size[3], sz_x = g_home_options.folder_pad_size[4];
+                if (sz_y >= 8 && sz_x >= 8 &&
+                        ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.folder_pad_vaddr[3], &fn_y) &&
+                        ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.folder_pad_vaddr[4], &fn_x) &&
+                        executable_range(fn_y, sz_y) && executable_range(fn_x, sz_x)) {
+                    for (size_t oy = 0; oy + 8 <= sz_y && pad_imm < 0; oy += 4) {
+                        uint32_t y0 = *(volatile uint32_t *)(fn_y + oy);
+                        if ((y0 & 0xffe00c00u) != 0xb8400000u) continue;
+                        uint32_t yrt = y0 & 0x1fu;
+                        uint32_t y1 = *(volatile uint32_t *)(fn_y + oy + 4);
+                        if (y1 != (0x8b1c8000u | (yrt << 5) | yrt)) continue;
+                        int32_t cand = (int32_t)((y0 >> 12) & 0x1ffu);
+                        for (size_t ox = 0; ox + 8 <= sz_x; ox += 4) {
+                            uint32_t x0 = *(volatile uint32_t *)(fn_x + ox);
+                            if ((x0 & 0xfffffc00u) != (0xb8400000u | ((uint32_t)cand << 12))) continue;
+                            uint32_t xrt = x0 & 0x1fu;
+                            uint32_t x1 = *(volatile uint32_t *)(fn_x + ox + 4);
+                            if (x1 == (0x8b1c8000u | (xrt << 5) | xrt)) {
+                                pad_imm = cand;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (pad_imm < 0) pad_imm = 0xe7;
+            uint32_t pad_ldur_mask = 0xb8400000u | ((uint32_t)(pad_imm & 0x1ff) << 12);
             size_t patched = 0;
             for(size_t i = 0; i < g_home_options.folder_pad_target_count && i < 16; i++) {
                 uintptr_t fn_rt = 0;
@@ -601,7 +633,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                 for(size_t off = 0; off + 8 <= fn_sz; off += 4) {
                     uintptr_t site = fn_rt + off;
                     uint32_t w0 = *(volatile uint32_t *)site;
-                    if((w0 & 0xfffffc00u) != 0xb84e7000u) continue; /* ldur wRt, [xRn, #0xe7] */
+                    if((w0 & 0xfffffc00u) != pad_ldur_mask) continue; /* ldur wRt, [xRn, #pad_imm] */
                     uint32_t rt_reg = w0 & 0x1fu;
                     uint32_t w1 = *(volatile uint32_t *)(site + 4);
                     if(w1 != (0x8b1c8000u | (rt_reg << 5) | rt_reg)) continue; /* add xRt, xRt, x28, lsl #32 */
@@ -614,8 +646,8 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
                 }
             }
             g_folder_pad_bypass_installed = true;
-            ld_blog("OS4 big folder Pad bypass installed: patched=%zu targets=%zu",
-                    patched, g_home_options.folder_pad_target_count);
+            ld_blog("OS4 big folder Pad bypass installed: patched=%zu targets=%zu pad_imm=0x%x",
+                    patched, g_home_options.folder_pad_target_count, (unsigned)pad_imm);
         }
     }
     ld_w1x1_menu_install(api, lib);
@@ -1335,6 +1367,62 @@ static int ld_guarded_hook(void *target, void *replace, void **original)
     return rc;
 }
 
+static void ld_install_dart_site_hook(const struct native_api *api, uintptr_t fn,
+        uintptr_t start, uintptr_t site_vaddr, const uint32_t *words, size_t size,
+        void *replace, void **orig)
+{
+    if (!fn || !orig || *orig || size < 16) return;
+    uintptr_t site = 0;
+    if (site_vaddr >= start) {
+        uintptr_t orig_delta = site_vaddr - start;
+        if (orig_delta + 16 <= size) {
+            const uint32_t *site_pat = (const uint32_t *)((const char *)words + orig_delta);
+            for (size_t off = 0; off < 0x1000 && executable_range(fn + off, 16); off += 4) {
+                if (ld_aot_match_words((const uint32_t *)(fn + off), site_pat, 4)) {
+                    site = fn + off;
+                    break;
+                }
+            }
+        }
+    }
+    if (!site) site = fn + (site_vaddr - start);
+    if (!executable_range(site, 16)) return;
+    int status = api->hook((void *)site, replace, orig);
+    if (status == 0 && *orig) pin_installed_hook(site);
+    ld_blog("home options observer %lx installed at %p result=%d", (unsigned long)site_vaddr, (void *)site, status);
+}
+
+static void ld_install_os4_glass_filter_and_scope(const struct native_api *api, const ld_lib_info *lib)
+{
+    if (!api || !api->hook || !lib) return;
+    if (g_orig_glass_filter && g_glass_scope_installed) return;
+    uintptr_t v7_entry = ld_resolve_sym_or_aot(
+        lib, g_home_options.glass_scope_targets_present,
+        g_home_options.glass_scope_vaddr[4], g_home_options.glass_scope_size[4],
+        LD_GLASS_FILTER_START, ld_glass_filter_words,
+        sizeof ld_glass_filter_words / sizeof(uint32_t), "home_opt glass_v7");
+    if (v7_entry && !g_orig_glass_filter) {
+        ld_install_dart_site_hook(api, v7_entry, LD_GLASS_FILTER_START, LD_GLASS_FILTER_SITE,
+                ld_glass_filter_words, sizeof ld_glass_filter_words,
+                (void *)repl_glass_filter, &g_orig_glass_filter);
+    }
+    if (g_home_options.glass_enabled && !g_glass_scope_installed) {
+        uintptr_t dock_light_start = 0, dock_light_end = 0;
+        uintptr_t dock_dark_start = 0, dock_dark_end = 0;
+        if (g_home_options.glass_observers_present) {
+            if (ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.glass_obs_vaddr[0], &dock_light_start)) {
+                dock_light_end = dock_light_start + (uintptr_t)g_home_options.glass_obs_size[0];
+            }
+            if (ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.glass_obs_vaddr[1], &dock_dark_start)) {
+                dock_dark_end = dock_dark_start + (uintptr_t)g_home_options.glass_obs_size[1];
+            }
+        }
+        ld_glass_scope_install(api, lib, v7_entry, g_scope_build_folder_glass,
+                g_scope_sysa_start, g_scope_sysb_start,
+                dock_light_start, dock_light_end, dock_dark_start, dock_dark_end);
+    }
+}
+
 static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
@@ -1380,14 +1468,17 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
     ld_folder_size_install(api,&lib,&g_home_options);
     ld_install_icon_materials(api,&lib);
+    ld_install_os4_glass_filter_and_scope(api,&lib);
     ld_widget_inventory_reset_once();
     (void)ld_maml_install(api);
     ld_install_os4_glass(api,&lib);
     ld_install_os4_widget_hooks(api,&lib);
     ld_install_os4_recents_blur(api,&lib);
     ld_widget_resize_install(api,&lib);
+    ld_workstation_install(api,&lib);
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);
+    ld_glass_filter_hook_install(api);
     ld_home_margins_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
     if (g_installed) { update_layout_ready(); return; }
@@ -1444,6 +1535,77 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         }
         ld_blog("home widget observer installed at %p (alloc=%p) result=%d", (void *)hw_hook, (void *)hw_alloc, rc);
     }
+    if (g_home_options.widget_geometry_targets_present && g_home_options.widget_prevent_stretch_enabled) {
+        uintptr_t height_fn = 0, content_fn = 0, spec_fn = 0;
+        uintptr_t height_site = 0, height_alloc = 0, content_site = 0, spec_site = 0;
+        if (ld_vaddr_to_runtime(&lib, g_home_options.widget_geometry_vaddr[0], &height_fn) &&
+                executable_range(height_fn, g_home_options.widget_geometry_size[0]) &&
+                g_home_options.widget_geometry_size[0] >= 0x100u) {
+            static const uint32_t height_alloc_words[] = {0xa9460341u, 0x91004021u, 0xeb01005fu};
+            size_t hsz = g_home_options.widget_geometry_size[0];
+            uintptr_t found_site = 0, found_alloc = 0;
+            for (size_t off = 0x20; off + 16 <= hsz && off < 0x100; off += 4) {
+                if (*(const uint32_t *)(height_fn + off) == 0xf81f83a0u) {
+                    found_site = height_fn + off;
+                    break;
+                }
+            }
+            for (size_t off = 0x80; off + sizeof height_alloc_words + 0x30 <= hsz; off += 4) {
+                if (memcmp((void *)(height_fn + off), height_alloc_words, sizeof height_alloc_words) == 0) {
+                    found_alloc = height_fn + off;
+                    break;
+                }
+            }
+            if (found_site && found_alloc) {
+                height_site = found_site;
+                height_alloc = found_alloc;
+            }
+        }
+        if (ld_vaddr_to_runtime(&lib, g_home_options.widget_geometry_vaddr[1], &content_fn) &&
+                executable_range(content_fn, g_home_options.widget_geometry_size[1])) {
+            static const uint32_t size_stores[] = {0xfc5c83a0u, 0xfc007000u, 0xfc5d03a0u, 0xfc00f000u};
+            size_t size = g_home_options.widget_geometry_size[1];
+            for (size_t off = 0; off + sizeof size_stores <= size; off += 4) {
+                if (memcmp((void *)(content_fn + off), size_stores, sizeof size_stores) == 0) {
+                    content_site = content_fn + off;
+                    break;
+                }
+            }
+        }
+        if (ld_vaddr_to_runtime(&lib, g_home_options.widget_geometry_vaddr[2], &spec_fn) &&
+                executable_range(spec_fn, g_home_options.widget_geometry_size[2])) {
+            static const uint32_t strides[] = {0xfc42b001u, 0xfc1c83a1u, 0xfc433002u, 0xfc1d03a2u};
+            size_t size = g_home_options.widget_geometry_size[2];
+            for (size_t off = 0; off + sizeof strides + 16 <= size; off += 4) {
+                if (memcmp((void *)(spec_fn + off), strides, sizeof strides) == 0) {
+                    spec_site = spec_fn + off + sizeof strides;
+                    break;
+                }
+            }
+        }
+        if (content_site && spec_site) {
+            int height_ok = height_site
+                    ? api->hook((void *)height_site, (void *)repl_home_widget_height,
+                                &g_orig_home_widget_height)
+                    : -1;
+            int content_ok = api->hook((void *)content_site, (void *)repl_home_widget_content,
+                                       &g_orig_home_widget_content);
+            int spec_ok = api->hook((void *)spec_site, (void *)repl_home_widget_spec,
+                                    &g_orig_home_widget_spec);
+            if (height_ok == 0 && g_orig_home_widget_height) {
+                pin_installed_hook(height_site);
+                g_home_widget_height_allocate = height_alloc;
+            }
+            if (content_ok == 0 && spec_ok == 0 &&
+                    g_orig_home_widget_content && g_orig_home_widget_spec) {
+                pin_installed_hook(content_site);
+                pin_installed_hook(spec_site);
+                g_home_widget_stretch_ready = 1;
+            }
+        }
+        ld_blog("widget stretch ready=%d height=%p content=%p spec=%p", g_home_widget_stretch_ready,
+                (void *)height_site, (void *)content_site, (void *)spec_site);
+    }
 
     struct { uintptr_t start,site; const void *words; size_t size; void *replace; void **orig; } home_hooks[] = {
         {LD_GLASS_FILTER_START,LD_GLASS_FILTER_SITE,ld_glass_filter_words,sizeof ld_glass_filter_words,(void*)repl_glass_filter,&g_orig_glass_filter},
@@ -1494,45 +1656,9 @@ static void install_grid_hook_unlocked(const struct native_api *api)
                                      (const uint32_t *)home_hooks[i].words, home_hooks[i].size / 4);
         }
         if (!fn) continue;
-        uintptr_t site = 0;
-        if (home_hooks[i].site >= home_hooks[i].start) {
-            uintptr_t orig_delta = home_hooks[i].site - home_hooks[i].start;
-            const uint32_t *orig_words = (const uint32_t *)home_hooks[i].words;
-            if (orig_delta + 16 <= home_hooks[i].size) {
-                const uint32_t *site_pat = (const uint32_t *)((const char *)orig_words + orig_delta);
-                for (size_t off = 0; off < 0x1000 && executable_range(fn + off, 16); off += 4) {
-                    if (ld_aot_match_words((const uint32_t *)(fn + off), site_pat, 4)) {
-                        site = fn + off;
-                        break;
-                    }
-                }
-            }
-        }
-        if (!site) site = fn + (home_hooks[i].site - home_hooks[i].start);
-        if (!executable_range(site, 16)) continue;
-        int status = api->hook((void *)site, home_hooks[i].replace, home_hooks[i].orig);
-        if (status == 0 && *home_hooks[i].orig) pin_installed_hook(site);
-        ld_blog("home options observer %lx installed at %p result=%d", (unsigned long)home_hooks[i].site, (void *)site, status);
-    }
-    if (g_home_options.glass_enabled && !g_glass_scope_installed) {
-        uintptr_t v7_entry = ld_resolve_sym_or_aot(
-            &lib, g_home_options.glass_scope_targets_present,
-            g_home_options.glass_scope_vaddr[4], g_home_options.glass_scope_size[4],
-            LD_GLASS_FILTER_START, ld_glass_filter_words,
-            sizeof ld_glass_filter_words / sizeof(uint32_t), "glass_v7_entry");
-        uintptr_t dock_light_start = 0, dock_light_end = 0;
-        uintptr_t dock_dark_start = 0, dock_dark_end = 0;
-        if (g_home_options.glass_observers_present) {
-            if (ld_vaddr_to_runtime(&lib, (uintptr_t)g_home_options.glass_obs_vaddr[0], &dock_light_start)) {
-                dock_light_end = dock_light_start + (uintptr_t)g_home_options.glass_obs_size[0];
-            }
-            if (ld_vaddr_to_runtime(&lib, (uintptr_t)g_home_options.glass_obs_vaddr[1], &dock_dark_start)) {
-                dock_dark_end = dock_dark_start + (uintptr_t)g_home_options.glass_obs_size[1];
-            }
-        }
-        ld_glass_scope_install(api, &lib, v7_entry, g_scope_build_folder_glass,
-                g_scope_sysa_start, g_scope_sysb_start,
-                dock_light_start, dock_light_end, dock_dark_start, dock_dark_end);
+        ld_install_dart_site_hook(api, fn, home_hooks[i].start, home_hooks[i].site,
+                (const uint32_t *)home_hooks[i].words, home_hooks[i].size,
+                home_hooks[i].replace, home_hooks[i].orig);
     }
     if(!g_grid_cols || !g_grid_rows) return;
     void *site = (void *)(entry + 0x80);
@@ -1600,7 +1726,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
             else if (observers[i].vaddr == LD_NO_VACANT_VADDR) extra_idx = 4;
             else if (observers[i].vaddr == LD_PROCESS_SCREEN_VADDR) extra_idx = 5;
             if (extra_idx >= 0) {
-                target = ld_resolve_sym_or_aot(
+                target = ld_resolve_sym_prologue_or_aot(
                     &lib, 1, g_home_options.layout_extra_vaddr[extra_idx],
                     g_home_options.layout_extra_size[extra_idx],
                     observers[i].vaddr, (const uint32_t *)observers[i].words,

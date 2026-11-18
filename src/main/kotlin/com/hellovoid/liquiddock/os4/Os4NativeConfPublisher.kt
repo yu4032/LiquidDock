@@ -40,6 +40,8 @@ object Os4NativeConfPublisher {
             (!options.glassIconSize.isFinite() || options.glassIconSize !in -40.0..40.0 ||
                 !options.glassIconCorner.isFinite() || options.glassIconCorner !in 0.0..128.0)) return null
         if (options.recentsBlurPercent !in 0..100) return null
+        if (options.allAppsBlurPercent !in 0..100) return null
+        if (options.workstation.dockCustomization && !options.workstation.isValid()) return null
         return buildString {
             append("hook_safety_enabled=").append(if (options.hookSafetyEnabled) 1 else 0).append('\n')
             if (grid) {
@@ -84,6 +86,7 @@ object Os4NativeConfPublisher {
                 append("glass_icon_corner=").append(options.glassIconCorner).append('\n')
             }
             if (options.glassEnabled && options.glassWidgets) append("glass_widgets=1\n")
+            if (options.useDragMaterial) append("use_drag_material=1\n")
             if (options.glassEnabled) {
                 append("large_folder_glass=").append(if (options.glassLargeFolder) 1 else 0).append('\n')
                 append("large_folder_corner=").append(options.glassLargeFolderCorner).append('\n')
@@ -126,6 +129,26 @@ object Os4NativeConfPublisher {
             }
             if (options.recentsBlurPercent != 100) {
                 append("recents_blur_percent=").append(options.recentsBlurPercent).append('\n')
+            }
+            if (options.allAppsBlurPercent != 100) {
+                append("allapps_blur_percent=").append(options.allAppsBlurPercent).append('\n')
+            }
+            if (options.workstation.dockCustomization) {
+                val ws = options.workstation
+                append("ws_dock_custom=1\n")
+                append("ws_taskbar_mode=").append(if (ws.taskbarMode) 1 else 0).append('\n')
+                append("ws_dock_icon_corner=").append(ws.dockIconGlassCornerRadius).append('\n')
+                append("ws_dock_v_offset=").append(ws.dockVerticalOffset).append('\n')
+                append("ws_dock_icon_land_v_offset=").append(ws.dockIconLandscapeVerticalOffset).append('\n')
+                append("ws_dock_icon_port_v_offset=").append(ws.dockIconTopOffset).append('\n')
+                append("ws_apps_land_h_offset=").append(ws.allAppsLandscapeHorizontalOffset).append('\n')
+                append("ws_apps_land_top=").append(ws.allAppsLandscapeTopSpacing).append('\n')
+                append("ws_apps_land_bottom=").append(ws.allAppsLandscapeBottomSpacing).append('\n')
+                append("ws_apps_land_ind_y=").append(ws.allAppsLandscapeIndicatorY).append('\n')
+                append("ws_apps_port_h_offset=").append(ws.allAppsPortraitHorizontalOffset).append('\n')
+                append("ws_apps_port_top=").append(ws.allAppsPortraitTopSpacing).append('\n')
+                append("ws_apps_port_bottom=").append(ws.allAppsPortraitBottomSpacing).append('\n')
+                append("ws_apps_port_ind_y=").append(ws.allAppsPortraitIndicatorY).append('\n')
             }
             append("end=1\n")
         }

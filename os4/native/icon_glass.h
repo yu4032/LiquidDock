@@ -439,8 +439,8 @@ __attribute__((used)) static void ld_icon_adjust_native_size(struct ld_dart_cont
 
 static void ld_icon_adjust_radius_site(struct ld_dart_context *c,unsigned site)
 {
-    if(!g_hook_pin_ok || !g_icon_glass_radius_installed || !g_home_options.glass_enabled || !g_home_options.glass_icons
-            || !isfinite(g_home_options.glass_icon_corner) || g_home_options.glass_icon_corner<=0.0) return;
+    if(!g_hook_pin_ok || !g_icon_glass_radius_installed || !g_home_options.glass_enabled || !g_home_options.glass_icons) return;
+    if(!isfinite(g_home_options.glass_icon_corner) || g_home_options.glass_icon_corner<=0.0) return;
     /* This site is inside the existing background closure. The saved Dart
      * context is retained by the observer; only its scalar result is changed. */
     uint32_t ref=0;
@@ -457,10 +457,10 @@ static void ld_icon_adjust_radius_site(struct ld_dart_context *c,unsigned site)
     memcpy(&orig_r,c->q[0],sizeof orig_r);
     static double s_ref_orig_r = 0.0;
     if(isfinite(orig_r) && orig_r > s_ref_orig_r && orig_r < 64.0) s_ref_orig_r = orig_r;
+    bool is_hotseat = ld_icon_is_hotseat_owner(c, owner);
     double radius=g_home_options.glass_icon_corner;
     double min_dim=0.0, scale=1.0;
     bool hit = ld_icon_lookup_size(owner, &min_dim, &scale);
-    bool is_hotseat = ld_icon_is_hotseat_owner(c, owner);
     ld_hotseat_cache_rx(c, owner);
     static double s_ref_dim = 0.0;
     if (!is_hotseat && hit && isfinite(min_dim) && min_dim > s_ref_dim && min_dim < 256.0) {
@@ -493,7 +493,7 @@ static void ld_icon_adjust_radius_site(struct ld_dart_context *c,unsigned site)
 __attribute__((used)) static void ld_icon_adjust_radius(struct ld_dart_context *c) { ld_icon_adjust_radius_site(c,0); }
 __attribute__((used)) static void ld_icon_adjust_radius_b(struct ld_dart_context *c) { ld_icon_adjust_radius_site(c,1); }
 
-static bool ld_resolve_so(const char *lib_substr, ld_lib_info *out)
+__attribute__((unused)) static bool ld_resolve_so(const char *lib_substr, ld_lib_info *out)
 {
     memset(out, 0, sizeof *out);
     ld_mapseg *segs = (ld_mapseg *)malloc(sizeof(ld_mapseg) * LD_MAX_SEGS);

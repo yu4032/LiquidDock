@@ -603,10 +603,6 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
         if (!found) {
             ld_blog("widget resize: no %lldx%lld space around (%lld,%lld)",
                     (long long)target_sx, (long long)target_sy, (long long)cx, (long long)cy);
-            if (g_w1x1_rt[LD_W1X1_SHOW_NO_SPACE_TOAST]) {
-                uint64_t a_toast[8] = { 0, cl, widget, 0, 0, 0, 0, 0 };
-                (void)ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_SHOW_NO_SPACE_TOAST], a_toast, 0);
-            }
             return;
         }
         ld_w1x1_add_enlarged(ld_w1x1_pos_key(screen_id, target_x, target_y), (int32_t)cx, (int32_t)cy);

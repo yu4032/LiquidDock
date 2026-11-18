@@ -96,6 +96,9 @@ struct ld_grid_conf {
     size_t recents_blur_target_count;
     uint64_t recents_blur_vaddr[2];
     size_t recents_blur_size[2];
+    int allapps_blur_percent;
+    uint64_t allapps_blur_vaddr;
+    size_t allapps_blur_size;
     int layout_targets_present;
     uint64_t layout_vaddr[2];
     size_t layout_size[2];
@@ -122,7 +125,15 @@ struct ld_grid_conf {
     uint64_t folder_size_vaddr[5];
     size_t folder_size_size[5];
     int widget_1x1_to_2x2_enabled;
+    int use_drag_material;
+    uint64_t blur_degrade_vaddr;
+    size_t blur_degrade_size;
+    uint64_t blur_better_down_vaddr;
+    size_t blur_better_down_size;
     int widget_prevent_stretch_enabled;
+    int widget_geometry_targets_present;
+    uint64_t widget_geometry_vaddr[3];
+    size_t widget_geometry_size[3];
     int widget_resize_targets_present;
     uint64_t widget_resize_vaddr[20];
     size_t widget_resize_size[20];
@@ -153,7 +164,29 @@ struct ld_grid_conf {
     int widget_resize_clear_target_present;
     uint64_t widget_resize_clear_vaddr;
     size_t widget_resize_clear_size;
+    struct ld_ws_conf {
+        int dock_custom;
+        int taskbar_mode;
+        double dock_icon_corner;
+        double dock_v_offset;
+        double dock_icon_land_v_offset;
+        double dock_icon_port_v_offset;
+        double apps_land_h_offset, apps_land_top, apps_land_bottom, apps_land_ind_y;
+        double apps_port_h_offset, apps_port_top, apps_port_bottom, apps_port_ind_y;
+    } ws;
+    int workstation_targets_present;
+    uint64_t workstation_vaddr[9];
+    size_t workstation_size[9];
+    uint64_t ws_allapps_ind_vaddr;
+    size_t ws_allapps_ind_size;
+    uint64_t ws_hotseat_bottom_vaddr;
+    size_t ws_hotseat_bottom_size;
+    uint64_t ws_cal_offset_vaddr;
+    size_t ws_cal_offset_size;
 };
+
+static volatile int g_ws_is_laptop_mode __attribute__((used));
+static volatile int g_ws_seen_dock_light __attribute__((used));
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
 static inline int ld_grid_parse_int(const char *s, int lo, int hi, int *outv)
@@ -309,9 +342,11 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
     struct ld_grid_conf c = {0};
     c.icon_size_percent = 100;
     c.recents_blur_percent = 100;
+    c.allapps_blur_percent = 100;
     uint64_t seen = 0;  /* bit0=dock_offset_y bit1=dock_offset_x bit2=glass bit3=icons
                            bit4=grid_cols bit5=grid_rows bit6=end */
     uint32_t divider_seen = 0;   /* 分隔线字段查重（定义见 divider_conf.h） */
+    uint32_t ws_seen = 0;        /* 工作台字段查重 */
     int ok = 0;
     c.large_folder_glass = 1;
     c.large_folder_native_outline = 1;
@@ -403,6 +438,17 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.recents_blur_percent=value;
                     seen |= 1ull << 37;
+                } else if (strcmp(key, "allapps_blur_percent") == 0) {
+                    int value;
+                    if (!ld_grid_parse_int(val, 0, 100, &value)) {
+                        bad=1; break;
+                    }
+                    c.allapps_blur_percent=value;
+                } else if (strcmp(key, "allapps_blur_target") == 0) {
+                    uint64_t va=0; size_t sz=0;
+                    if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
+                        c.allapps_blur_vaddr=va; c.allapps_blur_size=sz;
+                    }
                 } else if (strcmp(key, "recents_blur_target") == 0) {
                     size_t n = strchr(val, ',') ? 2 : 1;
                     if ((seen & (1ull << 38)) ||
@@ -521,6 +567,25 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.widget_prevent_stretch_enabled=value;
                     seen |= 1ull << 56;
+                } else if (strcmp(key, "use_drag_material") == 0) {
+                    int value=0;
+                    if (!ld_grid_parse_int(val, 0, 1, &value)) { bad=1; break; }
+                    c.use_drag_material = value;
+                } else if (strcmp(key, "blur_degrade_target") == 0) {
+                    uint64_t va=0; size_t sz=0;
+                    if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
+                        c.blur_degrade_vaddr=va; c.blur_degrade_size=sz;
+                    }
+                } else if (strcmp(key, "blur_better_down_target") == 0) {
+                    uint64_t va=0; size_t sz=0;
+                    if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
+                        c.blur_better_down_vaddr=va; c.blur_better_down_size=sz;
+                    }
+                } else if (strcmp(key, "widget_geometry_targets") == 0) {
+                    if (ld_grid_parse_aot_targets_max(val, c.widget_geometry_vaddr,
+                            c.widget_geometry_size, 3, 65536)) {
+                        c.widget_geometry_targets_present = 1;
+                    }
                 } else if (strcmp(key, "widget_resize_targets") == 0) {
                     if ((seen & (1ull << 46)) ||
                         !ld_grid_parse_aot_targets_max(val, c.widget_resize_vaddr, c.widget_resize_size, 20, 65536)) {
@@ -591,6 +656,65 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.widget_resize_clear_target_present=1;
                     seen |= 1ull << 55;
+                } else if (strcmp(key, "workstation_targets") == 0) {
+                    size_t n = 1;
+                    for (const char *p = val; *p; p++) if (*p == ',') n++;
+                    if (n > 9) n = 9;
+                    if ((ws_seen & (1u << 15)) ||
+                        !ld_grid_parse_aot_targets(val, c.workstation_vaddr, c.workstation_size, n)) {
+                        bad=1; break;
+                    }
+                    c.workstation_targets_present=(int)n;
+                    ws_seen |= 1u << 15;
+                } else if (strcmp(key, "workstation_allapps_ind_target") == 0) {
+                    if (!ld_grid_parse_aot_targets(val, &c.ws_allapps_ind_vaddr, &c.ws_allapps_ind_size, 1)) {
+                        bad=1; break;
+                    }
+                } else if (strcmp(key, "workstation_hotseat_bottom_target") == 0) {
+                    if (!ld_grid_parse_aot_targets(val, &c.ws_hotseat_bottom_vaddr, &c.ws_hotseat_bottom_size, 1)) {
+                        bad=1; break;
+                    }
+                } else if (strcmp(key, "workstation_cal_offset_target") == 0) {
+                    if (!ld_grid_parse_aot_targets(val, &c.ws_cal_offset_vaddr, &c.ws_cal_offset_size, 1)) {
+                        bad=1; break;
+                    }
+                } else if (strcmp(key, "ws_dock_custom") == 0 ||
+                           strcmp(key, "ws_taskbar_mode") == 0) {
+                    uint32_t bit = !strcmp(key, "ws_dock_custom") ? (1u << 0) : (1u << 1);
+                    int bv = 0;
+                    if ((ws_seen & bit) || !ld_grid_parse_bool01(val, &bv)) { bad=1; break; }
+                    if (bit == (1u << 0)) c.ws.dock_custom = bv;
+                    else c.ws.taskbar_mode = bv;
+                    ws_seen |= bit;
+                } else if (strncmp(key, "ws_", 3) == 0) {
+                    struct { const char *name; uint32_t bit; double lo, hi; double *dst; } map[] = {
+                        {"ws_dock_icon_corner",       1u<<2,   0.0, 100.0, &c.ws.dock_icon_corner},
+                        {"ws_dock_v_offset",          1u<<3,-120.0, 120.0, &c.ws.dock_v_offset},
+                        {"ws_dock_icon_land_v_offset",1u<<4, -48.0,  48.0, &c.ws.dock_icon_land_v_offset},
+                        {"ws_dock_icon_port_v_offset",1u<<5, -48.0,  48.0, &c.ws.dock_icon_port_v_offset},
+                        {"ws_apps_land_h_offset",     1u<<6, -240.0, 240.0, &c.ws.apps_land_h_offset},
+                        {"ws_apps_land_top",          1u<<7, -240.0, 240.0, &c.ws.apps_land_top},
+                        {"ws_apps_land_bottom",       1u<<8, -240.0, 240.0, &c.ws.apps_land_bottom},
+                        {"ws_apps_land_ind_y",        1u<<9,-160.0, 160.0, &c.ws.apps_land_ind_y},
+                        {"ws_apps_port_h_offset",     1u<<10,-240.0, 240.0, &c.ws.apps_port_h_offset},
+                        {"ws_apps_port_top",          1u<<11,-240.0, 240.0, &c.ws.apps_port_top},
+                        {"ws_apps_port_bottom",       1u<<12,-240.0, 240.0, &c.ws.apps_port_bottom},
+                        {"ws_apps_port_ind_y",        1u<<13,-160.0, 160.0, &c.ws.apps_port_ind_y},
+                    };
+                    int matched = 0;
+                    for (size_t wi = 0; wi < sizeof(map)/sizeof(map[0]); wi++) {
+                        if (strcmp(key, map[wi].name) == 0) {
+                            if ((ws_seen & map[wi].bit) ||
+                                !ld_grid_parse_bounded_decimal(val, map[wi].lo, map[wi].hi, map[wi].dst)) {
+                                bad = 1;
+                            } else {
+                                ws_seen |= map[wi].bit;
+                            }
+                            matched = 1;
+                            break;
+                        }
+                    }
+                    if (!matched || bad) { bad = 1; break; }
                 } else if (strcmp(key, "glass_enabled") == 0) {
                     int value;
                     if ((seen & (1u << 26)) || !ld_grid_parse_bool01(val,&value)) {

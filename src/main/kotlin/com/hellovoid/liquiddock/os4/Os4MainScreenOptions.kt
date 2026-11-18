@@ -48,6 +48,39 @@ data class Os4DividerOptions(
             listOf(colorR, colorG, colorB, alpha).all { it in 0..255 }
 }
 
+data class Os4WorkstationOptions(
+    val dockCustomization: Boolean = false,
+    val taskbarMode: Boolean = false,
+    val dockIconGlassCornerRadius: Double = 0.0,
+    val dockVerticalOffset: Double = 0.0,
+    val dockIconLandscapeVerticalOffset: Double = 0.0,
+    val dockIconTopOffset: Double = 0.0,
+    val allAppsLandscapeHorizontalOffset: Double = 0.0,
+    val allAppsLandscapeTopSpacing: Double = 0.0,
+    val allAppsLandscapeBottomSpacing: Double = 0.0,
+    val allAppsLandscapeIndicatorY: Double = 0.0,
+    val allAppsPortraitHorizontalOffset: Double = 0.0,
+    val allAppsPortraitTopSpacing: Double = 0.0,
+    val allAppsPortraitBottomSpacing: Double = 0.0,
+    val allAppsPortraitIndicatorY: Double = 0.0,
+) {
+    internal fun isValid(): Boolean =
+        dockIconGlassCornerRadius.isFinite() && dockIconGlassCornerRadius in 0.0..100.0 &&
+            dockVerticalOffset.isFinite() && dockVerticalOffset in -120.0..120.0 &&
+            dockIconLandscapeVerticalOffset.isFinite() && dockIconLandscapeVerticalOffset in -48.0..48.0 &&
+            dockIconTopOffset.isFinite() && dockIconTopOffset in -48.0..48.0 &&
+            listOf(
+                allAppsLandscapeHorizontalOffset,
+                allAppsLandscapeTopSpacing,
+                allAppsLandscapeBottomSpacing,
+                allAppsPortraitHorizontalOffset,
+                allAppsPortraitTopSpacing,
+                allAppsPortraitBottomSpacing,
+            ).all { it.isFinite() && it in -240.0..240.0 } &&
+            allAppsLandscapeIndicatorY.isFinite() && allAppsLandscapeIndicatorY in -160.0..160.0 &&
+            allAppsPortraitIndicatorY.isFinite() && allAppsPortraitIndicatorY in -160.0..160.0
+}
+
 /** Pure preference extraction, independent from Android/root and launcher identity checks. */
 data class Os4MainScreenOptions(
     val iconSizeEnabled: Boolean = false,
@@ -72,6 +105,7 @@ data class Os4MainScreenOptions(
     val glassLargeFolderOverrides: Map<String, Double> = emptyMap(),
     val glassIcons: Boolean = false,
     val glassWidgets: Boolean = false,
+    val useDragMaterial: Boolean = false,
     val glassLargeFolder: Boolean = true,
     val glassLargeFolderCorner: Double = 0.0,
     val glassLargeFolderNativeOutline: Boolean = true,
@@ -80,6 +114,8 @@ data class Os4MainScreenOptions(
     val glassIconSize: Double = 0.0,
     val glassIconCorner: Double = 0.0,
     val recentsBlurPercent: Int = 100,
+    val allAppsBlurPercent: Int = 100,
+    val workstation: Os4WorkstationOptions = Os4WorkstationOptions(),
 ) {
     companion object {
         val offsetKeys = listOf(
@@ -128,6 +164,7 @@ data class Os4MainScreenOptions(
             add(ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_OVERRIDES.name())
             add(ConfigSchema.Glass.ICON_GLASS.name())
             add(ConfigSchema.Glass.WIDGET_GLASS.name())
+            add(ConfigSchema.Glass.USE_DRAG_MATERIAL.name())
             add(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name())
             add(ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE.name())
             listOf(
@@ -146,6 +183,23 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Divider.ALPHA,
             ).forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name())
+            add(ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT.name())
+            add(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name())
+            add(ConfigSchema.Workstation.TASKBAR_MODE.name())
+            listOf(
+                ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
+                ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET,
+                ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
+                ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y,
+                ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
+                ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
+                ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
+                ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y,
+            ).forEach { add(it.name()); add("${it.name()}_tenths") }
         }
 
         /** Empty means disabled; null means corrupt active settings and must clear stale state. */
@@ -218,8 +272,11 @@ data class Os4MainScreenOptions(
                     ConfigSchema.Glass.OS4_LARGE_FOLDER_GLASS_OVERRIDES,
                 ) ?: return null
                 val recentsBlurPercent = integer(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT)
+                val allAppsBlurPercent = integer(ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT)
+                val workstationEnabled = boolean(ConfigSchema.Workstation.DOCK_CUSTOMIZATION)
                 if (!grid && !icons && !bigFolder && !folderGrid && !dockEnabled && !dividerEnabled && !glassEnabled &&
-                    !widgetOverrides && !preventWidgetStretch && recentsBlurPercent == 100) ""
+                    !widgetOverrides && !preventWidgetStretch && recentsBlurPercent == 100 &&
+                    allAppsBlurPercent == 100 && !workstationEnabled) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
                         enabled = true,
@@ -268,6 +325,7 @@ data class Os4MainScreenOptions(
                             glassLargeFolderOverrides = largeFolderGlassOverrides,
                             glassIcons = glassIcons,
                             glassWidgets = glassWidgets,
+                            useDragMaterial = boolean(ConfigSchema.Glass.USE_DRAG_MATERIAL),
                             glassLargeFolder = glassLargeFolder,
                             glassLargeFolderCorner = if (glassEnabled && glassLargeFolder) {
                                 dp(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS)
@@ -278,6 +336,25 @@ data class Os4MainScreenOptions(
                             glassIconSize = if (glassIcons) dp(ConfigSchema.Glass.ICON_SIZE_OFFSET) else 0.0,
                             glassIconCorner = if (glassIcons) dp(ConfigSchema.Glass.ICON_CORNER_RADIUS) else 0.0,
                             recentsBlurPercent = recentsBlurPercent,
+                            allAppsBlurPercent = allAppsBlurPercent,
+                            workstation = if (workstationEnabled) {
+                                Os4WorkstationOptions(
+                                    dockCustomization = true,
+                                    taskbarMode = boolean(ConfigSchema.Workstation.TASKBAR_MODE),
+                                    dockIconGlassCornerRadius = 0.0,
+                                    dockVerticalOffset = dp(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET),
+                                    dockIconLandscapeVerticalOffset = 0.0,
+                                    dockIconTopOffset = 0.0,
+                                    allAppsLandscapeHorizontalOffset = dp(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET),
+                                    allAppsLandscapeTopSpacing = dp(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING),
+                                    allAppsLandscapeBottomSpacing = dp(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING),
+                                    allAppsLandscapeIndicatorY = dp(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y),
+                                    allAppsPortraitHorizontalOffset = dp(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET),
+                                    allAppsPortraitTopSpacing = dp(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING),
+                                    allAppsPortraitBottomSpacing = dp(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING),
+                                    allAppsPortraitIndicatorY = dp(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y),
+                                )
+                            } else Os4WorkstationOptions(),
                         ),
                     )
                 }

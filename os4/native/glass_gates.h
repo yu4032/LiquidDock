@@ -21,6 +21,28 @@ static void *g_orig_passblur_supported __attribute__((used));
 static bool g_passblur_supported_installed;
 static volatile uint32_t g_os4_recents_blur_percent __attribute__((used)) = 100;
 static void *g_orig_recents_blur_radius __attribute__((used));
+static volatile uint32_t g_os4_allapps_blur_percent __attribute__((used)) = 100;
+static void *g_orig_allapps_blur_radius __attribute__((used));
+
+__attribute__((used,naked)) static void repl_os4_allapps_blur_radius(void)
+{
+    __asm__ volatile(
+        "adrp x9, g_os4_allapps_blur_percent\n"
+        "add x9, x9, :lo12:g_os4_allapps_blur_percent\n"
+        "ldar w9, [x9]\n"
+        "cmp w9, #100\n"
+        "b.hs 1f\n"
+        "ucvtf d1, w9\n"
+        "mov w10, #100\n"
+        "ucvtf d2, w10\n"
+        "fdiv d1, d1, d2\n"
+        "fmul d0, d0, d1\n"
+        "1: adrp x16, g_orig_allapps_blur_radius\n"
+        "add x16, x16, :lo12:g_orig_allapps_blur_radius\n"
+        "ldr x16, [x16]\n"
+        "br x16\n"
+    );
+}
 static void *g_orig_recents_home_hold __attribute__((used));
 static bool g_recents_blur_installed;
 static bool g_recents_blur_attempted;

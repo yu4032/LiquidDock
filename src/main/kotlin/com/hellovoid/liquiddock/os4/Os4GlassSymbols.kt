@@ -157,6 +157,17 @@ internal object Os4GlassSymbols {
     )
     private const val WIDGET_RESIZE_CLEAR_TARGET =
         "WorkspaceGetxController.clearWorkspaceGridCellState"
+    private val workstationSymbolNames = listOf(
+        "HotSeatsConstants2._isLaptopMode",
+        "GridController.hotSeatsMarginBottom",
+        "GridController.dockIconPaddingTop",
+        "LaptopCellScreen.build",
+        "LaptopWorkspaceGetxController.calIndicatorCenterPosition",
+        "_DockLightContentState._buildContent",
+        "_DockBackgroundViewState._buildStrategy",
+        "_DockBackgroundViewState._syncSpringToTarget",
+        "GlobalHotseatWindowManager._buildDockLayout",
+    )
 
     data class ResolvedTargets(
         val glass: String,
@@ -176,6 +187,14 @@ internal object Os4GlassSymbols {
         val homeOptTargets: String = "",
         val layoutExtraTargets: String = "",
         val widgetResizeClearTarget: String = "",
+        val workstationTargets: String = "",
+        val workstationAllAppsIndTarget: String = "",
+        val workstationHotseatBottomTarget: String = "",
+        val workstationCalOffsetTarget: String = "",
+        val allAppsBlurTarget: String = "",
+        val widgetGeometryTargets: String = "",
+        val blurDegradeTarget: String = "",
+        val blurBetterDownTarget: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -248,6 +267,39 @@ internal object Os4GlassSymbols {
         val homeOptTargets = fromMiniElfSymbolList(mini, homeOptSymbolNames)
         val layoutExtraTargets = fromMiniElfSymbolList(mini, layoutExtraSymbolNames)
         val widgetResizeClearTarget = fromMiniElfSingle(mini, WIDGET_RESIZE_CLEAR_TARGET)
+        val workstationTargets = fromMiniElfSymbolList(mini, workstationSymbolNames)
+        val workstationAllAppsIndTarget = fromMiniElfSymbolSpecs(
+            mini,
+            listOf("LauncherIndicatorState._buildAllAppsIndicator" to 0x98L),
+        )
+        val workstationHotseatBottomTarget = fromMiniElfSingle(
+            mini,
+            "HotSeatsConstants2.hotSeatsMarginBottom",
+        )
+        val workstationCalOffsetTarget = fromMiniElfSingle(
+            mini,
+            "HotseatLayerGetxController.calHotseatOffsetY",
+        )
+        val allAppsBlurTarget = fromMiniElfSingle(
+            mini,
+            "DrawerViewBlurController.updateProgress",
+        )
+        val widgetGeometryTargets = fromMiniElfSymbolList(
+            mini,
+            listOf(
+                "WidgetContainerWidget.widgetContainerHeight",
+                "MiuiWidgetGetxController.initWidgetSize",
+                "GridController.getMiuiWidgetSizeSpec",
+            ),
+        )
+        val blurDegradeTarget = fromMiniElfSingle(
+            mini,
+            "_DockBackgroundViewState._scheduleBlurDegrade",
+        )
+        val blurBetterDownTarget = fromMiniElfSingle(
+            mini,
+            "enablePassBlurBetterDownForView",
+        )
         return ResolvedTargets(
             glass,
             layoutTargets,
@@ -266,6 +318,14 @@ internal object Os4GlassSymbols {
             homeOptTargets,
             layoutExtraTargets,
             widgetResizeClearTarget,
+            workstationTargets,
+            workstationAllAppsIndTarget,
+            workstationHotseatBottomTarget,
+            workstationCalOffsetTarget,
+            allAppsBlurTarget,
+            widgetGeometryTargets,
+            blurDegradeTarget,
+            blurBetterDownTarget,
         )
     }
 

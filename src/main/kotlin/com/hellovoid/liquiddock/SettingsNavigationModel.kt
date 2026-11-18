@@ -101,7 +101,7 @@ internal val overviewEntries = listOf(
 internal val layoutEntries = listOf(
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏间距与分屏布局"),
     HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、尺寸、位置与最近程序"),
-    HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock 与所有应用布局"),
+    HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock、所有应用布局与多分屏"),
     HubEntry(Page.Recents, R.string.page_recents, "多任务壁纸背景与模糊"),
 )
 

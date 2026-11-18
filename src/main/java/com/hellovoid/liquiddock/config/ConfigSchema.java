@@ -340,6 +340,8 @@ public final class ConfigSchema {
                 ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> WIDGET_GLASS = bool(
                 "liquid_widget_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> USE_DRAG_MATERIAL = bool(
+                "glass_use_drag_material", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> WIDGET_DARK_CONTENT = bool(
                 "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> ICON_GLASS = bool(
@@ -801,22 +803,22 @@ public final class ConfigSchema {
                 "workstation_dock_icon_glass_corner_radius", 0, 0, 0, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET = dp(
-                "workstation_all_apps_landscape_horizontal_offset", 0, 0, 0, 0, 240,
+                "workstation_all_apps_landscape_horizontal_offset", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_TOP_SPACING = dp(
-                "workstation_all_apps_landscape_top_spacing", 0, 0, 0, 0, 240,
+                "workstation_all_apps_landscape_top_spacing", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_BOTTOM_SPACING = dp(
-                "workstation_all_apps_landscape_bottom_spacing", 0, 0, 0, 0, 240,
+                "workstation_all_apps_landscape_bottom_spacing", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET = dp(
-                "workstation_all_apps_portrait_horizontal_offset", 0, 0, 0, 0, 240,
+                "workstation_all_apps_portrait_horizontal_offset", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_TOP_SPACING = dp(
-                "workstation_all_apps_portrait_top_spacing", 0, 0, 0, 0, 240,
+                "workstation_all_apps_portrait_top_spacing", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_PORTRAIT_BOTTOM_SPACING = dp(
-                "workstation_all_apps_portrait_bottom_spacing", 0, 0, 0, 0, 240,
+                "workstation_all_apps_portrait_bottom_spacing", 0, 0, 0, -240, 240,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> ALL_APPS_LANDSCAPE_INDICATOR_Y = dp(
                 "workstation_all_apps_landscape_indicator_y", 0, 0, 0, -160, 160,
@@ -835,6 +837,9 @@ public final class ConfigSchema {
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_ICON_BOTTOM_OFFSET = dp(
                 "workstation_dock_icon_bottom_offset", 0, 0, 0, -48, 48,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> ALL_APPS_BLUR_PERCENT = integer(
+                "workstation_all_apps_blur_percent", 100, 100, 100, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
         private Workstation() {}
     }
@@ -922,6 +927,7 @@ public final class ConfigSchema {
                 Glass.DIALOG_DARK_MODE, Glass.DIALOG_BLUR, Glass.DIALOG_TINT_RED, Glass.DIALOG_TINT_GREEN,
                 Glass.DIALOG_TINT_BLUE, Glass.DIALOG_TINT_ALPHA,
                 Glass.WIDGET_GLASS,
+                Glass.USE_DRAG_MATERIAL,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
                 Glass.FUNCTIONAL_DOCK_ICON_GLASS, Glass.RECENTS_CAPSULE_GLASS,
                 Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
@@ -987,7 +993,8 @@ public final class ConfigSchema {
                 Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y,
                 Workstation.DOCK_VERTICAL_OFFSET,
                 Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
-                Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET);
+                Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET,
+                Workstation.ALL_APPS_BLUR_PERCENT);
         add(keys, Recents.BACKGROUND_BLUR_PERCENT, Recents.DISABLE_WALLPAPER_DIMMING);
         add(keys, Debug.LOGGING);
         return Collections.unmodifiableList(keys);

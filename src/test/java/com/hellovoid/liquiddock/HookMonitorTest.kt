@@ -160,7 +160,7 @@ class HookMonitorTest {
             """.trimIndent(),
         )
         val snapshotEnomem = evaluateHookMonitor(allEnabledConfig(), statusEnomem, "100.000 native_init enter pid=25282")
-        assertEquals("已生效 (10/10)", snapshotEnomem.items.first { it.id == "glass" }.detail)
+        assertEquals("Hook 已生效", snapshotEnomem.items.first { it.id == "glass" }.detail)
 
         val statusDegraded = parseStatusKeyValues(
             """

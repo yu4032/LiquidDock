@@ -44,6 +44,7 @@ static void ld_glass_filter_hook_install(const struct native_api *api)
     if ((unwrap_installed && acq_installed) || !api || !api->hook || !g_home_options.glass_enabled) return;
     ld_lib_info lib = {0};
     if (!ld_resolve_so("libhyper_os_flutter.so", &lib) || !lib.elf_base) return;
+    g_glass_vt_expect = lib.elf_base + 0x1190e98u;
     if (!unwrap_installed) {
         static const uint32_t pat[8] = {
             0xa9bd5ffeu, 0xa90157f6u, 0xa9024ff4u, 0x2a0103f3u,
@@ -53,7 +54,6 @@ static void ld_glass_filter_hook_install(const struct native_api *api)
         if (!target) {
             ld_blog("glass Unwrap pattern not found");
         } else {
-            g_glass_vt_expect = lib.elf_base + 0x1190e98u;
             void *backup = NULL;
             if (api->hook((void *)target, (void *)ld_unwrap_glass_hook, &backup) == 0 && backup) {
                 g_orig_unwrap_glass = (void *(*)(void *, int))backup;

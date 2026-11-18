@@ -56,6 +56,20 @@ __attribute__((used)) static void ld_observe_dock_background(struct ld_dart_cont
             ld_blog("dockbg-hide: params=%p size=%p forced 0x0",(void*)params,(void*)size);
         return;
     }
+    if (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED) &&
+        g_home_options.ws.dock_custom && g_home_options.ws.taskbar_mode) {
+        uintptr_t params = c->x[2], size = ld_heap_pointer(c, params, 7);
+        double dw = ld_ws_device_width();
+        double corner = 0.0;
+        if (size) {
+            if (dw > 100.0) {
+                double taskbar_w = dw + 16.0;
+                memcpy((void *)(size + 7), &taskbar_w, 8);
+            }
+            memcpy((void *)(params + 0xb), &corner, 8);
+            return;
+        }
+    }
     if(g_home_options.dock.width==0 && g_home_options.dock.height==0 && g_home_options.dock.corner==0) return;
     if(!ld_dock_active(c)) return;
     uintptr_t params=c->x[2],size=ld_heap_pointer(c,params,7);
