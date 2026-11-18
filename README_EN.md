@@ -64,24 +64,21 @@ An LSPosed module for **HyperOS 4 / HyperOS 3** tablets that customizes the home
 
 ## Key Features
 
-### Glass Styling
-- **Launcher & Component Glass**: Customize native Soft Glass parameters and Liquid Glass styling across the Dock, icons, widgets, folders, and drag states.
-- **System & Third-Party Surfaces**: Extends consistent glass styling to Recents action buttons, app top split-screen/window menus, Security Center sidebars, MIUI System Search, and Gboard floating keyboards.
-- **Fine-Grained Optical Controls**: Tune blur, refraction, highlights, edge bands, tint, solid fills, and corner radii globally or per component.
+### HyperOS 4 (OS4)
 
-### Home Grid, Large Folders & Widgets
-- **Free Home Grid**: Configure **2–10 columns and 2–6 rows** in landscape with independent portrait layouts, spacing, margins, row gaps, and page-indicator offsets.
-- **Large Folders**: Enable tablet large folders with customizable inner grid dimensions, 4×2 symmetric preview insets, icon scaling, and title visibility.
-- **Widget Enhancements**: Remove grid placement restrictions, switch quickly between **1×1 ↔ 2×2** and **2×1 ↔ 4×2** sizes from the long-press menu, prevent unwanted widget stretching, and apply dark-mode adaptation or background-node hiding.
+- **Native Soft Glass**: Customize the launcher's native Soft Glass optical parameters (edge bands, reflections, dark-area fill light, directional light), component glass, drag materials, adaptive icon corner radii, and MAML widget materials.
+- **Home Grid & Large Folders**: Configure custom grid dimensions and independent landscape/portrait margins and page-indicator offsets; supports tablet large folders, custom inner folder grids, 4×2 symmetric preview insets, icon alignment, and title controls.
+- **Widget Enhancements**: Quick **1×1 ↔ 2×2** and **2×1 ↔ 4×2** size switching via the long-press menu, widget stretch prevention, and horizontal offset tuning.
+- **Dock & Workstation**: Customize Dock geometry, position, and divider styling; supports Workstation Taskbar mode with floating overhang, Dock/icon vertical offsets, independent landscape/portrait All Apps margins, and background blur.
+- **Independent-Process Glass & Safety**: Extends Liquid Glass to Recents buttons, app top menus, Security Center sidebars, System Search, and Gboard; unlocks up to 6 split-screen stages; includes a live Hook Monitor and **automatic safe mode** (triggers if Launcher crashes 8 times within 20 seconds).
 
-### Dock, Workstation & Recents
-- **Dock Customization**: Adjust Dock dimensions, bottom position, corner radius, icon spacing, divider styling, and recent-app visibility.
-- **Workstation Mode**: Supports Taskbar mode (edge-to-edge or floating overhang), Dock and icon vertical offsets, independent landscape/portrait All Apps margins and indicator offsets, and background blur intensity.
-- **Multi-Window & Recents**: Unlock up to 6 split-screen stages and customize Recents background blur and dimming.
+### HyperOS 3 (OS3)
 
-### Usability & Safety
-- **MIUIX Settings UI**: Built-in global settings search, JSON configuration backup/restore, and per-scope one-tap restart.
-- **Live Diagnostics & Safe Mode**: Real-time hook status monitor and logs; automatically enters safe mode if Launcher crashes **8 times within 20 seconds** to keep your home screen recoverable.
+- **Full-Component Liquid Glass**: Applies unified Liquid Glass across the Dock, icons, widgets, small/large folders, shortcut menus, dialogs, drag states, and system surfaces, with global inheritance or per-component overrides for blur, refraction, dispersion, highlights, outlines, and shadows.
+- **Free Home Grid**: Supports **2–10 columns and 2–6 rows** in landscape with independent portrait layouts, removes rotation mapping and 2×1/2×2/4×2 placement restrictions, and adds 80%–120% home-icon scaling.
+- **Dock & Behavior**: Customize size, spacing, corner radius, shadows, and dividers; hide the device-interconnect entry or filter recent apps with a blacklist.
+- **RemoteViews & Folder Details**: Node-level RemoteViews background hiding and precise tinting/whitening, true 2×2 large folders, and independent Liquid Glass backgrounds for expanded folders.
+- **System Integration & Animations**: Hide the gesture pill, disable wallpaper zoom, and tune workspace fade-in and transition speeds.
 
 > See [FEATURES.md](FEATURES.md) for the full list of options and detailed parameter explanations.
 
