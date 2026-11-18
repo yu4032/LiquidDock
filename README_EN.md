@@ -115,8 +115,6 @@ An LSPosed module for **HyperOS 4 / HyperOS 3** tablets that customizes the home
 
 - [FEATURES.md](FEATURES.md) — Full feature and settings reference
 - [CHANGELOG.md](CHANGELOG.md) — Release history
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Runtime architecture
-- [HOOKS.md](HOOKS.md) — Hook entry points and boundaries
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Development guidelines
 - [docs/release-signing.md](docs/release-signing.md) — Release build and signing guide
 

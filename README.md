@@ -115,8 +115,6 @@
 
 - [FEATURES.md](FEATURES.md) — 完整功能与设置说明
 - [CHANGELOG.md](CHANGELOG.md) — 版本更新日志
-- [ARCHITECTURE.md](ARCHITECTURE.md) — 模块运行架构
-- [HOOKS.md](HOOKS.md) — 适配入口与边界说明
 - [CONTRIBUTING.md](CONTRIBUTING.md) — 参与贡献与开发约定
 - [docs/release-signing.md](docs/release-signing.md) — 构建与发布签名说明
 
