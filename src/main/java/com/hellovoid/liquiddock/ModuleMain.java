@@ -45,6 +45,23 @@ public final class ModuleMain extends XposedModule {
     public void onSystemServerStarting(@NonNull SystemServerStartingParam param) {
         if (!reloadGate.enterOwnerLifecycle()) return;
         WallpaperNativeTransformBridge.installSystemObserver(param.getClassLoader());
+        try {
+            ConfigReader config = ConfigReader.load();
+            boolean enabled = config.b(
+                    ConfigSchema.Core.ENABLED.name(),
+                    ConfigSchema.Core.ENABLED.runtimeFallback());
+            boolean liquidGlassEnabled = config.b(
+                    ConfigSchema.Glass.ENABLED.name(),
+                    ConfigSchema.Glass.ENABLED.runtimeFallback());
+            boolean wallpaperFlickerFixEnabled = config.b(
+                    ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.name(),
+                    ConfigSchema.Glass.WALLPAPER_FLICKER_FIX.runtimeFallback());
+            WallpaperClientCompositionHook.initialize(
+                    Api101Bridge.remotePreferences(ConfigReader.REMOTE_GROUP),
+                    enabled && liquidGlassEnabled && wallpaperFlickerFixEnabled);
+        } catch (Throwable error) {
+            Api101Bridge.log("[DC][WallpaperClientComposition] config gate failed", error);
+        }
     }
 
     @Override
