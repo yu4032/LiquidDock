@@ -10,6 +10,9 @@
 #ifndef LD_LAYOUT_FILE
 #define LD_LAYOUT_FILE "/data/user_de/0/com.miui.home/files/liquiddock-layout-v3.bin"
 #endif
+#ifndef LD_WS_LAYOUT_FILE
+#define LD_WS_LAYOUT_FILE "/data/user_de/0/com.miui.home/files/liquiddock-ws-layout-v3.bin"
+#endif
 static int g_restore_ready;
 static int g_initial_restore,g_initial_columns,g_initial_rows,g_initial_direction;
 static int g_rotation_direction=-1;
@@ -32,6 +35,8 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
         if(livecols==g_grid_cols && liverows==g_grid_rows) direction=0;
         else if(livecols==g_grid_rows && liverows==g_grid_cols) direction=1;
     }
+    int prev_cols = g_runtime_columns;
+    int prev_rows = g_runtime_rows;
     g_rotation_direction=direction;
     if(direction>=0 && direction<=1 && livecols==(direction?g_grid_rows:g_grid_cols)
             && liverows==(direction?g_grid_cols:g_grid_rows)) {
@@ -47,14 +52,18 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
     int initial=g_initial_restore==1 && direction==g_initial_direction
             && ld_heap_i64(c->x[2],0x1b)==g_initial_columns
             && ld_heap_i64(c->x[2],0x23)==g_initial_rows;
-    if(g_layout_hooks_ready && (initial || changed_square)) {
+    int stale_old = (prev_cols > 0 && prev_rows > 0 &&
+                     (prev_cols != livecols || prev_rows != liverows) &&
+                     ld_heap_i64(receiver, 7) == livecols &&
+                     ld_heap_i64(receiver, 15) == liverows);
+    if(g_layout_hooks_ready && (initial || changed_square || stale_old)) {
         /* Reuse the existing orientation transaction and its Dart frames to
          * publish the fully loaded layout through the vendor's save callbacks. */
-        int64_t oldcols=square?g_grid_cols+1:ld_heap_i64(c->x[2],0x23);
-        int64_t oldrows=square?g_grid_rows:ld_heap_i64(c->x[2],0x1b);
+        int64_t oldcols=stale_old ? prev_cols : (square?g_grid_cols+1:ld_heap_i64(c->x[2],0x23));
+        int64_t oldrows=stale_old ? prev_rows : (square?g_grid_rows:ld_heap_i64(c->x[2],0x1b));
         memcpy((void *)(receiver+7),&oldcols,8); memcpy((void *)(receiver+15),&oldrows,8);
         if(initial) g_initial_restore=2;
-        ld_blog("vendor layout transaction requested direction=%d initial=%d",direction,initial);
+        ld_blog("vendor layout transaction requested direction=%d initial=%d stale_old=%d",direction,initial,stale_old);
     }
     ld_blog("orientation fields old=%lld,%lld new=%lld,%lld late=%x,%x sentinel=%llx",
             (long long)ld_heap_i64(receiver, 7), (long long)ld_heap_i64(receiver, 15),
@@ -76,6 +85,7 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     struct ld_layout_item *source=calloc(LD_LAYOUT_MAX_ITEMS,sizeof *source);
     struct ld_layout_item *target=calloc(LD_LAYOUT_MAX_ITEMS,sizeof *target);
     uintptr_t *cells=calloc(LD_LAYOUT_MAX_ITEMS,sizeof *cells), *models=calloc(LD_LAYOUT_MAX_ITEMS,sizeof *models);
+    int64_t list_cont=0;
     size_t count=0;
     if(!source || !target || !cells || !models || n<=0 || n>=100) goto done;
     for (int i = 0; i < n; i++) {
@@ -90,7 +100,11 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
         if(!layout || !array || size<0 || count+(size_t)size>LD_LAYOUT_MAX_ITEMS) goto done;
         for(int j=0;j<size;j++) {
             uintptr_t cell=ld_heap_pointer(c,array,0xf+j*4), model=ld_heap_pointer(c,cell,7);
-            if(!cell || !model || ld_heap_i64(model,0x47)!=-100) goto done;
+            if(!cell || !model) goto done;
+            int64_t cont=ld_heap_i64(model,0x47);
+            if(cont!=-100 && cont!=-104) goto done;
+            if(!list_cont) list_cont=cont;
+            else if(cont!=list_cont) goto done;
             source[count]=(struct ld_layout_item){ld_heap_i64(model,7),ld_heap_i64(model,0x2f),
                 (int)ld_heap_i64(cell,0xb),(int)ld_heap_i64(cell,0x13),
                 (int)ld_heap_i64(model,0x1f),(int)ld_heap_i64(model,0x27)};
@@ -101,27 +115,32 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     int oldcols=(int)ld_heap_i64(c->x[1],7), oldrows=(int)ld_heap_i64(c->x[1],15);
     int initial=g_initial_restore==2;
     int square=g_grid_cols==g_grid_rows;
-    if(!count || !ld_layout_valid(source,count,(initial||square)?cols:oldcols,(initial||square)?rows:oldrows)) goto done;
+    int is_ws_allapps=(list_cont==-104);
+    if(!count) goto done;
+    if(!is_ws_allapps && !ld_layout_valid(source,count,(initial||square)?cols:oldcols,(initial||square)?rows:oldrows)) goto done;
     int direction=square?g_rotation_direction:(cols==g_grid_cols && rows==g_grid_rows?0:1);
     if(direction<0 || direction>1) goto done;
     if((direction && (cols!=g_grid_rows || rows!=g_grid_cols)) || (oldcols==cols && oldrows==rows)) goto done;
+    const char *layout_file = is_ws_allapps ? LD_WS_LAYOUT_FILE : LD_LAYOUT_FILE;
     struct ld_layout_memory *memory=calloc(1,sizeof *memory);
     if(!memory) goto done;
-    if(!ld_layout_load(LD_LAYOUT_FILE,memory) || memory->columns!=g_grid_cols || memory->rows!=g_grid_rows)
+    if(!ld_layout_load(layout_file,memory) || memory->columns!=g_grid_cols || memory->rows!=g_grid_rows)
         memset(memory,0,sizeof *memory);
     memory->columns=g_grid_cols; memory->rows=g_grid_rows;
-    if(!initial) {
+    if(!initial && (!is_ws_allapps || ld_layout_valid(source,count,oldcols,oldrows))) {
         memcpy(memory->items[1-direction],source,count*sizeof *source);
         memory->count[1-direction]=(uint32_t)count;
     }
     if(!ld_layout_plan(source,count,cols,rows,memory->items[direction],memory->count[direction],target)) {
-        ld_blog("layout restore cannot fit same-page items; no changes"); free(memory); goto done;
+        ld_blog("layout restore cannot fit same-page items; no changes");
+        free(memory);
+        goto done;
     }
     memcpy(memory->items[direction],target,count*sizeof *target); memory->count[direction]=(uint32_t)count;
     memory->active_direction=direction;
     /* Let the original Dart continuation publish through the launcher's own
      * database engine. Never open or rewrite its live database here. */
-    if(!ld_layout_save(LD_LAYOUT_FILE,memory)) { free(memory); goto done; }
+    if(!ld_layout_save(layout_file,memory)) { free(memory); goto done; }
     free(memory);
     for(size_t i=0;i<count;i++) {
         int64_t x=target[i].x,y=target[i].y;
@@ -129,8 +148,9 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
         memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
     }
     g_restore_ready=1;
-    if(g_initial_restore) g_initial_restore=0;
-    ld_blog("layout restored %zu items to %dx%d; vendor occupancy continuation",count,cols,rows);
+    if(g_initial_restore && !is_ws_allapps) g_initial_restore=0;
+    ld_blog("layout restored %zu items (cont=%lld) to %dx%d; vendor occupancy continuation",
+            count,(long long)list_cont,cols,rows);
 done:
     free(source); free(target); free(cells); free(models);
 }

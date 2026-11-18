@@ -319,36 +319,17 @@ static void ld_frb_write_opt_i32(uint8_t *item, size_t off, int32_t val) {
     memcpy(item + off + 4u, &val, 4);
 }
 
-static void ld_frb_plan_vec_items(void *vec_ptr) {
-    if (!vec_ptr || !g_frb_item_layout.valid) return;
-    if (g_load_prepared || !g_layout_hooks_ready || g_grid_cols <= 0 || g_grid_rows <= 0) return;
-
-    uint64_t data_addr = 0, len = 0;
-    memcpy(&data_addr, (const uint8_t *)vec_ptr + 8u, 8);
-    memcpy(&len, (const uint8_t *)vec_ptr + 16u, 8);
-    ld_blog("FRB vec_encode len=%llu hooks_ready=%d rt=%dx%d load=%dx%d frb=%dx%d",
-            (unsigned long long)len, g_layout_hooks_ready ? 1 : 0,
-            g_runtime_columns, g_runtime_rows, g_load_columns, g_load_rows,
-            g_frb_start_cols, g_frb_start_rows);
-    if (!data_addr || len == 0 || len > 4096u) return;
-
-    int cols = g_runtime_columns ? g_runtime_columns : (g_load_columns ? g_load_columns : g_frb_start_cols);
-    int rows = g_runtime_rows ? g_runtime_rows : (g_load_rows ? g_load_rows : g_frb_start_rows);
-    int direction = g_grid_cols == g_grid_rows
-        ? (g_runtime_columns ? g_runtime_direction : (g_load_columns ? g_load_direction : g_frb_start_dir))
-        : (cols == g_grid_cols && rows == g_grid_rows ? 0 : 1);
-    if (direction < 0 || direction > 1) return;
-    if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
-
+static int ld_frb_plan_container(uint8_t *base, uint64_t len, int cols, int rows, int direction,
+                                 int64_t target_cont, const char *layout_file, int is_home) {
     struct ld_layout_item *source = calloc(LD_LAYOUT_MAX_ITEMS, sizeof *source);
     struct ld_layout_item *target = calloc(LD_LAYOUT_MAX_ITEMS, sizeof *target);
     uint8_t **ptrs = calloc(LD_LAYOUT_MAX_ITEMS, sizeof *ptrs);
     struct ld_layout_memory *memory = calloc(1, sizeof *memory);
     size_t count = 0;
+    int planned = 0;
     if (!source || !target || !ptrs || !memory) goto done;
 
     const ld_frb_item_layout_t *L = &g_frb_item_layout;
-    uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
     for (uint64_t i = 0; i < len && count < LD_LAYOUT_MAX_ITEMS; i++) {
         uint8_t *it = base + i * L->stride;
         uint64_t disc = 0;
@@ -358,7 +339,7 @@ static void ld_frb_plan_vec_items(void *vec_ptr) {
         int32_t scr = 0, cx = 0, cy = 0, sx = 1, sy = 1;
         if (!ld_frb_read_opt_i64(it, L->id_off, &id)) { continue; }
         if (!ld_frb_read_opt_i64(it, L->container_off, &cont)) { continue; }
-        if (cont != -100) continue; /* HOME workspace items only */
+        if (cont != target_cont) continue;
         if (!ld_frb_read_opt_i32_def(it, L->screen_off, -1, &scr) || scr < 0) continue;
         if (!ld_frb_read_opt_i32_def(it, L->x_off, 0, &cx) ||
             !ld_frb_read_opt_i32_def(it, L->y_off, 0, &cy) ||
@@ -376,9 +357,9 @@ static void ld_frb_plan_vec_items(void *vec_ptr) {
     }
     if (count == 0) goto done;
 
-    ld_write_4x2_widget_state(source, count);
+    if (is_home) ld_write_4x2_widget_state(source, count);
 
-    int known = ld_layout_load(LD_LAYOUT_FILE, memory) &&
+    int known = ld_layout_load(layout_file, memory) &&
                 memory->columns == g_grid_cols && memory->rows == g_grid_rows;
     if (!known) {
         memset(memory, 0, sizeof *memory);
@@ -410,15 +391,16 @@ static void ld_frb_plan_vec_items(void *vec_ptr) {
     }
 
     if (!ld_layout_plan(source, count, cols, rows, memory->items[direction], memory->count[direction], target)) {
-        ld_blog("FRB load bail plan count=%zu cols=%d rows=%d dir=%d", count, cols, rows, direction);
+        ld_blog("FRB load bail plan cont=%lld count=%zu cols=%d rows=%d dir=%d",
+                (long long)target_cont, count, cols, rows, direction);
         goto done;
     }
 
     memcpy(memory->items[direction], target, count * sizeof *target);
     memory->count[direction] = (uint32_t)count;
     memory->active_direction = direction;
-    if (!ld_layout_save(LD_LAYOUT_FILE, memory)) {
-        ld_blog("FRB load bail save");
+    if (!ld_layout_save(layout_file, memory)) {
+        ld_blog("FRB load bail save cont=%lld", (long long)target_cont);
         goto done;
     }
 
@@ -428,28 +410,29 @@ static void ld_frb_plan_vec_items(void *vec_ptr) {
         ld_frb_write_opt_i32(ptrs[i], L->y_off, (int32_t)target[i].y);
     }
 
-    g_load_prepared = 1;
-    g_initial_restore = 1;
-    g_initial_columns = cols;
-    g_initial_rows = rows;
-    g_initial_direction = direction;
-    ld_blog("FRB boundary restored %zu HOME items %dx%d source-direction=%d (bypassed Dart DTO hook)",
-            count, cols, rows, source_direction);
+    planned = 1;
+    ld_blog("FRB boundary restored %zu items (cont=%lld) %dx%d source-direction=%d (bypassed Dart DTO hook)",
+            count, (long long)target_cont, cols, rows, source_direction);
 
 done:
     free(source);
     free(target);
     free(ptrs);
     free(memory);
+    return planned;
 }
 
-static void ld_frb_sync_decoded_vec(void *out_vec) {
-    if (!out_vec || !g_frb_item_layout.valid || !g_layout_hooks_ready ||
-        g_grid_cols <= 0 || g_grid_rows <= 0) return;
+static void ld_frb_plan_vec_items(void *vec_ptr) {
+    if (!vec_ptr || !g_frb_item_layout.valid) return;
+    if (g_load_prepared || !g_layout_hooks_ready || g_grid_cols <= 0 || g_grid_rows <= 0) return;
 
     uint64_t data_addr = 0, len = 0;
-    memcpy(&data_addr, (const uint8_t *)out_vec + 8u, 8);
-    memcpy(&len, (const uint8_t *)out_vec + 16u, 8);
+    memcpy(&data_addr, (const uint8_t *)vec_ptr + 8u, 8);
+    memcpy(&len, (const uint8_t *)vec_ptr + 16u, 8);
+    ld_blog("FRB vec_encode len=%llu hooks_ready=%d rt=%dx%d load=%dx%d frb=%dx%d",
+            (unsigned long long)len, g_layout_hooks_ready ? 1 : 0,
+            g_runtime_columns, g_runtime_rows, g_load_columns, g_load_rows,
+            g_frb_start_cols, g_frb_start_rows);
     if (!data_addr || len == 0 || len > 4096u) return;
 
     int cols = g_runtime_columns ? g_runtime_columns : (g_load_columns ? g_load_columns : g_frb_start_cols);
@@ -459,11 +442,24 @@ static void ld_frb_sync_decoded_vec(void *out_vec) {
         : (cols == g_grid_cols && rows == g_grid_rows ? 0 : 1);
     if (direction < 0 || direction > 1) return;
     if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
-    if (!cols || !rows) { cols = direction ? g_grid_rows : g_grid_cols; rows = direction ? g_grid_cols : g_grid_rows; }
 
+    uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
+    int p_home = ld_frb_plan_container(base, len, cols, rows, direction, -100, LD_LAYOUT_FILE, 1);
+    int p_ws   = ld_frb_plan_container(base, len, cols, rows, direction, -104, LD_WS_LAYOUT_FILE, 0);
+    if (p_home || p_ws) {
+        g_load_prepared = 1;
+        g_initial_restore = 1;
+        g_initial_columns = cols;
+        g_initial_rows = rows;
+        g_initial_direction = direction;
+    }
+}
+
+static void ld_frb_sync_container(uint8_t *base, uint64_t len, int cols, int rows, int direction,
+                                  int64_t target_cont, const char *layout_file) {
     struct ld_layout_memory *memory = calloc(1, sizeof *memory);
     if (!memory) return;
-    if (!ld_layout_load(LD_LAYOUT_FILE, memory) ||
+    if (!ld_layout_load(layout_file, memory) ||
         memory->columns != g_grid_cols || memory->rows != g_grid_rows) {
         memset(memory, 0, sizeof *memory);
         memory->columns = g_grid_cols;
@@ -472,7 +468,6 @@ static void ld_frb_sync_decoded_vec(void *out_vec) {
     }
 
     const ld_frb_item_layout_t *L = &g_frb_item_layout;
-    uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
     size_t upserted = 0;
     for (uint64_t i = 0; i < len; i++) {
         uint8_t *it = base + i * L->stride;
@@ -482,7 +477,7 @@ static void ld_frb_sync_decoded_vec(void *out_vec) {
         int64_t id = 0, cont = 0;
         int32_t scr = 0, cx = 0, cy = 0, sx = 1, sy = 1;
         if (!ld_frb_read_opt_i64(it, L->id_off, &id) || id <= 0) continue;
-        if (!ld_frb_read_opt_i64(it, L->container_off, &cont) || cont != -100) continue;
+        if (!ld_frb_read_opt_i64(it, L->container_off, &cont) || cont != target_cont) continue;
         if (!ld_frb_read_opt_i32_def(it, L->screen_off, -1, &scr) || scr < 0) continue;
         if (!ld_frb_read_opt_i32_def(it, L->x_off, 0, &cx) ||
             !ld_frb_read_opt_i32_def(it, L->y_off, 0, &cy) ||
@@ -516,13 +511,36 @@ static void ld_frb_sync_decoded_vec(void *out_vec) {
 
     if (upserted > 0) {
         memory->active_direction = direction;
-        if (ld_layout_save(LD_LAYOUT_FILE, memory)) {
+        if (ld_layout_save(layout_file, memory)) {
             g_frb_sse_decode_synced = true;
-            ld_blog("FRB vec_decode sync: len=%llu upserted=%zu dir=%d (%dx%d)",
-                    (unsigned long long)len, upserted, direction, cols, rows);
+            ld_blog("FRB vec_decode sync: cont=%lld len=%llu upserted=%zu dir=%d (%dx%d)",
+                    (long long)target_cont, (unsigned long long)len, upserted, direction, cols, rows);
         }
     }
     free(memory);
+}
+
+static void ld_frb_sync_decoded_vec(void *out_vec) {
+    if (!out_vec || !g_frb_item_layout.valid || !g_layout_hooks_ready ||
+        g_grid_cols <= 0 || g_grid_rows <= 0) return;
+
+    uint64_t data_addr = 0, len = 0;
+    memcpy(&data_addr, (const uint8_t *)out_vec + 8u, 8);
+    memcpy(&len, (const uint8_t *)out_vec + 16u, 8);
+    if (!data_addr || len == 0 || len > 4096u) return;
+
+    int cols = g_runtime_columns ? g_runtime_columns : (g_load_columns ? g_load_columns : g_frb_start_cols);
+    int rows = g_runtime_rows ? g_runtime_rows : (g_load_rows ? g_load_rows : g_frb_start_rows);
+    int direction = g_grid_cols == g_grid_rows
+        ? (g_runtime_columns ? g_runtime_direction : (g_load_columns ? g_load_direction : g_frb_start_dir))
+        : (cols == g_grid_cols && rows == g_grid_rows ? 0 : 1);
+    if (direction < 0 || direction > 1) return;
+    if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
+    if (!cols || !rows) { cols = direction ? g_grid_rows : g_grid_cols; rows = direction ? g_grid_cols : g_grid_rows; }
+
+    uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
+    ld_frb_sync_container(base, len, cols, rows, direction, -100, LD_LAYOUT_FILE);
+    ld_frb_sync_container(base, len, cols, rows, direction, -104, LD_WS_LAYOUT_FILE);
 }
 
 static void repl_frb_vec_item_decode(void *out_vec, void *deser) {
