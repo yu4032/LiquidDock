@@ -17,8 +17,8 @@ android {
         minSdk = 33
         targetSdk = 37
         testInstrumentationRunner = "com.hellovoid.liquiddock.SettingsSearchInstrumentation"
-        versionCode = 43
-        versionName = "3.0.1"
+        versionCode = 44
+        versionName = "3.0.2"
         buildConfigField(
             "boolean",
             "WORKSPACE_GLASS_HWUI_PROBE",
