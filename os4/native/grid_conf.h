@@ -18,6 +18,7 @@
  *   icons=0|1
  *   grid_cols=<2..10>     桌面网格列数（缺省 = 不改）
  *   grid_rows=<2..10>     桌面网格行数（缺省 = 不改）
+ *   widget_prevent_stretch=0|1  保持 MAML 小组件声明的宽高比（缺省关闭）
  *   icon_size_enabled=0|1; icon_size_percent=80..120 (缺省100)
  *   glass_enabled=0|1
  *   glass_native_<field>=decimal (逐项原生参数，缺键保留系统值)
@@ -105,6 +106,9 @@ struct ld_grid_conf {
     uint64_t rv_vaddr[2];
     size_t rv_size[2];
     int big_folder_enabled;
+    int big_folder_align_icon;
+    int big_folder_title_enabled;
+    int folder_preview_inset;
     int folder_grid_cols;
     int folder_grid_rows;
     int folder_target_present;
@@ -114,7 +118,11 @@ struct ld_grid_conf {
     size_t folder_pad_target_count;
     uint64_t folder_pad_vaddr[16];
     size_t folder_pad_size[16];
+    int folder_size_targets_present;
+    uint64_t folder_size_vaddr[5];
+    size_t folder_size_size[5];
     int widget_1x1_to_2x2_enabled;
+    int widget_prevent_stretch_enabled;
     int widget_resize_targets_present;
     uint64_t widget_resize_vaddr[20];
     size_t widget_resize_size[20];
@@ -158,6 +166,23 @@ static inline int ld_grid_parse_int(const char *s, int lo, int hi, int *outv)
         if (v > 1000000) return 0;              /* 防溢出（远超合法上限） */
         v = v * 10 + (*p - '0');
     }
+    if (v < lo || v > hi) return 0;
+    *outv = v;
+    return 1;
+}
+
+static inline int ld_grid_parse_signed_int(const char *s, int lo, int hi, int *outv)
+{
+    if (!s || !*s) return 0;
+    int sign = 1;
+    if (*s == '-') {
+        sign = -1;
+        ++s;
+        if (!*s || *s == '0') return 0;
+    }
+    int abs_v = 0;
+    if (!ld_grid_parse_int(s, 0, 1000000, &abs_v)) return 0;
+    int v = sign * abs_v;
     if (v < lo || v > hi) return 0;
     *outv = v;
     return 1;
@@ -408,6 +433,24 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.rv_targets_present=1;
                     seen |= 1ull << 41;
+                } else if (strcmp(key, "big_folder_title_enabled") == 0) {
+                    if ((seen & (1ull << 58)) ||
+                        !ld_grid_parse_bool01(val, &c.big_folder_title_enabled)) {
+                        bad=1; break;
+                    }
+                    seen |= 1ull << 58;
+                } else if (strcmp(key, "big_folder_align_icon") == 0) {
+                    if ((seen & (1ull << 60)) ||
+                        !ld_grid_parse_bool01(val, &c.big_folder_align_icon)) {
+                        bad=1; break;
+                    }
+                    seen |= 1ull << 60;
+                } else if (strcmp(key, "folder_preview_inset") == 0) {
+                    if ((seen & (1ull << 59)) ||
+                        !ld_grid_parse_signed_int(val, -24, 32, &c.folder_preview_inset)) {
+                        bad=1; break;
+                    }
+                    seen |= 1ull << 59;
                 } else if (strcmp(key, "big_folder_enabled") == 0) {
                     int value;
                     if ((seen & (1ull << 42)) || !ld_grid_parse_bool01(val,&value)) {
@@ -446,6 +489,24 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     c.folder_pad_targets_present=1;
                     c.folder_pad_target_count=n;
                     seen |= 1ull << 44;
+                } else if (strcmp(key, "folder_size_targets") == 0) {
+                    if (seen & (1ull << 57)) { bad=1; break; }
+                    c.folder_size_targets_present=ld_grid_parse_aot_targets_max(
+                            val, c.folder_size_vaddr, c.folder_size_size, 3, 65536);
+                    if (!c.folder_size_targets_present)
+                        c.folder_size_targets_present=ld_grid_parse_aot_targets_max(
+                                val, c.folder_size_vaddr, c.folder_size_size, 2, 65536);
+                    if (!c.folder_size_targets_present) {
+                        /* Ignore previous experimental target sets until settings republishes. */
+                        int old_count = 1;
+                        for (const char *q = val; *q; ++q) if (*q == ',') ++old_count;
+                        if (old_count < 3 || old_count > 5
+                                || !ld_grid_parse_aot_targets_max(val, c.folder_size_vaddr,
+                                                               c.folder_size_size, old_count, 65536)) {
+                            bad=1; break;
+                        }
+                    }
+                    seen |= 1ull << 57;
                 } else if (strcmp(key, "widget_1x1_to_2x2") == 0) {
                     int value;
                     if ((seen & (1ull << 45)) || !ld_grid_parse_bool01(val,&value)) {
@@ -453,6 +514,13 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.widget_1x1_to_2x2_enabled=value;
                     seen |= 1ull << 45;
+                } else if (strcmp(key, "widget_prevent_stretch") == 0) {
+                    int value;
+                    if ((seen & (1ull << 56)) || !ld_grid_parse_bool01(val,&value)) {
+                        bad=1; break;
+                    }
+                    c.widget_prevent_stretch_enabled=value;
+                    seen |= 1ull << 56;
                 } else if (strcmp(key, "widget_resize_targets") == 0) {
                     if ((seen & (1ull << 46)) ||
                         !ld_grid_parse_aot_targets_max(val, c.widget_resize_vaddr, c.widget_resize_size, 20, 65536)) {

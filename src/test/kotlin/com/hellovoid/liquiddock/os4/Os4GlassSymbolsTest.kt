@@ -16,6 +16,11 @@ class Os4GlassSymbolsTest {
         "BlurUtilities.isHyperMaterialSupported",
         "BlurUtilities.isMaterialDisabled",
     )
+    private val folderSizeNames = listOf(
+        "BigFolderCommonStrategy.calItemSize",
+        "GridController.getMiuiWidgetSizeSpec",
+        "FolderIconWidget._buildTitle",
+    )
 
     private fun buffer(bytes: ByteArray) = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
 
@@ -39,9 +44,10 @@ class Os4GlassSymbolsTest {
         val out=ByteArray(2048)
         val b=header(out,4,3)
         val shnames="\u0000.symtab\u0000.strtab\u0000.shstrtab\u0000".toByteArray()
-        shnames.copyInto(out,960)
+        shnames.copyInto(out,1200)
         val stringTable=ByteArrayOutputStream().apply { write(0) }
-        val offsets=names.map { n ->
+        val allNames = names + folderSizeNames
+        val offsets=allNames.map { n ->
             val at=stringTable.size()
             stringTable.write(n.toByteArray())
             stringTable.write(0)
@@ -49,26 +55,22 @@ class Os4GlassSymbolsTest {
         }
         val strings=stringTable.toByteArray()
         strings.copyInto(out,768)
-        section(b,1,1,2,512,4L*24L,2,24)
+        section(b,1,1,2,512,(allNames.size + 1L)*24L,2,24)
         section(b,2,9,3,768,strings.size.toLong())
-        section(b,3,17,3,960,shnames.size.toLong())
-        for(i in 1..3) {
+        section(b,3,17,3,1200,shnames.size.toLong())
+        for(i in 1..allNames.size) {
             val base=512+i*24
             b.putInt(base,offsets[i-1]); b.put(base+4,2)
             b.putShort(base+6,1)
-            b.putLong(base+8,0x9000L+(i-1)*0x400)
-            b.putLong(base+16,if(i==2)140 else 88)
+            b.putLong(base+8,if(i <= 3) 0x9000L+(i-1)*0x400 else 0x9800L+(i-4)*0x400)
+            b.putLong(base+16,if(i==2)140 else if(i<=3)88 else 128)
         }
         return out
     }
 
-    @Test fun resolvesThreeDartAotFunctionsFromMiniElf() {
-        assertEquals(target,Os4GlassSymbols.fromMiniElf(miniElf()))
-    }
-
-    @Test fun resolvesXzCompressedGnuDebugdata() {
+    private fun vendorElf(mini: ByteArray): ByteArray {
         val compressed=ByteArrayOutputStream()
-        XZOutputStream(compressed,LZMA2Options()).use { it.write(miniElf()) }
+        XZOutputStream(compressed,LZMA2Options()).use { it.write(mini) }
         val packed=compressed.toByteArray()
         val outer=ByteArray(1024+packed.size)
         val b=header(outer,3,2)
@@ -77,7 +79,22 @@ class Os4GlassSymbolsTest {
         packed.copyInto(outer,1024)
         section(b,1,1,1,1024,packed.size.toLong())
         section(b,2,16,3,768,strings.size.toLong())
-        assertEquals(target,Os4GlassSymbols.extract(outer))
+        return outer
+    }
+
+    @Test fun resolvesThreeDartAotFunctionsFromMiniElf() {
+        assertEquals(target,Os4GlassSymbols.fromMiniElf(miniElf()))
+    }
+
+    @Test fun resolvesFolderSizingTargets() {
+        assertEquals(
+            "0x9800:128,0x9c00:128,0xa000:128",
+            Os4GlassSymbols.extractResolved(vendorElf(miniElf()))?.folderSizeTargets,
+        )
+    }
+
+    @Test fun resolvesXzCompressedGnuDebugdata() {
+        assertEquals(target,Os4GlassSymbols.extract(vendorElf(miniElf())))
     }
 
     @Test fun rejectsAmbiguousAndMissingSymbols() {

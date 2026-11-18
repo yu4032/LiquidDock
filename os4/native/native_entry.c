@@ -64,6 +64,7 @@ static void (*g_orig_rust_orientation)(void *);
 
 #include "folder_grid.h"
 #include "icon_glass.h"
+#include "folder_size.h"
 #include "maml_widget_materials.h"
 #include "widget_resize.h"
 #include "widget_1x1_menu.h"
@@ -1377,6 +1378,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     }
     /* Retry independent rendering/feature modules on every entry regardless of g_installed. */
     ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
+    ld_folder_size_install(api,&lib,&g_home_options);
     ld_install_icon_materials(api,&lib);
     ld_widget_inventory_reset_once();
     (void)ld_maml_install(api);

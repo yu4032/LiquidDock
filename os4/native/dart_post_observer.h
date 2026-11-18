@@ -1,10 +1,12 @@
-/* Dart AOT 后置观察器：调用原函数后，把返回值（x0）交给 C 回调，再原样返回。
+/* Dart AOT 后置观察器：调用原函数后，把 x0/d0 返回值交给 C 回调，再原样返回。
  *
  * 与 dart_observer.h 的入口观察器同一套寄存器保存/恢复框架；区别是尾部用
  * blr 调用原函数、保存 x0、再调回调，最后恢复 x0 与调用者寄存器返回。
  *
  * 约束：
- *  - 回调只能修改返回值指向的 Dart 对象，或读 ctx 里的入口寄存器；
+ *  - 回调只读取入口寄存器和返回值，并只修改返回值对象或缓存标量；
+ *  - 不得在回调外保留任何 Dart 堆指针；
+ *  - 回调 ABI 为 (ctx, x0, d0_bits)；仅有对象返回值的回调忽略第三个参数；
  *  - 回调是 C 代码，x15（Dart SP）在回调前后由本框架保存/恢复；
  *  - 返回值槽位：frame+784（结构体 ld_dart_context 之后）。
  */
@@ -79,12 +81,19 @@ __attribute__((naked, used)) static void name(void) { \
         "adrp x16, " #original "\n" \
         "ldr x16, [x16, :lo12:" #original "]\n" \
         "blr x16\n" \
-        /* 保存返回值，回调(ctx, result) */ \
+        /* 保存 Dart 函数返回后的栈指针，以及 x0/d0 返回值。 */ \
+        "str x15, [sp, #800]\n" \
         "str x0, [sp, #784]\n" \
+        "str d0, [sp, #792]\n" \
         "mov x0, sp\n" \
         "ldr x1, [sp, #784]\n" \
+        "ldr x2, [sp, #792]\n" \
         "bl " #callback "\n" \
         "ldr x0, [sp, #784]\n" \
+        "ldr d0, [sp, #792]\n" \
+        /* C 回调会覆盖 x15 和 x30；还原 Dart SP 与最初的调用者 LR。 */ \
+        "ldr x15, [sp, #800]\n" \
+        "ldr x30, [sp, #240]\n" \
         "ldr x16, [sp, #776]\n" \
         "mov sp, x16\n" \
         "ret\n"); \

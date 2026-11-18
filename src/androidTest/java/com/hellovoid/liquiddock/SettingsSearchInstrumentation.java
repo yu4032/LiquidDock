@@ -59,15 +59,13 @@ public final class SettingsSearchInstrumentation extends Instrumentation {
         try {
             // Xiaomi blocks background starts from an instrumented application UID;
             // launch through the automation shell, as connected test runners do.
-            try (java.io.InputStream launch = new android.os.ParcelFileDescriptor.AutoCloseInputStream(
-                    getUiAutomation().executeShellCommand("am start -n com.hellovoid.liquiddock/.ComposeSettingsActivity -f 0x10008000"))) {
-                launch.readAllBytes();
-            }
+            launchSettingsActivity();
             android.accessibilityservice.AccessibilityServiceInfo service = getUiAutomation().getServiceInfo();
             service.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
                     | android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
             getUiAutomation().setServiceInfo(service);
             getUiAutomation().waitForIdle(500, 5000);
+            returnToRootPage();
             openSearch();
             setQuery("阴影红");
             await(n -> "阴影红".equals(String.valueOf(n.getText())));
@@ -79,10 +77,11 @@ public final class SettingsSearchInstrumentation extends Instrumentation {
             report(global);
             click(await(n -> "返回".equals(String.valueOf(n.getContentDescription()))));
             SystemClock.sleep(700);
+            returnToRootPage();
             openSearch();
-            setQuery("liquid_scope_dock_outer_shadow_r");
+            setQuery("liquid_scope_gboard_outer_shadow_r");
             click(await(n -> "阴影红".equals(String.valueOf(n.getText()))));
-            String scoped = verifyLocated("DockEdge", "liquid_scope_dock_outer_shadow_r");
+            String scoped = verifyLocated("GboardEdge", "liquid_scope_gboard_outer_shadow_r");
             result.putString("stream", "PASS Unicode search, offscreen global/scoped row navigation and visible target rows\n"
                     + global + "\n" + scoped + "\n");
             finish(-1, result);
@@ -99,6 +98,7 @@ public final class SettingsSearchInstrumentation extends Instrumentation {
     }
 
     private void openSearch() {
+        launchSettingsActivity();
         Rect bounds = new Rect();
         appRoot().getBoundsInScreen(bounds);
         int x = bounds.centerX(), y = bounds.top + bounds.height() / 3;
@@ -147,6 +147,50 @@ public final class SettingsSearchInstrumentation extends Instrumentation {
             throw new AssertionError("Result was not clickable");
     }
 
+    /** Search is only available on a root tab; the activity can resume on a saved subpage. */
+    private void returnToRootPage() {
+        for (int attempt = 0; attempt < 8; attempt++) {
+            launchSettingsActivity();
+            SystemClock.sleep(300);
+            AccessibilityNodeInfo back = find(appRoot(),
+                    n -> "返回".equals(String.valueOf(n.getContentDescription())));
+            if (back == null) return;
+            if (!tryClick(back)) {
+                // Compose may publish a stale/non-clickable accessibility node during the
+                // navigation transition. The system back action follows the same route safely.
+                sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+            }
+            SystemClock.sleep(500);
+        }
+        throw new AssertionError("Could not return to a settings root page");
+    }
+
+    private void launchSettingsActivity() {
+        try (java.io.InputStream launch = new android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                getUiAutomation().executeShellCommand(
+                        "am start -W -n com.hellovoid.liquiddock/.ComposeSettingsActivity -f 0x10008000"))) {
+            launch.readAllBytes();
+        } catch (java.io.IOException error) {
+            throw new AssertionError("Could not launch LiquidDock settings", error);
+        }
+        long deadline = SystemClock.uptimeMillis() + 5000;
+        while (SystemClock.uptimeMillis() < deadline) {
+            AccessibilityNodeInfo root = settingsRoot();
+            if (root != null) return;
+            SystemClock.sleep(100);
+        }
+        throw new AssertionError("LiquidDock settings did not become the foreground window");
+    }
+
+    private boolean tryClick(AccessibilityNodeInfo node) {
+        while (node != null) {
+            if (node.isClickable()
+                    && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
+            node = node.getParent();
+        }
+        return false;
+    }
+
     private String verifyLocated(String page, String key) {
         String id = "setting:" + page + ":" + key;
         await(n -> id.equals(n.getViewIdResourceName()));
@@ -161,11 +205,21 @@ public final class SettingsSearchInstrumentation extends Instrumentation {
     }
 
     private AccessibilityNodeInfo appRoot() {
+        AccessibilityNodeInfo root = settingsRoot();
+        if (root != null) return root;
+        return null;
+    }
+
+    private AccessibilityNodeInfo settingsRoot() {
         for (android.view.accessibility.AccessibilityWindowInfo window : getUiAutomation().getWindows()) {
             AccessibilityNodeInfo root = window.getRoot();
             if (root != null && "com.hellovoid.liquiddock".equals(String.valueOf(root.getPackageName()))) return root;
         }
-        return getUiAutomation().getRootInActiveWindow();
+        AccessibilityNodeInfo active = getUiAutomation().getRootInActiveWindow();
+        return active != null
+                && "com.hellovoid.liquiddock".equals(String.valueOf(active.getPackageName()))
+                ? active
+                : null;
     }
 
     private AccessibilityNodeInfo await(Predicate<AccessibilityNodeInfo> predicate) {

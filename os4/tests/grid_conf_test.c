@@ -37,6 +37,27 @@ int main(void)
             || !glass.glass_enabled || glass.cols || glass.rows) {
         puts("FAIL: independent glass-only configuration"); return 1;
     }
+    struct ld_grid_conf widget_stretch={0};
+    const char *prevent_stretch="widget_prevent_stretch=1\nend=1\n";
+    if(!ld_grid_conf_parse(prevent_stretch,strlen(prevent_stretch),&widget_stretch)
+            || !widget_stretch.widget_prevent_stretch_enabled) {
+        puts("FAIL: native widget stretch-prevention flag"); return 1;
+    }
+    const char *prevent_stretch_off="widget_prevent_stretch=0\nend=1\n";
+    if(!ld_grid_conf_parse(prevent_stretch_off,strlen(prevent_stretch_off),&widget_stretch)
+            || widget_stretch.widget_prevent_stretch_enabled) {
+        puts("FAIL: disabled widget stretch-prevention flag is not a no-op"); return 1;
+    }
+    const char *bad_widget_stretch[]={
+        "widget_prevent_stretch=2\nend=1\n",
+        "widget_prevent_stretch=1\nwidget_prevent_stretch=0\nend=1\n"
+    };
+    for(size_t i=0;i<sizeof bad_widget_stretch/sizeof *bad_widget_stretch;i++) {
+        if(ld_grid_conf_parse(bad_widget_stretch[i],strlen(bad_widget_stretch[i]),&widget_stretch)
+                || widget_stretch.widget_prevent_stretch_enabled) {
+            puts("FAIL: malformed widget stretch-prevention flag accepted"); return 1;
+        }
+    }
     const char *bad_glass[]={
         "glass_enabled=2\nend=1\n",
         "glass_enabled=1\nglass_enabled=0\nend=1\n",

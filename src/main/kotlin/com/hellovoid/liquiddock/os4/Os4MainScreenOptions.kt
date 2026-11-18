@@ -52,9 +52,13 @@ data class Os4DividerOptions(
 data class Os4MainScreenOptions(
     val iconSizeEnabled: Boolean = false,
     val bigFolderEnabled: Boolean = false,
+    val bigFolderAlignIconEnabled: Boolean = false,
+    val bigFolderTitleEnabled: Boolean = false,
+    val folderPreviewInset: Int = 0,
     val folderGridCols: Int = 0,
     val folderGridRows: Int = 0,
     val widget1x1To2x2Enabled: Boolean = false,
+    val preventWidgetStretchEnabled: Boolean = false,
     val iconSizePercent: Int = 100,
     val landscape: Os4GridOffsets = Os4GridOffsets(),
     val portrait: Os4GridOffsets = Os4GridOffsets(),
@@ -103,10 +107,14 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Grid.COLUMNS, ConfigSchema.Grid.ROWS,
                 ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
                 ConfigSchema.Grid.BIG_FOLDER_ENABLED,
+                ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED,
+                ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED,
+                ConfigSchema.Grid.FOLDER_PREVIEW_INSET,
                 ConfigSchema.Grid.FOLDER_GRID_ENABLED,
                 ConfigSchema.Grid.FOLDER_GRID_COLUMNS,
                 ConfigSchema.Grid.FOLDER_GRID_ROWS,
                 ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED).map { it.name() })
+            add(ConfigSchema.Grid.PREVENT_WIDGET_STRETCH.name())
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Glass.ENABLED.name())
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
@@ -174,6 +182,7 @@ data class Os4MainScreenOptions(
                 val folderGridCols = if (folderGrid) integer(ConfigSchema.Grid.FOLDER_GRID_COLUMNS) else 0
                 val folderGridRows = if (folderGrid) integer(ConfigSchema.Grid.FOLDER_GRID_ROWS) else 0
                 val widget1x1To2x2 = boolean(ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED)
+                val preventWidgetStretch = boolean(ConfigSchema.Grid.PREVENT_WIDGET_STRETCH)
                 val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
                 val dividerEnabled = boolean(ConfigSchema.Divider.ENABLED)
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
@@ -210,7 +219,7 @@ data class Os4MainScreenOptions(
                 ) ?: return null
                 val recentsBlurPercent = integer(ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT)
                 if (!grid && !icons && !bigFolder && !folderGrid && !dockEnabled && !dividerEnabled && !glassEnabled &&
-                    !widgetOverrides && recentsBlurPercent == 100) ""
+                    !widgetOverrides && !preventWidgetStretch && recentsBlurPercent == 100) ""
                 else {
                     fun dockOptions() = Os4DockOptions(
                         enabled = true,
@@ -230,9 +239,13 @@ data class Os4MainScreenOptions(
                         Os4MainScreenOptions(
                             iconSizeEnabled = icons,
                             bigFolderEnabled = bigFolder,
+                            bigFolderAlignIconEnabled = boolean(ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED),
+                            bigFolderTitleEnabled = boolean(ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED),
+                            folderPreviewInset = integer(ConfigSchema.Grid.FOLDER_PREVIEW_INSET),
                             folderGridCols = folderGridCols,
                             folderGridRows = folderGridRows,
                             widget1x1To2x2Enabled = widget1x1To2x2,
+                            preventWidgetStretchEnabled = preventWidgetStretch,
                             iconSizePercent = if (icons) integer(ConfigSchema.Grid.ICON_SIZE_PERCENT) else 100,
                             landscape = if (grid) offsets(0) else Os4GridOffsets(),
                             portrait = if (grid) offsets(5) else Os4GridOffsets(),

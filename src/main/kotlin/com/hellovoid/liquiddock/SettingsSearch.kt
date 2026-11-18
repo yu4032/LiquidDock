@@ -158,7 +158,11 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
             toggle(ConfigSchema.Grid.ICON_SIZE_ENABLED, "自定义图标大小"),
             number(launcher450IconSizeSpec),
             toggle(ConfigSchema.Grid.BIG_FOLDER_ENABLED, "启用桌面大文件夹"),
-            toggle(ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED, "1×1 小组件放大成 2×2"),
+            toggle(ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED, "大文件夹对齐图标尺寸"),
+            toggle(ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED, "显示大文件夹标题"),
+            number(os4FolderPreviewInsetSpec),
+            toggle(ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED, "小组件放大"),
+            toggle(ConfigSchema.Grid.PREVENT_WIDGET_STRETCH, "防止小组件拉伸"),
             toggle(ConfigSchema.Grid.ENABLED, "自由主界面网格"),
         ) + gridDimensionSpecs.map(::number) + listOf(
             toggle(ConfigSchema.Grid.FOLDER_GRID_ENABLED, "自定义文件夹展开行列"),
@@ -262,13 +266,17 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
             ConfigSchema.Grid.ICON_SIZE_ENABLED.name() -> 2
             launcher450IconSizeSpec.key -> 3
             ConfigSchema.Grid.BIG_FOLDER_ENABLED.name() -> 5
-            ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED.name() -> 7
-            ConfigSchema.Grid.ENABLED.name() -> 9
-            ConfigSchema.Grid.FOLDER_GRID_ENABLED.name() -> 10 + gridDimensionSpecs.size + 1
+            ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED.name() -> 6
+            ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED.name() -> 7
+            os4FolderPreviewInsetSpec.key -> 8
+            ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED.name() -> 10
+            ConfigSchema.Grid.PREVENT_WIDGET_STRETCH.name() -> 11
+            ConfigSchema.Grid.ENABLED.name() -> 13
+            ConfigSchema.Grid.FOLDER_GRID_ENABLED.name() -> 13 + gridDimensionSpecs.size + 2
             else -> gridDimensionSpecs.indexOfFirst { it.key == key }
-                .takeIf { it >= 0 }?.plus(10)
+                .takeIf { it >= 0 }?.plus(14)
                 ?: folderGridDimensionSpecs.indexOfFirst { it.key == key }
-                    .takeIf { it >= 0 }?.plus(10 + gridDimensionSpecs.size + 2)
+                    .takeIf { it >= 0 }?.plus(14 + gridDimensionSpecs.size + 2)
                 ?: -1
         }
         Page.GlassIcons -> when (key) {

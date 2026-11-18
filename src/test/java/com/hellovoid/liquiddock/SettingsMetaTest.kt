@@ -93,7 +93,11 @@ class SettingsMetaTest {
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.ICON_SIZE_ENABLED.name(),
             launcher450IconSizeSpec.key,
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.BIG_FOLDER_ENABLED.name(),
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED.name(),
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED.name(),
+            os4FolderPreviewInsetSpec.key,
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED.name(),
+            com.hellovoid.liquiddock.config.ConfigSchema.Grid.PREVENT_WIDGET_STRETCH.name(),
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.ENABLED.name(),
             com.hellovoid.liquiddock.config.ConfigSchema.Grid.FOLDER_GRID_ENABLED.name(),
         ) + gridDimensionSpecs.map { it.key } + folderGridDimensionSpecs.map { it.key }

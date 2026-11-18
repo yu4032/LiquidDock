@@ -136,6 +136,22 @@ internal fun GridBasicsPage(
             ),
         )
     }
+    var bigFolderEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Grid.BIG_FOLDER_ENABLED.name(),
+                ConfigSchema.Grid.BIG_FOLDER_ENABLED.uiDefault(),
+            ),
+        )
+    }
+    var bigFolderAlignIconEnabled by remember {
+        mutableStateOf(
+            prefs.getBoolean(
+                ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED.name(),
+                ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED.uiDefault(),
+            ),
+        )
+    }
     DenseSettingsList(
         padding,
         stringResource(R.string.page_grid_basics),
@@ -173,6 +189,37 @@ internal fun GridBasicsPage(
                     "启用桌面大文件夹",
                     "解锁平板桌面文件夹角标拖拽与 2×2 / 4×2 大文件夹样式；重启桌面后生效",
                     masterEnabled,
+                ) { bigFolderEnabled = it }
+            }
+        }
+        item(key = "grid-big-folder-align-icon-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.BIG_FOLDER_ALIGN_ICON_ENABLED,
+                    "大文件夹对齐图标尺寸",
+                    "将 2×2 / 4×2 大文件夹收缩对齐到图标外缘，下方留出标题空间；启用桌面大文件夹后可用，重启桌面生效",
+                    masterEnabled && bigFolderEnabled,
+                ) { bigFolderAlignIconEnabled = it }
+            }
+        }
+        item(key = "grid-big-folder-title-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.BIG_FOLDER_TITLE_ENABLED,
+                    "显示大文件夹标题",
+                    "在桌面大文件夹下方显示名称。开启“大文件夹对齐图标尺寸”后可用，重启桌面生效。",
+                    masterEnabled && bigFolderEnabled && bigFolderAlignIconEnabled,
+                )
+            }
+        }
+        item(key = "grid-folder-preview-inset") {
+            SettingsCard {
+                IntSetting(
+                    prefs,
+                    os4FolderPreviewInsetSpec,
+                    masterEnabled,
                 )
             }
         }
@@ -182,8 +229,19 @@ internal fun GridBasicsPage(
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED,
-                    "1×1 小组件放大成 2×2",
-                    "解锁 1×1 小组件尺寸限制，长按小组件通过弹出菜单切换 1×1 与 2×2；重启桌面后生效",
+                    "小组件放大",
+                    "解锁小组件尺寸限制，长按小组件通过弹出菜单切换 1×1 ↔ 2×2 与 2×1 ↔ 4×2；重启桌面后生效",
+                    masterEnabled,
+                )
+            }
+        }
+        item(key = "grid-widget-prevent-stretch-enabled") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Grid.PREVENT_WIDGET_STRETCH,
+                    "防止小组件拉伸",
+                    "开启后保持小组件宽高比例；关闭时沿用桌面默认行为；重启桌面后生效",
                     masterEnabled,
                 )
             }

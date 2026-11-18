@@ -242,6 +242,7 @@ Compatibility:
 | Scope | Purpose |
 | --- | --- |
 | `com.miui.home` | Required: OS4 grid, Dock, divider, Soft Glass, and MAML widgets |
+| `system` | Required: system_server Android/RemoteViews widget sizing and wallpaper animation sync; reboot after changing this scope |
 | `com.android.systemui` | Optional: desktop transitions, app top menus, and gesture bar integration |
 | `com.miui.securitycenter` | Optional: Security Center sidebars and gestures |
 | `com.google.android.inputmethod.latin` | Optional: Gboard floating-keyboard integration |

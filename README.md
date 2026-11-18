@@ -240,6 +240,7 @@ Gboard 支持悬浮键盘和工具栏玻璃，可独立设置染色、底色、�
 | 作用域 | 用途 |
 | --- | --- |
 | `com.miui.home` | 必选：OS4 桌面网格、Dock、分割线、柔光玻璃与 MAML 小组件 |
+| `system` | 必选：system_server 中的 Android/RemoteViews 小组件布局约束与壁纸动画同步；作用域变更后需重启设备 |
 | `com.android.systemui` | 按需：桌面转场、分屏/手柄菜单与系统手势联动 |
 | `com.miui.securitycenter` | 按需：安全中心侧边栏玻璃与手势 |
 | `com.google.android.inputmethod.latin` | 按需：Gboard 悬浮键盘适配 |

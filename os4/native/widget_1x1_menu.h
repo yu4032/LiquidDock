@@ -327,18 +327,51 @@ static void ld_w1x1_remove_enlarged(uint64_t key)
     }
 }
 
-static inline int ld_w1x1_is_toggle_target(struct ld_dart_context *c, uintptr_t widget, int *is_1x1_out)
+enum {
+    LD_WRESIZE_NONE = 0,
+    LD_WRESIZE_1X1_TO_2X2 = 1,
+    LD_WRESIZE_2X2_TO_1X1 = 2,
+    LD_WRESIZE_2X1_TO_4X2 = 3,
+    LD_WRESIZE_4X2_TO_2X1 = 4,
+};
+
+static inline int ld_w1x1_is_toggle_target(struct ld_dart_context *c, uintptr_t widget, int *mode_out)
 {
     if (!widget || !(widget & 1) || widget == c->x[22]) return 0;
     int64_t sx = ld_heap_i64(widget, 0x1f);
     int64_t sy = ld_heap_i64(widget, 0x27);
     if (sx == 1 && sy == 1) {
-        if (is_1x1_out) *is_1x1_out = 1;
+        if (mode_out) *mode_out = LD_WRESIZE_1X1_TO_2X2;
         return 1;
     }
     if (sx == 2 && sy == 2) {
-        if (is_1x1_out) *is_1x1_out = 0;
+        int64_t sid = ld_heap_i64(widget, 0x2f);
+        int64_t cx = ld_heap_i64(widget, 0x37);
+        int64_t cy = ld_heap_i64(widget, 0x3f);
+        int64_t min_sx = ld_heap_i64(widget, 0x4f);
+        int64_t min_sy = ld_heap_i64(widget, 0x57);
+        if (ld_w1x1_find_enlarged(ld_w1x1_pos_key(sid, cx, cy), NULL, NULL)
+                || (min_sx == 1 && min_sy == 1)) {
+            if (mode_out) *mode_out = LD_WRESIZE_2X2_TO_1X1;
+            return 1;
+        }
+        return 0;
+    }
+    if (sx == 2 && sy == 1) {
+        if (mode_out) *mode_out = LD_WRESIZE_2X1_TO_4X2;
         return 1;
+    }
+    if (sx == 4 && sy == 2) {
+        int64_t sid = ld_heap_i64(widget, 0x2f);
+        int64_t cx = ld_heap_i64(widget, 0x37);
+        int64_t cy = ld_heap_i64(widget, 0x3f);
+        int64_t min_sx = ld_heap_i64(widget, 0x4f);
+        int64_t min_sy = ld_heap_i64(widget, 0x57);
+        if (ld_w1x1_find_enlarged(ld_w1x1_pos_key(sid, cx, cy), NULL, NULL)
+                || (min_sx >= 1 && min_sx <= 2 && min_sy == 1)) {
+            if (mode_out) *mode_out = LD_WRESIZE_4X2_TO_2X1;
+            return 1;
+        }
     }
     return 0;
 }
@@ -377,17 +410,22 @@ __attribute__((used)) static int ld_w1x1_on_support(struct ld_dart_context *c)
 }
 LD_DART_INTERCEPTOR(repl_w1x1_support, ld_w1x1_on_support, g_orig_w1x1_support)
 
-static uintptr_t ld_w1x1_make_dart_string(struct ld_dart_context *c, int is_1x1)
+static uintptr_t ld_w1x1_make_dart_string(struct ld_dart_context *c, int mode)
 {
     if (!g_w1x1_rt[LD_W1X1_ALLOC_TWO_BYTE_STRING]) return 0;
-    /* UTF-16LE: "放大到 2×2" (7 chars) or "还原为 1×1" (7 chars) */
-    static const uint16_t k_expand[7] = { 0x653E, 0x5927, 0x5230, 0x0020, 0x0032, 0x00D7, 0x0032 };
-    static const uint16_t k_shrink[7] = { 0x8FD8, 0x539F, 0x4E3A, 0x0020, 0x0031, 0x00D7, 0x0031 };
-    const uint16_t *chars = is_1x1 ? k_expand : k_shrink;
+    /* UTF-16LE (7 chars each): "放大到 2×2" / "还原为 1×1" / "放大到 4×2" / "还原为 2×1" */
+    static const uint16_t k_expand_2x2[7] = { 0x653E, 0x5927, 0x5230, 0x0020, 0x0032, 0x00D7, 0x0032 };
+    static const uint16_t k_shrink_1x1[7] = { 0x8FD8, 0x539F, 0x4E3A, 0x0020, 0x0031, 0x00D7, 0x0031 };
+    static const uint16_t k_expand_4x2[7] = { 0x653E, 0x5927, 0x5230, 0x0020, 0x0034, 0x00D7, 0x0032 };
+    static const uint16_t k_shrink_2x1[7] = { 0x8FD8, 0x539F, 0x4E3A, 0x0020, 0x0032, 0x00D7, 0x0031 };
+    const uint16_t *chars = k_expand_2x2;
+    if (mode == LD_WRESIZE_2X2_TO_1X1) chars = k_shrink_1x1;
+    else if (mode == LD_WRESIZE_2X1_TO_4X2) chars = k_expand_4x2;
+    else if (mode == LD_WRESIZE_4X2_TO_2X1) chars = k_shrink_2x1;
     uint64_t args[8] = {0};
     uintptr_t s = (uintptr_t)ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_ALLOC_TWO_BYTE_STRING], args, (uint64_t)(7u << 1));
     if (!s || !(s & 1)) return 0;
-    memcpy((void *)(s + 0xf), chars, sizeof k_expand);
+    memcpy((void *)(s + 0xf), chars, sizeof k_expand_2x2);
     return s;
 }
 
@@ -520,32 +558,41 @@ static uintptr_t ld_w1x1_find_cl_items(struct ld_dart_context *c, uintptr_t cl, 
 
 static const uint8_t ld_w1x1_empty_args_desc[64] __attribute__((aligned(16))) = { 0 };
 
-static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl, uintptr_t widget, int is_1x1)
+static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl, uintptr_t widget, int mode)
 {
     int64_t screen_id = ld_heap_i64(widget, 0x2f);
     int64_t cx = ld_heap_i64(widget, 0x37);
     int64_t cy = ld_heap_i64(widget, 0x3f);
 
-    int64_t target_x = cx, target_y = cy, target_sx = 1, target_sy = 1;
+    int is_expand = (mode == LD_WRESIZE_1X1_TO_2X2 || mode == LD_WRESIZE_2X1_TO_4X2);
+    int is_4x2_pair = (mode == LD_WRESIZE_2X1_TO_4X2 || mode == LD_WRESIZE_4X2_TO_2X1);
+    int64_t target_sx = is_expand ? (is_4x2_pair ? 4 : 2) : (is_4x2_pair ? 2 : 1);
+    int64_t target_sy = is_expand ? 2 : 1;
+    int64_t target_x = cx, target_y = cy;
 
     uintptr_t cl = ld_w1x1_find_cell_layout(c, ws_ctrl, widget);
 
-    if (is_1x1) {
+    if (is_expand) {
         if (!cl || !g_w1x1_rt[LD_W1X1_IS_LEGAL_XY] || !g_w1x1_rt[LD_W1X1_IS_CELL_OCCUPIED_EXCEPT]) {
-            ld_blog("widget 1x1->2x2: cellLayout not found");
+            ld_blog("widget resize: cellLayout not found");
             return;
         }
-        static const int dx[4] = { 0, -1, 0, -1 };
-        static const int dy[4] = { 0, 0, -1, -1 };
+        static const int dx_2x2[4] = { 0, -1, 0, -1 };
+        static const int dy_2x2[4] = { 0, 0, -1, -1 };
+        static const int dx_4x2[6] = { 0, -1, -2, 0, -1, -2 };
+        static const int dy_4x2[6] = { 0, 0, 0, -1, -1, -1 };
+        const int *dx = is_4x2_pair ? dx_4x2 : dx_2x2;
+        const int *dy = is_4x2_pair ? dy_4x2 : dy_2x2;
+        int n_cand = is_4x2_pair ? 6 : 4;
         int found = 0;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < n_cand; i++) {
             int64_t nx = cx + dx[i];
             int64_t ny = cy + dy[i];
             if (nx < 0 || ny < 0) continue;
-            uint64_t a_legal[8] = { 0, cl, (uint64_t)nx, (uint64_t)ny, 0, (uint64_t)(2 << 1), (uint64_t)(2 << 1), 0 };
+            uint64_t a_legal[8] = { 0, cl, (uint64_t)nx, (uint64_t)ny, 0, (uint64_t)(target_sx << 1), (uint64_t)(target_sy << 1), 0 };
             uint64_t legal = ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_IS_LEGAL_XY], a_legal, 0);
             if (legal & 0x10u) continue; /* FALSE */
-            uint64_t a_occ[8] = { 0, cl, (uint64_t)nx, (uint64_t)ny, 0, (uint64_t)(2 << 1), (uint64_t)(2 << 1), widget };
+            uint64_t a_occ[8] = { 0, cl, (uint64_t)nx, (uint64_t)ny, 0, (uint64_t)(target_sx << 1), (uint64_t)(target_sy << 1), widget };
             uint64_t occ = ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_IS_CELL_OCCUPIED_EXCEPT], a_occ, 0);
             if (!(occ & 0x10u)) continue; /* TRUE = occupied */
             target_x = nx;
@@ -554,35 +601,36 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
             break;
         }
         if (!found) {
-            ld_blog("widget 1x1->2x2: no 2x2 space around (%lld,%lld)", (long long)cx, (long long)cy);
+            ld_blog("widget resize: no %lldx%lld space around (%lld,%lld)",
+                    (long long)target_sx, (long long)target_sy, (long long)cx, (long long)cy);
             if (g_w1x1_rt[LD_W1X1_SHOW_NO_SPACE_TOAST]) {
                 uint64_t a_toast[8] = { 0, cl, widget, 0, 0, 0, 0, 0 };
                 (void)ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_SHOW_NO_SPACE_TOAST], a_toast, 0);
             }
             return;
         }
-        target_sx = 2;
-        target_sy = 2;
         ld_w1x1_add_enlarged(ld_w1x1_pos_key(screen_id, target_x, target_y), (int32_t)cx, (int32_t)cy);
     } else {
         uint64_t cur_key = ld_w1x1_pos_key(screen_id, cx, cy);
         int32_t ox = (int32_t)cx, oy = (int32_t)cy;
         int has_saved = ld_w1x1_find_enlarged(cur_key, &ox, &oy);
-        const int64_t restore_cand[5][2] = {
+        const int64_t restore_cand[6][2] = {
             { has_saved ? (int64_t)ox : cx, has_saved ? (int64_t)oy : cy },
             { cx, cy },
             { cx + 1, cy },
+            { cx + 2, cy },
             { cx, cy + 1 },
             { cx + 1, cy + 1 }
         };
+        int n_restore = is_4x2_pair ? 6 : 5;
         if (cl && g_w1x1_rt[LD_W1X1_IS_LEGAL_XY] && g_w1x1_rt[LD_W1X1_IS_CELL_OCCUPIED_EXCEPT]) {
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < n_restore; i++) {
                 int64_t rx = restore_cand[i][0], ry = restore_cand[i][1];
                 if (rx < 0 || ry < 0) continue;
-                uint64_t a_legal[8] = { 0, cl, (uint64_t)rx, (uint64_t)ry, 0, (uint64_t)(1 << 1), (uint64_t)(1 << 1), 0 };
+                uint64_t a_legal[8] = { 0, cl, (uint64_t)rx, (uint64_t)ry, 0, (uint64_t)(target_sx << 1), (uint64_t)(target_sy << 1), 0 };
                 uint64_t legal = ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_IS_LEGAL_XY], a_legal, 0);
                 if (legal & 0x10u) continue; /* FALSE */
-                uint64_t a_occ[8] = { 0, cl, (uint64_t)rx, (uint64_t)ry, 0, (uint64_t)(1 << 1), (uint64_t)(1 << 1), widget };
+                uint64_t a_occ[8] = { 0, cl, (uint64_t)rx, (uint64_t)ry, 0, (uint64_t)(target_sx << 1), (uint64_t)(target_sy << 1), widget };
                 uint64_t occ = ld_dart_call_raw(c, g_w1x1_rt[LD_W1X1_IS_CELL_OCCUPIED_EXCEPT], a_occ, 0);
                 if (!(occ & 0x10u)) continue; /* TRUE = occupied */
                 target_x = rx;
@@ -590,8 +638,6 @@ static void ld_w1x1_execute_toggle(struct ld_dart_context *c, uintptr_t ws_ctrl,
                 break;
             }
         }
-        target_sx = 1;
-        target_sy = 1;
         if (has_saved) ld_w1x1_remove_enlarged(cur_key);
     }
 
@@ -756,6 +802,7 @@ static void ld_w1x1_menu_install(const struct native_api *api, const ld_lib_info
             ok++;
         }
     }
+
     g_w1x1_menu_installed = (ok == 8);
     ld_blog("OS4 widget 1x1<->2x2 menu installed=%d/8", ok);
 }

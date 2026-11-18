@@ -148,6 +148,13 @@ internal val launcher450IconSizeSpec = IntSpec(
     summary = "调整工作区、Dock 和小文件夹中的图标大小；100% 为系统默认；重启桌面生效",
 )
 
+internal val os4FolderPreviewInsetSpec = IntSpec(
+    ConfigSchema.Grid.FOLDER_PREVIEW_INSET,
+    "4×2 十宫格大文件夹图标边距",
+    "dp",
+    summary = "仅作用于 4×2（5×2 十宫格）大文件夹，不影响 6×3；正值向内缩进、负值向外扩展，图标左边与上边同间距；修改后即刻生效",
+)
+
 internal val gridDimensionSpecs = listOf(
     IntSpec(ConfigSchema.Grid.COLUMNS, "横屏列数", "列", summary = "2–10 列；竖屏自动交换为行数；重启桌面生效"),
     IntSpec(ConfigSchema.Grid.ROWS, "横屏行数", "行", summary = "2–10 行；竖屏自动交换为列数；重启桌面生效"),

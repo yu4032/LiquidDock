@@ -47,10 +47,20 @@ object Os4NativeConfPublisher {
                 append("grid_rows=").append(gridRows).append('\n')
             }
             append("icon_size_enabled=").append(if (options.iconSizeEnabled) 1 else 0).append('\n')
-            if (options.bigFolderEnabled) append("big_folder_enabled=1\n")
+            if (options.bigFolderEnabled) {
+                append("big_folder_enabled=1\n")
+                if (options.bigFolderAlignIconEnabled) {
+                    append("big_folder_align_icon=1\n")
+                    if (options.bigFolderTitleEnabled) append("big_folder_title_enabled=1\n")
+                }
+            }
+            if (options.folderPreviewInset != 0) {
+                append("folder_preview_inset=").append(options.folderPreviewInset).append('\n')
+            }
             if (options.folderGridCols > 0) append("folder_grid_cols=").append(options.folderGridCols).append('\n')
             if (options.folderGridRows > 0) append("folder_grid_rows=").append(options.folderGridRows).append('\n')
             if (options.widget1x1To2x2Enabled) append("widget_1x1_to_2x2=1\n")
+            if (options.preventWidgetStretchEnabled) append("widget_prevent_stretch=1\n")
             // Explicit opt-in only. An absent key preserves the stock OS4 material.
             if (options.glassEnabled) append("glass_enabled=1\n")
             if (options.glassEnabled) {
