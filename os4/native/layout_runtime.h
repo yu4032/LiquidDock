@@ -13,6 +13,9 @@
 #ifndef LD_WS_LAYOUT_FILE
 #define LD_WS_LAYOUT_FILE "/data/user_de/0/com.miui.home/files/liquiddock-ws-layout-v3.bin"
 #endif
+#ifndef LD_WS_DESK_LAYOUT_FILE
+#define LD_WS_DESK_LAYOUT_FILE "/data/user_de/0/com.miui.home/files/liquiddock-ws-desk-v3.bin"
+#endif
 static int g_restore_ready;
 static int g_initial_restore,g_initial_columns,g_initial_rows,g_initial_direction;
 static int g_rotation_direction=-1;
@@ -121,7 +124,9 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     int direction=square?g_rotation_direction:(cols==g_grid_cols && rows==g_grid_rows?0:1);
     if(direction<0 || direction>1) goto done;
     if((direction && (cols!=g_grid_rows || rows!=g_grid_cols)) || (oldcols==cols && oldrows==rows)) goto done;
-    const char *layout_file = is_ws_allapps ? LD_WS_LAYOUT_FILE : LD_LAYOUT_FILE;
+    int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    const char *layout_file = is_ws_allapps ? LD_WS_LAYOUT_FILE
+                            : (is_laptop ? LD_WS_DESK_LAYOUT_FILE : LD_LAYOUT_FILE);
     struct ld_layout_memory *memory=calloc(1,sizeof *memory);
     if(!memory) goto done;
     if(!ld_layout_load(layout_file,memory) || memory->columns!=g_grid_cols || memory->rows!=g_grid_rows)

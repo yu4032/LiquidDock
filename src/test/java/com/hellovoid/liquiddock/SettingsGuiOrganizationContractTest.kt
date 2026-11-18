@@ -15,7 +15,7 @@ class SettingsGuiOrganizationContractTest {
         Page.LiquidLighting, Page.LiquidSampling,
         Page.DockGeometry, Page.DockBehavior,
         Page.GridLandscape, Page.GridPortrait,
-        Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
+        Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
         Page.Recents, Page.AnimationSystem, Page.GlassMenus,
     ) + glassEdgePageScopes.keys
 

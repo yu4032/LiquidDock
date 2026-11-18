@@ -17,7 +17,7 @@ class SettingsAvailabilityTest {
             Page.SoftGlassColor, Page.SoftGlassLighting,
             Page.SoftGlassComponents, Page.WidgetComponents,
             Page.Recents,
-            Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
+            Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
         )
         testing.forEach {
             assertEquals("OS4 test route ${it.name}", PagePortState.TESTING, os4.status(it))

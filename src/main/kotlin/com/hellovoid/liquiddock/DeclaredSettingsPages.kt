@@ -91,6 +91,15 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     ) + workstationDockSpecs.map { row(it) }, workstation)
     numbers(Page.WorkstationAppsLandscape, "所有应用横屏布局参数", workstationAppsLandscapeSpecs, workstation)
     numbers(Page.WorkstationAppsPortrait, "所有应用竖屏布局参数", workstationAppsPortraitSpecs, workstation)
+    page(Page.WorkstationDesktop, "设置工作台桌面边距与页面指示器位置。", buildList {
+        add(toggle(ConfigSchema.Workstation.DESKTOP_SYNC_NORMAL, "同步普通桌面布局",
+            "开启后工作台桌面直接使用普通桌面的横竖屏边距与指示器设置；关闭后可独立调节工作台桌面参数"))
+        val customDesktop = workstation + (ConfigSchema.Workstation.DESKTOP_SYNC_NORMAL to false)
+        add(SettingsBlock.Header("ws.desktop.land", "横屏布局"))
+        addAll(workstationDesktopLandscapeSpecs.map { row(it, customDesktop) })
+        add(SettingsBlock.Header("ws.desktop.port", "竖屏布局"))
+        addAll(workstationDesktopPortraitSpecs.map { row(it, customDesktop) })
+    }, workstation)
     page(Page.DockBehavior, "管理 Dock 功能入口与尺寸变化动画。", listOf(
         toggle(ConfigSchema.Dock.HIDE_RECENT_TASK_ICONS, "隐藏 Dock 最近任务图标",
             "直接过滤 Dock 推荐的最近任务，不影响固定图标与系统多任务界面；重启桌面生效"),

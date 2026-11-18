@@ -841,6 +841,32 @@ public final class ConfigSchema {
         public static final ConfigKey<Integer> ALL_APPS_BLUR_PERCENT = integer(
                 "workstation_all_apps_blur_percent", 100, 100, 100, 0, 100,
                 ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> DESKTOP_SYNC_NORMAL = bool(
+                "workstation_desktop_sync_normal", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET = dp(
+                "workstation_desktop_landscape_horizontal_offset", 0, 0, 0, -240, 240,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DESKTOP_LANDSCAPE_TOP_SPACING = dp(
+                "workstation_desktop_landscape_top_spacing", 0, 0, 0, -240, 240,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DESKTOP_LANDSCAPE_BOTTOM_SPACING = dp(
+                "workstation_desktop_landscape_bottom_spacing", 0, 0, 0, -240, 240,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DESKTOP_LANDSCAPE_INDICATOR_Y = dp(
+                "workstation_desktop_landscape_indicator_y", 0, 0, 0, -160, 160,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DESKTOP_PORTRAIT_HORIZONTAL_OFFSET = dp(
+                "workstation_desktop_portrait_horizontal_offset", 0, 0, 0, -240, 240,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DESKTOP_PORTRAIT_TOP_SPACING = dp(
+                "workstation_desktop_portrait_top_spacing", 0, 0, 0, -240, 240,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DESKTOP_PORTRAIT_BOTTOM_SPACING = dp(
+                "workstation_desktop_portrait_bottom_spacing", 0, 0, 0, -240, 240,
+                ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> DESKTOP_PORTRAIT_INDICATOR_Y = dp(
+                "workstation_desktop_portrait_indicator_y", 0, 0, 0, -160, 160,
+                ConfigKey.ExportMode.ALWAYS);
         private Workstation() {}
     }
 
@@ -994,7 +1020,16 @@ public final class ConfigSchema {
                 Workstation.DOCK_VERTICAL_OFFSET,
                 Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
                 Workstation.DOCK_ICON_TOP_OFFSET, Workstation.DOCK_ICON_BOTTOM_OFFSET,
-                Workstation.ALL_APPS_BLUR_PERCENT);
+                Workstation.ALL_APPS_BLUR_PERCENT,
+                Workstation.DESKTOP_SYNC_NORMAL,
+                Workstation.DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET,
+                Workstation.DESKTOP_LANDSCAPE_TOP_SPACING,
+                Workstation.DESKTOP_LANDSCAPE_BOTTOM_SPACING,
+                Workstation.DESKTOP_LANDSCAPE_INDICATOR_Y,
+                Workstation.DESKTOP_PORTRAIT_HORIZONTAL_OFFSET,
+                Workstation.DESKTOP_PORTRAIT_TOP_SPACING,
+                Workstation.DESKTOP_PORTRAIT_BOTTOM_SPACING,
+                Workstation.DESKTOP_PORTRAIT_INDICATOR_Y);
         add(keys, Recents.BACKGROUND_BLUR_PERCENT, Recents.DISABLE_WALLPAPER_DIMMING);
         add(keys, Debug.LOGGING);
         return Collections.unmodifiableList(keys);

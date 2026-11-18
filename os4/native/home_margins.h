@@ -185,14 +185,18 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
     struct ld_grid_offsets ws_off = {0};
     const struct ld_grid_offsets *o;
-    if (is_laptop) {
-        if (g_home_options.ws.dock_custom) {
+    if (is_laptop && g_home_options.ws.dock_custom) {
+        if (__atomic_load_n(&g_ws_in_allapps_build, __ATOMIC_RELAXED)) {
             ws_off.horizontal  = landscape ? g_home_options.ws.apps_land_h_offset : g_home_options.ws.apps_port_h_offset;
             ws_off.top         = landscape ? g_home_options.ws.apps_land_top      : g_home_options.ws.apps_port_top;
             ws_off.bottom      = landscape ? g_home_options.ws.apps_land_bottom   : g_home_options.ws.apps_port_bottom;
             ws_off.indicator_y = landscape ? -g_home_options.ws.apps_land_ind_y   : -g_home_options.ws.apps_port_ind_y;
+            o = &ws_off;
+        } else if (!g_home_options.ws.desktop_sync_normal) {
+            o = landscape ? &g_home_options.ws.desktop_landscape : &g_home_options.ws.desktop_portrait;
+        } else {
+            o = landscape ? &g_home_options.landscape : &g_home_options.portrait;
         }
-        o = &ws_off;
     } else {
         o = landscape ? &g_home_options.landscape : &g_home_options.portrait;
     }

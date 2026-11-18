@@ -22,6 +22,7 @@ internal enum class Page(val titleRes: Int) {
     Divider(R.string.page_divider),
     Workstation(R.string.page_workstation),
     WorkstationDock(R.string.page_workstation_dock),
+    WorkstationDesktop(R.string.page_workstation_desktop),
     WorkstationAppsLandscape(R.string.page_workstation_apps_landscape),
     WorkstationAppsPortrait(R.string.page_workstation_apps_portrait),
     Recents(R.string.page_recents),
@@ -137,6 +138,7 @@ internal val workstationEntries = listOf(
     HubEntry(Page.WorkstationDock, R.string.page_workstation_dock, "任务栏模式、图标垂直偏移与玻璃圆角"),
     HubEntry(Page.WorkstationAppsLandscape, R.string.page_workstation_apps_landscape, "所有应用横屏水平与上下间距"),
     HubEntry(Page.WorkstationAppsPortrait, R.string.page_workstation_apps_portrait, "所有应用竖屏水平与上下间距"),
+    HubEntry(Page.WorkstationDesktop, R.string.page_workstation_desktop, "工作台桌面横竖屏边距与指示器位置（默认同步普通桌面）"),
 )
 
 internal val softGlassEntries = listOf(

@@ -56,7 +56,7 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
             Page.SoftGlassColor, Page.SoftGlassLighting,
             Page.SoftGlassComponents, Page.WidgetComponents,
             Page.Recents,
-            Page.WorkstationDock, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
+            Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
         )
 
         /** Detect the AOT desktop independently of its release and SDK version. */

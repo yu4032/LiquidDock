@@ -63,6 +63,15 @@ data class Os4WorkstationOptions(
     val allAppsPortraitTopSpacing: Double = 0.0,
     val allAppsPortraitBottomSpacing: Double = 0.0,
     val allAppsPortraitIndicatorY: Double = 0.0,
+    val desktopSyncNormal: Boolean = true,
+    val desktopLandscapeHorizontalOffset: Double = 0.0,
+    val desktopLandscapeTopSpacing: Double = 0.0,
+    val desktopLandscapeBottomSpacing: Double = 0.0,
+    val desktopLandscapeIndicatorY: Double = 0.0,
+    val desktopPortraitHorizontalOffset: Double = 0.0,
+    val desktopPortraitTopSpacing: Double = 0.0,
+    val desktopPortraitBottomSpacing: Double = 0.0,
+    val desktopPortraitIndicatorY: Double = 0.0,
 ) {
     internal fun isValid(): Boolean =
         dockIconGlassCornerRadius.isFinite() && dockIconGlassCornerRadius in 0.0..100.0 &&
@@ -76,9 +85,19 @@ data class Os4WorkstationOptions(
                 allAppsPortraitHorizontalOffset,
                 allAppsPortraitTopSpacing,
                 allAppsPortraitBottomSpacing,
+                desktopLandscapeHorizontalOffset,
+                desktopLandscapeTopSpacing,
+                desktopLandscapeBottomSpacing,
+                desktopPortraitHorizontalOffset,
+                desktopPortraitTopSpacing,
+                desktopPortraitBottomSpacing,
             ).all { it.isFinite() && it in -240.0..240.0 } &&
-            allAppsLandscapeIndicatorY.isFinite() && allAppsLandscapeIndicatorY in -160.0..160.0 &&
-            allAppsPortraitIndicatorY.isFinite() && allAppsPortraitIndicatorY in -160.0..160.0
+            listOf(
+                allAppsLandscapeIndicatorY,
+                allAppsPortraitIndicatorY,
+                desktopLandscapeIndicatorY,
+                desktopPortraitIndicatorY,
+            ).all { it.isFinite() && it in -160.0..160.0 }
 }
 
 /** Pure preference extraction, independent from Android/root and launcher identity checks. */
@@ -353,6 +372,15 @@ data class Os4MainScreenOptions(
                                     allAppsPortraitTopSpacing = dp(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING),
                                     allAppsPortraitBottomSpacing = dp(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING),
                                     allAppsPortraitIndicatorY = dp(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y),
+                                    desktopSyncNormal = boolean(ConfigSchema.Workstation.DESKTOP_SYNC_NORMAL),
+                                    desktopLandscapeHorizontalOffset = dp(ConfigSchema.Workstation.DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET),
+                                    desktopLandscapeTopSpacing = dp(ConfigSchema.Workstation.DESKTOP_LANDSCAPE_TOP_SPACING),
+                                    desktopLandscapeBottomSpacing = dp(ConfigSchema.Workstation.DESKTOP_LANDSCAPE_BOTTOM_SPACING),
+                                    desktopLandscapeIndicatorY = dp(ConfigSchema.Workstation.DESKTOP_LANDSCAPE_INDICATOR_Y),
+                                    desktopPortraitHorizontalOffset = dp(ConfigSchema.Workstation.DESKTOP_PORTRAIT_HORIZONTAL_OFFSET),
+                                    desktopPortraitTopSpacing = dp(ConfigSchema.Workstation.DESKTOP_PORTRAIT_TOP_SPACING),
+                                    desktopPortraitBottomSpacing = dp(ConfigSchema.Workstation.DESKTOP_PORTRAIT_BOTTOM_SPACING),
+                                    desktopPortraitIndicatorY = dp(ConfigSchema.Workstation.DESKTOP_PORTRAIT_INDICATOR_Y),
                                 )
                             } else Os4WorkstationOptions(),
                         ),

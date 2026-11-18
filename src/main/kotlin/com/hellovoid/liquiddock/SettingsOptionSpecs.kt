@@ -216,6 +216,22 @@ internal val workstationAppsPortraitSpecs by lazy {
         ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y,
     )
 }
+internal val workstationDesktopLandscapeSpecs by lazy {
+    workstationSpecsFor(
+        ConfigSchema.Workstation.DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET,
+        ConfigSchema.Workstation.DESKTOP_LANDSCAPE_TOP_SPACING,
+        ConfigSchema.Workstation.DESKTOP_LANDSCAPE_BOTTOM_SPACING,
+        ConfigSchema.Workstation.DESKTOP_LANDSCAPE_INDICATOR_Y,
+    )
+}
+internal val workstationDesktopPortraitSpecs by lazy {
+    workstationSpecsFor(
+        ConfigSchema.Workstation.DESKTOP_PORTRAIT_HORIZONTAL_OFFSET,
+        ConfigSchema.Workstation.DESKTOP_PORTRAIT_TOP_SPACING,
+        ConfigSchema.Workstation.DESKTOP_PORTRAIT_BOTTOM_SPACING,
+        ConfigSchema.Workstation.DESKTOP_PORTRAIT_INDICATOR_Y,
+    )
+}
 
 internal val dividerSpecs = listOf(
     IntSpec(ConfigSchema.Divider.WIDTH_DP, "分隔线宽度", "dp", displayTenths = true, summary = "重启桌面生效"),
@@ -246,6 +262,14 @@ internal val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET, "整个 Dock 垂直平移"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET, "横屏 · Dock 图标垂直偏移"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "竖屏 · Dock 图标垂直偏移"),
+    IntSpec(ConfigSchema.Workstation.DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET, "工作台桌面 · 横屏水平偏移"),
+    IntSpec(ConfigSchema.Workstation.DESKTOP_LANDSCAPE_TOP_SPACING, "工作台桌面 · 横屏顶部偏移"),
+    IntSpec(ConfigSchema.Workstation.DESKTOP_LANDSCAPE_BOTTOM_SPACING, "工作台桌面 · 横屏底部偏移"),
+    IntSpec(ConfigSchema.Workstation.DESKTOP_LANDSCAPE_INDICATOR_Y, "工作台桌面 · 横屏指示器 Y"),
+    IntSpec(ConfigSchema.Workstation.DESKTOP_PORTRAIT_HORIZONTAL_OFFSET, "工作台桌面 · 竖屏水平偏移"),
+    IntSpec(ConfigSchema.Workstation.DESKTOP_PORTRAIT_TOP_SPACING, "工作台桌面 · 竖屏顶部偏移"),
+    IntSpec(ConfigSchema.Workstation.DESKTOP_PORTRAIT_BOTTOM_SPACING, "工作台桌面 · 竖屏底部偏移"),
+    IntSpec(ConfigSchema.Workstation.DESKTOP_PORTRAIT_INDICATOR_Y, "工作台桌面 · 竖屏指示器 Y"),
 )
 internal val recentsBlurSpec = IntSpec(
     ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,

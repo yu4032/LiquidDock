@@ -149,6 +149,15 @@ object Os4NativeConfPublisher {
                 append("ws_apps_port_top=").append(ws.allAppsPortraitTopSpacing).append('\n')
                 append("ws_apps_port_bottom=").append(ws.allAppsPortraitBottomSpacing).append('\n')
                 append("ws_apps_port_ind_y=").append(ws.allAppsPortraitIndicatorY).append('\n')
+                append("ws_desktop_sync_normal=").append(if (ws.desktopSyncNormal) 1 else 0).append('\n')
+                append("ws_desktop_land_h_offset=").append(ws.desktopLandscapeHorizontalOffset).append('\n')
+                append("ws_desktop_land_top=").append(ws.desktopLandscapeTopSpacing).append('\n')
+                append("ws_desktop_land_bottom=").append(ws.desktopLandscapeBottomSpacing).append('\n')
+                append("ws_desktop_land_ind_y=").append(ws.desktopLandscapeIndicatorY).append('\n')
+                append("ws_desktop_port_h_offset=").append(ws.desktopPortraitHorizontalOffset).append('\n')
+                append("ws_desktop_port_top=").append(ws.desktopPortraitTopSpacing).append('\n')
+                append("ws_desktop_port_bottom=").append(ws.desktopPortraitBottomSpacing).append('\n')
+                append("ws_desktop_port_ind_y=").append(ws.desktopPortraitIndicatorY).append('\n')
             }
             append("end=1\n")
         }

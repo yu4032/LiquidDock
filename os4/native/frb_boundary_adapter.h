@@ -422,6 +422,19 @@ done:
     return planned;
 }
 
+static int ld_frb_vec_has_container(uint8_t *base, uint64_t len, int64_t target_cont) {
+    const ld_frb_item_layout_t *L = &g_frb_item_layout;
+    for (uint64_t i = 0; i < len; i++) {
+        uint8_t *it = base + i * L->stride;
+        uint64_t disc = 0;
+        memcpy(&disc, it, 8);
+        if (disc == 2u) continue;
+        int64_t cont = 0;
+        if (ld_frb_read_opt_i64(it, L->container_off, &cont) && cont == target_cont) return 1;
+    }
+    return 0;
+}
+
 static void ld_frb_plan_vec_items(void *vec_ptr) {
     if (!vec_ptr || !g_frb_item_layout.valid) return;
     if (g_load_prepared || !g_layout_hooks_ready || g_grid_cols <= 0 || g_grid_rows <= 0) return;
@@ -444,7 +457,10 @@ static void ld_frb_plan_vec_items(void *vec_ptr) {
     if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
 
     uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
-    int p_home = ld_frb_plan_container(base, len, cols, rows, direction, -100, LD_LAYOUT_FILE, 1);
+    int is_ws = ld_frb_vec_has_container(base, len, -104) ||
+                __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    const char *home_file = is_ws ? LD_WS_DESK_LAYOUT_FILE : LD_LAYOUT_FILE;
+    int p_home = ld_frb_plan_container(base, len, cols, rows, direction, -100, home_file, !is_ws);
     int p_ws   = ld_frb_plan_container(base, len, cols, rows, direction, -104, LD_WS_LAYOUT_FILE, 0);
     if (p_home || p_ws) {
         g_load_prepared = 1;
@@ -539,7 +555,10 @@ static void ld_frb_sync_decoded_vec(void *out_vec) {
     if (!cols || !rows) { cols = direction ? g_grid_rows : g_grid_cols; rows = direction ? g_grid_cols : g_grid_rows; }
 
     uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
-    ld_frb_sync_container(base, len, cols, rows, direction, -100, LD_LAYOUT_FILE);
+    int is_ws = ld_frb_vec_has_container(base, len, -104) ||
+                __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    const char *home_file = is_ws ? LD_WS_DESK_LAYOUT_FILE : LD_LAYOUT_FILE;
+    ld_frb_sync_container(base, len, cols, rows, direction, -100, home_file);
     ld_frb_sync_container(base, len, cols, rows, direction, -104, LD_WS_LAYOUT_FILE);
 }
 

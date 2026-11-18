@@ -173,6 +173,8 @@ struct ld_grid_conf {
         double dock_icon_port_v_offset;
         double apps_land_h_offset, apps_land_top, apps_land_bottom, apps_land_ind_y;
         double apps_port_h_offset, apps_port_top, apps_port_bottom, apps_port_ind_y;
+        int desktop_sync_normal;
+        struct ld_grid_offsets desktop_landscape, desktop_portrait;
     } ws;
     int workstation_targets_present;
     uint64_t workstation_vaddr[9];
@@ -350,6 +352,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
     int ok = 0;
     c.large_folder_glass = 1;
     c.large_folder_native_outline = 1;
+    c.ws.desktop_sync_normal = 1;
 
     // A binary NUL could make strcmp/strchr accept only a prefix of an
     // otherwise invalid line. The config is a strict LF-delimited text protocol.
@@ -679,12 +682,15 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         bad=1; break;
                     }
                 } else if (strcmp(key, "ws_dock_custom") == 0 ||
-                           strcmp(key, "ws_taskbar_mode") == 0) {
-                    uint32_t bit = !strcmp(key, "ws_dock_custom") ? (1u << 0) : (1u << 1);
+                           strcmp(key, "ws_taskbar_mode") == 0 ||
+                           strcmp(key, "ws_desktop_sync_normal") == 0) {
+                    uint32_t bit = !strcmp(key, "ws_dock_custom") ? (1u << 0)
+                                 : !strcmp(key, "ws_taskbar_mode") ? (1u << 1) : (1u << 16);
                     int bv = 0;
                     if ((ws_seen & bit) || !ld_grid_parse_bool01(val, &bv)) { bad=1; break; }
                     if (bit == (1u << 0)) c.ws.dock_custom = bv;
-                    else c.ws.taskbar_mode = bv;
+                    else if (bit == (1u << 1)) c.ws.taskbar_mode = bv;
+                    else c.ws.desktop_sync_normal = bv;
                     ws_seen |= bit;
                 } else if (strncmp(key, "ws_", 3) == 0) {
                     struct { const char *name; uint32_t bit; double lo, hi; double *dst; } map[] = {
@@ -700,6 +706,14 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         {"ws_apps_port_top",          1u<<11,-240.0, 240.0, &c.ws.apps_port_top},
                         {"ws_apps_port_bottom",       1u<<12,-240.0, 240.0, &c.ws.apps_port_bottom},
                         {"ws_apps_port_ind_y",        1u<<13,-160.0, 160.0, &c.ws.apps_port_ind_y},
+                        {"ws_desktop_land_h_offset",  1u<<17,-240.0, 240.0, &c.ws.desktop_landscape.horizontal},
+                        {"ws_desktop_land_top",       1u<<18,-240.0, 240.0, &c.ws.desktop_landscape.top},
+                        {"ws_desktop_land_bottom",    1u<<19,-240.0, 240.0, &c.ws.desktop_landscape.bottom},
+                        {"ws_desktop_land_ind_y",     1u<<20,-160.0, 160.0, &c.ws.desktop_landscape.indicator_y},
+                        {"ws_desktop_port_h_offset",  1u<<21,-240.0, 240.0, &c.ws.desktop_portrait.horizontal},
+                        {"ws_desktop_port_top",       1u<<22,-240.0, 240.0, &c.ws.desktop_portrait.top},
+                        {"ws_desktop_port_bottom",    1u<<23,-240.0, 240.0, &c.ws.desktop_portrait.bottom},
+                        {"ws_desktop_port_ind_y",     1u<<24,-160.0, 160.0, &c.ws.desktop_portrait.indicator_y},
                     };
                     int matched = 0;
                     for (size_t wi = 0; wi < sizeof(map)/sizeof(map[0]); wi++) {

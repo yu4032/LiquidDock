@@ -248,8 +248,19 @@ __attribute__((used)) static void ld_ws_post_dock_icon_top(struct ld_ws_ctx *c)
     return;
 }
 
+static volatile int g_ws_in_allapps_build __attribute__((used));
+
+__attribute__((used)) static void ld_ws_on_apps_padding(struct ld_ws_ctx *c)
+{
+    (void)c;
+    if (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED) && g_home_options.ws.dock_custom) {
+        __atomic_store_n(&g_ws_in_allapps_build, 1, __ATOMIC_RELAXED);
+    }
+}
+
 __attribute__((used)) static void ld_ws_post_apps_padding(struct ld_ws_ctx *c)
 {
+    __atomic_store_n(&g_ws_in_allapps_build, 0, __ATOMIC_RELAXED);
     if (!__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) return;
     if (!g_home_options.ws.dock_custom) return;
     uintptr_t root = (uintptr_t)c->ret_x0;
@@ -511,7 +522,7 @@ LD_DART_OBSERVER(repl_ws_bg_sync,            ld_ws_on_bg_sync,            g_orig
 LD_WS_POST_OBSERVER(repl_ws_is_laptop,        ld_ws_post_is_laptop,        g_orig_ws_is_laptop)
 LD_WS_POST_OBSERVER(repl_ws_margin_bottom,    ld_ws_post_margin_bottom,    g_orig_ws_margin_bottom)
 LD_WS_POST_OBSERVER(repl_ws_dock_icon_top,    ld_ws_post_dock_icon_top,    g_orig_ws_dock_icon_top)
-LD_WS_POST_OBSERVER(repl_ws_apps_padding,     ld_ws_post_apps_padding,     g_orig_ws_apps_padding)
+LD_WS_PRE_POST_OBSERVER(repl_ws_apps_padding,     ld_ws_on_apps_padding, ld_ws_post_apps_padding, g_orig_ws_apps_padding)
 LD_WS_POST_OBSERVER(repl_ws_indicator_pos,    ld_ws_post_indicator_pos,    g_orig_ws_indicator_pos)
 __attribute__((used)) static void ld_ws_post_allapps_ind(struct ld_ws_ctx *c)
 {
