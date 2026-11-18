@@ -34,11 +34,10 @@
 static void *g_hm_cc_orig __attribute__((used));
 static volatile unsigned g_hm_cc_calls __attribute__((used));
 
-struct ld_hm_base { double cw, ox, ch, oy, ind; int valid; int cols, rows; int oy_valid; };
-static struct ld_hm_base g_hm_base[2][2] __attribute__((used));
-/* 诊断：记录我们上一次写进去的 ox/cw，用来判断厂商下一帧是复制还是重算。 */
-static double g_hm_wrote_ox[2][2] __attribute__((used));
-static double g_hm_wrote_cw[2][2] __attribute__((used));
+struct ld_hm_base { double cw, ox, ch, oy, ind; int valid; int bi, cols, rows; int oy_valid; };
+#define LD_HM_MAX_BASES 8
+static struct ld_hm_base g_hm_bases[LD_HM_MAX_BASES] __attribute__((used));
+static unsigned g_hm_base_next __attribute__((used));
 /* pipeline 观察器按 config 指针记方向：同一份 config 只对应一个方向。 */
 struct ld_hm_note { uintptr_t cfg; int dir, cols, rows; };
 static struct ld_hm_note g_hm_notes[8] __attribute__((used));
@@ -202,49 +201,47 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
 
     int mode_idx = is_laptop ? 1 : 0;
     int bi = landscape ? 0 : 1;
-    struct ld_hm_base *base = &g_hm_base[mode_idx][bi];
-    /* config 的几何（列/行）变了，旧基准作废重采；普通/工作台模式各有独立基准槽。 */
-    if (base->valid && (base->cols != cols || base->rows != rows)) base->valid = 0;
-    if (!base->valid) {
+    uintptr_t box0 = ld_hm_ptr(cfg, 0x3b, x28);
+    double oy_now = 0;
+    int oy_ok = 0;
+    if (box0) {
+        __builtin_memcpy(&oy_now, (const void *)(box0 + 0xf), sizeof oy_now);
+        oy_ok = isfinite(oy_now);
+    }
+
+    struct ld_hm_base *base = 0;
+    for (unsigned i = 0; i < LD_HM_MAX_BASES; i++) {
+        struct ld_hm_base *b = &g_hm_bases[i];
+        if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows) continue;
+        if (oy_ok && b->oy_valid && __builtin_fabs(oy_now - b->oy) > 1.0) continue;
+        base = b;
+        break;
+    }
+    if (!base) {
         double cw_now = 0, ch_now = 0;
         __builtin_memcpy(&cw_now, (const void *)(cfg + 0x2b), sizeof cw_now);
         __builtin_memcpy(&ch_now, (const void *)(cfg + 0x33), sizeof ch_now);
         /* 启动早期会拿到还没填值的空 config（0.00）；文件夹/搜索等容器的格子只有
          * 40 上下，也不是主页网格。两者都不配当基准，否则偏移会被写进别的容器。 */
         if (!(cw_now > 80.0) || !(ch_now > 80.0)) return (void *)cfg;
-        uintptr_t box0 = ld_hm_ptr(cfg, 0x3b, x28);
-        double ox_now = 0;
-        if (box0) __builtin_memcpy(&ox_now, (const void *)(box0 + 7), sizeof ox_now);
-        int other = 1 - mode_idx;
-        const struct ld_hm_base *other_base = &g_hm_base[other][bi];
-        if (other_base->valid && other_base->cols == cols && other_base->rows == rows &&
-            g_hm_wrote_cw[other][bi] != 0.0 &&
-            __builtin_fabs(cw_now - g_hm_wrote_cw[other][bi]) < 1e-6 &&
-            (!box0 || __builtin_fabs(ox_now - g_hm_wrote_ox[other][bi]) < 1e-6)) {
-            /* 切模式瞬间若 cfg 仍残留另一模式写入的 cw/ox，直接继承其干净基准，避免二次偏移或污染基准。 */
-            *base = *other_base;
-            ld_blog("home margin base inherit mode=%d->%d dir=%d cellW0=%.2f originX0=%.2f cols=%d",
-                    other, mode_idx, landscape, base->cw, base->ox, cols);
-        } else {
-            base->cw = cw_now;
-            base->ch = ch_now;
-            base->ox = ox_now;
-            /* cfg+0x3b is the per-config workspace EdgeInsets. Its top stays native
-             * while the controller's shared Rx can still hold the previous
-             * orientation during currentConfig. Capture both origins from cfg. */
-            base->oy = 0;
-            base->oy_valid = 0;
-            if (box0) {
-                __builtin_memcpy(&base->oy, (const void *)(box0 + 0xf), sizeof base->oy);
-                base->oy_valid = isfinite(base->oy);
-            }
-            base->ind = 0;
-            __builtin_memcpy(&base->ind, (const void *)(cfg + 0x4b), sizeof base->ind);
-            base->cols = cols; base->rows = rows;
-            base->valid = 1;
-            ld_blog("home margin base mode=%d dir=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
-                    mode_idx, landscape, base->cw, base->ox, base->ch, base->oy, base->ind, cols, dh);
-        }
+        base = &g_hm_bases[g_hm_base_next++ % LD_HM_MAX_BASES];
+        base->cw = cw_now;
+        base->ch = ch_now;
+        base->ox = 0;
+        if (box0) __builtin_memcpy(&base->ox, (const void *)(box0 + 7), sizeof base->ox);
+        /* cfg+0x3b is the per-config workspace EdgeInsets. Its top stays native
+         * while the controller's shared Rx can still hold the previous
+         * orientation during currentConfig. Capture both origins from cfg. */
+        base->oy = oy_ok ? oy_now : 0.0;
+        base->oy_valid = oy_ok;
+        base->ind = 0;
+        __builtin_memcpy(&base->ind, (const void *)(cfg + 0x4b), sizeof base->ind);
+        base->bi = bi;
+        base->cols = cols;
+        base->rows = rows;
+        base->valid = 1;
+        ld_blog("home margin base mode=%d dir=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
+                mode_idx, landscape, base->cw, base->ox, base->ch, base->oy, base->ind, cols, dh);
     }
     if (n == 0u || n == 1000u || n == 100000u) {
         double cw = 0, ch = 0;
@@ -257,56 +254,42 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     __builtin_memcpy(&cw_cur, (const void *)(cfg + 0x2b), sizeof cw_cur);
     /* 只动和基准同一张网格的 config：文件夹/搜索的 cell 宽度差一个数量级。 */
     if (!isfinite(cw_cur) || __builtin_fabs(cw_cur - base->cw) > 0.3 * base->cw) return (void *)cfg;
-    int other = 1 - mode_idx;
-    int other_poisoned = (g_hm_wrote_cw[other][bi] != 0.0 &&
-                          __builtin_fabs(cw_cur - g_hm_wrote_cw[other][bi]) < 1e-6);
-    if (isfinite(base->cw) && base->cw > 1.0 && (dh != 0.0 || g_hm_wrote_cw[mode_idx][bi] != 0.0 || other_poisoned)) {
+    if (isfinite(base->cw) && base->cw > 1.0) {
         double cw = base->cw - 2.0 * dh / (double)cols;
         double ox = base->ox + dh;
         if (isfinite(cw) && isfinite(ox) && cw > 1.0) {
-            double cur = 0;
-            __builtin_memcpy(&cur, (const void *)(cfg + 0x2b), sizeof cur);
-            if (cur != cw) __builtin_memcpy((void *)(cfg + 0x2b), &cw, sizeof cw);
+            if (cw_cur != cw) __builtin_memcpy((void *)(cfg + 0x2b), &cw, sizeof cw);
             uintptr_t box = ld_hm_ptr(cfg, 0x3b, x28);
             if (box) {
                 double curx = 0;
                 __builtin_memcpy(&curx, (const void *)(box + 7), sizeof curx);
-                if ((n % 500u) == 0u)
-                    ld_blog("home margin h mode=%d dir=%d cols=%d cw_in=%.2f cw_prev=%.2f ox_in=%.2f ox_prev=%.2f target=cw%.2f/ox%.2f",
-                            mode_idx, landscape, cols, cw_cur, g_hm_wrote_cw[mode_idx][bi], curx, g_hm_wrote_ox[mode_idx][bi], cw, ox);
                 if (curx != ox) __builtin_memcpy((void *)(box + 7), &ox, sizeof ox);
-                if (dh != 0.0) {
-                    g_hm_wrote_ox[mode_idx][bi] = ox;
-                    g_hm_wrote_cw[mode_idx][bi] = cw;
-                } else {
-                    g_hm_wrote_ox[mode_idx][bi] = 0.0;
-                    g_hm_wrote_cw[mode_idx][bi] = 0.0;
-                }
+                if ((dh != 0.0 || cw_cur != cw || curx != ox) && (n % 500u) == 0u)
+                    ld_blog("home margin h mode=%d dir=%d cols=%d cw_in=%.2f ox_in=%.2f target=cw%.2f/ox%.2f",
+                            mode_idx, landscape, cols, cw_cur, curx, cw, ox);
             }
         }
     }
 
 #if LD_HM_VERTICAL
     double dt = o->top, db = o->bottom;
-    if ((dt != 0.0 || db != 0.0) && base->oy_valid) {
-        if (rows > 0 && isfinite(base->ch) && base->ch > 1.0) {
-            double ch = base->ch - (dt + db) / (double)rows;
-            double oy = base->oy + dt;
-            if (isfinite(ch) && isfinite(oy) && ch > 1.0) {
-                double cur = 0;
-                __builtin_memcpy(&cur, (const void *)(cfg + 0x33), sizeof cur);
-                if (cur != ch) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
-                uintptr_t oybox = ld_hm_oy_box(x28, x26);
-                uintptr_t leftbox = ld_hm_ptr(cfg, 0x3b, x28);
-                if (oybox && base->oy_valid) {
-                    double cury = 0;
-                    __builtin_memcpy(&cury, (const void *)(oybox + 7), sizeof cury);
-                    if (cury != oy) __builtin_memcpy((void *)(oybox + 7), &oy, sizeof oy);
-                }
-                if ((n % 500u) == 0u)
-                    ld_blog("home margin vertical dir=%d cellH %.2f->%.2f originY %.2f->%.2f t=%.1f b=%.1f cid=%x/%x",
-                            landscape, base->ch, ch, base->oy, oy, dt, db, ld_hm_cid(oybox), ld_hm_cid(leftbox));
+    if (base->oy_valid && rows > 0 && isfinite(base->ch) && base->ch > 1.0) {
+        double ch = base->ch - (dt + db) / (double)rows;
+        double oy = base->oy + dt;
+        if (isfinite(ch) && isfinite(oy) && ch > 1.0) {
+            double ch_cur = 0;
+            __builtin_memcpy(&ch_cur, (const void *)(cfg + 0x33), sizeof ch_cur);
+            if (ch_cur != ch) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
+            uintptr_t oybox = ld_hm_oy_box(x28, x26);
+            uintptr_t leftbox = ld_hm_ptr(cfg, 0x3b, x28);
+            double cury = oy;
+            if (oybox) {
+                __builtin_memcpy(&cury, (const void *)(oybox + 7), sizeof cury);
+                if (cury != oy) __builtin_memcpy((void *)(oybox + 7), &oy, sizeof oy);
             }
+            if ((dt != 0.0 || db != 0.0 || ch_cur != ch || cury != oy) && (n % 500u) == 0u)
+                ld_blog("home margin vertical mode=%d dir=%d cellH %.2f->%.2f originY %.2f->%.2f t=%.1f b=%.1f cid=%x/%x",
+                        mode_idx, landscape, base->ch, ch, base->oy, oy, dt, db, ld_hm_cid(oybox), ld_hm_cid(leftbox));
         }
     }
 #endif /* LD_HM_VERTICAL */
@@ -314,15 +297,15 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     /* 指示器底边距：GridController.workspaceIndicatorMarginBottom = hotSeatsMarginBottom()
      * + cfg+0x4b，再减去 getEditIndicatorMarginBottom。改 cfg+0x4b 即整条链路跟着动。 */
     double di = o->indicator_y;
-    if (di != 0.0 && isfinite(base->ind)) {
+    if (isfinite(base->ind)) {
         double ind = base->ind + di;
         if (isfinite(ind)) {
-            double cur = 0;
-            __builtin_memcpy(&cur, (const void *)(cfg + 0x4b), sizeof cur);
-            if (cur != ind) __builtin_memcpy((void *)(cfg + 0x4b), &ind, sizeof ind);
-            if ((n % 500u) == 0u)
-                ld_blog("home margin indicator dir=%d ind %.2f->%.2f dy=%.1f",
-                        landscape, base->ind, ind, di);
+            double ind_cur = 0;
+            __builtin_memcpy(&ind_cur, (const void *)(cfg + 0x4b), sizeof ind_cur);
+            if (ind_cur != ind) __builtin_memcpy((void *)(cfg + 0x4b), &ind, sizeof ind);
+            if ((di != 0.0 || ind_cur != ind) && (n % 500u) == 0u)
+                ld_blog("home margin indicator mode=%d dir=%d ind %.2f->%.2f dy=%.1f",
+                        mode_idx, landscape, base->ind, ind, di);
         }
     }
     return (void *)cfg;
