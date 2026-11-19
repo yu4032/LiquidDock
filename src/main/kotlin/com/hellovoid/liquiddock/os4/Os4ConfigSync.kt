@@ -219,6 +219,21 @@ object Os4ConfigSync {
                     if (resolvedTargets.workstationCalOffsetTarget.isNotEmpty()) {
                         append("workstation_cal_offset_target=").append(resolvedTargets.workstationCalOffsetTarget).append('\n')
                     }
+                    if (resolvedTargets.workstationAllAppsStateTarget.isNotEmpty()) {
+                        append("workstation_allapps_state_target=").append(resolvedTargets.workstationAllAppsStateTarget).append('\n')
+                    }
+                    if (resolvedTargets.workstationAllAppsUpdateStateTarget.isNotEmpty()) {
+                        append("workstation_allapps_update_state_target=").append(resolvedTargets.workstationAllAppsUpdateStateTarget).append('\n')
+                    }
+                    if (resolvedTargets.workstationAllAppsListPaddingTarget.isNotEmpty()) {
+                        append("workstation_allapps_list_padding_target=").append(resolvedTargets.workstationAllAppsListPaddingTarget).append('\n')
+                    }
+                    if (resolvedTargets.workstationPageChangedTarget.isNotEmpty()) {
+                        append("workstation_page_changed_target=").append(resolvedTargets.workstationPageChangedTarget).append('\n')
+                    }
+                    if (resolvedTargets.workstationJumpToPageTarget.isNotEmpty()) {
+                        append("workstation_jump_to_page_target=").append(resolvedTargets.workstationJumpToPageTarget).append('\n')
+                    }
                     if (resolvedTargets.allAppsBlurTarget.isNotEmpty()) {
                         append("allapps_blur_target=").append(resolvedTargets.allAppsBlurTarget).append('\n')
                     }

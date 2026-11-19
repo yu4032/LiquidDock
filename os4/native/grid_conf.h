@@ -185,9 +185,21 @@ struct ld_grid_conf {
     size_t ws_hotseat_bottom_size;
     uint64_t ws_cal_offset_vaddr;
     size_t ws_cal_offset_size;
+    uint64_t ws_allapps_state_vaddr;
+    size_t ws_allapps_state_size;
+    uint64_t ws_allapps_update_state_vaddr;
+    size_t ws_allapps_update_state_size;
+    uint64_t ws_allapps_list_padding_vaddr;
+    size_t ws_allapps_list_padding_size;
+    uint64_t ws_page_changed_vaddr;
+    size_t ws_page_changed_size;
+    uint64_t ws_jump_to_page_vaddr;
+    size_t ws_jump_to_page_size;
 };
 
 static volatile int g_ws_is_laptop_mode __attribute__((used));
+static volatile int g_ws_mode_hint_value __attribute__((used));
+static volatile int g_ws_mode_hint_pending __attribute__((used));
 static volatile int g_ws_seen_dock_light __attribute__((used));
 
 /* 纯十进制整数（无符号、无空格、无前导零、无多余字符），范围 [lo,hi]；出格 = 非法 */
@@ -681,6 +693,40 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if (!ld_grid_parse_aot_targets(val, &c.ws_cal_offset_vaddr, &c.ws_cal_offset_size, 1)) {
                         bad=1; break;
                     }
+                } else if (strcmp(key, "workstation_allapps_state_target") == 0) {
+                    if ((ws_seen & (1u << 25)) ||
+                        !ld_grid_parse_aot_targets(val, &c.ws_allapps_state_vaddr, &c.ws_allapps_state_size, 1)) {
+                        bad=1; break;
+                    }
+                    ws_seen |= 1u << 25;
+                } else if (strcmp(key, "workstation_allapps_update_state_target") == 0) {
+                    if ((ws_seen & (1u << 26)) ||
+                        !ld_grid_parse_aot_targets(val, &c.ws_allapps_update_state_vaddr,
+                                                   &c.ws_allapps_update_state_size, 1)) {
+                        bad=1; break;
+                    }
+                    ws_seen |= 1u << 26;
+                } else if (strcmp(key, "workstation_allapps_list_padding_target") == 0) {
+                    if ((ws_seen & (1u << 27)) ||
+                        !ld_grid_parse_aot_targets(val, &c.ws_allapps_list_padding_vaddr,
+                                                   &c.ws_allapps_list_padding_size, 1)) {
+                        bad=1; break;
+                    }
+                    ws_seen |= 1u << 27;
+                } else if (strcmp(key, "workstation_page_changed_target") == 0) {
+                    if ((ws_seen & (1u << 28)) ||
+                        !ld_grid_parse_aot_targets(val, &c.ws_page_changed_vaddr,
+                                                   &c.ws_page_changed_size, 1)) {
+                        bad=1; break;
+                    }
+                    ws_seen |= 1u << 28;
+                } else if (strcmp(key, "workstation_jump_to_page_target") == 0) {
+                    if ((ws_seen & (1u << 29)) ||
+                        !ld_grid_parse_aot_targets(val, &c.ws_jump_to_page_vaddr,
+                                                   &c.ws_jump_to_page_size, 1)) {
+                        bad=1; break;
+                    }
+                    ws_seen |= 1u << 29;
                 } else if (strcmp(key, "ws_dock_custom") == 0 ||
                            strcmp(key, "ws_taskbar_mode") == 0 ||
                            strcmp(key, "ws_desktop_sync_normal") == 0) {

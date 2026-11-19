@@ -195,6 +195,11 @@ internal object Os4GlassSymbols {
         val widgetGeometryTargets: String = "",
         val blurDegradeTarget: String = "",
         val blurBetterDownTarget: String = "",
+        val workstationAllAppsStateTarget: String = "",
+        val workstationAllAppsUpdateStateTarget: String = "",
+        val workstationAllAppsListPaddingTarget: String = "",
+        val workstationPageChangedTarget: String = "",
+        val workstationJumpToPageTarget: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -280,6 +285,26 @@ internal object Os4GlassSymbols {
             mini,
             "HotseatLayerGetxController.calHotseatOffsetY",
         )
+        val workstationAllAppsStateTarget = fromMiniElfSingle(
+            mini,
+            "AllAppsTransitionController.isShowAllApps=",
+        )
+        val workstationAllAppsUpdateStateTarget = fromMiniElfSingle(
+            mini,
+            "AnimatorPlaybackController.updateShowAllAppsState",
+        )
+        val workstationAllAppsListPaddingTarget = fromMiniElfSingle(
+            mini,
+            "AllAppsListWidget._getListPadding",
+        )
+        val workstationPageChangedTarget = fromMiniElfSingle(
+            mini,
+            "LaptopWorkspaceGetxController.pageChanged",
+        )
+        val workstationJumpToPageTarget = fromMiniElfSingle(
+            mini,
+            "LaptopWorkspaceGetxController.jumpToPage",
+        )
         val allAppsBlurTarget = fromMiniElfSingle(
             mini,
             "DrawerViewBlurController.updateProgress",
@@ -326,6 +351,11 @@ internal object Os4GlassSymbols {
             widgetGeometryTargets,
             blurDegradeTarget,
             blurBetterDownTarget,
+            workstationAllAppsStateTarget,
+            workstationAllAppsUpdateStateTarget,
+            workstationAllAppsListPaddingTarget,
+            workstationPageChangedTarget,
+            workstationJumpToPageTarget,
         )
     }
 

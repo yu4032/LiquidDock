@@ -11,6 +11,7 @@
 #include "hook_page_pin.h"
 #include "bootlog.h"
 #include "dart_heap.h"
+#include "dart_abi.h"
 #include "dart_observer.h"
 #include "grid_orientation.h"
 
@@ -133,6 +134,14 @@ static void *g_orig_ws_build_dock_layout __attribute__((used));
 static void *g_orig_ws_allapps_ind __attribute__((used));
 static void *g_orig_ws_hotseat_bottom __attribute__((used));
 static void *g_orig_ws_cal_offset __attribute__((used));
+static void *g_orig_ws_allapps_state __attribute__((used));
+static void *g_orig_ws_allapps_update_state __attribute__((used));
+static void *g_orig_ws_allapps_list_padding __attribute__((used));
+static void *g_orig_ws_page_changed __attribute__((used));
+static void *g_orig_ws_jump_to_page __attribute__((used));
+static volatile int g_ws_allapps_state_hook_ready __attribute__((used));
+static volatile int g_ws_page_changed_hook_ready __attribute__((used));
+static volatile int g_ws_jump_to_page_hook_ready __attribute__((used));
 
 __attribute__((used,naked)) static void repl_ws_skip_blur_degrade(void)
 {
@@ -198,6 +207,8 @@ __attribute__((used)) static void ld_ws_post_is_laptop(struct ld_ws_ctx *c)
         ld_blog("ws_is_laptop_ret: laptop=%d", laptop);
     }
     __atomic_store_n(&g_ws_is_laptop_mode, laptop, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_ws_mode_hint_value, laptop, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_ws_mode_hint_pending, 1, __ATOMIC_RELEASE);
 }
 
 __attribute__((used)) static void ld_ws_post_device_width(struct ld_ws_ctx *c)
@@ -250,17 +261,147 @@ __attribute__((used)) static void ld_ws_post_dock_icon_top(struct ld_ws_ctx *c)
 
 static volatile int g_ws_in_allapps_build __attribute__((used));
 
+__attribute__((used)) static void ld_ws_pre_allapps_state(struct ld_ws_ctx *c)
+{
+    if (!c) return;
+    uint32_t arg = (uint32_t)c->x[2];
+    uint32_t true_value = (uint32_t)(c->x[22] + 0x20u);
+    uint32_t false_value = (uint32_t)(c->x[22] + 0x30u);
+    int active;
+    if (arg == true_value) active = 1;
+    else if (arg == false_value) active = 0;
+    else {
+        ld_blog("ws_allapps_state: unknown bool arg2=%08x true=%08x false=%08x; keep state",
+                arg, true_value, false_value);
+        return;
+    }
+    __atomic_store_n(&g_ws_in_allapps_build, active, __ATOMIC_RELAXED);
+    static unsigned logs;
+    if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 12u) {
+        ld_blog("ws_allapps_state: active=%d laptop=%d source=setter",
+                active, __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED));
+    }
+}
+
+__attribute__((used)) static void ld_ws_post_allapps_state(struct ld_ws_ctx *c)
+{
+    (void)c;
+}
+
+/* pageChanged begins before the next cell-screen is built. Clear the latch
+ * there; LaptopCellScreen.build sets it again after its build, where the
+ * deferred grid-config calculation can still observe the AllApps scope. */
+__attribute__((used)) static void ld_ws_pre_page_changed(struct ld_ws_ctx *c)
+{
+    if (!c) return;
+    int previous = __atomic_exchange_n(&g_ws_in_allapps_build, 0, __ATOMIC_RELAXED);
+    static unsigned logs;
+    if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 16u) {
+        ld_blog("ws_page_changed: clear allapps=%d arg1=%08x arg2=%08x laptop=%d",
+                previous, (uint32_t)c->x[2], (uint32_t)c->x[3],
+                __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED));
+    }
+}
+
+__attribute__((used)) static void ld_ws_post_page_changed(struct ld_ws_ctx *c)
+{
+    (void)c;
+}
+
+__attribute__((used)) static void ld_ws_pre_jump_to_page(struct ld_ws_ctx *c)
+{
+    if (!c) return;
+    int previous = __atomic_exchange_n(&g_ws_in_allapps_build, 0, __ATOMIC_RELAXED);
+    static unsigned logs;
+    if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 16u) {
+        ld_blog("ws_jump_to_page: clear allapps=%d page_arg=%08x laptop=%d",
+                previous, (uint32_t)c->x[2],
+                __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED));
+    }
+}
+
+__attribute__((used)) static void ld_ws_post_jump_to_page(struct ld_ws_ctx *c)
+{
+    (void)c;
+}
+
+__attribute__((used)) static void ld_ws_post_allapps_list_padding(struct ld_ws_ctx *c)
+{
+    uintptr_t insets = c ? (uintptr_t)c->ret_x0 : 0;
+    int laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    int custom = g_home_options.ws.dock_custom;
+    static unsigned entry_logs;
+    if (__atomic_fetch_add(&entry_logs, 1u, __ATOMIC_RELAXED) < 8u) {
+        ld_blog("ws_allapps_list_padding enter: laptop=%d custom=%d insets=%p",
+                laptop, custom, (void *)insets);
+    }
+    if (!c || !laptop || !custom || !(insets & 1u) || ld_ws_is_const_ro(insets)) return;
+
+    int dir = ld_ws_direction(c); /* ld_grid_direction: 1=landscape, 0=portrait */
+    if (dir != 0 && dir != 1) return;
+    double dx = dir == 1 ? g_home_options.ws.apps_land_h_offset : g_home_options.ws.apps_port_h_offset;
+    double dt = dir == 1 ? g_home_options.ws.apps_land_top : g_home_options.ws.apps_port_top;
+    double db = dir == 1 ? g_home_options.ws.apps_land_bottom : g_home_options.ws.apps_port_bottom;
+    if (!isfinite(dx) || !isfinite(dt) || !isfinite(db) ||
+        fabs(dx) > 4096.0 || fabs(dt) > 4096.0 || fabs(db) > 4096.0) return;
+
+    double left = 0.0, top = 0.0, right = 0.0, bottom = 0.0;
+    if (!ld_read_heap(insets + 0x7, &left, sizeof left) ||
+        !ld_read_heap(insets + 0xf, &top, sizeof top) ||
+        !ld_read_heap(insets + 0x17, &right, sizeof right) ||
+        !ld_read_heap(insets + 0x1f, &bottom, sizeof bottom) ||
+        !isfinite(left) || !isfinite(top) || !isfinite(right) || !isfinite(bottom)) return;
+
+    /* Keep horizontal/vertical totals unchanged while moving the list's
+     * content origin. This changes icon positions without changing columns
+     * or the scrollable viewport size. Top and bottom remain independent
+     * margin controls, matching the home-grid setting semantics. */
+    double next_left = left + dx;
+    double next_right = right - dx;
+    double next_top = top + dt;
+    double next_bottom = bottom + db;
+    if (!isfinite(next_left) || !isfinite(next_right) ||
+        !isfinite(next_top) || !isfinite(next_bottom)) return;
+    if (next_left != left) memcpy((void *)(insets + 0x7), &next_left, sizeof next_left);
+    if (next_top != top) memcpy((void *)(insets + 0xf), &next_top, sizeof next_top);
+    if (next_right != right) memcpy((void *)(insets + 0x17), &next_right, sizeof next_right);
+    if (next_bottom != bottom) memcpy((void *)(insets + 0x1f), &next_bottom, sizeof next_bottom);
+
+    static unsigned apply_logs;
+    if (__atomic_fetch_add(&apply_logs, 1u, __ATOMIC_RELAXED) < 8u) {
+        ld_blog("ws_allapps_list_padding apply: dir=%d dx=%.1f dt=%.1f db=%.1f insets=%p LTRB=(%.1f,%.1f,%.1f,%.1f)->(%.1f,%.1f,%.1f,%.1f)",
+                dir, dx, dt, db, (void *)insets, left, top, right, bottom,
+                next_left, next_top, next_right, next_bottom);
+    }
+}
+
 __attribute__((used)) static void ld_ws_on_apps_padding(struct ld_ws_ctx *c)
 {
     (void)c;
-    if (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED) && g_home_options.ws.dock_custom) {
+    int laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    int lifecycle_ready = __atomic_load_n(&g_ws_page_changed_hook_ready, __ATOMIC_RELAXED) ||
+        __atomic_load_n(&g_ws_jump_to_page_hook_ready, __ATOMIC_RELAXED);
+    int state_ready = __atomic_load_n(&g_ws_allapps_state_hook_ready, __ATOMIC_RELAXED);
+    if (laptop && g_home_options.ws.dock_custom && (lifecycle_ready || !state_ready)) {
         __atomic_store_n(&g_ws_in_allapps_build, 1, __ATOMIC_RELAXED);
     }
 }
 
 __attribute__((used)) static void ld_ws_post_apps_padding(struct ld_ws_ctx *c)
 {
-    __atomic_store_n(&g_ws_in_allapps_build, 0, __ATOMIC_RELAXED);
+    int lifecycle_ready = __atomic_load_n(&g_ws_page_changed_hook_ready, __ATOMIC_RELAXED) ||
+        __atomic_load_n(&g_ws_jump_to_page_hook_ready, __ATOMIC_RELAXED);
+    int laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    if (lifecycle_ready && laptop && g_home_options.ws.dock_custom) {
+        int previous = __atomic_exchange_n(&g_ws_in_allapps_build, 1, __ATOMIC_RELAXED);
+        static unsigned logs;
+        if (previous != 1 || __atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 12u) {
+            ld_blog("ws_allapps_build: latch=1 source=LaptopCellScreen.build laptop=%d",
+                    laptop);
+        }
+    } else if (!lifecycle_ready && !__atomic_load_n(&g_ws_allapps_state_hook_ready, __ATOMIC_RELAXED)) {
+        __atomic_store_n(&g_ws_in_allapps_build, 0, __ATOMIC_RELAXED);
+    }
     if (!__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) return;
     if (!g_home_options.ws.dock_custom) return;
     uintptr_t root = (uintptr_t)c->ret_x0;
@@ -523,6 +664,11 @@ LD_WS_POST_OBSERVER(repl_ws_is_laptop,        ld_ws_post_is_laptop,        g_ori
 LD_WS_POST_OBSERVER(repl_ws_margin_bottom,    ld_ws_post_margin_bottom,    g_orig_ws_margin_bottom)
 LD_WS_POST_OBSERVER(repl_ws_dock_icon_top,    ld_ws_post_dock_icon_top,    g_orig_ws_dock_icon_top)
 LD_WS_PRE_POST_OBSERVER(repl_ws_apps_padding,     ld_ws_on_apps_padding, ld_ws_post_apps_padding, g_orig_ws_apps_padding)
+LD_WS_PRE_POST_OBSERVER(repl_ws_allapps_state,    ld_ws_pre_allapps_state, ld_ws_post_allapps_state, g_orig_ws_allapps_state)
+LD_WS_PRE_POST_OBSERVER(repl_ws_allapps_update_state, ld_ws_pre_allapps_state, ld_ws_post_allapps_state, g_orig_ws_allapps_update_state)
+LD_WS_POST_OBSERVER(repl_ws_allapps_list_padding, ld_ws_post_allapps_list_padding, g_orig_ws_allapps_list_padding)
+LD_WS_PRE_POST_OBSERVER(repl_ws_page_changed, ld_ws_pre_page_changed, ld_ws_post_page_changed, g_orig_ws_page_changed)
+LD_WS_PRE_POST_OBSERVER(repl_ws_jump_to_page, ld_ws_pre_jump_to_page, ld_ws_post_jump_to_page, g_orig_ws_jump_to_page)
 LD_WS_POST_OBSERVER(repl_ws_indicator_pos,    ld_ws_post_indicator_pos,    g_orig_ws_indicator_pos)
 __attribute__((used)) static void ld_ws_post_allapps_ind(struct ld_ws_ctx *c)
 {
@@ -597,6 +743,165 @@ __attribute__((used)) static void ld_ws_post_cal_offset(struct ld_ws_ctx *c)
 LD_WS_POST_OBSERVER(repl_ws_hotseat_bottom,    ld_ws_post_hotseat_bottom,    g_orig_ws_hotseat_bottom)
 LD_WS_POST_OBSERVER(repl_ws_cal_offset,        ld_ws_post_cal_offset,        g_orig_ws_cal_offset)
 
+static int ld_ws_allapps_state_semantics(uintptr_t fn, size_t size, int update_state)
+{
+    if (!fn || size < 32 || size > 2048 || !executable_range(fn, size)) return 0;
+    const uint32_t *insn = (const uint32_t *)fn;
+    if (insn[0] != DART_ENTRY_WORD) return 0;
+    size_t count = size / sizeof(uint32_t);
+    if (count > 32) count = 32;
+    int store_arg = -1, compare_arg = -1, branch_after_compare = -1, call_after_branch = -1;
+    uint32_t store_pattern = update_state ? 0xb8000002u : 0xb8000022u;
+    uint32_t compare_pattern = update_state ? 0x6b01005fu : 0x6b00005fu;
+    for (size_t i = 1; i < count; i++) {
+        uint32_t w = insn[i];
+        if ((w & 0xffe00fffu) == store_pattern && store_arg < 0) store_arg = (int)i;
+        if (w == compare_pattern && compare_arg < 0) compare_arg = (int)i;
+        if ((w & 0xff000010u) == 0x54000000u && compare_arg > 0 &&
+            branch_after_compare < 0) branch_after_compare = (int)i;
+        if ((w & 0xfc000000u) == 0x94000000u && branch_after_compare > 0 &&
+            (int)i > branch_after_compare && call_after_branch < 0) call_after_branch = (int)i;
+    }
+    return store_arg > 0 && compare_arg > store_arg && branch_after_compare > compare_arg &&
+        call_after_branch > branch_after_compare;
+}
+
+/* AllAppsListWidget._getListPadding builds the EdgeInsets consumed by the
+ * app drawer's scrolling list. Verify its AOT body still stores the four
+ * Dart doubles at the EdgeInsets field offsets before hooking it. */
+static int ld_ws_allapps_list_padding_semantics(uintptr_t fn, size_t size)
+{
+    if (!fn || size < 64 || size > 512 || !executable_range(fn, size)) return 0;
+    const uint32_t *insn = (const uint32_t *)fn;
+    if (insn[0] != DART_ENTRY_WORD) return 0;
+    size_t count = size / sizeof(uint32_t);
+    int calls = 0, ret = 0;
+    unsigned stores = 0;
+    const unsigned wanted_offsets[] = { 7u, 15u, 23u, 31u };
+    for (size_t i = 1; i < count; i++) {
+        uint32_t w = insn[i];
+        if ((w & 0xfc000000u) == 0x94000000u) calls++;
+        if (w == 0xd65f03c0u) ret = 1;
+        if ((w & 0xffc00c00u) == 0xfc000000u && ((w >> 5) & 0x1fu) == 0u) {
+            int imm = (int)((w >> 12) & 0x1ffu);
+            if (imm & 0x100) imm -= 0x200;
+            for (size_t j = 0; j < sizeof wanted_offsets / sizeof wanted_offsets[0]; j++) {
+                if (imm == (int)wanted_offsets[j]) stores |= 1u << j;
+            }
+        }
+    }
+    return calls >= 4 && ret && stores == 0x0fu;
+}
+
+static int ld_ws_page_changed_semantics(uintptr_t fn, size_t size)
+{
+    if (!fn || size < 32 || size > 4096 || !executable_range(fn, size)) return 0;
+    const uint32_t *insn = (const uint32_t *)fn;
+    if (insn[0] != DART_ENTRY_WORD) return 0;
+    size_t count = size / sizeof(uint32_t);
+    int saves_receiver = 0, saves_page_arg = 0, calls = 0, ret = 0;
+    for (size_t i = 1; i < count; i++) {
+        uint32_t w = insn[i];
+        if ((w & 0xffe00000u) == 0xf8000000u && ((w >> 5) & 0x1fu) == 29u) {
+            unsigned rt = w & 0x1fu;
+            if (rt == 1u) saves_receiver = 1;
+            if (rt == 2u) saves_page_arg = 1;
+        }
+        if ((w & 0xfc000000u) == 0x94000000u) calls++;
+        if (w == 0xd65f03c0u) ret = 1;
+    }
+    return saves_receiver && saves_page_arg && calls > 0 && ret;
+}
+
+static int ld_ws_install_page_transition_hook(const struct native_api *api, ld_lib_info *lib,
+                                             uint64_t vaddr, size_t size, const char *label,
+                                             void *replacement, void **original,
+                                             volatile int *hook_ready)
+{
+    if (!vaddr) return 0;
+    uintptr_t runtime = 0;
+    int mapped = size >= 32 && size <= 4096 && vaddr <= UINTPTR_MAX - (size - 4) &&
+        ld_cross_check_strict(lib, (uintptr_t)vaddr, (uintptr_t)vaddr + size - 4);
+    int executable = mapped && ld_vaddr_to_runtime(lib, (uintptr_t)vaddr, &runtime) &&
+        executable_range(runtime, size) && executable_range(runtime + size - 4, 4);
+    int semantic = executable && ld_ws_page_changed_semantics(runtime, size);
+    int safe = semantic && ld_hook_site_safe(runtime, label);
+    if (!safe) {
+        ld_blog("%s target rejected via sym vaddr=0x%lx size=%zu mapped=%d executable=%d semantic=%d",
+                label, (unsigned long)vaddr, size, mapped, executable, semantic);
+        return 0;
+    }
+    int rc = api->hook((void *)runtime, replacement, original);
+    if (rc != 0 || !*original) {
+        ld_blog("%s hook failed result=%d original=%p at %p",
+                label, rc, *original, (void *)runtime);
+        return 0;
+    }
+    __atomic_store_n(hook_ready, 1, __ATOMIC_RELAXED);
+    ld_blog("%s hook installed via sym+semantic at %p vaddr=0x%lx size=%zu",
+            label, (void *)runtime, (unsigned long)vaddr, size);
+    return 1;
+}
+
+static int ld_ws_install_allapps_list_padding_hook(const struct native_api *api, ld_lib_info *lib)
+{
+    uint64_t vaddr = g_home_options.ws_allapps_list_padding_vaddr;
+    size_t size = g_home_options.ws_allapps_list_padding_size;
+    if (!vaddr) return 0;
+    uintptr_t runtime = 0;
+    int mapped = size >= 64 && size <= 512 && vaddr <= UINTPTR_MAX - (size - 4) &&
+        ld_cross_check_strict(lib, (uintptr_t)vaddr, (uintptr_t)vaddr + size - 4);
+    int executable = mapped && ld_vaddr_to_runtime(lib, (uintptr_t)vaddr, &runtime) &&
+        executable_range(runtime, size) && executable_range(runtime + size - 4, 4);
+    int semantic = executable && ld_ws_allapps_list_padding_semantics(runtime, size);
+    int safe = semantic && ld_hook_site_safe(runtime, "ws_allapps_list_padding");
+    if (!safe) {
+        ld_blog("ws_allapps_list_padding target rejected via sym vaddr=0x%lx size=%zu mapped=%d executable=%d semantic=%d",
+                (unsigned long)vaddr, size, mapped, executable, semantic);
+        return 0;
+    }
+    int rc = api->hook((void *)runtime, (void *)repl_ws_allapps_list_padding,
+                       &g_orig_ws_allapps_list_padding);
+    if (rc != 0 || !g_orig_ws_allapps_list_padding) {
+        ld_blog("ws_allapps_list_padding hook failed closed result=%d original=%p at %p",
+                rc, g_orig_ws_allapps_list_padding, (void *)runtime);
+        return 0;
+    }
+    ld_blog("ws_allapps_list_padding hook installed via sym+semantic result=0 at %p vaddr=0x%lx size=%zu",
+            (void *)runtime, (unsigned long)vaddr, size);
+    return 1;
+}
+
+static int ld_ws_install_allapps_state_hook(const struct native_api *api, ld_lib_info *lib,
+                                            uint64_t vaddr, size_t size, const char *label,
+                                            void *replacement, void **original, int update_state)
+{
+    if (!vaddr) return 0;
+    uintptr_t runtime = 0;
+    uintptr_t target = (uintptr_t)vaddr;
+    int mapped = size >= 32 && size <= 2048 && target <= UINTPTR_MAX - (size - 4) &&
+        ld_cross_check_strict(lib, target, target + size - 4);
+    int executable = mapped && ld_vaddr_to_runtime(lib, vaddr, &runtime) &&
+        executable_range(runtime, size) && executable_range(runtime + size - 4, 4);
+    int semantic = executable && ld_ws_allapps_state_semantics(runtime, size, update_state);
+    int safe = semantic && ld_hook_site_safe(runtime, label);
+    if (!safe) {
+        ld_blog("%s target rejected via sym vaddr=0x%lx size=%zu mapped=%d executable=%d semantic=%d",
+                label, (unsigned long)vaddr, size, mapped, executable, semantic);
+        return 0;
+    }
+    int rc = api->hook((void *)runtime, replacement, original);
+    if (rc != 0 || !*original) {
+        ld_blog("%s hook failed closed result=%d original=%p at %p", label, rc, *original,
+                (void *)runtime);
+        return 0;
+    }
+    __atomic_store_n(&g_ws_allapps_state_hook_ready, 1, __ATOMIC_RELAXED);
+    ld_blog("%s hook installed via sym+semantic result=0 at %p vaddr=0x%lx size=%zu",
+            label, (void *)runtime, (unsigned long)vaddr, size);
+    return 1;
+}
+
 static void ld_workstation_install(const struct native_api *api, ld_lib_info *lib)
 {
     static int installed;
@@ -662,6 +967,28 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
             }
         }
     }
+    int allapps_state_hooks = 0;
+    allapps_state_hooks += ld_ws_install_allapps_state_hook(
+        api, lib, g_home_options.ws_allapps_update_state_vaddr,
+        g_home_options.ws_allapps_update_state_size, "ws_allapps_update_state",
+        (void *)repl_ws_allapps_update_state, &g_orig_ws_allapps_update_state, 1);
+    allapps_state_hooks += ld_ws_install_allapps_state_hook(
+        api, lib, g_home_options.ws_allapps_state_vaddr,
+        g_home_options.ws_allapps_state_size, "ws_allapps_state",
+        (void *)repl_ws_allapps_state, &g_orig_ws_allapps_state, 0);
+    if (allapps_state_hooks == 0) {
+        ld_blog("ws_allapps_state setters unavailable; using page/build lifecycle scope");
+    }
+    ok_count += allapps_state_hooks;
+    ok_count += ld_ws_install_allapps_list_padding_hook(api, lib);
+    ok_count += ld_ws_install_page_transition_hook(
+        api, lib, g_home_options.ws_page_changed_vaddr, g_home_options.ws_page_changed_size,
+        "ws_page_changed", (void *)repl_ws_page_changed, &g_orig_ws_page_changed,
+        &g_ws_page_changed_hook_ready);
+    ok_count += ld_ws_install_page_transition_hook(
+        api, lib, g_home_options.ws_jump_to_page_vaddr, g_home_options.ws_jump_to_page_size,
+        "ws_jump_to_page", (void *)repl_ws_jump_to_page, &g_orig_ws_jump_to_page,
+        &g_ws_jump_to_page_hook_ready);
     installed = 1;
     ld_blog("workstation hooks installed=%d/%zu", ok_count, count);
 }

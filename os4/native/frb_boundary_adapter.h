@@ -57,6 +57,7 @@ static bool g_frb_sse_decode_synced = false;
 static volatile int g_frb_start_cols = 0;
 static volatile int g_frb_start_rows = 0;
 static volatile int g_frb_start_dir = -1;
+static volatile int g_frb_start_ws_hint = -1;
 static __thread int t_frb_in_update_batch = 0;
 
 static int ld_frb_adapter_ready(void) {
@@ -437,6 +438,29 @@ static int ld_frb_vec_has_container(uint8_t *base, uint64_t len, int64_t target_
     return 0;
 }
 
+/*
+ * Launcher releases have represented the Workstation desktop using -104, then
+ * migrated those rows to -100 while retaining the active laptop/workstation
+ * mode. Prefer the mode observed at the current start_load boundary when both
+ * formats are possible; explicit -104 remains authoritative. The container-only
+ * fallback preserves behavior when the mode callback is unavailable.
+ */
+static int ld_frb_resolve_workspace_mode(uint8_t *base, uint64_t len,
+                                         int *out_known, int *out_has_home,
+                                         int *out_has_ws_allapps) {
+    int has_ws_allapps = ld_frb_vec_has_container(base, len, -104);
+    int has_home = ld_frb_vec_has_container(base, len, -100);
+    int ws_hint = __atomic_load_n(&g_frb_start_ws_hint, __ATOMIC_ACQUIRE);
+    int is_ws = has_ws_allapps ? 1
+              : (ws_hint >= 0 ? ws_hint
+                 : (has_home ? 0
+                    : (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_ACQUIRE) ? 1 : 0)));
+    if (out_known) *out_known = has_ws_allapps || has_home || ws_hint >= 0;
+    if (out_has_home) *out_has_home = has_home;
+    if (out_has_ws_allapps) *out_has_ws_allapps = has_ws_allapps;
+    return is_ws;
+}
+
 static void ld_frb_plan_vec_items(void *vec_ptr) {
     if (!vec_ptr || !g_frb_item_layout.valid) return;
     if (__atomic_load_n(&g_load_prepared, __ATOMIC_ACQUIRE) ||
@@ -463,12 +487,13 @@ static void ld_frb_plan_vec_items(void *vec_ptr) {
     if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
 
     uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
-    int has_104 = ld_frb_vec_has_container(base, len, -104);
-    int has_100 = ld_frb_vec_has_container(base, len, -100);
-    int is_ws = has_104 ? 1
-              : (has_100 ? 0 : (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_ACQUIRE) ? 1 : 0));
+    int has_100 = 0, has_104 = 0, known = 0;
+    int ws_hint = __atomic_load_n(&g_frb_start_ws_hint, __ATOMIC_ACQUIRE);
+    int is_ws = ld_frb_resolve_workspace_mode(base, len, &known, &has_100, &has_104);
     __atomic_store_n(&g_loaded_is_ws, is_ws, __ATOMIC_RELEASE);
-    __atomic_store_n(&g_loaded_ws_known, (has_104 || has_100) ? 1 : 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_loaded_ws_known, known ? 1 : 0, __ATOMIC_RELEASE);
+    ld_blog("FRB layout scope: len=%llu has_-104=%d has_-100=%d mode_hint=%d workstation=%d",
+            (unsigned long long)len, has_104, has_100, ws_hint, is_ws);
 
     int home_slot = is_ws ? LD_SLOT_WS_DESK : LD_SLOT_NORMAL_HOME;
     int p_home = ld_frb_plan_container(base, len, cols, rows, direction, -100, home_slot);
@@ -506,8 +531,11 @@ static void ld_frb_sync_decoded_vec(void *out_vec) {
     if (!cols || !rows) { cols = direction ? g_grid_rows : g_grid_cols; rows = direction ? g_grid_cols : g_grid_rows; }
 
     uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
-    int has_104 = ld_frb_vec_has_container(base, len, -104);
-    int is_ws = has_104 || ld_is_workstation_layout_active();
+    int has_100 = 0, has_104 = 0, known = 0;
+    int ws_hint = __atomic_load_n(&g_frb_start_ws_hint, __ATOMIC_ACQUIRE);
+    int is_ws = ld_frb_resolve_workspace_mode(base, len, &known, &has_100, &has_104);
+    ld_blog("FRB decoded scope: len=%llu has_-104=%d has_-100=%d mode_hint=%d workstation=%d known=%d",
+            (unsigned long long)len, has_104, has_100, ws_hint, is_ws, known);
     int home_slot = is_ws ? LD_SLOT_WS_DESK : LD_SLOT_NORMAL_HOME;
 
     size_t cap = (size_t)len < LD_LAYOUT_MAX_ITEMS ? (size_t)len : LD_LAYOUT_MAX_ITEMS;
@@ -598,9 +626,13 @@ static void repl_frb_primary_adapter(int32_t func_id, int64_t port, uint8_t *ptr
         __atomic_store_n(&g_initial_restore_mask, 0, __ATOMIC_RELEASE);
         __atomic_store_n(&g_loaded_ws_known, 0, __ATOMIC_RELEASE);
         __atomic_store_n(&g_loaded_is_ws, 0, __ATOMIC_RELEASE);
+        int ws_hint = -1;
+        if (__atomic_exchange_n(&g_ws_mode_hint_pending, 0, __ATOMIC_ACQ_REL))
+            ws_hint = __atomic_load_n(&g_ws_mode_hint_value, __ATOMIC_ACQUIRE) ? 1 : 0;
+        __atomic_store_n(&g_frb_start_ws_hint, ws_hint, __ATOMIC_RELEASE);
         ld_layout_invalidate_all_pending();
-        ld_blog("FRB adapter start_load(id=%d): args=[%d,%d,%d,%d] reset load_prepared=0",
-                func_id, args[0], args[1], args[2], args[3]);
+        ld_blog("FRB adapter start_load(id=%d): args=[%d,%d,%d,%d] mode_hint=%d reset load_prepared=0",
+                func_id, args[0], args[1], args[2], args[3], ws_hint);
     } else if (func_id == g_frb_ids.update_item_batch) {
         uint32_t count = 0;
         if (ptr && data_len >= 4) memcpy(&count, ptr, 4);

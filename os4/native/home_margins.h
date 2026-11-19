@@ -34,7 +34,7 @@
 static void *g_hm_cc_orig __attribute__((used));
 static volatile unsigned g_hm_cc_calls __attribute__((used));
 
-struct ld_hm_base { double cw, ox, ch, oy, ind; int valid; int bi, cols, rows; int oy_valid; };
+struct ld_hm_base { double cw, ox, ch, oy, ind; int valid; int bi, cols, rows, scope; int oy_valid; };
 #define LD_HM_MAX_BASES 8
 static struct ld_hm_base g_hm_bases[LD_HM_MAX_BASES] __attribute__((used));
 static unsigned g_hm_base_next __attribute__((used));
@@ -183,10 +183,13 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     }
 
     int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
+    int is_allapps = is_laptop && g_home_options.ws.dock_custom &&
+        __atomic_load_n(&g_ws_in_allapps_build, __ATOMIC_RELAXED);
+    int scope = is_laptop ? (is_allapps ? 2 : 1) : 0;
     struct ld_grid_offsets ws_off = {0};
     const struct ld_grid_offsets *o;
     if (is_laptop && g_home_options.ws.dock_custom) {
-        if (__atomic_load_n(&g_ws_in_allapps_build, __ATOMIC_RELAXED)) {
+        if (is_allapps) {
             ws_off.horizontal  = landscape ? g_home_options.ws.apps_land_h_offset : g_home_options.ws.apps_port_h_offset;
             ws_off.top         = landscape ? g_home_options.ws.apps_land_top      : g_home_options.ws.apps_port_top;
             ws_off.bottom      = landscape ? g_home_options.ws.apps_land_bottom   : g_home_options.ws.apps_port_bottom;
@@ -216,7 +219,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     struct ld_hm_base *base = 0;
     for (unsigned i = 0; i < LD_HM_MAX_BASES; i++) {
         struct ld_hm_base *b = &g_hm_bases[i];
-        if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows) continue;
+        if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows || b->scope != scope) continue;
         if (oy_ok && b->oy_valid && __builtin_fabs(oy_now - b->oy) > 1.0) continue;
         base = b;
         break;
@@ -243,9 +246,10 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         base->bi = bi;
         base->cols = cols;
         base->rows = rows;
+        base->scope = scope;
         base->valid = 1;
-        ld_blog("home margin base mode=%d dir=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
-                mode_idx, landscape, base->cw, base->ox, base->ch, base->oy, base->ind, cols, dh);
+        ld_blog("home margin base mode=%d scope=%d dir=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
+                mode_idx, scope, landscape, base->cw, base->ox, base->ch, base->oy, base->ind, cols, dh);
     }
     if (n == 0u || n == 1000u || n == 100000u) {
         double cw = 0, ch = 0;
@@ -269,8 +273,8 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                 __builtin_memcpy(&curx, (const void *)(box + 7), sizeof curx);
                 if (curx != ox) __builtin_memcpy((void *)(box + 7), &ox, sizeof ox);
                 if ((dh != 0.0 || cw_cur != cw || curx != ox) && (n % 500u) == 0u)
-                    ld_blog("home margin h mode=%d dir=%d cols=%d cw_in=%.2f ox_in=%.2f target=cw%.2f/ox%.2f",
-                            mode_idx, landscape, cols, cw_cur, curx, cw, ox);
+                    ld_blog("home margin h mode=%d scope=%d dir=%d cols=%d dh=%.2f cw_in=%.2f ox_in=%.2f target=cw%.2f/ox%.2f",
+                            mode_idx, scope, landscape, cols, dh, cw_cur, curx, cw, ox);
             }
         }
     }
