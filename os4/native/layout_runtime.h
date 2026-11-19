@@ -3,19 +3,9 @@
 #include <sys/uio.h>
 #include <sys/syscall.h>
 #include "dart_observer.h"
-#include "layout_memory.h"
+#include "layout_state.h"
 #include "dart_heap.h"
 #include "grid_orientation.h"
-
-#ifndef LD_LAYOUT_FILE
-#define LD_LAYOUT_FILE "/data/user_de/0/com.miui.home/files/liquiddock-layout-v3.bin"
-#endif
-#ifndef LD_WS_LAYOUT_FILE
-#define LD_WS_LAYOUT_FILE "/data/user_de/0/com.miui.home/files/liquiddock-ws-layout-v3.bin"
-#endif
-#ifndef LD_WS_DESK_LAYOUT_FILE
-#define LD_WS_DESK_LAYOUT_FILE "/data/user_de/0/com.miui.home/files/liquiddock-ws-desk-v3.bin"
-#endif
 static int g_restore_ready;
 static int g_initial_restore,g_initial_columns,g_initial_rows,g_initial_direction;
 static int g_rotation_direction=-1;
@@ -47,14 +37,25 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
     }
     int square=g_grid_cols>0 && g_grid_cols==g_grid_rows,changed_square=0;
     if(square && direction>=0 && g_layout_hooks_ready) {
+        const char *sq_path = ld_is_workstation_layout_active() ? LD_WS_DESK_LAYOUT_FILE : LD_LAYOUT_FILE;
         struct ld_layout_memory *m=calloc(1,sizeof *m);
-        if(m && ld_layout_load(LD_LAYOUT_FILE,m) && m->columns==g_grid_cols && m->rows==g_grid_rows)
-            changed_square=m->active_direction>=0 && m->active_direction!=direction;
-        free(m);
+        if(m) {
+            pthread_mutex_lock(&g_layout_io_lock);
+            int sq_ok = ld_layout_load(sq_path,m) && m->columns==g_grid_cols && m->rows==g_grid_rows;
+            pthread_mutex_unlock(&g_layout_io_lock);
+            if(sq_ok) changed_square=m->active_direction>=0 && m->active_direction!=direction;
+            free(m);
+        }
     }
-    int initial=g_initial_restore==1 && direction==g_initial_direction
+    int init_state = __atomic_load_n(&g_initial_restore, __ATOMIC_ACQUIRE);
+    int initial = init_state==1 && direction==g_initial_direction
             && ld_heap_i64(c->x[2],0x1b)==g_initial_columns
             && ld_heap_i64(c->x[2],0x23)==g_initial_rows;
+    if (g_layout_hooks_ready && init_state == 1 && !initial && livecols > 0 && liverows > 0 &&
+        (livecols != g_initial_columns || liverows != g_initial_rows || direction != g_initial_direction)) {
+        __atomic_store_n(&g_initial_restore, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_initial_restore_mask, 0, __ATOMIC_RELEASE);
+    }
     int stale_old = (prev_cols > 0 && prev_rows > 0 &&
                      (prev_cols != livecols || prev_rows != liverows) &&
                      ld_heap_i64(receiver, 7) == livecols &&
@@ -65,7 +66,7 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
         int64_t oldcols=stale_old ? prev_cols : (square?g_grid_cols+1:ld_heap_i64(c->x[2],0x23));
         int64_t oldrows=stale_old ? prev_rows : (square?g_grid_rows:ld_heap_i64(c->x[2],0x1b));
         memcpy((void *)(receiver+7),&oldcols,8); memcpy((void *)(receiver+15),&oldrows,8);
-        if(initial) g_initial_restore=2;
+        if(initial) __atomic_store_n(&g_initial_restore, 2, __ATOMIC_RELEASE);
         ld_blog("vendor layout transaction requested direction=%d initial=%d stale_old=%d",direction,initial,stale_old);
     }
     ld_blog("orientation fields old=%lld,%lld new=%lld,%lld late=%x,%x sentinel=%llx",
@@ -116,27 +117,55 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     }
     int cols=(int)c->x[3], rows=(int)c->x[5];
     int oldcols=(int)ld_heap_i64(c->x[1],7), oldrows=(int)ld_heap_i64(c->x[1],15);
-    int initial=g_initial_restore==2;
     int square=g_grid_cols==g_grid_rows;
     int is_ws_allapps=(list_cont==-104);
     if(!count) goto done;
-    if(!is_ws_allapps && !ld_layout_valid(source,count,(initial||square)?cols:oldcols,(initial||square)?rows:oldrows)) goto done;
+    if(is_ws_allapps) {
+        /* No remembered layout for AllApps: only transpose (x,y)->(y,x) when the
+         * items fit the swapped grid but not the target one. Page count is preserved
+         * (cols*rows is constant), so no page is lost or emptied. The vendor 6x4-only
+         * transform is always skipped. */
+        if(!ld_layout_valid(source,count,cols,rows) && ld_layout_valid(source,count,rows,cols)) {
+            for(size_t i=0;i<count;i++) {
+                int64_t x=source[i].y,y=source[i].x;
+                memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
+                memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
+            }
+            ld_blog("allapps transposed %zu items to %dx%d",count,cols,rows);
+        }
+        g_restore_ready=1; goto done;
+    }
     int direction=square?g_rotation_direction:(cols==g_grid_cols && rows==g_grid_rows?0:1);
     if(direction<0 || direction>1) goto done;
     if((direction && (cols!=g_grid_rows || rows!=g_grid_cols)) || (oldcols==cols && oldrows==rows)) goto done;
-    int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
-    const char *layout_file = is_ws_allapps ? LD_WS_LAYOUT_FILE
-                            : (is_laptop ? LD_WS_DESK_LAYOUT_FILE : LD_LAYOUT_FILE);
+    int bit = is_ws_allapps ? 2 : 1;
+    int init_state = __atomic_load_n(&g_initial_restore, __ATOMIC_ACQUIRE);
+    int init_mask = __atomic_load_n(&g_initial_restore_mask, __ATOMIC_ACQUIRE);
+    int initial = (init_state == 2) && ((init_mask & bit) != 0) &&
+                  cols == g_initial_columns && rows == g_initial_rows &&
+                  direction == g_initial_direction;
+    if (init_state == 2 && !initial &&
+        (cols != g_initial_columns || rows != g_initial_rows || direction != g_initial_direction)) {
+        __atomic_store_n(&g_initial_restore, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_initial_restore_mask, 0, __ATOMIC_RELEASE);
+    }
+    if(!is_ws_allapps && !ld_layout_valid(source,count,(initial||square)?cols:oldcols,(initial||square)?rows:oldrows)) goto done;
+    int is_laptop = ld_is_workstation_layout_active();
+    int slot = is_ws_allapps ? LD_SLOT_WS_ALLAPPS
+             : (is_laptop ? LD_SLOT_WS_DESK : LD_SLOT_NORMAL_HOME);
+    const char *layout_file = ld_layout_slot_path(slot);
     struct ld_layout_memory *memory=calloc(1,sizeof *memory);
     if(!memory) goto done;
+    pthread_mutex_lock(&g_layout_io_lock);
     if(!ld_layout_load(layout_file,memory) || memory->columns!=g_grid_cols || memory->rows!=g_grid_rows)
         memset(memory,0,sizeof *memory);
     memory->columns=g_grid_cols; memory->rows=g_grid_rows;
-    if(!initial && (!is_ws_allapps || ld_layout_valid(source,count,oldcols,oldrows))) {
+    if(!initial && ld_layout_valid(source,count,square?g_grid_cols:oldcols,square?g_grid_rows:oldrows)) {
         memcpy(memory->items[1-direction],source,count*sizeof *source);
         memory->count[1-direction]=(uint32_t)count;
     }
     if(!ld_layout_plan(source,count,cols,rows,memory->items[direction],memory->count[direction],target)) {
+        pthread_mutex_unlock(&g_layout_io_lock);
         ld_blog("layout restore cannot fit same-page items; no changes");
         free(memory);
         goto done;
@@ -145,17 +174,23 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     memory->active_direction=direction;
     /* Let the original Dart continuation publish through the launcher's own
      * database engine. Never open or rewrite its live database here. */
-    if(!ld_layout_save(layout_file,memory)) { free(memory); goto done; }
+    int saved = ld_layout_save(layout_file,memory);
+    if(saved) ld_layout_invalidate_pending_locked(slot);
+    pthread_mutex_unlock(&g_layout_io_lock);
     free(memory);
+    if(!saved) goto done;
     for(size_t i=0;i<count;i++) {
         int64_t x=target[i].x,y=target[i].y;
         memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
         memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
     }
     g_restore_ready=1;
-    if(g_initial_restore && !is_ws_allapps) g_initial_restore=0;
-    ld_blog("layout restored %zu items (cont=%lld) to %dx%d; vendor occupancy continuation",
-            count,(long long)list_cont,cols,rows);
+    if(initial) {
+        int rem = __atomic_and_fetch(&g_initial_restore_mask, ~bit, __ATOMIC_ACQ_REL);
+        if(!rem) __atomic_store_n(&g_initial_restore, 0, __ATOMIC_RELEASE);
+    }
+    ld_blog("layout restored %zu items (cont=%lld slot=%d) to %dx%d; vendor occupancy continuation",
+            count,(long long)list_cont,slot,cols,rows);
 done:
     free(source); free(target); free(cells); free(models);
 }

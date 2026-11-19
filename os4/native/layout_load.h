@@ -1,6 +1,8 @@
 #ifndef LD_LAYOUT_LOAD_H
 #define LD_LAYOUT_LOAD_H
+#include <stdbool.h>
 #include "grid_orientation.h"
+#include "layout_state.h"
 static void *g_orig_load_items __attribute__((used));
 static void *g_orig_filter_return __attribute__((used));
 static int g_load_columns,g_load_rows,g_load_direction;
@@ -43,20 +45,22 @@ static int64_t ld_dto_number(struct ld_dart_context *c,uintptr_t object,size_t o
     if(ptr && (ld_heap_u32(ptr,(size_t)-1)>>12 & 0xfffff)==0x3d) return ld_heap_i64(ptr,7);
     return INT64_MIN;
 }
-static int ld_read_dto_item(struct ld_dart_context *c,uintptr_t dto,struct ld_layout_item *item) {
-    uint32_t header = ld_heap_u32(dto, (size_t)-1);
-    uint32_t cid = (header >> 12) & 0xfffff;
-    uint32_t size_tag = (header >> 8) & 0xf;
-    static unsigned logged_dto_cid = 0;
-    if (__atomic_fetch_add(&logged_dto_cid, 1u, __ATOMIC_RELAXED) < 5u) {
-        ld_blog("layout DTO item: dto=%p header=0x%x cid=0x%x size_tag=%u", (void*)dto, header, cid, size_tag);
+static int ld_read_dto_item_ex(struct ld_dart_context *c,uintptr_t dto,struct ld_layout_item *item,int64_t *out_container) {
+    if(!(dto&1)) return 0;
+    uint32_t header=ld_heap_u32(dto,(size_t)-1);
+    uint32_t cid=(header>>12)&0xfffff;
+    uint32_t size_tag=(header>>8)&0xf;
+    static unsigned logged_dto_cid=0;
+    if(__atomic_fetch_add(&logged_dto_cid,1u,__ATOMIC_RELAXED)<5u) {
+        ld_blog("layout DTO item: dto=%p header=0x%x cid=0x%x size_tag=%u",(void*)dto,header,cid,size_tag);
     }
     /* ItemInfoDto: 8604 was 0xf26. Allow 0xf26 or valid CID > 0x100 */
-    if (cid != 0xf26 && cid < 0x100) return 0;
+    if(cid!=0xf26 && cid<0x100) return 0;
     int64_t id=ld_dto_number(c,dto,7),container=ld_dto_number(c,dto,0x2b);
     if(id<0 || container==INT64_MIN) return 0;
+    if(out_container) *out_container=container;
     int64_t extend_container=ld_dto_number(c,dto,0x2f);
-    if(container!=-100 || (extend_container!=INT64_MIN && extend_container>0)) {
+    if((container!=-100 && container!=-104) || (extend_container!=INT64_MIN && extend_container>0)) {
         *item=(struct ld_layout_item){.id=id,.screen=-1}; return 1;
     }
     int64_t page=ld_dto_number(c,dto,0x1f),x=ld_dto_number(c,dto,0x23),y=ld_dto_number(c,dto,0x27);
@@ -65,8 +69,16 @@ static int ld_read_dto_item(struct ld_dart_context *c,uintptr_t dto,struct ld_la
             || y<INT32_MIN+1LL || y>INT32_MAX || sx<1 || sx>10 || sy<1 || sy>10) return 0;
     *item=(struct ld_layout_item){id,page,(int)x,(int)y,(int)sx,(int)sy}; return 1;
 }
+static inline int ld_read_dto_item(struct ld_dart_context *c,uintptr_t dto,struct ld_layout_item *item) {
+    int64_t cont=0;
+    if(!ld_read_dto_item_ex(c,dto,item,&cont)) return 0;
+    if(cont!=-100 && item->screen>=0) {
+        *item=(struct ld_layout_item){.id=item->id,.screen=-1};
+    }
+    return 1;
+}
 __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
-    if(g_load_prepared || !g_layout_hooks_ready || g_grid_cols<=0 || g_grid_rows<=0) return;
+    if(__atomic_load_n(&g_load_prepared, __ATOMIC_ACQUIRE) || !g_layout_hooks_ready || g_grid_cols<=0 || g_grid_rows<=0) return;
     uintptr_t list=c->x[2];
     int n=(int32_t)ld_heap_u32(list,0xb)/2;
     uintptr_t data=ld_heap_pointer(c,list,0xf);
@@ -98,8 +110,12 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
         if(source[count].screen<0) continue;
         objects[count++]=dto;
     }
-    ld_write_4x2_widget_state(source, count);
-    int known=ld_layout_load(LD_LAYOUT_FILE,memory) && memory->columns==g_grid_cols && memory->rows==g_grid_rows;
+    int is_ws=ld_is_workstation_layout_active();
+    int slot=is_ws?LD_SLOT_WS_DESK:LD_SLOT_NORMAL_HOME;
+    const char *layout_file=ld_layout_slot_path(slot);
+    if(!is_ws) ld_write_4x2_widget_state(source, count);
+    pthread_mutex_lock(&g_layout_io_lock);
+    int known=ld_layout_load(layout_file,memory) && memory->columns==g_grid_cols && memory->rows==g_grid_rows;
     if(!known) { memset(memory,0,sizeof *memory); memory->active_direction=-1; }
     int source_direction=memory->active_direction;
     if(source_direction<0) {
@@ -108,30 +124,27 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
     }
     int sc=source_direction?g_grid_rows:g_grid_cols,sr=source_direction?g_grid_cols:g_grid_rows;
     memory->columns=g_grid_cols; memory->rows=g_grid_rows;
-    if(known && source_direction>=0) {
-        /* Rust may have already scaled or transposed DTO positions. The save
-         * boundary snapshot is authoritative; the load batch supplies identity
-         * and footprint, not a second snapshot of the previous orientation. */
-        for(size_t i=0;i<count;i++) for(size_t j=0;j<memory->count[source_direction];j++)
-            if(source[i].id==memory->items[source_direction][j].id) {
-                source[i].screen=memory->items[source_direction][j].screen; break;
-            }
-    } else if(ld_layout_valid(source,count,sc,sr)) {
+    if(!known && ld_layout_valid(source,count,sc,sr)) {
         memcpy(memory->items[source_direction],source,count*sizeof *source);
         memory->count[source_direction]=(uint32_t)count;
     }
     if(!ld_layout_plan(source,count,cols,rows,memory->items[direction],memory->count[direction],target)) {
+        pthread_mutex_unlock(&g_layout_io_lock);
         ld_blog("load-items bail plan count=%zu cols=%d rows=%d dir=%d known=%d mem_cnt=%u",
             count,cols,rows,direction,known,memory->count[direction]);
         goto done;
     }
     for(size_t i=0;i<count;i++) if(target[i].screen>INT32_MAX/2) {
+        pthread_mutex_unlock(&g_layout_io_lock);
         ld_blog("load-items bail screen i=%zu scr=%lld",i,(long long)target[i].screen);
         goto done;
     }
     memcpy(memory->items[direction],target,count*sizeof *target); memory->count[direction]=(uint32_t)count;
     memory->active_direction=direction;
-    if(!ld_layout_save(LD_LAYOUT_FILE,memory)) {
+    int saved=ld_layout_save(layout_file,memory);
+    if(saved) ld_layout_invalidate_pending_locked(slot);
+    pthread_mutex_unlock(&g_layout_io_lock);
+    if(!saved) {
         ld_blog("load-items bail save");
         goto done;
     }
@@ -140,13 +153,13 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
          * ItemInfoModel. Small coordinates are immediate Smis, never pointers. */
         int32_t x=target[i].x*2,y=target[i].y*2;
         memcpy((void *)(objects[i]+0x23),&x,4); memcpy((void *)(objects[i]+0x27),&y,4);
-        int32_t page=(int32_t)target[i].screen*2;
-        memcpy((void *)(objects[i]+0x1f),&page,4);
     }
-    g_load_prepared=1; g_initial_restore=1;
     g_initial_columns=cols; g_initial_rows=rows;
     g_initial_direction=direction;
-    ld_blog("startup DTO restored %zu HOME items %dx%d source-direction=%d",count,cols,rows,source_direction);
+    __atomic_store_n(&g_initial_restore_mask, 1, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_initial_restore, 1, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_load_prepared, 1, __ATOMIC_RELEASE);
+    ld_blog("startup DTO restored %zu HOME items (slot=%d) %dx%d source-direction=%d",count,slot,cols,rows,source_direction);
 done:
     free(source); free(target); free(objects); free(memory);
 }

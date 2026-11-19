@@ -4,7 +4,10 @@
 #undef LD_DART_OBSERVER
 #define LD_DART_OBSERVER(...)
 #define LD_LAYOUT_FILE "/tmp/ld-runtime-batch-fixture.bin"
+#define LD_WS_LAYOUT_FILE "/tmp/ld-runtime-ws-apps-fixture.bin"
+#define LD_WS_DESK_LAYOUT_FILE "/tmp/ld-runtime-ws-desk-fixture.bin"
 static int g_grid_cols=4,g_grid_rows=8;
+static volatile int g_ws_is_laptop_mode=0;
 static void *g_orig_orientation;
 static void ld_blog(const char *format,...) { (void)format; }
 #include "../native/layout_runtime.h"
@@ -41,6 +44,63 @@ int main(void) {
  ld_process_mid(&c); assert(g_process_mid_next==(void *)g_process_resume);
  assert(ld_layout_load(LD_LAYOUT_FILE,&m) && m.active_direction==1 && m.count[1]==3);
  g_layout_hooks_ready=0; ld_observe_process(&c); ld_process_mid(&c); assert(g_process_mid_next==g_orig_process_mid);
- unlink(LD_LAYOUT_FILE); (void)g_orig_orientation; (void)g_layout_mid_ready;
+
+ /* Verify Workstation initial_restore bitmask preserves initial=1 across -100 then -104,
+  * and never mutates Normal Home LD_LAYOUT_FILE. */
+ struct ld_layout_memory normal_before;
+ assert(ld_layout_load(LD_LAYOUT_FILE,&normal_before));
+ struct ld_layout_memory ws_desk={.columns=4,.rows=8,.active_direction=1,.count={2,2}};
+ struct ld_layout_item ws_d_p[]={{201,5,0,6,1,1},{202,5,3,7,1,1}};
+ struct ld_layout_item ws_d_l[]={{201,5,6,1,1,1},{202,5,7,2,1,1}};
+ memcpy(ws_desk.items[0],ws_d_p,sizeof ws_d_p); memcpy(ws_desk.items[1],ws_d_l,sizeof ws_d_l);
+ assert(ld_layout_save(LD_WS_DESK_LAYOUT_FILE,&ws_desk));
+
+ struct ld_layout_memory ws_apps={.columns=4,.rows=8,.active_direction=1,.count={1,1}};
+ struct ld_layout_item ws_a_p[]={{301,2,0,7,1,1}};
+ struct ld_layout_item ws_a_l[]={{301,2,5,3,1,1}};
+ memcpy(ws_apps.items[0],ws_a_p,sizeof ws_a_p); memcpy(ws_apps.items[1],ws_a_l,sizeof ws_a_l);
+ assert(ld_layout_save(LD_WS_LAYOUT_FILE,&ws_apps));
+
+ g_ws_is_laptop_mode=1; g_loaded_ws_known=1; g_loaded_is_ws=1;
+ g_layout_hooks_ready=1; g_initial_columns=8; g_initial_rows=4; g_initial_direction=1;
+ __atomic_store_n(&g_initial_restore_mask,3,__ATOMIC_RELEASE);
+ __atomic_store_n(&g_initial_restore,2,__ATOMIC_RELEASE);
+
+ /* 1) Desktop (-100) runs first; source already planned to 8x4, remembers ws_d_l and keeps initial=1 bit 2 */
+ integer(obj[15],7,201); integer(obj[15],0x1f,1); integer(obj[15],0x27,1);
+ integer(obj[15],0x2f,5); integer(obj[15],0x37,0); integer(obj[15],0x3f,2); integer(obj[15],0x47,-100);
+ integer(obj[12],11,0); integer(obj[12],19,2);
+ integer(obj[16],7,202); integer(obj[16],0x1f,1); integer(obj[16],0x27,1);
+ integer(obj[16],0x2f,5); integer(obj[16],0x37,3); integer(obj[16],0x3f,3); integer(obj[16],0x47,-100);
+ integer(obj[13],11,3); integer(obj[13],19,3);
+ word(obj[2],11,2); word(obj[8],11,4);
+ ld_observe_process(&c);
+ assert(g_restore_ready);
+ assert(ld_heap_i64(obj[12],11)==ws_d_l[0].x && ld_heap_i64(obj[12],19)==ws_d_l[0].y);
+ assert(ld_heap_i64(obj[13],11)==ws_d_l[1].x && ld_heap_i64(obj[13],19)==ws_d_l[1].y);
+ /* Bit 1 consumed, bit 2 (-104) MUST remain armed! */
+ assert(__atomic_load_n(&g_initial_restore_mask,__ATOMIC_ACQUIRE)==2);
+ assert(__atomic_load_n(&g_initial_restore,__ATOMIC_ACQUIRE)==2);
+
+ /* 2) AllApps (-104) runs second with valid 8x4 remembered slot in items[1]; portrait items[0] must stay intact */
+ word(obj[2],11,2); word(obj[8],11,2);
+ integer(obj[17],7,301); integer(obj[17],0x1f,1); integer(obj[17],0x27,1);
+ integer(obj[17],0x2f,2); integer(obj[17],0x37,0); integer(obj[17],0x3f,0); integer(obj[17],0x47,-104);
+ word(obj[14],7,(uint32_t)obj[17]); integer(obj[14],11,0); integer(obj[14],19,0);
+ word(obj[10],15,(uint32_t)obj[14]);
+ ld_observe_process(&c);
+ assert(g_restore_ready);
+ assert(ld_heap_i64(obj[14],11)==0 && ld_heap_i64(obj[14],19)==0); /* AllApps untouched */
+ /* Verify initial=1 prevented overwriting items[0] (4x8) of ws_apps */
+ struct ld_layout_memory ws_apps_after;
+ assert(ld_layout_load(LD_WS_LAYOUT_FILE,&ws_apps_after));
+ assert(ws_apps_after.items[0][0].x==ws_a_p[0].x && ws_apps_after.items[0][0].y==ws_a_p[0].y);
+ /* Normal Home file untouched */
+ struct ld_layout_memory normal_after;
+ assert(ld_layout_load(LD_LAYOUT_FILE,&normal_after));
+ assert(memcmp(&normal_before,&normal_after,sizeof normal_before)==0);
+
+ unlink(LD_LAYOUT_FILE); unlink(LD_WS_LAYOUT_FILE); unlink(LD_WS_DESK_LAYOUT_FILE);
+ (void)g_orig_orientation; (void)g_layout_mid_ready;
  puts("PASS all pages and model coordinates mapped in one batch before vendor continuation");
 }

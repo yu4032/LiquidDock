@@ -159,8 +159,8 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "layout_runtime.h"
 #include "layout_profiles.h"
 #include "layout_load.h"
-#include "frb_boundary_adapter.h"
 #include "layout_save.h"
+#include "frb_boundary_adapter.h"
 #include "home_icons.h"
 #include "home_margins.h"
 #include "safe_mode.h"
@@ -878,8 +878,11 @@ static void update_layout_ready(void) {
         && g_orig_load_items && g_orig_save_batch && g_orig_save_single && g_orig_delete_item
         && g_orig_rust_orientation && g_orig_process_screen && g_orig_widget_lattice && g_orig_no_vacant;
     if(g_layout_hooks_ready && !g_profile_selected) {
-        if(ld_layout_select_profile(LD_LAYOUT_FILE,g_grid_cols,g_grid_rows)) g_profile_selected=true;
-        else {
+        if(ld_layout_select_profile(LD_LAYOUT_FILE,g_grid_cols,g_grid_rows)) {
+            (void)ld_layout_select_profile(LD_WS_LAYOUT_FILE,g_grid_cols,g_grid_rows);
+            (void)ld_layout_select_profile(LD_WS_DESK_LAYOUT_FILE,g_grid_cols,g_grid_rows);
+            g_profile_selected=true;
+        } else {
             g_layout_hooks_ready=0; g_grid_cols=0; g_grid_rows=0;
             ld_blog("layout profile archive failed; custom grid disabled");
         }
@@ -1758,11 +1761,43 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         if (result == 0 && *observers[i].orig) pin_installed_hook(target);
         ld_blog("layout observer %lx installed at %p result=%d", (unsigned long)observers[i].vaddr, (void *)target, result);
         if (observers[i].vaddr == LD_PROCESS_SCREEN_VADDR && result == 0) {
-            g_process_resume = target + 0x384u;
-            int mid_result = api->hook((void *)(target + 0x218u), (void *)repl_process_mid, &g_orig_process_mid);
-            g_layout_mid_ready = mid_result == 0 && g_orig_process_mid != NULL;
-            if (g_layout_mid_ready) pin_installed_hook(target + 0x218u);
-            ld_blog("layout continuation installed at %p result=%d", (void *)(target + 0x218u), mid_result);
+            uintptr_t mid_site = 0;
+            uintptr_t resume_site = 0;
+            for (size_t k = 0; ; k++) {
+                size_t off;
+                if (k == 0) {
+                    off = 0x218u;
+                } else {
+                    off = 0x180u + (k - 1) * 4u;
+                    if (off > 0x300u) break;
+                    if (off == 0x218u) continue;
+                }
+                if (!executable_range(target + off - 4u, 8u)) continue;
+                uint32_t w_prev = *(const uint32_t *)(target + off - 4u);
+                uint32_t w_cbz = *(const uint32_t *)(target + off);
+                if (w_prev == 0xb840b020u && (w_cbz & 0xff00001fu) == 0x34000000u) {
+                    int32_t imm19 = (int32_t)((w_cbz >> 5) & 0x7ffffu);
+                    if (imm19 & 0x40000) imm19 -= 0x80000;
+                    int64_t delta = (int64_t)imm19 << 2;
+                    if (delta >= 0x40 && delta <= 0x400) {
+                        mid_site = target + off;
+                        resume_site = (uintptr_t)((intptr_t)mid_site + delta);
+                        break;
+                    }
+                }
+            }
+            if (mid_site && resume_site &&
+                executable_range(mid_site, 16u) && executable_range(resume_site, 16u)) {
+                g_process_resume = resume_site;
+                int mid_result = api->hook((void *)mid_site, (void *)repl_process_mid, &g_orig_process_mid);
+                g_layout_mid_ready = mid_result == 0 && g_orig_process_mid != NULL;
+                if (g_layout_mid_ready) pin_installed_hook(mid_site);
+                ld_blog("layout continuation installed at %p (resume=%p) result=%d",
+                        (void *)mid_site, (void *)g_process_resume, mid_result);
+            } else {
+                g_layout_mid_ready = 0;
+                ld_blog("layout continuation verification failed near target=%p", (void *)target);
+            }
         }
     }
     uintptr_t orientation = ld_resolve_sym_or_aot(

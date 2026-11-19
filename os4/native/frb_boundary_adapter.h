@@ -22,6 +22,7 @@
 #include <string.h>
 #include "bootlog.h"
 #include "executable_range.h"
+#include "layout_state.h"
 #include "lib_base.h"
 #include "rust_symbol_resolver.h"
 
@@ -56,6 +57,7 @@ static bool g_frb_sse_decode_synced = false;
 static volatile int g_frb_start_cols = 0;
 static volatile int g_frb_start_rows = 0;
 static volatile int g_frb_start_dir = -1;
+static __thread int t_frb_in_update_batch = 0;
 
 static int ld_frb_adapter_ready(void) {
     return (g_frb_adapter_installed && g_orig_frb_primary_adapter &&
@@ -320,13 +322,16 @@ static void ld_frb_write_opt_i32(uint8_t *item, size_t off, int32_t val) {
 }
 
 static int ld_frb_plan_container(uint8_t *base, uint64_t len, int cols, int rows, int direction,
-                                 int64_t target_cont, const char *layout_file, int is_home) {
+                                 int64_t target_cont, int slot) {
+    const char *layout_file = ld_layout_slot_path(slot);
+    int is_home = (slot == LD_SLOT_NORMAL_HOME);
     struct ld_layout_item *source = calloc(LD_LAYOUT_MAX_ITEMS, sizeof *source);
     struct ld_layout_item *target = calloc(LD_LAYOUT_MAX_ITEMS, sizeof *target);
     uint8_t **ptrs = calloc(LD_LAYOUT_MAX_ITEMS, sizeof *ptrs);
     struct ld_layout_memory *memory = calloc(1, sizeof *memory);
     size_t count = 0;
     int planned = 0;
+    int locked = 0;
     if (!source || !target || !ptrs || !memory) goto done;
 
     const ld_frb_item_layout_t *L = &g_frb_item_layout;
@@ -359,6 +364,9 @@ static int ld_frb_plan_container(uint8_t *base, uint64_t len, int cols, int rows
 
     if (is_home) ld_write_4x2_widget_state(source, count);
 
+    pthread_mutex_lock(&g_layout_io_lock);
+    locked = 1;
+
     int known = ld_layout_load(layout_file, memory) &&
                 memory->columns == g_grid_cols && memory->rows == g_grid_rows;
     if (!known) {
@@ -376,16 +384,7 @@ static int ld_frb_plan_container(uint8_t *base, uint64_t len, int cols, int rows
     memory->columns = g_grid_cols;
     memory->rows = g_grid_rows;
 
-    if (known && source_direction >= 0) {
-        for (size_t i = 0; i < count; i++) {
-            for (size_t j = 0; j < memory->count[source_direction]; j++) {
-                if (source[i].id == memory->items[source_direction][j].id) {
-                    source[i].screen = memory->items[source_direction][j].screen;
-                    break;
-                }
-            }
-        }
-    } else if (ld_layout_valid(source, count, sc, sr)) {
+    if (!known && ld_layout_valid(source, count, sc, sr)) {
         memcpy(memory->items[source_direction], source, count * sizeof *source);
         memory->count[source_direction] = (uint32_t)count;
     }
@@ -403,18 +402,21 @@ static int ld_frb_plan_container(uint8_t *base, uint64_t len, int cols, int rows
         ld_blog("FRB load bail save cont=%lld", (long long)target_cont);
         goto done;
     }
+    ld_layout_invalidate_pending_locked(slot);
+    pthread_mutex_unlock(&g_layout_io_lock);
+    locked = 0;
 
     for (size_t i = 0; i < count; i++) {
-        ld_frb_write_opt_i32(ptrs[i], L->screen_off, (int32_t)target[i].screen);
         ld_frb_write_opt_i32(ptrs[i], L->x_off, (int32_t)target[i].x);
         ld_frb_write_opt_i32(ptrs[i], L->y_off, (int32_t)target[i].y);
     }
 
     planned = 1;
-    ld_blog("FRB boundary restored %zu items (cont=%lld) %dx%d source-direction=%d (bypassed Dart DTO hook)",
-            count, (long long)target_cont, cols, rows, source_direction);
+    ld_blog("FRB boundary restored %zu items (cont=%lld slot=%d) %dx%d source-direction=%d (bypassed Dart DTO hook)",
+            count, (long long)target_cont, slot, cols, rows, source_direction);
 
 done:
+    if (locked) pthread_mutex_unlock(&g_layout_io_lock);
     free(source);
     free(target);
     free(ptrs);
@@ -437,106 +439,52 @@ static int ld_frb_vec_has_container(uint8_t *base, uint64_t len, int64_t target_
 
 static void ld_frb_plan_vec_items(void *vec_ptr) {
     if (!vec_ptr || !g_frb_item_layout.valid) return;
-    if (g_load_prepared || !g_layout_hooks_ready || g_grid_cols <= 0 || g_grid_rows <= 0) return;
+    if (__atomic_load_n(&g_load_prepared, __ATOMIC_ACQUIRE) ||
+        !g_layout_hooks_ready || g_grid_cols <= 0 || g_grid_rows <= 0) return;
 
     uint64_t data_addr = 0, len = 0;
     memcpy(&data_addr, (const uint8_t *)vec_ptr + 8u, 8);
     memcpy(&len, (const uint8_t *)vec_ptr + 16u, 8);
+    int frb_c = __atomic_load_n(&g_frb_start_cols, __ATOMIC_ACQUIRE);
+    int frb_r = __atomic_load_n(&g_frb_start_rows, __ATOMIC_ACQUIRE);
+    int frb_d = __atomic_load_n(&g_frb_start_dir, __ATOMIC_ACQUIRE);
     ld_blog("FRB vec_encode len=%llu hooks_ready=%d rt=%dx%d load=%dx%d frb=%dx%d",
             (unsigned long long)len, g_layout_hooks_ready ? 1 : 0,
             g_runtime_columns, g_runtime_rows, g_load_columns, g_load_rows,
-            g_frb_start_cols, g_frb_start_rows);
+            frb_c, frb_r);
     if (!data_addr || len == 0 || len > 4096u) return;
 
-    int cols = g_runtime_columns ? g_runtime_columns : (g_load_columns ? g_load_columns : g_frb_start_cols);
-    int rows = g_runtime_rows ? g_runtime_rows : (g_load_rows ? g_load_rows : g_frb_start_rows);
+    int cols = (frb_c > 0 && frb_r > 0) ? frb_c : (g_runtime_columns ? g_runtime_columns : g_load_columns);
+    int rows = (frb_c > 0 && frb_r > 0) ? frb_r : (g_runtime_rows ? g_runtime_rows : g_load_rows);
     int direction = g_grid_cols == g_grid_rows
-        ? (g_runtime_columns ? g_runtime_direction : (g_load_columns ? g_load_direction : g_frb_start_dir))
+        ? (g_runtime_columns ? g_runtime_direction : (g_load_columns ? g_load_direction : frb_d))
         : (cols == g_grid_cols && rows == g_grid_rows ? 0 : 1);
     if (direction < 0 || direction > 1) return;
     if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
 
     uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
-    int is_ws = ld_frb_vec_has_container(base, len, -104) ||
-                __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
-    const char *home_file = is_ws ? LD_WS_DESK_LAYOUT_FILE : LD_LAYOUT_FILE;
-    int p_home = ld_frb_plan_container(base, len, cols, rows, direction, -100, home_file, !is_ws);
-    int p_ws   = ld_frb_plan_container(base, len, cols, rows, direction, -104, LD_WS_LAYOUT_FILE, 0);
+    int has_104 = ld_frb_vec_has_container(base, len, -104);
+    int has_100 = ld_frb_vec_has_container(base, len, -100);
+    int is_ws = has_104 ? 1
+              : (has_100 ? 0 : (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_ACQUIRE) ? 1 : 0));
+    __atomic_store_n(&g_loaded_is_ws, is_ws, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_loaded_ws_known, (has_104 || has_100) ? 1 : 0, __ATOMIC_RELEASE);
+
+    int home_slot = is_ws ? LD_SLOT_WS_DESK : LD_SLOT_NORMAL_HOME;
+    int p_home = ld_frb_plan_container(base, len, cols, rows, direction, -100, home_slot);
+    int p_ws   = 0; /* AllApps (-104) is never re-laid out */
     if (p_home || p_ws) {
-        g_load_prepared = 1;
-        g_initial_restore = 1;
         g_initial_columns = cols;
         g_initial_rows = rows;
         g_initial_direction = direction;
+        __atomic_store_n(&g_initial_restore_mask, (p_home ? 1 : 0) | (p_ws ? 2 : 0), __ATOMIC_RELEASE);
+        __atomic_store_n(&g_initial_restore, 1, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_load_prepared, 1, __ATOMIC_RELEASE);
     }
-}
-
-static void ld_frb_sync_container(uint8_t *base, uint64_t len, int cols, int rows, int direction,
-                                  int64_t target_cont, const char *layout_file) {
-    struct ld_layout_memory *memory = calloc(1, sizeof *memory);
-    if (!memory) return;
-    if (!ld_layout_load(layout_file, memory) ||
-        memory->columns != g_grid_cols || memory->rows != g_grid_rows) {
-        memset(memory, 0, sizeof *memory);
-        memory->columns = g_grid_cols;
-        memory->rows = g_grid_rows;
-        memory->active_direction = direction;
-    }
-
-    const ld_frb_item_layout_t *L = &g_frb_item_layout;
-    size_t upserted = 0;
-    for (uint64_t i = 0; i < len; i++) {
-        uint8_t *it = base + i * L->stride;
-        uint64_t disc = 0;
-        memcpy(&disc, it, 8);
-        if (disc == 2u) continue;
-        int64_t id = 0, cont = 0;
-        int32_t scr = 0, cx = 0, cy = 0, sx = 1, sy = 1;
-        if (!ld_frb_read_opt_i64(it, L->id_off, &id) || id <= 0) continue;
-        if (!ld_frb_read_opt_i64(it, L->container_off, &cont) || cont != target_cont) continue;
-        if (!ld_frb_read_opt_i32_def(it, L->screen_off, -1, &scr) || scr < 0) continue;
-        if (!ld_frb_read_opt_i32_def(it, L->x_off, 0, &cx) ||
-            !ld_frb_read_opt_i32_def(it, L->y_off, 0, &cy) ||
-            !ld_frb_read_opt_i32_def(it, L->sx_off, 1, &sx) ||
-            !ld_frb_read_opt_i32_def(it, L->sy_off, 1, &sy)) continue;
-        if (cx < 0 || cy < 0 || sx <= 0 || sy <= 0 || cx + sx > cols || cy + sy > rows) continue;
-
-        int found = 0;
-        for (uint32_t j = 0; j < memory->count[direction]; j++) {
-            if (memory->items[direction][j].id == id) {
-                memory->items[direction][j].screen = scr;
-                memory->items[direction][j].x = cx;
-                memory->items[direction][j].y = cy;
-                memory->items[direction][j].sx = sx;
-                memory->items[direction][j].sy = sy;
-                found = 1;
-                break;
-            }
-        }
-        if (!found && memory->count[direction] < LD_LAYOUT_MAX_ITEMS) {
-            uint32_t k = memory->count[direction]++;
-            memory->items[direction][k].id = id;
-            memory->items[direction][k].screen = scr;
-            memory->items[direction][k].x = cx;
-            memory->items[direction][k].y = cy;
-            memory->items[direction][k].sx = sx;
-            memory->items[direction][k].sy = sy;
-        }
-        upserted++;
-    }
-
-    if (upserted > 0) {
-        memory->active_direction = direction;
-        if (ld_layout_save(layout_file, memory)) {
-            g_frb_sse_decode_synced = true;
-            ld_blog("FRB vec_decode sync: cont=%lld len=%llu upserted=%zu dir=%d (%dx%d)",
-                    (long long)target_cont, (unsigned long long)len, upserted, direction, cols, rows);
-        }
-    }
-    free(memory);
 }
 
 static void ld_frb_sync_decoded_vec(void *out_vec) {
+    if (!t_frb_in_update_batch) return;
     if (!out_vec || !g_frb_item_layout.valid || !g_layout_hooks_ready ||
         g_grid_cols <= 0 || g_grid_rows <= 0) return;
 
@@ -545,21 +493,74 @@ static void ld_frb_sync_decoded_vec(void *out_vec) {
     memcpy(&len, (const uint8_t *)out_vec + 16u, 8);
     if (!data_addr || len == 0 || len > 4096u) return;
 
-    int cols = g_runtime_columns ? g_runtime_columns : (g_load_columns ? g_load_columns : g_frb_start_cols);
-    int rows = g_runtime_rows ? g_runtime_rows : (g_load_rows ? g_load_rows : g_frb_start_rows);
+    int frb_c = __atomic_load_n(&g_frb_start_cols, __ATOMIC_ACQUIRE);
+    int frb_r = __atomic_load_n(&g_frb_start_rows, __ATOMIC_ACQUIRE);
+    int frb_d = __atomic_load_n(&g_frb_start_dir, __ATOMIC_ACQUIRE);
+    int cols = g_runtime_columns ? g_runtime_columns : (frb_c > 0 ? frb_c : g_load_columns);
+    int rows = g_runtime_rows ? g_runtime_rows : (frb_r > 0 ? frb_r : g_load_rows);
     int direction = g_grid_cols == g_grid_rows
-        ? (g_runtime_columns ? g_runtime_direction : (g_load_columns ? g_load_direction : g_frb_start_dir))
+        ? (g_runtime_columns ? g_runtime_direction : (frb_c > 0 ? frb_d : g_load_direction))
         : (cols == g_grid_cols && rows == g_grid_rows ? 0 : 1);
     if (direction < 0 || direction > 1) return;
     if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
     if (!cols || !rows) { cols = direction ? g_grid_rows : g_grid_cols; rows = direction ? g_grid_cols : g_grid_rows; }
 
     uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
-    int is_ws = ld_frb_vec_has_container(base, len, -104) ||
-                __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
-    const char *home_file = is_ws ? LD_WS_DESK_LAYOUT_FILE : LD_LAYOUT_FILE;
-    ld_frb_sync_container(base, len, cols, rows, direction, -100, home_file);
-    ld_frb_sync_container(base, len, cols, rows, direction, -104, LD_WS_LAYOUT_FILE);
+    int has_104 = ld_frb_vec_has_container(base, len, -104);
+    int is_ws = has_104 || ld_is_workstation_layout_active();
+    int home_slot = is_ws ? LD_SLOT_WS_DESK : LD_SLOT_NORMAL_HOME;
+
+    size_t cap = (size_t)len < LD_LAYOUT_MAX_ITEMS ? (size_t)len : LD_LAYOUT_MAX_ITEMS;
+    struct ld_layout_item *home_items = calloc(cap, sizeof *home_items);
+    struct ld_layout_item *ws_items = is_ws ? calloc(cap, sizeof *ws_items) : NULL;
+    if (!home_items || (is_ws && !ws_items)) {
+        free(home_items);
+        free(ws_items);
+        return;
+    }
+
+    const ld_frb_item_layout_t *L = &g_frb_item_layout;
+    size_t home_count = 0, ws_count = 0;
+    for (uint64_t i = 0; i < len && home_count < cap && (!is_ws || ws_count < cap); i++) {
+        uint8_t *it = base + i * L->stride;
+        uint64_t disc = 0;
+        memcpy(&disc, it, 8);
+        if (disc == 2u) continue;
+        int64_t id = 0, cont = 0;
+        int32_t scr = 0, cx = 0, cy = 0, sx = 1, sy = 1;
+        if (!ld_frb_read_opt_i64(it, L->id_off, &id) || id <= 0) continue;
+        if (!ld_frb_read_opt_i64(it, L->container_off, &cont)) continue;
+        if (cont == -100 || cont == -104) {
+            if (!ld_frb_read_opt_i32_def(it, L->screen_off, -1, &scr) || scr < 0 ||
+                !ld_frb_read_opt_i32_def(it, L->x_off, 0, &cx) ||
+                !ld_frb_read_opt_i32_def(it, L->y_off, 0, &cy) ||
+                !ld_frb_read_opt_i32_def(it, L->sx_off, 1, &sx) ||
+                !ld_frb_read_opt_i32_def(it, L->sy_off, 1, &sy)) continue;
+            if (cx < 0 || cy < 0 || sx <= 0 || sy <= 0 || cx + sx > cols || cy + sy > rows) continue;
+            struct ld_layout_item rec = {id, scr, cx, cy, sx, sy};
+            if (cont == -100) home_items[home_count++] = rec;
+        } else {
+            struct ld_layout_item del = {.id = id, .screen = -1};
+            home_items[home_count++] = del;
+            if (is_ws) ws_items[ws_count++] = del;
+        }
+    }
+
+    if (home_count > 0) {
+        ld_capture_saved_items_slot(home_slot, home_items, home_count, direction);
+        g_frb_sse_decode_synced = true;
+        ld_blog("FRB vec_decode sync: slot=%d len=%llu changes=%zu dir=%d (%dx%d)",
+                home_slot, (unsigned long long)len, home_count, direction, cols, rows);
+    }
+    if (ws_count > 0) {
+        ld_capture_saved_items_slot(LD_SLOT_WS_ALLAPPS, ws_items, ws_count, direction);
+        g_frb_sse_decode_synced = true;
+        ld_blog("FRB vec_decode sync: slot=%d len=%llu changes=%zu dir=%d (%dx%d)",
+                LD_SLOT_WS_ALLAPPS, (unsigned long long)len, ws_count, direction, cols, rows);
+    }
+
+    free(home_items);
+    free(ws_items);
 }
 
 static void repl_frb_vec_item_decode(void *out_vec, void *deser) {
@@ -577,24 +578,39 @@ static void repl_frb_primary_adapter(int32_t func_id, int64_t port, uint8_t *ptr
     if (func_id == g_frb_ids.start_load && ptr && data_len >= 16) {
         int32_t args[4] = {0};
         memcpy(args, ptr, 16);
+        int sc = 0, sr = 0, sd = -1;
         if ((args[0] == g_grid_cols && args[1] == g_grid_rows) ||
             (args[0] == g_grid_rows && args[1] == g_grid_cols)) {
-            g_frb_start_cols = args[0];
-            g_frb_start_rows = args[1];
-            g_frb_start_dir = (g_frb_start_cols == g_grid_cols && g_frb_start_rows == g_grid_rows) ? 0 : 1;
+            sc = args[0];
+            sr = args[1];
+            sd = (sc == g_grid_cols && sr == g_grid_rows) ? 0 : 1;
         } else if (args[2] > 0 && args[3] > 0) {
-            g_frb_start_cols = args[2];
-            g_frb_start_rows = args[3];
-            g_frb_start_dir = (g_frb_start_cols == g_grid_cols && g_frb_start_rows == g_grid_rows) ? 0
-                            : (g_frb_start_cols == g_grid_rows && g_frb_start_rows == g_grid_cols) ? 1 : -1;
+            sc = args[2];
+            sr = args[3];
+            sd = (sc == g_grid_cols && sr == g_grid_rows) ? 0
+               : (sc == g_grid_rows && sr == g_grid_cols) ? 1 : -1;
         }
-        ld_blog("FRB adapter start_load(id=%d): args=[%d,%d,%d,%d]",
+        __atomic_store_n(&g_frb_start_cols, sc, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_frb_start_rows, sr, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_frb_start_dir, sd, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_load_prepared, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_initial_restore, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_initial_restore_mask, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_loaded_ws_known, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_loaded_is_ws, 0, __ATOMIC_RELEASE);
+        ld_layout_invalidate_all_pending();
+        ld_blog("FRB adapter start_load(id=%d): args=[%d,%d,%d,%d] reset load_prepared=0",
                 func_id, args[0], args[1], args[2], args[3]);
     } else if (func_id == g_frb_ids.update_item_batch) {
         uint32_t count = 0;
         if (ptr && data_len >= 4) memcpy(&count, ptr, 4);
         ld_blog("FRB adapter update_item_batch(id=%d): bytes=%d header_count=%u",
                 func_id, data_len, count);
+        int prev = t_frb_in_update_batch;
+        t_frb_in_update_batch = 1;
+        g_orig_frb_primary_adapter(func_id, port, ptr, rust_vec_len, data_len);
+        t_frb_in_update_batch = prev;
+        return;
     } else if (func_id == g_frb_ids.update_item) {
         ld_blog("FRB adapter update_item(id=%d): bytes=%d", func_id, data_len);
     } else if (func_id == g_frb_ids.move_item) {
