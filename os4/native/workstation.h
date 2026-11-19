@@ -136,7 +136,6 @@ static void *g_orig_ws_hotseat_bottom __attribute__((used));
 static void *g_orig_ws_cal_offset __attribute__((used));
 static void *g_orig_ws_allapps_state __attribute__((used));
 static void *g_orig_ws_allapps_update_state __attribute__((used));
-static void *g_orig_ws_allapps_list_padding __attribute__((used));
 static void *g_orig_ws_page_changed __attribute__((used));
 static void *g_orig_ws_jump_to_page __attribute__((used));
 static volatile int g_ws_allapps_state_hook_ready __attribute__((used));
@@ -323,56 +322,6 @@ __attribute__((used)) static void ld_ws_pre_jump_to_page(struct ld_ws_ctx *c)
 __attribute__((used)) static void ld_ws_post_jump_to_page(struct ld_ws_ctx *c)
 {
     (void)c;
-}
-
-__attribute__((used)) static void ld_ws_post_allapps_list_padding(struct ld_ws_ctx *c)
-{
-    uintptr_t insets = c ? (uintptr_t)c->ret_x0 : 0;
-    int laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
-    int custom = g_home_options.ws.dock_custom;
-    static unsigned entry_logs;
-    if (__atomic_fetch_add(&entry_logs, 1u, __ATOMIC_RELAXED) < 8u) {
-        ld_blog("ws_allapps_list_padding enter: laptop=%d custom=%d insets=%p",
-                laptop, custom, (void *)insets);
-    }
-    if (!c || !laptop || !custom || !(insets & 1u) || ld_ws_is_const_ro(insets)) return;
-
-    int dir = ld_ws_direction(c); /* ld_grid_direction: 1=landscape, 0=portrait */
-    if (dir != 0 && dir != 1) return;
-    double dx = dir == 1 ? g_home_options.ws.apps_land_h_offset : g_home_options.ws.apps_port_h_offset;
-    double dt = dir == 1 ? g_home_options.ws.apps_land_top : g_home_options.ws.apps_port_top;
-    double db = dir == 1 ? g_home_options.ws.apps_land_bottom : g_home_options.ws.apps_port_bottom;
-    if (!isfinite(dx) || !isfinite(dt) || !isfinite(db) ||
-        fabs(dx) > 4096.0 || fabs(dt) > 4096.0 || fabs(db) > 4096.0) return;
-
-    double left = 0.0, top = 0.0, right = 0.0, bottom = 0.0;
-    if (!ld_read_heap(insets + 0x7, &left, sizeof left) ||
-        !ld_read_heap(insets + 0xf, &top, sizeof top) ||
-        !ld_read_heap(insets + 0x17, &right, sizeof right) ||
-        !ld_read_heap(insets + 0x1f, &bottom, sizeof bottom) ||
-        !isfinite(left) || !isfinite(top) || !isfinite(right) || !isfinite(bottom)) return;
-
-    /* Keep horizontal/vertical totals unchanged while moving the list's
-     * content origin. This changes icon positions without changing columns
-     * or the scrollable viewport size. Top and bottom remain independent
-     * margin controls, matching the home-grid setting semantics. */
-    double next_left = left + dx;
-    double next_right = right - dx;
-    double next_top = top + dt;
-    double next_bottom = bottom + db;
-    if (!isfinite(next_left) || !isfinite(next_right) ||
-        !isfinite(next_top) || !isfinite(next_bottom)) return;
-    if (next_left != left) memcpy((void *)(insets + 0x7), &next_left, sizeof next_left);
-    if (next_top != top) memcpy((void *)(insets + 0xf), &next_top, sizeof next_top);
-    if (next_right != right) memcpy((void *)(insets + 0x17), &next_right, sizeof next_right);
-    if (next_bottom != bottom) memcpy((void *)(insets + 0x1f), &next_bottom, sizeof next_bottom);
-
-    static unsigned apply_logs;
-    if (__atomic_fetch_add(&apply_logs, 1u, __ATOMIC_RELAXED) < 8u) {
-        ld_blog("ws_allapps_list_padding apply: dir=%d dx=%.1f dt=%.1f db=%.1f insets=%p LTRB=(%.1f,%.1f,%.1f,%.1f)->(%.1f,%.1f,%.1f,%.1f)",
-                dir, dx, dt, db, (void *)insets, left, top, right, bottom,
-                next_left, next_top, next_right, next_bottom);
-    }
 }
 
 __attribute__((used)) static void ld_ws_on_apps_padding(struct ld_ws_ctx *c)
@@ -666,7 +615,6 @@ LD_WS_POST_OBSERVER(repl_ws_dock_icon_top,    ld_ws_post_dock_icon_top,    g_ori
 LD_WS_PRE_POST_OBSERVER(repl_ws_apps_padding,     ld_ws_on_apps_padding, ld_ws_post_apps_padding, g_orig_ws_apps_padding)
 LD_WS_PRE_POST_OBSERVER(repl_ws_allapps_state,    ld_ws_pre_allapps_state, ld_ws_post_allapps_state, g_orig_ws_allapps_state)
 LD_WS_PRE_POST_OBSERVER(repl_ws_allapps_update_state, ld_ws_pre_allapps_state, ld_ws_post_allapps_state, g_orig_ws_allapps_update_state)
-LD_WS_POST_OBSERVER(repl_ws_allapps_list_padding, ld_ws_post_allapps_list_padding, g_orig_ws_allapps_list_padding)
 LD_WS_PRE_POST_OBSERVER(repl_ws_page_changed, ld_ws_pre_page_changed, ld_ws_post_page_changed, g_orig_ws_page_changed)
 LD_WS_PRE_POST_OBSERVER(repl_ws_jump_to_page, ld_ws_pre_jump_to_page, ld_ws_post_jump_to_page, g_orig_ws_jump_to_page)
 LD_WS_POST_OBSERVER(repl_ws_indicator_pos,    ld_ws_post_indicator_pos,    g_orig_ws_indicator_pos)
@@ -766,33 +714,9 @@ static int ld_ws_allapps_state_semantics(uintptr_t fn, size_t size, int update_s
         call_after_branch > branch_after_compare;
 }
 
-/* AllAppsListWidget._getListPadding builds the EdgeInsets consumed by the
- * app drawer's scrolling list. Verify its AOT body still stores the four
- * Dart doubles at the EdgeInsets field offsets before hooking it. */
-static int ld_ws_allapps_list_padding_semantics(uintptr_t fn, size_t size)
-{
-    if (!fn || size < 64 || size > 512 || !executable_range(fn, size)) return 0;
-    const uint32_t *insn = (const uint32_t *)fn;
-    if (insn[0] != DART_ENTRY_WORD) return 0;
-    size_t count = size / sizeof(uint32_t);
-    int calls = 0, ret = 0;
-    unsigned stores = 0;
-    const unsigned wanted_offsets[] = { 7u, 15u, 23u, 31u };
-    for (size_t i = 1; i < count; i++) {
-        uint32_t w = insn[i];
-        if ((w & 0xfc000000u) == 0x94000000u) calls++;
-        if (w == 0xd65f03c0u) ret = 1;
-        if ((w & 0xffc00c00u) == 0xfc000000u && ((w >> 5) & 0x1fu) == 0u) {
-            int imm = (int)((w >> 12) & 0x1ffu);
-            if (imm & 0x100) imm -= 0x200;
-            for (size_t j = 0; j < sizeof wanted_offsets / sizeof wanted_offsets[0]; j++) {
-                if (imm == (int)wanted_offsets[j]) stores |= 1u << j;
-            }
-        }
-    }
-    return calls >= 4 && ret && stores == 0x0fu;
-}
-
+/* Page transitions delimit the AllApps build latch used by currentConfig.
+ * Clear it before building a different page so only the app drawer selects
+ * its independent margin values. */
 static int ld_ws_page_changed_semantics(uintptr_t fn, size_t size)
 {
     if (!fn || size < 32 || size > 4096 || !executable_range(fn, size)) return 0;
@@ -840,35 +764,6 @@ static int ld_ws_install_page_transition_hook(const struct native_api *api, ld_l
     __atomic_store_n(hook_ready, 1, __ATOMIC_RELAXED);
     ld_blog("%s hook installed via sym+semantic at %p vaddr=0x%lx size=%zu",
             label, (void *)runtime, (unsigned long)vaddr, size);
-    return 1;
-}
-
-static int ld_ws_install_allapps_list_padding_hook(const struct native_api *api, ld_lib_info *lib)
-{
-    uint64_t vaddr = g_home_options.ws_allapps_list_padding_vaddr;
-    size_t size = g_home_options.ws_allapps_list_padding_size;
-    if (!vaddr) return 0;
-    uintptr_t runtime = 0;
-    int mapped = size >= 64 && size <= 512 && vaddr <= UINTPTR_MAX - (size - 4) &&
-        ld_cross_check_strict(lib, (uintptr_t)vaddr, (uintptr_t)vaddr + size - 4);
-    int executable = mapped && ld_vaddr_to_runtime(lib, (uintptr_t)vaddr, &runtime) &&
-        executable_range(runtime, size) && executable_range(runtime + size - 4, 4);
-    int semantic = executable && ld_ws_allapps_list_padding_semantics(runtime, size);
-    int safe = semantic && ld_hook_site_safe(runtime, "ws_allapps_list_padding");
-    if (!safe) {
-        ld_blog("ws_allapps_list_padding target rejected via sym vaddr=0x%lx size=%zu mapped=%d executable=%d semantic=%d",
-                (unsigned long)vaddr, size, mapped, executable, semantic);
-        return 0;
-    }
-    int rc = api->hook((void *)runtime, (void *)repl_ws_allapps_list_padding,
-                       &g_orig_ws_allapps_list_padding);
-    if (rc != 0 || !g_orig_ws_allapps_list_padding) {
-        ld_blog("ws_allapps_list_padding hook failed closed result=%d original=%p at %p",
-                rc, g_orig_ws_allapps_list_padding, (void *)runtime);
-        return 0;
-    }
-    ld_blog("ws_allapps_list_padding hook installed via sym+semantic result=0 at %p vaddr=0x%lx size=%zu",
-            (void *)runtime, (unsigned long)vaddr, size);
     return 1;
 }
 
@@ -980,7 +875,6 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
         ld_blog("ws_allapps_state setters unavailable; using page/build lifecycle scope");
     }
     ok_count += allapps_state_hooks;
-    ok_count += ld_ws_install_allapps_list_padding_hook(api, lib);
     ok_count += ld_ws_install_page_transition_hook(
         api, lib, g_home_options.ws_page_changed_vaddr, g_home_options.ws_page_changed_size,
         "ws_page_changed", (void *)repl_ws_page_changed, &g_orig_ws_page_changed,

@@ -62,6 +62,7 @@ data class HookFeatureConfig(
     val widgetGlassEnabled: Boolean,
     val gridEnabled: Boolean,
     val iconSizeEnabled: Boolean,
+    val homeMarginsEnabled: Boolean = false,
     val bigFolderEnabled: Boolean,
     val folderGridEnabled: Boolean = false,
     val widget1x1Enabled: Boolean,
@@ -80,6 +81,40 @@ data class HookFeatureConfig(
                 ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name(),
                 ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.uiDefault(),
             ) != 100
+            fun nonZero(key: com.hellovoid.liquiddock.config.ConfigKey<Int>): Boolean {
+                val tenthsKey = "${key.name()}_tenths"
+                return if (prefs.contains(tenthsKey)) {
+                    prefs.getInt(tenthsKey, key.uiDefault()) != 0
+                } else {
+                    prefs.getInt(key.name(), key.uiDefault()) != 0
+                }
+            }
+            val homeMarginKeys = listOf(
+                ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE,
+                ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE,
+                ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE,
+                ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y,
+                ConfigSchema.Grid.PORTRAIT_HORIZONTAL_DISTANCE,
+                ConfigSchema.Grid.PORTRAIT_TOP_DISTANCE,
+                ConfigSchema.Grid.PORTRAIT_BOTTOM_DISTANCE,
+                ConfigSchema.Grid.PORTRAIT_INDICATOR_Y,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING,
+                ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y,
+                ConfigSchema.Workstation.ALL_APPS_PORTRAIT_HORIZONTAL_OFFSET,
+                ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
+                ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
+                ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y,
+                ConfigSchema.Workstation.DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET,
+                ConfigSchema.Workstation.DESKTOP_LANDSCAPE_TOP_SPACING,
+                ConfigSchema.Workstation.DESKTOP_LANDSCAPE_BOTTOM_SPACING,
+                ConfigSchema.Workstation.DESKTOP_LANDSCAPE_INDICATOR_Y,
+                ConfigSchema.Workstation.DESKTOP_PORTRAIT_HORIZONTAL_OFFSET,
+                ConfigSchema.Workstation.DESKTOP_PORTRAIT_TOP_SPACING,
+                ConfigSchema.Workstation.DESKTOP_PORTRAIT_BOTTOM_SPACING,
+                ConfigSchema.Workstation.DESKTOP_PORTRAIT_INDICATOR_Y,
+            )
 
             return HookFeatureConfig(
                 masterEnabled = bool(ConfigSchema.Core.ENABLED),
@@ -88,6 +123,7 @@ data class HookFeatureConfig(
                 widgetGlassEnabled = glassOn && bool(ConfigSchema.Glass.WIDGET_GLASS),
                 gridEnabled = bool(ConfigSchema.Grid.ENABLED),
                 iconSizeEnabled = bool(ConfigSchema.Grid.ICON_SIZE_ENABLED),
+                homeMarginsEnabled = homeMarginKeys.any(::nonZero),
                 bigFolderEnabled = bool(ConfigSchema.Grid.BIG_FOLDER_ENABLED),
                 folderGridEnabled = bool(ConfigSchema.Grid.FOLDER_GRID_ENABLED),
                 widget1x1Enabled = bool(ConfigSchema.Grid.WIDGET_1X1_TO_2X2_ENABLED),
@@ -130,10 +166,18 @@ internal fun parseStatusKeyValues(text: String): Map<String, String> {
 
 private val WORKSTATION_HOOKS_REGEX = Regex("""workstation hooks installed=(\d+)/""")
 
+private val HOME_MARGIN_RUNTIME_REGEX = Regex(
+    """home margin monitor runtime=matched scope=(\d+) dir=(\d+) cols=(\d+) rows=(\d+)""",
+)
+private val HOME_MARGIN_STATUS_REGEX = Regex(
+    """home margin monitor state=([a-z_]+) detail=([^\r\n]*)""",
+)
+
 internal fun evaluateHookMonitor(
     config: HookFeatureConfig,
     statusMap: Map<String, String>,
     bootLog: String,
+    currentBootLog: String = bootLog,
 ): HookMonitorSnapshot {
     val statusPid = statusMap["pid"]?.toIntOrNull()
     val bootLogPid = BOOT_PID_REGEX.findAll(bootLog).lastOrNull()
@@ -154,10 +198,10 @@ internal fun evaluateHookMonitor(
         else -> "Hook 已生效"
     }
 
-    fun resolve(enabled: Boolean, hooked: Boolean): HookProbeState = when {
+    fun resolve(enabled: Boolean, hooked: Boolean, stale: Boolean = statusStale): HookProbeState = when {
         !config.masterEnabled -> HookProbeState.PAUSED
         !enabled -> HookProbeState.DISABLED
-        statusStale -> HookProbeState.MISSING
+        stale -> HookProbeState.MISSING
         hooked && (!patchDegraded || patchIntact > 0) -> HookProbeState.ACTIVE
         else -> HookProbeState.MISSING
     }
@@ -169,13 +213,18 @@ internal fun evaluateHookMonitor(
         hooked: Boolean,
         missingDetail: String = "偏移或 Hook 异常",
         activeDetailOverride: String? = null,
+        staleDetailOverride: String? = null,
+        staleOverride: Boolean? = null,
     ): HookProbeItem {
-        val state = resolve(enabled, hooked)
+        val isStale = staleOverride ?: statusStale
+        val state = resolve(enabled, hooked, isStale)
         val detail = when (state) {
             HookProbeState.ACTIVE -> if (patchDegraded) activeDetail else (activeDetailOverride ?: "Hook 已生效")
             HookProbeState.DISABLED -> "开关未开启"
             HookProbeState.PAUSED -> "总开关已暂停"
-            HookProbeState.MISSING -> if (statusStale) "桌面重启后状态已过期，请重启桌面" else missingDetail
+            HookProbeState.MISSING -> if (isStale) {
+                staleDetailOverride ?: "桌面重启后状态已过期，请重启桌面"
+            } else missingDetail
         }
         return HookProbeItem(id = id, title = title, state = state, detail = detail)
     }
@@ -202,9 +251,71 @@ internal fun evaluateHookMonitor(
     }
 
     val homeIconsHooked = resolveHooked("home_icons") {
-        bootLog.contains("home icons applied:") ||
-            bootLog.contains("home margin currentConfig hooked")
+        bootLog.contains("home icons applied:")
     }
+
+    val latestCurrentBootMarker = BOOT_PID_REGEX.findAll(currentBootLog).lastOrNull()
+    val currentMarginLog = latestCurrentBootMarker?.let { currentBootLog.substring(it.range.first) }
+        ?: currentBootLog
+    val currentLogHasMarginEvidence = HOME_MARGIN_STATUS_REGEX.containsMatchIn(currentMarginLog) ||
+        HOME_MARGIN_RUNTIME_REGEX.containsMatchIn(currentMarginLog)
+    val homeMarginStatusStale = statusStale && !currentLogHasMarginEvidence
+    val homeMarginRuntime = HOME_MARGIN_RUNTIME_REGEX.findAll(currentMarginLog).lastOrNull()
+    val homeMarginState = statusMap["home_margins_state"]?.toIntOrNull()
+    val homeMarginLogState = HOME_MARGIN_STATUS_REGEX.findAll(currentMarginLog).lastOrNull()
+        ?.groupValues?.getOrNull(1)
+    val homeMarginHits = statusMap["home_margins_context_hits"]?.toIntOrNull() ?: 0
+    val homeMarginRuntimeFailed = homeMarginLogState in setOf(
+        "symbols_missing", "field_decode_failed", "target_rejected", "hook_failed",
+        "runtime_object_mismatch", "runtime_dimensions_missing",
+    ) || (homeMarginLogState == null && homeMarginState in setOf(1, 2, 5, 6, 7, 8))
+    val homeMarginsHooked = when {
+        homeMarginRuntimeFailed -> false
+        homeMarginLogState == "grid_context_matched" -> true
+        homeMarginRuntime != null -> true
+        !homeMarginStatusStale && homeMarginState == 4 -> true
+        homeMarginStatusStale -> false
+        statusMap.containsKey("home_margins") ->
+            statusMap["home_margins"] == "1" && (homeMarginState != 3 || homeMarginHits > 0)
+        else -> bootLog.contains("home margin: currentConfig hooked")
+    }
+    val homeMarginsActiveDetail = homeMarginRuntime?.takeIf { !homeMarginRuntimeFailed }?.let { match ->
+        val scope = match.groupValues[1].toIntOrNull()
+        val dir = match.groupValues[2].toIntOrNull()
+        val cols = match.groupValues[3]
+        val rows = match.groupValues[4]
+        val scopeText = if (scope == 2) "所有应用" else if (scope == 1) "工作台桌面" else "桌面"
+        val dirText = if (dir == 1) "横屏" else "竖屏"
+        "已匹配 $scopeText $dirText 网格（${cols}×${rows}）"
+    } ?: if (homeMarginState == 4 || homeMarginHits > 0) "动态边距已命中网格" else null
+    val homeMarginsMissingDetail = when (homeMarginLogState) {
+        "symbols_missing" -> "currentConfig 目标未找到或签名不匹配"
+        "field_decode_failed" -> "当前版本字段语义无法识别"
+        "target_rejected" -> "目标地址或指令校验失败"
+        "hook_failed" -> "边距 Hook 安装失败"
+        "runtime_object_mismatch" -> "运行时 GridConfig 对象与已解析布局不匹配"
+        "runtime_dimensions_missing" -> "没有取得当前方向或网格行列数"
+        "hooks_installed_waiting_for_grid" -> "Hook 已安装，尚未匹配目标网格"
+        "grid_context_matched" -> "边距 Hook 已命中，但当前运行状态尚未刷新"
+        else -> when (homeMarginState) {
+        1 -> "currentConfig 目标未找到或签名不匹配"
+        2 -> "currentConfig Hook 安装失败"
+        3 -> "Hook 已安装，尚未匹配目标网格"
+        4 -> "已匹配网格，但运行状态文件未刷新"
+        5 -> "当前版本字段语义无法识别，部分边距不可用"
+        6 -> "运行时 GridConfig 对象与已解析布局不匹配"
+        7 -> "没有取得当前方向或网格行列数"
+        else -> "偏移或 Hook 异常"
+        }
+    }
+    val homeMarginKnownFailure = homeMarginRuntimeFailed || homeMarginState in setOf(1, 2, 5, 6, 7, 8)
+    val homeMarginStaleDetail = if (homeMarginKnownFailure) {
+        "最近一次检测失败：$homeMarginsMissingDetail"
+    } else null
+    // The margin hook is installed even while every margin is zero so later preference
+    // changes can take effect without rebuilding the hook. Do not let the UI's
+    // "disabled" state hide a concrete failure reported by that always-installed hook.
+    val homeMarginsShouldReport = config.homeMarginsEnabled || homeMarginKnownFailure
 
     val folderHooked = resolveHooked("big_folder") {
         val folderGateHooked = bootLog.contains("OS4 big folder gate installed:")
@@ -262,6 +373,13 @@ internal fun evaluateHookMonitor(
         probe("glass_widgets", "小组件玻璃", config.widgetGlassEnabled, widgetGlassHooked),
         probe("grid", "桌面网格", config.gridEnabled, gridHooked),
         probe("home_icons", "图标与边距", config.iconSizeEnabled, homeIconsHooked),
+        probe(
+            "home_margins", "桌面与所有应用边距", homeMarginsShouldReport, homeMarginsHooked,
+            missingDetail = homeMarginsMissingDetail,
+            activeDetailOverride = homeMarginsActiveDetail,
+            staleDetailOverride = homeMarginStaleDetail,
+            staleOverride = homeMarginStatusStale,
+        ),
         probe("big_folder", "大文件夹", config.bigFolderEnabled, folderHooked),
         probe("folder_grid", "文件夹行列", config.folderGridEnabled, folderGridHooked, folderGridMissingDetail, folderGridDetail),
         probe("widget_1x1", "1×1↔2×2", config.widget1x1Enabled, widget1x1Hooked, activeDetailOverride = widget1x1Detail),
@@ -291,10 +409,15 @@ object HookMonitorStore {
         }.getOrDefault("")
         val statusMap = parseStatusKeyValues(statusText)
 
-        val bootLog = runCatching {
+        val currentBootLog = runCatching {
             if (bootLogFile.isFile) bootLogFile.readText() else ""
         }.getOrDefault("")
-        return evaluateHookMonitor(config, statusMap, bootLog)
+        val bootLog = runCatching {
+            val previous = if (bootLogPrevFile.isFile) bootLogPrevFile.readText() else ""
+            val current = currentBootLog
+            listOf(previous, current).filter(String::isNotBlank).joinToString("\n")
+        }.getOrDefault("")
+        return evaluateHookMonitor(config, statusMap, bootLog, currentBootLog)
     }
 }
 

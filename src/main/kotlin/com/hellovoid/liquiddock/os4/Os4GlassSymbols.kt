@@ -7,24 +7,15 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 /**
  * Decode Dart AOT .gnu_debugdata only in the LiquidDock app's background
- * config worker, never on the Launcher startup path. Exact ELF and function
- * checks are optional and follow the native hook safety setting.
+ * config worker. Native hook safety checks validate targets at install time.
  */
 internal object Os4GlassSymbols {
     private const val TAG = "LiquidDock-OS4Glass"
     private const val LIB = "lib/arm64-v8a/libapp.so"
-    private const val EXPECTED_SIZE = 29_980_112L
-    private const val EXPECTED_SHA =
-        "93e511989202a70d38b8231c3133167b830ca7609b61ba6ad133898737d0e0ef"
-    // Folder geometry was checked against the exact 9239 libapp installed on H645.
-    private const val FOLDER_SIZE_EXPECTED_SIZE = 30_395_464L
-    private const val FOLDER_SIZE_EXPECTED_SHA =
-        "5fdb8f900b5e8a7d531cbef591f1b1d4fdeed49bcf427a3904dd173266b4c68a"
     private const val MAX_XZ = 8 * 1024 * 1024
     private const val MAX_ELF = 16 * 1024 * 1024
     private val names = listOf(
@@ -197,7 +188,6 @@ internal object Os4GlassSymbols {
         val blurBetterDownTarget: String = "",
         val workstationAllAppsStateTarget: String = "",
         val workstationAllAppsUpdateStateTarget: String = "",
-        val workstationAllAppsListPaddingTarget: String = "",
         val workstationPageChangedTarget: String = "",
         val workstationJumpToPageTarget: String = "",
     )
@@ -205,29 +195,22 @@ internal object Os4GlassSymbols {
         val source: String,
         val lastUpdateTime: Long,
         val versionCode: Long,
-        val strictFingerprint: Boolean,
     )
     @Volatile private var cached: Pair<CacheKey, ResolvedTargets>? = null
 
-    fun fromInstalledLauncher(context: Context, strictFingerprint: Boolean): String? =
-        fromInstalledLauncherResolved(context, strictFingerprint)?.glass
-
-    fun fromInstalledLauncherResolved(context: Context, strictFingerprint: Boolean): ResolvedTargets? = runCatching {
+    fun fromInstalledLauncherResolved(context: Context): ResolvedTargets? = runCatching {
         val pkg = context.packageManager.getPackageInfo("com.miui.home", 0)
         val source = pkg.applicationInfo?.sourceDir
             ?: context.packageManager.getApplicationInfo("com.miui.home", 0).sourceDir
-        val cacheKey = CacheKey(source, pkg.lastUpdateTime, pkg.longVersionCode, strictFingerprint)
+        val cacheKey = CacheKey(source, pkg.lastUpdateTime, pkg.longVersionCode)
         cached?.takeIf { pair -> pair.first == cacheKey }?.second?.let { result -> return result }
         val image = ZipFile(source).use { zip ->
             val entry = zip.getEntry(LIB) ?: error("Launcher has no Dart AOT libapp.so")
-            if (strictFingerprint) require(entry.size == EXPECTED_SIZE || entry.size == FOLDER_SIZE_EXPECTED_SIZE) { "Vendor ELF changed size" }
             require(entry.size in 1L..64L * 1024L * 1024L) { "Vendor ELF size is invalid" }
             zip.getInputStream(entry).use { input -> input.readBytes() }
         }
         require(image.isNotEmpty())
-        val actual = MessageDigest.getInstance("SHA-256").digest(image)
-        val hex = actual.joinToString("") { byte -> "%02x".format(byte) }
-        val result = extractResolved(image) ?: error("XZ mini-ELF symbols missing or ambiguous")
+        val result = extractResolved(image) ?: error("XZ mini-ELF unavailable")
         cached = cacheKey to result
         Log.i(TAG, "Resolved OS4 glass targets: " + result.glass +
             (if (result.layoutTargets.isNotEmpty()) " layout=" + result.layoutTargets else "") +
@@ -237,7 +220,7 @@ internal object Os4GlassSymbols {
         result
     }.onFailure { err -> Log.e(TAG, "OS4 glass target extraction failed", err) }.getOrNull()
 
-    fun extract(vendor: ByteArray): String? = extractResolved(vendor)?.glass
+    fun extract(vendor: ByteArray): String? = extractResolved(vendor)?.glass?.takeIf { it.isNotEmpty() }
 
     fun extractResolved(vendor: ByteArray): ResolvedTargets? {
         val outer = Elf64(vendor)
@@ -257,7 +240,7 @@ internal object Os4GlassSymbols {
             }
             out.toByteArray()
         }
-        val glass = fromMiniElf(mini) ?: return null
+        val glass = fromMiniElf(mini).orEmpty()
         val (layoutTargets, homeMarginTarget, rvTargets) = fromMiniElfExtras(mini)
         val folderTarget = fromMiniElfSingle(mini, FOLDER_CORNER_DRAG_TARGET)
         val folderPadTargets = fromMiniElfPadBypass(mini)
@@ -292,10 +275,6 @@ internal object Os4GlassSymbols {
         val workstationAllAppsUpdateStateTarget = fromMiniElfSingle(
             mini,
             "AnimatorPlaybackController.updateShowAllAppsState",
-        )
-        val workstationAllAppsListPaddingTarget = fromMiniElfSingle(
-            mini,
-            "AllAppsListWidget._getListPadding",
         )
         val workstationPageChangedTarget = fromMiniElfSingle(
             mini,
@@ -353,7 +332,6 @@ internal object Os4GlassSymbols {
             blurBetterDownTarget,
             workstationAllAppsStateTarget,
             workstationAllAppsUpdateStateTarget,
-            workstationAllAppsListPaddingTarget,
             workstationPageChangedTarget,
             workstationJumpToPageTarget,
         )

@@ -189,8 +189,6 @@ struct ld_grid_conf {
     size_t ws_allapps_state_size;
     uint64_t ws_allapps_update_state_vaddr;
     size_t ws_allapps_update_state_size;
-    uint64_t ws_allapps_list_padding_vaddr;
-    size_t ws_allapps_list_padding_size;
     uint64_t ws_page_changed_vaddr;
     size_t ws_page_changed_size;
     uint64_t ws_jump_to_page_vaddr;
@@ -707,9 +705,13 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     ws_seen |= 1u << 26;
                 } else if (strcmp(key, "workstation_allapps_list_padding_target") == 0) {
+                    /* Legacy config compatibility: this hook was never reached
+                     * by the active app-drawer grid. Accept and discard its
+                     * old target so an upgrade does not invalidate all settings. */
+                    uint64_t ignored_vaddr = 0;
+                    size_t ignored_size = 0;
                     if ((ws_seen & (1u << 27)) ||
-                        !ld_grid_parse_aot_targets(val, &c.ws_allapps_list_padding_vaddr,
-                                                   &c.ws_allapps_list_padding_size, 1)) {
+                        !ld_grid_parse_aot_targets(val, &ignored_vaddr, &ignored_size, 1)) {
                         bad=1; break;
                     }
                     ws_seen |= 1u << 27;

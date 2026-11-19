@@ -108,4 +108,12 @@ class Os4GlassSymbolsTest {
         buffer(missing).putInt(512+3*24,0)
         assertNull(Os4GlassSymbols.fromMiniElf(missing))
     }
+
+    @Test fun resolvesIndependentTargetsWithoutGlassGateSymbols() {
+        val mini = miniElf()
+        buffer(mini).putInt(512 + 3 * 24, 0)
+        val targets = Os4GlassSymbols.extractResolved(vendorElf(mini))
+        assertEquals("", targets?.glass)
+        assertEquals("0x9800:128,0x9c00:128,0xa000:128", targets?.folderSizeTargets)
+    }
 }

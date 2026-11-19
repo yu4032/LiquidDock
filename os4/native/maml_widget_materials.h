@@ -6,6 +6,7 @@
 #include "native_api.h"
 #include "sha256_region.h"
 #include "maml_widget_materials_fingerprints.h"
+#include "maml_elf_symbol.h"
 
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -267,61 +268,12 @@ static int ld_maml_hash_path(const char *path,unsigned char digest[32])
 }
 
 
-/* 从 SDK 文件解析 dynsym 里符号的 st_value（= vaddr 偏移，ET_DYN）。
- * 注意：section headers 不在 PT_LOAD 里，内存映射读不到，必须读文件。 */
-static uintptr_t ld_maml_symbol_offset(const char *name)
+/* Parse the SDK file because local dlopen namespaces hide its handle from RTLD_DEFAULT. */
+static int ld_maml_symbol_info(const char *name, uintptr_t *value, size_t *size)
 {
     FILE *f = fopen(LD_MAML_SDK_PATH, "rb");
     if(!f) return 0;
-    unsigned char eh[64];
-    if(fread(eh, 1, sizeof eh, f) != sizeof eh) { fclose(f); return 0; }
-    uint64_t shoff; uint16_t shentsize, shnum;
-    memcpy(&shoff, eh + 0x28, 8);
-    memcpy(&shentsize, eh + 0x3a, 2);
-    memcpy(&shnum, eh + 0x3c, 2);
-    if(!shoff || !shnum || shentsize < 64 || shnum > 512) { fclose(f); return 0; }
-    unsigned char *sh = (unsigned char *)calloc(shnum, shentsize);
-    if(!sh) { fclose(f); return 0; }
-    if(fseek(f, (long)shoff, SEEK_SET) != 0 ||
-       fread(sh, shentsize, shnum, f) != shnum) { free(sh); fclose(f); return 0; }
-    uintptr_t found = 0;
-    for(uint16_t i = 0; i < shnum && !found; i++) {
-        unsigned char *sec = sh + (size_t)i * shentsize;
-        uint32_t type; memcpy(&type, sec + 4, 4);
-        if(type != 11) continue;                       /* SHT_DYNSYM */
-        uint64_t off_v, size_v, ent; uint32_t link;
-        memcpy(&off_v, sec + 24, 8);
-        memcpy(&size_v, sec + 32, 8);
-        memcpy(&link, sec + 40, 4);
-        memcpy(&ent, sec + 56, 8);
-        if(link >= shnum || ent < 24 || !size_v || size_v / ent > 200000) continue;
-        unsigned char *strsec = sh + (size_t)link * shentsize;
-        uint64_t stroff, strsize;
-        memcpy(&stroff, strsec + 24, 8);
-        memcpy(&strsize, strsec + 32, 8);
-        if(!strsize || strsize > 16u * 1024u * 1024u) continue;
-        char *str = (char *)malloc((size_t)strsize + 1);
-        if(!str) continue;
-        if(fseek(f, (long)stroff, SEEK_SET) == 0 && fread(str, 1, (size_t)strsize, f) == strsize) {
-            str[strsize] = 0;
-            unsigned char *sym = (unsigned char *)malloc((size_t)size_v);
-            if(sym && fseek(f, (long)off_v, SEEK_SET) == 0 &&
-               fread(sym, 1, (size_t)size_v, f) == size_v) {
-                for(uint64_t k = 0; k + ent <= size_v; k += ent) {
-                    uint32_t st_name; memcpy(&st_name, sym + k, 4);
-                    if(!st_name || st_name >= strsize) continue;
-                    if(strcmp(str + st_name, name) == 0) {
-                        uint64_t value; memcpy(&value, sym + k + 8, 8);
-                        found = (uintptr_t)value;
-                        break;
-                    }
-                }
-            }
-            free(sym);
-        }
-        free(str);
-    }
-    free(sh);
+    int found = ld_maml_elf_resolve_function(f, name, value, size);
     fclose(f);
     return found;
 }
@@ -339,8 +291,11 @@ static int ld_maml_install(const struct native_api *api)
     }
     /* 先用已加载库的 handle 解析（SDK 常以局部命名空间 dlopen，
      * RTLD_DEFAULT 看不到）；再退 RTLD_DEFAULT；最后才是固定偏移。 */
-    uintptr_t target=0, offset=ld_maml_symbol_offset("init_maml");
-    if(offset) {
+    uintptr_t target=0, offset=0;
+    size_t target_size=0;
+    int symbol_found=ld_maml_symbol_info("init_maml",&offset,&target_size);
+    int symbol_verified=0;
+    if(symbol_found) {
         uintptr_t base=0; char maps[1024]; FILE *f=fopen("/proc/self/maps","r");
         if(f) {
             while(fgets(maps,sizeof maps,f)) {
@@ -350,10 +305,17 @@ static int ld_maml_install(const struct native_api *api)
             }
             fclose(f);
         }
-        target=base+offset;
-        ld_blog("MAML init_maml dynsym offset 0x%lx -> %p", (unsigned long)offset, (void *)target);
+        if(base && offset <= UINTPTR_MAX - base) target=base+offset;
+        if(target) {
+            symbol_verified=1;
+            ld_blog("MAML init_maml dynsym verified offset 0x%lx size=%zu -> %p",
+                    (unsigned long)offset,target_size,(void *)target);
+        }
     }
-    if(!target) target=(uintptr_t)dlsym(RTLD_DEFAULT,"init_maml");
+    if(!target) {
+        target=(uintptr_t)dlsym(RTLD_DEFAULT,"init_maml");
+        if(target) target_size=LD_MAML_INIT_SIZE;
+    }
     if(!target) {
         /* 固定偏移只对钉过的 SDK 成立：摘要不匹配时绝不用它（陈旧偏移会 hook 错函数）。 */
         if(!hex[0] || strcmp(hex, LD_MAML_SDK_SHA)) {
@@ -368,25 +330,29 @@ static int ld_maml_install(const struct native_api *api)
         }
         fclose(f); if(!base) return 0;
         target=base+LD_MAML_INIT_OFFSET;
+        target_size=LD_MAML_INIT_SIZE;
         ld_blog("MAML target fallback offset 0x%lx -> %p", (unsigned long)LD_MAML_INIT_OFFSET, (void *)target);
     }
-    if(!executable_range(target,strict?LD_MAML_INIT_SIZE:16)) {
+    if(!target_size || target_size > 1024u * 1024u || !executable_range(target,strict?target_size:16)) {
         ld_blog("MAML target %p not executable (strict=%d)", (void *)target, strict);
         return 0;
     }
-    if(ld_read_heap(target,body,sizeof body)) {
+    int body_readable=0, body_matches_pin=0;
+    if(target_size >= sizeof body && ld_read_heap(target,body,sizeof body)) {
+        body_readable=1;
         struct ld_sha256 sha; ld_sha256_init(&sha); ld_sha256_update(&sha,body,sizeof body); ld_sha256_final(&sha,digest);
         ld_maml_hex(digest,hex);
         int body_mismatch=strcmp(hex,LD_MAML_INIT_SHA)!=0;
-        ld_blog("MAML init_maml body %s%s", hex, body_mismatch?" (differs from pin)":"");
-        if(strict && body_mismatch) {
-            ld_blog("MAML strict mode: refusing init_maml hook on body mismatch");
-            return 0;
-        }
-    } else if(strict) {
-        ld_blog("MAML strict mode: unreadable init_maml body");
+        body_matches_pin=!body_mismatch;
+        ld_blog("MAML init_maml body %s%s", hex,
+                body_mismatch?(symbol_verified?" (different build; dynsym verified)":" (differs from pin)"):"");
+    }
+    if(strict && !ld_maml_strict_target_allowed(symbol_verified,body_readable,body_matches_pin)) {
+        ld_blog("MAML strict mode: refusing unverified init_maml target");
         return 0;
     }
+    if(strict && symbol_verified && !body_matches_pin)
+        ld_blog("MAML strict mode: accepted changed build through verified ELF function symbol");
     void *backup=NULL; int rc=api->hook((void*)target,(void*)ld_maml_init_replacement,&backup);
     if(rc || !backup) { ld_blog("MAML init hook failed result=%d",rc); return 0; }
     g_maml_init_original=(void(*)(const void*))backup;

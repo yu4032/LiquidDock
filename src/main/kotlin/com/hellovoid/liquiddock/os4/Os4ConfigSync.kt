@@ -5,7 +5,6 @@ import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.util.Log
 import androidx.preference.PreferenceManager
-import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.LiquidDockRestart
 import java.util.concurrent.Executors
 
@@ -140,11 +139,9 @@ object Os4ConfigSync {
         val conf = Os4MainScreenOptions.fromPreferences(prefs.all)
         if (conf == null) Log.e(TAG, "[$reason] invalid options; native snapshot cleared")
         // The vendor's named Dart AOT symbols live in XZ .gnu_debugdata.
-        // Extract off the Launcher process; the safety switch controls exact-byte checks.
+        // Resolve the installed build; native validation runs when each hook is installed.
         val resolved = if (!conf.isNullOrEmpty()) {
-            val safetyEnabled = prefs.getBoolean(ConfigSchema.Grid.NATIVE_HOOK_SAFETY.name(),
-                ConfigSchema.Grid.NATIVE_HOOK_SAFETY.uiDefault())
-            val resolvedTargets = Os4GlassSymbols.fromInstalledLauncherResolved(context, safetyEnabled)
+            val resolvedTargets = Os4GlassSymbols.fromInstalledLauncherResolved(context)
             if (resolvedTargets == null) conf
             else {
                 val parts = resolvedTargets.glass.split('|', limit = 5)
@@ -154,7 +151,7 @@ object Os4ConfigSync {
                 val renderGates = parts.getOrElse(3) { "" }
                 val recentsBlur = parts.getOrElse(4) { "" }
                 val lines = buildString {
-                    append("glass_targets=").append(gates).append('\n')
+                    if (gates.isNotEmpty()) append("glass_targets=").append(gates).append('\n')
                     if (probes.isNotEmpty()) append("glass_observers=").append(probes).append('\n')
                     if (passBlur.isNotEmpty()) append("passblur_target=").append(passBlur).append('\n')
                     if (renderGates.isNotEmpty()) append("render_targets=").append(renderGates).append('\n')
@@ -224,9 +221,6 @@ object Os4ConfigSync {
                     }
                     if (resolvedTargets.workstationAllAppsUpdateStateTarget.isNotEmpty()) {
                         append("workstation_allapps_update_state_target=").append(resolvedTargets.workstationAllAppsUpdateStateTarget).append('\n')
-                    }
-                    if (resolvedTargets.workstationAllAppsListPaddingTarget.isNotEmpty()) {
-                        append("workstation_allapps_list_padding_target=").append(resolvedTargets.workstationAllAppsListPaddingTarget).append('\n')
                     }
                     if (resolvedTargets.workstationPageChangedTarget.isNotEmpty()) {
                         append("workstation_page_changed_target=").append(resolvedTargets.workstationPageChangedTarget).append('\n')

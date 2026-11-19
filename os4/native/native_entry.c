@@ -226,11 +226,12 @@ static void load_grid_config(void)
     struct ld_grid_conf conf={0};
     const char *source = LD_PRIMARY_CONF;
     int ok = ld_grid_conf_parse_file(LD_PRIMARY_CONF, &conf);
-    struct stat ce;
-    bool ce_available=stat("/data/user/0/com.miui.home/files",&ce)==0 && S_ISDIR(ce.st_mode);
-    if (!ok && !ce_available) {
+    /* The CE directory may exist before the module has published its primary
+     * snapshot (for example, immediately after a Launcher restart). Always
+     * fall back to the DE snapshot when the primary file is missing/invalid. */
+    if (!ok) {
         ok = ld_grid_conf_parse_file(LD_EARLY_CONF, &conf);
-        source = LD_EARLY_CONF;
+        if (ok) source = LD_EARLY_CONF;
     }
     if (!ok) {
         g_grid_cols = 0;
@@ -402,9 +403,7 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         close(fd);
         if(mapping==MAP_FAILED) { ld_blog("OS4 glass safety check unavailable: mmap"); return; }
         apk=mapping;
-        const size_t vendor_size=29983448u;
-        ready=lib->entry_off<=(size_t)st.st_size
-            && vendor_size<=(size_t)st.st_size-lib->entry_off;
+        ready=lib->entry_off<(size_t)st.st_size;
     }
     for(size_t i=0;i<3 && ready;i++) {
         uint64_t vaddr=g_home_options.glass_vaddr[i];
@@ -1869,7 +1868,12 @@ static void ld_write_hook_status(void) {
     int dock_ok = (g_orig_dock_background != NULL && g_orig_dock_spacing != NULL) ? 1 : 0;
     int divider_ok = (g_dp_inner_orig != NULL && g_dp_bg_orig != NULL) ? 1 : 0;
     int recents_ok = g_recents_blur_installed ? 1 : 0;
-    int home_icons_ok = (g_hm_cc_orig != NULL) ? 1 : 0;
+    int home_icons_ok = (g_home_options.icon_size_enabled && g_orig_home_pipeline != NULL) ? 1 : 0;
+    int home_margins_ok = g_hm_cc_orig != NULL ? 1 : 0;
+    int home_margins_state = __atomic_load_n(&g_hm_status, __ATOMIC_RELAXED);
+    unsigned home_margins_hits = __atomic_load_n(&g_hm_context_hits, __ATOMIC_RELAXED);
+    unsigned home_margins_scopes = __atomic_load_n(&g_hm_scope_mask, __ATOMIC_RELAXED);
+    unsigned home_margins_dirs = __atomic_load_n(&g_hm_dir_mask, __ATOMIC_RELAXED);
     int big_folder_ok = g_folder_corner_drag_installed ? 1 : 0;
     int widget_1x1_ok = g_w1x1_menu_installed ? 1 : 0;
     int folder_cols_ready = (g_home_options.folder_grid_cols > 0 && g_folder_grid_cols > 0) ? 1 : 0;
@@ -1894,6 +1898,12 @@ static void ld_write_hook_status(void) {
             "divider=%d\n"
             "recents=%d\n"
             "home_icons=%d\n"
+            "home_margins=%d\n"
+            "home_margins_state=%d\n"
+            "home_margins_detail=%s\n"
+            "home_margins_context_hits=%u\n"
+            "home_margins_scope_mask=%u\n"
+            "home_margins_dir_mask=%u\n"
             "big_folder=%d\n"
             "widget_1x1=%d\n"
             "frb_adapter=%d\n"
@@ -1905,7 +1915,10 @@ static void ld_write_hook_status(void) {
             patch_total, patch_intact,
             glass_ok, icons_ok, radius_ok, widgets_ok,
             grid_ok, dock_ok, divider_ok, recents_ok,
-            home_icons_ok, big_folder_ok, widget_1x1_ok, ld_frb_adapter_ready(),
+            home_icons_ok, home_margins_ok, home_margins_state,
+            ld_hm_status_name(home_margins_state), home_margins_hits,
+            home_margins_scopes, home_margins_dirs,
+            big_folder_ok, widget_1x1_ok, ld_frb_adapter_ready(),
             folder_grid_ok, folder_cols_ready, folder_rows_ready);
     fclose(fp);
     rename(tmp, dst);
