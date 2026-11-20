@@ -6,10 +6,12 @@
 #include "layout_state.h"
 #include "dart_heap.h"
 #include "grid_orientation.h"
+#include "page_fields.h"
 static int g_restore_ready;
 static int g_initial_restore,g_initial_columns,g_initial_rows,g_initial_direction;
 static int g_rotation_direction=-1;
 static int g_runtime_columns,g_runtime_rows,g_runtime_direction;
+static int g_allapps_grid_rotating;
 static int g_layout_mid_ready;
 static int g_layout_hooks_ready;
 static uintptr_t g_process_resume;
@@ -51,6 +53,8 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
     int initial = init_state==1 && direction==g_initial_direction
             && ld_heap_i64(c->x[2],0x1b)==g_initial_columns
             && ld_heap_i64(c->x[2],0x23)==g_initial_rows;
+    g_allapps_grid_rotating = !initial && prev_cols > 0 && prev_rows > 0 &&
+        prev_cols == liverows && prev_rows == livecols && livecols != liverows;
     if (g_layout_hooks_ready && init_state == 1 && !initial && livecols > 0 && liverows > 0 &&
         (livecols != g_initial_columns || liverows != g_initial_rows || direction != g_initial_direction)) {
         __atomic_store_n(&g_initial_restore, 0, __ATOMIC_RELEASE);
@@ -78,11 +82,11 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
 __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
 {
     g_restore_ready=0;
-    if(!g_layout_hooks_ready) return;
+    if(!g_layout_hooks_ready || !g_page_fields.layout) return;
     ld_blog("process-screen args=%llx,%llx,%lld,%llx,%lld",
             (unsigned long long)c->x[1], (unsigned long long)c->x[2],
             (long long)c->x[3], (unsigned long long)c->x[4], (long long)c->x[5]);
-    uintptr_t list = ld_heap_pointer(c, c->x[2], 0xf);
+    uintptr_t list = ld_heap_pointer(c, c->x[2], g_page_fields.rx_value);
     int n = (int32_t)ld_heap_u32(list, 0xb) >> 1;
     uintptr_t data = ld_heap_pointer(c, list, 0xf);
     ld_blog("process-screen list=%llx n=%d data=%llx", (unsigned long long)list, n, (unsigned long long)data);
@@ -94,18 +98,16 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     if(!source || !target || !cells || !models || n<=0 || n>=100) goto done;
     for (int i = 0; i < n; i++) {
         uintptr_t screen = ld_heap_pointer(c, data, 0xf + i * 4);
-        uintptr_t layout = ld_heap_pointer(c, screen, 0x1b);
-        uintptr_t items = ld_heap_pointer(c, layout, 0xe7);
-        if (!items || (ld_heap_u32(items, (size_t)-1) >> 12 & 0xfffff) != 0x5c) {
-            items = ld_heap_pointer(c, layout, 0xdb);
-        }
+        uintptr_t layout = ld_heap_pointer(c, screen, g_page_fields.layout);
+        uintptr_t items = ld_heap_pointer(c, layout, g_page_fields.items);
+        if (!items || (ld_heap_u32(items, (size_t)-1) >> 12 & 0xfffff) != 0x5c) goto done;
         int size=(int32_t)ld_heap_u32(items,0xb)>>1;
         uintptr_t array=ld_heap_pointer(c,items,0xf);
         if(!layout || !array || size<0 || count+(size_t)size>LD_LAYOUT_MAX_ITEMS) goto done;
         for(int j=0;j<size;j++) {
-            uintptr_t cell=ld_heap_pointer(c,array,0xf+j*4), model=ld_heap_pointer(c,cell,7);
+            uintptr_t cell=ld_heap_pointer(c,array,0xf+j*4), model=ld_heap_pointer(c,cell,g_page_fields.model);
             if(!cell || !model) goto done;
-            int64_t cont=ld_heap_i64(model,0x47);
+            int64_t cont=ld_heap_i64(model,g_page_fields.container);
             if(cont!=-100 && cont!=-104) goto done;
             if(!list_cont) list_cont=cont;
             else if(cont!=list_cont) goto done;
@@ -121,18 +123,41 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     int is_ws_allapps=(list_cont==-104);
     if(!count) goto done;
     if(is_ws_allapps) {
-        /* No remembered layout for AllApps: only transpose (x,y)->(y,x) when the
-         * items fit the swapped grid but not the target one. Page count is preserved
-         * (cols*rows is constant), so no page is lost or emptied. The vendor 6x4-only
-         * transform is always skipped. */
-        if(!ld_layout_valid(source,count,cols,rows) && ld_layout_valid(source,count,rows,cols)) {
-            for(size_t i=0;i<count;i++) {
-                int64_t x=source[i].y,y=source[i].x;
-                memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
-                memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
+        int fits_target = ld_layout_valid(source,count,cols,rows);
+        int rotated = g_allapps_grid_rotating && cols == g_runtime_columns &&
+            rows == g_runtime_rows && oldcols == rows && oldrows == cols;
+        /* The old page can fit both shapes when it is sparsely populated.
+         * Only a live rotation disambiguates those coordinates. */
+        if ((rotated || !fits_target) && ld_layout_valid(source,count,rows,cols)) {
+            int icons_only = 1;
+            for (size_t i = 0; i < count; i++) {
+                if (source[i].sx != 1 || source[i].sy != 1) icons_only = 0;
             }
-            ld_blog("allapps transposed %zu items to %dx%d",count,cols,rows);
+            for (size_t i = 0; i < count; i++) {
+                target[i] = source[i];
+                if (icons_only) {
+                    int index = 0;
+                    for (size_t j = 0; j < count; j++) {
+                        if (source[j].screen == source[i].screen &&
+                            source[j].y * rows + source[j].x < source[i].y * rows + source[i].x) index++;
+                    }
+                    target[i].x = index % cols;
+                    target[i].y = index / cols;
+                } else {
+                    target[i].x = source[i].y;
+                    target[i].y = source[i].x;
+                }
+            }
+            if ((icons_only || !fits_target) && ld_layout_valid(target,count,cols,rows)) {
+                for (size_t i = 0; i < count; i++) {
+                    int64_t x=target[i].x,y=target[i].y;
+                    memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
+                    memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
+                }
+                ld_blog("allapps %s %zu items to %dx%d", icons_only ? "reflowed" : "transposed",count,cols,rows);
+            }
         }
+        /* The vendor transform assumes the stock grid. */
         g_restore_ready=1; goto done;
     }
     int direction=square?g_rotation_direction:(cols==g_grid_cols && rows==g_grid_rows?0:1);

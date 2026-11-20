@@ -14,6 +14,7 @@
 #include "dart_abi.h"
 #include "dart_observer.h"
 #include "grid_orientation.h"
+#include "page_fields.h"
 
 /*
  * Post-call observer on system SP (not Dart SP x15) so nested Dart calls inside
@@ -259,6 +260,49 @@ __attribute__((used)) static void ld_ws_post_dock_icon_top(struct ld_ws_ctx *c)
 }
 
 static volatile int g_ws_in_allapps_build __attribute__((used));
+static int g_ws_visible_page_scope = -1;
+static unsigned g_ws_page_list_field;
+static const uint32_t *g_ws_page_rx_getter;
+
+static int ld_ws_page_scope(const struct ld_ws_ctx *c)
+{
+    int64_t index = (int64_t)c->x[2];
+    if (!g_page_fields.layout || !g_ws_page_list_field || index < 0 || index >= 100) return -1;
+
+    struct ld_dart_context dc;
+    memcpy(dc.x, c->x, sizeof(dc.x));
+    uintptr_t rx = ld_heap_pointer(&dc, c->x[1], g_ws_page_list_field);
+    uintptr_t list = ld_heap_pointer(&dc, rx, g_page_fields.rx_value);
+    if (!list || ((ld_heap_u32(list, (size_t)-1) >> 12) & 0xfffff) != 0x5c) return -1;
+    uint32_t length = ld_heap_u32(list, 0xb);
+    if ((length & 1u) || index >= (length >> 1) || length > 200u) return -1;
+    uintptr_t array = ld_heap_pointer(&dc, list, 0xf);
+    uintptr_t screen = ld_heap_pointer(&dc, array, 0xf + (size_t)index * 4);
+    uintptr_t layout = ld_heap_pointer(&dc, screen, g_page_fields.layout);
+    uintptr_t items = ld_heap_pointer(&dc, layout, g_page_fields.items);
+    int64_t container = 0;
+    if (items && ((ld_heap_u32(items, (size_t)-1) >> 12) & 0xfffff) == 0x5c &&
+        ld_heap_u32(items, 0xb) >= 2u) {
+        uintptr_t cells = ld_heap_pointer(&dc, items, 0xf);
+        uintptr_t cell = ld_heap_pointer(&dc, cells, 0xf);
+        uintptr_t model = ld_heap_pointer(&dc, cell, g_page_fields.model);
+        container = ld_heap_i64(model, g_page_fields.container);
+    }
+    int quick_call = ld_heap_u32(layout, g_page_fields.quick_call) == (uint32_t)(c->x[22] + 0x20u);
+    static unsigned logged;
+    if (logged++ < 24)
+        ld_blog("ws page geometry index=%lld container=%lld quick_call=%d", (long long)index,
+                (long long)container, quick_call);
+    if (quick_call || container == -104) return 1;
+    if (container == -100) return 0;
+    return -1;
+}
+
+static int ld_ws_allapps_geometry(void)
+{
+    int scope = __atomic_load_n(&g_ws_visible_page_scope, __ATOMIC_RELAXED);
+    return scope >= 0 ? scope : __atomic_load_n(&g_ws_in_allapps_build, __ATOMIC_RELAXED);
+}
 
 __attribute__((used)) static void ld_ws_pre_allapps_state(struct ld_ws_ctx *c)
 {
@@ -287,12 +331,12 @@ __attribute__((used)) static void ld_ws_post_allapps_state(struct ld_ws_ctx *c)
     (void)c;
 }
 
-/* pageChanged begins before the next cell-screen is built. Clear the latch
- * there; LaptopCellScreen.build sets it again after its build, where the
- * deferred grid-config calculation can still observe the AllApps scope. */
+/* Resolve the destination before its first layout pass. The build latch
+ * remains a fallback for pages without an item model. */
 __attribute__((used)) static void ld_ws_pre_page_changed(struct ld_ws_ctx *c)
 {
     if (!c) return;
+    __atomic_store_n(&g_ws_visible_page_scope, ld_ws_page_scope(c), __ATOMIC_RELAXED);
     int previous = __atomic_exchange_n(&g_ws_in_allapps_build, 0, __ATOMIC_RELAXED);
     static unsigned logs;
     if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 16u) {
@@ -310,6 +354,7 @@ __attribute__((used)) static void ld_ws_post_page_changed(struct ld_ws_ctx *c)
 __attribute__((used)) static void ld_ws_pre_jump_to_page(struct ld_ws_ctx *c)
 {
     if (!c) return;
+    __atomic_store_n(&g_ws_visible_page_scope, ld_ws_page_scope(c), __ATOMIC_RELAXED);
     int previous = __atomic_exchange_n(&g_ws_in_allapps_build, 0, __ATOMIC_RELAXED);
     static unsigned logs;
     if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 16u) {
@@ -332,6 +377,7 @@ __attribute__((used)) static void ld_ws_on_apps_padding(struct ld_ws_ctx *c)
         __atomic_load_n(&g_ws_jump_to_page_hook_ready, __ATOMIC_RELAXED);
     int state_ready = __atomic_load_n(&g_ws_allapps_state_hook_ready, __ATOMIC_RELAXED);
     if (laptop && g_home_options.ws.dock_custom && (lifecycle_ready || !state_ready)) {
+        __atomic_store_n(&g_ws_visible_page_scope, -1, __ATOMIC_RELAXED);
         __atomic_store_n(&g_ws_in_allapps_build, 1, __ATOMIC_RELAXED);
     }
 }
@@ -761,6 +807,22 @@ static int ld_ws_install_page_transition_hook(const struct native_api *api, ld_l
                 label, rc, *original, (void *)runtime);
         return 0;
     }
+    if (hook_ready == &g_ws_page_changed_hook_ready && g_ws_page_rx_getter) {
+        const uint32_t *insn = (const uint32_t *)runtime;
+        for (size_t i = 1; i + 4 < size / 4; i++) {
+            if (insn[i - 1] == 0xb8013060u &&
+                (insn[i] & 0xffe00fffu) == 0xb8400040u &&
+                insn[i + 1] == 0x8b1c8000u && insn[i + 2] == 0xaa0003e1u &&
+                (insn[i + 4] & 0xfc000000u) == 0x94000000u) {
+                int32_t delta = (int32_t)(insn[i + 4] << 6) >> 4;
+                if ((uintptr_t)&insn[i + 4] + delta != (uintptr_t)g_ws_page_rx_getter) continue;
+                g_ws_page_list_field = ld_page_field(insn[i], 0xb8400040u);
+                if (!g_ws_page_list_field) continue;
+                break;
+            }
+        }
+        ld_blog("ws page list field=0x%x", g_ws_page_list_field);
+    }
     __atomic_store_n(hook_ready, 1, __ATOMIC_RELAXED);
     ld_blog("%s hook installed via sym+semantic at %p vaddr=0x%lx size=%zu",
             label, (void *)runtime, (unsigned long)vaddr, size);
@@ -795,6 +857,43 @@ static int ld_ws_install_allapps_state_hook(const struct native_api *api, ld_lib
     ld_blog("%s hook installed via sym+semantic result=0 at %p vaddr=0x%lx size=%zu",
             label, (void *)runtime, (unsigned long)vaddr, size);
     return 1;
+}
+
+static const uint32_t *ld_ws_page_symbol(ld_lib_info *lib, uint64_t vaddr, size_t size)
+{
+    uintptr_t runtime = 0;
+    if (!vaddr || size < 16 || size > 8192 || size % 4 || vaddr > UINTPTR_MAX - (size - 4) ||
+        !ld_cross_check_strict(lib, (uintptr_t)vaddr, (uintptr_t)vaddr + size - 4) ||
+        !ld_vaddr_to_runtime(lib, (uintptr_t)vaddr, &runtime) ||
+        !executable_range(runtime, size)) return NULL;
+    return (const uint32_t *)runtime;
+}
+
+static void ld_ws_resolve_page_fields(ld_lib_info *lib)
+{
+    if (g_page_fields.layout) return;
+    size_t process_size = g_home_options.ws_page_field_size[0];
+    size_t classifier_size = g_home_options.ws_page_field_size[1];
+    size_t quick_size = g_home_options.ws_page_field_size[2];
+    const uint32_t *process = ld_ws_page_symbol(lib, g_home_options.ws_page_field_vaddr[0], process_size);
+    const uint32_t *classifier = ld_ws_page_symbol(lib, g_home_options.ws_page_field_vaddr[1], classifier_size);
+    const uint32_t *quick = ld_ws_page_symbol(lib, g_home_options.ws_page_field_vaddr[2], quick_size);
+    size_t rx_size = g_home_options.ws_page_field_size[3];
+    const uint32_t *rx = ld_ws_page_symbol(lib, g_home_options.ws_page_field_vaddr[3], rx_size);
+    struct ld_page_fields fields;
+    unsigned rx_value = rx ? ld_decode_page_rx_value(rx, rx_size / 4) : 0;
+    if (!process || !classifier || !quick || !rx_value ||
+        !ld_decode_page_fields(&fields, process, process_size / 4,
+                               classifier, classifier_size / 4, quick, quick_size / 4)) {
+        ld_blog("workstation page fields: unavailable; page scope uses build lifecycle");
+        return;
+    }
+    fields.rx_value = rx_value;
+    g_ws_page_rx_getter = rx;
+    g_page_fields = fields;
+    ld_blog("workstation page fields: layout=0x%x items=0x%x model=0x%x container=0x%x quick_call=0x%x rx_value=0x%x",
+            g_page_fields.layout, g_page_fields.items, g_page_fields.model,
+            g_page_fields.container, g_page_fields.quick_call, g_page_fields.rx_value);
 }
 
 static void ld_workstation_install(const struct native_api *api, ld_lib_info *lib)

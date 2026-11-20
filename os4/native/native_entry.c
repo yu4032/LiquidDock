@@ -873,7 +873,7 @@ static void repl_rust_orientation(void *grid) {
     g_orig_rust_orientation(grid);
 }
 static void update_layout_ready(void) {
-    g_layout_hooks_ready=g_hook_pin_ok && g_layout_mid_ready && g_orig_orientation && g_orig_filter_return
+    g_layout_hooks_ready=g_page_fields.layout && g_hook_pin_ok && g_layout_mid_ready && g_orig_orientation && g_orig_filter_return
         && g_orig_load_items && g_orig_save_batch && g_orig_save_single && g_orig_delete_item
         && g_orig_rust_orientation && g_orig_process_screen && g_orig_widget_lattice && g_orig_no_vacant;
     if(g_layout_hooks_ready && !g_profile_selected) {
@@ -1477,6 +1477,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_install_os4_widget_hooks(api,&lib);
     ld_install_os4_recents_blur(api,&lib);
     ld_widget_resize_install(api,&lib);
+    ld_ws_resolve_page_fields(&lib);
     ld_workstation_install(api,&lib);
     ld_superellipse_blur_install();
     ld_glass_superellipse_install(api);

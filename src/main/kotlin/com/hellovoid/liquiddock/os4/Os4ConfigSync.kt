@@ -228,6 +228,9 @@ object Os4ConfigSync {
                     if (resolvedTargets.workstationJumpToPageTarget.isNotEmpty()) {
                         append("workstation_jump_to_page_target=").append(resolvedTargets.workstationJumpToPageTarget).append('\n')
                     }
+                    if (resolvedTargets.workstationPageFieldTargets.isNotEmpty()) {
+                        append("workstation_page_field_targets=").append(resolvedTargets.workstationPageFieldTargets).append('\n')
+                    }
                     if (resolvedTargets.allAppsBlurTarget.isNotEmpty()) {
                         append("allapps_blur_target=").append(resolvedTargets.allAppsBlurTarget).append('\n')
                     }

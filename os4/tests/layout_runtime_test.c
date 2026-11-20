@@ -15,7 +15,36 @@ static uint64_t heap[18][64];
 static uintptr_t object(int i) { heap[i][0]=0x5c<<12; return (uintptr_t)&heap[i][0]+1; }
 static void word(uintptr_t p,size_t o,uint32_t n) { memcpy((void *)(p+o),&n,4); }
 static void integer(uintptr_t p,size_t o,int64_t n) { memcpy((void *)(p+o),&n,8); }
+static void verify_page_fields(void)
+{
+    /* The fields in this fixture are deliberately shifted from both Launcher builds. */
+    const uint32_t process[] = {
+        0xb8400043u | (0xefu << 12), 0x8b1c8063u, 0xf80003a3u,
+        0xb840b064u, 0x93417c85u,
+    };
+    uint32_t classifier[] = {
+        0xb8400001u | (0xbu << 12), 0x8b1c8021u, 0xf8400020u | (0x57u << 12),
+        0xb101a01fu, 0x910082d0u, 0x9100c2d1u, 0x9a910204u,
+    };
+    const uint32_t quick[] = {
+        0xd63f03c0u, 0xb8400001u | (0x23u << 12), 0x8b1c8021u,
+        0xb8400020u | (0x43u << 12), 0x8b1c8000u, 0xf9402370u, 0x6b10001fu,
+        0x54000080u, 0xaa1d03efu,
+    };
+    struct ld_page_fields fields = {0};
+    assert(ld_decode_page_fields(&fields, process, 5, classifier, 7, quick, 9));
+    assert(fields.layout == 0x23 && fields.items == 0xef && fields.model == 0xb &&
+           fields.container == 0x57 && fields.quick_call == 0x43);
+
+    classifier[3] = 0;
+    fields = (struct ld_page_fields){0};
+    assert(!ld_decode_page_fields(&fields, process, 5, classifier, 7, quick, 9));
+    assert(!fields.layout);
+}
+
 int main(void) {
+ verify_page_fields();
+ g_page_fields = (struct ld_page_fields){.layout=0x1b,.items=0xdb,.model=7,.container=0x47,.rx_value=0xf};
  uintptr_t obj[18]; for(int i=0;i<18;i++) obj[i]=object(i);
  integer(obj[0],7,4); integer(obj[0],15,8);
  word(obj[1],15,(uint32_t)obj[2]); word(obj[2],11,4); word(obj[2],15,(uint32_t)obj[3]);
@@ -99,6 +128,33 @@ int main(void) {
  struct ld_layout_memory normal_after;
  assert(ld_layout_load(LD_LAYOUT_FILE,&normal_after));
  assert(memcmp(&normal_before,&normal_after,sizeof normal_before)==0);
+
+ /* Live rotation reflows each page using the old reading order. The first
+  * page fits both shapes, and the second has an old column outside 4x8. */
+ word(obj[2],11,4); word(obj[8],11,4);
+ word(obj[10],15,(uint32_t)obj[12]);
+ const int landscape_x[]={1,2,7}, landscape_y[]={0,0,1};
+ for(int i=0;i<3;i++) {
+  integer(obj[15+i],7,401+i); integer(obj[15+i],0x1f,1); integer(obj[15+i],0x27,1);
+  integer(obj[15+i],0x2f,i<2?2:3); integer(obj[15+i],0x47,-104);
+  integer(obj[12+i],11,landscape_x[i]); integer(obj[12+i],19,landscape_y[i]);
+  integer(obj[15+i],0x37,landscape_x[i]); integer(obj[15+i],0x3f,landscape_y[i]);
+ }
+ uintptr_t grid=obj[6];
+ integer(grid,0x1b,8); integer(grid,0x23,4);
+ c.x[2]=grid; ld_observe_orientation(&c);
+ integer(obj[0],7,8); integer(obj[0],15,4);
+ integer(grid,0x1b,4); integer(grid,0x23,8);
+ ld_observe_orientation(&c);
+ c.x[2]=obj[1]; c.x[3]=4; c.x[5]=8;
+ ld_observe_process(&c);
+ assert(g_restore_ready);
+ for(int i=0;i<3;i++) {
+  int x=i==1?1:0;
+  assert(ld_heap_i64(obj[12+i],11)==x && ld_heap_i64(obj[12+i],19)==0);
+  assert(ld_heap_i64(obj[15+i],0x37)==x && ld_heap_i64(obj[15+i],0x3f)==0);
+  assert(ld_heap_i64(obj[15+i],0x2f)==(i<2?2:3));
+ }
 
  unlink(LD_LAYOUT_FILE); unlink(LD_WS_LAYOUT_FILE); unlink(LD_WS_DESK_LAYOUT_FILE);
  (void)g_orig_orientation; (void)g_layout_mid_ready;

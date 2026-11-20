@@ -326,7 +326,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     int landscape = -1, cols = 0, rows = 0;
     int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
     int is_allapps = is_laptop && g_home_options.ws.dock_custom &&
-        __atomic_load_n(&g_ws_in_allapps_build, __ATOMIC_RELAXED);
+        ld_ws_allapps_geometry();
     int scope = is_laptop ? (is_allapps ? 2 : 1) : 0;
     uintptr_t controller = ld_hm_controller(x26);
     uintptr_t identity = controller ? controller : variables ? variables : cfg;

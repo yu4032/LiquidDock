@@ -190,6 +190,7 @@ internal object Os4GlassSymbols {
         val workstationAllAppsUpdateStateTarget: String = "",
         val workstationPageChangedTarget: String = "",
         val workstationJumpToPageTarget: String = "",
+        val workstationPageFieldTargets: String = "",
     )
     private data class CacheKey(
         val source: String,
@@ -284,6 +285,15 @@ internal object Os4GlassSymbols {
             mini,
             "LaptopWorkspaceGetxController.jumpToPage",
         )
+        val workstationPageFieldTargets = fromMiniElfSymbolList(
+            mini,
+            listOf(
+                "GridOccupancyController._processScreenList",
+                "DataClassifier.addSingleItemsInScreenRegionCellItems",
+                "LaptopWorkspaceGetxController.isQuickCallScreenShowing",
+                "RxList.value",
+            ),
+        )
         val allAppsBlurTarget = fromMiniElfSingle(
             mini,
             "DrawerViewBlurController.updateProgress",
@@ -334,6 +344,7 @@ internal object Os4GlassSymbols {
             workstationAllAppsUpdateStateTarget,
             workstationPageChangedTarget,
             workstationJumpToPageTarget,
+            workstationPageFieldTargets,
         )
     }
 
