@@ -11,7 +11,7 @@ static volatile int g_ws_is_laptop_mode=0;
 static void *g_orig_orientation;
 static void ld_blog(const char *format,...) { (void)format; }
 #include "../native/layout_runtime.h"
-static uint64_t heap[18][64];
+static uint64_t heap[70][64];
 static uintptr_t object(int i) { heap[i][0]=0x5c<<12; return (uintptr_t)&heap[i][0]+1; }
 static void word(uintptr_t p,size_t o,uint32_t n) { memcpy((void *)(p+o),&n,4); }
 static void integer(uintptr_t p,size_t o,int64_t n) { memcpy((void *)(p+o),&n,8); }
@@ -129,9 +129,8 @@ int main(void) {
  assert(ld_layout_load(LD_LAYOUT_FILE,&normal_after));
  assert(memcmp(&normal_before,&normal_after,sizeof normal_before)==0);
 
- /* Live rotation reflows each page using the old reading order. The first
-  * page fits both shapes, and the second has an old column outside 4x8. */
- word(obj[2],11,4); word(obj[8],11,4);
+ /* A sparse page that already fits the destination is left untouched. */
+ word(obj[2],11,2); word(obj[8],11,4);
  word(obj[10],15,(uint32_t)obj[12]);
  const int landscape_x[]={1,2,7}, landscape_y[]={0,0,1};
  for(int i=0;i<3;i++) {
@@ -140,20 +139,50 @@ int main(void) {
   integer(obj[12+i],11,landscape_x[i]); integer(obj[12+i],19,landscape_y[i]);
   integer(obj[15+i],0x37,landscape_x[i]); integer(obj[15+i],0x3f,landscape_y[i]);
  }
- uintptr_t grid=obj[6];
- integer(grid,0x1b,8); integer(grid,0x23,4);
- c.x[2]=grid; ld_observe_orientation(&c);
- integer(obj[0],7,8); integer(obj[0],15,4);
- integer(grid,0x1b,4); integer(grid,0x23,8);
- ld_observe_orientation(&c);
  c.x[2]=obj[1]; c.x[3]=4; c.x[5]=8;
- ld_observe_process(&c);
- assert(g_restore_ready);
+ ld_observe_process(&c); assert(g_restore_ready);
+ for(int i=0;i<2;i++) {
+  assert(ld_heap_i64(obj[12+i],11)==landscape_x[i] && ld_heap_i64(obj[12+i],19)==landscape_y[i]);
+ }
+ /* With a later page containing x=7, transpose every collected page
+  * while preserving model identity, list order, and screen assignments. */
+ word(obj[2],11,4);
+ ld_observe_process(&c); assert(g_restore_ready);
  for(int i=0;i<3;i++) {
-  int x=i==1?1:0;
-  assert(ld_heap_i64(obj[12+i],11)==x && ld_heap_i64(obj[12+i],19)==0);
-  assert(ld_heap_i64(obj[15+i],0x37)==x && ld_heap_i64(obj[15+i],0x3f)==0);
+  assert(ld_heap_i64(obj[12+i],11)==landscape_y[i] && ld_heap_i64(obj[12+i],19)==landscape_x[i]);
+  assert(ld_heap_i64(obj[15+i],0x37)==landscape_y[i] && ld_heap_i64(obj[15+i],0x3f)==landscape_x[i]);
   assert(ld_heap_i64(obj[15+i],0x2f)==(i<2?2:3));
+ }
+
+ /* 25 shuffled icons across 32 slots: seven vacant slots must not cause
+  * positional compaction or change the underlying cell array order. */
+ word(obj[2],11,2); word(obj[8],11,50);
+ integer(obj[0],7,8); integer(obj[0],15,4);
+ for(int i=0;i<25;i++) {
+  uintptr_t model=object(18+2*i),cell=object(19+2*i);
+  int slot=(i*9)%32, x=slot%8, y=slot/8;
+  word(obj[10],15+i*4,(uint32_t)cell);
+  word(cell,7,(uint32_t)model);
+  integer(cell,0xb,x); integer(cell,0x13,y);
+  integer(model,7,900+i); integer(model,0x1f,1); integer(model,0x27,1);
+  integer(model,0x2f,4); integer(model,0x37,x); integer(model,0x3f,y);
+  integer(model,0x47,-104);
+ }
+ ld_observe_process(&c); assert(g_restore_ready);
+ for(int i=0;i<25;i++) {
+  uintptr_t model=object(18+2*i),cell=object(19+2*i);
+  int slot=(i*9)%32, x=slot/8, y=slot%8;
+  assert(ld_heap_pointer(&c,obj[10],0xf+i*4)==cell);
+  assert(ld_heap_i64(cell,0xb)==x && ld_heap_i64(cell,0x13)==y);
+  assert(ld_heap_i64(model,0x37)==x && ld_heap_i64(model,0x3f)==y);
+  assert(ld_heap_i64(model,7)==900+i && ld_heap_i64(model,0x2f)==4);
+ }
+ ld_observe_process(&c); assert(g_restore_ready);
+ for(int i=0;i<25;i++) {
+  uintptr_t model=object(18+2*i),cell=object(19+2*i);
+  int slot=(i*9)%32;
+  assert(ld_heap_i64(cell,0xb)==slot/8 && ld_heap_i64(cell,0x13)==slot%8);
+  assert(ld_heap_i64(model,0x37)==slot/8 && ld_heap_i64(model,0x3f)==slot%8);
  }
 
  unlink(LD_LAYOUT_FILE); unlink(LD_WS_LAYOUT_FILE); unlink(LD_WS_DESK_LAYOUT_FILE);
