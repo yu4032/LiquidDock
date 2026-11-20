@@ -11,7 +11,6 @@ static int g_restore_ready;
 static int g_initial_restore,g_initial_columns,g_initial_rows,g_initial_direction;
 static int g_rotation_direction=-1;
 static int g_runtime_columns,g_runtime_rows,g_runtime_direction;
-static int g_allapps_grid_rotating;
 static int g_layout_mid_ready;
 static int g_layout_hooks_ready;
 static uintptr_t g_process_resume;
@@ -104,8 +103,6 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
     int initial = init_state==1 && direction==g_initial_direction
             && ld_heap_i64(c->x[2],0x1b)==g_initial_columns
             && ld_heap_i64(c->x[2],0x23)==g_initial_rows;
-    g_allapps_grid_rotating = !initial && prev_cols > 0 && prev_rows > 0 &&
-        prev_cols == liverows && prev_rows == livecols && livecols != liverows;
     if (g_layout_hooks_ready && init_state == 1 && !initial && livecols > 0 && liverows > 0 &&
         (livecols != g_initial_columns || liverows != g_initial_rows || direction != g_initial_direction)) {
         __atomic_store_n(&g_initial_restore, 0, __ATOMIC_RELEASE);
