@@ -205,6 +205,7 @@ data class Os4MainScreenOptions(
             add(ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT.name())
             add(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name())
             add(ConfigSchema.Workstation.TASKBAR_MODE.name())
+            add(ConfigSchema.Workstation.DESKTOP_SYNC_NORMAL.name())
             listOf(
                 ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
                 ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET,
@@ -218,6 +219,14 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Workstation.ALL_APPS_PORTRAIT_TOP_SPACING,
                 ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING,
                 ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y,
+                ConfigSchema.Workstation.DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET,
+                ConfigSchema.Workstation.DESKTOP_LANDSCAPE_TOP_SPACING,
+                ConfigSchema.Workstation.DESKTOP_LANDSCAPE_BOTTOM_SPACING,
+                ConfigSchema.Workstation.DESKTOP_LANDSCAPE_INDICATOR_Y,
+                ConfigSchema.Workstation.DESKTOP_PORTRAIT_HORIZONTAL_OFFSET,
+                ConfigSchema.Workstation.DESKTOP_PORTRAIT_TOP_SPACING,
+                ConfigSchema.Workstation.DESKTOP_PORTRAIT_BOTTOM_SPACING,
+                ConfigSchema.Workstation.DESKTOP_PORTRAIT_INDICATOR_Y,
             ).forEach { add(it.name()); add("${it.name()}_tenths") }
         }
 

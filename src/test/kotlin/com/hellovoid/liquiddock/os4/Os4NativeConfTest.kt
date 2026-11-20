@@ -33,6 +33,25 @@ class Os4NativeConfTest {
     }
 
     @Test
+    fun `workstation desktop mode and margins trigger snapshot publication`() {
+        val watched = Os4MainScreenOptions.watchedKeys
+        assertTrue(watched.contains(ConfigSchema.Workstation.DESKTOP_SYNC_NORMAL.name()))
+        listOf(
+            ConfigSchema.Workstation.DESKTOP_LANDSCAPE_HORIZONTAL_OFFSET,
+            ConfigSchema.Workstation.DESKTOP_LANDSCAPE_TOP_SPACING,
+            ConfigSchema.Workstation.DESKTOP_LANDSCAPE_BOTTOM_SPACING,
+            ConfigSchema.Workstation.DESKTOP_LANDSCAPE_INDICATOR_Y,
+            ConfigSchema.Workstation.DESKTOP_PORTRAIT_HORIZONTAL_OFFSET,
+            ConfigSchema.Workstation.DESKTOP_PORTRAIT_TOP_SPACING,
+            ConfigSchema.Workstation.DESKTOP_PORTRAIT_BOTTOM_SPACING,
+            ConfigSchema.Workstation.DESKTOP_PORTRAIT_INDICATOR_Y,
+        ).forEach { key ->
+            assertTrue(key.name(), watched.contains(key.name()))
+            assertTrue("${key.name()}_tenths", watched.contains("${key.name()}_tenths"))
+        }
+    }
+
+    @Test
     fun `prevent stretch preference is watched and published to native config`() {
         val key = ConfigSchema.Grid.PREVENT_WIDGET_STRETCH.name()
         assertTrue(Os4MainScreenOptions.watchedKeys.contains(key))

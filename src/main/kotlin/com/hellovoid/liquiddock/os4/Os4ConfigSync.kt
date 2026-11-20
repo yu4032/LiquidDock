@@ -48,25 +48,30 @@ object Os4ConfigSync {
 
     /**
      * Prepares native config before a manual launcher restart (e.g. from Settings UI).
-     * Waits for any in-flight sync and suppresses a redundant delayed watchdog restart.
+     * Publishes the latest preferences even when the Launcher version is unchanged.
      */
     @JvmStatic
     fun prepareForManualLauncherRestart(context: Context) {
         suppressAutoRestartUntilMs = System.currentTimeMillis() + 15_000L
-        syncIfLauncherChangedBlocking(context, requestRestart = false)
+        syncIfLauncherChangedBlocking(context, requestRestart = false, forcePublish = true)
     }
 
-    private fun syncIfLauncherChangedBlocking(context: Context, requestRestart: Boolean) {
+    private fun syncIfLauncherChangedBlocking(
+        context: Context,
+        requestRestart: Boolean,
+        forcePublish: Boolean = false,
+    ) {
         val app = context.applicationContext
         if (!supportsPublisher(app)) return
         val current = readLauncherStamp(app) ?: return
         val future = worker.submit {
             val persisted = app.getSharedPreferences("os4_sync_state", Context.MODE_PRIVATE)
                 .getString("last_synced_launcher_stamp", null)
-            if (current != persisted) {
+            if (forcePublish || current != persisted) {
                 lastLauncherStamp = current
-                runCatching { publishNow(app, "launcher_changed", requestRestart) }
-                    .onFailure { Log.e(TAG, "[launcher_changed] blocking publish failed", it) }
+                val reason = if (forcePublish) "manual_restart" else "launcher_changed"
+                runCatching { publishNow(app, reason, requestRestart) }
+                    .onFailure { Log.e(TAG, "[$reason] blocking publish failed", it) }
             }
         }
         runCatching { future.get(8L, java.util.concurrent.TimeUnit.SECONDS) }
