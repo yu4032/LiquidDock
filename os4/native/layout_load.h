@@ -66,7 +66,7 @@ static int ld_read_dto_item_ex(struct ld_dart_context *c,uintptr_t dto,struct ld
     int64_t page=ld_dto_number(c,dto,0x1f),x=ld_dto_number(c,dto,0x23),y=ld_dto_number(c,dto,0x27);
     int64_t sx=ld_dto_number(c,dto,0x17),sy=ld_dto_number(c,dto,0x1b);
     if(page<0 || page>INT32_MAX/2 || x<INT32_MIN+1LL || x>INT32_MAX
-            || y<INT32_MIN+1LL || y>INT32_MAX || sx<1 || sx>10 || sy<1 || sy>10) return 0;
+            || y<INT32_MIN+1LL || y>INT32_MAX || sx<1 || sx>LD_LAYOUT_MAX_DIM || sy<1 || sy>LD_LAYOUT_MAX_DIM) return 0;
     *item=(struct ld_layout_item){id,page,(int)x,(int)y,(int)sx,(int)sy}; return 1;
 }
 static inline int ld_read_dto_item(struct ld_dart_context *c,uintptr_t dto,struct ld_layout_item *item) {

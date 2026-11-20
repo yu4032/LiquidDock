@@ -26,7 +26,7 @@ static int ld_page_merge_field(unsigned *field, unsigned candidate)
     return 1;
 }
 
-static unsigned ld_decode_page_rx_value(const uint32_t *getter, size_t count)
+static __attribute__((unused)) unsigned ld_decode_page_rx_value(const uint32_t *getter, size_t count)
 {
     unsigned value = 0;
     for (size_t i = 1; i + 7 < count; i++) {

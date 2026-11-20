@@ -115,7 +115,9 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
     if(g_layout_hooks_ready && (initial || changed_square || stale_old)) {
         /* Reuse the existing orientation transaction and its Dart frames to
          * publish the fully loaded layout through the vendor's save callbacks. */
-        int64_t oldcols=stale_old ? prev_cols : (square?g_grid_cols+1:ld_heap_i64(c->x[2],0x23));
+        int64_t oldcols=stale_old ? prev_cols
+            : (square ? (g_grid_cols<LD_LAYOUT_MAX_DIM ? g_grid_cols+1 : g_grid_cols-1)
+                      : ld_heap_i64(c->x[2],0x23));
         int64_t oldrows=stale_old ? prev_rows : (square?g_grid_rows:ld_heap_i64(c->x[2],0x1b));
         memcpy((void *)(receiver+7),&oldcols,8); memcpy((void *)(receiver+15),&oldrows,8);
         if(initial) __atomic_store_n(&g_initial_restore, 2, __ATOMIC_RELEASE);
