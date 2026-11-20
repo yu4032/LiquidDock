@@ -17,9 +17,13 @@
 #include "page_fields.h"
 
 /*
- * Post-call observer on system SP (not Dart SP x15) so nested Dart calls inside
- * `original` never clobber our saved frame. Saves x0..x30 (at [sp, #0..240]),
- * q0..q1 (at [sp, #256..288]), and return x0/d0 at [sp, #288]/[sp, #296].
+ * Post-call / pre+post observer using a per-thread TLS shadow stack instead of
+ * hardware SP (CSP). On this launcher's Dart UI thread, CSP sits near the
+ * stack trim boundary (stack_base + 0x1b140) and pages starting at +0x1b000
+ * can be zeroed (e.g. MADV_DONTNEED) while `original` executes, which wipes
+ * any LR saved on CSP. Keeping cross-call state in TLS avoids both CSP page
+ * zeroing and Dart-stack (x15) clobbering, while temporary C callbacks run on
+ * a 16-byte-aligned scratch C stack below x15.
  */
 struct ld_ws_ctx {
     uint64_t x[31];
@@ -28,12 +32,69 @@ struct ld_ws_ctx {
     unsigned char q1[16];
     uint64_t ret_x0;
     uint64_t ret_d0;
+    uint64_t post_x15;
+    uint64_t saved_csp;
 };
 
-#define LD_WS_POST_OBSERVER(name, callback, original) \
+struct ld_ws_ret_frame {
+    uint64_t ret_x0;
+    uint64_t ret_d0;
+    uint64_t post_x15;
+    uint64_t saved_x30;
+    uint64_t saved_csp;
+};
+
+_Static_assert(sizeof(struct ld_ws_ctx) == 320, "ld_ws_ctx size must match asm");
+_Static_assert(__builtin_offsetof(struct ld_ws_ctx, nzcv) == 248, "nzcv offset");
+_Static_assert(__builtin_offsetof(struct ld_ws_ctx, q0) == 256, "q0 offset");
+_Static_assert(__builtin_offsetof(struct ld_ws_ctx, saved_csp) == 312, "saved_csp offset");
+
+typedef void (*ld_ws_cb_t)(struct ld_ws_ctx *);
+
+enum { LD_WS_SHADOW_MAX = 32 };
+static __thread struct ld_ws_ctx g_ws_shadow[LD_WS_SHADOW_MAX];
+static __thread uint32_t g_ws_shadow_depth;
+
+__attribute__((used, noinline)) static struct ld_ws_ctx *
+ld_ws_frame_push(const struct ld_ws_ctx *tmp, ld_ws_cb_t pre_cb)
+{
+    uint32_t depth = g_ws_shadow_depth;
+    if (depth >= LD_WS_SHADOW_MAX) depth = LD_WS_SHADOW_MAX - 1u;
+    struct ld_ws_ctx *slot = &g_ws_shadow[depth];
+    memcpy(slot, tmp, sizeof(*slot));
+    g_ws_shadow_depth = depth + 1u;
+    if (pre_cb) pre_cb(slot);
+    return slot;
+}
+
+__attribute__((used, noinline)) static void
+ld_ws_frame_pop_and_post(struct ld_ws_ret_frame *rf, ld_ws_cb_t post_cb)
+{
+    uint32_t depth = g_ws_shadow_depth;
+    if (depth == 0u) return;
+    depth -= 1u;
+    g_ws_shadow_depth = depth;
+    struct ld_ws_ctx *slot = &g_ws_shadow[depth];
+    slot->ret_x0 = rf->ret_x0;
+    slot->ret_d0 = rf->ret_d0;
+    slot->post_x15 = rf->post_x15;
+    if (post_cb) post_cb(slot);
+    rf->ret_x0 = slot->ret_x0;
+    rf->ret_d0 = slot->ret_d0;
+    rf->post_x15 = slot->post_x15;
+    rf->saved_x30 = slot->x[30];
+    rf->saved_csp = slot->saved_csp;
+}
+
+#define LD_WS_SHADOW_OBSERVER(name, pre_cb_sym, post_cb_sym, original) \
 __attribute__((naked, used)) static void name(void) { \
     __asm__ volatile( \
-        "sub sp, sp, #320\n" \
+        "stp x16, x17, [x15, #-16]\n" \
+        "mov x16, sp\n" \
+        "sub x17, x15, #512\n" \
+        "and x17, x17, #0xfffffffffffffff0\n" \
+        "mov sp, x17\n" \
+        "str x16, [sp, #312]\n" \
         "stp x0, x1, [sp, #0]\n" \
         "stp x2, x3, [sp, #16]\n" \
         "stp x4, x5, [sp, #32]\n" \
@@ -42,6 +103,8 @@ __attribute__((naked, used)) static void name(void) { \
         "stp x10, x11, [sp, #80]\n" \
         "stp x12, x13, [sp, #96]\n" \
         "stp x14, x15, [sp, #112]\n" \
+        "ldur x16, [x15, #-16]\n" \
+        "ldur x17, [x15, #-8]\n" \
         "stp x16, x17, [sp, #128]\n" \
         "stp x18, x19, [sp, #144]\n" \
         "stp x20, x21, [sp, #160]\n" \
@@ -53,73 +116,57 @@ __attribute__((naked, used)) static void name(void) { \
         "mrs x16, nzcv\n" \
         "str x16, [sp, #248]\n" \
         "stp q0, q1, [sp, #256]\n" \
-        "ldp x0, x1, [sp, #0]\n" \
-        "ldp x2, x3, [sp, #16]\n" \
-        "ldp x4, x5, [sp, #32]\n" \
-        "ldp x6, x7, [sp, #48]\n" \
+        "mov x0, sp\n" \
+        pre_cb_sym \
+        "bl ld_ws_frame_push\n" \
+        "mov x16, x0\n" \
+        "ldr x17, [x16, #248]\n" \
+        "msr nzcv, x17\n" \
+        "ldp q0, q1, [x16, #256]\n" \
+        "ldr x17, [x16, #312]\n" \
+        "mov sp, x17\n" \
+        "ldp x0, x1, [x16, #0]\n" \
+        "ldp x2, x3, [x16, #16]\n" \
+        "ldp x4, x5, [x16, #32]\n" \
+        "ldp x6, x7, [x16, #48]\n" \
+        "ldp x8, x9, [x16, #64]\n" \
+        "ldp x10, x11, [x16, #80]\n" \
+        "ldp x12, x13, [x16, #96]\n" \
+        "ldp x14, x15, [x16, #112]\n" \
+        "ldp x18, x19, [x16, #144]\n" \
+        "ldp x20, x21, [x16, #160]\n" \
+        "ldp x22, x23, [x16, #176]\n" \
+        "ldp x24, x25, [x16, #192]\n" \
+        "ldp x26, x27, [x16, #208]\n" \
+        "ldp x28, x29, [x16, #224]\n" \
+        "ldr x17, [x16, #136]\n" \
         "adrp x16, " #original "\n" \
         "ldr x16, [x16, :lo12:" #original "]\n" \
         "blr x16\n" \
-        "str x0, [sp, #288]\n" \
-        "str d0, [sp, #296]\n" \
-        "str x15, [sp, #304]\n" \
+        "sub x17, x15, #128\n" \
+        "and x17, x17, #0xfffffffffffffff0\n" \
+        "mov sp, x17\n" \
+        "str x0, [sp, #0]\n" \
+        "str d0, [sp, #8]\n" \
+        "str x15, [sp, #16]\n" \
         "mov x0, sp\n" \
-        "bl " #callback "\n" \
-        "ldr x0, [sp, #288]\n" \
-        "ldr d0, [sp, #296]\n" \
-        "ldr x15, [sp, #304]\n" \
-        "ldr x30, [sp, #240]\n" \
-        "add sp, sp, #320\n" \
+        "adrp x1, " #post_cb_sym "\n" \
+        "add x1, x1, :lo12:" #post_cb_sym "\n" \
+        "bl ld_ws_frame_pop_and_post\n" \
+        "ldr x0, [sp, #0]\n" \
+        "ldr d0, [sp, #8]\n" \
+        "ldr x15, [sp, #16]\n" \
+        "ldr x30, [sp, #24]\n" \
+        "ldr x16, [sp, #32]\n" \
+        "mov sp, x16\n" \
         "ret\n"); \
 }
 
+#define LD_WS_POST_OBSERVER(name, callback, original) \
+    LD_WS_SHADOW_OBSERVER(name, "mov x1, #0\n", callback, original)
+
 #define LD_WS_PRE_POST_OBSERVER(name, pre_cb, post_cb, original) \
-__attribute__((naked, used)) static void name(void) { \
-    __asm__ volatile( \
-        "sub sp, sp, #320\n" \
-        "stp x0, x1, [sp, #0]\n" \
-        "stp x2, x3, [sp, #16]\n" \
-        "stp x4, x5, [sp, #32]\n" \
-        "stp x6, x7, [sp, #48]\n" \
-        "stp x8, x9, [sp, #64]\n" \
-        "stp x10, x11, [sp, #80]\n" \
-        "stp x12, x13, [sp, #96]\n" \
-        "stp x14, x15, [sp, #112]\n" \
-        "stp x16, x17, [sp, #128]\n" \
-        "stp x18, x19, [sp, #144]\n" \
-        "stp x20, x21, [sp, #160]\n" \
-        "stp x22, x23, [sp, #176]\n" \
-        "stp x24, x25, [sp, #192]\n" \
-        "stp x26, x27, [sp, #208]\n" \
-        "stp x28, x29, [sp, #224]\n" \
-        "str x30, [sp, #240]\n" \
-        "mrs x16, nzcv\n" \
-        "str x16, [sp, #248]\n" \
-        "stp q0, q1, [sp, #256]\n" \
-        "mov x0, sp\n" \
-        "bl " #pre_cb "\n" \
-        "ldp x0, x1, [sp, #0]\n" \
-        "ldp x2, x3, [sp, #16]\n" \
-        "ldp x4, x5, [sp, #32]\n" \
-        "ldp x6, x7, [sp, #48]\n" \
-        "ldp x14, x15, [sp, #112]\n" \
-        "ldp x26, x27, [sp, #208]\n" \
-        "ldp x28, x29, [sp, #224]\n" \
-        "adrp x16, " #original "\n" \
-        "ldr x16, [x16, :lo12:" #original "]\n" \
-        "blr x16\n" \
-        "str x0, [sp, #288]\n" \
-        "str d0, [sp, #296]\n" \
-        "str x15, [sp, #304]\n" \
-        "mov x0, sp\n" \
-        "bl " #post_cb "\n" \
-        "ldr x0, [sp, #288]\n" \
-        "ldr d0, [sp, #296]\n" \
-        "ldr x15, [sp, #304]\n" \
-        "ldr x30, [sp, #240]\n" \
-        "add sp, sp, #320\n" \
-        "ret\n"); \
-}
+    LD_WS_SHADOW_OBSERVER(name, "adrp x1, " #pre_cb "\nadd x1, x1, :lo12:" #pre_cb "\n", post_cb, original)
 
 static volatile uint64_t g_ws_device_width_bits __attribute__((used));
 
@@ -264,28 +311,26 @@ static int g_ws_visible_page_scope = -1;
 static unsigned g_ws_page_list_field;
 static const uint32_t *g_ws_page_rx_getter;
 
-static int ld_ws_page_scope(const struct ld_ws_ctx *c)
+static int ld_ws_page_scope(const struct ld_dart_context *c)
 {
     int64_t index = (int64_t)c->x[2];
     if (!g_page_fields.layout || !g_ws_page_list_field || index < 0 || index >= 100) return -1;
 
-    struct ld_dart_context dc;
-    memcpy(dc.x, c->x, sizeof(dc.x));
-    uintptr_t rx = ld_heap_pointer(&dc, c->x[1], g_ws_page_list_field);
-    uintptr_t list = ld_heap_pointer(&dc, rx, g_page_fields.rx_value);
+    uintptr_t rx = ld_heap_pointer(c, c->x[1], g_ws_page_list_field);
+    uintptr_t list = ld_heap_pointer(c, rx, g_page_fields.rx_value);
     if (!list || ((ld_heap_u32(list, (size_t)-1) >> 12) & 0xfffff) != 0x5c) return -1;
     uint32_t length = ld_heap_u32(list, 0xb);
     if ((length & 1u) || index >= (length >> 1) || length > 200u) return -1;
-    uintptr_t array = ld_heap_pointer(&dc, list, 0xf);
-    uintptr_t screen = ld_heap_pointer(&dc, array, 0xf + (size_t)index * 4);
-    uintptr_t layout = ld_heap_pointer(&dc, screen, g_page_fields.layout);
-    uintptr_t items = ld_heap_pointer(&dc, layout, g_page_fields.items);
+    uintptr_t array = ld_heap_pointer(c, list, 0xf);
+    uintptr_t screen = ld_heap_pointer(c, array, 0xf + (size_t)index * 4);
+    uintptr_t layout = ld_heap_pointer(c, screen, g_page_fields.layout);
+    uintptr_t items = ld_heap_pointer(c, layout, g_page_fields.items);
     int64_t container = 0;
     if (items && ((ld_heap_u32(items, (size_t)-1) >> 12) & 0xfffff) == 0x5c &&
         ld_heap_u32(items, 0xb) >= 2u) {
-        uintptr_t cells = ld_heap_pointer(&dc, items, 0xf);
-        uintptr_t cell = ld_heap_pointer(&dc, cells, 0xf);
-        uintptr_t model = ld_heap_pointer(&dc, cell, g_page_fields.model);
+        uintptr_t cells = ld_heap_pointer(c, items, 0xf);
+        uintptr_t cell = ld_heap_pointer(c, cells, 0xf);
+        uintptr_t model = ld_heap_pointer(c, cell, g_page_fields.model);
         container = ld_heap_i64(model, g_page_fields.container);
     }
     int quick_call = ld_heap_u32(layout, g_page_fields.quick_call) == (uint32_t)(c->x[22] + 0x20u);
@@ -304,7 +349,7 @@ static int ld_ws_allapps_geometry(void)
     return scope >= 0 ? scope : __atomic_load_n(&g_ws_in_allapps_build, __ATOMIC_RELAXED);
 }
 
-__attribute__((used)) static void ld_ws_pre_allapps_state(struct ld_ws_ctx *c)
+__attribute__((used)) static void ld_ws_pre_allapps_state(struct ld_dart_context *c)
 {
     if (!c) return;
     uint32_t arg = (uint32_t)c->x[2];
@@ -318,6 +363,8 @@ __attribute__((used)) static void ld_ws_pre_allapps_state(struct ld_ws_ctx *c)
                 arg, true_value, false_value);
         return;
     }
+    /* Clear stale page scope so setter transitions always take effect. */
+    __atomic_store_n(&g_ws_visible_page_scope, -1, __ATOMIC_RELAXED);
     __atomic_store_n(&g_ws_in_allapps_build, active, __ATOMIC_RELAXED);
     static unsigned logs;
     if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 12u) {
@@ -326,14 +373,9 @@ __attribute__((used)) static void ld_ws_pre_allapps_state(struct ld_ws_ctx *c)
     }
 }
 
-__attribute__((used)) static void ld_ws_post_allapps_state(struct ld_ws_ctx *c)
-{
-    (void)c;
-}
-
 /* Resolve the destination before its first layout pass. The build latch
  * remains a fallback for pages without an item model. */
-__attribute__((used)) static void ld_ws_pre_page_changed(struct ld_ws_ctx *c)
+__attribute__((used)) static void ld_ws_pre_page_changed(struct ld_dart_context *c)
 {
     if (!c) return;
     __atomic_store_n(&g_ws_visible_page_scope, ld_ws_page_scope(c), __ATOMIC_RELAXED);
@@ -346,12 +388,7 @@ __attribute__((used)) static void ld_ws_pre_page_changed(struct ld_ws_ctx *c)
     }
 }
 
-__attribute__((used)) static void ld_ws_post_page_changed(struct ld_ws_ctx *c)
-{
-    (void)c;
-}
-
-__attribute__((used)) static void ld_ws_pre_jump_to_page(struct ld_ws_ctx *c)
+__attribute__((used)) static void ld_ws_pre_jump_to_page(struct ld_dart_context *c)
 {
     if (!c) return;
     __atomic_store_n(&g_ws_visible_page_scope, ld_ws_page_scope(c), __ATOMIC_RELAXED);
@@ -362,11 +399,6 @@ __attribute__((used)) static void ld_ws_pre_jump_to_page(struct ld_ws_ctx *c)
                 previous, (uint32_t)c->x[2],
                 __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED));
     }
-}
-
-__attribute__((used)) static void ld_ws_post_jump_to_page(struct ld_ws_ctx *c)
-{
-    (void)c;
 }
 
 __attribute__((used)) static void ld_ws_on_apps_padding(struct ld_ws_ctx *c)
@@ -657,12 +689,11 @@ LD_DART_OBSERVER(repl_ws_bg_sync,            ld_ws_on_bg_sync,            g_orig
 
 LD_WS_POST_OBSERVER(repl_ws_is_laptop,        ld_ws_post_is_laptop,        g_orig_ws_is_laptop)
 LD_WS_POST_OBSERVER(repl_ws_margin_bottom,    ld_ws_post_margin_bottom,    g_orig_ws_margin_bottom)
-LD_WS_POST_OBSERVER(repl_ws_dock_icon_top,    ld_ws_post_dock_icon_top,    g_orig_ws_dock_icon_top)
-LD_WS_PRE_POST_OBSERVER(repl_ws_apps_padding,     ld_ws_on_apps_padding, ld_ws_post_apps_padding, g_orig_ws_apps_padding)
-LD_WS_PRE_POST_OBSERVER(repl_ws_allapps_state,    ld_ws_pre_allapps_state, ld_ws_post_allapps_state, g_orig_ws_allapps_state)
-LD_WS_PRE_POST_OBSERVER(repl_ws_allapps_update_state, ld_ws_pre_allapps_state, ld_ws_post_allapps_state, g_orig_ws_allapps_update_state)
-LD_WS_PRE_POST_OBSERVER(repl_ws_page_changed, ld_ws_pre_page_changed, ld_ws_post_page_changed, g_orig_ws_page_changed)
-LD_WS_PRE_POST_OBSERVER(repl_ws_jump_to_page, ld_ws_pre_jump_to_page, ld_ws_post_jump_to_page, g_orig_ws_jump_to_page)
+LD_WS_PRE_POST_OBSERVER(repl_ws_apps_padding, ld_ws_on_apps_padding, ld_ws_post_apps_padding, g_orig_ws_apps_padding)
+LD_DART_OBSERVER(repl_ws_allapps_state,        ld_ws_pre_allapps_state, g_orig_ws_allapps_state)
+LD_DART_OBSERVER(repl_ws_allapps_update_state, ld_ws_pre_allapps_state, g_orig_ws_allapps_update_state)
+LD_DART_OBSERVER(repl_ws_page_changed,         ld_ws_pre_page_changed,  g_orig_ws_page_changed)
+LD_DART_OBSERVER(repl_ws_jump_to_page,         ld_ws_pre_jump_to_page,  g_orig_ws_jump_to_page)
 LD_WS_POST_OBSERVER(repl_ws_indicator_pos,    ld_ws_post_indicator_pos,    g_orig_ws_indicator_pos)
 __attribute__((used)) static void ld_ws_post_allapps_ind(struct ld_ws_ctx *c)
 {
@@ -801,12 +832,8 @@ static int ld_ws_install_page_transition_hook(const struct native_api *api, ld_l
                 label, (unsigned long)vaddr, size, mapped, executable, semantic);
         return 0;
     }
-    int rc = api->hook((void *)runtime, replacement, original);
-    if (rc != 0 || !*original) {
-        ld_blog("%s hook failed result=%d original=%p at %p",
-                label, rc, *original, (void *)runtime);
-        return 0;
-    }
+    /* Decode g_ws_page_list_field from unpatched instructions BEFORE installing
+     * the inline hook so entry bytes are intact and the field is ready on call #1. */
     if (hook_ready == &g_ws_page_changed_hook_ready && g_ws_page_rx_getter) {
         const uint32_t *insn = (const uint32_t *)runtime;
         for (size_t i = 1; i + 4 < size / 4; i++) {
@@ -822,6 +849,12 @@ static int ld_ws_install_page_transition_hook(const struct native_api *api, ld_l
             }
         }
         ld_blog("ws page list field=0x%x", g_ws_page_list_field);
+    }
+    int rc = api->hook((void *)runtime, replacement, original);
+    if (rc != 0 || !*original) {
+        ld_blog("%s hook failed result=%d original=%p at %p",
+                label, rc, *original, (void *)runtime);
+        return 0;
     }
     __atomic_store_n(hook_ready, 1, __ATOMIC_RELAXED);
     ld_blog("%s hook installed via sym+semantic at %p vaddr=0x%lx size=%zu",
@@ -911,7 +944,8 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
     } specs[9] = {
         { 0, (void *)repl_ws_is_laptop,          &g_orig_ws_is_laptop,     "ws_is_laptop",          1 },
         { 1, (void *)repl_ws_margin_bottom,      &g_orig_ws_margin_bottom, "ws_margin_bottom",      1 },
-        { 2, (void *)repl_ws_dock_icon_top,      &g_orig_ws_dock_icon_top, "ws_dock_icon_top",      1 },
+        /* idx 2 (ws_dock_icon_top) was a no-op observer; skip hooking it. */
+        { 2, NULL,                               &g_orig_ws_dock_icon_top, "ws_dock_icon_top",      1 },
         { 3, (void *)repl_ws_apps_padding,       &g_orig_ws_apps_padding,  "ws_apps_padding",       1 },
         { 4, (void *)repl_ws_indicator_pos,      &g_orig_ws_indicator_pos, "ws_indicator_pos",      1 },
         { 5, (void *)repl_ws_dock_build_content, &g_orig_ws_device_width,  "ws_dock_build_content", 1 },
@@ -924,6 +958,7 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
     if (count > 9) count = 9;
     int ok_count = 0;
     for (size_t i = 0; i < count; i++) {
+        if (!specs[i].repl) continue;
         uintptr_t fn = 0;
         size_t sz = g_home_options.workstation_size[specs[i].idx];
         if (!ld_vaddr_to_runtime(lib, g_home_options.workstation_vaddr[specs[i].idx], &fn)) continue;
@@ -945,8 +980,12 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
     }
     if (g_home_options.ws_hotseat_bottom_vaddr) {
         uintptr_t hb_fn = 0;
+        size_t hb_sz = g_home_options.ws_hotseat_bottom_size >= 16 ? g_home_options.ws_hotseat_bottom_size : 64;
+        /* The 16-byte detour overlaps a BL at +0xc; the hook framework relocates
+         * it, and this site has been hooked in production since the port. The
+         * x17/pc-rel heuristic would skip it and drop the dock offset. */
         if (ld_vaddr_to_runtime(lib, g_home_options.ws_hotseat_bottom_vaddr, &hb_fn) &&
-            executable_range(hb_fn, 64)) {
+            executable_range(hb_fn, hb_sz)) {
             if (api->hook((void *)hb_fn, (void *)repl_ws_hotseat_bottom, &g_orig_ws_hotseat_bottom) == 0) {
                 ok_count++;
             }
@@ -982,7 +1021,7 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
         api, lib, g_home_options.ws_jump_to_page_vaddr, g_home_options.ws_jump_to_page_size,
         "ws_jump_to_page", (void *)repl_ws_jump_to_page, &g_orig_ws_jump_to_page,
         &g_ws_jump_to_page_hook_ready);
-    installed = 1;
+    if (ok_count > 0) installed = 1;
     ld_blog("workstation hooks installed=%d/%zu", ok_count, count);
 }
 

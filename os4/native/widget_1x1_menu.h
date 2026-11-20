@@ -76,13 +76,19 @@ static struct {
 static size_t g_w1x1_enlarged_count;
 static int g_w1x1_enlarged_loaded;
 
-/* Interceptor trampoline using hardware SP so Dart stack x15 stays free for Dart calls.
+/* Interceptor trampoline using a temporary C stack below Dart SP (x15),
+ * never pushing onto hardware SP (CSP) which sits near the stack trim boundary.
  * callback(struct ld_dart_context *c): return 1 to return c->x[0] directly, 0 to tail-call original.
  */
 #define LD_DART_INTERCEPTOR(name, callback, original) \
 __attribute__((naked, used)) static void name(void) { \
     __asm__ volatile( \
-        "sub sp, sp, #832\n" \
+        "stp x16, x17, [x15, #-16]\n" \
+        "mov x16, sp\n" \
+        "sub x17, x15, #832\n" \
+        "and x17, x17, #0xfffffffffffffff0\n" \
+        "mov sp, x17\n" \
+        "str x16, [sp, #776]\n" \
         "stp x0, x1, [sp, #0]\n" \
         "stp x2, x3, [sp, #16]\n" \
         "stp x4, x5, [sp, #32]\n" \
@@ -91,6 +97,8 @@ __attribute__((naked, used)) static void name(void) { \
         "stp x10, x11, [sp, #80]\n" \
         "stp x12, x13, [sp, #96]\n" \
         "stp x14, x15, [sp, #112]\n" \
+        "ldur x16, [x15, #-16]\n" \
+        "ldur x17, [x15, #-8]\n" \
         "stp x16, x17, [sp, #128]\n" \
         "stp x18, x19, [sp, #144]\n" \
         "stp x20, x21, [sp, #160]\n" \
@@ -146,6 +154,7 @@ __attribute__((naked, used)) static void name(void) { \
         "ldp x10, x11, [sp, #80]\n" \
         "ldp x12, x13, [sp, #96]\n" \
         "ldp x14, x15, [sp, #112]\n" \
+        "ldr x17, [sp, #136]\n" \
         "ldp x18, x19, [sp, #144]\n" \
         "ldp x20, x21, [sp, #160]\n" \
         "ldp x22, x23, [sp, #176]\n" \
@@ -153,7 +162,8 @@ __attribute__((naked, used)) static void name(void) { \
         "ldp x26, x27, [sp, #208]\n" \
         "ldp x28, x29, [sp, #224]\n" \
         "ldr x30, [sp, #240]\n" \
-        "add sp, sp, #832\n" \
+        "ldr x16, [sp, #776]\n" \
+        "mov sp, x16\n" \
         "adrp x16, " #original "\n" \
         "ldr x16, [x16, :lo12:" #original "]\n" \
         "br x16\n" \
@@ -188,29 +198,36 @@ __attribute__((naked, used)) static void name(void) { \
         "ldp x26, x27, [sp, #208]\n" \
         "ldp x28, x29, [sp, #224]\n" \
         "ldr x30, [sp, #240]\n" \
-        "add sp, sp, #832\n" \
+        "ldr x16, [sp, #776]\n" \
+        "mov sp, x16\n" \
         "ret\n" \
     ); \
 }
 
 /* Call a Dart AOT function from inside an interceptor callback.
  * x0=ctx, x1=fn, x2=args[8], x3=push_smi_on_dart_stack (0 or Smi value for allocateTwoByteString).
+ * Sets Dart SP (x15) below current C sp so nested Dart frames never collide with
+ * LD_DART_INTERCEPTOR's temporary C stack, and preserves AAPCS callee-saved d8..d15.
  */
 __attribute__((naked, noinline)) static uint64_t ld_dart_call_raw(
     const struct ld_dart_context *c, void *fn, const uint64_t args[8], uint64_t dart_stack_arg)
 {
     __asm__ volatile(
-        "stp x29, x30, [sp, #-96]!\n"
+        "stp x29, x30, [sp, #-160]!\n"
         "mov x29, sp\n"
         "stp x19, x20, [sp, #16]\n"
         "stp x21, x22, [sp, #32]\n"
         "stp x23, x24, [sp, #48]\n"
         "stp x25, x26, [sp, #64]\n"
         "stp x27, x28, [sp, #80]\n"
+        "stp d8,  d9,  [sp, #96]\n"
+        "stp d10, d11, [sp, #112]\n"
+        "stp d12, d13, [sp, #128]\n"
+        "stp d14, d15, [sp, #144]\n"
         "mov x9, x1\n"       /* fn */
         "mov x10, x2\n"      /* args */
         "mov x11, x3\n"      /* optional dart stack arg */
-        "ldr x15, [x0, #120]\n" /* c->x[15] */
+        "sub x15, sp, #64\n" /* fresh Dart SP below C frame */
         "ldr x21, [x0, #168]\n" /* c->x[21] */
         "ldr x22, [x0, #176]\n" /* c->x[22] */
         "ldr x26, [x0, #208]\n" /* c->x[26] */
@@ -224,12 +241,16 @@ __attribute__((naked, noinline)) static uint64_t ld_dart_call_raw(
         "ldp x4, x5, [x10, #32]\n"
         "ldp x6, x7, [x10, #48]\n"
         "blr x9\n"
+        "ldp d14, d15, [sp, #144]\n"
+        "ldp d12, d13, [sp, #128]\n"
+        "ldp d10, d11, [sp, #112]\n"
+        "ldp d8,  d9,  [sp, #96]\n"
         "ldp x19, x20, [sp, #16]\n"
         "ldp x21, x22, [sp, #32]\n"
         "ldp x23, x24, [sp, #48]\n"
         "ldp x25, x26, [sp, #64]\n"
         "ldp x27, x28, [sp, #80]\n"
-        "ldp x29, x30, [sp], #96\n"
+        "ldp x29, x30, [sp], #160\n"
         "ret\n"
     );
 }

@@ -385,76 +385,7 @@ __attribute__((used)) static void ld_dp_bg_cb(struct ld_dart_context *c)
 
 LD_DART_OBSERVER(repl_dp_bg, ld_dp_bg_cb, g_dp_bg_orig)
 
-/* ---- _getBackgroundPaint 后置：首次创建 Paint 时补写颜色 ---- */
-static void *g_dp_gp_orig __attribute__((used));
-static unsigned char g_dp_gp_save[0x100] __attribute__((aligned(16), used));
-
-#define LD_DP_POST(name, callback, original, save) \
-__attribute__((naked, used)) static void name(void) { \
-    __asm__ volatile( \
-        "adrp x16, " #save "\n" \
-        "add x16, x16, :lo12:" #save "\n" \
-        "stp x0, x1, [x16, #0]\n" \
-        "stp x2, x3, [x16, #16]\n" \
-        "stp x4, x5, [x16, #32]\n" \
-        "stp x6, x7, [x16, #48]\n" \
-        "str x8, [x16, #64]\n" \
-        "str x15, [x16, #72]\n" \
-        "str x30, [x16, #80]\n" \
-        "str x28, [x16, #248]\n" \
-        "stp q0, q1, [x16, #112]\n" \
-        "stp q2, q3, [x16, #144]\n" \
-        "stp q4, q5, [x16, #176]\n" \
-        "stp q6, q7, [x16, #208]\n" \
-        "ldp x0, x1, [x16, #0]\n" \
-        "ldp x2, x3, [x16, #16]\n" \
-        "ldp x4, x5, [x16, #32]\n" \
-        "ldp x6, x7, [x16, #48]\n" \
-        "ldr x8, [x16, #64]\n" \
-        "ldr x15, [x16, #72]\n" \
-        "ldr x30, [x16, #80]\n" \
-        "ldp q0, q1, [x16, #112]\n" \
-        "ldp q2, q3, [x16, #144]\n" \
-        "ldp q4, q5, [x16, #176]\n" \
-        "ldp q6, q7, [x16, #208]\n" \
-        "adrp x17, " #original "\n" \
-        "ldr x17, [x17, :lo12:" #original "]\n" \
-        "blr x17\n" \
-        "adrp x16, " #save "\n" \
-        "add x16, x16, :lo12:" #save "\n" \
-        "str x0, [x16, #88]\n" \
-        "str x19, [x16, #96]\n" \
-        "mov x19, sp\n" \
-        "sub x17, x15, #1024\n" \
-        "and x17, x17, #0xfffffffffffffff0\n" \
-        "mov sp, x17\n" \
-        "mov x0, x16\n" \
-        "ldr x1, [x16, #88]\n" \
-        "bl " #callback "\n" \
-        "mov sp, x19\n" \
-        "adrp x16, " #save "\n" \
-        "add x16, x16, :lo12:" #save "\n" \
-        "ldr x19, [x16, #96]\n" \
-        "ldr x0, [x16, #88]\n" \
-        "ret\n"); \
-}
-
-__attribute__((used)) static void ld_dp_gp_post(struct ld_dart_context *c, uintptr_t result)
-{
-    (void)result;
-    if (!__atomic_load_n(&g_dp_const_color, __ATOMIC_ACQUIRE)) return;
-    uintptr_t heap = (uintptr_t)(((const uint64_t *)c)[31] << 32);
-    uintptr_t painter = (uintptr_t)c->x[1] & ~(uintptr_t)1;
-    uintptr_t rectp = (uintptr_t)c->x[3] & ~(uintptr_t)1;
-    double w = ld_dp_ldd(rectp + 24) - ld_dp_ldd(rectp + 8);
-    double h = ld_dp_ldd(rectp + 32) - ld_dp_ldd(rectp + 16);
-    if (!(w > 0.0 && w <= 3.0 && h >= 18.0 && h <= 90.0)) return;
-    if (!ld_dp_is_divider(painter, heap)) return;
-    struct ld_dp_cfg cfg = ld_dp_cfg_snapshot();
-    ld_dp_apply_color(painter, heap, &cfg);
-}
-
-LD_DP_POST(repl_dp_gp, ld_dp_gp_post, g_dp_gp_orig, g_dp_gp_save)
+/* _getBackgroundPaint 后置跳板已移除（热路径 _paintBackgroundColor 已覆盖颜色写入）。 */
 
 /* ---- 构建期：捕获厂商 const Color（内层闭包 PP[0xd4a30 / 0xd6dc8]） ---- */
 #define LD_DP_INNER 0x18893ccu

@@ -200,6 +200,10 @@ static void ld_call_dart_2(struct ld_dart_context *c, uintptr_t fn, uintptr_t ar
         "stp x25, x26, [sp, #-16]!\n"
         "stp x27, x28, [sp, #-16]!\n"
         "stp x29, x30, [sp, #-16]!\n"
+        "stp d8,  d9,  [sp, #-16]!\n"
+        "stp d10, d11, [sp, #-16]!\n"
+        "stp d12, d13, [sp, #-16]!\n"
+        "stp d14, d15, [sp, #-16]!\n"
         "ldr x10, [%[a], #0]\n"
         "sub x15, sp, #64\n"
         "ldp x19, x20, [x10, #152]\n"
@@ -212,6 +216,10 @@ static void ld_call_dart_2(struct ld_dart_context *c, uintptr_t fn, uintptr_t ar
         "ldr x1,  [%[a], #16]\n"
         "ldr x2,  [%[a], #24]\n"
         "blr x16\n"
+        "ldp d14, d15, [sp], #16\n"
+        "ldp d12, d13, [sp], #16\n"
+        "ldp d10, d11, [sp], #16\n"
+        "ldp d8,  d9,  [sp], #16\n"
         "ldp x29, x30, [sp], #16\n"
         "ldp x27, x28, [sp], #16\n"
         "ldp x25, x26, [sp], #16\n"
@@ -222,6 +230,9 @@ static void ld_call_dart_2(struct ld_dart_context *c, uintptr_t fn, uintptr_t ar
         :
         : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8",
           "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17",
+          "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
+          "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
+          "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
           "memory", "cc"
     );
 }

@@ -18,7 +18,7 @@ static int64_t ld_heap_i64(uintptr_t object,size_t offset)
 {
     int64_t value=-999; ld_read_heap(object+offset,&value,sizeof value); return value;
 }
-static uintptr_t ld_heap_pointer(struct ld_dart_context *c,uintptr_t object,size_t offset)
+static uintptr_t ld_heap_pointer(const struct ld_dart_context *c,uintptr_t object,size_t offset)
 {
     uint32_t value=ld_heap_u32(object,offset);
     if(!(value&1) || value==(uint32_t)c->x[22]) return 0;
