@@ -11,7 +11,6 @@ static int g_restore_ready;
 static int g_initial_restore,g_initial_columns,g_initial_rows,g_initial_direction;
 static int g_rotation_direction=-1;
 static int g_runtime_columns,g_runtime_rows,g_runtime_direction;
-static int g_allapps_grid_rotating;
 static int g_layout_mid_ready;
 static int g_layout_hooks_ready;
 static uintptr_t g_process_resume;
@@ -53,8 +52,6 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
     int initial = init_state==1 && direction==g_initial_direction
             && ld_heap_i64(c->x[2],0x1b)==g_initial_columns
             && ld_heap_i64(c->x[2],0x23)==g_initial_rows;
-    g_allapps_grid_rotating = !initial && prev_cols > 0 && prev_rows > 0 &&
-        prev_cols == liverows && prev_rows == livecols && livecols != liverows;
     if (g_layout_hooks_ready && init_state == 1 && !initial && livecols > 0 && liverows > 0 &&
         (livecols != g_initial_columns || liverows != g_initial_rows || direction != g_initial_direction)) {
         __atomic_store_n(&g_initial_restore, 0, __ATOMIC_RELEASE);
@@ -123,39 +120,16 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     int is_ws_allapps=(list_cont==-104);
     if(!count) goto done;
     if(is_ws_allapps) {
-        int fits_target = ld_layout_valid(source,count,cols,rows);
-        int rotated = g_allapps_grid_rotating && cols == g_runtime_columns &&
-            rows == g_runtime_rows && oldcols == rows && oldrows == cols;
-        /* The old page can fit both shapes when it is sparsely populated.
-         * Only a live rotation disambiguates those coordinates. */
-        if ((rotated || !fits_target) && ld_layout_valid(source,count,rows,cols)) {
-            int icons_only = 1;
-            for (size_t i = 0; i < count; i++) {
-                if (source[i].sx != 1 || source[i].sy != 1) icons_only = 0;
+        /* Keep the Launcher cell/model-to-slot mapping intact on incomplete pages.
+         * Repacking icons by ordinal mutates slot identity during page navigation. */
+        if(!ld_layout_valid(source,count,cols,rows) &&
+                ld_layout_valid(source,count,rows,cols)) {
+            for(size_t i=0;i<count;i++) {
+                int64_t x=source[i].y,y=source[i].x;
+                memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
+                memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
             }
-            for (size_t i = 0; i < count; i++) {
-                target[i] = source[i];
-                if (icons_only) {
-                    int index = 0;
-                    for (size_t j = 0; j < count; j++) {
-                        if (source[j].screen == source[i].screen &&
-                            source[j].y * rows + source[j].x < source[i].y * rows + source[i].x) index++;
-                    }
-                    target[i].x = index % cols;
-                    target[i].y = index / cols;
-                } else {
-                    target[i].x = source[i].y;
-                    target[i].y = source[i].x;
-                }
-            }
-            if ((icons_only || !fits_target) && ld_layout_valid(target,count,cols,rows)) {
-                for (size_t i = 0; i < count; i++) {
-                    int64_t x=target[i].x,y=target[i].y;
-                    memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
-                    memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
-                }
-                ld_blog("allapps %s %zu items to %dx%d", icons_only ? "reflowed" : "transposed",count,cols,rows);
-            }
+            ld_blog("allapps transposed %zu items to %dx%d",count,cols,rows);
         }
         /* The vendor transform assumes the stock grid. */
         g_restore_ready=1; goto done;
