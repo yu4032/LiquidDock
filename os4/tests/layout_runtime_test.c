@@ -118,7 +118,9 @@ int main(void) {
  word(obj[14],7,(uint32_t)obj[17]); integer(obj[14],11,0); integer(obj[14],19,0);
  word(obj[10],15,(uint32_t)obj[14]);
  ld_observe_process(&c);
- assert(g_restore_ready);
+ /* The page already fits the live grid, so nothing was rewritten and the
+  * Launcher keeps its own placement pass. */
+ assert(!g_restore_ready);
  assert(ld_heap_i64(obj[14],11)==0 && ld_heap_i64(obj[14],19)==0); /* AllApps untouched */
  /* Verify initial=1 prevented overwriting items[0] (4x8) of ws_apps */
  struct ld_layout_memory ws_apps_after;

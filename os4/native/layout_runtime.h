@@ -19,6 +19,57 @@ static void *g_orig_process_mid __attribute__((used));
 static void *g_process_mid_next __attribute__((used));
 
 static void *g_orig_process_screen __attribute__((used));
+
+/* Only rewrite item coordinates after proving every target object is a cell of
+ * the same class: a page can briefly expose a non-cell object (matrix/list)
+ * while it is rebuilt, and an 8-byte x/y store would clobber its header. */
+static unsigned ld_layout_object_cid(uintptr_t object)
+{
+    uint64_t header = 0;
+    if (!object || !ld_read_heap(object - 1, &header, sizeof header)) return 0;
+    return (unsigned)((header >> 12) & 0xfffffu);
+}
+
+/* The Launcher pages store items in reading order; the vendor resolves a slot
+ * by walking that array. Only a sequence that is already ordered by (y,x)
+ * inside each screen may be renumbered without changing the occupied set. */
+static int ld_layout_screen_order_ok(const struct ld_layout_item *a, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = 0; j < i; j++) {
+            if (a[j].screen != a[i].screen) continue;
+            if (a[j].y > a[i].y || (a[j].y == a[i].y && a[j].x > a[i].x)) return 0;
+        }
+    }
+    return 1;
+}
+
+static void ld_layout_write_items(const uintptr_t *cells, const uintptr_t *models,
+                                  const struct ld_layout_item *items, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        int64_t x = items[i].x, y = items[i].y;
+        memcpy((void *)(cells[i] + 0xb), &x, 8);
+        memcpy((void *)(cells[i] + 0x13), &y, 8);
+        memcpy((void *)(models[i] + 0x37), &x, 8);
+        memcpy((void *)(models[i] + 0x3f), &y, 8);
+    }
+}
+
+/* Read the fields back so the vendor continuation only ever sees coordinates
+ * that are proven to be the ones we computed. */
+static int ld_layout_write_verified(const uintptr_t *cells, const uintptr_t *models,
+                                    const struct ld_layout_item *want, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (ld_heap_i64(cells[i], 0xb) != want[i].x ||
+            ld_heap_i64(cells[i], 0x13) != want[i].y ||
+            ld_heap_i64(models[i], 0x37) != want[i].x ||
+            ld_heap_i64(models[i], 0x3f) != want[i].y) return 0;
+    }
+    return 1;
+}
+
 __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context *c)
 {
     uintptr_t receiver = c->x[1];
@@ -123,42 +174,68 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     int is_ws_allapps=(list_cont==-104);
     if(!count) goto done;
     if(is_ws_allapps) {
+        /* The frame config still carries the grid the pages were built for and
+         * the arguments carry the live grid, so only a page that does not fit
+         * the live grid may be rewritten. Everything about the rewrite is then
+         * proven before the native continuation is switched. */
         int fits_target = ld_layout_valid(source,count,cols,rows);
-        int rotated = g_allapps_grid_rotating && cols == g_runtime_columns &&
-            rows == g_runtime_rows && oldcols == rows && oldrows == cols;
-        /* The old page can fit both shapes when it is sparsely populated.
-         * Only a live rotation disambiguates those coordinates. */
-        if ((rotated || !fits_target) && ld_layout_valid(source,count,rows,cols)) {
+        int order_ok = ld_layout_screen_order_ok(source,count);
+        int applied = 0;
+        if (!fits_target && ld_layout_valid(source,count,rows,cols)) {
             int icons_only = 1;
             for (size_t i = 0; i < count; i++) {
                 if (source[i].sx != 1 || source[i].sy != 1) icons_only = 0;
             }
-            for (size_t i = 0; i < count; i++) {
-                target[i] = source[i];
-                if (icons_only) {
-                    int index = 0;
-                    for (size_t j = 0; j < count; j++) {
-                        if (source[j].screen == source[i].screen &&
-                            source[j].y * rows + source[j].x < source[i].y * rows + source[i].x) index++;
-                    }
-                    target[i].x = index % cols;
-                    target[i].y = index / cols;
-                } else {
-                    target[i].x = source[i].y;
-                    target[i].y = source[i].x;
-                }
+            unsigned cell_cid = ld_layout_object_cid(cells[0]);
+            unsigned model_cid = ld_layout_object_cid(models[0]);
+            int targets_are_cells = cell_cid != 0 && model_cid != 0;
+            for (size_t i = 1; targets_are_cells && i < count; i++) {
+                if (ld_layout_object_cid(cells[i]) != cell_cid ||
+                    ld_layout_object_cid(models[i]) != model_cid) targets_are_cells = 0;
             }
-            if ((icons_only || !fits_target) && ld_layout_valid(target,count,cols,rows)) {
+            if (!targets_are_cells) {
+                ld_blog("allapps transform skipped: non-cell object in %zu items", count);
+            } else {
                 for (size_t i = 0; i < count; i++) {
-                    int64_t x=target[i].x,y=target[i].y;
-                    memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
-                    memcpy((void *)(models[i]+0x37),&x,8); memcpy((void *)(models[i]+0x3f),&y,8);
+                    target[i] = source[i];
+                    if (icons_only && order_ok) {
+                        int index = 0;
+                        for (size_t j = 0; j < count; j++) {
+                            /* Reading order must not depend on the grid stride:
+                             * the source page may still be the other orientation. */
+                            if (source[j].screen == source[i].screen &&
+                                (source[j].y < source[i].y ||
+                                 (source[j].y == source[i].y && source[j].x < source[i].x))) index++;
+                        }
+                        target[i].x = index % cols;
+                        target[i].y = index / cols;
+                    } else {
+                        target[i].x = source[i].y;
+                        target[i].y = source[i].x;
+                    }
                 }
-                ld_blog("allapps %s %zu items to %dx%d", icons_only ? "reflowed" : "transposed",count,cols,rows);
+                if (ld_layout_valid(target,count,cols,rows)) {
+                    ld_layout_write_items(cells,models,target,count);
+                    if (ld_layout_write_verified(cells,models,target,count)) {
+                        applied = 1;
+                        ld_blog("allapps %s %zu items to %dx%d (verified)",
+                                (icons_only && order_ok) ? "reflowed" : "transposed", count, cols, rows);
+                    } else {
+                        ld_layout_write_items(cells,models,source,count);
+                        ld_blog("allapps transform rolled back: readback mismatch");
+                    }
+                }
             }
         }
-        /* The vendor transform assumes the stock grid. */
-        g_restore_ready=1; goto done;
+        /* The continuation resumes the Launcher past its own placement pass, so
+         * it is only safe to arm it for a page this hook rewrote and verified.
+         * Untouched pages stay on the stock path and let the Launcher resolve
+         * their occupied slots itself. */
+        g_restore_ready = applied ? 1 : 0;
+        if (!g_restore_ready)
+            ld_blog("allapps mid path kept: %zu items live %dx%d config %dx%d fits=%d order=%d applied=%d",
+                    count, cols, rows, oldcols, oldrows, fits_target, order_ok, applied);
+        goto done;
     }
     int direction=square?g_rotation_direction:(cols==g_grid_cols && rows==g_grid_rows?0:1);
     if(direction<0 || direction>1) goto done;
