@@ -79,18 +79,20 @@ static inline int ld_read_dto_item(struct ld_dart_context *c,uintptr_t dto,struc
 }
 __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
     if(__atomic_load_n(&g_load_prepared, __ATOMIC_ACQUIRE) || !g_layout_hooks_ready || g_grid_cols<=0 || g_grid_rows<=0) return;
+    int physical_direction = ld_orientation_guard_refresh_now();
+    if (physical_direction < 0) return;
+    const uint64_t orient_generation = ld_orientation_generation();
     uintptr_t list=c->x[2];
     int n=(int32_t)ld_heap_u32(list,0xb)/2;
     uintptr_t data=ld_heap_pointer(c,list,0xf);
     ld_blog("load-items list cid=%x n=%d data=%llx grid=%dx%d",ld_heap_u32(list,(size_t)-1)>>12&0xfffff,n,(unsigned long long)data,g_load_columns,g_load_rows);
     if(n<0 || n>LD_LAYOUT_MAX_ITEMS || !data || (ld_heap_u32(list,(size_t)-1)>>12&0xfffff)!=0x5c) return;
-    /* Active GOC geometry wins over filter calls for inactive configurations.
-     * During cold boot both orientations may be enumerated after GOC is ready. */
-    int cols=g_runtime_columns?g_runtime_columns:g_load_columns;
-    int rows=g_runtime_rows?g_runtime_rows:g_load_rows;
-    int direction=g_grid_cols==g_grid_rows?(g_runtime_columns?g_runtime_direction:g_load_direction):(cols==g_grid_cols && rows==g_grid_rows?0:1);
-    if(direction<0 || direction>1) return;
-    if(direction && (cols!=g_grid_rows || rows!=g_grid_cols)) return;
+    /* Cold boot may enumerate inactive grid configurations. The framework
+     * rotation chooses the desired profile; neither stale GOC dimensions nor
+     * the most recent database filter may override it. */
+    int direction=1-physical_direction; /* layout_memory slot */
+    int cols=direction?g_grid_rows:g_grid_cols;
+    int rows=direction?g_grid_cols:g_grid_rows;
     struct ld_layout_item *source=calloc(LD_LAYOUT_MAX_ITEMS,sizeof *source),*target=calloc(LD_LAYOUT_MAX_ITEMS,sizeof *target);
     uintptr_t *objects=calloc(LD_LAYOUT_MAX_ITEMS,sizeof *objects);
     struct ld_layout_memory *memory=calloc(1,sizeof *memory);
@@ -141,11 +143,14 @@ __attribute__((used)) static void ld_load_items(struct ld_dart_context *c) {
     }
     memcpy(memory->items[direction],target,count*sizeof *target); memory->count[direction]=(uint32_t)count;
     memory->active_direction=direction;
-    int saved=ld_layout_save(layout_file,memory);
+    int valid_rotation=ld_orientation_guard_refresh_now()==physical_direction &&
+                       ld_orientation_guard_generation_matches(orient_generation);
+    int saved=valid_rotation && ld_layout_save(layout_file,memory);
     if(saved) ld_layout_invalidate_pending_locked(slot);
     pthread_mutex_unlock(&g_layout_io_lock);
-    if(!saved) {
-        ld_blog("load-items bail save");
+    if(!saved || ld_orientation_guard_refresh_now()!=physical_direction ||
+       !ld_orientation_guard_generation_matches(orient_generation)) {
+        ld_blog("load-items bail save or superseded rotation");
         goto done;
     }
     for(size_t i=0;i<count;i++) {
