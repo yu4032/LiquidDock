@@ -50,22 +50,25 @@ ld_screen_calibration_step(struct ld_screen_calibration s, int candidate)
     if (candidate != 0 && candidate != 1)
         return s;
     if (candidate == s.candidate) {
-        if (s.votes < 2) s.votes++;
+        if (s.votes < 3) s.votes++;
     } else {
         s.candidate = candidate;
         s.votes = 1;
     }
-    if (s.votes >= 2) s.locked = candidate;
+    /* Two agreeing samples establish the panel; three are required to
+     * overwrite an established calibration, so a short run of stale size
+     * reads cannot flip a correct orientation back and forth. */
+    if (s.votes >= (s.locked < 0 ? 2 : 3)) s.locked = s.candidate;
     return s;
 }
 
-/* A size sample paired with this event is authoritative; calibration only
- * fills the gap left by a lagging size read, so a stale calibration can
- * never overwrite fresh geometry. */
-static inline int ld_screen_land_for_event(int measured, int rotation,
-                                           int locked_natural)
+/* Once the panel is calibrated it is the authority for the target
+ * orientation: a delivered rotation can arrive while getSize() still reports
+ * the previous transaction, and trusting that sample would reopen exactly the
+ * window this provider exists to close. Without a calibration the orientation
+ * stays UNKNOWN and the native GridConfig decides. */
+static inline int ld_screen_land_for_event(int rotation, int locked_natural)
 {
-    if (measured == 0 || measured == 1) return measured;
     return ld_screen_landscape_from_natural(rotation, locked_natural);
 }
 

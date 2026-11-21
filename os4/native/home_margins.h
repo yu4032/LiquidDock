@@ -92,23 +92,34 @@ static struct ld_hm_base g_hm_bases[LD_HM_MAX_BASES] __attribute__((used));
  * retain the last output on this thread to make repeated callbacks idempotent.
  * One slot per controller: a A->B->A sequence across a page switch must not
  * evict A's in-flight baseline and re-derive it from already-shifted cells. */
-#define LD_HM_MAX_TRANS 4
+#define LD_HM_MAX_TRANS 8
+/* Frames after which an idle provisional slot may be recycled. */
+#define LD_HM_TRANS_MAX_AGE 1024u
 static __thread struct ld_hm_base g_hm_trans[LD_HM_MAX_TRANS];
-static __thread unsigned g_hm_trans_next __attribute__((used));
+static __thread unsigned g_hm_trans_seen[LD_HM_MAX_TRANS];
+static __thread unsigned g_hm_trans_clock __attribute__((used));
 
-static struct ld_hm_base *ld_hm_trans_slot(uintptr_t identity, int identity_kind)
+static struct ld_hm_base *ld_hm_trans_slot(uintptr_t identity, int identity_kind,
+                                           int dir, int cols, int rows)
 {
-    struct ld_hm_trans_ident ids[LD_HM_MAX_TRANS];
+    struct ld_hm_trans_key keys[LD_HM_MAX_TRANS];
     unsigned char valid[LD_HM_MAX_TRANS];
     for (unsigned i = 0; i < LD_HM_MAX_TRANS; i++) {
-        ids[i].identity = g_hm_trans[i].identity;
-        ids[i].kind = g_hm_trans[i].identity_kind;
+        keys[i] = (struct ld_hm_trans_key){g_hm_trans[i].identity,
+                                           g_hm_trans[i].identity_kind,
+                                           g_hm_trans[i].bi,
+                                           g_hm_trans[i].cols,
+                                           g_hm_trans[i].rows};
         valid[i] = g_hm_trans[i].valid != 0;
     }
-    int idx = ld_hm_trans_pick(ids, valid, LD_HM_MAX_TRANS,
-                               (struct ld_hm_trans_ident){identity, identity_kind},
-                               &g_hm_trans_next);
-    return idx >= 0 ? &g_hm_trans[idx] : &g_hm_trans[0];
+    unsigned now = ++g_hm_trans_clock;
+    int idx = ld_hm_trans_pick(keys, valid, g_hm_trans_seen, LD_HM_MAX_TRANS,
+                               (struct ld_hm_trans_key){identity, identity_kind,
+                                                         dir, cols, rows},
+                               now, LD_HM_TRANS_MAX_AGE);
+    if (idx < 0) return NULL;
+    g_hm_trans_seen[idx] = now;
+    return &g_hm_trans[idx];
 }
 static unsigned g_hm_base_next __attribute__((used));
 /* pipeline 观察器按 config 指针记方向：同一份 config 只对应一个方向。 */
@@ -516,9 +527,24 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                                  "active home grid resolved to an empty or non-grid config");
             return (void *)cfg;
         }
-        base = transitional_geometry
-                ? ld_hm_trans_slot(identity, identity_kind)
-                : &g_hm_bases[g_hm_base_next++ % LD_HM_MAX_BASES];
+        if (transitional_geometry) {
+            base = ld_hm_trans_slot(identity, identity_kind, bi, cols, rows);
+            if (!base) {
+                /* Every provisional slot still belongs to a recent controller.
+                 * Registering this config now would record geometry we already
+                 * shifted as native and apply the offset twice; skip the frame
+                 * and let the vendor commit settle first. */
+                static int logged_full;
+                if (!logged_full) {
+                    logged_full = 1;
+                    ld_blog("home margin transition slots full identity=%p; frame left untouched",
+                            (void *)identity);
+                }
+                return (void *)cfg;
+            }
+        } else {
+            base = &g_hm_bases[g_hm_base_next++ % LD_HM_MAX_BASES];
+        }
         base->cw = cw_now;
         base->ch = ch_now;
         base->ox = 0;

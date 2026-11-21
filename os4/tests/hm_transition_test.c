@@ -2,49 +2,78 @@
 #include <stdio.h>
 #include "../native/hm_transition.h"
 
+#define N 8
+#define MAX_AGE 1024u
+
+static struct ld_hm_trans_key keys[N];
+static unsigned char valid[N];
+static unsigned seen[N];
+
+static struct ld_hm_trans_key key(uintptr_t id, int kind, int dir, int cols, int rows)
+{
+    return (struct ld_hm_trans_key){id, kind, dir, cols, rows};
+}
+
+static int take(struct ld_hm_trans_key want, unsigned now)
+{
+    int i = ld_hm_trans_pick(keys, valid, seen, N, want, now, MAX_AGE);
+    if (i >= 0) {
+        keys[i] = want;
+        valid[i] = 1;
+        seen[i] = now;
+    }
+    return i;
+}
+
 int main(void)
 {
-    struct ld_hm_trans_ident ids[4] = {{0}};
-    unsigned char valid[4] = {0, 0, 0, 0};
-    unsigned next = 0;
+    unsigned now = 1;
 
-    /* A -> B -> A inside one transition window: A must keep its own slot so
-     * its shifted geometry is still recognised on the third callback. */
-    int a = ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){100, 1}, &next);
-    assert(a == 0);
-    ids[a] = (struct ld_hm_trans_ident){100, 1}; valid[a] = 1;
+    /* Five controllers visited in one window, then revisited in the same
+     * order: none may displace another (the A->B->A case generalised). */
+    uintptr_t ids[5] = {100, 200, 300, 400, 500};
+    int idx[5];
+    for (int i = 0; i < 5; i++)
+        idx[i] = take(key(ids[i], 1, i & 1, 4 + (i & 1), 8 - (i & 1)), now);
+    for (int i = 0; i < 5; i++) {
+        assert(idx[i] >= 0);
+        assert(ld_hm_trans_pick(keys, valid, seen, N,
+                                key(ids[i], 1, i & 1, 4 + (i & 1), 8 - (i & 1)),
+                                now, MAX_AGE) == idx[i]);
+    }
 
-    int b = ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){200, 1}, &next);
-    assert(b == 1);
-    ids[b] = (struct ld_hm_trans_ident){200, 1}; valid[b] = 1;
+    /* The same controller in another direction or grid profile is a distinct
+     * baseline; it must not overwrite the first one. */
+    int turned = take(key(100, 1, 1, 8, 4), now);
+    assert(turned >= 0 && turned != idx[0]);
+    assert(ld_hm_trans_pick(keys, valid, seen, N, key(100, 1, 0, 4, 8),
+                            now, MAX_AGE) == idx[0]);
 
-    int a2 = ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){100, 1}, &next);
-    assert(a2 == a);
-    int b2 = ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){200, 1}, &next);
-    assert(b2 == b);
+    /* Fill the remaining slots (5 + turned = 6 already taken). */
+    for (uintptr_t id = 600; id <= 700; id += 100)
+        assert(take(key(id, 1, 1, 8, 4), now) >= 0);
+    for (int i = 0; i < N; i++)
+        assert(valid[i]);
 
-    /* identity_kind separates a page from a same-address workspace grid */
-    int k = ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){100, 2}, &next);
-    assert(k == 2);
-    ids[k] = (struct ld_hm_trans_ident){100, 2}; valid[k] = 1;
+    /* Full table: a new controller is refused instead of evicting a recent
+     * baseline. Registering its geometry as native would apply the offsets
+     * twice, so the caller must fail closed for that frame. */
+    assert(ld_hm_trans_pick(keys, valid, seen, N, key(999, 1, 1, 8, 4),
+                            now, MAX_AGE) == -1);
+    assert(ld_hm_trans_pick(keys, valid, seen, N, key(100, 1, 0, 4, 8),
+                            now, MAX_AGE) == idx[0]);
 
-    /* Fill the table, then evict round-robin; existing identities still hit. */
-    int c = ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){300, 1}, &next);
-    assert(c == 3);
-    ids[c] = (struct ld_hm_trans_ident){300, 1}; valid[c] = 1;
-
-    assert(ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){100, 1}, &next) == a);
-    assert(ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){200, 1}, &next) == b);
-
-    unsigned before = next;
-    int evicted = ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){400, 1}, &next);
-    assert(evicted == 0);
-    assert(next == before + 1);
+    /* Only slots idle longer than max_age are recycled. */
+    now += MAX_AGE + 1;
+    int aged = ld_hm_trans_pick(keys, valid, seen, N, key(999, 1, 1, 8, 4),
+                                now, MAX_AGE);
+    assert(aged >= 0 && aged < N);
 
     /* Degenerate arguments are rejected, never dereferenced. */
-    assert(ld_hm_trans_pick(NULL, valid, 4, (struct ld_hm_trans_ident){1, 1}, &next) == -1);
-    assert(ld_hm_trans_pick(ids, NULL, 4, (struct ld_hm_trans_ident){1, 1}, &next) == -1);
-    assert(ld_hm_trans_pick(ids, valid, 4, (struct ld_hm_trans_ident){1, 1}, NULL) == -1);
+    assert(ld_hm_trans_pick(NULL, valid, seen, N, key(1, 1, 1, 4, 8), now, MAX_AGE) == -1);
+    assert(ld_hm_trans_pick(keys, NULL, seen, N, key(1, 1, 1, 4, 8), now, MAX_AGE) == -1);
+    assert(ld_hm_trans_pick(keys, valid, NULL, N, key(1, 1, 1, 4, 8), now, MAX_AGE) == -1);
+    assert(ld_hm_trans_pick(keys, valid, seen, 0, key(1, 1, 1, 4, 8), now, MAX_AGE) == -1);
 
     printf("hm_transition_test: ok\n");
     return 0;

@@ -71,9 +71,9 @@ static inline void ld_rotation_publish(int rotation, struct ld_screen_dimensions
             atomic_load_explicit(&g_ld_screen_calibration, memory_order_acquire)).locked;
 
     /* A size reading may lag a delivered display event by one transaction.
-     * Prefer the paired measurement whenever it exists; fall back to the
-     * calibrated natural orientation only when the size read is late. */
-    int land = ld_screen_land_for_event(measured, rotation, natural);
+     * The calibrated natural orientation decides the target direction; the
+     * measurement is only published when it agrees with that direction. */
+    int land = ld_screen_land_for_event(rotation, natural);
     int size_matches = measured >= 0 && measured == land;
     unsigned width = size_matches && (unsigned)dimensions.width <= 65535u
                    ? (unsigned)dimensions.width : 0u;

@@ -11,6 +11,7 @@
 #include <jni.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <time.h>
 #include "screen_rotation_math.h"
 
 static pthread_mutex_t g_ld_screen_java_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -107,12 +108,27 @@ static struct ld_screen_dimensions ld_screen_query_framework_dimensions(int even
     JavaVM *vm = atomic_load_explicit(&g_ld_screen_java_ready, memory_order_acquire)
                ? g_ld_screen_vm : NULL;
     if (!vm) vm = (JavaVM *)atomic_load_explicit(&g_ld_jvm_ptr, memory_order_acquire);
-    /* A process either has libart mapped or it never will; scanning maps and
-     * parsing libandroid_runtime on every rotation event is pure overhead. */
-    static int vm_scan_done;
-    if (!vm && !__atomic_load_n(&vm_scan_done, __ATOMIC_ACQUIRE)) {
-        vm = ld_find_vm_from_maps();
-        if (!vm) __atomic_store_n(&vm_scan_done, 1, __ATOMIC_RELEASE);
+    /* Scanning /proc/self/maps and parsing libandroid_runtime on every event
+     * is pure overhead, but a failure can be transient: the runtime may not
+     * be published yet when the first rotation arrives. Cache success only
+     * and retry a failed scan at most once per second. */
+    static atomic_int vm_scan_ok = ATOMIC_VAR_INIT(0);
+    static atomic_ullong vm_next_try_ns = ATOMIC_VAR_INIT(0);
+    if (!vm && !atomic_load_explicit(&vm_scan_ok, memory_order_acquire)) {
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        unsigned long long now_ns =
+                (unsigned long long)now.tv_sec * 1000000000ull +
+                (unsigned long long)now.tv_nsec;
+        if (now_ns >= atomic_load_explicit(&vm_next_try_ns, memory_order_relaxed)) {
+            vm = ld_find_vm_from_maps();
+            if (vm) {
+                atomic_store_explicit(&vm_scan_ok, 1, memory_order_release);
+            } else {
+                atomic_store_explicit(&vm_next_try_ns, now_ns + 1000000000ull,
+                                      memory_order_relaxed);
+            }
+        }
     }
     if (!vm) return result;
 
