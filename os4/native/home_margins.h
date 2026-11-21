@@ -350,9 +350,13 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
          * never raw rotation parity. Resolve the row/column divisors in
          * the same operation so new landscape offsets cannot be divided
          * by obsolete portrait counts. */
+        /* AllApps has its own full, non-sparse grid. Do not replace its
+         * counts with the workspace's configured rows/columns. */
+        int nominal_cols = is_allapps ? 0 : (int)g_grid_cols;
+        int nominal_rows = is_allapps ? 0 : (int)g_grid_rows;
         struct ld_hm_layout_shape shape = ld_hm_layout_shape_for_display(
                 (int)dir_raw, (int)cfg_cols, (int)cfg_rows,
-                display_landscape, (int)g_grid_cols, (int)g_grid_rows);
+                display_landscape, nominal_cols, nominal_rows);
         if (shape.landscape >= 0 && shape.cols > 0 && shape.rows > 0) {
             landscape = shape.landscape;
             cols = shape.cols;
