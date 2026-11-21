@@ -22,10 +22,9 @@ static int ld_dock_active(struct ld_dart_context *c)
     uintptr_t rx = ld_heap_pointer(c, controller, ld_get_grid_rx_offset());
     uintptr_t grid = rx ? ld_heap_pointer(c, rx, 0x13) : 0;
     uintptr_t variables = grid ? ld_heap_pointer(c, grid, 0x8f) : 0;
-    uintptr_t orientation = variables ? ld_heap_pointer(c, variables, 0x23) : 0;
-    int64_t direction = orientation ? ld_heap_i64(orientation, 7) : -1;
+    int direction = grid ? ld_grid_direction(c, grid) : LD_ORIENT_UNKNOWN;
     uint32_t mode = 0;
-    if (!rx || !grid || !variables || !orientation || (direction != 0 && direction != 1)) return 0;
+    if (!rx || !grid || !variables || direction < 0) return 0;
     if (!ld_read_heap(variables + 0x27, &mode, 4) || !(mode & 1)) return 0;
 
     if (ld_is_fullscreen_layout(c, mode)) return 1;
