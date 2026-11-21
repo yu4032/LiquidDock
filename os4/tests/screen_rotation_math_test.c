@@ -33,6 +33,25 @@ int main(void)
     assert(ld_screen_landscape_for_dimensions(4,
         (struct ld_screen_dimensions){3008,1880,4}) == -1);
 
+    /* Once calibrated from width/height, target landscape can be published
+     * even if getSize still reports OLD dimensions during a 53ms window. */
+    assert(ld_screen_natural_landscape(0,
+        (struct ld_screen_dimensions){1880,3008,0}) == 0);
+    assert(ld_screen_natural_landscape(0,
+        (struct ld_screen_dimensions){3008,1880,0}) == 1);
+    assert(ld_screen_natural_landscape(1,
+        (struct ld_screen_dimensions){3008,1880,1}) == 0);
+    assert(ld_screen_landscape_from_natural(3, 0) == 1);
+    assert(ld_screen_landscape_from_natural(3, 1) == 0);
+    assert(ld_screen_landscape_from_natural(2, 1) == 1);
+    assert(ld_screen_landscape_from_natural(1, 1) == 0);
+    assert(ld_screen_landscape_from_natural(2, -1) == -1);
+    /* Observed dimensions might still be portrait with new ROTATION_270:
+     * a measured natural portrait panel remains physically landscape. */
+    struct ld_screen_dimensions stale = {1880,3008,3};
+    assert(ld_screen_landscape_for_dimensions(3, stale) == 0);
+    assert(ld_screen_landscape_from_natural(3, 0) == 1);
+
     /* The ~53ms transition: surface already landscape, currentConfig still
      * portrait. Switch BOTH direction and row/column divisors together. */
     shape(0, 4, 8, 1, 8, 4, 1, 8, 4, 1);
