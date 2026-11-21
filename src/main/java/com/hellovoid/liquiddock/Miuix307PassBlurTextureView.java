@@ -222,10 +222,6 @@ final class Miuix307PassBlurTextureView extends TextureView
     private Field cachedWinFrameInScreenField;
     private Field cachedSurfaceSizeField;
     private Method cachedGetSurfaceControlMethod;
-    private boolean installOrientationMethodResolved;
-    private Method cachedInstallOrientationMethod;
-    private Display cachedInstallOrientationDisplay;
-    private int cachedInstallOrientation;
     private boolean sameSurfaceMethodResolved;
     private Method cachedIsSameSurfaceMethod;
 
@@ -2002,36 +1998,7 @@ final class Miuix307PassBlurTextureView extends TextureView
     }
 
     private int readConfigRotation(View materialHost) {
-        Display display = materialHost != null ? materialHost.getDisplay() : null;
-        if (display == null) return 0;
-
-        if (cachedInstallOrientationDisplay != display) {
-            if (!installOrientationMethodResolved) {
-                installOrientationMethodResolved = true;
-                try {
-                    cachedInstallOrientationMethod =
-                            Display.class.getMethod("getInstallOrientation");
-                } catch (Throwable ignored) {
-                    cachedInstallOrientationMethod = null;
-                }
-            }
-            int installOrientation = 0;
-            Method method = cachedInstallOrientationMethod;
-            if (method != null) {
-                try {
-                    Object value = method.invoke(display);
-                    if (value instanceof Number) {
-                        installOrientation = ((Number) value).intValue();
-                    }
-                } catch (Throwable ignored) {}
-            }
-            cachedInstallOrientation = installOrientation;
-            cachedInstallOrientationDisplay = display;
-        }
-
-        int rotation = display.getRotation();
-        int result = (cachedInstallOrientation + rotation) % 4;
-        return result < 0 ? result + 4 : result;
+        return FrameworkDisplayRotation.normalized(materialHost);
     }
 
     private Rect readViewRootWinFrame(View view) {
