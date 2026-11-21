@@ -156,16 +156,7 @@ final class RootPassBlurEndpointBridge {
     }
 
     static int readConfigRotation(View view) {
-        Display display = view != null ? view.getDisplay() : null;
-        if (display == null) return 0;
-        int installOrientation = 0;
-        try {
-            Method method = Display.class.getMethod("getInstallOrientation");
-            Object value = method.invoke(display);
-            if (value instanceof Number) installOrientation = ((Number) value).intValue();
-        } catch (Throwable ignored) {}
-        int result = (installOrientation + display.getRotation()) % 4;
-        return result < 0 ? result + 4 : result;
+        return FrameworkDisplayRotation.normalized(view);
     }
 
     private static Object getViewRootImpl(View view) throws Exception {
