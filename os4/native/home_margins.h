@@ -445,9 +445,14 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
      * matches one of our recorded outputs. Never infer a baseline from another
      * controller's unmodified geometry. */
     for (int pass = 0; pass < 2 && !base; pass++) {
-        unsigned max_bases = transitional_geometry ? 1u : LD_HM_MAX_BASES;
+        /* A just-committed GridConfig can still carry the exact output
+         * we wrote during the preceding transition. Check that provisional
+         * output LAST, after durable baselines, so we don't capture our own
+         * offset as a new durable native baseline and apply it twice. */
+        unsigned max_bases = transitional_geometry ? 1u : LD_HM_MAX_BASES + 1u;
         for (unsigned i = 0; i < max_bases; i++) {
-            struct ld_hm_base *b = transitional_geometry
+            int from_provisional = transitional_geometry || i == LD_HM_MAX_BASES;
+            struct ld_hm_base *b = from_provisional
                     ? &g_hm_transition_base : &g_hm_bases[i];
             int same_identity = b->identity == identity && b->identity_kind == identity_kind;
             if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows ||
@@ -469,7 +474,8 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                     break;
                 }
             }
-            if ((pass == 0 && native_geometry) || written_scope >= 0) {
+            if ((pass == 0 && native_geometry && !from_provisional) ||
+                written_scope >= 0) {
                 base = b;
                 matched_scope = native_geometry ? -1 : written_scope;
                 break;
