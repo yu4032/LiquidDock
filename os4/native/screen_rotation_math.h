@@ -33,6 +33,42 @@ static inline int ld_screen_landscape_from_natural(int rotation, int natural)
     return natural ^ (rotation & 1);
 }
 
+/* Natural orientation is a property of the panel, but a sample can still be
+ * wrong: a delivered rotation may be paired with a size read that still
+ * belongs to the previous display transaction. Locking the first sample would
+ * then invert every later event, so require two consecutive agreeing samples
+ * and let two consecutive disagreeing samples correct an existing lock. */
+struct ld_screen_calibration {
+    int candidate;  /* last natural-landscape sample, -1 = none */
+    int votes;      /* consecutive samples agreeing with candidate */
+    int locked;     /* established natural landscape, -1 = not yet */
+};
+
+static inline struct ld_screen_calibration
+ld_screen_calibration_step(struct ld_screen_calibration s, int candidate)
+{
+    if (candidate != 0 && candidate != 1)
+        return s;
+    if (candidate == s.candidate) {
+        if (s.votes < 2) s.votes++;
+    } else {
+        s.candidate = candidate;
+        s.votes = 1;
+    }
+    if (s.votes >= 2) s.locked = candidate;
+    return s;
+}
+
+/* A size sample paired with this event is authoritative; calibration only
+ * fills the gap left by a lagging size read, so a stale calibration can
+ * never overwrite fresh geometry. */
+static inline int ld_screen_land_for_event(int measured, int rotation,
+                                           int locked_natural)
+{
+    if (measured == 0 || measured == 1) return measured;
+    return ld_screen_landscape_from_natural(rotation, locked_natural);
+}
+
 struct ld_hm_layout_shape {
     int landscape, cols, rows, adjusted, provisional;
 };

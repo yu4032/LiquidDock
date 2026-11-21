@@ -107,7 +107,13 @@ static struct ld_screen_dimensions ld_screen_query_framework_dimensions(int even
     JavaVM *vm = atomic_load_explicit(&g_ld_screen_java_ready, memory_order_acquire)
                ? g_ld_screen_vm : NULL;
     if (!vm) vm = (JavaVM *)atomic_load_explicit(&g_ld_jvm_ptr, memory_order_acquire);
-    if (!vm) vm = ld_find_vm_from_maps();
+    /* A process either has libart mapped or it never will; scanning maps and
+     * parsing libandroid_runtime on every rotation event is pure overhead. */
+    static int vm_scan_done;
+    if (!vm && !__atomic_load_n(&vm_scan_done, __ATOMIC_ACQUIRE)) {
+        vm = ld_find_vm_from_maps();
+        if (!vm) __atomic_store_n(&vm_scan_done, 1, __ATOMIC_RELEASE);
+    }
     if (!vm) return result;
 
     JNIEnv *env = NULL;

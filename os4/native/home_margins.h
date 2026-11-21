@@ -28,6 +28,7 @@
 #include "native_api.h"
 #include "lib_base.h"
 #include "aot_scanner.h"
+#include "hm_transition.h"
 #include "screen_rotation.h"
 
 #define LD_HM_CC_VADDR 0xb47388u   /* GridController.currentConfig */
@@ -88,8 +89,27 @@ struct ld_hm_base {
 static struct ld_hm_base g_hm_bases[LD_HM_MAX_BASES] __attribute__((used));
 /* New-direction geometry can precede the vendor's GridConfig commit by ~53ms.
  * Keep its transient baseline OUT of the durable orientation cache, yet
- * retain the last output on this thread to make repeated callbacks idempotent. */
-static __thread struct ld_hm_base g_hm_transition_base;
+ * retain the last output on this thread to make repeated callbacks idempotent.
+ * One slot per controller: a A->B->A sequence across a page switch must not
+ * evict A's in-flight baseline and re-derive it from already-shifted cells. */
+#define LD_HM_MAX_TRANS 4
+static __thread struct ld_hm_base g_hm_trans[LD_HM_MAX_TRANS];
+static __thread unsigned g_hm_trans_next __attribute__((used));
+
+static struct ld_hm_base *ld_hm_trans_slot(uintptr_t identity, int identity_kind)
+{
+    struct ld_hm_trans_ident ids[LD_HM_MAX_TRANS];
+    unsigned char valid[LD_HM_MAX_TRANS];
+    for (unsigned i = 0; i < LD_HM_MAX_TRANS; i++) {
+        ids[i].identity = g_hm_trans[i].identity;
+        ids[i].kind = g_hm_trans[i].identity_kind;
+        valid[i] = g_hm_trans[i].valid != 0;
+    }
+    int idx = ld_hm_trans_pick(ids, valid, LD_HM_MAX_TRANS,
+                               (struct ld_hm_trans_ident){identity, identity_kind},
+                               &g_hm_trans_next);
+    return idx >= 0 ? &g_hm_trans[idx] : &g_hm_trans[0];
+}
 static unsigned g_hm_base_next __attribute__((used));
 /* pipeline 观察器按 config 指针记方向：同一份 config 只对应一个方向。 */
 struct ld_hm_note { uintptr_t cfg; int dir, cols, rows; };
@@ -446,18 +466,20 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
      * controller's unmodified geometry. */
     for (int pass = 0; pass < 2 && !base; pass++) {
         /* A just-committed GridConfig can still carry the exact output
-         * we wrote during the preceding transition. Check that provisional
-         * output LAST, after durable baselines, so we don't capture our own
-         * offset as a new durable native baseline and apply it twice. */
-        unsigned max_bases = transitional_geometry ? 1u : LD_HM_MAX_BASES + 1u;
-        for (unsigned i = 0; i < max_bases; i++) {
-            int from_provisional = transitional_geometry || i == LD_HM_MAX_BASES;
+         * we wrote during the preceding transition. Check those provisional
+         * slots LAST, after durable baselines, so we don't capture our own
+         * offset as a new durable native baseline and apply it twice. They
+         * are scanned in both modes: the commit may arrive after the window. */
+        unsigned slots = LD_HM_MAX_BASES + LD_HM_MAX_TRANS;
+        for (unsigned i = 0; i < slots; i++) {
+            int from_provisional = i >= LD_HM_MAX_BASES;
             struct ld_hm_base *b = from_provisional
-                    ? &g_hm_transition_base : &g_hm_bases[i];
+                    ? &g_hm_trans[i - LD_HM_MAX_BASES] : &g_hm_bases[i];
             int same_identity = b->identity == identity && b->identity_kind == identity_kind;
+            int provisional = from_provisional || transitional_geometry;
             /* The provisional baseline may only follow its own controller
              * through a transition, never migrate to a different page. */
-            if (from_provisional && !same_identity) continue;
+            if (provisional && !same_identity) continue;
             if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows ||
                 (pass == 0 ? !same_identity : same_identity)) continue;
             int native_geometry = __builtin_fabs(cw_now - b->cw) < 0.5 &&
@@ -477,7 +499,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                     break;
                 }
             }
-            if ((pass == 0 && native_geometry && !from_provisional) ||
+            if ((pass == 0 && native_geometry && !provisional) ||
                 written_scope >= 0) {
                 base = b;
                 matched_scope = native_geometry ? -1 : written_scope;
@@ -495,7 +517,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
             return (void *)cfg;
         }
         base = transitional_geometry
-                ? &g_hm_transition_base
+                ? ld_hm_trans_slot(identity, identity_kind)
                 : &g_hm_bases[g_hm_base_next++ % LD_HM_MAX_BASES];
         base->cw = cw_now;
         base->ch = ch_now;

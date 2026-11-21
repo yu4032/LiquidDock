@@ -12,7 +12,26 @@
  * UNKNOWN landscape=0 (stored as zero); 1=portrait, 2=landscape.
  */
 static atomic_uint_fast64_t g_ld_screen_state = ATOMIC_VAR_INIT(0);
-static atomic_int g_ld_screen_natural_orientation = ATOMIC_VAR_INIT(-1);
+/* Packed ld_screen_calibration: candidate+1 [0,1], votes [4,5], locked+1 [8,9]. */
+static atomic_uint g_ld_screen_calibration = ATOMIC_VAR_INIT(0);
+
+static inline struct ld_screen_calibration ld_screen_cal_unpack(unsigned v)
+{
+    struct ld_screen_calibration s;
+    unsigned c = v & 3u, k = (v >> 4) & 3u, l = (v >> 8) & 3u;
+    s.candidate = c ? (int)c - 1 : -1;
+    s.votes = (int)k;
+    s.locked = l ? (int)l - 1 : -1;
+    return s;
+}
+
+static inline unsigned ld_screen_cal_pack(struct ld_screen_calibration s)
+{
+    unsigned c = (unsigned)(s.candidate + 1) & 3u;
+    unsigned k = (unsigned)s.votes & 3u;
+    unsigned l = (unsigned)(s.locked + 1) & 3u;
+    return c | (k << 4) | (l << 8);
+}
 
 static inline int ld_screen_rotation(void)
 {
@@ -33,28 +52,28 @@ static inline void ld_rotation_publish(int rotation, struct ld_screen_dimensions
     if ((unsigned)rotation > 3u) return;
 
     int measured = ld_screen_landscape_for_dimensions(rotation, dimensions);
-    int natural = atomic_load_explicit(&g_ld_screen_natural_orientation,
-                                       memory_order_acquire);
-    if (natural < 0 && measured >= 0) {
-        int candidate = ld_screen_natural_landscape(rotation, dimensions);
-        int expected = -1;
-        if (atomic_compare_exchange_strong_explicit(&g_ld_screen_natural_orientation,
-                &expected, candidate, memory_order_acq_rel, memory_order_acquire)) {
-            natural = candidate;
-            ld_blog("screen natural orientation calibrated land=%d from rot=%d size=%dx%d",
-                    natural, rotation, dimensions.width, dimensions.height);
-        } else {
-            natural = expected;
+    int candidate = ld_screen_natural_landscape(rotation, dimensions);
+    unsigned cal = atomic_load_explicit(&g_ld_screen_calibration, memory_order_acquire);
+    for (;;) {
+        struct ld_screen_calibration before = ld_screen_cal_unpack(cal);
+        struct ld_screen_calibration after = ld_screen_calibration_step(before, candidate);
+        unsigned want = ld_screen_cal_pack(after);
+        if (want == cal) break;
+        if (atomic_compare_exchange_weak_explicit(&g_ld_screen_calibration, &cal, want,
+                memory_order_acq_rel, memory_order_acquire)) {
+            if (after.locked != before.locked)
+                ld_blog("screen natural orientation calibrated land=%d after %d agreeing samples",
+                        after.locked, after.votes);
+            break;
         }
     }
+    int natural = ld_screen_cal_unpack(
+            atomic_load_explicit(&g_ld_screen_calibration, memory_order_acquire)).locked;
 
     /* A size reading may lag a delivered display event by one transaction.
-     * Once natural orientation has been calibrated from physical dimensions,
-     * prefer the target rotation transformed through that calibration; do
-     * not publish a stale width/height as the target's current geometry. */
-    int land = natural >= 0
-             ? ld_screen_landscape_from_natural(rotation, natural)
-             : measured;
+     * Prefer the paired measurement whenever it exists; fall back to the
+     * calibrated natural orientation only when the size read is late. */
+    int land = ld_screen_land_for_event(measured, rotation, natural);
     int size_matches = measured >= 0 && measured == land;
     unsigned width = size_matches && (unsigned)dimensions.width <= 65535u
                    ? (unsigned)dimensions.width : 0u;
