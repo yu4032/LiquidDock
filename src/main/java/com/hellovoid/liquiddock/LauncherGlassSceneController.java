@@ -775,12 +775,7 @@ final class LauncherGlassSceneController {
     }
 
     private static int readDisplayRotation(View root) {
-        if (root == null || root.getDisplay() == null) return -1;
-        try {
-            return root.getDisplay().getRotation();
-        } catch (Throwable ignored) {
-            return -1;
-        }
+        return FrameworkDisplayRotation.normalized(root);
     }
 
     /** Startup barrier: scan objects that existed before constructor/attach hooks became useful. */
