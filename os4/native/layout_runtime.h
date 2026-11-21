@@ -97,14 +97,16 @@ static int ld_layout_write_verified(const uintptr_t *cells, const uintptr_t *mod
 __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context *c)
 {
     uintptr_t receiver = c->x[1];
+    /* Authoritative synchronous check: the Dart entry runs before its own
+     * orientation transaction and may still expose yesterday's geometry. */
+    if (ld_orientation_guard_refresh_now() < 0) return;
     int raw_dir=ld_grid_direction(c,c->x[2]);
+    if (raw_dir < 0) return;
     /* layout_memory slots: 0=landscape(g_grid_cols x g_grid_rows), 1=portrait; ld_grid_direction is 1=landscape, 0=portrait. */
     int direction=(raw_dir==0 || raw_dir==1)?(1-raw_dir):-1;
     int livecols=(int)ld_heap_i64(c->x[2],0x1b),liverows=(int)ld_heap_i64(c->x[2],0x23);
-    if(g_grid_cols>0 && g_grid_rows>0 && g_grid_cols!=g_grid_rows) {
-        if(livecols==g_grid_cols && liverows==g_grid_rows) direction=0;
-        else if(livecols==g_grid_rows && liverows==g_grid_cols) direction=1;
-    }
+    /* Grid dimensions are validation data, never an alternative direction
+     * authority. This also handles square grids without special guessing. */
     int prev_cols = g_runtime_columns;
     int prev_rows = g_runtime_rows;
     g_rotation_direction=direction;
@@ -158,6 +160,9 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
 {
     g_restore_ready=0;
     if(!g_layout_hooks_ready || !g_page_fields.layout) return;
+    int physical_direction = ld_orientation_guard_refresh_now();
+    if (physical_direction < 0) return;
+    const uint64_t orient_generation = ld_orientation_generation();
     ld_blog("process-screen args=%llx,%llx,%lld,%llx,%lld",
             (unsigned long long)c->x[1], (unsigned long long)c->x[2],
             (long long)c->x[3], (unsigned long long)c->x[4], (long long)c->x[5]);
@@ -221,7 +226,9 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
             int changed = 0;
             for (size_t i = 0; i < count; i++)
                 changed |= target[i].x != source[i].x || target[i].y != source[i].y;
-            if (targets_are_cells && (changed || live_positions)) {
+            if (targets_are_cells && (changed || live_positions) &&
+                ld_orientation_guard_refresh_now() == physical_direction &&
+                ld_orientation_guard_generation_matches(orient_generation)) {
                 /* With already-live cells, confirm both coordinate owners
                  * agree before bypassing the stock old-grid transform. */
                 if (changed) ld_layout_write_items(cells,models,target,count);
@@ -242,9 +249,10 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
                     count,cols,rows,oldcols,oldrows,valid_source,live_positions);
         goto done;
     }
-    int direction=square?g_rotation_direction:(cols==g_grid_cols && rows==g_grid_rows?0:1);
-    if(direction<0 || direction>1) goto done;
-    if((direction && (cols!=g_grid_rows || rows!=g_grid_cols)) || (oldcols==cols && oldrows==rows)) goto done;
+    int direction=1-physical_direction; /* layout_memory: 0=landscape, 1=portrait */
+    if(cols!=(direction?g_grid_rows:g_grid_cols) ||
+       rows!=(direction?g_grid_cols:g_grid_rows) ||
+       (oldcols==cols && oldrows==rows)) goto done;
     int bit = is_ws_allapps ? 2 : 1;
     int init_state = __atomic_load_n(&g_initial_restore, __ATOMIC_ACQUIRE);
     int init_mask = __atomic_load_n(&g_initial_restore_mask, __ATOMIC_ACQUIRE);
@@ -281,11 +289,15 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     memory->active_direction=direction;
     /* Let the original Dart continuation publish through the launcher's own
      * database engine. Never open or rewrite its live database here. */
-    int saved = ld_layout_save(layout_file,memory);
+    /* A superseding rotation invalidates this planned batch. */
+    int guard_ok = ld_orientation_guard_refresh_now() == physical_direction &&
+                   ld_orientation_guard_generation_matches(orient_generation);
+    int saved = guard_ok && ld_layout_save(layout_file,memory);
     if(saved) ld_layout_invalidate_pending_locked(slot);
     pthread_mutex_unlock(&g_layout_io_lock);
     free(memory);
-    if(!saved) goto done;
+    if(!saved || ld_orientation_guard_refresh_now()!=physical_direction ||
+       !ld_orientation_guard_generation_matches(orient_generation)) goto done;
     for(size_t i=0;i<count;i++) {
         int64_t x=target[i].x,y=target[i].y;
         memcpy((void *)(cells[i]+0xb),&x,8); memcpy((void *)(cells[i]+0x13),&y,8);
