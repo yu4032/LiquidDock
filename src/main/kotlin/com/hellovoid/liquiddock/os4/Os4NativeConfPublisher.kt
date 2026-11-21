@@ -44,6 +44,7 @@ object Os4NativeConfPublisher {
         if (options.workstation.dockCustomization && !options.workstation.isValid()) return null
         return buildString {
             append("hook_safety_enabled=").append(if (options.hookSafetyEnabled) 1 else 0).append('\n')
+            if (options.debugLogging) append("debug_logging=1\n")
             if (grid) {
                 append("grid_cols=").append(gridCols).append('\n')
                 append("grid_rows=").append(gridRows).append('\n')

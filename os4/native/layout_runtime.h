@@ -180,24 +180,51 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
         int fits_target = ld_layout_valid(source,count,cols,rows);
         int order_ok = ld_layout_screen_order_ok(source,count);
         int applied = 0;
-        if (!fits_target && ld_layout_valid(source,count,rows,cols)) {
-            int icons_only = 1;
-            for (size_t i = 0; i < count; i++) {
-                if (source[i].sx != 1 || source[i].sy != 1) icons_only = 0;
-            }
+        int icons_only = 1;
+        for (size_t i = 0; i < count; i++) {
+            if (source[i].sx != 1 || source[i].sy != 1) icons_only = 0;
+        }
+        /* A page that already fits the live grid is normally left alone, but a
+         * dense icon page (slots 0..n-1 of the old grid, no vacancies) built
+         * for fewer columns would stay bunched in the left columns when the
+         * grid widens. Re-flow only such pages; sparse pages keep their holes. */
+        int dense_in_old = icons_only && oldcols > 0 && oldrows > 0 &&
+                           (oldcols != cols || oldrows != rows) &&
+                           ld_layout_valid(source,count,oldcols,oldrows);
+        for (size_t i = 0; dense_in_old && i < count; i++) {
+            int screen_n = 0;
+            for (size_t j = 0; j < count; j++)
+                if (source[j].screen == source[i].screen) screen_n++;
+            if (source[i].y * oldcols + source[i].x >= screen_n) dense_in_old = 0;
+        }
+        /* Dense pages are renumbered by (y,x) rank, which does not depend on the
+         * Dart array order, so order_ok is not required for them. */
+        int widen_reflow = dense_in_old;
+        if (widen_reflow || (!fits_target && ld_layout_valid(source,count,rows,cols))) {
+            /* Cells must share one class (a rebuilding page can expose a matrix or
+             * list instead). Item models are legitimately sibling subclasses
+             * (observed cids 0x88e/0x89a on one page) that share the x/y layout
+             * of the base model, so they only need to be real heap objects; the
+             * verified write below rolls back on any readback mismatch. */
             unsigned cell_cid = ld_layout_object_cid(cells[0]);
-            unsigned model_cid = ld_layout_object_cid(models[0]);
-            int targets_are_cells = cell_cid != 0 && model_cid != 0;
+            int targets_are_cells = cell_cid != 0 && ld_layout_object_cid(models[0]) != 0;
             for (size_t i = 1; targets_are_cells && i < count; i++) {
                 if (ld_layout_object_cid(cells[i]) != cell_cid ||
-                    ld_layout_object_cid(models[i]) != model_cid) targets_are_cells = 0;
+                    ld_layout_object_cid(models[i]) == 0) {
+                    targets_are_cells = 0;
+                    if (g_diag_logging)
+                        ld_blog("allapps cid mismatch at %zu/%zu: cell %x vs %x model %x sx=%d sy=%d id=%lld",
+                            i, count, ld_layout_object_cid(cells[i]), cell_cid,
+                            ld_layout_object_cid(models[i]),
+                            source[i].sx, source[i].sy, (long long)source[i].id);
+                }
             }
             if (!targets_are_cells) {
                 ld_blog("allapps transform skipped: non-cell object in %zu items", count);
             } else {
                 for (size_t i = 0; i < count; i++) {
                     target[i] = source[i];
-                    if (icons_only && order_ok) {
+                    if (icons_only && (order_ok || dense_in_old)) {
                         int index = 0;
                         for (size_t j = 0; j < count; j++) {
                             /* Reading order must not depend on the grid stride:
@@ -213,12 +240,15 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
                         target[i].y = source[i].x;
                     }
                 }
-                if (ld_layout_valid(target,count,cols,rows)) {
+                int changed = 0;
+                for (size_t i = 0; i < count; i++)
+                    if (target[i].x != source[i].x || target[i].y != source[i].y) changed = 1;
+                if (changed && ld_layout_valid(target,count,cols,rows)) {
                     ld_layout_write_items(cells,models,target,count);
                     if (ld_layout_write_verified(cells,models,target,count)) {
                         applied = 1;
                         ld_blog("allapps %s %zu items to %dx%d (verified)",
-                                (icons_only && order_ok) ? "reflowed" : "transposed", count, cols, rows);
+                                (icons_only && (order_ok || dense_in_old)) ? "reflowed" : "transposed", count, cols, rows);
                     } else {
                         ld_layout_write_items(cells,models,source,count);
                         ld_blog("allapps transform rolled back: readback mismatch");

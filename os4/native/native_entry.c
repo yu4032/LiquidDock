@@ -46,6 +46,7 @@
     "/data/user_de/0/com.miui.home/files/liquiddock-layout-managed-v1"
 
 static volatile int g_grid_cols;
+static volatile int g_diag_logging; /* settings log switch for optional diagnostics */
 static volatile int g_grid_rows;
 static volatile int g_count_cols,g_count_rows;
 static struct ld_grid_conf g_home_options;
@@ -244,6 +245,7 @@ static void load_grid_config(void)
     g_grid_cols = conf.cols;
     g_grid_rows = conf.rows;
     g_home_options=conf;
+    g_diag_logging=conf.debug_logging;
     LOGI("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     ld_blog("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     if (conf.cols > 0 && conf.rows > 0) {

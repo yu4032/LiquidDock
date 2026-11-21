@@ -130,6 +130,7 @@ data class Os4MainScreenOptions(
     val glassLargeFolderNativeOutline: Boolean = true,
     val widgetOverrides: Boolean = false,
     val hookSafetyEnabled: Boolean = false,
+    val debugLogging: Boolean = false,
     val glassIconSize: Double = 0.0,
     val glassIconCorner: Double = 0.0,
     val recentsBlurPercent: Int = 100,
@@ -158,7 +159,7 @@ data class Os4MainScreenOptions(
         )
         val watchedKeys: Set<String> = buildSet {
             addAll(listOf(ConfigSchema.Core.ENABLED, ConfigSchema.Grid.ENABLED,
-                ConfigSchema.Grid.NATIVE_HOOK_SAFETY,
+                ConfigSchema.Grid.NATIVE_HOOK_SAFETY, ConfigSchema.Debug.LOGGING,
                 ConfigSchema.Grid.COLUMNS, ConfigSchema.Grid.ROWS,
                 ConfigSchema.Grid.ICON_SIZE_ENABLED, ConfigSchema.Grid.ICON_SIZE_PERCENT,
                 ConfigSchema.Grid.BIG_FOLDER_ENABLED,
@@ -361,6 +362,7 @@ data class Os4MainScreenOptions(
                             glassLargeFolderNativeOutline = glassLargeFolderNativeOutline,
                             widgetOverrides = widgetOverrides,
                             hookSafetyEnabled = boolean(ConfigSchema.Grid.NATIVE_HOOK_SAFETY),
+                            debugLogging = boolean(ConfigSchema.Debug.LOGGING),
                             glassIconSize = if (glassIcons) dp(ConfigSchema.Glass.ICON_SIZE_OFFSET) else 0.0,
                             glassIconCorner = if (glassIcons) dp(ConfigSchema.Glass.ICON_CORNER_RADIUS) else 0.0,
                             recentsBlurPercent = recentsBlurPercent,

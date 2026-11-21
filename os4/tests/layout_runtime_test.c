@@ -7,6 +7,7 @@
 #define LD_WS_LAYOUT_FILE "/tmp/ld-runtime-ws-apps-fixture.bin"
 #define LD_WS_DESK_LAYOUT_FILE "/tmp/ld-runtime-ws-desk-fixture.bin"
 static int g_grid_cols=4,g_grid_rows=8;
+static int g_diag_logging=0;
 static volatile int g_ws_is_laptop_mode=0;
 static void *g_orig_orientation;
 static void ld_blog(const char *format,...) { (void)format; }
@@ -197,6 +198,29 @@ int main(void) {
    int slot=(i*stride)%(sc*sr);
    assert(ld_heap_i64(cell,0xb)==slot/sc && ld_heap_i64(cell,0x13)==slot%sc);
    assert(ld_heap_i64(model,0x37)==slot/sc && ld_heap_i64(model,0x3f)==slot%sc);
+  }
+ }
+
+ /* Dense page built for 4 columns, widened to 8x4: it already fits, but must
+  * spread in reading order instead of staying in the left columns. */
+ {
+  const int n=12;
+  word(obj[2],11,2); word(obj[8],11,(uint32_t)(n*2));
+  integer(obj[0],7,4); integer(obj[0],15,8);
+  c.x[3]=8; c.x[5]=4;
+  for(int i=0;i<n;i++) {
+   uintptr_t model=object(18+2*i),cell=object(19+2*i);
+   word(obj[10],15+i*4,(uint32_t)cell);
+   word(cell,7,(uint32_t)model);
+   integer(cell,0xb,i%4); integer(cell,0x13,i/4);
+   integer(model,7,900+i); integer(model,0x1f,1); integer(model,0x27,1);
+   integer(model,0x2f,4); integer(model,0x37,i%4); integer(model,0x3f,i/4);
+   integer(model,0x47,-104);
+  }
+  ld_observe_process(&c); assert(g_restore_ready);
+  for(int i=0;i<n;i++) {
+   uintptr_t cell=object(19+2*i);
+   assert(ld_heap_i64(cell,0xb)==i%8 && ld_heap_i64(cell,0x13)==i/8);
   }
  }
 
