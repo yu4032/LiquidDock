@@ -39,6 +39,7 @@
 #include "home_geometry_fingerprints.h"
 #include "dock_geometry_fingerprints.h"
 #include "sync_trigger.h"
+#include "screen_rotation.h"
 
 #define LD_PRIMARY_CONF "/data/user/0/com.miui.home/files/liquiddock-native.conf"
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
@@ -69,6 +70,7 @@ static void (*g_orig_rust_orientation)(void *);
 #include "maml_widget_materials.h"
 #include "widget_resize.h"
 #include "workstation.h"
+#include "rotation_provider.h"
 #include "widget_1x1_menu.h"
 
 #define LD_BLOG_MAX_BYTES (512 * 1024)
@@ -1471,6 +1473,9 @@ static void install_grid_hook_unlocked(const struct native_api *api)
         LOGI("libapp.so not mapped yet");
         return;
     }
+    /* Install first: this event source must be available when subsequent
+     * rendering hooks begin observing currentConfig. */
+    ld_rotation_provider_install(api, &lib);
     /* Retry independent rendering/feature modules on every entry regardless of g_installed. */
     ld_folder_grid_install(api,&lib,g_home_options.folder_grid_cols,g_home_options.folder_grid_rows);
     ld_folder_size_install(api,&lib,&g_home_options);
@@ -1946,7 +1951,8 @@ static void install_grid_hook(const struct native_api *api) {
             || g_home_options.big_folder_enabled || g_home_options.widget_1x1_to_2x2_enabled
             || g_home_options.folder_grid_cols > 0 || g_home_options.folder_grid_rows > 0
             || g_home_options.dock.enabled || g_home_options.glass_enabled
-            || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100))
+            || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100
+            || ld_hm_has_any_offsets()))
         install_grid_hook_unlocked(api);
     if (app_loaded) ld_write_hook_status();
     if((g_installed || g_os4_glass_installed) && !g_trace_started) {
