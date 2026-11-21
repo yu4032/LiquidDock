@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include "../native/dart_heap.h"
+#include "orientation_guard_mock.h"
 #undef LD_DART_OBSERVER
 #define LD_DART_OBSERVER(...)
 #define LD_LAYOUT_FILE "/tmp/ld-runtime-batch-fixture.bin"
@@ -44,6 +45,7 @@ static void verify_page_fields(void)
 }
 
 int main(void) {
+ ld_test_set_framework_orientation(0); /* 8x4 portrait slot for this fixture */
  verify_page_fields();
  const struct ld_layout_item mixed[]={{1,3,3,2,1,1},{2,3,1,1,2,2},{3,4,0,3,1,1}};
  struct ld_layout_item compact[3];
@@ -154,6 +156,7 @@ int main(void) {
  c.x[2]=grid; ld_observe_orientation(&c);
  integer(obj[0],7,8); integer(obj[0],15,4);
  integer(grid,0x1b,4); integer(grid,0x23,8);
+ ld_test_set_framework_orientation(1);
  ld_observe_orientation(&c);
  c.x[2]=obj[1]; c.x[3]=4; c.x[5]=8;
  ld_observe_process(&c);
