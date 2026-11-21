@@ -323,9 +323,10 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     __builtin_memcpy(&cfg_rows, (const void *)(cfg + 0x23), sizeof cfg_rows);
     if (vo) __builtin_memcpy(&dir_raw, (const void *)(vo + 7), sizeof dir_raw);
 
-    /* The Config's enum is an ownership check only. Do not recover direction
-     * from previously observed configs, global notes or transposed grid sizes. */
-    int landscape = ld_orientation_guard_for_grid((int)dir_raw);
+    /* This getter may build an inactive GridConfig. Its own enum selects
+     * the profile to customize; neither saved notes nor physical Display
+     * rotation can replace that per-config identity. */
+    int landscape = (dir_raw == 0 || dir_raw == 1) ? (int)dir_raw : -1;
     int cols = 0, rows = 0;
     int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
     int is_allapps = is_laptop && g_home_options.ws.dock_custom &&
