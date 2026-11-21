@@ -7,13 +7,18 @@ static void *g_orig_save_single __attribute__((used));
 static void *g_orig_delete_item __attribute__((used));
 
 static inline int ld_save_dir_hint(void) {
-    return g_runtime_columns ? g_runtime_direction : (g_load_columns ? g_load_direction : -1);
+    int physical = ld_orientation_guard_refresh_now();
+    return physical < 0 ? -1 : 1 - physical; /* layout_memory slot */
 }
 
 static void ld_capture_saved_items_slot(int slot, const struct ld_layout_item *items, size_t count, int dir_hint) {
     if (slot < 0 || slot >= LD_SLOT_COUNT || !g_layout_hooks_ready ||
         !__atomic_load_n(&g_load_prepared, __ATOMIC_ACQUIRE) ||
         !count || g_grid_cols <= 0 || g_grid_rows <= 0) return;
+    const int physical = ld_orientation_guard_refresh_now();
+    if (physical < 0 || (dir_hint >= 0 && dir_hint != 1 - physical)) return;
+    dir_hint = 1 - physical;
+    const uint64_t orient_generation = ld_orientation_generation();
     const char *path = ld_layout_slot_path(slot);
     pthread_mutex_lock(&g_layout_io_lock);
     if (!g_pending_layout_valid[slot] ||
@@ -44,6 +49,8 @@ static void ld_capture_saved_items_slot(int slot, const struct ld_layout_item *i
         return;
     }
     if (ld_layout_finalize_changes(&g_pending_layout_mem[slot]) &&
+        ld_orientation_guard_refresh_now() == physical &&
+        ld_orientation_guard_generation_matches(orient_generation) &&
         ld_layout_save(path, &g_pending_layout_mem[slot])) {
         g_pending_layout_valid[slot] = 0;
         int d = g_pending_layout_mem[slot].active_direction;
