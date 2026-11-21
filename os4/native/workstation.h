@@ -207,29 +207,12 @@ static inline double ld_ws_device_width(void)
     return (isfinite(d) && d > 100.0) ? d : 0.0;
 }
 
-static volatile int g_ws_last_dir __attribute__((used)) = -1;
-
+/* Workstation uses the same framework Display state as Home, Folder and Dock.
+ * No last-seen Dart direction or physical-width fallback is allowed. */
 static inline int ld_ws_direction(const struct ld_ws_ctx *c)
 {
-    struct ld_dart_context dc;
-    memcpy(dc.x, c->x, sizeof(dc.x));
-    uintptr_t controller = ld_get_grid_controller(&dc);
-    if (controller) {
-        uintptr_t rx = ld_heap_pointer(&dc, controller, ld_get_grid_rx_offset());
-        uintptr_t grid = rx ? ld_heap_pointer(&dc, rx, 0x13) : 0;
-        if (grid) {
-            int dir = ld_grid_direction(&dc, grid);
-            if (dir == 0 || dir == 1) {
-                __atomic_store_n(&g_ws_last_dir, dir, __ATOMIC_RELAXED);
-                return dir;
-            }
-        }
-    }
-    int last = __atomic_load_n(&g_ws_last_dir, __ATOMIC_RELAXED);
-    if (last == 0 || last == 1) return last;
-    double dw = ld_ws_device_width();
-    if (dw > 100.0) return (dw > 800.0) ? 1 : 0;
-    return -1;
+    (void)c;
+    return ld_orientation_guard_direction();
 }
 
 static inline int ld_ws_is_const_ro(uintptr_t addr)
