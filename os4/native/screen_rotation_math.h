@@ -15,6 +15,24 @@ static inline int ld_screen_landscape_for_dimensions(int target_rotation,
     return size.width > size.height;
 }
 
+/* Calibrate once from an actual size + rotation pair. Unlike a raw
+ * (rotation & 1) mapping, this supports BOTH natural-portrait and
+ * natural-landscape displays. A fixed panel's natural orientation does not
+ * change when a rotation callback arrives before its new size is visible. */
+static inline int ld_screen_natural_landscape(int rotation,
+                                              struct ld_screen_dimensions size)
+{
+    int measured = ld_screen_landscape_for_dimensions(rotation, size);
+    return measured < 0 ? -1 : measured ^ (rotation & 1);
+}
+
+static inline int ld_screen_landscape_from_natural(int rotation, int natural)
+{
+    if ((unsigned)rotation > 3u || (natural != 0 && natural != 1))
+        return -1;
+    return natural ^ (rotation & 1);
+}
+
 struct ld_hm_layout_shape {
     int landscape, cols, rows, adjusted, provisional;
 };
