@@ -478,13 +478,14 @@ static void ld_frb_plan_vec_items(void *vec_ptr) {
             frb_c, frb_r);
     if (!data_addr || len == 0 || len > 4096u) return;
 
-    int cols = (frb_c > 0 && frb_r > 0) ? frb_c : (g_runtime_columns ? g_runtime_columns : g_load_columns);
-    int rows = (frb_c > 0 && frb_r > 0) ? frb_r : (g_runtime_rows ? g_runtime_rows : g_load_rows);
-    int direction = g_grid_cols == g_grid_rows
-        ? (g_runtime_columns ? g_runtime_direction : (g_load_columns ? g_load_direction : frb_d))
-        : (cols == g_grid_cols && rows == g_grid_rows ? 0 : 1);
-    if (direction < 0 || direction > 1) return;
-    if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
+    /* FRB arguments can describe old or inactive configurations at startup.
+     * The current target profile always comes from framework Display rotation. */
+    (void)frb_d;
+    int physical = ld_orientation_guard_refresh_now();
+    if (physical < 0) return;
+    int direction = 1 - physical;
+    int cols = direction ? g_grid_rows : g_grid_cols;
+    int rows = direction ? g_grid_cols : g_grid_rows;
 
     uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
     int has_100 = 0, has_104 = 0, known = 0;
@@ -521,14 +522,15 @@ static void ld_frb_sync_decoded_vec(void *out_vec) {
     int frb_c = __atomic_load_n(&g_frb_start_cols, __ATOMIC_ACQUIRE);
     int frb_r = __atomic_load_n(&g_frb_start_rows, __ATOMIC_ACQUIRE);
     int frb_d = __atomic_load_n(&g_frb_start_dir, __ATOMIC_ACQUIRE);
-    int cols = g_runtime_columns ? g_runtime_columns : (frb_c > 0 ? frb_c : g_load_columns);
-    int rows = g_runtime_rows ? g_runtime_rows : (frb_r > 0 ? frb_r : g_load_rows);
-    int direction = g_grid_cols == g_grid_rows
-        ? (g_runtime_columns ? g_runtime_direction : (frb_c > 0 ? frb_d : g_load_direction))
-        : (cols == g_grid_cols && rows == g_grid_rows ? 0 : 1);
-    if (direction < 0 || direction > 1) return;
-    if (direction && (cols != g_grid_rows || rows != g_grid_cols)) return;
-    if (!cols || !rows) { cols = direction ? g_grid_rows : g_grid_cols; rows = direction ? g_grid_cols : g_grid_rows; }
+    (void)frb_d;
+    int physical = ld_orientation_guard_refresh_now();
+    if (physical < 0) return;
+    int direction = 1 - physical;
+    int cols = direction ? g_grid_rows : g_grid_cols;
+    int rows = direction ? g_grid_cols : g_grid_rows;
+    /* A decoded update batch must belong to the active grid. Do not attribute
+     * an old-orientation batch to a fresh slot merely because it fits. */
+    if (frb_c > 0 && frb_r > 0 && (frb_c != cols || frb_r != rows)) return;
 
     uint8_t *base = (uint8_t *)(uintptr_t)data_addr;
     int has_100 = 0, has_104 = 0, known = 0;
