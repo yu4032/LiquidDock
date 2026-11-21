@@ -9,10 +9,14 @@ static inline uintptr_t ld_get_grid_rx_offset(void) {
     return g_grid_rx_offset ? g_grid_rx_offset : 0x2bu;
 }
 
+/* The Dart enum describes this GridConfig, not the active display. Resolve
+ * only when it agrees with the authoritative framework Display rotation.
+ * Inactive configurations enumerated during boot must not affect layout. */
 static inline int ld_grid_direction(struct ld_dart_context *c,uintptr_t grid) {
     uintptr_t variables=ld_heap_pointer(c,grid,0x8f),value=ld_heap_pointer(c,variables,0x23);
     int64_t raw=ld_heap_i64(value,7);
-    return value && (raw==0 || raw==1)?(int)raw:-1;
+    if (!value || (raw != 0 && raw != 1)) return LD_ORIENT_UNKNOWN;
+    return ld_orientation_guard_for_grid((int)raw);
 }
 
 static inline int ld_is_fullscreen_layout(struct ld_dart_context *c, uint32_t layout) {
