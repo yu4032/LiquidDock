@@ -86,6 +86,10 @@ struct ld_hm_base {
 };
 #define LD_HM_MAX_BASES 16
 static struct ld_hm_base g_hm_bases[LD_HM_MAX_BASES] __attribute__((used));
+/* New-direction geometry can precede the vendor's GridConfig commit by ~53ms.
+ * Keep its transient baseline OUT of the durable orientation cache, yet
+ * retain the last output on this thread to make repeated callbacks idempotent. */
+static __thread struct ld_hm_base g_hm_transition_base;
 static unsigned g_hm_base_next __attribute__((used));
 /* pipeline 观察器按 config 指针记方向：同一份 config 只对应一个方向。 */
 struct ld_hm_note { uintptr_t cfg; int dir, cols, rows; };
@@ -339,6 +343,23 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         if (dir_raw == 0 || dir_raw == 1)
             landscape = (dir_raw == 1);
     }
+    int display_landscape = ld_screen_landscape();
+    int transitional_geometry = 0;
+    if (display_landscape >= 0) {
+        /* The display event is physically classified from width/height,
+         * never raw rotation parity. Resolve the row/column divisors in
+         * the same operation so new landscape offsets cannot be divided
+         * by obsolete portrait counts. */
+        struct ld_hm_layout_shape shape = ld_hm_layout_shape_for_display(
+                (int)dir_raw, (int)cfg_cols, (int)cfg_rows,
+                display_landscape, (int)g_grid_cols, (int)g_grid_rows);
+        if (shape.landscape >= 0 && shape.cols > 0 && shape.rows > 0) {
+            landscape = shape.landscape;
+            cols = shape.cols;
+            rows = shape.rows;
+            transitional_geometry = shape.provisional;
+        }
+    }
     if (landscape < 0 && note) {
         landscape = (note->dir == 1);   /* ld_grid_direction: 1=横屏 0=竖屏 */
         if (cols <= 0) { cols = note->cols; rows = note->rows; }
@@ -366,11 +387,9 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     static int last_land = -1, last_cols = -1, last_rows = -1;
     if (landscape != last_land || cols != last_cols || rows != last_rows) {
         last_land = landscape; last_cols = cols; last_rows = rows;
-        /* Compare raw Surface rotation with the selected GridConfig in logs.
-         * Do not use raw rotation parity as portrait/landscape: natural
-         * landscape displays would select the opposite profile. */
-        ld_blog("home margin orient land=%d cols=%d rows=%d raw_dir=%lld surface_rotation=%d cfg=%lldx%lld note=%d cellW=%.2f",
+        ld_blog("home margin orient land=%d cols=%d rows=%d raw_dir=%lld surface_rotation=%d display_land=%d transitional=%d cfg=%lldx%lld note=%d cellW=%.2f",
                 landscape, cols, rows, (long long)dir_raw, ld_screen_rotation(),
+                display_landscape, transitional_geometry,
                 (long long)cfg_cols, (long long)cfg_rows, note ? 1 : 0, cell_w_now);
     }
 
@@ -417,8 +436,10 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
      * matches one of our recorded outputs. Never infer a baseline from another
      * controller's unmodified geometry. */
     for (int pass = 0; pass < 2 && !base; pass++) {
-        for (unsigned i = 0; i < LD_HM_MAX_BASES; i++) {
-            struct ld_hm_base *b = &g_hm_bases[i];
+        unsigned max_bases = transitional_geometry ? 1u : LD_HM_MAX_BASES;
+        for (unsigned i = 0; i < max_bases; i++) {
+            struct ld_hm_base *b = transitional_geometry
+                    ? &g_hm_transition_base : &g_hm_bases[i];
             int same_identity = b->identity == identity && b->identity_kind == identity_kind;
             if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows ||
                 (pass == 0 ? !same_identity : same_identity)) continue;
@@ -455,7 +476,9 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                                  "active home grid resolved to an empty or non-grid config");
             return (void *)cfg;
         }
-        base = &g_hm_bases[g_hm_base_next++ % LD_HM_MAX_BASES];
+        base = transitional_geometry
+                ? &g_hm_transition_base
+                : &g_hm_bases[g_hm_base_next++ % LD_HM_MAX_BASES];
         base->cw = cw_now;
         base->ch = ch_now;
         base->ox = 0;
@@ -474,8 +497,9 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         base->identity_kind = identity_kind;
         __builtin_memset(base->output, 0, sizeof base->output);
         base->valid = 1;
-        ld_blog("home margin base identity=%p key=%d scope=%d dir=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
-                (void *)identity, identity_kind, scope, landscape, base->cw, base->ox,
+        ld_blog("home margin base identity=%p key=%d scope=%d dir=%d transient=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
+                (void *)identity, identity_kind, scope, landscape, transitional_geometry,
+                base->cw, base->ox,
                 base->ch, base->oy, base->ind, cols, dh);
     } else if (matched_scope >= 0 && matched_scope != scope) {
         static int last_source_scope = -1, last_target_scope = -1, last_reuse_dir = -1;
