@@ -29,16 +29,41 @@ static unsigned ld_layout_object_cid(uintptr_t object)
     return (unsigned)((header >> 12) & 0xfffffu);
 }
 
-/* The Launcher pages store items in reading order; the vendor resolves a slot
- * by walking that array. Only a sequence that is already ordered by (y,x)
- * inside each screen may be renumbered without changing the occupied set. */
-static int ld_layout_screen_order_ok(const struct ld_layout_item *a, size_t n)
+/* Keep each page's visible reading order, even when its Dart list is unordered.
+ * Each item's original array index is retained for the verified heap write. */
+static int ld_layout_reflow_allapps(const struct ld_layout_item *source, size_t count,
+                                    int cols, int rows, struct ld_layout_item *target)
 {
-    for (size_t i = 0; i < n; i++) {
-        for (size_t j = 0; j < i; j++) {
-            if (a[j].screen != a[i].screen) continue;
-            if (a[j].y > a[i].y || (a[j].y == a[i].y && a[j].x > a[i].x)) return 0;
+    if (cols < 2 || cols > LD_LAYOUT_MAX_DIM || rows < 2 || rows > LD_LAYOUT_MAX_DIM)
+        return 0;
+    unsigned char placed[LD_LAYOUT_MAX_ITEMS] = {0};
+    int next_slot = 0;
+    int64_t screen = -1;
+    for (size_t n = 0; n < count; n++) {
+        size_t i = count;
+        for (size_t j = 0; j < count; j++) {
+            if (placed[j]) continue;
+            if (i == count || source[j].screen < source[i].screen ||
+                (source[j].screen == source[i].screen &&
+                 (source[j].y < source[i].y ||
+                  (source[j].y == source[i].y && source[j].x < source[i].x)))) {
+                i = j;
+            }
         }
+        if (screen != source[i].screen) {
+            screen = source[i].screen;
+            next_slot = 0;
+        }
+        target[i] = source[i];
+        for (; next_slot < cols * rows; next_slot++) {
+            target[i].x = next_slot % cols;
+            target[i].y = next_slot / cols;
+            if (ld_layout_bounds(&target[i], cols, rows) &&
+                ld_layout_free(&target[i], target, placed, count)) break;
+        }
+        if (next_slot == cols * rows) return 0;
+        placed[i] = 1;
+        next_slot++;
     }
     return 1;
 }
@@ -173,97 +198,48 @@ __attribute__((used)) static void ld_observe_process(struct ld_dart_context *c)
     int is_ws_allapps=(list_cont==-104);
     if(!count) goto done;
     if(is_ws_allapps) {
-        /* The frame config still carries the grid the pages were built for and
-         * the arguments carry the live grid, so only a page that does not fit
-         * the live grid may be rewritten. Everything about the rewrite is then
-         * proven before the native continuation is switched. */
-        int fits_target = ld_layout_valid(source,count,cols,rows);
-        int order_ok = ld_layout_screen_order_ok(source,count);
-        int applied = 0;
-        int icons_only = 1;
-        for (size_t i = 0; i < count; i++) {
-            if (source[i].sx != 1 || source[i].sy != 1) icons_only = 0;
+        int source_grid_changed = cols != oldcols || rows != oldrows;
+        int valid_source = source_grid_changed && ld_layout_valid(source,count,oldcols,oldrows);
+        int live_positions = source_grid_changed && !valid_source &&
+                             ld_layout_valid(source,count,cols,rows);
+        if (live_positions) {
+            /* After a restart the database can already contain live-grid
+             * positions even though the controller still reports the old grid. */
+            memcpy(target,source,count*sizeof *target);
         }
-        /* A page that already fits the live grid is normally left alone, but a
-         * dense icon page (slots 0..n-1 of the old grid, no vacancies) built
-         * for fewer columns would stay bunched in the left columns when the
-         * grid widens. Re-flow only such pages; sparse pages keep their holes. */
-        int dense_in_old = icons_only && oldcols > 0 && oldrows > 0 &&
-                           (oldcols != cols || oldrows != rows) &&
-                           ld_layout_valid(source,count,oldcols,oldrows);
-        for (size_t i = 0; dense_in_old && i < count; i++) {
-            int screen_n = 0;
-            for (size_t j = 0; j < count; j++)
-                if (source[j].screen == source[i].screen) screen_n++;
-            if (source[i].y * oldcols + source[i].x >= screen_n) dense_in_old = 0;
-        }
-        /* Dense pages are renumbered by (y,x) rank, which does not depend on the
-         * Dart array order, so order_ok is not required for them. */
-        int widen_reflow = dense_in_old;
-        if (widen_reflow || (!fits_target && ld_layout_valid(source,count,rows,cols))) {
-            /* Cells must share one class (a rebuilding page can expose a matrix or
-             * list instead). Item models are legitimately sibling subclasses
-             * (observed cids 0x88e/0x89a on one page) that share the x/y layout
-             * of the base model, so they only need to be real heap objects; the
-             * verified write below rolls back on any readback mismatch. */
+        if (live_positions || (valid_source &&
+            ld_layout_reflow_allapps(source,count,cols,rows,target) &&
+            ld_layout_valid(target,count,cols,rows))) {
+            /* Rebuilding screens can briefly expose non-cell objects. Model
+             * subclasses may differ, but their position fields are shared. */
             unsigned cell_cid = ld_layout_object_cid(cells[0]);
-            int targets_are_cells = cell_cid != 0 && ld_layout_object_cid(models[0]) != 0;
-            for (size_t i = 1; targets_are_cells && i < count; i++) {
-                if (ld_layout_object_cid(cells[i]) != cell_cid ||
-                    ld_layout_object_cid(models[i]) == 0) {
-                    targets_are_cells = 0;
-                    if (g_diag_logging)
-                        ld_blog("allapps cid mismatch at %zu/%zu: cell %x vs %x model %x sx=%d sy=%d id=%lld",
-                            i, count, ld_layout_object_cid(cells[i]), cell_cid,
-                            ld_layout_object_cid(models[i]),
-                            source[i].sx, source[i].sy, (long long)source[i].id);
-                }
+            int targets_are_cells = cell_cid != 0;
+            for (size_t i = 0; targets_are_cells && i < count; i++) {
+                targets_are_cells = ld_layout_object_cid(cells[i]) == cell_cid &&
+                    ld_layout_object_cid(models[i]) != 0;
             }
-            if (!targets_are_cells) {
-                ld_blog("allapps transform skipped: non-cell object in %zu items", count);
-            } else {
-                for (size_t i = 0; i < count; i++) {
-                    target[i] = source[i];
-                    if (icons_only && (order_ok || dense_in_old)) {
-                        int index = 0;
-                        for (size_t j = 0; j < count; j++) {
-                            /* Reading order must not depend on the grid stride:
-                             * the source page may still be the other orientation. */
-                            if (source[j].screen == source[i].screen &&
-                                (source[j].y < source[i].y ||
-                                 (source[j].y == source[i].y && source[j].x < source[i].x))) index++;
-                        }
-                        target[i].x = index % cols;
-                        target[i].y = index / cols;
-                    } else {
-                        target[i].x = source[i].y;
-                        target[i].y = source[i].x;
-                    }
-                }
-                int changed = 0;
-                for (size_t i = 0; i < count; i++)
-                    if (target[i].x != source[i].x || target[i].y != source[i].y) changed = 1;
-                if (changed && ld_layout_valid(target,count,cols,rows)) {
-                    ld_layout_write_items(cells,models,target,count);
-                    if (ld_layout_write_verified(cells,models,target,count)) {
-                        applied = 1;
-                        ld_blog("allapps %s %zu items to %dx%d (verified)",
-                                (icons_only && (order_ok || dense_in_old)) ? "reflowed" : "transposed", count, cols, rows);
-                    } else {
-                        ld_layout_write_items(cells,models,source,count);
-                        ld_blog("allapps transform rolled back: readback mismatch");
-                    }
+            int changed = 0;
+            for (size_t i = 0; i < count; i++)
+                changed |= target[i].x != source[i].x || target[i].y != source[i].y;
+            if (targets_are_cells && (changed || live_positions)) {
+                /* With already-live cells, confirm both coordinate owners
+                 * agree before bypassing the stock old-grid transform. */
+                if (changed) ld_layout_write_items(cells,models,target,count);
+                if (ld_layout_write_verified(cells,models,target,count)) {
+                    g_restore_ready = 1;
+                    ld_blog("allapps %s %zu items from %dx%d to %dx%d (verified)",
+                            live_positions ? "retained" : "reflowed",count,oldcols,oldrows,cols,rows);
+                } else if (changed) {
+                    ld_layout_write_items(cells,models,source,count);
+                    ld_blog("allapps transform rolled back: readback mismatch");
+                } else {
+                    ld_blog("allapps live cell/model coordinates disagree at startup");
                 }
             }
         }
-        /* The continuation resumes the Launcher past its own placement pass, so
-         * it is only safe to arm it for a page this hook rewrote and verified.
-         * Untouched pages stay on the stock path and let the Launcher resolve
-         * their occupied slots itself. */
-        g_restore_ready = applied ? 1 : 0;
         if (!g_restore_ready)
-            ld_blog("allapps mid path kept: %zu items live %dx%d config %dx%d fits=%d order=%d applied=%d",
-                    count, cols, rows, oldcols, oldrows, fits_target, order_ok, applied);
+            ld_blog("allapps mid path kept: %zu items live %dx%d config %dx%d source_valid=%d live_positions=%d",
+                    count,cols,rows,oldcols,oldrows,valid_source,live_positions);
         goto done;
     }
     int direction=square?g_rotation_direction:(cols==g_grid_cols && rows==g_grid_rows?0:1);

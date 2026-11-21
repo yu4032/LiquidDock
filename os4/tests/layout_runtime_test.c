@@ -45,6 +45,12 @@ static void verify_page_fields(void)
 
 int main(void) {
  verify_page_fields();
+ const struct ld_layout_item mixed[]={{1,3,3,2,1,1},{2,3,1,1,2,2},{3,4,0,3,1,1}};
+ struct ld_layout_item compact[3];
+ assert(ld_layout_reflow_allapps(mixed,3,4,4,compact));
+ assert(ld_layout_valid(compact,3,4,4));
+ assert(compact[1].x==0 && compact[1].y==0 && compact[1].sx==2 && compact[1].sy==2);
+ assert(compact[0].x==2 && compact[0].y==0 && compact[2].x==0 && compact[2].y==0);
  g_page_fields = (struct ld_page_fields){.layout=0x1b,.items=0xdb,.model=7,.container=0x47,.rx_value=0xf};
  uintptr_t obj[18]; for(int i=0;i<18;i++) obj[i]=object(i);
  integer(obj[0],7,4); integer(obj[0],15,8);
@@ -159,9 +165,8 @@ int main(void) {
   assert(ld_heap_i64(obj[15+i],0x2f)==(i<2?2:3));
  }
 
- /* Sparse AllApps pages: vacant slots must not cause positional compaction,
-  * and cell order, model identity and screen assignment must survive the
-  * rewrite. Both grids come from fixture data instead of a literal 8x4. */
+ /* A sparse Dart list in arbitrary storage order must pack according to
+  * the visible reading order while preserving identity and page membership. */
  const int shapes[][3]={{8,4,9},{6,5,7}};   /* cols, rows, coprime stride */
  for(size_t s=0;s<sizeof shapes/sizeof shapes[0];s++) {
   const int sc=shapes[s][0], sr=shapes[s][1], stride=shapes[s][2], n=25;
@@ -183,22 +188,18 @@ int main(void) {
   ld_observe_process(&c); assert(g_restore_ready);
   for(int i=0;i<n;i++) {
    uintptr_t model=object(18+2*i),cell=object(19+2*i);
-   int slot=(i*stride)%(sc*sr), x=slot/sc, y=slot%sc;
+   int slot=(i*stride)%(sc*sr), rank=0;
+   for(int j=0;j<n;j++) if((j*stride)%(sc*sr)<slot) rank++;
+   int x=rank%dc, y=rank/dc;
    assert(x<dc && y<dr);
    assert(ld_heap_pointer(&c,obj[10],0xf+i*4)==cell);
    assert(ld_heap_i64(cell,0xb)==x && ld_heap_i64(cell,0x13)==y);
    assert(ld_heap_i64(model,0x37)==x && ld_heap_i64(model,0x3f)==y);
    assert(ld_heap_i64(model,7)==900+i && ld_heap_i64(model,0x2f)==4);
   }
-  /* The transposed page now fits the live grid, so the Launcher keeps its own
-   * placement pass and nothing is rewritten a second time. */
+  /* Once the controller has adopted the target grid, its placement is left alone. */
+  integer(obj[0],7,dc); integer(obj[0],15,dr);
   ld_observe_process(&c); assert(!g_restore_ready);
-  for(int i=0;i<n;i++) {
-   uintptr_t model=object(18+2*i),cell=object(19+2*i);
-   int slot=(i*stride)%(sc*sr);
-   assert(ld_heap_i64(cell,0xb)==slot/sc && ld_heap_i64(cell,0x13)==slot%sc);
-   assert(ld_heap_i64(model,0x37)==slot/sc && ld_heap_i64(model,0x3f)==slot%sc);
-  }
  }
 
  /* Dense page built for 4 columns, widened to 8x4: it already fits, but must
@@ -224,6 +225,11 @@ int main(void) {
   }
  }
 
+ /* Startup can carry positions already valid in the target grid alone. */
+ ld_observe_process(&c); assert(g_restore_ready);
+ assert(ld_heap_i64(object(19+2*7),0xb)==7);
+ integer(object(18+2*7),0x37,0);
+ ld_observe_process(&c); assert(!g_restore_ready);
  unlink(LD_LAYOUT_FILE); unlink(LD_WS_LAYOUT_FILE); unlink(LD_WS_DESK_LAYOUT_FILE);
  (void)g_orig_orientation; (void)g_layout_mid_ready;
  puts("PASS all pages and model coordinates mapped in one batch before vendor continuation");
