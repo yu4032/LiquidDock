@@ -50,6 +50,8 @@ jobs:
             echo "Forbidden Security Center obfuscated-name dependency detected" >&2
             exit 1
           fi
+      - name: Native ELF rotation-symbol parser test
+        run: cc -std=c11 -Wall -Wextra -Werror os4/tests/elf_named_symbol_test.c -o /tmp/os4-elf-named-symbol-test && /tmp/os4-elf-named-symbol-test
       - name: Unit + debug assembly
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - name: Package installable OS4 debug APK
