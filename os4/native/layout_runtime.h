@@ -99,9 +99,11 @@ __attribute__((used)) static void ld_observe_orientation(struct ld_dart_context 
     uintptr_t receiver = c->x[1];
     /* Authoritative synchronous check: the Dart entry runs before its own
      * orientation transaction and may still expose yesterday's geometry. */
-    if (ld_orientation_guard_refresh_now() < 0) return;
-    int raw_dir=ld_grid_direction(c,c->x[2]);
+    int raw_dir = ld_orientation_guard_refresh_now();
     if (raw_dir < 0) return;
+    /* On entry to the vendor orientation transaction the Dart GridConfig
+     * can still describe the previous orientation. The framework already
+     * published the new physical rotation; do not veto it with stale Dart. */
     /* layout_memory slots: 0=landscape(g_grid_cols x g_grid_rows), 1=portrait; ld_grid_direction is 1=landscape, 0=portrait. */
     int direction=(raw_dir==0 || raw_dir==1)?(1-raw_dir):-1;
     int livecols=(int)ld_heap_i64(c->x[2],0x1b),liverows=(int)ld_heap_i64(c->x[2],0x23);
