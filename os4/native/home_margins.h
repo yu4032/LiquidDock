@@ -323,7 +323,10 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     __builtin_memcpy(&cfg_rows, (const void *)(cfg + 0x23), sizeof cfg_rows);
     if (vo) __builtin_memcpy(&dir_raw, (const void *)(vo + 7), sizeof dir_raw);
 
-    int landscape = -1, cols = 0, rows = 0;
+    /* The Config's enum is an ownership check only. Do not recover direction
+     * from previously observed configs, global notes or transposed grid sizes. */
+    int landscape = ld_orientation_guard_for_grid((int)dir_raw);
+    int cols = 0, rows = 0;
     int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
     int is_allapps = is_laptop && g_home_options.ws.dock_custom &&
         ld_ws_allapps_geometry();
@@ -335,22 +338,6 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     if (cfg_cols >= 2 && cfg_cols <= 16 && cfg_rows >= 2 && cfg_rows <= 16) {
         cols = (int)cfg_cols;
         rows = (int)cfg_rows;
-        if (dir_raw == 0 || dir_raw == 1)
-            landscape = (dir_raw == 1);
-    }
-    if (landscape < 0 && note) {
-        landscape = (note->dir == 1);   /* ld_grid_direction: 1=横屏 0=竖屏 */
-        if (cols <= 0) { cols = note->cols; rows = note->rows; }
-    } else if (landscape < 0 && (g_hm_cur_dir == 0 || g_hm_cur_dir == 1)) {
-        landscape = (g_hm_cur_dir == 1);
-        if (cols <= 0) { cols = g_hm_cur_cols; rows = g_hm_cur_rows; }
-    }
-    if (landscape < 0 && (dir_raw == 0 || dir_raw == 1)) {
-        landscape = (dir_raw == 1);
-        if (cols <= 0) {
-            cols = landscape ? g_grid_cols : g_grid_rows;
-            rows = landscape ? g_grid_rows : g_grid_cols;
-        }
     }
     if (landscape < 0 || cols <= 0 || rows <= 0) {
         if (ld_hm_has_any_offsets() && n >= 8u)
