@@ -2,6 +2,7 @@
 #define LD_ROTATION_PROVIDER_H
 
 #include "screen_rotation.h"
+#include "screen_rotation_jni.h"
 #include "rust_symbol_resolver.h"
 #include "dart_observer.h"
 
@@ -9,10 +10,14 @@
  * RotationHelper.updateRotation receives an untagged Surface quarter turn
  * from the vendor's own Rust display callback or startup probe.
  *
- * Observe at ENTRY and immediately tail-call the original. This reuses the
- * existing, tested Dart observer and does not retain a post-call frame or LR
- * across arbitrary vendor Dart execution. A post observer with a fixed TLS
- * depth / temporary frame below Dart SP is unsafe under re-entrancy.
+ * Observe at ENTRY and immediately tail-call the original. Both entry and
+ * post observers briefly use a C stack below Dart x15; the entry observer
+ * has less state and does not retain LR or a shadow frame across a vendor
+ * call. No claim is made that entry observation eliminates temporary frames.
+ *
+ * On each delivered rotation, pair Display.getSize() with getRotation()
+ * on demand. If the framework has not published that same rotation,
+ * the event's physical orientation is UNKNOWN until a subsequent event.
  *
  * This is a LAUNCHER event signal, not a framework DisplayInfo poll. A
  * symbol's name alone is never enough to hook: executable mapping and the
@@ -66,7 +71,8 @@ __attribute__((used)) static void ld_rotation_update_cb(struct ld_dart_context *
                     (unsigned long long)value);
         return;
     }
-    ld_rotation_publish((int)value);
+    struct ld_screen_dimensions size = ld_screen_query_framework_dimensions((int)value);
+    ld_rotation_publish((int)value, size);
 }
 LD_DART_OBSERVER(repl_rotation_update, ld_rotation_update_cb, g_orig_rotation_update)
 
