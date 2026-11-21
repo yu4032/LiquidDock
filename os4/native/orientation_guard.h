@@ -13,8 +13,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <unistd.h>
-
-#define LD_ORIENT_UNKNOWN (-1)
+#include "orientation_guard_policy.h"
 #define LD_ORIENT_MAX_AGE_NS UINT64_C(250000000)
 
 /* Packed atomic: low byte = normalized rotation + 1, upper bits = generation. */
@@ -26,12 +25,6 @@ static JavaVM *g_ld_orient_vm;
 static jobject g_ld_orient_display;
 static jmethodID g_ld_orient_get_rotation;
 static jmethodID g_ld_orient_get_install;
-
-static inline int ld_orientation_normalize(int rotation, int install)
-{
-    if ((unsigned)rotation > 3u || (unsigned)install > 3u) return LD_ORIENT_UNKNOWN;
-    return (rotation + install) & 3;
-}
 
 static inline uint64_t ld_orientation_now_ns(void)
 {
@@ -73,7 +66,7 @@ static inline int ld_orientation_guard_rotation(void)
 static inline int ld_orientation_guard_direction(void)
 {
     int rotation = ld_orientation_guard_rotation();
-    return rotation < 0 ? LD_ORIENT_UNKNOWN : (rotation & 1);
+    return ld_orientation_from_rotation(rotation);
 }
 
 /* A non-active Dart grid must not be treated as the display's active direction. */
@@ -140,6 +133,7 @@ static int ld_orientation_init_java(JNIEnv *env, JavaVM *vm)
     atomic_store_explicit(&g_ld_orient_java_ready, 1, memory_order_release);
     ok = 1;
 done:
+    (void)ld_orientation_jni_clear(env);
     (void)(*env)->PopLocalFrame(env, NULL);
     return ok;
 }
@@ -175,7 +169,7 @@ static int ld_orientation_guard_refresh_now(void)
     }
     int rotation = ld_orientation_sample(env);
     if (attached) (*vm)->DetachCurrentThread(vm);
-    return rotation < 0 ? LD_ORIENT_UNKNOWN : (rotation & 1);
+    return ld_orientation_from_rotation(rotation);
 }
 
 static void *ld_orientation_reader(void *unused)
