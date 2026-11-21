@@ -18,6 +18,7 @@
 #include "bootlog.h"
 #include "executable_range.h"
 #include "xz_mini.h"
+#include "elf_named_symbol.h"
 
 typedef struct {
     uintptr_t vaddr;
@@ -206,6 +207,33 @@ static bool ld_rust_decompress_debugdata(const ld_lib_info *lib,
     bool decomp_ok = xz_mini_decompress(xz_buf, (size_t)dbg_size, out_elf, out_len);
     free(xz_buf);
     return decomp_ok;
+}
+
+/* Name-only lookup from libapp.so's compressed mini-ELF; the resolved
+ * address MUST be checked against mapped executable code before hooking. */
+static bool ld_resolve_launcher_symbol(const ld_lib_info *lib,
+                                       const char *apk_substr,
+                                       const char *name, ld_rust_sym_result_t *out)
+{
+    if (!lib || !apk_substr || !name || !out) return false;
+    memset(out, 0, sizeof *out);
+    uint8_t *elf = NULL;
+    size_t elf_len = 0;
+    if (!ld_rust_decompress_debugdata(lib, apk_substr, &elf, &elf_len))
+        return false;
+    uintptr_t vaddr = 0;
+    size_t size = 0;
+    bool found = ld_elf64_find_named_sym_in_mem(elf, elf_len,
+                                                name, &vaddr, &size);
+    free(elf);
+    if (!found) return false;
+    uintptr_t runtime = 0;
+    if (!ld_vaddr_to_runtime(lib, vaddr, &runtime)) return false;
+    out->vaddr = vaddr;
+    out->size = size;
+    out->runtime = runtime;
+    out->from_debugdata = true;
+    return runtime != 0;
 }
 
 static bool ld_resolve_rust_symbol(const ld_lib_info *lib,

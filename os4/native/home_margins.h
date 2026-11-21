@@ -28,6 +28,8 @@
 #include "native_api.h"
 #include "lib_base.h"
 #include "aot_scanner.h"
+#include "hm_transition.h"
+#include "screen_rotation.h"
 
 #define LD_HM_CC_VADDR 0xb47388u   /* GridController.currentConfig */
 #define LD_HM_VERTICAL 1           /* 竖直：cellH 收缩 + GridController+0xeb 的 originY */
@@ -85,6 +87,40 @@ struct ld_hm_base {
 };
 #define LD_HM_MAX_BASES 16
 static struct ld_hm_base g_hm_bases[LD_HM_MAX_BASES] __attribute__((used));
+/* New-direction geometry can precede the vendor's GridConfig commit by ~53ms.
+ * Keep its transient baseline OUT of the durable orientation cache, yet
+ * retain the last output on this thread to make repeated callbacks idempotent.
+ * One slot per controller: a A->B->A sequence across a page switch must not
+ * evict A's in-flight baseline and re-derive it from already-shifted cells. */
+#define LD_HM_MAX_TRANS 8
+/* Frames after which an idle provisional slot may be recycled. */
+#define LD_HM_TRANS_MAX_AGE 1024u
+static __thread struct ld_hm_base g_hm_trans[LD_HM_MAX_TRANS];
+static __thread unsigned g_hm_trans_seen[LD_HM_MAX_TRANS];
+static __thread unsigned g_hm_trans_clock __attribute__((used));
+
+static struct ld_hm_base *ld_hm_trans_slot(uintptr_t identity, int identity_kind,
+                                           int dir, int cols, int rows)
+{
+    struct ld_hm_trans_key keys[LD_HM_MAX_TRANS];
+    unsigned char valid[LD_HM_MAX_TRANS];
+    for (unsigned i = 0; i < LD_HM_MAX_TRANS; i++) {
+        keys[i] = (struct ld_hm_trans_key){g_hm_trans[i].identity,
+                                           g_hm_trans[i].identity_kind,
+                                           g_hm_trans[i].bi,
+                                           g_hm_trans[i].cols,
+                                           g_hm_trans[i].rows};
+        valid[i] = g_hm_trans[i].valid != 0;
+    }
+    unsigned now = ++g_hm_trans_clock;
+    int idx = ld_hm_trans_pick(keys, valid, g_hm_trans_seen, LD_HM_MAX_TRANS,
+                               (struct ld_hm_trans_key){identity, identity_kind,
+                                                         dir, cols, rows},
+                               now, LD_HM_TRANS_MAX_AGE);
+    if (idx < 0) return NULL;
+    g_hm_trans_seen[idx] = now;
+    return &g_hm_trans[idx];
+}
 static unsigned g_hm_base_next __attribute__((used));
 /* pipeline 观察器按 config 指针记方向：同一份 config 只对应一个方向。 */
 struct ld_hm_note { uintptr_t cfg; int dir, cols, rows; };
@@ -338,6 +374,32 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         if (dir_raw == 0 || dir_raw == 1)
             landscape = (dir_raw == 1);
     }
+    int display_landscape = ld_screen_landscape();
+    int transitional_geometry = 0;
+    if (display_landscape >= 0) {
+        /* The display event is physically classified from width/height,
+         * never raw rotation parity. Resolve the row/column divisors in
+         * the same operation so new landscape offsets cannot be divided
+         * by obsolete portrait counts. */
+        /* AllApps has its own full, non-sparse grid. Do not replace its
+         * counts with the workspace's configured rows/columns. */
+        int nominal_cols = is_allapps ? 0 : (int)g_grid_cols;
+        int nominal_rows = is_allapps ? 0 : (int)g_grid_rows;
+        /* Validate wide Dart fields BEFORE narrowing to int; otherwise
+         * values such as 0x100000008 would alias a legitimate count of 8. */
+        int valid_dir = (dir_raw == 0 || dir_raw == 1) ? (int)dir_raw : -1;
+        int valid_cols = (cfg_cols >= 2 && cfg_cols <= 16) ? (int)cfg_cols : 0;
+        int valid_rows = (cfg_rows >= 2 && cfg_rows <= 16) ? (int)cfg_rows : 0;
+        struct ld_hm_layout_shape shape = ld_hm_layout_shape_for_display(
+                valid_dir, valid_cols, valid_rows,
+                display_landscape, nominal_cols, nominal_rows);
+        if (shape.landscape >= 0 && shape.cols > 0 && shape.rows > 0) {
+            landscape = shape.landscape;
+            cols = shape.cols;
+            rows = shape.rows;
+            transitional_geometry = shape.provisional;
+        }
+    }
     if (landscape < 0 && note) {
         landscape = (note->dir == 1);   /* ld_grid_direction: 1=横屏 0=竖屏 */
         if (cols <= 0) { cols = note->cols; rows = note->rows; }
@@ -365,8 +427,9 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     static int last_land = -1, last_cols = -1, last_rows = -1;
     if (landscape != last_land || cols != last_cols || rows != last_rows) {
         last_land = landscape; last_cols = cols; last_rows = rows;
-        ld_blog("home margin orient land=%d cols=%d rows=%d raw_dir=%lld cfg=%lldx%lld note=%d cellW=%.2f",
-                landscape, cols, rows, (long long)dir_raw,
+        ld_blog("home margin orient land=%d cols=%d rows=%d raw_dir=%lld surface_rotation=%d display_land=%d transitional=%d cfg=%lldx%lld note=%d cellW=%.2f",
+                landscape, cols, rows, (long long)dir_raw, ld_screen_rotation(),
+                display_landscape, transitional_geometry,
                 (long long)cfg_cols, (long long)cfg_rows, note ? 1 : 0, cell_w_now);
     }
 
@@ -413,9 +476,21 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
      * matches one of our recorded outputs. Never infer a baseline from another
      * controller's unmodified geometry. */
     for (int pass = 0; pass < 2 && !base; pass++) {
-        for (unsigned i = 0; i < LD_HM_MAX_BASES; i++) {
-            struct ld_hm_base *b = &g_hm_bases[i];
+        /* A just-committed GridConfig can still carry the exact output
+         * we wrote during the preceding transition. Check those provisional
+         * slots LAST, after durable baselines, so we don't capture our own
+         * offset as a new durable native baseline and apply it twice. They
+         * are scanned in both modes: the commit may arrive after the window. */
+        unsigned slots = LD_HM_MAX_BASES + LD_HM_MAX_TRANS;
+        for (unsigned i = 0; i < slots; i++) {
+            int from_provisional = i >= LD_HM_MAX_BASES;
+            struct ld_hm_base *b = from_provisional
+                    ? &g_hm_trans[i - LD_HM_MAX_BASES] : &g_hm_bases[i];
             int same_identity = b->identity == identity && b->identity_kind == identity_kind;
+            int provisional = from_provisional || transitional_geometry;
+            /* The provisional baseline may only follow its own controller
+             * through a transition, never migrate to a different page. */
+            if (provisional && !same_identity) continue;
             if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows ||
                 (pass == 0 ? !same_identity : same_identity)) continue;
             int native_geometry = __builtin_fabs(cw_now - b->cw) < 0.5 &&
@@ -435,7 +510,8 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                     break;
                 }
             }
-            if ((pass == 0 && native_geometry) || written_scope >= 0) {
+            if ((pass == 0 && native_geometry && !provisional) ||
+                written_scope >= 0) {
                 base = b;
                 matched_scope = native_geometry ? -1 : written_scope;
                 break;
@@ -451,7 +527,24 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                                  "active home grid resolved to an empty or non-grid config");
             return (void *)cfg;
         }
-        base = &g_hm_bases[g_hm_base_next++ % LD_HM_MAX_BASES];
+        if (transitional_geometry) {
+            base = ld_hm_trans_slot(identity, identity_kind, bi, cols, rows);
+            if (!base) {
+                /* Every provisional slot still belongs to a recent controller.
+                 * Registering this config now would record geometry we already
+                 * shifted as native and apply the offset twice; skip the frame
+                 * and let the vendor commit settle first. */
+                static int logged_full;
+                if (!logged_full) {
+                    logged_full = 1;
+                    ld_blog("home margin transition slots full identity=%p; frame left untouched",
+                            (void *)identity);
+                }
+                return (void *)cfg;
+            }
+        } else {
+            base = &g_hm_bases[g_hm_base_next++ % LD_HM_MAX_BASES];
+        }
         base->cw = cw_now;
         base->ch = ch_now;
         base->ox = 0;
@@ -470,8 +563,9 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         base->identity_kind = identity_kind;
         __builtin_memset(base->output, 0, sizeof base->output);
         base->valid = 1;
-        ld_blog("home margin base identity=%p key=%d scope=%d dir=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
-                (void *)identity, identity_kind, scope, landscape, base->cw, base->ox,
+        ld_blog("home margin base identity=%p key=%d scope=%d dir=%d transient=%d cellW0=%.2f originX0=%.2f cellH0=%.2f originY0=%.2f ind0=%.2f cols=%d dh=%.2f",
+                (void *)identity, identity_kind, scope, landscape, transitional_geometry,
+                base->cw, base->ox,
                 base->ch, base->oy, base->ind, cols, dh);
     } else if (matched_scope >= 0 && matched_scope != scope) {
         static int last_source_scope = -1, last_target_scope = -1, last_reuse_dir = -1;
