@@ -48,6 +48,20 @@ static void ld_orientation_publish(int normalized)
     atomic_store_explicit(&g_ld_orient_sample_ns, ld_orientation_now_ns(), memory_order_release);
 }
 
+static void ld_orientation_revoke(void)
+{
+    /* Revoke the low-byte validity marker as well as the cached timestamp.
+     * The naked count wrapper can then safely preserve vendor counts. */
+    uint64_t prev = atomic_load_explicit(&g_ld_orient_word, memory_order_relaxed);
+    uint64_t next;
+    do {
+        if ((prev & 0xffu) == 0) break;
+        next = ((prev >> 8) + 1) << 8;
+    } while (!atomic_compare_exchange_weak_explicit(&g_ld_orient_word, &prev, next,
+                memory_order_release, memory_order_relaxed));
+    atomic_store_explicit(&g_ld_orient_sample_ns, 0, memory_order_release);
+}
+
 static inline uint64_t ld_orientation_generation(void)
 {
     return atomic_load_explicit(&g_ld_orient_word, memory_order_acquire) >> 8;
@@ -151,8 +165,9 @@ static int ld_orientation_sample(JNIEnv *env)
     jint install = (*env)->CallIntMethod(env, g_ld_orient_display, g_ld_orient_get_install);
     if (ld_orientation_jni_clear(env)) goto done;
     normalized = ld_orientation_normalize(rotation, install);
-    if (normalized >= 0) ld_orientation_publish(normalized);
 done:
+    if (normalized >= 0) ld_orientation_publish(normalized);
+    else ld_orientation_revoke();
     pthread_mutex_unlock(&g_ld_orient_sample_lock);
     return normalized;
 }
