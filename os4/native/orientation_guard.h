@@ -25,6 +25,7 @@ static JavaVM *g_ld_orient_vm;
 static jobject g_ld_orient_display;
 static jmethodID g_ld_orient_get_rotation;
 static jmethodID g_ld_orient_get_install;
+static pthread_mutex_t g_ld_orient_sample_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static inline uint64_t ld_orientation_now_ns(void)
 {
@@ -141,13 +142,18 @@ done:
 static int ld_orientation_sample(JNIEnv *env)
 {
     if (!atomic_load_explicit(&g_ld_orient_java_ready, memory_order_acquire)) return -1;
+    /* Serialize sampling AND publishing. A worker sample initiated earlier
+     * must never be published after a newer synchronous commit check. */
+    pthread_mutex_lock(&g_ld_orient_sample_lock);
+    int normalized = LD_ORIENT_UNKNOWN;
     jint rotation = (*env)->CallIntMethod(env, g_ld_orient_display, g_ld_orient_get_rotation);
-    if (ld_orientation_jni_clear(env)) return -1;
+    if (ld_orientation_jni_clear(env)) goto done;
     jint install = (*env)->CallIntMethod(env, g_ld_orient_display, g_ld_orient_get_install);
-    if (ld_orientation_jni_clear(env)) return -1;
-    int normalized = ld_orientation_normalize(rotation, install);
-    if (normalized < 0) return -1;
-    ld_orientation_publish(normalized);
+    if (ld_orientation_jni_clear(env)) goto done;
+    normalized = ld_orientation_normalize(rotation, install);
+    if (normalized >= 0) ld_orientation_publish(normalized);
+done:
+    pthread_mutex_unlock(&g_ld_orient_sample_lock);
     return normalized;
 }
 
