@@ -28,6 +28,7 @@
 #include "native_api.h"
 #include "lib_base.h"
 #include "aot_scanner.h"
+#include "screen_rotation.h"
 
 #define LD_HM_CC_VADDR 0xb47388u   /* GridController.currentConfig */
 #define LD_HM_VERTICAL 1           /* 竖直：cellH 收缩 + GridController+0xeb 的 originY */
@@ -324,6 +325,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     if (vo) __builtin_memcpy(&dir_raw, (const void *)(vo + 7), sizeof dir_raw);
 
     int landscape = -1, cols = 0, rows = 0;
+    int display_landscape = ld_screen_landscape();
     int is_laptop = __atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED);
     int is_allapps = is_laptop && g_home_options.ws.dock_custom &&
         ld_ws_allapps_geometry();
@@ -338,6 +340,19 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         if (dir_raw == 0 || dir_raw == 1)
             landscape = (dir_raw == 1);
     }
+    /* currentConfig may be queried for a profile that has not yet adopted
+     * the display-event orientation. Do not apply NEW-rotation offsets to
+     * OLD-rotation geometry, or force an inactive precomputed GridConfig to
+     * become the active one. Defer custom margins until the two agree. */
+    if (display_landscape >= 0 && (dir_raw == 0 || dir_raw == 1) &&
+        display_landscape != (int)dir_raw) {
+        static unsigned stale_skips;
+        if (__atomic_fetch_add(&stale_skips, 1u, __ATOMIC_RELAXED) < 4u)
+            ld_blog("home margin deferred: config dir=%lld display dir=%d",
+                    (long long)dir_raw, display_landscape);
+        return (void *)cfg;
+    }
+    if (display_landscape >= 0) landscape = display_landscape;
     if (landscape < 0 && note) {
         landscape = (note->dir == 1);   /* ld_grid_direction: 1=横屏 0=竖屏 */
         if (cols <= 0) { cols = note->cols; rows = note->rows; }
@@ -365,8 +380,8 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
     static int last_land = -1, last_cols = -1, last_rows = -1;
     if (landscape != last_land || cols != last_cols || rows != last_rows) {
         last_land = landscape; last_cols = cols; last_rows = rows;
-        ld_blog("home margin orient land=%d cols=%d rows=%d raw_dir=%lld cfg=%lldx%lld note=%d cellW=%.2f",
-                landscape, cols, rows, (long long)dir_raw,
+        ld_blog("home margin orient land=%d cols=%d rows=%d raw_dir=%lld display=%d cfg=%lldx%lld note=%d cellW=%.2f",
+                landscape, cols, rows, (long long)dir_raw, display_landscape,
                 (long long)cfg_cols, (long long)cfg_rows, note ? 1 : 0, cell_w_now);
     }
 
