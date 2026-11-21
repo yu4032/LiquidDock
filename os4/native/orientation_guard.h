@@ -19,13 +19,15 @@
 /* Packed atomic: low byte = normalized rotation + 1, upper bits = generation. */
 static atomic_uint_fast64_t g_ld_orient_word = ATOMIC_VAR_INIT(0);
 static atomic_uint_fast64_t g_ld_orient_sample_ns = ATOMIC_VAR_INIT(0);
-static atomic_int g_ld_orient_reader_started = ATOMIC_VAR_INIT(0);
 static atomic_int g_ld_orient_java_ready = ATOMIC_VAR_INIT(0);
 static JavaVM *g_ld_orient_vm;
 static jobject g_ld_orient_display;
 static jmethodID g_ld_orient_get_rotation;
 static jmethodID g_ld_orient_get_install;
 static pthread_mutex_t g_ld_orient_sample_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_ld_orient_init_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int ld_orientation_guard_refresh_now(void);
 
 static inline uint64_t ld_orientation_now_ns(void)
 {
@@ -80,8 +82,7 @@ static inline int ld_orientation_guard_rotation(void)
 
 static inline int ld_orientation_guard_direction(void)
 {
-    int rotation = ld_orientation_guard_rotation();
-    return ld_orientation_from_rotation(rotation);
+    return ld_orientation_guard_refresh_now();
 }
 
 /* A non-active Dart grid must not be treated as the display's active direction. */
@@ -173,12 +174,16 @@ done:
 }
 
 /* Synchronous framework check at the rare layout transaction/commit boundary. */
+/* Read the current framework state only when a consumer needs it.
+ * JNI setup is lazy because the OS4 native module can load before Application.
+ * No polling thread, timer, or rotation hook is required. */
 static int ld_orientation_guard_refresh_now(void)
 {
-    if (!atomic_load_explicit(&g_ld_orient_java_ready, memory_order_acquire))
-        return LD_ORIENT_UNKNOWN;
     JavaVM *vm = g_ld_orient_vm;
+    if (!vm) vm = (JavaVM *)atomic_load_explicit(&g_ld_jvm_ptr, memory_order_acquire);
+    if (!vm) vm = ld_find_vm_from_maps();
     if (!vm) return LD_ORIENT_UNKNOWN;
+
     JNIEnv *env = NULL;
     int attached = 0;
     jint rc = (*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6);
@@ -188,60 +193,18 @@ static int ld_orientation_guard_refresh_now(void)
     } else if (rc != JNI_OK || !env) {
         return LD_ORIENT_UNKNOWN;
     }
-    int rotation = ld_orientation_sample(env);
+
+    if (!atomic_load_explicit(&g_ld_orient_java_ready, memory_order_acquire)) {
+        pthread_mutex_lock(&g_ld_orient_init_lock);
+        if (!atomic_load_explicit(&g_ld_orient_java_ready, memory_order_relaxed)) {
+            (void)ld_orientation_init_java(env, vm);
+        }
+        pthread_mutex_unlock(&g_ld_orient_init_lock);
+    }
+
+    int rotation = atomic_load_explicit(&g_ld_orient_java_ready, memory_order_acquire)
+                 ? ld_orientation_sample(env) : LD_ORIENT_UNKNOWN;
     if (attached) (*vm)->DetachCurrentThread(vm);
     return ld_orientation_from_rotation(rotation);
-}
-
-static void *ld_orientation_reader(void *unused)
-{
-    (void)unused;
-    JavaVM *vm = NULL;
-    for (int attempt = 0; attempt < 200 && !vm; ++attempt) {
-        vm = (JavaVM *)atomic_load(&g_ld_jvm_ptr);
-        if (!vm) vm = ld_find_vm_from_maps();
-        if (!vm) usleep(50000);
-    }
-    if (!vm) {
-        ld_blog("orientation guard: JVM unavailable; modifications fail closed");
-        return NULL;
-    }
-    JNIEnv *env = NULL;
-    if ((*vm)->AttachCurrentThread(vm, &env, NULL) != JNI_OK || !env) return NULL;
-    for (int attempt = 0; attempt < 200 && !atomic_load(&g_ld_orient_java_ready); ++attempt) {
-        if (ld_orientation_init_java(env, vm)) break;
-        usleep(50000);
-    }
-    if (!atomic_load(&g_ld_orient_java_ready)) {
-        ld_blog("orientation guard: Display or install orientation unavailable");
-        (*vm)->DetachCurrentThread(vm);
-        return NULL;
-    }
-    ld_blog("orientation guard: framework Display ready; no orientation hook");
-    int last = LD_ORIENT_UNKNOWN;
-    for (;;) {
-        int rotation = ld_orientation_sample(env);
-        if (rotation >= 0 && rotation != last) {
-            ld_blog("orientation guard: normalized rotation=%d direction=%d generation=%llu",
-                    rotation, rotation & 1, (unsigned long long)ld_orientation_generation());
-            last = rotation;
-        }
-        usleep(16000);
-    }
-    return NULL;
-}
-
-static void ld_orientation_guard_start(void)
-{
-    int expected = 0;
-    if (!atomic_compare_exchange_strong(&g_ld_orient_reader_started, &expected, 1))
-        return;
-    pthread_t thread;
-    if (pthread_create(&thread, NULL, ld_orientation_reader, NULL) == 0)
-        pthread_detach(thread);
-    else {
-        atomic_store(&g_ld_orient_reader_started, 0);
-        ld_blog("orientation guard: unable to start framework reader");
-    }
 }
 #endif
