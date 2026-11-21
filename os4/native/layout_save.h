@@ -39,9 +39,9 @@ static void ld_capture_saved_items_slot(int slot, const struct ld_layout_item *i
             }
         }
     }
-    if (dir_hint >= 0 && dir_hint <= 1 && g_pending_layout_mem[slot].active_direction < 0) {
-        g_pending_layout_mem[slot].active_direction = dir_hint;
-    }
+    /* Every persisted update belongs to the framework-selected profile.
+     * A loaded sidecar's last active slot must not override the live display. */
+    g_pending_layout_mem[slot].active_direction = dir_hint;
     if (!ld_layout_apply_changes(&g_pending_layout_mem[slot], items, count)) {
         g_pending_layout_valid[slot] = 0;
         ld_blog("layout save ignored %zu changes slot=%d (invalid item)", count, slot);
