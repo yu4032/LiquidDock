@@ -455,6 +455,9 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
             struct ld_hm_base *b = from_provisional
                     ? &g_hm_transition_base : &g_hm_bases[i];
             int same_identity = b->identity == identity && b->identity_kind == identity_kind;
+            /* The provisional baseline may only follow its own controller
+             * through a transition, never migrate to a different page. */
+            if (from_provisional && !same_identity) continue;
             if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows ||
                 (pass == 0 ? !same_identity : same_identity)) continue;
             int native_geometry = __builtin_fabs(cw_now - b->cw) < 0.5 &&
