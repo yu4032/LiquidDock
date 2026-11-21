@@ -2048,7 +2048,6 @@ on_library_loaded_t native_init(struct native_api *api)
     g_guarded_api.hook = ld_guarded_hook;
     g_api = &g_guarded_api;
     ld_madvise_guard_install(g_api);
-    ld_orientation_guard_start();
     load_grid_config();
     ld_prepare_native_glass();
     install_grid_hook(g_api);
