@@ -70,6 +70,8 @@ static void (*g_orig_rust_orientation)(void *);
 #include "maml_widget_materials.h"
 #include "widget_resize.h"
 #include "workstation.h"
+/* The rotation provider is included before the helper implementation below. */
+static void pin_installed_hook(uintptr_t site);
 #include "rotation_provider.h"
 #include "widget_1x1_menu.h"
 
