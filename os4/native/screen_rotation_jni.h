@@ -102,7 +102,10 @@ done:
 static struct ld_screen_dimensions ld_screen_query_framework_dimensions(int event_rotation)
 {
     struct ld_screen_dimensions result = {0, 0, -1};
-    JavaVM *vm = g_ld_screen_vm;
+    /* g_ld_screen_vm is initialized before the ready flag release-store.
+     * Only dereference it after an acquire-load to avoid first-use races. */
+    JavaVM *vm = atomic_load_explicit(&g_ld_screen_java_ready, memory_order_acquire)
+               ? g_ld_screen_vm : NULL;
     if (!vm) vm = (JavaVM *)atomic_load_explicit(&g_ld_jvm_ptr, memory_order_acquire);
     if (!vm) vm = ld_find_vm_from_maps();
     if (!vm) return result;
