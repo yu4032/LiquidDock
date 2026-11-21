@@ -1,6 +1,7 @@
 /* PadRowColHandler at +0x80: x2 is raw rows; x0 is raw columns.
- * The vendor has selected portrait/split (6 rows x 4 columns) or landscape
- * (4 rows x 6 columns). Substitute module landscape counts before the ORIGINAL
+ * Select the configured portrait/landscape counts from the authoritative
+ * framework rotation snapshot, not the vendor's stock 6x4 row heuristic.
+ * Substitute counts before the ORIGINAL
  * tagging/copyWith instructions. No calls, stack access or heap mutations here.
  */
 #ifndef LD_PAD_COUNTS_WRAPPER_H
@@ -25,8 +26,14 @@ __attribute__((naked, used)) static void name(void) { \
         "adrp x17, " #rows "\n" \
         "add x17, x17, :lo12:" #rows "\n" \
         "ldr w17, [x17]\n" \
-        "cmp x2, #6\n" \
-        "b.ne 1f\n" \
+        "adrp x11, g_ld_orient_word\n" \
+        "add x11, x11, :lo12:g_ld_orient_word\n" \
+        "ldr x11, [x11]\n" \
+        "and w11, w11, #0xff\n" \
+        "cbz w11, 3f\n" \
+        "tbnz w11, #0, 5f\n" \
+        "b 1f\n" \
+        "5:\n" \
         "cbz w16, 2f\n" \
         "mov x2, x16\n" \
         "2:\n" \
