@@ -23,13 +23,10 @@ final class WorkstationDockCustomizationHook {
     private static volatile int iconBottomOffset;
     private static volatile int iconLandscapeTopOffset;
 
-    private static boolean landscape(View view) {
-        return view.getResources().getConfiguration().orientation
-                == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-    }
-
     private static int verticalOffset(View view) {
-        return landscape(view) ? iconLandscapeTopOffset : iconTopOffset;
+        int direction = FrameworkDisplayRotation.direction(view);
+        if (direction < 0) return 0;
+        return direction == 1 ? iconLandscapeTopOffset : iconTopOffset;
     }
     private static final WeakHashMap<View, RowTranslation> OBSERVED_RECYCLERS =
             new WeakHashMap<>();
