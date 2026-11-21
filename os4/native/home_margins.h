@@ -354,8 +354,13 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
          * counts with the workspace's configured rows/columns. */
         int nominal_cols = is_allapps ? 0 : (int)g_grid_cols;
         int nominal_rows = is_allapps ? 0 : (int)g_grid_rows;
+        /* Validate wide Dart fields BEFORE narrowing to int; otherwise
+         * values such as 0x100000008 would alias a legitimate count of 8. */
+        int valid_dir = (dir_raw == 0 || dir_raw == 1) ? (int)dir_raw : -1;
+        int valid_cols = (cfg_cols >= 2 && cfg_cols <= 16) ? (int)cfg_cols : 0;
+        int valid_rows = (cfg_rows >= 2 && cfg_rows <= 16) ? (int)cfg_rows : 0;
         struct ld_hm_layout_shape shape = ld_hm_layout_shape_for_display(
-                (int)dir_raw, (int)cfg_cols, (int)cfg_rows,
+                valid_dir, valid_cols, valid_rows,
                 display_landscape, nominal_cols, nominal_rows);
         if (shape.landscape >= 0 && shape.cols > 0 && shape.rows > 0) {
             landscape = shape.landscape;
