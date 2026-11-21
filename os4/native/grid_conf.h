@@ -20,6 +20,7 @@
  *   grid_rows=<2..10>     桌面网格行数（缺省 = 不改）
  *   widget_prevent_stretch=0|1  保持 MAML 小组件声明的宽高比（缺省关闭）
  *   icon_size_enabled=0|1; icon_size_percent=80..120 (缺省100)
+ *   debug_logging=0|1 (缺省0；设置里的日志开关)
  *   glass_enabled=0|1
  *   glass_native_<field>=decimal (逐项原生参数，缺键保留系统值)
  *   grid_{landscape,portrait}_{horizontal_distance,top_distance,bottom_distance}=-600..600 dp
@@ -73,6 +74,7 @@ struct ld_grid_conf {
     struct ld_grid_offsets landscape, portrait;
     struct ld_dock_conf dock;
     int glass_enabled;
+    int debug_logging;  /* settings log switch; gates optional diagnostics */
     int glass_icons, glass_widgets, widget_overrides;
     int large_folder_glass, large_folder_native_outline;
     double glass_icon_size, glass_icon_corner, large_folder_corner;
@@ -793,6 +795,13 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     }
                     c.glass_enabled=value;
                     seen |= 1u << 26;
+                } else if (strcmp(key, "debug_logging") == 0) {
+                    int value;
+                    if ((seen & (1ull << 61)) || !ld_grid_parse_bool01(val,&value)) {
+                        bad=1; break;
+                    }
+                    c.debug_logging=value;
+                    seen |= 1ull << 61;
                 } else if (strcmp(key, "hook_safety_enabled") == 0) {
                     int value;
                     if ((seen & (1ull << 34)) || !ld_grid_parse_bool01(val,&value)) {

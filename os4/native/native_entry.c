@@ -46,6 +46,7 @@
     "/data/user_de/0/com.miui.home/files/liquiddock-layout-managed-v1"
 
 static volatile int g_grid_cols;
+static volatile int g_diag_logging; /* settings log switch for optional diagnostics */
 static volatile int g_grid_rows;
 static volatile int g_count_cols,g_count_rows;
 static struct ld_grid_conf g_home_options;
@@ -244,6 +245,7 @@ static void load_grid_config(void)
     g_grid_cols = conf.cols;
     g_grid_rows = conf.rows;
     g_home_options=conf;
+    g_diag_logging=conf.debug_logging;
     LOGI("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     ld_blog("grid config %dx%d source=%s", conf.cols, conf.rows, source);
     if (conf.cols > 0 && conf.rows > 0) {
@@ -1358,6 +1360,7 @@ static void ld_madvise_guard_install(const struct native_api *api)
 }
 
 static int (*g_real_hook)(void *target, void *replace, void **original) = NULL;
+static struct native_api g_guarded_api;
 
 static int ld_guarded_hook(void *target, void *replace, void **original)
 {
@@ -1428,10 +1431,12 @@ static void ld_install_os4_glass_filter_and_scope(const struct native_api *api, 
 static void install_grid_hook_unlocked(const struct native_api *api)
 {
     if (!api || !api->hook) return;
-    g_real_hook = api->hook;
-    struct native_api guarded_api = *api;
-    guarded_api.hook = ld_guarded_hook;
-    api = &guarded_api;
+    if (!g_real_hook) {
+        g_real_hook = api->hook;
+        g_guarded_api = *api;
+        g_guarded_api.hook = ld_guarded_hook;
+    }
+    api = &g_guarded_api;
     ld_madvise_guard_install(api);
     bool strict=g_home_options.hook_safety_enabled;
     ld_aot_set_strict(strict);
@@ -2037,10 +2042,14 @@ on_library_loaded_t native_init(struct native_api *api)
     /* 连续崩溃保护：安全模式下不装任何 hook，直接返回。 */
     if (ld_safe_mode_tick()) return NULL;
 
-    g_api = api;
+    g_real_hook = api->hook;
+    g_guarded_api = *api;
+    g_guarded_api.hook = ld_guarded_hook;
+    g_api = &g_guarded_api;
+    ld_madvise_guard_install(g_api);
     load_grid_config();
     ld_prepare_native_glass();
-    install_grid_hook(api);
-    ld_superellipse_install(api);
+    install_grid_hook(g_api);
+    ld_superellipse_install(g_api);
     return on_library_loaded;
 }

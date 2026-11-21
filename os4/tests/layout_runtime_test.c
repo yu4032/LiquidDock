@@ -7,6 +7,7 @@
 #define LD_WS_LAYOUT_FILE "/tmp/ld-runtime-ws-apps-fixture.bin"
 #define LD_WS_DESK_LAYOUT_FILE "/tmp/ld-runtime-ws-desk-fixture.bin"
 static int g_grid_cols=4,g_grid_rows=8;
+static int g_diag_logging=0;
 static volatile int g_ws_is_laptop_mode=0;
 static void *g_orig_orientation;
 static void ld_blog(const char *format,...) { (void)format; }
@@ -118,7 +119,9 @@ int main(void) {
  word(obj[14],7,(uint32_t)obj[17]); integer(obj[14],11,0); integer(obj[14],19,0);
  word(obj[10],15,(uint32_t)obj[14]);
  ld_observe_process(&c);
- assert(g_restore_ready);
+ /* The page already fits the live grid, so nothing was rewritten and the
+  * Launcher keeps its own placement pass. */
+ assert(!g_restore_ready);
  assert(ld_heap_i64(obj[14],11)==0 && ld_heap_i64(obj[14],19)==0); /* AllApps untouched */
  /* Verify initial=1 prevented overwriting items[0] (4x8) of ws_apps */
  struct ld_layout_memory ws_apps_after;
@@ -129,8 +132,9 @@ int main(void) {
  assert(ld_layout_load(LD_LAYOUT_FILE,&normal_after));
  assert(memcmp(&normal_before,&normal_after,sizeof normal_before)==0);
 
- /* A sparse page that already fits the destination is left untouched. */
- word(obj[2],11,2); word(obj[8],11,4);
+ /* Live rotation reflows each page using the old reading order. The first
+  * page fits both shapes, and the second has an old column outside 4x8. */
+ word(obj[2],11,4); word(obj[8],11,4);
  word(obj[10],15,(uint32_t)obj[12]);
  const int landscape_x[]={1,2,7}, landscape_y[]={0,0,1};
  for(int i=0;i<3;i++) {
@@ -139,50 +143,85 @@ int main(void) {
   integer(obj[12+i],11,landscape_x[i]); integer(obj[12+i],19,landscape_y[i]);
   integer(obj[15+i],0x37,landscape_x[i]); integer(obj[15+i],0x3f,landscape_y[i]);
  }
+ uintptr_t grid=obj[6];
+ integer(grid,0x1b,8); integer(grid,0x23,4);
+ c.x[2]=grid; ld_observe_orientation(&c);
+ integer(obj[0],7,8); integer(obj[0],15,4);
+ integer(grid,0x1b,4); integer(grid,0x23,8);
+ ld_observe_orientation(&c);
  c.x[2]=obj[1]; c.x[3]=4; c.x[5]=8;
- ld_observe_process(&c); assert(g_restore_ready);
- for(int i=0;i<2;i++) {
-  assert(ld_heap_i64(obj[12+i],11)==landscape_x[i] && ld_heap_i64(obj[12+i],19)==landscape_y[i]);
- }
- /* With a later page containing x=7, transpose every collected page
-  * while preserving model identity, list order, and screen assignments. */
- word(obj[2],11,4);
- ld_observe_process(&c); assert(g_restore_ready);
+ ld_observe_process(&c);
+ assert(g_restore_ready);
  for(int i=0;i<3;i++) {
-  assert(ld_heap_i64(obj[12+i],11)==landscape_y[i] && ld_heap_i64(obj[12+i],19)==landscape_x[i]);
-  assert(ld_heap_i64(obj[15+i],0x37)==landscape_y[i] && ld_heap_i64(obj[15+i],0x3f)==landscape_x[i]);
+  int x=i==1?1:0;
+  assert(ld_heap_i64(obj[12+i],11)==x && ld_heap_i64(obj[12+i],19)==0);
+  assert(ld_heap_i64(obj[15+i],0x37)==x && ld_heap_i64(obj[15+i],0x3f)==0);
   assert(ld_heap_i64(obj[15+i],0x2f)==(i<2?2:3));
  }
 
- /* 25 shuffled icons across 32 slots: seven vacant slots must not cause
-  * positional compaction or change the underlying cell array order. */
- word(obj[2],11,2); word(obj[8],11,50);
- integer(obj[0],7,8); integer(obj[0],15,4);
- for(int i=0;i<25;i++) {
-  uintptr_t model=object(18+2*i),cell=object(19+2*i);
-  int slot=(i*9)%32, x=slot%8, y=slot/8;
-  word(obj[10],15+i*4,(uint32_t)cell);
-  word(cell,7,(uint32_t)model);
-  integer(cell,0xb,x); integer(cell,0x13,y);
-  integer(model,7,900+i); integer(model,0x1f,1); integer(model,0x27,1);
-  integer(model,0x2f,4); integer(model,0x37,x); integer(model,0x3f,y);
-  integer(model,0x47,-104);
+ /* Sparse AllApps pages: vacant slots must not cause positional compaction,
+  * and cell order, model identity and screen assignment must survive the
+  * rewrite. Both grids come from fixture data instead of a literal 8x4. */
+ const int shapes[][3]={{8,4,9},{6,5,7}};   /* cols, rows, coprime stride */
+ for(size_t s=0;s<sizeof shapes/sizeof shapes[0];s++) {
+  const int sc=shapes[s][0], sr=shapes[s][1], stride=shapes[s][2], n=25;
+  const int dc=sr, dr=sc;                    /* the transpose swaps the axes */
+  assert(sc*sr>n);
+  word(obj[2],11,2); word(obj[8],11,(uint32_t)(n*2));
+  integer(obj[0],7,sc); integer(obj[0],15,sr);
+  c.x[3]=dc; c.x[5]=dr;
+  for(int i=0;i<n;i++) {
+   uintptr_t model=object(18+2*i),cell=object(19+2*i);
+   int slot=(i*stride)%(sc*sr), x=slot%sc, y=slot/sc;
+   word(obj[10],15+i*4,(uint32_t)cell);
+   word(cell,7,(uint32_t)model);
+   integer(cell,0xb,x); integer(cell,0x13,y);
+   integer(model,7,900+i); integer(model,0x1f,1); integer(model,0x27,1);
+   integer(model,0x2f,4); integer(model,0x37,x); integer(model,0x3f,y);
+   integer(model,0x47,-104);
+  }
+  ld_observe_process(&c); assert(g_restore_ready);
+  for(int i=0;i<n;i++) {
+   uintptr_t model=object(18+2*i),cell=object(19+2*i);
+   int slot=(i*stride)%(sc*sr), x=slot/sc, y=slot%sc;
+   assert(x<dc && y<dr);
+   assert(ld_heap_pointer(&c,obj[10],0xf+i*4)==cell);
+   assert(ld_heap_i64(cell,0xb)==x && ld_heap_i64(cell,0x13)==y);
+   assert(ld_heap_i64(model,0x37)==x && ld_heap_i64(model,0x3f)==y);
+   assert(ld_heap_i64(model,7)==900+i && ld_heap_i64(model,0x2f)==4);
+  }
+  /* The transposed page now fits the live grid, so the Launcher keeps its own
+   * placement pass and nothing is rewritten a second time. */
+  ld_observe_process(&c); assert(!g_restore_ready);
+  for(int i=0;i<n;i++) {
+   uintptr_t model=object(18+2*i),cell=object(19+2*i);
+   int slot=(i*stride)%(sc*sr);
+   assert(ld_heap_i64(cell,0xb)==slot/sc && ld_heap_i64(cell,0x13)==slot%sc);
+   assert(ld_heap_i64(model,0x37)==slot/sc && ld_heap_i64(model,0x3f)==slot%sc);
+  }
  }
- ld_observe_process(&c); assert(g_restore_ready);
- for(int i=0;i<25;i++) {
-  uintptr_t model=object(18+2*i),cell=object(19+2*i);
-  int slot=(i*9)%32, x=slot/8, y=slot%8;
-  assert(ld_heap_pointer(&c,obj[10],0xf+i*4)==cell);
-  assert(ld_heap_i64(cell,0xb)==x && ld_heap_i64(cell,0x13)==y);
-  assert(ld_heap_i64(model,0x37)==x && ld_heap_i64(model,0x3f)==y);
-  assert(ld_heap_i64(model,7)==900+i && ld_heap_i64(model,0x2f)==4);
- }
- ld_observe_process(&c); assert(g_restore_ready);
- for(int i=0;i<25;i++) {
-  uintptr_t model=object(18+2*i),cell=object(19+2*i);
-  int slot=(i*9)%32;
-  assert(ld_heap_i64(cell,0xb)==slot/8 && ld_heap_i64(cell,0x13)==slot%8);
-  assert(ld_heap_i64(model,0x37)==slot/8 && ld_heap_i64(model,0x3f)==slot%8);
+
+ /* Dense page built for 4 columns, widened to 8x4: it already fits, but must
+  * spread in reading order instead of staying in the left columns. */
+ {
+  const int n=12;
+  word(obj[2],11,2); word(obj[8],11,(uint32_t)(n*2));
+  integer(obj[0],7,4); integer(obj[0],15,8);
+  c.x[3]=8; c.x[5]=4;
+  for(int i=0;i<n;i++) {
+   uintptr_t model=object(18+2*i),cell=object(19+2*i);
+   word(obj[10],15+i*4,(uint32_t)cell);
+   word(cell,7,(uint32_t)model);
+   integer(cell,0xb,i%4); integer(cell,0x13,i/4);
+   integer(model,7,900+i); integer(model,0x1f,1); integer(model,0x27,1);
+   integer(model,0x2f,4); integer(model,0x37,i%4); integer(model,0x3f,i/4);
+   integer(model,0x47,-104);
+  }
+  ld_observe_process(&c); assert(g_restore_ready);
+  for(int i=0;i<n;i++) {
+   uintptr_t cell=object(19+2*i);
+   assert(ld_heap_i64(cell,0xb)==i%8 && ld_heap_i64(cell,0x13)==i/8);
+  }
  }
 
  unlink(LD_LAYOUT_FILE); unlink(LD_WS_LAYOUT_FILE); unlink(LD_WS_DESK_LAYOUT_FILE);

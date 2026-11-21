@@ -9,6 +9,7 @@
 #include <errno.h>
 
 #define LD_LAYOUT_MAX_ITEMS 1024
+#define LD_LAYOUT_MAX_DIM 16   /* accepted grid dimension, matches the margin pipeline */
 struct ld_layout_item { int64_t id, screen; int32_t x,y,sx,sy; };
 struct ld_layout_memory {
     int32_t columns, rows;
@@ -26,7 +27,7 @@ static inline int ld_layout_overlap(const struct ld_layout_item *a,const struct 
         && (int64_t)a->y+a->sy>b->y && (int64_t)b->y+b->sy>a->y;
 }
 static inline int ld_layout_valid(const struct ld_layout_item *a,size_t n,int c,int r) {
-    if(n>LD_LAYOUT_MAX_ITEMS || c<2 || c>10 || r<2 || r>10 || (!a && n)) return 0;
+    if(n>LD_LAYOUT_MAX_ITEMS || c<2 || c>LD_LAYOUT_MAX_DIM || r<2 || r>LD_LAYOUT_MAX_DIM || (!a && n)) return 0;
     for(size_t i=0;i<n;i++) {
         if(!ld_layout_bounds(&a[i],c,r)) return 0;
         for(size_t j=0;j<i;j++) if(a[i].id==a[j].id || ld_layout_overlap(&a[i],&a[j])) return 0;
@@ -42,7 +43,7 @@ static inline int ld_layout_free(const struct ld_layout_item *a,const struct ld_
 static inline int ld_layout_plan(const struct ld_layout_item *source,size_t n,int c,int r,
         const struct ld_layout_item *remembered,size_t rn,struct ld_layout_item *output) {
     if(!source || !output || n>LD_LAYOUT_MAX_ITEMS || rn>LD_LAYOUT_MAX_ITEMS
-            || c<2 || c>10 || r<2 || r>10 || (rn && !remembered)) return 0;
+            || c<2 || c>LD_LAYOUT_MAX_DIM || r<2 || r>LD_LAYOUT_MAX_DIM || (rn && !remembered)) return 0;
     struct ld_layout_item *tmp=calloc(n?n:1,sizeof *tmp);
     unsigned char *placed=calloc(n?n:1,1);
     if(!tmp || !placed) { free(tmp); free(placed); return 0; }

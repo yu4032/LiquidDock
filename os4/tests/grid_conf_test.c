@@ -37,6 +37,13 @@ int main(void)
             || !glass.glass_enabled || glass.cols || glass.rows) {
         puts("FAIL: independent glass-only configuration"); return 1;
     }
+    struct ld_grid_conf logging={0}, logging_default={0};
+    const char *log_on="debug_logging=1\nend=1\n", *log_dup="debug_logging=1\ndebug_logging=0\nend=1\n";
+    if(!ld_grid_conf_parse(log_on,strlen(log_on),&logging) || !logging.debug_logging
+            || !ld_grid_conf_parse("end=1\n",6,&logging_default) || logging_default.debug_logging
+            || ld_grid_conf_parse(log_dup,strlen(log_dup),&logging_default)) {
+        puts("FAIL: debug_logging switch"); return 1;
+    }
     struct ld_grid_conf widget_stretch={0};
     const char *prevent_stretch="widget_prevent_stretch=1\nend=1\n";
     if(!ld_grid_conf_parse(prevent_stretch,strlen(prevent_stretch),&widget_stretch)
