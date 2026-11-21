@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "../native/dart_heap.h"
+#include "orientation_guard_mock.h"
 #undef LD_DART_OBSERVER
 #define LD_DART_OBSERVER(...)
 
@@ -150,6 +151,7 @@ int main(void) {
     struct ld_layout_memory norm_snapshot = normal_mem;
 
     /* 2. Switch to Workstation Mode (Landscape 8x4): start_load must reset g_load_prepared=0! */
+    ld_test_set_framework_orientation(0);
     g_runtime_columns = 8; g_runtime_rows = 4; g_runtime_direction = 1;
     int32_t start_land[4] = {8, 4, 4, 6};
     repl_frb_primary_adapter(g_frb_ids.start_load, 0, (uint8_t *)start_land, 16, 16);
@@ -207,6 +209,7 @@ int main(void) {
 
     /* 4. Switch Workstation -> Normal even when stale g_ws_is_laptop_mode == 1 */
     g_ws_is_laptop_mode = 1;
+    ld_test_set_framework_orientation(1);
     g_runtime_columns = 4; g_runtime_rows = 8; g_runtime_direction = 0;
     repl_frb_primary_adapter(g_frb_ids.start_load, 0, (uint8_t *)start_port, 16, 16);
     struct mock_frb_item norm_reload[2] = {
