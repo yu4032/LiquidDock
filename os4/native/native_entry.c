@@ -39,6 +39,7 @@
 #include "home_geometry_fingerprints.h"
 #include "dock_geometry_fingerprints.h"
 #include "sync_trigger.h"
+#include "orientation_guard.h"
 
 #define LD_PRIMARY_CONF "/data/user/0/com.miui.home/files/liquiddock-native.conf"
 #define LD_EARLY_CONF "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
@@ -2047,6 +2048,7 @@ on_library_loaded_t native_init(struct native_api *api)
     g_guarded_api.hook = ld_guarded_hook;
     g_api = &g_guarded_api;
     ld_madvise_guard_install(g_api);
+    ld_orientation_guard_start();
     load_grid_config();
     ld_prepare_native_glass();
     install_grid_hook(g_api);
