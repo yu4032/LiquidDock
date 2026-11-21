@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include "../native/layout_memory.h"
 #include "../native/dart_heap.h"
+#include "orientation_guard_mock.h"
 #undef LD_DART_OBSERVER
 #define LD_DART_OBSERVER(...)
 #define LD_LAYOUT_FILE "/tmp/ld-load-fixture.bin"
@@ -54,6 +55,7 @@ int main(void) {
  int64_t index=1; memcpy((void *)(orientation+7),&index,8);
  assert(ld_grid_direction(&c,grid)==1);
  index=0; memcpy((void *)(orientation+7),&index,8);
+ ld_test_set_framework_orientation(0);
  assert(ld_grid_direction(&c,grid)==0);
  g_runtime_columns=g_runtime_rows=0;
  g_grid_cols=6; g_grid_rows=6; cols=rows=6;
@@ -67,6 +69,7 @@ int main(void) {
  assert(g_load_prepared && ld_layout_load(LD_LAYOUT_FILE,&memory) && memory.count[1]==0);
 
  /* Verify ld_load_items NEVER overwrites SQLite screen IDs from stale .bin memory */
+ ld_test_set_framework_orientation(1);
  g_grid_cols=4; g_grid_rows=8; cols=4; rows=8;
  memcpy((void *)(grid+0x1b),&cols,8); memcpy((void *)(grid+0x23),&rows,8);
  g_runtime_columns=4; g_runtime_rows=8; g_runtime_direction=0;
