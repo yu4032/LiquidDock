@@ -73,8 +73,8 @@ static void ld_hm_set_status(int status, const char *detail)
 }
 
 struct ld_hm_output {
-    double cw, ox, ch, ind;
-    int valid;
+    double cw, ox, ch, oy, ind;
+    int valid, oy_valid;
 };
 struct ld_hm_base {
     uintptr_t identity;
@@ -418,18 +418,19 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
             int same_identity = b->identity == identity && b->identity_kind == identity_kind;
             if (!b->valid || b->bi != bi || b->cols != cols || b->rows != rows ||
                 (pass == 0 ? !same_identity : same_identity)) continue;
-            if (oy_ok && b->oy_valid && __builtin_fabs(oy_now - b->oy) > 1.0) continue;
             int native_geometry = __builtin_fabs(cw_now - b->cw) < 0.5 &&
                 __builtin_fabs(ch_now - b->ch) < 0.5 &&
                 __builtin_fabs(ind_now - b->ind) < 0.5 &&
-                (!box0 || __builtin_fabs(ox_now - b->ox) < 1.0);
+                (!box0 || __builtin_fabs(ox_now - b->ox) < 1.0) &&
+                (!oy_ok || !b->oy_valid || __builtin_fabs(oy_now - b->oy) < 1.0);
             int written_scope = -1;
             for (int s = 0; s < 3; s++) {
                 const struct ld_hm_output *out = &b->output[s];
                 if (out->valid && __builtin_fabs(cw_now - out->cw) < 0.5 &&
                     __builtin_fabs(ch_now - out->ch) < 0.5 &&
                     __builtin_fabs(ind_now - out->ind) < 0.5 &&
-                    (!box0 || __builtin_fabs(ox_now - out->ox) < 1.0)) {
+                    (!box0 || __builtin_fabs(ox_now - out->ox) < 1.0) &&
+                    (!oy_ok || (out->oy_valid && __builtin_fabs(oy_now - out->oy) < 1.0))) {
                     written_scope = s;
                     break;
                 }
@@ -541,18 +542,39 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
             __builtin_memcpy(&ch_cur, (const void *)(cfg + 0x33), sizeof ch_cur);
             if (ch_cur != ch) __builtin_memcpy((void *)(cfg + 0x33), &ch, sizeof ch);
             uintptr_t oybox = ld_hm_oy_box(x28, x26);
-            uintptr_t leftbox = ld_hm_ptr(cfg, 0x3b, x28);
+            /* The active-config listener publishes this inset to originY.
+             * Keep it in sync so the next rotation publish sees the same value. */
+            int publish_through_config = scope == 0 && oy_ok &&
+                (oy_now == oy || !ld_ws_is_const_ro(box0));
+            if (oy_ok && oy_now != oy && !ld_ws_is_const_ro(box0)) {
+                __builtin_memcpy((void *)(box0 + 0xf), &oy, sizeof oy);
+                static unsigned reports;
+                if (reports++ < 32u)
+                    ld_blog("home margin top synced scope=%d dir=%d grid=%dx%d inset=%.2f->%.2f",
+                            scope, landscape, cols, rows, oy_now, oy);
+                oy_now = oy;
+            }
             double cury = oy;
             if (oybox) {
                 __builtin_memcpy(&cury, (const void *)(oybox + 7), sizeof cury);
-                if (cury != oy) __builtin_memcpy((void *)(oybox + 7), &oy, sizeof oy);
+                /* The Launcher setter compares the old and new values before
+                 * notifying layout listeners. Leave the old value intact so
+                 * a normal desktop rotation can publish the new one. */
+                if (!publish_through_config && cury != oy)
+                    __builtin_memcpy((void *)(oybox + 7), &oy, sizeof oy);
+                static int last_publish_dir = -1;
+                if (publish_through_config && landscape != last_publish_dir) {
+                    ld_blog("home margin top publish dir=%d grid=%dx%d inset=%.2f previous_rx=%.2f",
+                            landscape, cols, rows, oy, cury);
+                    last_publish_dir = landscape;
+                }
             } else if (dt != 0.0) {
                 ld_hm_set_status(LD_HM_STATUS_RUNTIME_OBJECT_MISMATCH,
                                  "GridController originY box is unavailable for top offset");
             }
             if ((dt != 0.0 || db != 0.0 || ch_cur != ch || cury != oy) && (n % 500u) == 0u)
                 ld_blog("home margin vertical mode=%d dir=%d cellH %.2f->%.2f originY %.2f->%.2f t=%.1f b=%.1f cid=%x/%x",
-                        mode_idx, landscape, base->ch, ch, base->oy, oy, dt, db, ld_hm_cid(oybox), ld_hm_cid(leftbox));
+                        mode_idx, landscape, base->ch, ch, base->oy, oy, dt, db, ld_hm_cid(oybox), ld_hm_cid(box0));
         }
     } else if (o->top != 0.0 && (note || is_allapps)) {
         ld_hm_set_status(LD_HM_STATUS_RUNTIME_DIMENSIONS_MISSING,
@@ -591,6 +613,8 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
         out->cw = out_cw;
         out->ox = out_ox;
         out->ch = out_ch;
+        out->oy = oy_now;
+        out->oy_valid = oy_ok;
         out->ind = out_ind;
         out->valid = out_geometry_valid && isfinite(out_ox);
 
@@ -613,7 +637,7 @@ __attribute__((used)) static void *ld_hm_cc_post(unsigned char *save)
                     scope, landscape, cols, rows, o->horizontal, o->top, o->bottom,
                     o->indicator_y, base->cw, base->ox, base->ch, base_oy,
                     out_cw, out_ox, out_ch,
-                    base->oy_valid ? base_oy + o->top : 0.0, out_ind,
+                    oy_ok ? oy_now : 0.0, out_ind,
                     base->oy_valid, out->valid);
             last->valid = 1;
             last->h = o->horizontal;
