@@ -60,6 +60,13 @@ internal fun SoftGlassPage(
                     "开启后自定义桌面原生柔光玻璃参数；重启桌面生效。",
                     masterEnabled,
                 ) { liquidGlass = it }
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE,
+                    "取消桌面玻璃静止时的下采样",
+                    "禁用桌面原生在玻璃静止时的采样降级与 0.25× 预缩放下采样，保持完整采样分辨率。",
+                    masterEnabled && liquidGlass,
+                )
             }
         }
         item { ModernSectionLabel("全局基准") }
@@ -152,6 +159,13 @@ internal fun SoftGlassComponentsPage(
                 ) { widgetGlass = it }
             }
         }
+        item(key = "soft-widgets-geometry") {
+            SettingsCard {
+                IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
+                ModernListDivider()
+                IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
+            }
+        }
         item(key = "soft-widgets-maml") {
             SettingsCard {
                 ArrowPreference(
@@ -159,6 +173,28 @@ internal fun SoftGlassComponentsPage(
                     summary = "扫描并按节点隐藏小组件（MAML 与 RemoteViews）内部背景或元素；背景规则随小组件玻璃开关同步恢复。",
                     enabled = true,
                     onClick = { open(Page.WidgetComponents) },
+                )
+            }
+        }
+        item(key = "soft-folders-heading") { SmallTitle("文件夹") }
+        item(key = "soft-folders-entry") {
+            SettingsCard {
+                ArrowPreference(
+                    title = stringResource(R.string.page_glass_folders),
+                    summary = "小文件夹与大文件夹玻璃开关、尺寸与圆角自定义。",
+                    enabled = true,
+                    onClick = { open(Page.GlassFolders) },
+                )
+            }
+        }
+        item(key = "soft-dock-heading") { SmallTitle("Dock 栏") }
+        item(key = "soft-dock-entry") {
+            SettingsCard {
+                ArrowPreference(
+                    title = stringResource(R.string.page_dock_geometry),
+                    summary = "调整 Dock 尺寸、位置、圆角与图标间距。",
+                    enabled = true,
+                    onClick = { open(Page.DockGeometry) },
                 )
             }
         }
@@ -314,24 +350,22 @@ internal fun GlassIconsPage(
                     else "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
                     masterEnabled && liquidEnabled,
                 ) { iconGlass = it }
-                if (!os4Launcher) {
-                    ModernListDivider()
-                    BooleanSetting(
-                        prefs,
-                        ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
-                        "仅 Dock 功能图标玻璃",
-                        "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
-                        masterEnabled && liquidEnabled,
-                    ) { functionalDockIconGlass = it }
-                    ModernListDivider()
-                    BooleanSetting(
-                        prefs,
-                        ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
-                        "多任务操作按钮玻璃",
-                        "使用液态玻璃替换清除全部和设备互联胶囊背景；采样未就绪时保持透明，不回退原生模糊",
-                        masterEnabled && liquidEnabled,
-                    )
-                }
+                ModernListDivider()
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
+                    "仅 Dock 功能图标玻璃",
+                    "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
+                    masterEnabled && liquidEnabled,
+                ) { functionalDockIconGlass = it }
+                ModernListDivider()
+                BooleanSetting(
+                    prefs,
+                    ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
+                    "多任务操作按钮玻璃",
+                    "使用液态玻璃替换清除全部和设备互联胶囊背景；采样未就绪时保持透明，不回退原生模糊",
+                    masterEnabled && liquidEnabled,
+                )
             }
         }
         item(key = "icons-geometry-title") { SmallTitle("尺寸与圆角") }
@@ -340,39 +374,35 @@ internal fun GlassIconsPage(
                 IntSetting(
                     prefs,
                     iconSizeOffsetSpec,
-                    masterEnabled && liquidEnabled &&
-                        (iconGlass || (!os4Launcher && functionalDockIconGlass)),
+                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
                 )
                 ModernListDivider()
                 IntSetting(
                     prefs,
                     iconCornerRadiusSpec,
-                    masterEnabled && liquidEnabled &&
-                        (iconGlass || (!os4Launcher && functionalDockIconGlass)),
+                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
                 )
             }
         }
-        if (!os4Launcher) {
-            item(key = "icons-appearance-title") { SmallTitle("独立外观") }
-            item(key = "icons-glass-highlights") {
-                SettingsCard {
-                    ArrowPreference(
-                        stringResource(R.string.launcher_highlights_entry),
-                        summary = stringResource(R.string.launcher_highlights_entry_summary),
-                        enabled = masterEnabled && liquidEnabled,
-                        onClick = { open(Page.LauncherHighlights) },
-                    )
-                }
+        item(key = "icons-appearance-title") { SmallTitle("独立外观") }
+        item(key = "icons-glass-highlights") {
+            SettingsCard {
+                ArrowPreference(
+                    stringResource(R.string.launcher_highlights_entry),
+                    summary = stringResource(R.string.launcher_highlights_entry_summary),
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.LauncherHighlights) },
+                )
             }
-            item(key = "icons-glass-edge") {
-                SettingsCard {
-                    ArrowPreference(
-                        title = "阴影",
-                        summary = "独立设置 Prismal 外阴影与边缘描边",
-                        enabled = masterEnabled && liquidEnabled,
-                        onClick = { open(Page.IconEdge) },
-                    )
-                }
+        }
+        item(key = "icons-glass-edge") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "阴影",
+                    summary = "独立设置 Prismal 外阴影与边缘描边",
+                    enabled = masterEnabled && liquidEnabled,
+                    onClick = { open(Page.IconEdge) },
+                )
             }
         }
     }
@@ -408,7 +438,7 @@ internal fun GlassWidgetsPage(
         focusSequence = searchFocus?.sequence,
     ) {
         item(key = "widget-function-heading") {
-            SmallTitle(if (os4Launcher) "玻璃" else "玻璃与内容适配")
+            SmallTitle("玻璃与内容适配")
         }
         item(key = "widget-enabled") {
             SettingsCard {
@@ -419,36 +449,34 @@ internal fun GlassWidgetsPage(
                 ) { widgetGlass = it }
             }
         }
-        if (!os4Launcher) {
-            item(key = "widget-dark-content") {
-                SettingsCard {
-                    BooleanSetting(
-                        prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配",
-                        "将深色中性文字适配为浅色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
-                        masterEnabled && liquidEnabled && widgetGlass,
-                    )
-                }
-            }
-            item(key = "widget-geometry-heading") { SmallTitle("尺寸与圆角") }
-            item(key = "widget-geometry") {
-                SettingsCard {
-                    IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
-                    ModernListDivider()
-                    IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
-                }
-            }
-            item(key = "widget-edge") {
-                SettingsCard {
-                    ArrowPreference(
-                        title = "阴影",
-                        summary = "Prismal 外阴影与描边可独立设置，未调整时继承全局",
-                        enabled = masterEnabled && liquidEnabled && widgetGlass,
-                        onClick = { open(Page.WidgetEdge) },
-                    )
-                }
+        item(key = "widget-dark-content") {
+            SettingsCard {
+                BooleanSetting(
+                    prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配",
+                    "将深色中性文字适配为浅色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
+                    masterEnabled && liquidEnabled && widgetGlass,
+                )
             }
         }
-        item(key = "widget-related-heading") { SmallTitle(if (os4Launcher) "已载入小组件" else "独立外观与组件管理") }
+        item(key = "widget-geometry-heading") { SmallTitle("尺寸与圆角") }
+        item(key = "widget-geometry") {
+            SettingsCard {
+                IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
+                ModernListDivider()
+                IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
+            }
+        }
+        item(key = "widget-edge") {
+            SettingsCard {
+                ArrowPreference(
+                    title = "阴影",
+                    summary = "Prismal 外阴影与描边可独立设置，未调整时继承全局",
+                    enabled = masterEnabled && liquidEnabled && widgetGlass,
+                    onClick = { open(Page.WidgetEdge) },
+                )
+            }
+        }
+        item(key = "widget-related-heading") { SmallTitle("独立外观与组件管理") }
         item(key = "widget-components") {
             SettingsCard {
                 ArrowPreference(

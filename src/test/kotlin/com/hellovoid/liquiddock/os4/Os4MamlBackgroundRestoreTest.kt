@@ -72,4 +72,56 @@ class Os4MamlBackgroundRestoreTest {
             directory.deleteRecursively()
         }
     }
+
+    @Test fun unifiesExistingStrokeMaterialToClockGlassMaterial() {
+        val directory = Files.createTempDirectory("os4-maml-clock-unify").toFile()
+        try {
+            val source = directory.resolve("source.zip")
+            val glassOn = directory.resolve("glass-on.zip")
+            val manifest = """
+                <Widget productId="weather" w="400" h="200" supportBackgroundBlur="false">
+                    <Layer w="#view_width" h="#view_height">
+                        <MaterialToken tokenName="Glass_Stroke_Regular" version="30">
+                            <BloomStrokeConfig disableBloomStroke="not(#hyper_material_bloom_stroke_enable)||#isInPicker"/>
+                            <ColorBlendConfig disableBlend="0"/>
+                        </MaterialToken>
+                    </Layer>
+                </Widget>
+            """.trimIndent()
+            ZipOutputStream(source.outputStream()).use { out ->
+                out.putNextEntry(ZipEntry("manifest.xml"))
+                out.write(manifest.toByteArray(Charsets.UTF_8))
+                out.closeEntry()
+            }
+
+            assertTrue(Os4MamlArchive.rewrite(
+                Os4MamlArchive.FileLike(source), Os4MamlArchive.FileLike(glassOn),
+                emptySet(), true,
+            ))
+
+            val doc = ZipFile(glassOn).use { zip ->
+                zip.getInputStream(zip.getEntry("manifest.xml")).use { input ->
+                    DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(input)
+                }
+            }
+            assertEquals("false", doc.documentElement.getAttribute("supportBackgroundBlur"))
+            val token = doc.getElementsByTagName("MaterialToken").item(0) as org.w3c.dom.Element
+            assertEquals("clock_classic_material", token.getAttribute("tokenName"))
+            assertEquals("30", token.getAttribute("version"))
+            val bloom = doc.getElementsByTagName("BloomStrokeConfig").item(0) as org.w3c.dom.Element
+            assertEquals("1", bloom.getAttribute("disableBloomStroke"))
+            val blend = doc.getElementsByTagName("ColorBlendConfig").item(0) as org.w3c.dom.Element
+            assertEquals("1", blend.getAttribute("disableBlend"))
+            val blur = doc.getElementsByTagName("BackgroundBlurConfig").item(0) as org.w3c.dom.Element
+            assertEquals("0", blur.getAttribute("blurBgMode"))
+            assertEquals("0", blur.getAttribute("disableBlur"))
+            assertEquals("true", blur.getAttribute("passWindow"))
+            assertEquals("true", blur.getAttribute("rustPassWindow"))
+            assertEquals("true", blur.getAttribute("reuseContainer"))
+            val glass = doc.getElementsByTagName("GlassConfig").item(0) as org.w3c.dom.Element
+            assertEquals("0", glass.getAttribute("disableGlass"))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
 }

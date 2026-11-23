@@ -90,6 +90,8 @@ static ld_gse_dhm_fn g_ld_gse_orig_dhm;
 static ld_gse_compute_fn g_ld_gse_compute;
 static int g_ld_gse_logonly;
 static volatile unsigned g_ld_gse_calls;
+static volatile float g_ld_gse_large_folder_corner;
+static volatile float g_ld_gse_widget_corner;
 
 /* 引擎 .so 首个映射 = ELF 基址（首个 PT_LOAD，offset 0）。 */
 static uintptr_t ld_gse_engine_base(void)
@@ -172,7 +174,7 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
     }
 
     int interesting = (rec != NULL) && (dock || kind == 1);
-    if (interesting && (call < 8u || (call % 60u) == 0u)) {
+    if (interesting && call < 24u) {
         ld_blog("glass superellipse: arena=%p base=%llu count=%llu rec=%p "
                 "kind=%u rect=%.1f,%.1f,%.1f,%.1f wh=%.1fx%.1f "
                 "radii=%.1f,%.1f quad=%.1f,%.1f,%.1f,%.1f n=%.3f dock=%d",
@@ -186,31 +188,63 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
                 (double)n_old, dock);
     }
 
-    /* 只改 Dock 的圆角矩形记录（n<=2）；真 SE 记录（n>2）不动。 */
-    if (rec && dock && kind == 1 && !(n_old > 2.0f) && g_ld_gse_compute) {
+    /* 对所有圆角矩形或超椭圆记录（kind==1，半径>0）按组件圆角更新并合成超椭圆参数。 */
+    if (rec && kind == 1 && (rad[0] > 0.5f || rad[1] > 0.5f) && g_ld_gse_compute) {
         if (!g_ld_gse_logonly) {
-            __attribute__((aligned(16))) float rect_buf[4];
-            __attribute__((aligned(16))) float radii_buf[8];
-            __attribute__((aligned(16))) uint8_t params[LD_GSE_PARAMS_SIZE];
-            memcpy(rect_buf, rec + LD_GSE_OFF_RECT, sizeof rect_buf);
-            for (int i = 0; i < 4; i++) {
-                radii_buf[i * 2 + 0] = rad[0];
-                radii_buf[i * 2 + 1] = rad[1];
+            float min_dim = fminf(w, h);
+            float max_dim = fmaxf(w, h);
+            int radius_overridden = 0;
+            int is_zero_origin = (fabsf(rect[0]) < 1.0f && fabsf(rect[1]) < 1.0f);
+            float lf_c = g_ld_gse_large_folder_corner;
+            float wg_c = g_ld_gse_widget_corner;
+            /* 大文件夹：静止时非零原点（如 26.8,26.8），长按/拖动浮层时原点为 0 但原半径 > 15.2dp（小组件原半径为 14dp）。 */
+            int is_large_folder = !dock && min_dim >= 45.0f && max_dim >= 120.0f &&
+                                  max_dim <= 800.0f && (max_dim / fmaxf(min_dim, 1.0f)) <= 4.0f &&
+                                  (!is_zero_origin || rad[0] > 15.2f);
+            int is_widget = !dock && !is_large_folder && is_zero_origin &&
+                            min_dim >= 120.0f && max_dim <= 800.0f &&
+                            (max_dim / fmaxf(min_dim, 1.0f)) <= 3.2f;
+            if (is_large_folder && lf_c > 0.0f) {
+                float r_lf = fminf(lf_c, min_dim * 0.5f);
+                rad[0] = rad[1] = r_lf;
+                quad[0] = quad[1] = quad[2] = quad[3] = r_lf;
+                memcpy(rec + LD_GSE_OFF_RADII, rad, sizeof rad);
+                memcpy(rec + LD_GSE_OFF_QUAD, quad, sizeof quad);
+                radius_overridden = 1;
+            } else if (is_widget && wg_c > 0.0f) {
+                float r_w = fminf(wg_c, min_dim * 0.5f);
+                rad[0] = rad[1] = r_w;
+                quad[0] = quad[1] = quad[2] = quad[3] = r_w;
+                memcpy(rec + LD_GSE_OFF_RADII, rad, sizeof rad);
+                memcpy(rec + LD_GSE_OFF_QUAD, quad, sizeof quad);
+                radius_overridden = 1;
             }
-            memset(params, 0, sizeof params);
-            g_ld_gse_compute(params, rect_buf, radii_buf);
-            float n_new;
-            memcpy(&n_new, params, sizeof n_new);
-            if (!isfinite(n_new) || !(n_new > 2.0f)) n_new = 5.0f;
-            memcpy(rec + LD_GSE_OFF_PARAMS, params, LD_GSE_PARAMS_SIZE);
-            memcpy(rec + LD_GSE_OFF_N, &n_new, sizeof n_new);
-            patched = 1;
-            ld_blog("glass superellipse: patched rec=%p n=%.3f->%.3f "
-                    "rect=%.1f,%.1f,%.1f,%.1f radii=%.1f,%.1f",
-                    (void *)rec, (double)n_old, (double)n_new,
-                    (double)rect[0], (double)rect[1], (double)rect[2],
-                    (double)rect[3], (double)rad[0], (double)rad[1]);
-        } else if (call < 8u || (call % 60u) == 0u) {
+            if (!(n_old > 2.0f) || radius_overridden) {
+                __attribute__((aligned(16))) float rect_buf[4];
+                __attribute__((aligned(16))) float radii_buf[8];
+                __attribute__((aligned(16))) uint8_t params[LD_GSE_PARAMS_SIZE];
+                memcpy(rect_buf, rec + LD_GSE_OFF_RECT, sizeof rect_buf);
+                for (int i = 0; i < 4; i++) {
+                    radii_buf[i * 2 + 0] = rad[0];
+                    radii_buf[i * 2 + 1] = rad[1];
+                }
+                memset(params, 0, sizeof params);
+                g_ld_gse_compute(params, rect_buf, radii_buf);
+                float n_new;
+                memcpy(&n_new, params, sizeof n_new);
+                if (!isfinite(n_new) || !(n_new > 2.0f)) n_new = 5.0f;
+                memcpy(rec + LD_GSE_OFF_PARAMS, params, LD_GSE_PARAMS_SIZE);
+                memcpy(rec + LD_GSE_OFF_N, &n_new, sizeof n_new);
+                patched = 1;
+                if (call < 24u) {
+                    ld_blog("glass superellipse: patched rec=%p n=%.3f->%.3f "
+                            "rect=%.1f,%.1f,%.1f,%.1f radii=%.1f,%.1f",
+                            (void *)rec, (double)n_old, (double)n_new,
+                            (double)rect[0], (double)rect[1], (double)rect[2],
+                            (double)rect[3], (double)rad[0], (double)rad[1]);
+                }
+            }
+        } else if (call < 24u) {
             ld_blog("glass superellipse: logonly, rec=%p not patched",
                     (void *)rec);
         }
@@ -223,11 +257,14 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
     return NULL;
 }
 
-static void ld_glass_superellipse_install(const struct native_api *api)
+static void ld_glass_superellipse_install(const struct native_api *api, int enabled,
+                                          float large_folder_corner, float widget_corner)
 {
+    g_ld_gse_large_folder_corner = large_folder_corner;
+    g_ld_gse_widget_corner = widget_corner;
     static int state;
     if (state || !api || !api->hook) return;
-    if (access(LD_GSE_MARKER, F_OK) != 0) { state = 2; return; }
+    if (!enabled && access(LD_GSE_MARKER, F_OK) != 0) { state = 2; return; }
     g_ld_gse_logonly = access(LD_GSE_LOGONLY_MARKER, F_OK) == 0;
 
     uintptr_t base = ld_gse_engine_base();

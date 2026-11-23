@@ -67,11 +67,11 @@ static int ld_patch_text_word(uintptr_t address, uint32_t expected, uint32_t val
     return rc;
 }
 
-static void ld_superellipse_blur_install(void)
+static void ld_superellipse_blur_install(int enabled)
 {
     static int state;
     if (state) return;
-    if (access(LD_SE_BLUR_MARKER, F_OK) != 0) { state = 2; return; }
+    if (!enabled && access(LD_SE_BLUR_MARKER, F_OK) != 0) { state = 2; return; }
     uintptr_t base = ld_se_blur_engine_base();
     if (!base) return;
     uintptr_t site = base + LD_SE_BLUR_PATCH_VADDR;

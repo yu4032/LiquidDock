@@ -36,6 +36,12 @@ object Os4NativeConfPublisher {
         if (grid && (!options.landscape.isValid() || !options.portrait.isValid())) return null
         if (options.dock.enabled && !options.dock.isValid()) return null
         if (options.divider.enabled && !options.divider.isValid()) return null
+        if (options.glassEnabled) {
+            for ((k, v) in options.prismalOverrides) {
+                val spec = Os4MainScreenOptions.prismalSpecsByKey[k] ?: return null
+                if (!v.isFinite() || v !in spec.min..spec.max) return null
+            }
+        }
         if (options.glassEnabled && options.glassIcons &&
             (!options.glassIconSize.isFinite() || options.glassIconSize !in -40.0..40.0 ||
                 !options.glassIconCorner.isFinite() || options.glassIconCorner !in 0.0..128.0)) return null
@@ -66,6 +72,17 @@ object Os4NativeConfPublisher {
             if (options.preventWidgetStretchEnabled) append("widget_prevent_stretch=1\n")
             // Explicit opt-in only. An absent key preserves the stock OS4 material.
             if (options.glassEnabled) append("glass_enabled=1\n")
+            if (options.glassEnabled && options.softGlassEnabled) append("soft_glass_enabled=1\n")
+            if (options.glassEnabled && options.prismalOverrides.isNotEmpty()) {
+                for (spec in Os4MainScreenOptions.prismalSpecs) {
+                    val v = options.prismalOverrides[spec.confKey] ?: continue
+                    if (spec.isBool) {
+                        append(spec.confKey).append('=').append(if (v >= 0.5) 1 else 0).append('\n')
+                    } else {
+                        append(spec.confKey).append('=').append(Os4NativeGlassOptions.format(v)).append('\n')
+                    }
+                }
+            }
             if (options.glassEnabled) {
                 Os4NativeGlassOptions.configLines(options.glassNativeOverrides)!!.forEach {
                     append(it).append('\n')

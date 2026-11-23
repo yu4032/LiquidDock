@@ -93,4 +93,38 @@ class Os4GlassConfigTest {
         )))
         assertTrue(Os4MainScreenOptions.watchedKeys.contains(ConfigSchema.Glass.ENABLED.name()))
     }
+
+    @Test fun prismalGuiSettingsExportOnlyWhenPresentAndRejectOutOfRange() {
+        val conf = Os4MainScreenOptions.fromPreferences(mapOf(
+            ConfigSchema.Dock.ENABLED.name() to false,
+            ConfigSchema.Glass.ENABLED.name() to true,
+            ConfigSchema.Glass.ICON_GLASS.name() to false,
+            ConfigSchema.Glass.WIDGET_GLASS.name() to false,
+            ConfigSchema.Glass.CONTINUOUS_CORNERS.name() to true,
+            "${ConfigSchema.Glass.BLUR.name()}_tenths" to 35,
+            ConfigSchema.Glass.IOR.name() to 160,
+            ConfigSchema.Glass.PRISMAL_SHOW_NORMALS.name() to true,
+            ConfigSchema.Glass.BACKLIT_ENABLED.name() to true,
+        ))
+        assertTrue(conf != null)
+        assertTrue(conf!!.contains("prismal_continuous_corners=1\n"))
+        assertTrue(conf.contains("prismal_blur=3.5\n"))
+        assertTrue(conf.contains("prismal_ior=1.6\n"))
+        assertTrue(conf.contains("prismal_show_normals=1\n"))
+        assertTrue(conf.contains("prismal_backlit_enabled=1\n"))
+        assertTrue(!conf.contains("soft_glass_enabled=1\n"))
+
+        val softOn = Os4MainScreenOptions.fromPreferences(mapOf(
+            ConfigSchema.Dock.ENABLED.name() to false,
+            ConfigSchema.Glass.ENABLED.name() to true,
+            ConfigSchema.Glass.SOFT_GLASS_ENABLED.name() to true,
+        ))
+        assertTrue(softOn != null && softOn.contains("soft_glass_enabled=1\n"))
+
+        val invalidIor = Os4MainScreenOptions.fromPreferences(mapOf(
+            ConfigSchema.Glass.ENABLED.name() to true,
+            ConfigSchema.Glass.IOR.name() to 999,
+        ))
+        assertEquals(null, invalidIor)
+    }
 }

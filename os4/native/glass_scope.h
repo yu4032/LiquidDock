@@ -122,12 +122,6 @@ __attribute__((used)) static void ld_on_build_folder_glass(struct ld_dart_contex
     int scope = LD_GLASS_SCOPE_WIDGET;
     if (ld_in_range(lr, g_scope_folder_light_start, g_scope_folder_light_end)) {
         scope = LD_GLASS_SCOPE_LARGE_FOLDER;
-        if (g_home_options.glass_enabled && g_home_options.large_folder_corner > 0.0) {
-            double corner = g_home_options.large_folder_corner;
-            uint64_t bits = 0;
-            memcpy(&bits, &corner, sizeof bits);
-            ld_write_q0_u64(c, bits);
-        }
     } else if (ld_in_range(lr, g_scope_sysa_start, g_scope_sysa_end) ||
                ld_in_range(lr, g_scope_sysb_start, g_scope_sysb_end)) {
         scope = LD_GLASS_SCOPE_ICON;
@@ -199,22 +193,24 @@ static void ld_glass_scope_install(
         g_home_options.glass_scope_vaddr[0], g_home_options.glass_scope_size[0],
         0x11de554u, ld_pat_recents_glass_build, 16, "glass_scope recents");
     if (recents) {
+        uintptr_t span = (g_home_options.glass_scope_targets_present &&
+                          g_home_options.glass_scope_size[0] >= 0x500u)
+                             ? (uintptr_t)g_home_options.glass_scope_size[0]
+                             : 0x500u;
         g_scope_recents_start = recents;
-        g_scope_recents_end = recents +
-            (g_home_options.glass_scope_targets_present && g_home_options.glass_scope_size[0]
-                 ? (uintptr_t)g_home_options.glass_scope_size[0]
-                 : 0x500u);
+        g_scope_recents_end = recents + span;
     }
     uintptr_t folder_light = ld_resolve_sym_or_aot(
         lib, g_home_options.glass_scope_targets_present,
         g_home_options.glass_scope_vaddr[1], g_home_options.glass_scope_size[1],
         0x11b26c0u, ld_pat_folder_light_build, 20, "glass_scope folder_light");
     if (folder_light) {
+        uintptr_t span = (g_home_options.glass_scope_targets_present &&
+                          g_home_options.glass_scope_size[1] >= 0x400u)
+                             ? (uintptr_t)g_home_options.glass_scope_size[1]
+                             : 0x400u;
         g_scope_folder_light_start = folder_light;
-        g_scope_folder_light_end = folder_light +
-            (g_home_options.glass_scope_targets_present && g_home_options.glass_scope_size[1]
-                 ? (uintptr_t)g_home_options.glass_scope_size[1]
-                 : 0x100u);
+        g_scope_folder_light_end = folder_light + span;
     }
 
     uintptr_t build_filter = ld_resolve_sym_or_aot(

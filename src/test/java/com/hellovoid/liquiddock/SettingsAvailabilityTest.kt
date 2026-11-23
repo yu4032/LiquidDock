@@ -12,10 +12,19 @@ class SettingsAvailabilityTest {
     @Test fun os4PortPagesAreNavigableForTestingWithoutBeingMarkedReady() {
         val testing = listOf(
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
-            Page.Dock, Page.DockGeometry, Page.Divider,
+            Page.Dock, Page.DockGeometry, Page.DockBehavior, Page.DockRecentBlacklist,
+            Page.Divider,
             Page.SoftGlass, Page.SoftGlassMaterial,
             Page.SoftGlassColor, Page.SoftGlassLighting,
-            Page.SoftGlassComponents, Page.WidgetComponents,
+            Page.SoftGlassComponents,
+            Page.SoftGlassDock, Page.SoftGlassIcons, Page.SoftGlassWidgets, Page.SoftGlassLargeFolder,
+            Page.WidgetComponents,
+            Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
+            Page.DockEdge, Page.IconEdge, Page.WidgetEdge, Page.FolderEdge,
+            Page.PopupEdge, Page.DialogEdge,
+            Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
+            Page.DialogCustomization, Page.DialogAll,
+            Page.LauncherHighlights, Page.LauncherHighlightsCompact, Page.LauncherHighlightsLarge,
             Page.Recents,
             Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
         )
@@ -26,19 +35,8 @@ class SettingsAvailabilityTest {
     }
 
     @Test fun unrelatedLauncherFeaturesStillGrayOut() {
-        val unavailable = listOf(
-            Page.DockBehavior,
-            Page.DockRecentBlacklist,
-            Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
-            Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
-            Page.DialogCustomization, Page.DialogAll, Page.PopupEdge, Page.DialogEdge,
-            Page.DockEdge, Page.IconEdge, Page.WidgetEdge, Page.FolderEdge,
-            Page.LauncherHighlights, Page.LauncherHighlightsCompact,
-            Page.LauncherHighlightsLarge,
-        )
-        unavailable.forEach {
-            assertEquals("OS4 unavailable ${it.name}", PagePortState.UNAVAILABLE, os4.status(it))
-            assertFalse("Blocked ${it.name}", os4.allows(it))
+        Page.entries.forEach {
+            assertTrue("Open in OS4 ${it.name}", os4.allows(it))
         }
     }
 
@@ -46,8 +44,8 @@ class SettingsAvailabilityTest {
         val ready = listOf(
             Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub,
             Page.ThemePalette, Page.Data, Page.About,
-            Page.Liquid, Page.LiquidMaterial, Page.LiquidColor,
-            Page.LiquidLighting, Page.LiquidSampling, Page.GlassEdge,
+            Page.Liquid, Page.LiquidMaterial, Page.LiquidRefraction, Page.LiquidColor,
+            Page.LiquidLighting, Page.LiquidShadow, Page.LiquidSampling, Page.GlassEdge,
             Page.GlassComponents, Page.GlassMenus, Page.SidebarEdge,
             Page.HandleMenuCustomization, Page.HandleMenuAll, Page.HandleMenuEdge,
             Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.GboardEdge,
@@ -67,12 +65,10 @@ class SettingsAvailabilityTest {
     }
 
     @Test fun futureRoutesFailClosedUnlessExplicitlyEnrolled() {
-        // WidgetComponents was explicitly enrolled in the OS4 testing routes.
         assertEquals(PagePortState.TESTING, os4.status(Page.WidgetComponents))
         assertTrue(os4.allows(Page.WidgetComponents))
-        // Unported folder customization must still remain gated.
-        assertEquals(PagePortState.UNAVAILABLE, os4.status(Page.GlassFolders))
-        assertFalse(os4.allows(Page.GlassFolders))
+        assertEquals(PagePortState.TESTING, os4.status(Page.GlassFolders))
+        assertTrue(os4.allows(Page.GlassFolders))
     }
 
     @Test fun availablePagesAreTheUnionOfReadyAndTesting() {

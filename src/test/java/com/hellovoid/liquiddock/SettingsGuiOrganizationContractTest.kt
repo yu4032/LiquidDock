@@ -11,8 +11,8 @@ class SettingsGuiOrganizationContractTest {
 
     private val declaredRoutes = setOf(
         Page.SoftGlassMaterial, Page.SoftGlassColor, Page.SoftGlassLighting,
-        Page.LiquidMaterial, Page.LiquidColor,
-        Page.LiquidLighting, Page.LiquidSampling,
+        Page.LiquidMaterial, Page.LiquidRefraction, Page.LiquidColor,
+        Page.LiquidLighting, Page.LiquidShadow, Page.LiquidSampling,
         Page.DockGeometry, Page.DockBehavior,
         Page.GridLandscape, Page.GridPortrait,
         Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,

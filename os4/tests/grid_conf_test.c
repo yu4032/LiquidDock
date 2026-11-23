@@ -127,6 +127,34 @@ int main(void)
             puts("FAIL: malformed or repeated divider field accepted"); return 1;
         }
     }
+
+    /* Prismal GUI options: defaults, valid override parsing, out-of-range/duplicate rejection */
+    const char *prismal_ok = "glass_enabled=1\nsoft_glass_enabled=0\n"
+        "prismal_continuous_corners=1\nprismal_blur=4.5\nprismal_thickness=22.0\n"
+        "prismal_ior=1.65\nprismal_dome=1.2\nprismal_chromatic=18.0\n"
+        "prismal_tint_a=48.0\nprismal_light_dir_x=-0.65\nprismal_show_normals=1\n"
+        "prismal_backlit_enabled=1\nprismal_backlit_width=1.2\nprismal_backlit_strength=0.4\n"
+        "end=1\n";
+    if (!ld_grid_conf_parse(prismal_ok, strlen(prismal_ok), &glass) ||
+        glass.soft_glass_enabled != 0 || glass.prismal.continuous_corners != 1 ||
+        fabs(glass.prismal.blur - 4.5) > 1e-6 || fabs(glass.prismal.ior - 1.65) > 1e-6 ||
+        glass.prismal.show_normals != 1 || glass.prismal.backlit_enabled != 1 ||
+        fabs(glass.prismal.backlit_width - 1.2) > 1e-6) {
+        puts("FAIL: valid prismal config rejected or misparsed"); return 1;
+    }
+    const char *bad_prismal[] = {
+        "glass_enabled=1\nprismal_unknown=1.0\nend=1\n",
+        "glass_enabled=1\nprismal_ior=2.5\nend=1\n",
+        "glass_enabled=1\nprismal_blur=61.0\nend=1\n",
+        "glass_enabled=1\nprismal_continuous_corners=2\nend=1\n",
+        "glass_enabled=1\nprismal_blur=2.0\nprismal_blur=3.0\nend=1\n",
+        "glass_enabled=1\nsoft_glass_enabled=2\nend=1\n",
+    };
+    for (size_t i = 0; i < sizeof bad_prismal / sizeof *bad_prismal; i++) {
+        if (ld_grid_conf_parse(bad_prismal[i], strlen(bad_prismal[i]), NULL)) {
+            puts("FAIL: invalid prismal config accepted"); return 1;
+        }
+    }
     puts("PASS: strict glass gates and four AOT pipeline observers");
     return 0;
 }

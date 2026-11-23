@@ -99,6 +99,15 @@ __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context
         }
     }
     int result=opts->mask?ld_native_glass_apply(filter,opts,ld_read_heap,ld_native_glass_write):0;
+    if(__atomic_load_n(&g_prismal_glass_active,__ATOMIC_ACQUIRE)) {
+        float blur_px=ld_prismal_current_blur_px();
+        float br=blur_px>=0.5f?blur_px:0.01f;
+        float bg=0.01f;
+        uintptr_t br_addr=filter+ld_native_glass_fields[22].offset;
+        uintptr_t bg_addr=filter+ld_native_glass_fields[23].offset;
+        ld_native_glass_write(&br_addr,&br,1);
+        ld_native_glass_write(&bg_addr,&bg,1);
+    }
     static unsigned reported;
     if(__atomic_fetch_add(&reported,1u,__ATOMIC_RELAXED)<12)
         ld_blog("native glass configured scope=%d fields=%d unified_base=%d",scope,result,base_applied);

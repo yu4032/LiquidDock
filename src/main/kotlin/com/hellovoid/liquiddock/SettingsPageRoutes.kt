@@ -13,8 +13,8 @@ internal fun canonicalSettingsParent(page: Page): Page? = when (page) {
     Page.SoftGlassMaterial, Page.SoftGlassColor, Page.SoftGlassLighting,
     Page.SoftGlassDock, Page.SoftGlassIcons, Page.SoftGlassWidgets,
     Page.SoftGlassLargeFolder -> Page.SoftGlass
-    Page.LiquidMaterial, Page.LiquidColor, Page.LiquidLighting,
-    Page.LiquidSampling, Page.GlassEdge -> Page.Liquid
+    Page.LiquidMaterial, Page.LiquidRefraction, Page.LiquidColor, Page.LiquidLighting,
+    Page.LiquidShadow, Page.LiquidSampling, Page.GlassEdge -> Page.Liquid
     Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders, Page.GlassMenus, Page.SidebarEdge -> Page.GlassComponents
     Page.HandleMenuCustomization, Page.ShortcutPopupCustomization, Page.DialogCustomization -> Page.GlassMenus
     Page.Gboard -> Page.ThirdPartyApps

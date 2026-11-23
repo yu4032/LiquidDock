@@ -44,6 +44,8 @@
     <string name="page_widget_component_detail">Widget component detail</string>
     <string name="widget_components_entry">Widget component styling</string>
     <string name="widget_components_entry_summary">Load widgets to hide components or turn selected text/icons white</string>
+    <string name="page_stroke">Dock stroke</string>
+    <string name="page_shadow">Native Dock shadow</string>
     <string name="page_animation">Animations &amp; transitions</string>
     <string name="page_data">Presets</string>
     <string name="page_logs">Module Logs</string>
@@ -117,10 +119,10 @@
     <string name="page_glass_edge">Shadow</string>
     <string name="page_shortcut_popup">Shortcut menu customization</string>
     <string name="page_handle_menu">Top menu customization</string>
-    <string name="page_liquid_material">Material &amp; refraction</string>
+    <string name="page_liquid_material">Material</string>
     <string name="page_liquid_refraction">Refraction</string>
-    <string name="page_liquid_color">Color &amp; shadow</string>
-    <string name="page_liquid_lighting">Lighting &amp; edges</string>
+    <string name="page_liquid_color">Color &amp; dispersion</string>
+    <string name="page_liquid_lighting">Lighting &amp; OS4 edge</string>
     <string name="page_liquid_shadow">Inner shadow</string>
     <string name="page_liquid_sampling">Sampling &amp; performance</string>
     <string name="page_animation_workspace">Workspace &amp; Dock</string>

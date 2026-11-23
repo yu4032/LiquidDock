@@ -67,6 +67,110 @@ struct ld_dock_conf {
     double width, height, spacing, bottom, corner;
 };
 
+struct ld_prismal_options {
+    int continuous_corners;
+    int show_normals;
+    int backlit_enabled;
+    double blur;
+    double thickness;
+    double lens_refraction;
+    double refraction_inset;
+    double htw;
+    double smin_smoothing;
+    double backlit_width;
+    double ior;
+    double normal_strength;
+    double dome;
+    double depth_effect;
+    double chromatic;
+    double brightness;
+    double caustics;
+    double highlight_width;
+    double tint_r, tint_g, tint_b, tint_a;
+    double base_r, base_g, base_b, base_a;
+    double displacement_scale;
+    double edge_falloff;
+    double fresnel_reflect;
+    double dispersion_r, dispersion_b;
+    double vibrancy;
+    double os4_edge_width_px;
+    double os4_reflect_offset_px;
+    double os4_reflection_strength;
+    double os4_reflection_lighten;
+    double os4_directional_angle_range;
+    double os4_directional_intensity;
+    double os4_directional_opposite_intensity;
+    double light_dir_x, light_dir_y;
+    double shadow_r, shadow_g, shadow_b, shadow_a;
+    double shadow_softness;
+    double transmittance;
+    double backdrop_scale_x, backdrop_scale_y;
+    double parallax_scale;
+    double backlit_strength;
+    double backlit_extent;
+    double backlit_softness;
+    double widget_corner;
+    double small_folder_corner;
+    double large_folder_corner;
+    int outer_shadow_enabled;
+    double outer_shadow_radius;
+    double outer_shadow_offset_y;
+    double outer_shadow_r, outer_shadow_g, outer_shadow_b, outer_shadow_a;
+    double outer_shadow_light_follow;
+    int disable_stationary_downsample;
+};
+
+static inline void ld_prismal_options_defaults(struct ld_prismal_options *p)
+{
+    if (!p) return;
+    memset(p, 0, sizeof(*p));
+    p->blur = 2.0;
+    p->thickness = 18.0;
+    p->lens_refraction = 1.3;
+    p->refraction_inset = 20.0;
+    p->htw = 19.0;
+    p->smin_smoothing = 1.8;
+    p->backlit_width = 0.4;
+    p->ior = 1.55;
+    p->normal_strength = 1.15;
+    p->dome = 1.30;
+    p->depth_effect = 0.0;
+    p->chromatic = 26.0;
+    p->brightness = 1.08;
+    p->caustics = 0.28;
+    p->highlight_width = 1.0;
+    p->tint_r = 0.0; p->tint_g = 0.0; p->tint_b = 255.0; p->tint_a = 35.0;
+    p->base_r = 255.0; p->base_g = 255.0; p->base_b = 255.0; p->base_a = 0.0;
+    p->displacement_scale = 1.15;
+    p->edge_falloff = 4.0;
+    p->fresnel_reflect = 1.98;
+    p->dispersion_r = 1.0; p->dispersion_b = 1.0;
+    p->vibrancy = 1.28;
+    p->os4_edge_width_px = 6.0;
+    p->os4_reflect_offset_px = 0.0;
+    p->os4_reflection_strength = 0.28;
+    p->os4_reflection_lighten = 0.16;
+    p->os4_directional_angle_range = 0.52;
+    p->os4_directional_intensity = 0.42;
+    p->os4_directional_opposite_intensity = 0.14;
+    p->light_dir_x = -0.50;
+    p->light_dir_y = -0.80;
+    p->shadow_r = 255.0; p->shadow_g = 255.0; p->shadow_b = 255.0; p->shadow_a = 35.0;
+    p->shadow_softness = 10.0;
+    p->transmittance = 1.0;
+    p->backdrop_scale_x = 1.0; p->backdrop_scale_y = 1.0;
+    p->parallax_scale = 1.0;
+    p->backlit_strength = 0.20;
+    p->backlit_extent = 1.0;
+    p->backlit_softness = 0.68;
+    p->outer_shadow_enabled = 0;
+    p->outer_shadow_radius = 5.0;
+    p->outer_shadow_offset_y = 0.0;
+    p->outer_shadow_r = 0.0; p->outer_shadow_g = 0.0; p->outer_shadow_b = 0.0; p->outer_shadow_a = 8.0;
+    p->outer_shadow_light_follow = 0.65;
+    p->disable_stationary_downsample = 1;
+}
+
 struct ld_grid_conf {
     int cols;   /* 0 = 不改（缺键）；否则 [LD_GRID_COLS_MIN, LD_GRID_COLS_MAX] */
     int rows;   /* 0 = 不改（缺键）；否则 [LD_GRID_ROWS_MIN, LD_GRID_ROWS_MAX] */
@@ -74,6 +178,8 @@ struct ld_grid_conf {
     struct ld_grid_offsets landscape, portrait;
     struct ld_dock_conf dock;
     int glass_enabled;
+    int soft_glass_enabled;
+    struct ld_prismal_options prismal;
     int debug_logging;  /* settings log switch; gates optional diagnostics */
     int glass_icons, glass_widgets, widget_overrides;
     int large_folder_glass, large_folder_native_outline;
@@ -283,6 +389,113 @@ static inline int ld_grid_parse_bounded_decimal(const char *s, double lo, double
     return 1;
 }
 
+static inline int ld_prismal_conf_kv(const char *key, const char *val,
+                                     struct ld_prismal_options *p, uint64_t *seen)
+{
+    static const struct {
+        const char *name;
+        size_t off;
+        int is_bool;
+        double lo, hi;
+    } tbl[] = {
+        {"prismal_continuous_corners", offsetof(struct ld_prismal_options, continuous_corners), 1, 0, 1},
+        {"prismal_show_normals", offsetof(struct ld_prismal_options, show_normals), 1, 0, 1},
+        {"prismal_backlit_enabled", offsetof(struct ld_prismal_options, backlit_enabled), 1, 0, 1},
+        {"prismal_blur", offsetof(struct ld_prismal_options, blur), 0, 0.0, 60.0},
+        {"prismal_thickness", offsetof(struct ld_prismal_options, thickness), 0, 1.0, 60.0},
+        {"prismal_lens_refraction", offsetof(struct ld_prismal_options, lens_refraction), 0, 0.0, 8.0},
+        {"prismal_refraction_inset", offsetof(struct ld_prismal_options, refraction_inset), 0, 0.0, 80.0},
+        {"prismal_htw", offsetof(struct ld_prismal_options, htw), 0, 1.0, 120.0},
+        {"prismal_smin_smoothing", offsetof(struct ld_prismal_options, smin_smoothing), 0, 0.0, 24.0},
+        {"prismal_backlit_width", offsetof(struct ld_prismal_options, backlit_width), 0, 0.0, 5.0},
+        {"prismal_ior", offsetof(struct ld_prismal_options, ior), 0, 1.0, 2.0},
+        {"prismal_normal_strength", offsetof(struct ld_prismal_options, normal_strength), 0, 0.0, 3.0},
+        {"prismal_dome", offsetof(struct ld_prismal_options, dome), 0, 0.0, 2.0},
+        {"prismal_depth_effect", offsetof(struct ld_prismal_options, depth_effect), 0, 0.0, 1.0},
+        {"prismal_chromatic", offsetof(struct ld_prismal_options, chromatic), 0, 0.0, 40.0},
+        {"prismal_brightness", offsetof(struct ld_prismal_options, brightness), 0, 0.5, 2.0},
+        {"prismal_caustics", offsetof(struct ld_prismal_options, caustics), 0, 0.0, 1.0},
+        {"prismal_highlight_width", offsetof(struct ld_prismal_options, highlight_width), 0, 0.5, 3.0},
+        {"prismal_tint_r", offsetof(struct ld_prismal_options, tint_r), 0, 0.0, 255.0},
+        {"prismal_tint_g", offsetof(struct ld_prismal_options, tint_g), 0, 0.0, 255.0},
+        {"prismal_tint_b", offsetof(struct ld_prismal_options, tint_b), 0, 0.0, 255.0},
+        {"prismal_tint_a", offsetof(struct ld_prismal_options, tint_a), 0, 0.0, 255.0},
+        {"prismal_base_r", offsetof(struct ld_prismal_options, base_r), 0, 0.0, 255.0},
+        {"prismal_base_g", offsetof(struct ld_prismal_options, base_g), 0, 0.0, 255.0},
+        {"prismal_base_b", offsetof(struct ld_prismal_options, base_b), 0, 0.0, 255.0},
+        {"prismal_base_a", offsetof(struct ld_prismal_options, base_a), 0, 0.0, 255.0},
+        {"prismal_displacement_scale", offsetof(struct ld_prismal_options, displacement_scale), 0, 0.0, 4.0},
+        {"prismal_edge_falloff", offsetof(struct ld_prismal_options, edge_falloff), 0, 0.0, 20.0},
+        {"prismal_fresnel_reflect", offsetof(struct ld_prismal_options, fresnel_reflect), 0, 0.0, 5.0},
+        {"prismal_dispersion_r", offsetof(struct ld_prismal_options, dispersion_r), 0, 0.0, 4.0},
+        {"prismal_dispersion_b", offsetof(struct ld_prismal_options, dispersion_b), 0, 0.0, 4.0},
+        {"prismal_vibrancy", offsetof(struct ld_prismal_options, vibrancy), 0, 0.0, 3.0},
+        {"prismal_os4_edge_width_px", offsetof(struct ld_prismal_options, os4_edge_width_px), 0, 3.0, 64.0},
+        {"prismal_os4_reflect_offset_px", offsetof(struct ld_prismal_options, os4_reflect_offset_px), 0, 0.0, 40.0},
+        {"prismal_os4_reflection_strength", offsetof(struct ld_prismal_options, os4_reflection_strength), 0, 0.0, 2.0},
+        {"prismal_os4_reflection_lighten", offsetof(struct ld_prismal_options, os4_reflection_lighten), 0, 0.0, 1.0},
+        {"prismal_os4_directional_angle_range", offsetof(struct ld_prismal_options, os4_directional_angle_range), 0, 0.05, 1.50},
+        {"prismal_os4_directional_intensity", offsetof(struct ld_prismal_options, os4_directional_intensity), 0, 0.0, 2.0},
+        {"prismal_os4_directional_opposite_intensity", offsetof(struct ld_prismal_options, os4_directional_opposite_intensity), 0, 0.0, 2.0},
+        {"prismal_light_dir_x", offsetof(struct ld_prismal_options, light_dir_x), 0, -2.0, 2.0},
+        {"prismal_light_dir_y", offsetof(struct ld_prismal_options, light_dir_y), 0, -2.0, 2.0},
+        {"prismal_shadow_r", offsetof(struct ld_prismal_options, shadow_r), 0, 0.0, 255.0},
+        {"prismal_shadow_g", offsetof(struct ld_prismal_options, shadow_g), 0, 0.0, 255.0},
+        {"prismal_shadow_b", offsetof(struct ld_prismal_options, shadow_b), 0, 0.0, 255.0},
+        {"prismal_shadow_a", offsetof(struct ld_prismal_options, shadow_a), 0, 0.0, 255.0},
+        {"prismal_shadow_softness", offsetof(struct ld_prismal_options, shadow_softness), 0, 0.0, 20.0},
+        {"prismal_transmittance", offsetof(struct ld_prismal_options, transmittance), 0, 0.0, 1.0},
+        {"prismal_backdrop_scale_x", offsetof(struct ld_prismal_options, backdrop_scale_x), 0, 0.25, 4.0},
+        {"prismal_backdrop_scale_y", offsetof(struct ld_prismal_options, backdrop_scale_y), 0, 0.25, 4.0},
+        {"prismal_parallax_scale", offsetof(struct ld_prismal_options, parallax_scale), 0, 0.0, 4.0},
+        {"prismal_backlit_strength", offsetof(struct ld_prismal_options, backlit_strength), 0, 0.0, 1.0},
+        {"prismal_backlit_extent", offsetof(struct ld_prismal_options, backlit_extent), 0, 0.0, 1.0},
+        {"prismal_backlit_softness", offsetof(struct ld_prismal_options, backlit_softness), 0, 0.05, 2.0},
+        {"prismal_disable_stationary_downsample", offsetof(struct ld_prismal_options, disable_stationary_downsample), 1, 0, 1},
+        {"prismal_widget_corner", offsetof(struct ld_prismal_options, widget_corner), 0, 0.0, 128.0},
+        {"prismal_small_folder_corner", offsetof(struct ld_prismal_options, small_folder_corner), 0, 0.0, 128.0},
+        {"prismal_outer_shadow_enabled", offsetof(struct ld_prismal_options, outer_shadow_enabled), 1, 0, 1},
+        {"prismal_outer_shadow_radius", offsetof(struct ld_prismal_options, outer_shadow_radius), 0, 0.0, 24.0},
+        {"prismal_outer_shadow_offset_y", offsetof(struct ld_prismal_options, outer_shadow_offset_y), 0, -16.0, 16.0},
+        {"prismal_outer_shadow_r", offsetof(struct ld_prismal_options, outer_shadow_r), 0, 0.0, 255.0},
+        {"prismal_outer_shadow_g", offsetof(struct ld_prismal_options, outer_shadow_g), 0, 0.0, 255.0},
+        {"prismal_outer_shadow_b", offsetof(struct ld_prismal_options, outer_shadow_b), 0, 0.0, 255.0},
+        {"prismal_outer_shadow_a", offsetof(struct ld_prismal_options, outer_shadow_a), 0, 0.0, 255.0},
+        {"prismal_outer_shadow_light_follow", offsetof(struct ld_prismal_options, outer_shadow_light_follow), 0, 0.0, 1.0},
+    };
+    const size_t n = sizeof(tbl) / sizeof(tbl[0]);
+    for (size_t i = 0; i < n; ++i) {
+        if (strcmp(key, tbl[i].name) != 0) continue;
+        if (*seen & (1ull << i)) return -1;
+        *seen |= (1ull << i);
+        if (tbl[i].is_bool) {
+            if (strcmp(val, "0") != 0 && strcmp(val, "1") != 0) return -1;
+            *(int *)((uint8_t *)p + tbl[i].off) = (val[0] == '1') ? 1 : 0;
+            return 1;
+        } else {
+            double v = 0;
+            /* ld_grid_parse_plain_decimal requires strict decimal; 0/1/int are valid plain decimals too */
+            const char *q = val;
+            int digits = 0, frac = 0, dot = 0;
+            if (!q || !*q) return -1;
+            if (*q == '-' || *q == '+') ++q;
+            for (; *q; ++q) {
+                if (*q >= '0' && *q <= '9') { ++digits; if (dot) ++frac; }
+                else if (*q == '.' && !dot) dot = 1;
+                else return -1;
+            }
+            if (digits == 0 || (dot && frac == 0)) return -1;
+            char *endp = NULL;
+            errno = 0;
+            v = strtod(val, &endp);
+            if (errno || !endp || *endp != '\0' || !isfinite(v) || v < tbl[i].lo || v > tbl[i].hi) return -1;
+            *(double *)((uint8_t *)p + tbl[i].off) = v;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* Plain decimal only (no exponent, whitespace, NaN or infinity). */
 static inline int ld_grid_parse_plain_decimal(const char *s, double lo, double hi, double *outv)
 {
@@ -359,6 +572,8 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
     c.icon_size_percent = 100;
     c.recents_blur_percent = 100;
     c.allapps_blur_percent = 100;
+    ld_prismal_options_defaults(&c.prismal);
+    uint64_t prismal_seen = 0;
     uint64_t seen = 0;  /* bit0=dock_offset_y bit1=dock_offset_x bit2=glass bit3=icons
                            bit4=grid_cols bit5=grid_rows bit6=end */
     uint32_t divider_seen = 0;   /* 分隔线字段查重（定义见 divider_conf.h） */
@@ -588,6 +803,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     int value=0;
                     if (!ld_grid_parse_int(val, 0, 1, &value)) { bad=1; break; }
                     c.use_drag_material = value;
+                    if (!(prismal_seen & (1ull << 53))) c.prismal.disable_stationary_downsample = value;
                 } else if (strcmp(key, "blur_degrade_target") == 0) {
                     uint64_t va=0; size_t sz=0;
                     if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
@@ -871,6 +1087,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if (!ld_grid_parse_bounded_decimal(val, 0, 128, &c.large_folder_corner)) {
                         bad = 1; break;
                     }
+                    c.prismal.large_folder_corner = c.large_folder_corner;
                 } else if (strncmp(key,"glass_native_",13)==0) {
                     const char *sub = key + 13;
                     struct ld_native_glass_options *dst = &c.native_glass;
@@ -893,6 +1110,13 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                      * 值为纯整数、落在该字段上下限内（y_offset 可为负）、同一字段不得重复。
                      * 校验通过的值由 divider_paint.h 直接读文件解析，两侧语义一致。 */
                     if (ld_divider_conf_kv(key, val, &divider_seen) < 0) { bad = 1; break; }
+                } else if (strcmp(key, "soft_glass_enabled") == 0) {
+                    int value;
+                    if ((prismal_seen & (1ull << 62)) || !ld_grid_parse_bool01(val, &value)) { bad = 1; break; }
+                    c.soft_glass_enabled = value;
+                    prismal_seen |= (1ull << 62);
+                } else if (strncmp(key, "prismal_", 8) == 0) {
+                    if (ld_prismal_conf_kv(key, val, &c.prismal, &prismal_seen) <= 0) { bad = 1; break; }
                 } else if (strcmp(key, "end") == 0) {
                     if (seen & 64u) { bad = 1; break; }
                     if (val[0] != '1' || val[1] != '\0') { bad = 1; break; }

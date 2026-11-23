@@ -55,22 +55,24 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     page(Page.SoftGlassMaterial, "OS4 系统桌面原生柔光玻璃的折射与轮廓参数。", emptyList(), glass)
     page(Page.SoftGlassColor, "OS4 系统桌面原生柔光玻璃的颜色、背景模糊与色调曲线。", emptyList(), glass)
     page(Page.SoftGlassLighting, "OS4 系统桌面原生柔光玻璃的光源方向与反射参数。", emptyList(), glass)
-    page(Page.LiquidMaterial, "玻璃本体与几何：模糊、厚度、透射率、折射率、法线位移与边缘轮廓。",
-        groups(liquidSoftLightMaterialGroups), glass)
-    page(Page.LiquidColor, "显色与阴影：亮度、染色、底色透明度、色散、饱和度、色调曲线与内阴影。",
-        groups(liquidSoftLightColorGroups), glass)
-    page(Page.LiquidLighting, "光的来源与边缘：高光、焦散、菲涅尔反射、光源方向、OS4 反射、外阴影与描边。",
-        groups(liquidSoftLightLightingGroups) + listOf(
+    page(Page.LiquidMaterial, "控制玻璃主体的基础材质感", groups(liquidMaterialGroups), glass)
+    page(Page.LiquidRefraction, "折射形状、位移、边缘衰减与表面几何", groups(liquidRefractionGroups), glass)
+    page(Page.LiquidColor, "染色保留背景纹理，底色可纯色覆盖；另可调整色散与饱和度", groups(liquidColorGroups), glass)
+    page(Page.LiquidShadow, "玻璃内部阴影颜色与柔和程度", groups(liquidShadowGroups), glass)
+    page(Page.LiquidLighting, "调节焦散、菲涅尔反射与光源方向，并集中调整 OS4 边缘反射和方向光。",
+        groups(liquidLightingGroups + liquidOs4Groups) + listOf(
             SettingsBlock.Header("lighting.edge", "外阴影与描边"),
             SettingsBlock.Link("lighting.edge.scope", text(R.string.page_glass_edge),
                 "Prismal 外阴影与光学描边，按作用域（Dock、图标、小组件…）独立调整", Page.GlassEdge),
         ), glass)
-    page(Page.LiquidSampling, "渲染开销：背景缩放、视差、实时采样帧率与调试显示。",
-        groups(liquidSoftLightSamplingGroups) + listOf(
+    page(Page.LiquidSampling, "调整背景缩放、PassBlur 渲染分辨率与实时刷新上限。采样保护区由渲染器自动计算。",
+        groups(liquidSamplingGroups) + listOf(
             SettingsBlock.Header("sampling.performance", "实时背景采样与帧同步"),
+            toggle(ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE, "取消桌面玻璃静止时的下采样",
+                "禁用桌面原生在玻璃静止时的采样降级与 0.25× 预缩放下采样，保持完整采样分辨率"),
             row(passBlurCaptureScaleSpec), row(passBlurRenderFpsSpec),
             toggle(ConfigSchema.Dock.FRAME_SYNC, text(R.string.dock_frame_sync),
-                text(R.string.dock_frame_sync_summary), os4Unavailable = true),
+                text(R.string.dock_frame_sync_summary)),
             SettingsBlock.Header("sampling.debug", "调试显示"),
             toggle(ConfigSchema.Glass.PRISMAL_SHOW_NORMALS, "OS4 法线与方向光可视化",
                 "内部显示玻璃表面法线，边缘显示 OS4 反射使用的 SDF 法线；亮度反映 OS4 方向光，不包含背景反射纹理"),
@@ -121,9 +123,11 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
         toggle(ConfigSchema.Glass.WALLPAPER_FLICKER_FIX, "壁纸闪烁 / 抖动修复",
             "在 system 作用域内将桌面壁纸强制为客户端合成，缓解桌面动画或过渡时的闪烁与抖动；需勾选 system 作用域并重启设备生效"),
     ))
-    page(Page.GlassMenus, "应用顶部控制器的菜单玻璃与独立光学参数。", listOf(
+    page(Page.GlassMenus, "菜单与弹窗按组件设置，系统级壁纸修复独立放置。", listOf(
         SettingsBlock.Header("menus.heading", "菜单与弹窗"),
         SettingsBlock.Link("menus.handle", text(R.string.page_handle_menu), "应用顶部控制器的菜单玻璃、颜色、模糊与独立光学参数", Page.HandleMenuCustomization),
+        SettingsBlock.Link("menus.shortcut", text(R.string.page_shortcut_popup), "长按快捷菜单的玻璃、深色模式、模糊、颜色及独立光学参数", Page.ShortcutPopupCustomization),
+        SettingsBlock.Link("menus.dialog", text(R.string.page_dialog_customization), "卸载、移除与二次确认弹窗的玻璃、背景压暗、模糊和颜色", Page.DialogCustomization),
     ), glass)
     glassEdgePageScopes.forEach { (p, scope) ->
         val label = glassEdgeScopeLabels.getValue(scope)

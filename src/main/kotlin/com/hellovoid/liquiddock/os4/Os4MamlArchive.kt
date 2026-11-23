@@ -314,8 +314,8 @@ internal object Os4MamlArchive {
         }
         val isSpecialShape = root.getAttribute("specialShapeWidget") == "1"
         var changed = false
-        if (elementTag(root) == "Widget" && !isSpecialShape && root.getAttribute("supportBackgroundBlur") != "true") {
-            root.setAttribute("supportBackgroundBlur", "true")
+        if (elementTag(root) == "Widget" && !isSpecialShape && root.getAttribute("supportBackgroundBlur") != "false") {
+            root.setAttribute("supportBackgroundBlur", "false")
             changed = true
         }
 
@@ -345,24 +345,43 @@ internal object Os4MamlArchive {
             addVar("ld_glass_big_blur", "expression", "500")
         }
 
-        fun ensureMaterialChildren(material: Element) {
-            val blurCfg = directChildren(material, "BackgroundBlurConfig").firstOrNull()
-            if (blurCfg != null) {
-                blurCfg.setAttribute("passWindow", "true")
-                blurCfg.setAttribute("rustPassWindow", "true")
-                blurCfg.setAttribute("reuseContainer", "true")
-            } else {
-                material.appendChild(document.createElementNS(material.namespaceURI, "BackgroundBlurConfig").apply {
-                    setAttribute("blurBgMode", "0")
-                    setAttribute("blurContentMode", "1")
-                    setAttribute("blurRadius", "120")
-                    setAttribute("blurType", "0")
-                    setAttribute("disableBlur", "0")
-                    setAttribute("passWindow", "true")
-                    setAttribute("rustPassWindow", "true")
-                    setAttribute("reuseContainer", "true")
-                })
+        fun disableSecondaryEffects(token: Element) {
+            directChildren(token, "BloomStrokeConfig").forEach { cfg ->
+                if (cfg.getAttribute("disableBloomStroke") != "1") {
+                    cfg.setAttribute("disableBloomStroke", "1")
+                    changed = true
+                }
             }
+            directChildren(token, "ColorBlendConfig").forEach { cfg ->
+                if (cfg.getAttribute("disableBlend") != "1") {
+                    cfg.setAttribute("disableBlend", "1")
+                    changed = true
+                }
+            }
+        }
+
+        fun ensureMaterialChildren(material: Element) {
+            if (material.getAttribute("tokenName") != "clock_classic_material") {
+                material.setAttribute("tokenName", "clock_classic_material")
+                changed = true
+            }
+            if (material.getAttribute("version") != "30") {
+                material.setAttribute("version", "30")
+                changed = true
+            }
+            disableSecondaryEffects(material)
+            val blurCfg = directChildren(material, "BackgroundBlurConfig").firstOrNull()
+                ?: document.createElementNS(material.namespaceURI, "BackgroundBlurConfig").also {
+                    material.appendChild(it)
+                }
+            blurCfg.setAttribute("blurBgMode", "0")
+            blurCfg.setAttribute("blurContentMode", "1")
+            blurCfg.setAttribute("blurRadius", "120")
+            blurCfg.setAttribute("blurType", "0")
+            blurCfg.setAttribute("disableBlur", "0")
+            blurCfg.setAttribute("passWindow", "true")
+            blurCfg.setAttribute("rustPassWindow", "true")
+            blurCfg.setAttribute("reuseContainer", "true")
             material.appendChild(document.createElementNS(material.namespaceURI, "GlassConfig").apply {
                 setAttribute("disableGlass", "0")
                 setAttribute("smallBlurRadius", "#ld_glass_small_blur")
@@ -374,6 +393,7 @@ internal object Os4MamlArchive {
         val material = allMaterials.firstOrNull()
         if (material != null) {
             ensureMaterialChildren(material)
+            allMaterials.drop(1).forEach(::disableSecondaryEffects)
             val parentLayer = material.parentNode as? Element
             if (parentLayer != null &&
                 root.getAttribute("specialShapeWidget") != "1" &&

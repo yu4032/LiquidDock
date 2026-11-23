@@ -117,6 +117,8 @@ data class Os4MainScreenOptions(
     val dock: Os4DockOptions = Os4DockOptions(),
     val divider: Os4DividerOptions = Os4DividerOptions(),
     val glassEnabled: Boolean = false,
+    val softGlassEnabled: Boolean = false,
+    val prismalOverrides: Map<String, Double> = emptyMap(),
     val glassNativeOverrides: Map<String, Double> = emptyMap(),
     val glassDockOverrides: Map<String, Double> = emptyMap(),
     val glassIconOverrides: Map<String, Double> = emptyMap(),
@@ -150,6 +152,85 @@ data class Os4MainScreenOptions(
             ConfigSchema.Grid.PORTRAIT_ROW_GAP,
             ConfigSchema.Grid.PORTRAIT_INDICATOR_Y,
         )
+        internal data class PrismalFieldSpec(
+            val confKey: String,
+            val configKey: ConfigKey<*>,
+            val isBool: Boolean = false,
+            val isDp: Boolean = false,
+            val divisor: Double = 1.0,
+            val min: Double = 0.0,
+            val max: Double = 1.0,
+        )
+
+        internal val prismalSpecs: List<PrismalFieldSpec> = listOf(
+            PrismalFieldSpec("prismal_continuous_corners", ConfigSchema.Glass.CONTINUOUS_CORNERS, isBool = true),
+            PrismalFieldSpec("prismal_show_normals", ConfigSchema.Glass.PRISMAL_SHOW_NORMALS, isBool = true),
+            PrismalFieldSpec("prismal_backlit_enabled", ConfigSchema.Glass.BACKLIT_ENABLED, isBool = true),
+            PrismalFieldSpec("prismal_blur", ConfigSchema.Glass.BLUR, isDp = true, min = 0.0, max = 60.0),
+            PrismalFieldSpec("prismal_thickness", ConfigSchema.Glass.THICKNESS, isDp = true, min = 1.0, max = 60.0),
+            PrismalFieldSpec("prismal_lens_refraction", ConfigSchema.Glass.LENS_REFRACTION, isDp = true, min = 0.0, max = 8.0),
+            PrismalFieldSpec("prismal_refraction_inset", ConfigSchema.Glass.PRISMAL_REFRACTION_INSET, isDp = true, min = 0.0, max = 80.0),
+            PrismalFieldSpec("prismal_htw", ConfigSchema.Glass.PRISMAL_HEIGHT_TRANSITION_WIDTH, isDp = true, min = 1.0, max = 120.0),
+            PrismalFieldSpec("prismal_smin_smoothing", ConfigSchema.Glass.PRISMAL_SMIN_SMOOTHING, isDp = true, min = 0.0, max = 24.0),
+            PrismalFieldSpec("prismal_backlit_width", ConfigSchema.Glass.BACKLIT_WIDTH, isDp = true, min = 0.0, max = 5.0),
+            PrismalFieldSpec("prismal_ior", ConfigSchema.Glass.IOR, divisor = 100.0, min = 1.0, max = 2.0),
+            PrismalFieldSpec("prismal_normal_strength", ConfigSchema.Glass.NORMAL_STRENGTH, divisor = 100.0, min = 0.0, max = 3.0),
+            PrismalFieldSpec("prismal_dome", ConfigSchema.Glass.DOME, divisor = 100.0, min = 0.0, max = 2.0),
+            PrismalFieldSpec("prismal_depth_effect", ConfigSchema.Glass.DEPTH_EFFECT, divisor = 100.0, min = 0.0, max = 1.0),
+            PrismalFieldSpec("prismal_chromatic", ConfigSchema.Glass.CHROMATIC, min = 0.0, max = 40.0),
+            PrismalFieldSpec("prismal_brightness", ConfigSchema.Glass.BRIGHTNESS, divisor = 100.0, min = 0.5, max = 2.0),
+            PrismalFieldSpec("prismal_caustics", ConfigSchema.Glass.CAUSTICS, divisor = 100.0, min = 0.0, max = 1.0),
+            PrismalFieldSpec("prismal_highlight_width", ConfigSchema.Glass.HIGHLIGHT_WIDTH, divisor = 100.0, min = 0.5, max = 3.0),
+            PrismalFieldSpec("prismal_tint_r", ConfigSchema.Glass.TINT_RED, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_tint_g", ConfigSchema.Glass.TINT_GREEN, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_tint_b", ConfigSchema.Glass.TINT_BLUE, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_tint_a", ConfigSchema.Glass.TINT_ALPHA, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_base_r", ConfigSchema.Glass.BASE_COLOR_RED, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_base_g", ConfigSchema.Glass.BASE_COLOR_GREEN, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_base_b", ConfigSchema.Glass.BASE_COLOR_BLUE, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_base_a", ConfigSchema.Glass.BASE_COLOR_ALPHA, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_displacement_scale", ConfigSchema.Glass.PRISMAL_DISPLACEMENT_SCALE, divisor = 100.0, min = 0.0, max = 4.0),
+            PrismalFieldSpec("prismal_edge_falloff", ConfigSchema.Glass.PRISMAL_EDGE_REFRACTION_FALLOFF, divisor = 100.0, min = 0.0, max = 20.0),
+            PrismalFieldSpec("prismal_fresnel_reflect", ConfigSchema.Glass.PRISMAL_FRESNEL_REFLECT, divisor = 100.0, min = 0.0, max = 5.0),
+            PrismalFieldSpec("prismal_dispersion_r", ConfigSchema.Glass.PRISMAL_DISPERSION_R, divisor = 100.0, min = 0.0, max = 4.0),
+            PrismalFieldSpec("prismal_dispersion_b", ConfigSchema.Glass.PRISMAL_DISPERSION_B, divisor = 100.0, min = 0.0, max = 4.0),
+            PrismalFieldSpec("prismal_vibrancy", ConfigSchema.Glass.PRISMAL_VIBRANCY, divisor = 100.0, min = 0.0, max = 3.0),
+            PrismalFieldSpec("prismal_os4_edge_width_px", ConfigSchema.Glass.OS4_EDGE_WIDTH_PX, min = 3.0, max = 64.0),
+            PrismalFieldSpec("prismal_os4_reflect_offset_px", ConfigSchema.Glass.OS4_REFLECT_OFFSET_PX, min = 0.0, max = 40.0),
+            PrismalFieldSpec("prismal_os4_reflection_strength", ConfigSchema.Glass.OS4_REFLECTION_STRENGTH, divisor = 100.0, min = 0.0, max = 2.0),
+            PrismalFieldSpec("prismal_os4_reflection_lighten", ConfigSchema.Glass.OS4_REFLECTION_LIGHTEN, divisor = 100.0, min = 0.0, max = 1.0),
+            PrismalFieldSpec("prismal_os4_directional_angle_range", ConfigSchema.Glass.OS4_DIRECTIONAL_ANGLE_RANGE, divisor = 100.0, min = 0.05, max = 1.50),
+            PrismalFieldSpec("prismal_os4_directional_intensity", ConfigSchema.Glass.OS4_DIRECTIONAL_INTENSITY, divisor = 100.0, min = 0.0, max = 2.0),
+            PrismalFieldSpec("prismal_os4_directional_opposite_intensity", ConfigSchema.Glass.OS4_DIRECTIONAL_OPPOSITE_INTENSITY, divisor = 100.0, min = 0.0, max = 2.0),
+            PrismalFieldSpec("prismal_light_dir_x", ConfigSchema.Glass.PRISMAL_LIGHT_DIR_X, divisor = 100.0, min = -2.0, max = 2.0),
+            PrismalFieldSpec("prismal_light_dir_y", ConfigSchema.Glass.PRISMAL_LIGHT_DIR_Y, divisor = 100.0, min = -2.0, max = 2.0),
+            PrismalFieldSpec("prismal_shadow_r", ConfigSchema.Glass.PRISMAL_SHADOW_RED, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_shadow_g", ConfigSchema.Glass.PRISMAL_SHADOW_GREEN, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_shadow_b", ConfigSchema.Glass.PRISMAL_SHADOW_BLUE, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_shadow_a", ConfigSchema.Glass.PRISMAL_SHADOW_ALPHA, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_shadow_softness", ConfigSchema.Glass.PRISMAL_SHADOW_SOFTNESS, divisor = 100.0, min = 0.0, max = 20.0),
+            PrismalFieldSpec("prismal_transmittance", ConfigSchema.Glass.PRISMAL_TRANSMITTANCE, divisor = 100.0, min = 0.0, max = 1.0),
+            PrismalFieldSpec("prismal_backdrop_scale_x", ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_X, divisor = 100.0, min = 0.25, max = 4.0),
+            PrismalFieldSpec("prismal_backdrop_scale_y", ConfigSchema.Glass.PRISMAL_BACKDROP_SCALE_Y, divisor = 100.0, min = 0.25, max = 4.0),
+            PrismalFieldSpec("prismal_parallax_scale", ConfigSchema.Glass.PRISMAL_PARALLAX_SCALE, divisor = 100.0, min = 0.0, max = 4.0),
+            PrismalFieldSpec("prismal_backlit_strength", ConfigSchema.Glass.BACKLIT_STRENGTH, divisor = 100.0, min = 0.0, max = 1.0),
+            PrismalFieldSpec("prismal_backlit_extent", ConfigSchema.Glass.BACKLIT_EXTENT, divisor = 100.0, min = 0.0, max = 1.0),
+            PrismalFieldSpec("prismal_backlit_softness", ConfigSchema.Glass.BACKLIT_SOFTNESS, divisor = 100.0, min = 0.05, max = 2.0),
+            PrismalFieldSpec("prismal_disable_stationary_downsample", ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE, isBool = true),
+            PrismalFieldSpec("prismal_widget_corner", ConfigSchema.Glass.WIDGET_CORNER_RADIUS, isDp = true, min = 0.0, max = 128.0),
+            PrismalFieldSpec("prismal_small_folder_corner", ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS, isDp = true, min = 0.0, max = 128.0),
+            PrismalFieldSpec("prismal_outer_shadow_enabled", ConfigSchema.Glass.OUTER_SHADOW_ENABLED, isBool = true),
+            PrismalFieldSpec("prismal_outer_shadow_radius", ConfigSchema.Glass.OUTER_SHADOW_RADIUS, isDp = true, min = 0.0, max = 24.0),
+            PrismalFieldSpec("prismal_outer_shadow_offset_y", ConfigSchema.Glass.OUTER_SHADOW_OFFSET_Y, isDp = true, min = -16.0, max = 16.0),
+            PrismalFieldSpec("prismal_outer_shadow_r", ConfigSchema.Glass.OUTER_SHADOW_RED, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_outer_shadow_g", ConfigSchema.Glass.OUTER_SHADOW_GREEN, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_outer_shadow_b", ConfigSchema.Glass.OUTER_SHADOW_BLUE, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_outer_shadow_a", ConfigSchema.Glass.OUTER_SHADOW_ALPHA, min = 0.0, max = 255.0),
+            PrismalFieldSpec("prismal_outer_shadow_light_follow", ConfigSchema.Glass.OUTER_SHADOW_LIGHT_FOLLOW, divisor = 100.0, min = 0.0, max = 1.0),
+        )
+
+        internal val prismalSpecsByKey: Map<String, PrismalFieldSpec> = prismalSpecs.associateBy { it.confKey }
+
         private val dockKeys = listOf(
             ConfigSchema.Dock.WIDTH_OFFSET,
             ConfigSchema.Dock.HEIGHT_OFFSET,
@@ -173,6 +254,11 @@ data class Os4MainScreenOptions(
             add(ConfigSchema.Grid.PREVENT_WIDGET_STRETCH.name())
             offsetKeys.forEach { add(it.name()); add("${it.name()}_tenths") }
             add(ConfigSchema.Glass.ENABLED.name())
+            add(ConfigSchema.Glass.SOFT_GLASS_ENABLED.name())
+            prismalSpecs.forEach { spec ->
+                add(spec.configKey.name())
+                if (spec.isDp) add("${spec.configKey.name()}_tenths")
+            }
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
             add(ConfigSchema.Glass.OS4_DOCK_GLASS_CUSTOM.name())
             add(ConfigSchema.Glass.OS4_DOCK_GLASS_OVERRIDES.name())
@@ -269,6 +355,38 @@ data class Os4MainScreenOptions(
                 val dockEnabled = boolean(ConfigSchema.Dock.ENABLED)
                 val dividerEnabled = boolean(ConfigSchema.Divider.ENABLED)
                 val glassEnabled = boolean(ConfigSchema.Glass.ENABLED)
+                val softGlassEnabled = boolean(ConfigSchema.Glass.SOFT_GLASS_ENABLED)
+                val prismalOverrides = if (glassEnabled) {
+                    buildMap {
+                        for (spec in prismalSpecs) {
+                            val name = spec.configKey.name()
+                            val tenthsName = "${name}_tenths"
+                            if (spec.isBool) {
+                                if (values.containsKey(name)) {
+                                    @Suppress("UNCHECKED_CAST")
+                                    val bKey = spec.configKey as ConfigKey<Boolean>
+                                    put(spec.confKey, if (boolean(bKey)) 1.0 else 0.0)
+                                }
+                            } else if (spec.isDp) {
+                                if (values.containsKey(name) || values.containsKey(tenthsName)) {
+                                    @Suppress("UNCHECKED_CAST")
+                                    val iKey = spec.configKey as ConfigKey<Int>
+                                    val v = dp(iKey)
+                                    require(v.isFinite() && v in spec.min..spec.max)
+                                    put(spec.confKey, v)
+                                }
+                            } else {
+                                if (values.containsKey(name)) {
+                                    @Suppress("UNCHECKED_CAST")
+                                    val iKey = spec.configKey as ConfigKey<Int>
+                                    val v = integer(iKey).toDouble() / spec.divisor
+                                    require(v.isFinite() && v in spec.min..spec.max)
+                                    put(spec.confKey, v)
+                                }
+                            }
+                        }
+                    }
+                } else emptyMap()
                 val glassIcons = glassEnabled && boolean(ConfigSchema.Glass.ICON_GLASS)
                 val glassWidgets = glassEnabled && boolean(ConfigSchema.Glass.WIDGET_GLASS)
                 val glassLargeFolder = !glassEnabled || boolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS)
@@ -347,6 +465,8 @@ data class Os4MainScreenOptions(
                                 alpha = integer(ConfigSchema.Divider.ALPHA),
                             ),
                             glassEnabled = glassEnabled,
+                            softGlassEnabled = softGlassEnabled,
+                            prismalOverrides = prismalOverrides,
                             glassNativeOverrides = nativeGlassOverrides,
                             glassDockOverrides = dockGlassOverrides,
                             glassIconOverrides = iconGlassOverrides,
@@ -371,10 +491,10 @@ data class Os4MainScreenOptions(
                                 Os4WorkstationOptions(
                                     dockCustomization = true,
                                     taskbarMode = boolean(ConfigSchema.Workstation.TASKBAR_MODE),
-                                    dockIconGlassCornerRadius = 0.0,
+                                    dockIconGlassCornerRadius = dp(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS),
                                     dockVerticalOffset = dp(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET),
-                                    dockIconLandscapeVerticalOffset = 0.0,
-                                    dockIconTopOffset = 0.0,
+                                    dockIconLandscapeVerticalOffset = dp(ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET),
+                                    dockIconTopOffset = dp(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET),
                                     allAppsLandscapeHorizontalOffset = dp(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET),
                                     allAppsLandscapeTopSpacing = dp(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING),
                                     allAppsLandscapeBottomSpacing = dp(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_BOTTOM_SPACING),

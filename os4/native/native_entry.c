@@ -174,6 +174,7 @@ LD_PAD_COUNTS_WRAPPER(repl_pad_rowcol_counts, g_count_cols, g_count_rows,
 #include "dock_geometry.h"
 #include "glass_gates.h"
 #include "glass_trace.h"
+#include "prismal_glass.h"
 #include "glass_filter.h"
 #include "glass_filter_fingerprints.h"
 #include "glass_filter_hook.h"
@@ -656,6 +657,31 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
         }
     }
     ld_w1x1_menu_install(api, lib);
+    if (g_home_options.use_drag_material || g_home_options.prismal.disable_stationary_downsample) {
+        static bool g_blur_degrade_hook_installed = false;
+        if (!g_blur_degrade_hook_installed) {
+            uintptr_t deg_rt = 0, bet_rt = 0;
+            if (g_home_options.blur_degrade_vaddr &&
+                ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.blur_degrade_vaddr, &deg_rt) &&
+                executable_range(deg_rt, 16) && *(const uint32_t *)deg_rt == 0xa9bf79fdu) {
+                void *bak = NULL;
+                if (api->hook((void *)deg_rt, (void *)repl_ws_skip_blur_degrade, &bak) == 0 && bak) {
+                    ld_pin_code_pages_soft(deg_rt, 16);
+                    ld_blog("OS4 skip blur degrade installed at %p", (void *)deg_rt);
+                }
+            }
+            if (g_home_options.blur_better_down_vaddr &&
+                ld_vaddr_to_runtime(lib, (uintptr_t)g_home_options.blur_better_down_vaddr, &bet_rt) &&
+                executable_range(bet_rt, 16) && *(const uint32_t *)bet_rt == 0xa9bf79fdu) {
+                void *bak = NULL;
+                if (api->hook((void *)bet_rt, (void *)repl_ws_skip_blur_degrade, &bak) == 0 && bak) {
+                    ld_pin_code_pages_soft(bet_rt, 16);
+                    ld_blog("OS4 skip blur better down installed at %p", (void *)bet_rt);
+                }
+            }
+            g_blur_degrade_hook_installed = true;
+        }
+    }
     const char *label[4]={"Dock.light","Dock.dark","ImageFilter.glass","LightConfig.applyTo"};
     void *wrapper[4]={(void *)repl_os4_trace_light,(void *)repl_os4_trace_dark,
         (void *)repl_os4_trace_filter,(void *)repl_os4_trace_apply};
@@ -1491,8 +1517,13 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_widget_resize_install(api,&lib);
     ld_ws_resolve_page_fields(&lib);
     ld_workstation_install(api,&lib);
-    ld_superellipse_blur_install();
-    ld_glass_superellipse_install(api);
+    int se_on = g_home_options.glass_enabled && g_home_options.prismal.continuous_corners;
+    ld_prismal_glass_install_ex(api, g_home_options.glass_enabled && !g_home_options.soft_glass_enabled,
+                                &g_home_options.prismal);
+    ld_superellipse_blur_install(se_on);
+    ld_glass_superellipse_install(api, se_on,
+                                  (float)g_home_options.large_folder_corner,
+                                  (float)g_home_options.prismal.widget_corner);
     ld_glass_filter_hook_install(api);
     ld_home_margins_install(api,&lib);
     ld_dart_superellipse_install(api,&lib);
@@ -1972,7 +2003,13 @@ static void on_library_loaded(const char *name, void *handle)
         const char *base=strrchr(name,'/'); base=base?base+1:name;
         if(!strcmp(base,"libapp.so") || !strcmp(base,"libapp_launcher.so")) install_grid_hook(g_api);
         else if(!strcmp(base,"libhyper_os_flutter.so")) {
-            ld_glass_superellipse_install(g_api);
+            int se_on = g_home_options.glass_enabled && g_home_options.prismal.continuous_corners;
+            ld_prismal_glass_install_ex(g_api, g_home_options.glass_enabled && !g_home_options.soft_glass_enabled,
+                                        &g_home_options.prismal);
+            ld_superellipse_blur_install(se_on);
+            ld_glass_superellipse_install(g_api, se_on,
+                                          (float)g_home_options.large_folder_corner,
+                                          (float)g_home_options.prismal.widget_corner);
             ld_glass_filter_hook_install(g_api);
         }
         else if(!strcmp(base,"librust_maml_sdk.so")) {
@@ -2057,6 +2094,8 @@ on_library_loaded_t native_init(struct native_api *api)
     ld_madvise_guard_install(g_api);
     load_grid_config();
     ld_prepare_native_glass();
+    ld_prismal_glass_install_ex(g_api, g_home_options.glass_enabled && !g_home_options.soft_glass_enabled,
+                                &g_home_options.prismal);
     install_grid_hook(g_api);
     ld_superellipse_install(g_api);
     return on_library_loaded;

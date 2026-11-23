@@ -36,8 +36,8 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
         private val OS4_READY_PAGES = setOf(
             Page.Home, Page.LayoutHub, Page.GlassHub, Page.MoreHub,
             Page.ThemePalette, Page.Data, Page.Logs, Page.About,
-            Page.Liquid, Page.LiquidMaterial, Page.LiquidColor,
-            Page.LiquidLighting, Page.LiquidSampling, Page.GlassEdge,
+            Page.Liquid, Page.LiquidMaterial, Page.LiquidRefraction, Page.LiquidColor,
+            Page.LiquidLighting, Page.LiquidShadow, Page.LiquidSampling, Page.GlassEdge,
             Page.GlassComponents, Page.GlassMenus, Page.SidebarEdge,
             Page.HandleMenuCustomization, Page.HandleMenuAll, Page.HandleMenuEdge,
             Page.ThirdPartyApps, Page.Gboard, Page.GboardAll, Page.GboardEdge,
@@ -50,11 +50,19 @@ internal class SettingsAvailability(private val os4Launcher: Boolean) {
         // Keep the set narrow; enroll other pages as their implementation begins.
         private val OS4_TESTING_PAGES = setOf(
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
-            Page.Dock, Page.DockGeometry,
+            Page.Dock, Page.DockGeometry, Page.DockBehavior, Page.DockRecentBlacklist,
             Page.Divider,
             Page.SoftGlass, Page.SoftGlassMaterial,
             Page.SoftGlassColor, Page.SoftGlassLighting,
-            Page.SoftGlassComponents, Page.WidgetComponents,
+            Page.SoftGlassComponents,
+            Page.SoftGlassDock, Page.SoftGlassIcons, Page.SoftGlassWidgets, Page.SoftGlassLargeFolder,
+            Page.WidgetComponents,
+            Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
+            Page.DockEdge, Page.IconEdge, Page.WidgetEdge, Page.FolderEdge,
+            Page.PopupEdge, Page.DialogEdge,
+            Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
+            Page.DialogCustomization, Page.DialogAll,
+            Page.LauncherHighlights, Page.LauncherHighlightsCompact, Page.LauncherHighlightsLarge,
             Page.Recents,
             Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
         )

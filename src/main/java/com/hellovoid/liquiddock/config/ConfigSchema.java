@@ -342,6 +342,8 @@ public final class ConfigSchema {
                 "liquid_widget_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> USE_DRAG_MATERIAL = bool(
                 "glass_use_drag_material", false, false, false, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> DISABLE_STATIONARY_DOWNSAMPLE = bool(
+                "liquid_disable_stationary_downsample", true, true, true, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> WIDGET_DARK_CONTENT = bool(
                 "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> ICON_GLASS = bool(
@@ -954,6 +956,7 @@ public final class ConfigSchema {
                 Glass.DIALOG_TINT_BLUE, Glass.DIALOG_TINT_ALPHA,
                 Glass.WIDGET_GLASS,
                 Glass.USE_DRAG_MATERIAL,
+                Glass.DISABLE_STATIONARY_DOWNSAMPLE,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
                 Glass.FUNCTIONAL_DOCK_ICON_GLASS, Glass.RECENTS_CAPSULE_GLASS,
                 Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
