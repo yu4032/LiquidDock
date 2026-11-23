@@ -50,25 +50,27 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
     if (!from_unwrap &&
         (g_home_options.prismal.disable_stationary_downsample ||
          __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED))) {
-        /* Route A: keep home-screen glass elements on the single shared full-screen
-         * pass_blur cache (rate == 0), while repl_compose_textures raises that single
-         * capture from 0.25x to 1.0x. Normalize rate > 0 to 0 so every shared component
-         * hits the same cache entry without frozen throttled frames, while preserving
-         * stock rate < 0 (-1) so dragged elements and live overlays retain real-time
-         * sampling of underlying icons/widgets. */
+        /* Use live 1.0x capture (rate = -1) for Dock, Widgets, Large Folders, and
+         * stationary 1x1 icons (when icon_downsample == 0), so they never hit a
+         * pre-hook 0.25x cached wallpaper entry and Workstation Dock refracts live
+         * content. Fall back to shared cache (rate = 0) for 1x1 icons during motion
+         * or when icon_downsample == 1 to keep 120fps locked with zero icon RT churn. */
+        int is_small_icon = 0;
+#ifdef LD_GLASS_SUPERELLIPSE_H
+        is_small_icon = g_ld_gse_tls_is_small_icon;
+#endif
+        int downsample_icon = is_small_icon &&
+            (__atomic_load_n(&g_prismal_icon_downsample, __ATOMIC_RELAXED) ||
+             __atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED));
         int32_t rate_i = 0;
         uint8_t *rate_ptr = (uint8_t *)obj + 0x34u;
         memcpy(&rate_i, rate_ptr, sizeof(rate_i));
-        uint8_t use_wp = 0;
-        memcpy(&use_wp, (uint8_t *)obj + 0x38u, sizeof(use_wp));
-        if (rate_i > 0) {
-            int32_t shared_rate = 0;
-            memcpy(rate_ptr, &shared_rate, sizeof(shared_rate));
-        } else if (rate_i == 0 && use_wp == 0) {
-            /* Non-wallpaper layer (e.g. dragged icon/widget floating over workspace):
-             * use live per-frame sampling instead of the cached shared wallpaper. */
+        if (!downsample_icon && rate_i >= 0) {
             int32_t live_rate = -1;
             memcpy(rate_ptr, &live_rate, sizeof(live_rate));
+        } else if (downsample_icon && rate_i < 0) {
+            int32_t shared_rate = 0;
+            memcpy(rate_ptr, &shared_rate, sizeof(shared_rate));
         }
     }
     if (__atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE)) {
