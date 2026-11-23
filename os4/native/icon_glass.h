@@ -380,11 +380,19 @@ static void ld_icon_note_cid(unsigned site,uint32_t cid)
     if(slot<8) { seen[site][slot]=cid; ld_blog("icon glass owner site=%u cid=%u",site,cid); }
 }
 
+static inline bool ld_icon_fast_read(uintptr_t addr, void *dst, size_t n)
+{
+    if (addr < 4096u) return false;
+    memcpy(dst, (const void *)addr, n);
+    return true;
+}
+
 __attribute__((used)) static void ld_icon_force_folder_flag(struct ld_dart_context *c)
 {
     if(!g_hook_pin_ok || !g_icon_glass_installed || !g_home_options.glass_enabled || !g_home_options.glass_icons) return;
+    uintptr_t frame=(uintptr_t)c->x[29];
     uint32_t ref=0;
-    if(!ld_read_heap((uintptr_t)c->x[29]-8,&ref,sizeof ref)) return;
+    if(!ld_icon_fast_read(frame-8,&ref,sizeof ref)) return;
     uintptr_t context=ld_icon_decode_compressed(c,ref);
     uintptr_t owner=ld_heap_pointer(c,context,0x0f);
     uint32_t cid=ld_icon_owner_class_id(owner);
@@ -404,29 +412,29 @@ __attribute__((used)) static void ld_icon_force_folder_flag(struct ld_dart_conte
 __attribute__((used)) static void ld_icon_adjust_native_size(struct ld_dart_context *c)
 {
     if(!g_hook_pin_ok || !g_icon_glass_installed || !g_home_options.glass_enabled || !g_home_options.glass_icons) return;
+    uintptr_t frame=(uintptr_t)c->x[29];
     uint32_t ref=0;
-    if(!ld_read_heap((uintptr_t)c->x[29]-8,&ref,sizeof ref)) return;
+    if(!ld_icon_fast_read(frame-8,&ref,sizeof ref)) return;
     uintptr_t context=ld_icon_decode_compressed(c,ref);
     uintptr_t owner=ld_heap_pointer(c,context,0x0f);
     uint32_t size_cid=ld_icon_owner_class_id(owner);
     ld_icon_note_cid(1,size_cid);
     if(!ld_icon_owner_allowed(size_cid)) return;
 
-    uintptr_t frame=(uintptr_t)c->x[29];
     uint32_t flag_ref=0, ref113=0, ref10f=0;
-    ld_read_heap(frame-0x10,&flag_ref,sizeof flag_ref);
-    ld_read_heap(frame-0x18,&ref113,sizeof ref113);
-    ld_read_heap(frame-0x28,&ref10f,sizeof ref10f);
+    ld_icon_fast_read(frame-0x10,&flag_ref,sizeof flag_ref);
+    ld_icon_fast_read(frame-0x18,&ref113,sizeof ref113);
+    ld_icon_fast_read(frame-0x28,&ref10f,sizeof ref10f);
 
     uintptr_t obj113=ld_icon_decode_compressed(c,ref113);
     uintptr_t obj10f=ld_icon_decode_compressed(c,ref10f);
     double d113=-999.0, d10f=-999.0;
-    if(obj113) ld_read_heap(obj113+7,&d113,sizeof d113);
-    if(obj10f) ld_read_heap(obj10f+7,&d10f,sizeof d10f);
+    if(obj113) ld_icon_fast_read(obj113+7,&d113,sizeof d113);
+    if(obj10f) ld_icon_fast_read(obj10f+7,&d10f,sizeof d10f);
 
     double width=0,height=0;
-    ld_read_heap(frame-0x40,&width,sizeof width);
-    ld_read_heap(frame-0x48,&height,sizeof height);
+    ld_icon_fast_read(frame-0x40,&width,sizeof width);
+    ld_icon_fast_read(frame-0x48,&height,sizeof height);
 
     static unsigned size_calls = 0;
     unsigned scall = __atomic_add_fetch(&size_calls, 1, __ATOMIC_RELAXED);
@@ -439,9 +447,8 @@ __attribute__((used)) static void ld_icon_adjust_native_size(struct ld_dart_cont
         double delta=2.0*g_home_options.glass_icon_size;
         width+=delta; height+=delta;
         if(width>0.0 && height>0.0 && isfinite(width) && isfinite(height)) {
-            struct iovec local[2]={{&width,sizeof width},{&height,sizeof height}};
-            struct iovec remote[2]={{(void *)(frame-0x40),sizeof width},{(void *)(frame-0x48),sizeof height}};
-            (void)syscall(SYS_process_vm_writev,getpid(),local,2,remote,2,0);
+            memcpy((void *)(frame-0x40), &width, sizeof width);
+            memcpy((void *)(frame-0x48), &height, sizeof height);
         }
     }
     double min_s = (d113 > 0.0 && d10f > 0.0) ? ((d113 < d10f) ? d113 : d10f) : 1.0;
@@ -455,7 +462,7 @@ static void ld_icon_adjust_radius_site(struct ld_dart_context *c,unsigned site)
     /* This site is inside the existing background closure. The saved Dart
      * context is retained by the observer; only its scalar result is changed. */
     uint32_t ref=0;
-    if(!ld_read_heap((uintptr_t)c->x[29]-0x10,&ref,sizeof ref)) return;
+    if(!ld_icon_fast_read((uintptr_t)c->x[29]-0x10,&ref,sizeof ref)) return;
     uintptr_t new_context=ld_icon_decode_compressed(c,ref);
     if(!new_context) return;
     uintptr_t original_context=ld_heap_pointer(c,new_context,0x0b);

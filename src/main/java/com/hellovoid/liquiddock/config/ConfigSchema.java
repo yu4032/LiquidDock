@@ -348,6 +348,10 @@ public final class ConfigSchema {
                 "liquid_widget_dark_content", false, false, false, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> ICON_GLASS = bool(
                 "liquid_icon_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Boolean> OS4_ICON_GLASS_DOWNSAMPLE = bool(
+                "liquid_os4_icon_glass_downsample", true, true, true, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Boolean> OS4_ICON_GLASS_FIXED_WALLPAPER = bool(
+                "liquid_os4_icon_glass_fixed_wallpaper", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> FUNCTIONAL_DOCK_ICON_GLASS = bool(
                 "liquid_functional_dock_icon_glass", false, false, false,
                 ConfigKey.ExportMode.ALWAYS);
@@ -410,6 +414,8 @@ public final class ConfigSchema {
                 "liquid_large_folder_size_offset", 0, 0, 0, -40, 40, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> LARGE_FOLDER_CORNER_RADIUS = dp(
                 "liquid_large_folder_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
+        public static final ConfigKey<Integer> LARGE_FOLDER_2X1_CORNER_RADIUS = dp(
+                "liquid_large_folder_2x1_corner_radius", 0, 0, 0, 0, 128, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<String> BLUR_MODE = string(
                 "liquid_blur_mode", "shader", "shader", "shader",
                 ConfigKey.ExportMode.ALWAYS);
@@ -957,7 +963,8 @@ public final class ConfigSchema {
                 Glass.WIDGET_GLASS,
                 Glass.USE_DRAG_MATERIAL,
                 Glass.DISABLE_STATIONARY_DOWNSAMPLE,
-                Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS,
+                Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS, Glass.OS4_ICON_GLASS_DOWNSAMPLE,
+                Glass.OS4_ICON_GLASS_FIXED_WALLPAPER,
                 Glass.FUNCTIONAL_DOCK_ICON_GLASS, Glass.RECENTS_CAPSULE_GLASS,
                 Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
                 Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS,
@@ -971,6 +978,7 @@ public final class ConfigSchema {
                 Glass.OPEN_FOLDER_BASE_COLOR_RED, Glass.OPEN_FOLDER_BASE_COLOR_GREEN,
                 Glass.OPEN_FOLDER_BASE_COLOR_BLUE, Glass.OPEN_FOLDER_BASE_COLOR_ALPHA,
                 Glass.LARGE_FOLDER_SIZE_OFFSET, Glass.LARGE_FOLDER_CORNER_RADIUS,
+                Glass.LARGE_FOLDER_2X1_CORNER_RADIUS,
                 Glass.BLUR_MODE,
                 Glass.BLUR, Glass.CHROMATIC,
                 Glass.TINT_ALPHA, Glass.BASE_COLOR_RED, Glass.BASE_COLOR_GREEN,

@@ -82,22 +82,59 @@ vec2 continuousGlassReach(float r, vec2 b) {
     return r * min(0.2893 * pow(room, vec2(0.6)), room);
 }
 
-float sdContinuousGlass(vec2 p, vec2 b, float radius) {
-    vec2 e = abs(p) - b;
-    float box = min(max(e.x, e.y), 0.0) + length(max(e, vec2(0.0)));
-    float r = clamp(radius, 0.0, min(b.x, b.y));
-    if (r <= 0.001) return box;
-    vec2 reach = continuousGlassReach(r, b);
-    vec2 R = min(vec2(r) + reach, b);
-    vec2 q = abs(p) - (b - R);
-    if (min(q.x, q.y) <= 0.0) return box;
-    vec2 n = vec2(2.0) + 0.7198 * reach / max(0.2893 * r, 1e-6);
+float sdContinuousGlassPre(vec2 p, vec2 b, vec2 R, vec2 n, out vec2 gradOut) {
+    vec2 ap = abs(p);
+    vec2 sp = vec2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
+    vec2 e = ap - b;
+    float box;
+    vec2 boxGrad;
+    if (e.x > 0.0 || e.y > 0.0) {
+        vec2 m = max(e, vec2(0.0));
+        float len = length(m);
+        box = len;
+        boxGrad = (len > 1e-5) ? (sp * (m / len)) : vec2(0.0);
+    } else {
+        box = max(e.x, e.y);
+        boxGrad = (e.x >= e.y) ? vec2(sp.x, 0.0) : vec2(0.0, sp.y);
+    }
+    if (R.x <= 0.001 || R.y <= 0.001) {
+        gradOut = boxGrad;
+        return box;
+    }
+    vec2 q = ap - (b - R);
+    if (min(q.x, q.y) <= 0.0) {
+        gradOut = boxGrad;
+        return box;
+    }
     vec2 shares = pow(q / R, n);
     float total = shares.x + shares.y;
-    if (total <= 1e-20) return box;
+    if (total <= 1e-20) {
+        gradOut = boxGrad;
+        return box;
+    }
     vec2 weight = shares / total;
     float corner = dot(R, weight) * (pow(total, 1.0 / dot(n, weight)) - 1.0);
-    return max(corner, box);
+    if (corner >= box) {
+        vec2 rawG = sp * (n * shares / max(q, vec2(1e-5)));
+        float gl = length(rawG);
+        gradOut = (gl > 1e-5) ? (rawG / gl) : boxGrad;
+        return corner;
+    }
+    gradOut = boxGrad;
+    return box;
+}
+
+float sdContinuousGlass(vec2 p, vec2 b, float radius) {
+    float r = clamp(radius, 0.0, min(b.x, b.y));
+    if (r <= 0.001) {
+        vec2 e = abs(p) - b;
+        return min(max(e.x, e.y), 0.0) + length(max(e, vec2(0.0)));
+    }
+    vec2 reach = continuousGlassReach(r, b);
+    vec2 R = min(vec2(r) + reach, b);
+    vec2 n = vec2(2.0) + 0.7198 * reach / max(0.2893 * r, 1e-6);
+    vec2 dummyG;
+    return sdContinuousGlassPre(p, b, R, n, dummyG);
 }
 
 float sdRoundedRectRealistic(vec2 p, vec2 b, float r, bool cont) {
@@ -284,6 +321,7 @@ void main() {
     bool useBlur     = (ubo.p_flags & 2u) != 0u;
     bool showNormals = (ubo.p_flags & 4u) != 0u;
     bool hasSharpTex = (ubo.p_flags & 8u) != 0u;
+    bool inMotion    = (ubo.p_flags & 16u) != 0u;
 
     vec2 glassSize = max(ubo.uGeoPxSize.xy, vec2(2.0));
     float padPx = max(ubo.p_castShadowParams.w, 0.0);
@@ -322,15 +360,28 @@ void main() {
 
     // Pure analytical v2.7.9 Prismal SDF (unclamped Euclidean distance across full glass interior)
     bool outOfUnit = (v_texcoord.x < 0.0 || v_texcoord.x > 1.0 || v_texcoord.y < 0.0 || v_texcoord.y > 1.0);
-    float distMask = sdRoundBox(pPx, halfSz, cr, ubo.p_sminSmoothing, contCorners);
-    float sdKy = sdRoundedRectRealistic(cKy, halfSz, cr, contCorners);
+    float distMask;
+    float sdKy;
+    vec2 os4SdfGradient;
+    if (contCorners) {
+        vec2 cgReach = continuousGlassReach(cr, halfSz);
+        vec2 cgR = min(vec2(cr) + cgReach, halfSz);
+        vec2 cgN = vec2(2.0) + 0.7198 * cgReach / max(0.2893 * cr, 1e-6);
+        vec2 gradP;
+        distMask = sdContinuousGlassPre(pPx, halfSz, cgR, cgN, gradP);
+        sdKy = distMask;
+        os4SdfGradient = vec2(gradP.x, -gradP.y);
+    } else {
+        distMask = sdLegacyRoundBox(pPx, halfSz, cr, ubo.p_sminSmoothing);
+        sdKy = sdLegacyRoundedRect(cKy, halfSz, cr);
+        os4SdfGradient = vec2(
+                (sdLegacyRoundBox(pPx + vec2(1.0, 0.0), halfSz, cr, ubo.p_sminSmoothing)
+               - sdLegacyRoundBox(pPx - vec2(1.0, 0.0), halfSz, cr, ubo.p_sminSmoothing)) * 0.5,
+               -(sdLegacyRoundBox(pPx + vec2(0.0, 1.0), halfSz, cr, ubo.p_sminSmoothing)
+               - sdLegacyRoundBox(pPx - vec2(0.0, 1.0), halfSz, cr, ubo.p_sminSmoothing)) * 0.5);
+    }
     float edgeDist = -distMask;
     float opticalEdgeScale = clamp(ubo.p_os4LightParams.w, 0.5, 3.0);
-    vec2 os4SdfGradient = vec2(
-            (sdRoundBox(pPx + vec2(1.0, 0.0), halfSz, cr, ubo.p_sminSmoothing, contCorners)
-           - sdRoundBox(pPx - vec2(1.0, 0.0), halfSz, cr, ubo.p_sminSmoothing, contCorners)) * 0.5,
-           -(sdRoundBox(pPx + vec2(0.0, 1.0), halfSz, cr, ubo.p_sminSmoothing, contCorners)
-           - sdRoundBox(pPx - vec2(0.0, 1.0), halfSz, cr, ubo.p_sminSmoothing, contCorners)) * 0.5);
     float edgeAa = max(max(fwidth(distMask), abs(os4SdfGradient.x) + abs(os4SdfGradient.y)), 0.75);
     float os4DefaultEdgeWidthPx = clamp(6.0 * opticalEdgeScale, 3.0, 18.0);
     float os4EdgeWidthPx = ubo.p_os4EdgeParams.x > 0.0 ? ubo.p_os4EdgeParams.x : os4DefaultEdgeWidthPx;
@@ -434,6 +485,10 @@ void main() {
         }
     }
 
+    float uAlphaClamped = clamp(ubo.uAlpha, 0.0, 1.0);
+    outlineAlpha *= uAlphaClamped;
+    innerHighlightAlpha *= uAlphaClamped;
+
     if (opacity < 0.001 && outlineAlpha < 0.001 && exteriorShadowAlpha < 0.001) discard;
     if (opacity < 0.001) {
         float combinedAlpha = outlineAlpha + exteriorShadowAlpha * (1.0 - outlineAlpha);
@@ -452,7 +507,9 @@ void main() {
     float refractionHeight = min(max(htw * (1.0 + 0.55 * dome), 1.0), minDim * 0.98);
     float tw = min(max(htw * (1.0 + 0.38 * dome), 1.0), minDim * 0.98);
     float hSig = getHeightFromDist(distMask, tw);
-    vec2 gradHSig = computeGradientHeight(pPx, halfSz, cr, ubo.p_sminSmoothing, tw, contCorners);
+    float tSig = clamp(-distMask / tw, 0.0, 1.0);
+    float dhdd = (tSig > 0.0 && tSig < 1.0) ? (-(1.0 - tSig) / (max(hSig, 0.02) * tw)) : 0.0;
+    vec2 gradHSig = vec2(os4SdfGradient.x, -os4SdfGradient.y) * dhdd;
 
     float gradRadius = min(cr * 1.5, minDim);
     vec2 gradLens = contCorners ? os4SdfGradient : gradLegacyRoundedRect(cKy, halfSz, gradRadius);
@@ -534,7 +591,17 @@ void main() {
         if (chromaPx > 0.02 && normalLength > 0.05) {
             vec2 surfaceNormal = os4SdfGradient / normalLength;
             vec2 chromaPush = kyToUv * (surfaceNormal * chromaPx);
-            color = optical27SevenTap(screenUv, baseOffset, chromaPush, useBlur, hasSharpTex);
+            if (inMotion || smallGlass > 0.5 || max(halfSz.x, halfSz.y) < 110.0) {
+                vec2 uvR = backdropUv(screenUv, baseOffset + chromaPush * ubo.p_dispersionR);
+                vec2 uvB = backdropUv(screenUv, baseOffset - chromaPush * ubo.p_dispersionB);
+                color = vec3(
+                    sampleBodyBackdrop(uvR, useBlur, hasSharpTex).r,
+                    sampleBodyBackdrop(uvCenter, useBlur, hasSharpTex).g,
+                    sampleBodyBackdrop(uvB, useBlur, hasSharpTex).b
+                );
+            } else {
+                color = optical27SevenTap(screenUv, baseOffset, chromaPush, useBlur, hasSharpTex);
+            }
         } else {
             color = sampleBodyBackdrop(uvCenter, useBlur, hasSharpTex);
         }
@@ -547,18 +614,20 @@ void main() {
     float edgeG = reflShell * pow(1.0 - cosVNrim, 1.35) * mix(0.07, 0.62, F);
     edgeG *= mix(0.72, 0.38, smallGlass);
     float reflW = min(0.9, edgeG * (0.1 + fresCtl * 0.46) * (0.28 + 0.72 * height));
-    vec2 reflDeltaPx = gDir * (4.0 + 38.0 * pow(1.0 - cosVNrim, 1.25) + length(N.xy) * 14.0) * pxNorm;
-    vec2 reflUv = clamp(uvCenter + kyToUv * reflDeltaPx, vec2(0.001), vec2(0.999));
-    vec3 reflSample = sampleBodyBackdrop(reflUv, useBlur, hasSharpTex);
-    color = mix(color, reflSample, reflW);
+    if (reflW > 0.002) {
+        vec2 reflDeltaPx = gDir * (4.0 + 38.0 * pow(1.0 - cosVNrim, 1.25) + length(N.xy) * 14.0) * pxNorm;
+        vec2 reflUv = clamp(uvCenter + kyToUv * reflDeltaPx, vec2(0.001), vec2(0.999));
+        vec3 reflSample = sampleBodyBackdrop(reflUv, useBlur, hasSharpTex);
+        color = mix(color, reflSample, reflW);
+    }
 
     // PrismalOpticalEdgeShader: narrow sharp-backdrop meniscus reflection along OS4 SDF normal
-    float os4DefaultReflectOffsetPx = clamp(ubo.p_glassThickness * 0.38, 4.0, 14.0);
-    float os4ReflectOffsetPx = ubo.p_os4EdgeParams.y > 0.0 ? ubo.p_os4EdgeParams.y : os4DefaultReflectOffsetPx;
-    vec2 os4ReflectPx = os4EdgeNormal3.xy * (2.0 * os4EdgeNormal3.z) * os4ReflectOffsetPx * (1.0 - os4EdgeT) * os4EdgeMask;
-    vec2 os4ReflectUv = clamp(uvCenter + kyToUv * os4ReflectPx, vec2(0.001), vec2(0.999));
     float os4ReflectionWeight = clamp(os4EdgeMask * max(ubo.p_os4EdgeParams.z, 0.0), 0.0, 1.0);
     if (os4ReflectionWeight > 0.001) {
+        float os4DefaultReflectOffsetPx = clamp(ubo.p_glassThickness * 0.38, 4.0, 14.0);
+        float os4ReflectOffsetPx = ubo.p_os4EdgeParams.y > 0.0 ? ubo.p_os4EdgeParams.y : os4DefaultReflectOffsetPx;
+        vec2 os4ReflectPx = os4EdgeNormal3.xy * (2.0 * os4EdgeNormal3.z) * os4ReflectOffsetPx * (1.0 - os4EdgeT) * os4EdgeMask;
+        vec2 os4ReflectUv = clamp(uvCenter + kyToUv * os4ReflectPx, vec2(0.001), vec2(0.999));
         color = mix(color, sampleSharpBackdrop(os4ReflectUv, hasSharpTex), os4ReflectionWeight);
     }
 
@@ -579,23 +648,26 @@ void main() {
     color = mix(color, ubo.p_shadowColor.rgb * 0.25, innerShadow * ubo.p_shadowColor.a);
 
     // PrismalOpticalEdgeShader: OS4 directional rim lighting (replaces legacy specular/litRim/oppRim)
-    vec3 os4LightDir3 = ubo.p_invariantOs4LightDir;
-    float os4MainFacing = max(dot(os4EdgeNormal3, os4LightDir3), 0.0);
-    float os4OppositeFacing = max(dot(vec3(-os4EdgeNormal3.xy, os4EdgeNormal3.z), os4LightDir3), 0.0);
-    float os4AngleRange = max(ubo.p_os4LightParams.x, 0.05);
-    float os4MainAngle = acos(clamp(os4MainFacing, 0.0, 1.0));
-    float os4OppositeAngle = acos(clamp(os4OppositeFacing, 0.0, 1.0));
-    float os4MainFalloff = max(1.0 - os4MainAngle / (3.14159265 * os4AngleRange), 0.0);
-    float os4OppositeFalloff = max(1.0 - os4OppositeAngle / (3.14159265 * os4AngleRange), 0.0);
-    float os4Directional = os4MainFacing * max(ubo.p_os4LightParams.y, 0.0) * os4MainFalloff
-            + os4OppositeFacing * max(ubo.p_os4LightParams.z, 0.0) * os4OppositeFalloff;
-    float os4SoftLight = clamp(os4Directional * os4EdgeMask, 0.0, 1.0);
-    float os4Luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    float os4DarkResponse = 1.0 - smoothstep(0.35, 0.92, os4Luma);
-    color += vec3(os4SoftLight * (0.42 + max(ubo.p_os4EdgeParams.w, 0.0) * os4DarkResponse));
+    float os4SoftLight = 0.0;
+    if (os4EdgeMask > 0.001) {
+        vec3 os4LightDir3 = ubo.p_invariantOs4LightDir;
+        float os4MainFacing = max(dot(os4EdgeNormal3, os4LightDir3), 0.0);
+        float os4OppositeFacing = max(dot(vec3(-os4EdgeNormal3.xy, os4EdgeNormal3.z), os4LightDir3), 0.0);
+        float os4AngleRange = max(ubo.p_os4LightParams.x, 0.05);
+        float os4MainAngle = acos(clamp(os4MainFacing, 0.0, 1.0));
+        float os4OppositeAngle = acos(clamp(os4OppositeFacing, 0.0, 1.0));
+        float os4MainFalloff = max(1.0 - os4MainAngle / (3.14159265 * os4AngleRange), 0.0);
+        float os4OppositeFalloff = max(1.0 - os4OppositeAngle / (3.14159265 * os4AngleRange), 0.0);
+        float os4Directional = os4MainFacing * max(ubo.p_os4LightParams.y, 0.0) * os4MainFalloff
+                + os4OppositeFacing * max(ubo.p_os4LightParams.z, 0.0) * os4OppositeFalloff;
+        os4SoftLight = clamp(os4Directional * os4EdgeMask, 0.0, 1.0);
+        float os4Luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        float os4DarkResponse = 1.0 - smoothstep(0.35, 0.92, os4Luma);
+        color += vec3(os4SoftLight * (0.42 + max(ubo.p_os4EdgeParams.w, 0.0) * os4DarkResponse));
+    }
 
-    // Caustics
-    if (ubo.p_caustics > 0.001) {
+    // Caustics (disabled during motion, matching 2.7.9 PrismalRenderer.transientQualityActive)
+    if (!inMotion && ubo.p_caustics > 0.001) {
         float causticDot = dot(normalize(vec3(gradH * ubo.p_normalStrength, 0.45)), ubo.p_invariantLightPrimary);
         float caust = pow(max(causticDot, 0.0), 7.0) * ubo.p_caustics * height;
         color += caust * vec3(1.0, 0.96, 0.90);

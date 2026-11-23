@@ -24,27 +24,7 @@ static uint32_t read_u32(const uint8_t *buf, size_t off) {
 int main(void) {
     assert(sizeof(g_prismal_os4_spv) > 0);
     assert((sizeof(g_prismal_os4_spv) & 3u) == 0);
-    assert(g_prismal_os4_spv[0] == LD_PRISMAL_SPV_MAGIC);
-
-    /* Test ld_prismal_patch_rodata with an aligned buffer fitting LD_PRISMAL_SPV_MAX_BYTES */
-    size_t map_sz = 32768u;
-    uint8_t *buf = mmap(NULL, map_sz, PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    assert(buf != MAP_FAILED);
-
-    uint32_t *size_ptr = (uint32_t *)(buf + 0x1000u);
-    uint32_t *data_ptr = (uint32_t *)(buf + 0x1004u);
-    *size_ptr = LD_PRISMAL_SPV_MAX_BYTES;
-    data_ptr[0] = LD_PRISMAL_SPV_MAGIC;
-    assert(mprotect(buf, map_sz, PROT_READ) == 0);
-
-    static const uint32_t dummy_spv[4] = { LD_PRISMAL_SPV_MAGIC, 0x00010300u, 0u, 1u };
-    int rc = ld_prismal_patch_rodata((uintptr_t)size_ptr, (uintptr_t)data_ptr,
-                                     dummy_spv, sizeof(dummy_spv));
-    assert(rc == 0);
-    assert(*size_ptr == (uint32_t)sizeof(dummy_spv));
-    assert(memcmp(data_ptr, dummy_spv, sizeof(dummy_spv)) == 0);
-    munmap(buf, map_sz);
+    assert(g_prismal_os4_spv[0] == 0x07230203u);
 
     /* Test ld_prismal_fill_ubo preserves Impeller slots & injects v2.7.9 Prismal uniforms */
     uint8_t ubo[0x180];
@@ -112,6 +92,27 @@ int main(void) {
     opts.show_normals = 0;
     ld_prismal_fill_ubo(ubo, &opts, 3.0f, 1);
     assert(read_u32(ubo, 0x94u) == 8u);
+
+    /* Cross-version dynamic resolver test: verify masked ADRP/ADD resolution with zero hints */
+    uint32_t fake_text[256];
+    memset(fake_text, 0x1fu, sizeof fake_text);
+    /* Place BindUMaskTex at index 32 with a shifted ADRP page, and BindUBO at index 80 with shifted ADRP+ADD */
+    memcpy(&fake_text[32], ld_pg_pat_bind_mask_tex, sizeof ld_pg_pat_bind_mask_tex);
+    fake_text[32 + 7] = (ld_pg_pat_bind_mask_tex[7] & 0x9f00001fu) | 0x00123400u;
+    memcpy(&fake_text[80], ld_pg_pat_bind_ubo, sizeof ld_pg_pat_bind_ubo);
+    fake_text[80 + 4] = (ld_pg_pat_bind_ubo[4] & 0x9f00001fu) | 0x00456000u;
+    fake_text[80 + 5] = (ld_pg_pat_bind_ubo[5] & 0xffc003ffu) | (0x321u << 10);
+
+    struct ld_hyper_engine_info fake_eng;
+    fake_eng.elf_base = (uintptr_t)fake_text;
+    fake_eng.text_start = (uintptr_t)fake_text;
+    fake_eng.text_end = (uintptr_t)(fake_text + 256);
+
+    uintptr_t ubo_r = ld_he_resolve_unique(&fake_eng, 0, ld_pg_pat_bind_ubo, ld_pg_msk_bind_ubo, 8);
+    assert(ubo_r == (uintptr_t)&fake_text[80]);
+    uintptr_t mask_r = ld_he_resolve_near(&fake_eng, 0, ubo_r, 0x200u, 0x100u,
+                                          ld_pg_pat_bind_mask_tex, ld_pg_msk_bind_mask_tex, 8);
+    assert(mask_r == (uintptr_t)&fake_text[32]);
 
     (void)ld_prismal_glass_install;
     (void)ld_prismal_current_blur_px;

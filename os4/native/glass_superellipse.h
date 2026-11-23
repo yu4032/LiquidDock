@@ -41,6 +41,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "bootlog.h"
+#include "hyper_engine_resolver.h"
 #include "native_api.h"
 
 #define LD_GSE_MARKER \
@@ -48,27 +49,26 @@
 #define LD_GSE_LOGONLY_MARKER \
     "/data/user_de/0/com.miui.home/files/liquiddock-glass-superellipse-logonly"
 
-/* 引擎 vaddr（运行时 = libhyper_os_flutter.so 映射基址 + vaddr）。 */
-#define LD_GSE_DHM_VADDR        0xc3c20cu /* Canvas::DrawHyperMaterial 入口 */
-#define LD_GSE_DHM_MOVX19_VADDR 0xc3c24cu /* mov x19, x0（canvas） */
-#define LD_GSE_CLIPWALK_VADDR   0xc414dcu /* ldp x9,x8,[x19,#0x138] */
-#define LD_GSE_STRIDE_VADDR     0xc414e0u /* mov w11,#0x260 */
-#define LD_GSE_PAGES_VADDR      0xc414e8u /* ldr x9,[x19,#0x120] */
-#define LD_GSE_FCMP_VADDR       0xc415e0u /* fcmp s0,s1（n 对 2.0） */
-#define LD_GSE_BLE_VADDR        0xc415e4u /* b.le 跳过 SE 分支 */
-#define LD_GSE_COMPUTE_VADDR    0xd83644u /* ComputeSuperellipseParams */
+/* 快速路径 hint vaddr；跨版本时自动全 .text 掩码扫描解析。 */
+#define LD_GSE_DHM_HINT      0xc3c20cu
+#define LD_GSE_COMPUTE_HINT  0xd83644u
 
-/* 校验字面量（均取自 turner 8.01.02.8604 libhyper_os_flutter.so）。 */
-#define LD_GSE_DHM_W0   0x6db63befu /* stp d15,d14,[sp,#-0xa0]! */
-#define LD_GSE_DHM_W1   0x6d0133edu
-#define LD_GSE_MOVX19   0xaa0003f3u /* mov x19, x0 */
-#define LD_GSE_CLIPWALK 0xa953a269u /* ldp x9,x8,[x19,#0x138] */
-#define LD_GSE_STRIDE_W 0x52804c0bu /* mov w11,#0x260 */
-#define LD_GSE_PAGES_W  0xf9409269u /* ldr x9,[x19,#0x120] */
-#define LD_GSE_FCMP_W   0x1e212000u /* fcmp s0,s1 */
-#define LD_GSE_BLE_W    0x5400032du /* b.le .+0x64 */
-#define LD_GSE_COMPUTE_W0 0x6db93befu /* stp d15,d14,[sp,#-0x70]! */
-#define LD_GSE_COMPUTE_W1 0x6d0133edu
+static const uint32_t ld_gse_pat_dhm[16] = {
+    0x6db63befu, 0x6d0133edu, 0x6d022bebu, 0x6d0323e9u,
+    0xa9047bfdu, 0xa9056ffcu, 0xa90667fau, 0xa9075ff8u,
+    0xa90857f6u, 0xa9094ff4u, 0xd12e03ffu, 0xd53bd059u,
+    0x1e20400cu, 0xaa0703f5u, 0xf9401728u, 0xaa0603f6u,
+};
+static const uint32_t ld_gse_pat_compute[8] = {
+    0x6db93befu, 0x6d0133edu, 0x6d022bebu, 0x6d0323e9u,
+    0xa9047bfdu, 0xa90557f6u, 0xa9064ff4u, 0xd10783ffu,
+};
+static const uint32_t ld_gse_pat_clipwalk[4] = {
+    0xa953a269u, /* ldp x9,x8,[x19,#0x138] */
+    0x52804c0bu, /* mov w11,#0x260 */
+    0x8b090108u, /* add x8,x8,x9 */
+    0xf9409269u, /* ldr x9,[x19,#0x120] */
+};
 
 /* 记录字段偏移 / 尺寸。 */
 #define LD_GSE_REC_SIZE   0x260u
@@ -91,27 +91,40 @@ static ld_gse_compute_fn g_ld_gse_compute;
 static int g_ld_gse_logonly;
 static volatile unsigned g_ld_gse_calls;
 static volatile float g_ld_gse_large_folder_corner;
+static volatile float g_ld_gse_large_folder_2x1_corner;
 static volatile float g_ld_gse_widget_corner;
+static __thread int g_ld_gse_tls_is_small_icon;
 
-/* 引擎 .so 首个映射 = ELF 基址（首个 PT_LOAD，offset 0）。 */
-static uintptr_t ld_gse_engine_base(void)
+struct ld_gse_cache_entry {
+    float w, h, rx, ry, n;
+    uint8_t params[LD_GSE_PARAMS_SIZE];
+};
+static __thread struct ld_gse_cache_entry g_ld_gse_cache[8];
+static __thread unsigned g_ld_gse_cache_next;
+
+static int ld_gse_cache_lookup(float w, float h, float rx, float ry,
+                               uint8_t *params_out, float *n_out)
 {
-    FILE *maps = fopen("/proc/self/maps", "r");
-    if (!maps) return 0;
-    char line[512];
-    uintptr_t base = 0;
-    while (fgets(line, sizeof line, maps)) {
-        if (!strstr(line, "libhyper_os_flutter.so")) continue;
-        unsigned long start = 0;
-        if (sscanf(line, "%lx-", &start) == 1) { base = (uintptr_t)start; break; }
+    for (unsigned i = 0; i < 8u; i++) {
+        const struct ld_gse_cache_entry *e = &g_ld_gse_cache[i];
+        if (e->n > 2.0f &&
+            fabsf(e->w - w) < 0.05f && fabsf(e->h - h) < 0.05f &&
+            fabsf(e->rx - rx) < 0.05f && fabsf(e->ry - ry) < 0.05f) {
+            memcpy(params_out, e->params, LD_GSE_PARAMS_SIZE);
+            *n_out = e->n;
+            return 1;
+        }
     }
-    fclose(maps);
-    return base;
+    return 0;
 }
 
-static int ld_gse_word_ok(uintptr_t site, uint32_t expected)
+static void ld_gse_cache_store(float w, float h, float rx, float ry,
+                               const uint8_t *params, float n)
 {
-    return *(const volatile uint32_t *)site == expected;
+    unsigned slot = (g_ld_gse_cache_next++) & 7u;
+    struct ld_gse_cache_entry *e = &g_ld_gse_cache[slot];
+    e->w = w; e->h = h; e->rx = rx; e->ry = ry; e->n = n;
+    memcpy(e->params, params, LD_GSE_PARAMS_SIZE);
 }
 
 /* Dock 命中：矩形宽高匹配 1880x3008（全屏玻璃层）或 dock 条阈值
@@ -194,18 +207,23 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
             float min_dim = fminf(w, h);
             float max_dim = fmaxf(w, h);
             int radius_overridden = 0;
-            int is_zero_origin = (fabsf(rect[0]) < 1.0f && fabsf(rect[1]) < 1.0f);
             float lf_c = g_ld_gse_large_folder_corner;
+            float lf_2x1_c = g_ld_gse_large_folder_2x1_corner;
             float wg_c = g_ld_gse_widget_corner;
-            /* 大文件夹：静止时非零原点（如 26.8,26.8），长按/拖动浮层时原点为 0 但原半径 > 15.2dp（小组件原半径为 14dp）。 */
-            int is_large_folder = !dock && min_dim >= 45.0f && max_dim >= 120.0f &&
+            /* 按原始圆角区分小组件（<=15.2dp，原生 14dp，含堆叠小组件滚动切换时的非零原点）
+             * 与大文件夹（>15.2dp，原生 16.7dp+，含 2x2/1x2/2x1/3x1 及长按拖动浮层）。
+             * 大文件夹再按短边区分：2x1/1x2/3x1 窄条（min_dim < 120dp）与 2x2 及以上（>= 120dp）。 */
+            /* 保留原生圆形/胶囊小组件（如放大到 2x2 的圆形时钟小组件），不覆盖其圆角。 */
+            int is_circular = (rad[0] >= min_dim * 0.45f || rad[1] >= min_dim * 0.45f);
+            int is_widget = !dock && !is_circular && min_dim >= 120.0f && max_dim <= 800.0f &&
+                            (max_dim / fmaxf(min_dim, 1.0f)) <= 3.2f &&
+                            rad[0] <= 15.2f;
+            int is_large_folder = !dock && !is_circular && !is_widget && min_dim >= 45.0f && max_dim >= 120.0f &&
                                   max_dim <= 800.0f && (max_dim / fmaxf(min_dim, 1.0f)) <= 4.0f &&
-                                  (!is_zero_origin || rad[0] > 15.2f);
-            int is_widget = !dock && !is_large_folder && is_zero_origin &&
-                            min_dim >= 120.0f && max_dim <= 800.0f &&
-                            (max_dim / fmaxf(min_dim, 1.0f)) <= 3.2f;
-            if (is_large_folder && lf_c > 0.0f) {
-                float r_lf = fminf(lf_c, min_dim * 0.5f);
+                                  rad[0] > 15.2f;
+            float eff_lf_c = (min_dim < 120.0f && lf_2x1_c > 0.0f) ? lf_2x1_c : lf_c;
+            if (is_large_folder && eff_lf_c > 0.0f) {
+                float r_lf = fminf(eff_lf_c, min_dim * 0.5f);
                 rad[0] = rad[1] = r_lf;
                 quad[0] = quad[1] = quad[2] = quad[3] = r_lf;
                 memcpy(rec + LD_GSE_OFF_RADII, rad, sizeof rad);
@@ -219,20 +237,23 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
                 memcpy(rec + LD_GSE_OFF_QUAD, quad, sizeof quad);
                 radius_overridden = 1;
             }
-            if (!(n_old > 2.0f) || radius_overridden) {
-                __attribute__((aligned(16))) float rect_buf[4];
-                __attribute__((aligned(16))) float radii_buf[8];
+            if (!is_circular && (dock || max_dim >= 115.0f) && (!(n_old > 2.0f) || radius_overridden)) {
                 __attribute__((aligned(16))) uint8_t params[LD_GSE_PARAMS_SIZE];
-                memcpy(rect_buf, rec + LD_GSE_OFF_RECT, sizeof rect_buf);
-                for (int i = 0; i < 4; i++) {
-                    radii_buf[i * 2 + 0] = rad[0];
-                    radii_buf[i * 2 + 1] = rad[1];
+                float n_new = 0.0f;
+                if (!ld_gse_cache_lookup(w, h, rad[0], rad[1], params, &n_new)) {
+                    __attribute__((aligned(16))) float rect_buf[4];
+                    __attribute__((aligned(16))) float radii_buf[8];
+                    memcpy(rect_buf, rec + LD_GSE_OFF_RECT, sizeof rect_buf);
+                    for (int i = 0; i < 4; i++) {
+                        radii_buf[i * 2 + 0] = rad[0];
+                        radii_buf[i * 2 + 1] = rad[1];
+                    }
+                    memset(params, 0, sizeof params);
+                    g_ld_gse_compute(params, rect_buf, radii_buf);
+                    memcpy(&n_new, params, sizeof n_new);
+                    if (!isfinite(n_new) || !(n_new > 2.0f)) n_new = 5.0f;
+                    ld_gse_cache_store(w, h, rad[0], rad[1], params, n_new);
                 }
-                memset(params, 0, sizeof params);
-                g_ld_gse_compute(params, rect_buf, radii_buf);
-                float n_new;
-                memcpy(&n_new, params, sizeof n_new);
-                if (!isfinite(n_new) || !(n_new > 2.0f)) n_new = 5.0f;
                 memcpy(rec + LD_GSE_OFF_PARAMS, params, LD_GSE_PARAMS_SIZE);
                 memcpy(rec + LD_GSE_OFF_N, &n_new, sizeof n_new);
                 patched = 1;
@@ -250,53 +271,48 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
         }
     }
 
+    int prev_small_icon = g_ld_gse_tls_is_small_icon;
+    float max_d = fmaxf(w, h);
+    g_ld_gse_tls_is_small_icon = (rec != NULL && !dock && max_d > 1.0f && max_d < 115.0f);
+
+    void *ret = NULL;
     if (g_ld_gse_orig_dhm)
-        return ((ld_gse_dhm_fn)g_ld_gse_orig_dhm)(self, a1, a2, a3,
-                                                  a4, a5, a6, a7, a8);
+        ret = ((ld_gse_dhm_fn)g_ld_gse_orig_dhm)(self, a1, a2, a3,
+                                                 a4, a5, a6, a7, a8);
+    g_ld_gse_tls_is_small_icon = prev_small_icon;
     (void)patched;
-    return NULL;
+    return ret;
 }
 
 static void ld_glass_superellipse_install(const struct native_api *api, int enabled,
-                                          float large_folder_corner, float widget_corner)
+                                          float large_folder_corner, float large_folder_2x1_corner,
+                                          float widget_corner)
 {
     g_ld_gse_large_folder_corner = large_folder_corner;
+    g_ld_gse_large_folder_2x1_corner = large_folder_2x1_corner;
     g_ld_gse_widget_corner = widget_corner;
     static int state;
     if (state || !api || !api->hook) return;
     if (!enabled && access(LD_GSE_MARKER, F_OK) != 0) { state = 2; return; }
     g_ld_gse_logonly = access(LD_GSE_LOGONLY_MARKER, F_OK) == 0;
 
-    uintptr_t base = ld_gse_engine_base();
-    if (!base) return; /* 引擎未映射，下次再试。 */
+    struct ld_hyper_engine_info eng;
+    if (!ld_hyper_engine_locate(&eng)) return; /* 引擎未映射，下次再试。 */
 
-    uintptr_t dhm = base + LD_GSE_DHM_VADDR;
-    uintptr_t compute = base + LD_GSE_COMPUTE_VADDR;
-
-    /* Fail-closed：prologue / 关键指令字面量逐一校验。 */
-    if (!ld_gse_word_ok(dhm, LD_GSE_DHM_W0) ||
-        !ld_gse_word_ok(dhm + 4, LD_GSE_DHM_W1) ||
-        !ld_gse_word_ok(base + LD_GSE_DHM_MOVX19_VADDR, LD_GSE_MOVX19) ||
-        !ld_gse_word_ok(base + LD_GSE_CLIPWALK_VADDR, LD_GSE_CLIPWALK) ||
-        !ld_gse_word_ok(base + LD_GSE_STRIDE_VADDR, LD_GSE_STRIDE_W) ||
-        !ld_gse_word_ok(base + LD_GSE_PAGES_VADDR, LD_GSE_PAGES_W) ||
-        !ld_gse_word_ok(base + LD_GSE_FCMP_VADDR, LD_GSE_FCMP_W) ||
-        !ld_gse_word_ok(base + LD_GSE_BLE_VADDR, LD_GSE_BLE_W) ||
-        !ld_gse_word_ok(compute, LD_GSE_COMPUTE_W0) ||
-        !ld_gse_word_ok(compute + 4, LD_GSE_COMPUTE_W1) ||
-        !ld_gse_word_ok(compute + 0x20, LD_GSE_MOVX19)) {
+    uintptr_t dhm = ld_he_resolve_unique(&eng, LD_GSE_DHM_HINT, ld_gse_pat_dhm, NULL, 16);
+    uintptr_t compute = ld_he_resolve_unique(&eng, LD_GSE_COMPUTE_HINT, ld_gse_pat_compute, NULL, 8);
+    if (!dhm || !compute) {
         state = 2;
-        ld_blog("glass superellipse: literal mismatch, fail-closed "
-                "dhm=%08x movx19=%08x walk=%08x stride=%08x pages=%08x "
-                "fcmp=%08x ble=%08x compute=%08x",
-                *(const volatile uint32_t *)dhm,
-                *(const volatile uint32_t *)(base + LD_GSE_DHM_MOVX19_VADDR),
-                *(const volatile uint32_t *)(base + LD_GSE_CLIPWALK_VADDR),
-                *(const volatile uint32_t *)(base + LD_GSE_STRIDE_VADDR),
-                *(const volatile uint32_t *)(base + LD_GSE_PAGES_VADDR),
-                *(const volatile uint32_t *)(base + LD_GSE_FCMP_VADDR),
-                *(const volatile uint32_t *)(base + LD_GSE_BLE_VADDR),
-                *(const volatile uint32_t *)compute);
+        ld_blog("glass superellipse: dynamic resolve failed dhm=%p compute=%p",
+                (void *)dhm, (void *)compute);
+        return;
+    }
+    /* 动态校验 Canvas::DrawHyperMaterial 内部确有 0x260 stride + 0x120/0x138 clip-walk，保证结构一致。 */
+    uintptr_t walk_hit = 0;
+    uintptr_t walk_hi = (dhm + 0x7000u < eng.text_end) ? (dhm + 0x7000u) : eng.text_end;
+    if (ld_he_scan_masked_range(dhm, walk_hi, ld_gse_pat_clipwalk, NULL, 4, &walk_hit, 1) == 0) {
+        state = 2;
+        ld_blog("glass superellipse: clipwalk layout mismatch inside dhm=%p, fail-closed", (void *)dhm);
         return;
     }
 
@@ -306,8 +322,10 @@ static void ld_glass_superellipse_install(const struct native_api *api, int enab
         && backup) {
         g_ld_gse_orig_dhm = (ld_gse_dhm_fn)backup;
         state = 1;
-        ld_blog("glass superellipse: installed dhm=%p compute=%p logonly=%d",
-                (void *)dhm, (void *)compute, g_ld_gse_logonly);
+        ld_blog("glass superellipse: installed dhm=%p (off=0x%lx) compute=%p (off=0x%lx) walk=%p logonly=%d",
+                (void *)dhm, (unsigned long)(dhm - eng.elf_base),
+                (void *)compute, (unsigned long)(compute - eng.elf_base),
+                (void *)walk_hit, g_ld_gse_logonly);
     } else {
         state = 2;
         ld_blog("glass superellipse: hook failed rc-errno=%d", errno);

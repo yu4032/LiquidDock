@@ -58,12 +58,7 @@ internal data class CustomGlassSearchRow(val key: String, val title: String, val
 
 internal val expandedFolderSearchSpecs: List<IntSpec> = listOf(
     smallFolderSizeOffsetSpec, smallFolderCornerRadiusSpec,
-    largeFolderSizeOffsetSpec, largeFolderCornerRadiusSpec,
-    largeFolderPreviewIconScaleSpec,
-    openFolderBlurSpec, openFolderNativeBlurSpec, openFolderIorSpec,
-    openFolderThicknessSpec, openFolderTintSpec,
-    openFolderBaseColorRedSpec, openFolderBaseColorGreenSpec,
-    openFolderBaseColorBlueSpec, openFolderBaseColorAlphaSpec,
+    largeFolderSizeOffsetSpec, largeFolder2x1CornerRadiusSpec, largeFolderCornerRadiusSpec,
 )
 
 /** Custom page search never creates a focus key for an item not rendered by that page. */
@@ -100,12 +95,6 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         val toggles = listOf(
             CustomGlassSearchRow(ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(), "小文件夹玻璃", ""),
             CustomGlassSearchRow(ConfigSchema.Glass.LARGE_FOLDER_GLASS.name(), "大文件夹玻璃", ""),
-            CustomGlassSearchRow(ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE.name(),
-                "显示原生大文件夹描边", ""),
-            CustomGlassSearchRow(ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT.name(),
-                "绵狗修改版桌面适配", ""),
-            CustomGlassSearchRow(ConfigSchema.Glass.OPEN_FOLDER_GLASS.name(),
-                "展开文件夹玻璃背景", ""),
         )
         return toggles + expandedFolderSearchSpecs.map { spec ->
             CustomGlassSearchRow(spec.key, spec.title, spec.summary)
@@ -179,8 +168,7 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         )
         Page.GlassIcons -> listOf(
             toggle(ConfigSchema.Glass.ICON_GLASS, "图标玻璃"),
-            toggle(ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS, "仅 Dock 功能图标玻璃"),
-            toggle(ConfigSchema.Glass.RECENTS_CAPSULE_GLASS, "多任务操作按钮玻璃"),
+            toggle(ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE, "图标玻璃下采样"),
             number(iconSizeOffsetSpec), number(iconCornerRadiusSpec),
         )
         Page.GlassWidgets -> listOf(
@@ -281,8 +269,8 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
         }
         Page.GlassIcons -> when (key) {
             ConfigSchema.Glass.ICON_GLASS.name(),
-            ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
-            ConfigSchema.Glass.RECENTS_CAPSULE_GLASS.name() -> 2
+            ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE.name(),
+            ConfigSchema.Glass.OS4_ICON_GLASS_FIXED_WALLPAPER.name() -> 2
             iconSizeOffsetSpec.key, iconCornerRadiusSpec.key -> 4
             else -> -1
         }

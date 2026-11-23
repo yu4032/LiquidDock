@@ -5,45 +5,87 @@
 static void *(*g_orig_unwrap_glass)(void *filter, int depth);
 static bool (*g_orig_acquire_blur)(void *canvas, void *filter, void *a2, void *a3, void *a4, void *a5, int w6, float s0);
 static uintptr_t g_glass_vt_expect;
+static uintptr_t g_glass_eng_base;
 
-static void ld_glass_apply_obj(void *obj)
+static int ld_glass_fast_read(uintptr_t addr, void *buf, size_t n)
 {
-    uintptr_t vt = 0;
-    if (!obj || !g_glass_vt_expect || !ld_read_heap((uintptr_t)obj, &vt, 8) || vt != g_glass_vt_expect) return;
-    if (g_home_options.glass_enabled && g_home_options.native_glass.mask) {
-        ld_native_glass_apply((uintptr_t)obj, &g_home_options.native_glass, ld_read_heap, ld_native_glass_write);
+    if (addr < 4096u) return 0;
+    memcpy(buf, (const void *)addr, n);
+    return 1;
+}
+
+static int ld_glass_fast_write(const uintptr_t *addrs, const float *vals, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (addrs[i] < 4096u) return 0;
+        memcpy((void *)addrs[i], &vals[i], sizeof(float));
     }
-    if (g_home_options.prismal.disable_stationary_downsample ||
-        __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED)) {
-        uintptr_t rate_addr = (uintptr_t)obj + 0x34u;
+    return 1;
+}
+
+static void ld_glass_apply_obj(void *obj, int from_unwrap)
+{
+    if ((uintptr_t)obj < 4096u) return;
+    uintptr_t vt = 0;
+    uintptr_t expect = __atomic_load_n(&g_glass_vt_expect, __ATOMIC_ACQUIRE);
+    if (!expect) {
+        if (!from_unwrap) return;
+        if (!ld_read_heap((uintptr_t)obj, &vt, 8) || !vt) return;
+        /* Learn DlGlassImageFilter vtable dynamically from Unwrap's first returned object. */
+        if (g_glass_eng_base && vt > g_glass_eng_base && vt < g_glass_eng_base + 0x4000000u) {
+            __atomic_store_n(&g_glass_vt_expect, vt, __ATOMIC_RELEASE);
+            expect = vt;
+            ld_blog("glass filter vtable learned dynamically: %p (off=0x%lx)",
+                    (void *)vt, (unsigned long)(vt - g_glass_eng_base));
+        } else {
+            return;
+        }
+    } else {
+        memcpy(&vt, obj, sizeof(vt));
+    }
+    if (vt != expect) return;
+    if (g_home_options.glass_enabled && g_home_options.native_glass.mask) {
+        ld_native_glass_apply((uintptr_t)obj, &g_home_options.native_glass, ld_glass_fast_read, ld_glass_fast_write);
+    }
+    if (!from_unwrap &&
+        (g_home_options.prismal.disable_stationary_downsample ||
+         __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED))) {
+        /* Route A: keep home-screen glass elements on the single shared full-screen
+         * pass_blur cache (rate == 0), while repl_compose_textures raises that single
+         * capture from 0.25x to 1.0x. Normalize rate > 0 to 0 so every shared component
+         * hits the same cache entry without frozen throttled frames, while preserving
+         * stock rate < 0 (-1) so dragged elements and live overlays retain real-time
+         * sampling of underlying icons/widgets. */
         int32_t rate_i = 0;
-        if (ld_read_heap(rate_addr, &rate_i, sizeof(rate_i)) && rate_i >= 0) {
-            /* pass_blur_rate < 0 (-1) bypasses ProcessHyperGlassMaterial's cached/downsampled
-             * pass_blur lookup (0xd629c8) and uses the live inline RenderTarget every frame,
-             * avoiding both stationary downsampling (rate==0) and frozen folder-close frames (rate>0). */
+        uint8_t *rate_ptr = (uint8_t *)obj + 0x34u;
+        memcpy(&rate_i, rate_ptr, sizeof(rate_i));
+        uint8_t use_wp = 0;
+        memcpy(&use_wp, (uint8_t *)obj + 0x38u, sizeof(use_wp));
+        if (rate_i > 0) {
+            int32_t shared_rate = 0;
+            memcpy(rate_ptr, &shared_rate, sizeof(shared_rate));
+        } else if (rate_i == 0 && use_wp == 0) {
+            /* Non-wallpaper layer (e.g. dragged icon/widget floating over workspace):
+             * use live per-frame sampling instead of the cached shared wallpaper. */
             int32_t live_rate = -1;
-            memcpy((void *)rate_addr, &live_rate, sizeof(live_rate));
+            memcpy(rate_ptr, &live_rate, sizeof(live_rate));
         }
     }
     if (__atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE)) {
-        uintptr_t base = (uintptr_t)obj;
+        uint8_t *base = (uint8_t *)obj;
         float blur_px = ld_prismal_current_blur_px();
         float br = blur_px >= 0.5f ? blur_px : 0.01f;
         float bg = 0.01f; /* always triggers MakeBaseBlurImage sharp bypass for +0x148 */
         static const unsigned zero_idx[] = { 24, 28, 30, 31, 32, 33 }; /* darker, bg_brightness, brightness, inner_white, inner_mix, luminance_amount */
         static const unsigned one_idx[] = { 27, 29, 38 }; /* bg_saturation, saturation, burn */
-        float z = 0.0f, o = 1.0f;
-        uintptr_t br_addr = base + ld_native_glass_fields[22].offset;
-        uintptr_t bg_addr = base + ld_native_glass_fields[23].offset;
-        ld_native_glass_write(&br_addr, &br, 1);
-        ld_native_glass_write(&bg_addr, &bg, 1);
+        const float z = 0.0f, o = 1.0f;
+        memcpy(base + ld_native_glass_fields[22].offset, &br, sizeof(float));
+        memcpy(base + ld_native_glass_fields[23].offset, &bg, sizeof(float));
         for (size_t i = 0; i < sizeof(zero_idx) / sizeof(zero_idx[0]); i++) {
-            uintptr_t addr = base + ld_native_glass_fields[zero_idx[i]].offset;
-            ld_native_glass_write(&addr, &z, 1);
+            memcpy(base + ld_native_glass_fields[zero_idx[i]].offset, &z, sizeof(float));
         }
         for (size_t i = 0; i < sizeof(one_idx) / sizeof(one_idx[0]); i++) {
-            uintptr_t addr = base + ld_native_glass_fields[one_idx[i]].offset;
-            ld_native_glass_write(&addr, &o, 1);
+            memcpy(base + ld_native_glass_fields[one_idx[i]].offset, &o, sizeof(float));
         }
     }
 }
@@ -54,7 +96,7 @@ static bool ld_acquire_blur_hook(void *canvas, void *filter, void *a2, void *a3,
 {
     if (filter && ((g_home_options.glass_enabled && g_home_options.native_glass.mask) ||
                    __atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE))) {
-        ld_glass_apply_obj(filter);
+        ld_glass_apply_obj(filter, 0);
         static unsigned calls;
         unsigned n = __atomic_fetch_add(&calls, 1u, __ATOMIC_RELAXED);
         float orig_s0 = s0;
@@ -75,7 +117,7 @@ static void *ld_unwrap_glass_hook(void *filter, int depth)
     void *res = g_orig_unwrap_glass(filter, depth);
     if (res && ((g_home_options.glass_enabled && g_home_options.native_glass.mask) ||
                 __atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE))) {
-        ld_glass_apply_obj(res);
+        ld_glass_apply_obj(res, 1);
         static unsigned calls;
         unsigned n = __atomic_fetch_add(&calls, 1u, __ATOMIC_RELAXED);
         if (n == 0) ld_blog("glass Unwrap hook active res=%p", res);
@@ -91,7 +133,7 @@ static void ld_glass_filter_hook_install(const struct native_api *api)
         (!g_home_options.glass_enabled && !__atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE))) return;
     ld_lib_info lib = {0};
     if (!ld_resolve_so("libhyper_os_flutter.so", &lib) || !lib.elf_base) return;
-    g_glass_vt_expect = lib.elf_base + 0x1190e98u;
+    g_glass_eng_base = lib.elf_base;
     if (!unwrap_installed) {
         static const uint32_t pat[8] = {
             0xa9bd5ffeu, 0xa90157f6u, 0xa9024ff4u, 0x2a0103f3u,

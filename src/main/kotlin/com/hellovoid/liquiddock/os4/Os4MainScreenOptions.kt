@@ -1,5 +1,6 @@
 package com.hellovoid.liquiddock.os4
 
+import com.hellovoid.liquiddock.GlassEdgeEffects
 import com.hellovoid.liquiddock.config.ConfigKey
 import com.hellovoid.liquiddock.config.ConfigSchema
 import com.hellovoid.liquiddock.WidgetComponentStore
@@ -129,6 +130,7 @@ data class Os4MainScreenOptions(
     val useDragMaterial: Boolean = false,
     val glassLargeFolder: Boolean = true,
     val glassLargeFolderCorner: Double = 0.0,
+    val glassLargeFolder2x1Corner: Double = 0.0,
     val glassLargeFolderNativeOutline: Boolean = true,
     val widgetOverrides: Boolean = false,
     val hookSafetyEnabled: Boolean = false,
@@ -217,6 +219,8 @@ data class Os4MainScreenOptions(
             PrismalFieldSpec("prismal_backlit_extent", ConfigSchema.Glass.BACKLIT_EXTENT, divisor = 100.0, min = 0.0, max = 1.0),
             PrismalFieldSpec("prismal_backlit_softness", ConfigSchema.Glass.BACKLIT_SOFTNESS, divisor = 100.0, min = 0.05, max = 2.0),
             PrismalFieldSpec("prismal_disable_stationary_downsample", ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE, isBool = true),
+            PrismalFieldSpec("prismal_icon_downsample", ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE, isBool = true),
+            PrismalFieldSpec("prismal_icon_fixed_wallpaper", ConfigSchema.Glass.OS4_ICON_GLASS_FIXED_WALLPAPER, isBool = true),
             PrismalFieldSpec("prismal_widget_corner", ConfigSchema.Glass.WIDGET_CORNER_RADIUS, isDp = true, min = 0.0, max = 128.0),
             PrismalFieldSpec("prismal_small_folder_corner", ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS, isDp = true, min = 0.0, max = 128.0),
             PrismalFieldSpec("prismal_outer_shadow_enabled", ConfigSchema.Glass.OUTER_SHADOW_ENABLED, isBool = true),
@@ -259,6 +263,8 @@ data class Os4MainScreenOptions(
                 add(spec.configKey.name())
                 if (spec.isDp) add("${spec.configKey.name()}_tenths")
             }
+            add(GlassEdgeEffects.key(GlassEdgeEffects.ICON, ConfigSchema.Glass.BACKLIT_ENABLED))
+            add(GlassEdgeEffects.key(GlassEdgeEffects.ICON, ConfigSchema.Glass.OUTER_SHADOW_ENABLED))
             add(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES.name())
             add(ConfigSchema.Glass.OS4_DOCK_GLASS_CUSTOM.name())
             add(ConfigSchema.Glass.OS4_DOCK_GLASS_OVERRIDES.name())
@@ -277,6 +283,7 @@ data class Os4MainScreenOptions(
                 ConfigSchema.Glass.ICON_SIZE_OFFSET,
                 ConfigSchema.Glass.ICON_CORNER_RADIUS,
                 ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS,
+                ConfigSchema.Glass.LARGE_FOLDER_2X1_CORNER_RADIUS,
             ).forEach { add(it.name()); add("${it.name()}_tenths") }
             add(WidgetComponentStore.SELECTION_KEY)
             add(ConfigSchema.Dock.ENABLED.name())
@@ -385,6 +392,14 @@ data class Os4MainScreenOptions(
                                 }
                             }
                         }
+                        val iconBacklitKey = GlassEdgeEffects.key(GlassEdgeEffects.ICON, ConfigSchema.Glass.BACKLIT_ENABLED)
+                        (values[iconBacklitKey] as? Boolean)?.let {
+                            put("prismal_icon_backlit_enabled", if (it) 1.0 else 0.0)
+                        }
+                        val iconShadowKey = GlassEdgeEffects.key(GlassEdgeEffects.ICON, ConfigSchema.Glass.OUTER_SHADOW_ENABLED)
+                        (values[iconShadowKey] as? Boolean)?.let {
+                            put("prismal_icon_outer_shadow_enabled", if (it) 1.0 else 0.0)
+                        }
                     }
                 } else emptyMap()
                 val glassIcons = glassEnabled && boolean(ConfigSchema.Glass.ICON_GLASS)
@@ -478,6 +493,9 @@ data class Os4MainScreenOptions(
                             glassLargeFolder = glassLargeFolder,
                             glassLargeFolderCorner = if (glassEnabled && glassLargeFolder) {
                                 dp(ConfigSchema.Glass.LARGE_FOLDER_CORNER_RADIUS)
+                            } else 0.0,
+                            glassLargeFolder2x1Corner = if (glassEnabled && glassLargeFolder) {
+                                dp(ConfigSchema.Glass.LARGE_FOLDER_2X1_CORNER_RADIUS)
                             } else 0.0,
                             glassLargeFolderNativeOutline = glassLargeFolderNativeOutline,
                             widgetOverrides = widgetOverrides,

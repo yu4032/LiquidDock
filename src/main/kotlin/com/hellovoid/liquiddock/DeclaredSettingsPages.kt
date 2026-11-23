@@ -65,17 +65,11 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
             SettingsBlock.Link("lighting.edge.scope", text(R.string.page_glass_edge),
                 "Prismal 外阴影与光学描边，按作用域（Dock、图标、小组件…）独立调整", Page.GlassEdge),
         ), glass)
-    page(Page.LiquidSampling, "调整背景缩放、PassBlur 渲染分辨率与实时刷新上限。采样保护区由渲染器自动计算。",
-        groups(liquidSamplingGroups) + listOf(
-            SettingsBlock.Header("sampling.performance", "实时背景采样与帧同步"),
+    page(Page.LiquidSampling, "控制桌面玻璃静止时的采样行为。",
+        listOf(
+            SettingsBlock.Header("sampling.performance", "实时背景采样"),
             toggle(ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE, "取消桌面玻璃静止时的下采样",
-                "禁用桌面原生在玻璃静止时的采样降级与 0.25× 预缩放下采样，保持完整采样分辨率"),
-            row(passBlurCaptureScaleSpec), row(passBlurRenderFpsSpec),
-            toggle(ConfigSchema.Dock.FRAME_SYNC, text(R.string.dock_frame_sync),
-                text(R.string.dock_frame_sync_summary)),
-            SettingsBlock.Header("sampling.debug", "调试显示"),
-            toggle(ConfigSchema.Glass.PRISMAL_SHOW_NORMALS, "OS4 法线与方向光可视化",
-                "内部显示玻璃表面法线，边缘显示 OS4 反射使用的 SDF 法线；亮度反映 OS4 方向光，不包含背景反射纹理"),
+                "禁用桌面原生在玻璃静止时的采样降级与下采样，保持完整采样分辨率"),
         ), glass)
     numbers(Page.DockGeometry, "调整 Dock 的尺寸、位置、圆角与图标间距。", dockSpecs, dock)
     listOf(Page.GridLandscape to "landscape", Page.GridPortrait to "portrait").forEach { (p, orientation) ->

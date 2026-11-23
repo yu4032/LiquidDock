@@ -21,28 +21,32 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include "bootlog.h"
+#include "hyper_engine_resolver.h"
 #include "native_api.h"
 
 #define LD_SE_BLUR_MARKER \
     "/data/user_de/0/com.miui.home/files/liquiddock-superellipse-blur"
-#define LD_SE_BLUR_PATCH_VADDR 0xc4aee0u
-#define LD_SE_BLUR_OLD 0x912b0108u   /* add x8, x8, #0xac0 */
-#define LD_SE_BLUR_NEW 0x912bc108u   /* add x8, x8, #0xaf0 */
+#define LD_SE_BLUR_PATCH_HINT 0xc4aedcu
+#define LD_SE_BLUR_VTABLE_DELTA 0x30u
 
-static uintptr_t ld_se_blur_engine_base(void)
-{
-    FILE *maps = fopen("/proc/self/maps", "r");
-    if (!maps) return 0;
-    char line[512];
-    uintptr_t base = 0;
-    while (fgets(line, sizeof line, maps)) {
-        if (!strstr(line, "libhyper_os_flutter.so")) continue;
-        unsigned long start = 0;
-        if (sscanf(line, "%lx-", &start) == 1) { base = (uintptr_t)start; break; }
-    }
-    fclose(maps);
-    return base;
-}
+static const uint32_t ld_pat_se_blur[7] = {
+    0xd0002a28u, /* adrp x8, #page */
+    0x912b0108u, /* add  x8, x8, #imm12 (RRectBlurShape vtable) */
+    0x910023e3u, /* add  x3, sp, #8 */
+    0xaa1303e2u, /* mov  x2, x19 */
+    0xf90007e8u, /* str  x8, [sp, #8] */
+    0xaa0003f4u, /* mov  x20, x0 */
+    0x390043ffu, /* strb wzr, [sp, #0x10] */
+};
+static const uint32_t ld_msk_se_blur[7] = {
+    0x9f00001fu, /* ADRP x8 */
+    0xffc003ffu, /* ADD x8, x8, #imm12 */
+    0xffffffffu,
+    0xffffffffu,
+    0xffffffffu,
+    0xffffffffu,
+    0xffffffffu,
+};
 
 /* 返回 0 成功；负值为 -errno 或 -2（内容不符）。 */
 static int ld_patch_text_word(uintptr_t address, uint32_t expected, uint32_t value)
@@ -72,13 +76,28 @@ static void ld_superellipse_blur_install(int enabled)
     static int state;
     if (state) return;
     if (!enabled && access(LD_SE_BLUR_MARKER, F_OK) != 0) { state = 2; return; }
-    uintptr_t base = ld_se_blur_engine_base();
-    if (!base) return;
-    uintptr_t site = base + LD_SE_BLUR_PATCH_VADDR;
-    int rc = ld_patch_text_word(site, LD_SE_BLUR_OLD, LD_SE_BLUR_NEW);
+    struct ld_hyper_engine_info eng;
+    if (!ld_hyper_engine_locate(&eng)) return;
+    uintptr_t anchor = ld_he_resolve_unique(&eng, LD_SE_BLUR_PATCH_HINT,
+                                            ld_pat_se_blur, ld_msk_se_blur, 7);
+    if (!anchor) {
+        state = 2;
+        ld_blog("superellipse blur: pattern not found, skipped");
+        return;
+    }
+    uintptr_t site = anchor + 4u;
+    uint32_t old_w = *(volatile uint32_t *)site;
+    uint32_t imm12 = (old_w >> 10) & 0xfffu;
+    if (imm12 + LD_SE_BLUR_VTABLE_DELTA >= 0x1000u) {
+        state = 2;
+        ld_blog("superellipse blur: imm12=0x%x overflow, skipped", imm12);
+        return;
+    }
+    uint32_t new_w = (old_w & ~(0xfffu << 10)) | ((imm12 + LD_SE_BLUR_VTABLE_DELTA) << 10);
+    int rc = ld_patch_text_word(site, old_w, new_w);
     state = 1;
-    ld_blog("superellipse blur: patch %p rc=%d now=%08x", (void *)site, rc,
-            *(volatile uint32_t *)site);
+    ld_blog("superellipse blur: patch %p (off=0x%lx) %08x->%08x rc=%d",
+            (void *)site, (unsigned long)(site - eng.elf_base), old_w, new_w, rc);
 }
 
 #endif

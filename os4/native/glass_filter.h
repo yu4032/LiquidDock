@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <dlfcn.h>
+#include "hyper_engine_resolver.h"
 #include "native_glass_apply.h"
 #include "native_glass_fingerprints.h"
 static void *g_orig_glass_filter __attribute__((used));
@@ -64,13 +65,19 @@ __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context
     uintptr_t holder=0,filter=0,vt=0;
     if(!ld_read_heap(c->x[29]-0x70,&holder,8) || !ld_read_heap(holder+0x30,&filter,8) || !ld_read_heap(filter,&vt,8)) return;
     Dl_info info={0};
-    if(!dladdr((void *)vt,&info) || (strict && (vt<(uintptr_t)info.dli_fbase
-            || vt-(uintptr_t)info.dli_fbase!=0x1190e98))) return;
+    if(!dladdr((void *)vt,&info) || !info.dli_fbase || vt<(uintptr_t)info.dli_fbase) return;
+    if(strict && (!info.dli_fname || !strstr(info.dli_fname,"libhyper_os_flutter.so"))) return;
     static uintptr_t verified_base;
     uintptr_t base=(uintptr_t)info.dli_fbase;
     if(strict && __atomic_load_n(&verified_base,__ATOMIC_ACQUIRE)!=base) {
-        unsigned char live[sizeof ld_native_glass_engine_words];
-        if(!ld_read_heap(base+LD_NATIVE_GLASS_ENGINE_VADDR,live,sizeof live) || memcmp(live,ld_native_glass_engine_words,sizeof live)) return;
+        struct ld_hyper_engine_info eng;
+        uintptr_t hit=0;
+        if(ld_hyper_engine_locate(&eng) && eng.elf_base==base) {
+            uint32_t pat[8];
+            memcpy(pat,ld_native_glass_engine_words,sizeof pat);
+            hit=ld_he_resolve_unique(&eng,LD_NATIVE_GLASS_ENGINE_VADDR,pat,NULL,8);
+        }
+        if(!hit) return;
         __atomic_store_n(&verified_base,base,__ATOMIC_RELEASE);
     }
     if((scope==LD_GLASS_SCOPE_ICON || scope==LD_GLASS_SCOPE_GLOBAL || scope==LD_GLASS_SCOPE_LARGE_FOLDER)

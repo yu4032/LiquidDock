@@ -320,22 +320,13 @@ internal fun GlassIconsPage(
             ),
         )
     }
-    var functionalDockIconGlass by remember {
-        mutableStateOf(
-            prefs.getBoolean(
-                ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.name(),
-                ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS.uiDefault(),
-            ),
-        )
-    }
     // Keep Prismal on every group, but avoid one massive offscreen blur
     // layer containing every switch, slider and stepper on this page.
     // The entire page still has only one LazyColumn as scroll owner.
     DenseSettingsList(
         padding,
         stringResource(R.string.page_glass_icons),
-        if (os4Launcher) "控制普通桌面图标与 Dock 应用图标玻璃，并调整尺寸与圆角。"
-        else "调整桌面图标、Dock 功能图标与多任务胶囊玻璃。",
+        "控制普通桌面图标与 Dock 应用图标玻璃，并调整尺寸与圆角。",
         focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GlassIcons, it.key) },
         focusSequence = searchFocus?.sequence,
     ) {
@@ -350,22 +341,16 @@ internal fun GlassIconsPage(
                     else "同时控制桌面与 Dock 全部图标；0 圆角为 Auto",
                     masterEnabled && liquidEnabled,
                 ) { iconGlass = it }
-                ModernListDivider()
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.FUNCTIONAL_DOCK_ICON_GLASS,
-                    "仅 Dock 功能图标玻璃",
-                    "仅搜索、小爱、全部应用、最近任务、Home、手机互联等系统功能入口；可在关闭“图标玻璃”后单独使用",
-                    masterEnabled && liquidEnabled,
-                ) { functionalDockIconGlass = it }
-                ModernListDivider()
-                BooleanSetting(
-                    prefs,
-                    ConfigSchema.Glass.RECENTS_CAPSULE_GLASS,
-                    "多任务操作按钮玻璃",
-                    "使用液态玻璃替换清除全部和设备互联胶囊背景；采样未就绪时保持透明，不回退原生模糊",
-                    masterEnabled && liquidEnabled,
-                )
+                if (os4Launcher) {
+                    ModernListDivider()
+                    BooleanSetting(
+                        prefs,
+                        ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE,
+                        "图标玻璃下采样",
+                        "开启后 1×1 图标复用共享下采样背景以降低 GPU 与显存开销；关闭后全分辨率采样更清晰但更耗性能。",
+                        masterEnabled && liquidEnabled && iconGlass,
+                    )
+                }
             }
         }
         item(key = "icons-geometry-title") { SmallTitle("尺寸与圆角") }
@@ -374,13 +359,13 @@ internal fun GlassIconsPage(
                 IntSetting(
                     prefs,
                     iconSizeOffsetSpec,
-                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+                    masterEnabled && liquidEnabled && iconGlass,
                 )
                 ModernListDivider()
                 IntSetting(
                     prefs,
                     iconCornerRadiusSpec,
-                    masterEnabled && liquidEnabled && (iconGlass || functionalDockIconGlass),
+                    masterEnabled && liquidEnabled && iconGlass,
                 )
             }
         }
@@ -499,16 +484,6 @@ internal enum class FolderGlassCell(val id: String) {
     LARGE_HEADING("folder-large-heading"),
     LARGE_ENABLED("folder-large-enabled"),
     LARGE_GEOMETRY("folder-large-geometry"),
-    LARGE_PREVIEW("folder-large-preview"),
-    LARGE_NATIVE_OUTLINE("folder-large-native-outline"),
-    LARGE_MINGOU_COMPAT("folder-large-mingou-compat"),
-    OPEN_HEADING("folder-open-heading"),
-    OPEN_ENABLED("folder-open-enabled"),
-    OPEN_BLUR("folder-open-blur"),
-    OPEN_OPTICS("folder-open-optics"),
-    OPEN_FILL_HEADING("folder-open-fill-heading"),
-    OPEN_FILL_RGB("folder-open-fill-rgb"),
-    OPEN_FILL_ALPHA("folder-open-fill-alpha"),
     SHADOW_HEADING("folder-shadow-heading"),
     SHADOW("folder-shadow");
 }
@@ -520,19 +495,7 @@ internal val folderGlassFocusCell: Map<String, String> = mapOf(
     ConfigSchema.Glass.LARGE_FOLDER_GLASS.name() to FolderGlassCell.LARGE_ENABLED.id,
     largeFolderSizeOffsetSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
     largeFolderCornerRadiusSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
-    largeFolderPreviewIconScaleSpec.key to FolderGlassCell.LARGE_PREVIEW.id,
-    ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE.name() to FolderGlassCell.LARGE_NATIVE_OUTLINE.id,
-    ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT.name() to FolderGlassCell.LARGE_MINGOU_COMPAT.id,
-    ConfigSchema.Glass.OPEN_FOLDER_GLASS.name() to FolderGlassCell.OPEN_ENABLED.id,
-    openFolderBlurSpec.key to FolderGlassCell.OPEN_BLUR.id,
-    openFolderNativeBlurSpec.key to FolderGlassCell.OPEN_BLUR.id,
-    openFolderIorSpec.key to FolderGlassCell.OPEN_OPTICS.id,
-    openFolderThicknessSpec.key to FolderGlassCell.OPEN_OPTICS.id,
-    openFolderTintSpec.key to FolderGlassCell.OPEN_OPTICS.id,
-    openFolderBaseColorRedSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
-    openFolderBaseColorGreenSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
-    openFolderBaseColorBlueSpec.key to FolderGlassCell.OPEN_FILL_RGB.id,
-    openFolderBaseColorAlphaSpec.key to FolderGlassCell.OPEN_FILL_ALPHA.id
+    largeFolder2x1CornerRadiusSpec.key to FolderGlassCell.LARGE_GEOMETRY.id,
 )
 
 @Composable
@@ -563,18 +526,10 @@ internal fun GlassFoldersPage(
             ),
         )
     }
-    var openFolderGlass by remember {
-        mutableStateOf(
-            prefs.getBoolean(
-                ConfigSchema.Glass.OPEN_FOLDER_GLASS.name(),
-                ConfigSchema.Glass.OPEN_FOLDER_GLASS.uiDefault(),
-            ),
-        )
-    }
     DenseSettingsList(
         padding,
         stringResource(R.string.page_glass_folders),
-        "小文件夹、大文件夹和展开文件夹分别调整，不混用背景与几何参数。",
+        "小文件夹与大文件夹分别调整，支持 2×1 与 2×2 及以上大文件夹独立圆角。",
         focusItemIndex = searchFocus?.key?.let(folderGlassFocusCell::get)
             ?.let(folderGlassCellOrder::indexOf)?.takeIf { it >= 0 }?.plus(1),
         focusSequence = searchFocus?.sequence,
@@ -618,76 +573,9 @@ internal fun GlassFoldersPage(
             SettingsCard {
                 IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
                 ModernListDivider()
+                IntSetting(prefs, largeFolder2x1CornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
+                ModernListDivider()
                 IntSetting(prefs, largeFolderCornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
-            }
-        }
-        item(key = FolderGlassCell.LARGE_PREVIEW.id) {
-            SettingsCard {
-                IntSetting(prefs, largeFolderPreviewIconScaleSpec, masterEnabled)
-            }
-        }
-        item(key = FolderGlassCell.LARGE_NATIVE_OUTLINE.id) {
-            SettingsCard {
-                BooleanSetting(
-                    prefs, ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE,
-                    "显示原生大文件夹描边",
-                    "关闭后移除系统默认灰黑色圆角描边，保留玻璃与背景效果",
-                    masterEnabled,
-                )
-            }
-        }
-        item(key = FolderGlassCell.LARGE_MINGOU_COMPAT.id) {
-            SettingsCard {
-                BooleanSetting(
-                    prefs, ConfigSchema.Glass.MINGOU_LARGE_FOLDER_COMPAT,
-                    "绵狗修改版桌面适配",
-                    "默认关闭。开启后对含 LiquidDock4 标记且数据库保存为 2×2 的大文件夹恢复网格尺寸；不检测桌面版本。修改后重启桌面生效",
-                    enabled = true, // This compatibility repair has its own master switch.
-                )
-            }
-        }
-        item(key = FolderGlassCell.OPEN_HEADING.id) { SmallTitle("展开文件夹") }
-        item(key = FolderGlassCell.OPEN_ENABLED.id) {
-            SettingsCard {
-                // FolderCling background is independent of the desktop preview;
-                // its first Hook installation still requires a Launcher restart.
-                BooleanSetting(
-                    prefs, ConfigSchema.Glass.OPEN_FOLDER_GLASS,
-                    "展开文件夹玻璃背景",
-                    "替换文件夹展开后的原生背景；关闭后恢复系统样式，修改后需重启桌面",
-                    masterEnabled && liquidEnabled,
-                ) { openFolderGlass = it }
-            }
-        }
-        item(key = FolderGlassCell.OPEN_BLUR.id) {
-            SettingsCard {
-                IntSetting(prefs, openFolderBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
-                ModernListDivider()
-                IntSetting(prefs, openFolderNativeBlurSpec, masterEnabled && liquidEnabled && openFolderGlass)
-            }
-        }
-        item(key = FolderGlassCell.OPEN_OPTICS.id) {
-            SettingsCard {
-                IntSetting(prefs, openFolderIorSpec, masterEnabled && liquidEnabled && openFolderGlass)
-                ModernListDivider()
-                IntSetting(prefs, openFolderThicknessSpec, masterEnabled && liquidEnabled && openFolderGlass)
-                ModernListDivider()
-                IntSetting(prefs, openFolderTintSpec, masterEnabled && liquidEnabled && openFolderGlass)
-            }
-        }
-        item(key = FolderGlassCell.OPEN_FILL_HEADING.id) { SmallTitle("展开文件夹 · 底色（纯色覆盖）") }
-        item(key = FolderGlassCell.OPEN_FILL_RGB.id) {
-            SettingsCard {
-                IntSetting(prefs, openFolderBaseColorRedSpec, masterEnabled && liquidEnabled && openFolderGlass)
-                ModernListDivider()
-                IntSetting(prefs, openFolderBaseColorGreenSpec, masterEnabled && liquidEnabled && openFolderGlass)
-                ModernListDivider()
-                IntSetting(prefs, openFolderBaseColorBlueSpec, masterEnabled && liquidEnabled && openFolderGlass)
-            }
-        }
-        item(key = FolderGlassCell.OPEN_FILL_ALPHA.id) {
-            SettingsCard {
-                IntSetting(prefs, openFolderBaseColorAlphaSpec, masterEnabled && liquidEnabled && openFolderGlass)
             }
         }
         item(key = FolderGlassCell.SHADOW_HEADING.id) { SmallTitle("玻璃阴影") }

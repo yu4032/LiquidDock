@@ -21,9 +21,6 @@ class SettingsAvailabilityTest {
             Page.WidgetComponents,
             Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
             Page.DockEdge, Page.IconEdge, Page.WidgetEdge, Page.FolderEdge,
-            Page.PopupEdge, Page.DialogEdge,
-            Page.ShortcutPopupCustomization, Page.ShortcutPopupAll,
-            Page.DialogCustomization, Page.DialogAll,
             Page.LauncherHighlights, Page.LauncherHighlightsCompact, Page.LauncherHighlightsLarge,
             Page.Recents,
             Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
@@ -35,7 +32,15 @@ class SettingsAvailabilityTest {
     }
 
     @Test fun unrelatedLauncherFeaturesStillGrayOut() {
-        Page.entries.forEach {
+        val grayedOut = setOf(
+            Page.ShortcutPopupCustomization, Page.ShortcutPopupAll, Page.PopupEdge,
+            Page.DialogCustomization, Page.DialogAll, Page.DialogEdge,
+        )
+        grayedOut.forEach {
+            assertEquals("Grayed out in OS4 ${it.name}", PagePortState.UNAVAILABLE, os4.status(it))
+            assertFalse("Disabled in OS4 ${it.name}", os4.allows(it))
+        }
+        Page.entries.filterNot { it in grayedOut }.forEach {
             assertTrue("Open in OS4 ${it.name}", os4.allows(it))
         }
     }

@@ -24,6 +24,7 @@
 #endif
 #include "bootlog.h"
 #include "grid_conf.h"
+#include "hyper_engine_resolver.h"
 #include "native_api.h"
 #include "prismal_os4_spv.h"
 
@@ -34,25 +35,83 @@
 #define LD_PRISMAL_CONF_EARLY \
     "/data/user_de/0/com.miui.home/files/liquiddock-native-early.conf"
 
-#define LD_PRISMAL_SPV_SIZE_VADDR         0x513a84u
-#define LD_PRISMAL_SPV_DATA_VADDR         0x513a88u
-#define LD_PRISMAL_SPV_MAX_BYTES          22816u
-#define LD_PRISMAL_SPV_MAGIC              0x07230203u
+/* 快速路径 hint vaddr；跨版本时自动通过 hyper_engine_resolver 全 .text 掩码扫描解析。 */
+#define LD_HINT_MAKE_BASE_BLUR            0xc835b8u
+#define LD_HINT_MAKE_REFLECT_BLUR         0xc83b58u
+#define LD_HINT_MAKE_TINTED_FROM_BASE     0xc84188u
+#define LD_HINT_COMPOSE_TEXTURES          0xc76290u
+#define LD_HINT_GLASS_CONTENTS_RENDER     0xd69e00u
+#define LD_HINT_BIND_U_MASK_TEX           0xd6c1b8u
+#define LD_HINT_BIND_UBO                  0xd6c260u
+#define LD_HINT_DEVICE_BUF_GET_CONTENTS   0xdec528u
+#define LD_HINT_DEVICE_BUF_FLUSH          0xdec594u
+#define LD_HINT_PIPELINE_VK_CREATE        0xdf6028u
+#define LD_HINT_RENDER_PASS_SET_SCISSOR   0xe01148u
+#define LD_HINT_CANVAS_SAVE_LAYER         0xc34d58u
 
-#define LD_VADDR_MAKE_BASE_BLUR           0xc835b8u
-#define LD_VADDR_MAKE_REFLECT_BLUR        0xc83b58u
-#define LD_VADDR_MAKE_TINTED_FROM_BASE    0xc84188u
-#define LD_VADDR_COMPOSE_TEXTURES         0xc76290u
-#define LD_VADDR_GLASS_CONTENTS_RENDER    0xd69e00u
-#define LD_VADDR_BIND_U_MASK_TEX          0xd6c1b8u
-#define LD_VADDR_BIND_UBO                 0xd6c260u
-#define LD_VADDR_DEVICE_BUF_GET_CONTENTS  0xdec528u
-#define LD_VADDR_DEVICE_BUF_FLUSH         0xdec594u
-#define LD_VADDR_PIPELINE_VK_CREATE       0xdf6028u
-#define LD_VADDR_RENDER_PASS_SET_SCISSOR  0xe01148u
+static const uint32_t ld_pg_pat_make_blur[8] = {
+    0x6dba23e9u, 0xf9000bfdu, 0xa90267feu, 0xa9035ff8u,
+    0xa90457f6u, 0xa9054ff4u, 0xd10e03ffu, 0x1e204028u,
+};
+static const uint32_t ld_pg_pat_make_tinted[8] = {
+    0xfc1b0fe8u, 0xf90007fdu, 0xa90167feu, 0xa9025ff8u,
+    0xa90357f6u, 0xa9044ff4u, 0xd10d43ffu, 0xf9400048u,
+};
+static const uint32_t ld_pg_pat_compose_textures[8] = {
+    0xa9ba7bfdu, 0xa9016ffcu, 0xa90267fau, 0xa9035ff8u,
+    0xa90457f6u, 0xa9054ff4u, 0xd10d03ffu, 0xd53bd048u,
+};
+static const uint32_t ld_pg_pat_canvas_savelayer[8] = {
+    0x6db733edu, 0x6d012bebu, 0x6d0223e9u, 0xa9037bfdu,
+    0xa9046ffcu, 0xa90567fau, 0xa9065ff8u, 0xa90757f6u,
+};
+static const uint32_t ld_pg_pat_glass_render[16] = {
+    0x6db63befu, 0x6d0133edu, 0x6d022bebu, 0x6d0323e9u,
+    0xa9047bfdu, 0xa9056ffcu, 0xa90667fau, 0xa9075ff8u,
+    0xa90857f6u, 0xa9094ff4u, 0xd11303ffu, 0xd53bd05bu,
+    0xaa0303f3u, 0xaa0103f4u, 0xf9401768u, 0xaa0003f5u,
+};
+static const uint32_t ld_pg_pat_bind_mask_tex[8] = {
+    0xd100c3ffu, 0xf9000bfeu, 0xa9024ff4u, 0x3dc00020u,
+    0xa9007c3fu, 0xaa0203e6u, 0xf9400008u, 0xd0002163u,
+};
+static const uint32_t ld_pg_msk_bind_mask_tex[8] = {
+    0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu,
+    0xffffffffu, 0xffffffffu, 0xffffffffu, 0x9f00001fu,
+};
+static const uint32_t ld_pg_pat_bind_ubo[8] = {
+    0xd10143ffu, 0xf9001bfeu, 0xa9044ff4u, 0xad400420u,
+    0xd0002163u, 0x910de063u, 0xa9007c3fu, 0xf9401028u,
+};
+static const uint32_t ld_pg_msk_bind_ubo[8] = {
+    0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu,
+    0x9f00001fu, 0xffc003ffu, 0xffffffffu, 0xffffffffu,
+};
+static const uint32_t ld_pg_pat_devbuf_get[8] = {
+    0xd10503ffu, 0xf90093fdu, 0xa9134ffeu, 0xf9402008u,
+    0xb5000248u, 0xaa0003f3u, 0xf0ff97c2u, 0x91366c42u,
+};
+static const uint32_t ld_pg_msk_devbuf_get[8] = {
+    0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu,
+    0xffffffffu, 0xffffffffu, 0x9f00001fu, 0xffc003ffu,
+};
+static const uint32_t ld_pg_pat_devbuf_flush[8] = {
+    0x39412008u, 0x37000668u, 0xd10543ffu, 0xf90093fdu,
+    0xa91357feu, 0xa9144ff4u, 0x39404028u, 0x7100051fu,
+};
+static const uint32_t ld_pg_pat_pipeline_vk_create[8] = {
+    0xfc190fe8u, 0xa9017bfdu, 0xa9026ffcu, 0xa90367fau,
+    0xa9045ff8u, 0xa90557f6u, 0xa9064ff4u, 0xd11d43ffu,
+};
+static const uint32_t ld_pg_pat_set_scissor[8] = {
+    0xd360fc28u, 0xd360fc49u, 0x37f800e2u, 0x36f80281u,
+    0x12b0000au, 0x0b0a002bu, 0x6b02017fu, 0x5400010bu,
+};
 
 static volatile int g_prismal_glass_active __attribute__((used));
 static volatile int g_prismal_no_downsample __attribute__((used));
+static volatile int g_prismal_icon_downsample __attribute__((used)) = 1;
+static volatile int g_prismal_icon_fixed_wallpaper __attribute__((used));
 
 typedef struct {
     void *ptr;
@@ -91,6 +150,7 @@ static uint8_t (*g_orig_bind_mask_tex)(void *binder, ld_sp_t *tex_sp, void *samp
 static uint8_t (*g_orig_bind_ubo)(void *binder, void *buffer_view);
 static void (*g_orig_set_scissor)(void *pass, uint64_t lt, uint64_t rb);
 static void *g_orig_compose_textures __attribute__((used));
+static void *g_orig_canvas_savelayer __attribute__((used));
 
 static uint8_t *(*g_fn_devbuf_get_contents)(void *dev_buf);
 static void (*g_fn_devbuf_flush)(void *dev_buf, const ld_opt_range_t *opt_range);
@@ -101,14 +161,203 @@ static uint64_t g_prismal_vk_device;
 
 static pthread_mutex_t g_prismal_conf_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct ld_prismal_options g_prismal_live_opts;
+static struct ld_prismal_options g_prismal_opts_slots[2];
+static volatile unsigned g_prismal_opts_slot;
+static volatile uint32_t g_prismal_blur_px_bits;
+static volatile int g_prismal_in_motion __attribute__((used));
 static int g_prismal_opts_initialized;
+
+static void ld_prismal_fade_begin_frame(int64_t now_ns, int64_t dt_ns);
+
+static void ld_prismal_update_motion(void *pass)
+{
+    static __thread void *last_pass;
+    static __thread int64_t last_frame_ns;
+    static __thread int consec_fast;
+    if (pass && pass == last_pass) return;
+    last_pass = pass;
+
+    struct timespec now = {0, 0};
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int64_t now_ns = (int64_t)now.tv_sec * 1000000000LL + (int64_t)now.tv_nsec;
+    int64_t dt_ns = now_ns - last_frame_ns;
+    if (last_frame_ns == 0) {
+        last_frame_ns = now_ns;
+        ld_prismal_fade_begin_frame(now_ns, 100000000LL);
+        return;
+    }
+    if (dt_ns < 4000000LL) return; /* same frame (multiple RenderPasses within 4ms) */
+    last_frame_ns = now_ns;
+    ld_prismal_fade_begin_frame(now_ns, dt_ns);
+    if (dt_ns < 40000000LL) {
+        if (consec_fast < 4) consec_fast++;
+        if (consec_fast >= 2) {
+            __atomic_store_n(&g_prismal_in_motion, 1, __ATOMIC_RELEASE);
+        }
+    } else if (dt_ns >= 80000000LL) {
+        consec_fast = 0;
+        __atomic_store_n(&g_prismal_in_motion, 0, __ATOMIC_RELEASE);
+    }
+}
 
 static __thread uintptr_t g_tls_glass_contents;
 static __thread int g_tls_bound_sharp_tex;
 static __thread float g_tls_expand_pad_px;
+static __thread float g_tls_entity_tx;
+static __thread float g_tls_entity_ty;
+static __thread float g_tls_ubo_orig_ox;
+static __thread float g_tls_ubo_orig_oy;
+static __thread int g_tls_is_small_icon;
 static __thread void *g_tls_scissor_pass;
 static __thread uint64_t g_tls_scissor_lt;
 static __thread uint64_t g_tls_scissor_rb;
+
+/* 2.7.9-style smoothstep fade-in at the tail of an icon return animation (CLOSE_TO_HOME).
+ * Runs exclusively on the Impeller raster thread via __thread state (zero locks). */
+enum { LD_ICON_TRACK_MAX = 64, LD_ICON_FADE_MAX = 8 };
+struct ld_icon_pos { float x, y; };
+struct ld_icon_fade { float x, y; int64_t start_ns; int active; };
+static __thread struct ld_icon_pos g_tls_prev_icons[LD_ICON_TRACK_MAX];
+static __thread int g_tls_prev_icon_n;
+static __thread struct ld_icon_pos g_tls_cur_icons[LD_ICON_TRACK_MAX];
+static __thread int g_tls_cur_icon_n;
+static __thread struct ld_icon_fade g_tls_icon_fades[LD_ICON_FADE_MAX];
+static __thread int64_t g_tls_fade_frame_ns;
+static __thread int64_t g_tls_fade_armed_until_ns;
+static __thread int64_t g_tls_close_fade_start_ns;
+static __thread int g_tls_fade_consec_frames;
+static __thread int g_tls_fade_new_this_frame;
+static __thread int g_tls_fade_scroll_detected;
+static __thread float g_tls_icon_scale = 1.0f;
+
+static void ld_prismal_fade_begin_frame(int64_t now_ns, int64_t dt_ns)
+{
+    if (dt_ns >= 80000000LL) {
+        if (dt_ns >= 250000000LL) {
+            /* Launcher just resumed from background / app: arm close-to-home fade detector. */
+            g_tls_fade_armed_until_ns = now_ns + 1800000000LL;
+        }
+        g_tls_close_fade_start_ns = 0;
+        g_tls_fade_consec_frames = 0;
+        g_tls_prev_icon_n = 0;
+        g_tls_cur_icon_n = 0;
+        g_tls_fade_scroll_detected = 0;
+        for (int i = 0; i < LD_ICON_FADE_MAX; i++) g_tls_icon_fades[i].active = 0;
+    } else {
+        if (g_tls_fade_consec_frames < 1000) g_tls_fade_consec_frames++;
+        g_tls_prev_icon_n = g_tls_cur_icon_n;
+        if (g_tls_prev_icon_n > 0) {
+            memcpy(g_tls_prev_icons, g_tls_cur_icons,
+                   (size_t)g_tls_prev_icon_n * sizeof(struct ld_icon_pos));
+        }
+        g_tls_cur_icon_n = 0;
+        g_tls_fade_scroll_detected = 0;
+    }
+    g_tls_fade_frame_ns = now_ns;
+    g_tls_fade_new_this_frame = 0;
+}
+
+static float ld_prismal_icon_return_fade(float sx, float sy)
+{
+    int64_t now_ns = g_tls_fade_frame_ns;
+    if (now_ns <= 0 || !isfinite(sx) || !isfinite(sy)) return 1.0f;
+
+    if (g_tls_cur_icon_n < LD_ICON_TRACK_MAX) {
+        g_tls_cur_icons[g_tls_cur_icon_n].x = sx;
+        g_tls_cur_icons[g_tls_cur_icon_n].y = sy;
+        g_tls_cur_icon_n++;
+    }
+
+    /* 0. Close-to-home workspace zoom fade-in (starts during the close animation itself,
+     * triggered when resuming from background with workspace zoom scale < 0.985). */
+    if (g_tls_close_fade_start_ns == 0 &&
+        now_ns <= g_tls_fade_armed_until_ns &&
+        g_tls_fade_consec_frames <= 12 &&
+        g_tls_icon_scale > 0.3f && g_tls_icon_scale < 0.985f) {
+        g_tls_close_fade_start_ns = now_ns;
+        g_tls_fade_armed_until_ns = 0;
+    }
+    float close_alpha = 1.0f;
+    if (g_tls_close_fade_start_ns > 0) {
+        int64_t elapsed = now_ns - g_tls_close_fade_start_ns;
+        /* 80ms initial hold while app shrinks, then 220ms smoothstep fade-in during close anim. */
+        if (elapsed >= 300000000LL) {
+            g_tls_close_fade_start_ns = 0;
+        } else if (elapsed <= 80000000LL) {
+            close_alpha = 0.0f;
+        } else {
+            float p = (float)(elapsed - 80000000LL) / 220000000.0f;
+            close_alpha = p * p * (3.0f - 2.0f * p);
+        }
+    }
+
+    /* 1. Continue an active per-icon fade matching this icon's position. */
+    for (int i = 0; i < LD_ICON_FADE_MAX; i++) {
+        if (!g_tls_icon_fades[i].active) continue;
+        float dx = sx - g_tls_icon_fades[i].x;
+        float dy = sy - g_tls_icon_fades[i].y;
+        if (dx * dx + dy * dy <= 48.0f * 48.0f) {
+            g_tls_icon_fades[i].x = sx;
+            g_tls_icon_fades[i].y = sy;
+            int64_t elapsed = now_ns - g_tls_icon_fades[i].start_ns;
+            if (elapsed >= 120000000LL) {
+                g_tls_icon_fades[i].active = 0;
+                return close_alpha;
+            }
+            float phase = elapsed > 0 ? (float)elapsed / 120000000.0f : 0.0f;
+            float a = phase * phase * (3.0f - 2.0f * phase);
+            return a < close_alpha ? a : close_alpha;
+        }
+    }
+
+    /* 2. Detect a single returning icon reappearing during/after CLOSE_TO_HOME SF flight. */
+    if (now_ns <= g_tls_fade_armed_until_ns &&
+        !g_tls_fade_scroll_detected &&
+        g_tls_fade_consec_frames >= 4 && g_tls_prev_icon_n >= 3) {
+        float best_d2 = 1e9f;
+        float best_dx = 0.0f;
+        for (int i = 0; i < g_tls_prev_icon_n; i++) {
+            float dx = sx - g_tls_prev_icons[i].x;
+            float dy = sy - g_tls_prev_icons[i].y;
+            float d2 = dx * dx + dy * dy;
+            if (d2 < best_d2) {
+                best_d2 = d2;
+                best_dx = fabsf(dx);
+            }
+        }
+        if (best_d2 <= 72.0f * 72.0f) {
+            if (best_dx > 8.0f) {
+                g_tls_fade_scroll_detected = 1;
+                for (int i = 0; i < LD_ICON_FADE_MAX; i++) {
+                    if (g_tls_icon_fades[i].active && g_tls_icon_fades[i].start_ns == now_ns) {
+                        g_tls_icon_fades[i].active = 0;
+                    }
+                }
+            }
+            return close_alpha;
+        }
+        g_tls_fade_new_this_frame++;
+        if (g_tls_fade_new_this_frame >= 3) {
+            for (int i = 0; i < LD_ICON_FADE_MAX; i++) {
+                if (g_tls_icon_fades[i].active && g_tls_icon_fades[i].start_ns == now_ns) {
+                    g_tls_icon_fades[i].active = 0;
+                }
+            }
+            return close_alpha;
+        }
+        for (int i = 0; i < LD_ICON_FADE_MAX; i++) {
+            if (!g_tls_icon_fades[i].active) {
+                g_tls_icon_fades[i].x = sx;
+                g_tls_icon_fades[i].y = sy;
+                g_tls_icon_fades[i].start_ns = now_ns;
+                g_tls_icon_fades[i].active = 1;
+                g_tls_fade_armed_until_ns = 0;
+                return 0.0f;
+            }
+        }
+    }
+    return close_alpha;
+}
 
 static void repl_set_scissor(void *pass, uint64_t lt, uint64_t rb)
 {
@@ -146,19 +395,39 @@ static float ld_prismal_get_density(void)
     return d;
 }
 
-static void ld_prismal_copy_opts(struct ld_prismal_options *out)
+static void ld_prismal_publish_opts_locked(const struct ld_prismal_options *src)
 {
-    pthread_mutex_lock(&g_prismal_conf_lock);
-    if (!g_prismal_opts_initialized) {
-        ld_prismal_options_defaults(&g_prismal_live_opts);
-        g_prismal_opts_initialized = 1;
+    g_prismal_live_opts = *src;
+    unsigned next = (__atomic_load_n(&g_prismal_opts_slot, __ATOMIC_RELAXED) ^ 1u) & 1u;
+    g_prismal_opts_slots[next] = *src;
+    __atomic_store_n(&g_prismal_opts_slot, next, __ATOMIC_RELEASE);
+    float blur_px = fmaxf(0.0f, (float)src->blur * ld_prismal_get_density());
+    uint32_t bits = 0;
+    memcpy(&bits, &blur_px, sizeof bits);
+    __atomic_store_n(&g_prismal_blur_px_bits, bits, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_prismal_opts_initialized, 1, __ATOMIC_RELEASE);
+}
+
+static const struct ld_prismal_options *ld_prismal_read_opts(void)
+{
+    if (!__atomic_load_n(&g_prismal_opts_initialized, __ATOMIC_ACQUIRE)) {
+        pthread_mutex_lock(&g_prismal_conf_lock);
+        if (!g_prismal_opts_initialized) {
+            struct ld_prismal_options def;
+            ld_prismal_options_defaults(&def);
+            ld_prismal_publish_opts_locked(&def);
+        }
+        pthread_mutex_unlock(&g_prismal_conf_lock);
     }
-    *out = g_prismal_live_opts;
-    pthread_mutex_unlock(&g_prismal_conf_lock);
+    unsigned slot = __atomic_load_n(&g_prismal_opts_slot, __ATOMIC_ACQUIRE) & 1u;
+    return &g_prismal_opts_slots[slot];
 }
 
 static void ld_prismal_maybe_reload(void)
 {
+    static __thread unsigned tick;
+    if ((tick++ & 63u) != 0u) return;
+
     static pthread_mutex_t reload_lock = PTHREAD_MUTEX_INITIALIZER;
     static int64_t last_check_ns;
     static time_t last_mtime;
@@ -187,14 +456,20 @@ static void ld_prismal_maybe_reload(void)
         struct ld_grid_conf conf;
         if (ld_grid_conf_parse_file(path, &conf)) {
             pthread_mutex_lock(&g_prismal_conf_lock);
-            g_prismal_live_opts = conf.prismal;
-            g_prismal_opts_initialized = 1;
+            ld_prismal_publish_opts_locked(&conf.prismal);
             pthread_mutex_unlock(&g_prismal_conf_lock);
             __atomic_store_n(&g_prismal_no_downsample,
                              conf.prismal.disable_stationary_downsample ? 1 : 0,
                              __ATOMIC_RELEASE);
+            __atomic_store_n(&g_prismal_icon_downsample,
+                             conf.prismal.icon_downsample ? 1 : 0,
+                             __ATOMIC_RELEASE);
+            __atomic_store_n(&g_prismal_icon_fixed_wallpaper,
+                             conf.prismal.icon_fixed_wallpaper ? 1 : 0,
+                             __ATOMIC_RELEASE);
 #ifdef LD_GLASS_SUPERELLIPSE_H
             g_ld_gse_large_folder_corner = (float)conf.large_folder_corner;
+            g_ld_gse_large_folder_2x1_corner = (float)conf.large_folder_2x1_corner;
             g_ld_gse_widget_corner = (float)conf.prismal.widget_corner;
 #endif
             last_mtime = st.st_mtime;
@@ -205,12 +480,12 @@ static void ld_prismal_maybe_reload(void)
     pthread_mutex_unlock(&reload_lock);
 }
 
-static float ld_prismal_current_blur_px(void)
+static inline float ld_prismal_current_blur_px(void)
 {
-    struct ld_prismal_options opts;
-    ld_prismal_maybe_reload();
-    ld_prismal_copy_opts(&opts);
-    return fmaxf(0.0f, (float)opts.blur * ld_prismal_get_density());
+    uint32_t bits = __atomic_load_n(&g_prismal_blur_px_bits, __ATOMIC_RELAXED);
+    float v = 0.0f;
+    memcpy(&v, &bits, sizeof v);
+    return v;
 }
 
 static inline void ld_sp_add_shared(uint8_t *ctrl)
@@ -258,6 +533,9 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     float eff_gy = fmaxf(gy - 2.0f * pad_px, 2.0f);
     float min_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fminf(eff_gx, eff_gy) : 100.0f;
     float max_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fmaxf(eff_gx, eff_gy) : 100.0f;
+    /* Preserve stock full-circle / capsule widgets (e.g. 2x2 circular clock widget). */
+    int is_circular = (gz >= min_glass_dim * 0.45f);
+    if (!is_circular) {
     if (min_glass_dim >= 360.0f && max_glass_dim <= 2000.0f && (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 3.2f) {
         int is_large_folder = (gz > 15.2f * d) ||
                               (fabsf(eff_gx - eff_gy) < 12.0f && fabsf(eff_gx - 169.7f * d) < 22.0f * d);
@@ -271,10 +549,13 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
             ld_write_f32(ubo, 0x18u, cr_px);
         }
     } else if (min_glass_dim >= 45.0f * d && min_glass_dim < 120.0f * d &&
-               fabsf(max_glass_dim - 169.7f * d) < 20.0f * d) {
-        /* 1x2 / 2x1 大文件夹 */
-        if (opt->large_folder_corner > 0.0) {
-            float cr_px = fminf((float)opt->large_folder_corner * d, min_glass_dim * 0.5f);
+               max_glass_dim >= 120.0f * d && max_glass_dim <= 800.0f * d &&
+               gz > 15.2f * d) {
+        /* 2x1 / 1x2 / 3x1 窄条大文件夹 */
+        double c21 = opt->large_folder_2x1_corner > 0.0
+            ? opt->large_folder_2x1_corner : opt->large_folder_corner;
+        if (c21 > 0.0) {
+            float cr_px = fminf((float)c21 * d, min_glass_dim * 0.5f);
             ld_write_f32(ubo, 0x18u, cr_px);
         }
     } else if (min_glass_dim >= 80.0f && max_glass_dim <= 340.0f && fabsf(eff_gx - eff_gy) < 12.0f) {
@@ -282,6 +563,7 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
             float cr_px = fminf((float)opt->small_folder_corner * d, min_glass_dim * 0.5f);
             ld_write_f32(ubo, 0x18u, cr_px);
         }
+    }
     }
     (void)gz;
 
@@ -318,7 +600,8 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     uint32_t flags = (opt->continuous_corners ? 1u : 0u)
                    | ((blur_px >= 0.5f) ? 2u : 0u)
                    | (opt->show_normals ? 4u : 0u)
-                   | (has_sharp_tex ? 8u : 0u);
+                   | (has_sharp_tex ? 8u : 0u)
+                   | (__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED) ? 16u : 0u);
 
     ld_write_vec2(ubo, 0x08u, (float)opt->backdrop_scale_x, (float)opt->backdrop_scale_y);
     ld_write_f32(ubo, 0x1cu, fmaxf(0.0f, (float)opt->refraction_inset));
@@ -343,6 +626,17 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     ld_write_f32(ubo, 0x70u, (float)opt->vibrancy);
     ld_write_f32(ubo, 0x74u, (float)opt->brightness);
     ld_write_f32(ubo, 0x78u, dome);
+    if (g_tls_is_small_icon) {
+        float fade_a = ld_prismal_icon_return_fade(
+            g_tls_ubo_orig_ox + g_tls_entity_tx,
+            g_tls_ubo_orig_oy + g_tls_entity_ty);
+        if (fade_a < 0.999f) {
+            float cur_alpha = 1.0f;
+            memcpy(&cur_alpha, ubo + 0x7cu, sizeof cur_alpha);
+            if (!isfinite(cur_alpha)) cur_alpha = 1.0f;
+            ld_write_f32(ubo, 0x7cu, cur_alpha * ld_clampf(fade_a, 0.0f, 1.0f));
+        }
+    }
     ld_write_u32(ubo, 0x94u, flags);
     ld_write_f32(ubo, 0x98u, (float)opt->fresnel_reflect);
     ld_write_f32(ubo, 0x9cu, r0);
@@ -377,23 +671,90 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     float backlit_soft = ld_clampf((float)opt->backlit_softness, 0.05f, 2.0f);
     float side_start = (backlit_ext <= 0.0f) ? 2.0f : ld_clampf(0.65f - 0.55f * backlit_ext, 0.10f, 0.65f);
     float side_span = ld_clampf(0.19f + 0.60f * fminf(1.0f, backlit_soft * 0.5f), 0.12f, 0.78f);
+    int backlit_on = (g_tls_is_small_icon && opt->icon_backlit_enabled >= 0)
+        ? opt->icon_backlit_enabled : opt->backlit_enabled;
     ld_write_vec4(ubo, 0x110u,
                   (float)opt->backlit_width * d,
-                  opt->backlit_enabled ? (float)opt->backlit_strength : 0.0f,
+                  backlit_on ? (float)opt->backlit_strength : 0.0f,
                   side_start, side_span);
+    int allow_outer_shadow = opt->outer_shadow_enabled && !g_tls_is_small_icon;
     ld_write_vec4(ubo, 0x120u,
                   (float)opt->outer_shadow_r / 255.0f,
                   (float)opt->outer_shadow_g / 255.0f,
                   (float)opt->outer_shadow_b / 255.0f,
-                  opt->outer_shadow_enabled ? (float)opt->outer_shadow_a / 255.0f : 0.0f);
+                  allow_outer_shadow ? (float)opt->outer_shadow_a / 255.0f : 0.0f);
     ld_write_vec4(ubo, 0x130u,
-                  opt->outer_shadow_enabled ? (float)opt->outer_shadow_radius * d : 0.0f,
+                  allow_outer_shadow ? (float)opt->outer_shadow_radius * d : 0.0f,
                   (float)opt->outer_shadow_offset_y * d,
                   ld_clampf((float)opt->outer_shadow_light_follow, 0.0f, 1.0f),
                   pad_px);
 }
 
+__attribute__((used)) static int ld_should_elide_icon_savelayer(
+    const void *paint, const void *bounds_opt, const void *backdrop, int bounds_prom, int can_elide)
+{
+    if (backdrop != NULL || !paint || !bounds_opt) return 0;
+    if (can_elide && bounds_prom != 2) return 0;
+    if (!__atomic_load_n(&g_prismal_glass_active, __ATOMIC_RELAXED)) return 0;
+    const uint8_t *p = (const uint8_t *)paint;
+    if (p[0x3cu] != 3u || p[0x3du] != 0u || (p[0x8cu] & 1u) != 0u) return 0;
+    if (*(void *const *)(p + 0x20u) != NULL || *(void *const *)(p + 0x18u) != NULL) return 0;
+    float alpha = 1.0f;
+    memcpy(&alpha, p + 0x0cu, sizeof alpha);
+    if (!(alpha >= 0.99f)) return 0;
+
+    const uint8_t *bo = (const uint8_t *)bounds_opt;
+    if (bo[16] == 0u) return 0;
+    float r[4];
+    memcpy(r, bo, sizeof r);
+    if (!isfinite(r[0]) || !isfinite(r[1]) || !isfinite(r[2]) || !isfinite(r[3])) return 0;
+    float w = fabsf(r[2] - r[0]);
+    float h = fabsf(r[3] - r[1]);
+    /* Match 1x1 icon EntityPass Clip SaveLayer (58.1dp..85.3dp or 167px square; never 2x2 folder/widget). */
+    int is_icon_dp = (w >= 40.0f && w <= 110.0f && h >= 40.0f && h <= 110.0f && fabsf(w - h) <= 10.0f);
+    int is_icon_px = (w >= 120.0f && w <= 210.0f && h >= 120.0f && h <= 210.0f && fabsf(w - h) <= 12.0f);
+    if (!is_icon_dp && !is_icon_px) return 0;
+
+    static volatile unsigned elided_logs;
+    if (__atomic_fetch_add(&elided_logs, 1u, __ATOMIC_RELAXED) < 6u) {
+        ld_blog("prismal SaveLayer elided 1x1 icon EntityPass Clip: wh=%.1fx%.1f prom=%d can=%d",
+                (double)w, (double)h, bounds_prom, can_elide);
+    }
+    return 1;
+}
+
 #if defined(__aarch64__)
+__attribute__((naked)) static void repl_canvas_savelayer(void)
+{
+    __asm__ volatile(
+        "cbnz x3, 1f\n"
+        "stp x29, x30, [sp, #-0x60]!\n"
+        "stp x0, x1, [sp, #0x10]\n"
+        "stp x2, x3, [sp, #0x20]\n"
+        "stp x4, x5, [sp, #0x30]\n"
+        "stp x6, x7, [sp, #0x40]\n"
+        "mov x0, x1\n"
+        "mov x1, x2\n"
+        "mov x2, x3\n"
+        "mov w3, w4\n"
+        "mov w4, w6\n"
+        "bl ld_should_elide_icon_savelayer\n"
+        "mov w9, w0\n"
+        "ldp x0, x1, [sp, #0x10]\n"
+        "ldp x2, x3, [sp, #0x20]\n"
+        "ldp x4, x5, [sp, #0x30]\n"
+        "ldp x6, x7, [sp, #0x40]\n"
+        "ldp x29, x30, [sp], #0x60\n"
+        "cbz w9, 1f\n"
+        "mov w4, #0\n"
+        "mov w6, #1\n"
+        "1:\n"
+        "adrp x16, g_orig_canvas_savelayer\n"
+        "ldr x16, [x16, :lo12:g_orig_canvas_savelayer]\n"
+        "br x16\n"
+    );
+}
+
 __attribute__((naked)) static void repl_compose_textures(void)
 {
     __asm__ volatile(
@@ -417,7 +778,8 @@ static void repl_make_base_blur(ld_sp_t *sret, void *ctx, const ld_sp_t *src_tex
         if (out_opt) { out_opt->ptr = NULL; out_opt->ctrl = NULL; }
         return;
     }
-    if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) && scale > 0.0f && scale < 1.0f) {
+    if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) &&
+        scale > 0.0f && scale < 1.0f) {
         scale = 1.0f;
     }
     g_orig_make_base_blur(sret, ctx, src_tex, out_opt, cmd_buf, blur, scale);
@@ -431,7 +793,8 @@ static void repl_make_reflect_blur(ld_sp_t *sret, void *ctx, const ld_sp_t *src_
         if (out_opt) { out_opt->ptr = NULL; out_opt->ctrl = NULL; }
         return;
     }
-    if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) && scale > 0.0f && scale < 1.0f) {
+    if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) &&
+        scale > 0.0f && scale < 1.0f) {
         scale = 1.0f;
     }
     g_orig_make_reflect_blur(sret, ctx, src_tex, out_opt, cmd_buf, blur, scale);
@@ -463,26 +826,60 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
     uintptr_t prev = g_tls_glass_contents;
     int prev_sharp = g_tls_bound_sharp_tex;
     float prev_pad_px = g_tls_expand_pad_px;
+    float prev_tx = g_tls_entity_tx, prev_ty = g_tls_entity_ty;
+    int prev_small = g_tls_is_small_icon;
     g_tls_glass_contents = (uintptr_t)self;
     g_tls_bound_sharp_tex = 0;
     g_tls_expand_pad_px = 0.0f;
+    g_tls_entity_tx = 0.0f;
+    g_tls_entity_ty = 0.0f;
+    g_tls_is_small_icon = 0;
 
     int expanded_rect = 0, expanded_alt = 0, expanded_geo = 0;
     float orig_rect[4] = {0, 0, 0, 0};
     float orig_alt[4] = {0, 0, 0, 0};
     float orig_geo[2] = {0, 0};
     if (self && __atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE)) {
+        ld_prismal_update_motion(pass);
         ld_prismal_maybe_reload();
-        struct ld_prismal_options opts;
-        ld_prismal_copy_opts(&opts);
+        const struct ld_prismal_options *opts = ld_prismal_read_opts();
         float d = ld_prismal_get_density();
+        memcpy(orig_geo, (const uint8_t *)self + 0x1c8u, sizeof orig_geo);
+        g_tls_is_small_icon = (isfinite(orig_geo[0]) && isfinite(orig_geo[1]) &&
+                               orig_geo[0] > 8.0f && orig_geo[1] > 8.0f &&
+                               fmaxf(orig_geo[0], orig_geo[1]) < 115.0f * d &&
+                               fabsf(orig_geo[0] - orig_geo[1]) < 16.0f * d);
+        if (g_tls_is_small_icon && entity) {
+            float m[16];
+            memcpy(m, entity, sizeof m);
+            if (isfinite(m[12]) && isfinite(m[13]) && fabsf(m[15] - 1.0f) < 0.05f) {
+                g_tls_entity_tx = m[12];
+                g_tls_entity_ty = m[13];
+                float sx = sqrtf(m[0] * m[0] + m[1] * m[1]);
+                float sy = sqrtf(m[4] * m[4] + m[5] * m[5]);
+                float sc = fminf(sx, sy);
+                g_tls_icon_scale = (isfinite(sc) && sc > 0.1f && sc < 4.0f) ? sc : 1.0f;
+            } else {
+                g_tls_icon_scale = 1.0f;
+            }
+            float alt_w = 0.0f;
+            memcpy(&alt_w, (const uint8_t *)self + 0x1e0u, sizeof alt_w);
+            if (isfinite(alt_w) && alt_w > 10.0f && alt_w < 200.0f) {
+                float geo_sc = orig_geo[0] / (alt_w * d);
+                if (isfinite(geo_sc) && geo_sc > 0.1f && geo_sc < g_tls_icon_scale) {
+                    g_tls_icon_scale = geo_sc;
+                }
+            }
+        } else {
+            g_tls_icon_scale = 1.0f;
+        }
         float pad_dp = 0.0f;
-        if (opts.outer_shadow_enabled && opts.outer_shadow_radius > 0.0 && opts.outer_shadow_a > 0.0) {
-            float sh = (float)opts.outer_shadow_radius * 2.0f + fabsf((float)opts.outer_shadow_offset_y) + 2.0f;
+        if (opts->outer_shadow_enabled && opts->outer_shadow_radius > 0.0 && opts->outer_shadow_a > 0.0) {
+            float sh = (float)opts->outer_shadow_radius * 2.0f + fabsf((float)opts->outer_shadow_offset_y) + 2.0f;
             if (sh > pad_dp) pad_dp = fminf(sh, 36.0f);
         }
-        if (opts.backlit_enabled && opts.backlit_strength > 0.0 && opts.backlit_width > 0.0) {
-            float st = (float)opts.backlit_width + 2.0f;
+        if (opts->backlit_enabled && opts->backlit_strength > 0.0 && opts->backlit_width > 0.0) {
+            float st = (float)opts->backlit_width + 2.0f;
             if (st > pad_dp) pad_dp = fminf(st, 10.0f);
         }
         if (pad_dp > 0.0f) {
@@ -496,7 +893,14 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
             float h = use_alt ? orig_alt[3] : (orig_rect[3] - orig_rect[1]);
             if (isfinite(w) && isfinite(h) && w > 8.0f && h > 8.0f && w < 4000.0f && h < 4000.0f &&
                 isfinite(orig_geo[0]) && isfinite(orig_geo[1]) && orig_geo[0] > 8.0f && orig_geo[1] > 8.0f) {
-                float pad_px = pad_dp * d;
+                float eff_pad_dp = pad_dp;
+                if (g_tls_is_small_icon) {
+                    /* 1x1 icons render inside a tight 167x167 EntityPass Clip RT; outer shadow
+                     * cannot extend past the 4 straight RT edges and would clip to 4 corner triangles. */
+                    eff_pad_dp = 0.0f;
+                }
+                if (eff_pad_dp > 0.0f) {
+                float pad_px = eff_pad_dp * d;
                 float qscale = orig_geo[0] / w;
                 if (!(qscale > 0.25f && qscale < 8.0f)) qscale = d;
                 float pad_q = pad_px / qscale;
@@ -519,6 +923,7 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
                 memcpy((uint8_t *)self + 0x1c8u, exp_geo, sizeof exp_geo);
                 expanded_geo = 1;
                 g_tls_expand_pad_px = pad_px;
+                }
             }
         }
     }
@@ -543,6 +948,9 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
     if (expanded_alt)  memcpy((uint8_t *)self + 0x1d8u, orig_alt, sizeof orig_alt);
     if (expanded_rect) memcpy((uint8_t *)self + 0x28u, orig_rect, sizeof orig_rect);
     if (expanded_geo)  memcpy((uint8_t *)self + 0x1c8u, orig_geo, sizeof orig_geo);
+    g_tls_is_small_icon = prev_small;
+    g_tls_entity_tx = prev_tx;
+    g_tls_entity_ty = prev_ty;
     g_tls_expand_pad_px = prev_pad_px;
     g_tls_bound_sharp_tex = prev_sharp;
     g_tls_glass_contents = prev;
@@ -578,11 +986,15 @@ static uint8_t repl_bind_ubo(void *binder, void *buffer_view)
             uint8_t *mapped = g_fn_devbuf_get_contents(dev_buf);
             if (mapped) {
                 uint8_t *ubo = mapped + offset;
-                ld_prismal_maybe_reload();
-                struct ld_prismal_options opts;
-                ld_prismal_copy_opts(&opts);
+                const struct ld_prismal_options *opts = ld_prismal_read_opts();
                 float density = ld_prismal_get_density();
                 int sharp = g_tls_bound_sharp_tex;
+
+                float orig_ox = 0.0f, orig_oy = 0.0f;
+                memcpy(&orig_ox, ubo + 0x00u, sizeof orig_ox);
+                memcpy(&orig_oy, ubo + 0x04u, sizeof orig_oy);
+                g_tls_ubo_orig_ox = isfinite(orig_ox) ? orig_ox : 0.0f;
+                g_tls_ubo_orig_oy = isfinite(orig_oy) ? orig_oy : 0.0f;
 
                 static volatile unsigned logged;
                 if (__atomic_fetch_add(&logged, 1u, __ATOMIC_RELAXED) == 0) {
@@ -594,10 +1006,10 @@ static uint8_t repl_bind_ubo(void *binder, void *buffer_view)
                     memcpy(&sx, ubo + 0x88u, 4); memcpy(&sy, ubo + 0x8cu, 4);
                     memcpy(&um, ubo + 0x90u, 4); memcpy(&cs, ubo + 0x160u, 4);
                     ld_blog("prismal BindUBO first: geo=(%.1f,%.1f,%.1f) invRes=(%.6f,%.6f) scale=(%.2f,%.2f) mask=%u cs=%d density=%.2f sharp=%d blur=%.1f",
-                            gx, gy, gz, ix, iy, sx, sy, um, cs, density, sharp, opts.blur);
+                            gx, gy, gz, ix, iy, sx, sy, um, cs, density, sharp, opts->blur);
                 }
 
-                ld_prismal_fill_ubo(ubo, &opts, density, sharp);
+                ld_prismal_fill_ubo(ubo, opts, density, sharp);
                 if (g_fn_devbuf_flush) {
                     ld_opt_range_t range = { offset, length, 1u, {0} };
                     g_fn_devbuf_flush(dev_buf, &range);
@@ -750,57 +1162,6 @@ static void *repl_pipeline_vk_create(void *sret, const void *desc, const void *d
     return ret;
 }
 
-static uintptr_t ld_prismal_engine_base(void)
-{
-    FILE *maps = fopen("/proc/self/maps", "r");
-    if (!maps) return 0;
-    char line[512];
-    uintptr_t base = 0;
-    while (fgets(line, sizeof line, maps)) {
-        if (!strstr(line, "libhyper_os_flutter.so")) continue;
-        unsigned long start = 0;
-        if (sscanf(line, "%lx-", &start) == 1) {
-            base = (uintptr_t)start;
-            break;
-        }
-    }
-    fclose(maps);
-    return base;
-}
-
-static int ld_prismal_patch_rodata(uintptr_t size_addr, uintptr_t data_addr,
-                                   const uint32_t *spv, size_t spv_bytes)
-{
-    if (!size_addr || !data_addr || !spv || spv_bytes == 0 ||
-        spv_bytes > LD_PRISMAL_SPV_MAX_BYTES || (spv_bytes & 3u) != 0) {
-        return -EINVAL;
-    }
-    if (*(const volatile uint32_t *)data_addr != LD_PRISMAL_SPV_MAGIC) {
-        return -2;
-    }
-    if (*(const volatile uint32_t *)size_addr != LD_PRISMAL_SPV_MAX_BYTES) {
-        return -3;
-    }
-
-    size_t page = (size_t)sysconf(_SC_PAGESIZE);
-    uintptr_t page_start = size_addr & ~(uintptr_t)(page - 1u);
-    uintptr_t end_addr = data_addr + spv_bytes;
-    uintptr_t page_end = (end_addr + page - 1u) & ~(uintptr_t)(page - 1u);
-    size_t span = (size_t)(page_end - page_start);
-
-    if (mprotect((void *)page_start, span, PROT_READ | PROT_WRITE) != 0) {
-        return -errno;
-    }
-
-    *(volatile uint32_t *)size_addr = (uint32_t)spv_bytes;
-    memcpy((void *)data_addr, spv, spv_bytes);
-
-    if (mprotect((void *)page_start, span, PROT_READ) != 0) {
-        return -errno;
-    }
-    return 0;
-}
-
 static void ld_prismal_glass_install_ex(const struct native_api *api, int gui_enabled,
                                         const struct ld_prismal_options *initial_opts)
 {
@@ -811,69 +1172,129 @@ static void ld_prismal_glass_install_ex(const struct native_api *api, int gui_en
     }
     if (initial_opts && initial_opts->ior >= 1.0) {
         pthread_mutex_lock(&g_prismal_conf_lock);
-        g_prismal_live_opts = *initial_opts;
-        g_prismal_opts_initialized = 1;
+        ld_prismal_publish_opts_locked(initial_opts);
         pthread_mutex_unlock(&g_prismal_conf_lock);
         __atomic_store_n(&g_prismal_no_downsample,
                          initial_opts->disable_stationary_downsample ? 1 : 0,
                          __ATOMIC_RELEASE);
+        __atomic_store_n(&g_prismal_icon_downsample,
+                         initial_opts->icon_downsample ? 1 : 0,
+                         __ATOMIC_RELEASE);
+        __atomic_store_n(&g_prismal_icon_fixed_wallpaper,
+                         initial_opts->icon_fixed_wallpaper ? 1 : 0,
+                         __ATOMIC_RELEASE);
     }
 
-    uintptr_t base = ld_prismal_engine_base();
-    if (!base) return;
+    struct ld_hyper_engine_info eng;
+    if (!ld_hyper_engine_locate(&eng)) return;
+    uintptr_t base = eng.elf_base;
 
-    int ro_rc = 0;
-    if (sizeof g_prismal_os4_spv <= LD_PRISMAL_SPV_MAX_BYTES) {
-        ro_rc = ld_prismal_patch_rodata(base + LD_PRISMAL_SPV_SIZE_VADDR,
-                                        base + LD_PRISMAL_SPV_DATA_VADDR,
-                                        g_prismal_os4_spv, sizeof g_prismal_os4_spv);
+    uintptr_t pipe_addr = ld_he_resolve_unique(&eng, LD_HINT_PIPELINE_VK_CREATE,
+                                               ld_pg_pat_pipeline_vk_create, NULL, 8);
+    uintptr_t tint_addr = ld_he_resolve_unique(&eng, LD_HINT_MAKE_TINTED_FROM_BASE,
+                                               ld_pg_pat_make_tinted, NULL, 8);
+    uintptr_t render_addr = ld_he_resolve_unique(&eng, LD_HINT_GLASS_CONTENTS_RENDER,
+                                                 ld_pg_pat_glass_render, NULL, 16);
+    uintptr_t ubo_addr = ld_he_resolve_unique(&eng, LD_HINT_BIND_UBO,
+                                              ld_pg_pat_bind_ubo, ld_pg_msk_bind_ubo, 8);
+    uintptr_t mask_addr = ld_he_resolve_near(&eng, LD_HINT_BIND_U_MASK_TEX,
+                                             ubo_addr, 0x400u, 0x200u,
+                                             ld_pg_pat_bind_mask_tex, ld_pg_msk_bind_mask_tex, 8);
+    uintptr_t flush_addr = ld_he_resolve_unique(&eng, LD_HINT_DEVICE_BUF_FLUSH,
+                                                ld_pg_pat_devbuf_flush, NULL, 8);
+    uintptr_t getc_addr = ld_he_resolve_near(&eng, LD_HINT_DEVICE_BUF_GET_CONTENTS,
+                                             flush_addr, 0x400u, 0x200u,
+                                             ld_pg_pat_devbuf_get, ld_pg_msk_devbuf_get, 8);
+    uintptr_t sc_addr = ld_he_resolve_unique(&eng, LD_HINT_RENDER_PASS_SET_SCISSOR,
+                                             ld_pg_pat_set_scissor, NULL, 8);
+#if defined(__aarch64__)
+    uintptr_t ct_addr = ld_he_resolve_unique(&eng, LD_HINT_COMPOSE_TEXTURES,
+                                             ld_pg_pat_compose_textures, NULL, 8);
+    uintptr_t sl_addr = ld_he_resolve_unique(&eng, LD_HINT_CANVAS_SAVE_LAYER,
+                                             ld_pg_pat_canvas_savelayer, NULL, 8);
+#endif
+
+    /* MakeBaseBlur & MakeReflectBlur share the same 8-word prologue and identical hook logic. */
+    uintptr_t blur_addrs[2] = {0, 0};
+    uintptr_t b_hint0 = base + LD_HINT_MAKE_BASE_BLUR;
+    uintptr_t b_hint1 = base + LD_HINT_MAKE_REFLECT_BLUR;
+    if (b_hint0 >= eng.text_start && b_hint0 + 32u <= eng.text_end &&
+        b_hint1 >= eng.text_start && b_hint1 + 32u <= eng.text_end &&
+        ld_he_match_masked(b_hint0, ld_pg_pat_make_blur, NULL, 8) &&
+        ld_he_match_masked(b_hint1, ld_pg_pat_make_blur, NULL, 8)) {
+        blur_addrs[0] = b_hint0;
+        blur_addrs[1] = b_hint1;
+    } else {
+        ld_he_scan_masked_range(eng.text_start, eng.text_end,
+                                ld_pg_pat_make_blur, NULL, 8, blur_addrs, 2);
     }
 
-    g_fn_devbuf_get_contents = (uint8_t *(*)(void *))(base + LD_VADDR_DEVICE_BUF_GET_CONTENTS);
-    g_fn_devbuf_flush = (void (*)(void *, const ld_opt_range_t *))(base + LD_VADDR_DEVICE_BUF_FLUSH);
+    if (getc_addr) g_fn_devbuf_get_contents = (uint8_t *(*)(void *))getc_addr;
+    if (flush_addr) g_fn_devbuf_flush = (void (*)(void *, const ld_opt_range_t *))flush_addr;
 
-    int prc = -1, b1 = -1, b2 = -1, t1 = -1, r1 = -1, m1 = -1, u1 = -1, c1 = -1;
+    int prc = -1, b1 = -1, b2 = -1, t1 = -1, r1 = -1, m1 = -1, u1 = -1, c1 = -1, s1 = -1, sl1 = -1;
     if (api && api->hook) {
-        prc = g_orig_pipeline_vk_create ? 0
-            : api->hook((void *)(base + LD_VADDR_PIPELINE_VK_CREATE),
-                        (void *)repl_pipeline_vk_create, (void **)&g_orig_pipeline_vk_create);
-        b1 = g_orig_make_base_blur ? 0
-            : api->hook((void *)(base + LD_VADDR_MAKE_BASE_BLUR),
-                        (void *)repl_make_base_blur, (void **)&g_orig_make_base_blur);
-        b2 = g_orig_make_reflect_blur ? 0
-            : api->hook((void *)(base + LD_VADDR_MAKE_REFLECT_BLUR),
-                        (void *)repl_make_reflect_blur, (void **)&g_orig_make_reflect_blur);
-        t1 = g_orig_make_tinted_from_base ? 0
-            : api->hook((void *)(base + LD_VADDR_MAKE_TINTED_FROM_BASE),
-                        (void *)repl_make_tinted_from_base, (void **)&g_orig_make_tinted_from_base);
-        r1 = g_orig_glass_contents_render ? 0
-            : api->hook((void *)(base + LD_VADDR_GLASS_CONTENTS_RENDER),
-                        (void *)repl_glass_contents_render, (void **)&g_orig_glass_contents_render);
-        m1 = g_orig_bind_mask_tex ? 0
-            : api->hook((void *)(base + LD_VADDR_BIND_U_MASK_TEX),
-                        (void *)repl_bind_mask_tex, (void **)&g_orig_bind_mask_tex);
-        u1 = g_orig_bind_ubo ? 0
-            : api->hook((void *)(base + LD_VADDR_BIND_UBO),
-                        (void *)repl_bind_ubo, (void **)&g_orig_bind_ubo);
-        uintptr_t sc_addr = base + LD_VADDR_RENDER_PASS_SET_SCISSOR;
-        if (!g_orig_set_scissor && *(const uint32_t *)sc_addr == 0xd360fc28u) {
-            api->hook((void *)sc_addr, (void *)repl_set_scissor, (void **)&g_orig_set_scissor);
+        if (pipe_addr) {
+            prc = g_orig_pipeline_vk_create ? 0
+                : api->hook((void *)pipe_addr, (void *)repl_pipeline_vk_create,
+                            (void **)&g_orig_pipeline_vk_create);
+        }
+        if (blur_addrs[0]) {
+            b1 = g_orig_make_base_blur ? 0
+                : api->hook((void *)blur_addrs[0], (void *)repl_make_base_blur,
+                            (void **)&g_orig_make_base_blur);
+        }
+        if (blur_addrs[1]) {
+            b2 = g_orig_make_reflect_blur ? 0
+                : api->hook((void *)blur_addrs[1], (void *)repl_make_reflect_blur,
+                            (void **)&g_orig_make_reflect_blur);
+        }
+        if (tint_addr) {
+            t1 = g_orig_make_tinted_from_base ? 0
+                : api->hook((void *)tint_addr, (void *)repl_make_tinted_from_base,
+                            (void **)&g_orig_make_tinted_from_base);
+        }
+        if (render_addr) {
+            r1 = g_orig_glass_contents_render ? 0
+                : api->hook((void *)render_addr, (void *)repl_glass_contents_render,
+                            (void **)&g_orig_glass_contents_render);
+        }
+        if (mask_addr) {
+            m1 = g_orig_bind_mask_tex ? 0
+                : api->hook((void *)mask_addr, (void *)repl_bind_mask_tex,
+                            (void **)&g_orig_bind_mask_tex);
+        }
+        if (ubo_addr) {
+            u1 = g_orig_bind_ubo ? 0
+                : api->hook((void *)ubo_addr, (void *)repl_bind_ubo,
+                            (void **)&g_orig_bind_ubo);
+        }
+        if (sc_addr) {
+            s1 = g_orig_set_scissor ? 0
+                : api->hook((void *)sc_addr, (void *)repl_set_scissor,
+                            (void **)&g_orig_set_scissor);
         }
 #if defined(__aarch64__)
-        uintptr_t ct_addr = base + LD_VADDR_COMPOSE_TEXTURES;
-        if (*(const uint32_t *)ct_addr == 0xa9ba7bfdu) {
+        if (ct_addr) {
             c1 = g_orig_compose_textures ? 0
-                : api->hook((void *)ct_addr, (void *)repl_compose_textures, &g_orig_compose_textures);
+                : api->hook((void *)ct_addr, (void *)repl_compose_textures,
+                            &g_orig_compose_textures);
+        }
+        if (sl_addr) {
+            sl1 = g_orig_canvas_savelayer ? 0
+                : api->hook((void *)sl_addr, (void *)repl_canvas_savelayer,
+                            &g_orig_canvas_savelayer);
         }
 #endif
     }
 
     state = 1;
-    if (prc == 0 && b1 == 0 && b2 == 0 && t1 == 0 && r1 == 0 && m1 == 0 && u1 == 0) {
+    if (prc == 0 && b1 == 0 && b2 == 0 && t1 == 0 && r1 == 0 && m1 == 0 && u1 == 0 &&
+        g_fn_devbuf_get_contents && g_fn_devbuf_flush) {
         __atomic_store_n(&g_prismal_glass_active, 1, __ATOMIC_RELEASE);
     }
-    ld_blog("prismal v2.7.9 hooks: pipe=%d baseBlur=%d reflBlur=%d tint=%d render=%d mask=%d ubo=%d compose=%d ro=%d spv=%zu",
-            prc, b1, b2, t1, r1, m1, u1, c1, ro_rc, sizeof g_prismal_os4_spv);
+    ld_blog("prismal v2.7.9 hooks: pipe=%d baseBlur=%d reflBlur=%d tint=%d render=%d mask=%d ubo=%d sc=%d compose=%d savelayer=%d spv=%zu",
+            prc, b1, b2, t1, r1, m1, u1, s1, c1, sl1, sizeof g_prismal_os4_spv);
 }
 
 static inline void ld_prismal_glass_install(const struct native_api *api)

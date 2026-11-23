@@ -17,7 +17,7 @@ class Os4GlassConfigTest {
         ))
         assertEquals(
             "hook_safety_enabled=0\nicon_size_enabled=0\nglass_enabled=1\n" +
-                "large_folder_glass=1\nlarge_folder_corner=0.0\nlarge_folder_native_outline=1\n" +
+                "large_folder_glass=1\nlarge_folder_corner=0.0\nlarge_folder_2x1_corner=0.0\nlarge_folder_native_outline=1\n" +
                 "icon_size_percent=100\nend=1\n",
             result,
         )
@@ -30,7 +30,7 @@ class Os4GlassConfigTest {
         assertEquals(
             "hook_safety_enabled=0\nicon_size_enabled=0\nglass_enabled=1\nglass_icons=1\n" +
                 "glass_icon_size=0.0\nglass_icon_corner=0.0\nglass_widgets=1\n" +
-                "large_folder_glass=1\nlarge_folder_corner=0.0\nlarge_folder_native_outline=1\n" +
+                "large_folder_glass=1\nlarge_folder_corner=0.0\nlarge_folder_2x1_corner=0.0\nlarge_folder_native_outline=1\n" +
                 "icon_size_percent=100\nend=1\n",
             result,
         )

@@ -32,12 +32,17 @@ object Os4NativeConfPublisher {
         if (Os4NativeGlassOptions.configLines(options.glassWidgetOverrides, "glass_native_widget_") == null) return null
         if (Os4NativeGlassOptions.configLines(options.glassLargeFolderOverrides, "glass_native_large_folder_") == null) return null
         if (options.glassEnabled && options.glassLargeFolder &&
-            (!options.glassLargeFolderCorner.isFinite() || options.glassLargeFolderCorner !in 0.0..128.0)) return null
+            (!options.glassLargeFolderCorner.isFinite() || options.glassLargeFolderCorner !in 0.0..128.0) ||
+            (!options.glassLargeFolder2x1Corner.isFinite() || options.glassLargeFolder2x1Corner !in 0.0..128.0)) return null
         if (grid && (!options.landscape.isValid() || !options.portrait.isValid())) return null
         if (options.dock.enabled && !options.dock.isValid()) return null
         if (options.divider.enabled && !options.divider.isValid()) return null
         if (options.glassEnabled) {
             for ((k, v) in options.prismalOverrides) {
+                if (k == "prismal_icon_backlit_enabled" || k == "prismal_icon_outer_shadow_enabled") {
+                    if (!v.isFinite() || v !in 0.0..1.0) return null
+                    continue
+                }
                 val spec = Os4MainScreenOptions.prismalSpecsByKey[k] ?: return null
                 if (!v.isFinite() || v !in spec.min..spec.max) return null
             }
@@ -82,6 +87,11 @@ object Os4NativeConfPublisher {
                         append(spec.confKey).append('=').append(Os4NativeGlassOptions.format(v)).append('\n')
                     }
                 }
+                listOf("prismal_icon_backlit_enabled", "prismal_icon_outer_shadow_enabled").forEach { k ->
+                    options.prismalOverrides[k]?.let { v ->
+                        append(k).append('=').append(if (v >= 0.5) 1 else 0).append('\n')
+                    }
+                }
             }
             if (options.glassEnabled) {
                 Os4NativeGlassOptions.configLines(options.glassNativeOverrides)!!.forEach {
@@ -108,6 +118,7 @@ object Os4NativeConfPublisher {
             if (options.glassEnabled) {
                 append("large_folder_glass=").append(if (options.glassLargeFolder) 1 else 0).append('\n')
                 append("large_folder_corner=").append(options.glassLargeFolderCorner).append('\n')
+                append("large_folder_2x1_corner=").append(options.glassLargeFolder2x1Corner).append('\n')
                 append("large_folder_native_outline=")
                     .append(if (options.glassLargeFolderNativeOutline) 1 else 0).append('\n')
             }

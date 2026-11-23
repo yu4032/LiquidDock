@@ -112,12 +112,17 @@ struct ld_prismal_options {
     double widget_corner;
     double small_folder_corner;
     double large_folder_corner;
+    double large_folder_2x1_corner;
     int outer_shadow_enabled;
     double outer_shadow_radius;
     double outer_shadow_offset_y;
     double outer_shadow_r, outer_shadow_g, outer_shadow_b, outer_shadow_a;
     double outer_shadow_light_follow;
     int disable_stationary_downsample;
+    int icon_downsample;
+    int icon_fixed_wallpaper;
+    int icon_backlit_enabled;
+    int icon_outer_shadow_enabled;
 };
 
 static inline void ld_prismal_options_defaults(struct ld_prismal_options *p)
@@ -169,6 +174,10 @@ static inline void ld_prismal_options_defaults(struct ld_prismal_options *p)
     p->outer_shadow_r = 0.0; p->outer_shadow_g = 0.0; p->outer_shadow_b = 0.0; p->outer_shadow_a = 8.0;
     p->outer_shadow_light_follow = 0.65;
     p->disable_stationary_downsample = 1;
+    p->icon_downsample = 1;
+    p->icon_fixed_wallpaper = 0;
+    p->icon_backlit_enabled = -1;
+    p->icon_outer_shadow_enabled = -1;
 }
 
 struct ld_grid_conf {
@@ -183,7 +192,7 @@ struct ld_grid_conf {
     int debug_logging;  /* settings log switch; gates optional diagnostics */
     int glass_icons, glass_widgets, widget_overrides;
     int large_folder_glass, large_folder_native_outline;
-    double glass_icon_size, glass_icon_corner, large_folder_corner;
+    double glass_icon_size, glass_icon_corner, large_folder_corner, large_folder_2x1_corner;
     struct ld_native_glass_options native_glass;
     struct ld_native_glass_options scoped_glass[LD_GLASS_SCOPE_COUNT];
     int glass_targets_present;
@@ -390,7 +399,7 @@ static inline int ld_grid_parse_bounded_decimal(const char *s, double lo, double
 }
 
 static inline int ld_prismal_conf_kv(const char *key, const char *val,
-                                     struct ld_prismal_options *p, uint64_t *seen)
+                                     struct ld_prismal_options *p, uint64_t seen[2])
 {
     static const struct {
         const char *name;
@@ -452,6 +461,8 @@ static inline int ld_prismal_conf_kv(const char *key, const char *val,
         {"prismal_backlit_extent", offsetof(struct ld_prismal_options, backlit_extent), 0, 0.0, 1.0},
         {"prismal_backlit_softness", offsetof(struct ld_prismal_options, backlit_softness), 0, 0.05, 2.0},
         {"prismal_disable_stationary_downsample", offsetof(struct ld_prismal_options, disable_stationary_downsample), 1, 0, 1},
+        {"prismal_icon_downsample", offsetof(struct ld_prismal_options, icon_downsample), 1, 0, 1},
+        {"prismal_icon_fixed_wallpaper", offsetof(struct ld_prismal_options, icon_fixed_wallpaper), 1, 0, 1},
         {"prismal_widget_corner", offsetof(struct ld_prismal_options, widget_corner), 0, 0.0, 128.0},
         {"prismal_small_folder_corner", offsetof(struct ld_prismal_options, small_folder_corner), 0, 0.0, 128.0},
         {"prismal_outer_shadow_enabled", offsetof(struct ld_prismal_options, outer_shadow_enabled), 1, 0, 1},
@@ -462,12 +473,16 @@ static inline int ld_prismal_conf_kv(const char *key, const char *val,
         {"prismal_outer_shadow_b", offsetof(struct ld_prismal_options, outer_shadow_b), 0, 0.0, 255.0},
         {"prismal_outer_shadow_a", offsetof(struct ld_prismal_options, outer_shadow_a), 0, 0.0, 255.0},
         {"prismal_outer_shadow_light_follow", offsetof(struct ld_prismal_options, outer_shadow_light_follow), 0, 0.0, 1.0},
+        {"prismal_icon_backlit_enabled", offsetof(struct ld_prismal_options, icon_backlit_enabled), 1, 0, 1},
+        {"prismal_icon_outer_shadow_enabled", offsetof(struct ld_prismal_options, icon_outer_shadow_enabled), 1, 0, 1},
     };
     const size_t n = sizeof(tbl) / sizeof(tbl[0]);
     for (size_t i = 0; i < n; ++i) {
         if (strcmp(key, tbl[i].name) != 0) continue;
-        if (*seen & (1ull << i)) return -1;
-        *seen |= (1ull << i);
+        size_t word = i >> 6;
+        uint64_t bit = 1ull << (i & 63u);
+        if (word >= 2u || (seen[word] & bit)) return -1;
+        seen[word] |= bit;
         if (tbl[i].is_bool) {
             if (strcmp(val, "0") != 0 && strcmp(val, "1") != 0) return -1;
             *(int *)((uint8_t *)p + tbl[i].off) = (val[0] == '1') ? 1 : 0;
@@ -573,7 +588,8 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
     c.recents_blur_percent = 100;
     c.allapps_blur_percent = 100;
     ld_prismal_options_defaults(&c.prismal);
-    uint64_t prismal_seen = 0;
+    uint64_t prismal_seen[2] = {0, 0};
+    int soft_glass_seen = 0;
     uint64_t seen = 0;  /* bit0=dock_offset_y bit1=dock_offset_x bit2=glass bit3=icons
                            bit4=grid_cols bit5=grid_rows bit6=end */
     uint32_t divider_seen = 0;   /* 分隔线字段查重（定义见 divider_conf.h） */
@@ -803,7 +819,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     int value=0;
                     if (!ld_grid_parse_int(val, 0, 1, &value)) { bad=1; break; }
                     c.use_drag_material = value;
-                    if (!(prismal_seen & (1ull << 53))) c.prismal.disable_stationary_downsample = value;
+                    if (!(prismal_seen[0] & (1ull << 53))) c.prismal.disable_stationary_downsample = value;
                 } else if (strcmp(key, "blur_degrade_target") == 0) {
                     uint64_t va=0; size_t sz=0;
                     if (ld_grid_parse_aot_targets(val, &va, &sz, 1)) {
@@ -1088,6 +1104,11 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                         bad = 1; break;
                     }
                     c.prismal.large_folder_corner = c.large_folder_corner;
+                } else if (strcmp(key, "large_folder_2x1_corner") == 0) {
+                    if (!ld_grid_parse_bounded_decimal(val, 0, 128, &c.large_folder_2x1_corner)) {
+                        bad = 1; break;
+                    }
+                    c.prismal.large_folder_2x1_corner = c.large_folder_2x1_corner;
                 } else if (strncmp(key,"glass_native_",13)==0) {
                     const char *sub = key + 13;
                     struct ld_native_glass_options *dst = &c.native_glass;
@@ -1112,11 +1133,11 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                     if (ld_divider_conf_kv(key, val, &divider_seen) < 0) { bad = 1; break; }
                 } else if (strcmp(key, "soft_glass_enabled") == 0) {
                     int value;
-                    if ((prismal_seen & (1ull << 62)) || !ld_grid_parse_bool01(val, &value)) { bad = 1; break; }
+                    if (soft_glass_seen || !ld_grid_parse_bool01(val, &value)) { bad = 1; break; }
                     c.soft_glass_enabled = value;
-                    prismal_seen |= (1ull << 62);
+                    soft_glass_seen = 1;
                 } else if (strncmp(key, "prismal_", 8) == 0) {
-                    if (ld_prismal_conf_kv(key, val, &c.prismal, &prismal_seen) <= 0) { bad = 1; break; }
+                    if (ld_prismal_conf_kv(key, val, &c.prismal, prismal_seen) <= 0) { bad = 1; break; }
                 } else if (strcmp(key, "end") == 0) {
                     if (seen & 64u) { bad = 1; break; }
                     if (val[0] != '1' || val[1] != '\0') { bad = 1; break; }

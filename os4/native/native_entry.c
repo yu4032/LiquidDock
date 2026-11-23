@@ -1104,29 +1104,9 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             ld_blog("icon glass owner observer (wrap) installed at %p", (void *)wrap_rt);
         }
     }
-    if(g_icon_glass_installed && g_home_options.glass_enabled && g_home_options.glass_icons
-            && !g_orig_icon_glass_flight) {
-        uintptr_t flight_rt = ld_resolve_sym_prologue_or_aot(
-            lib, g_home_options.icon_glass_targets_present,
-            g_home_options.icon_glass_vaddr[5], g_home_options.icon_glass_size[5],
-            LD_ICON_GLASS_FLIGHT_START,
-            ld_pat_flight, sizeof(ld_pat_flight) / sizeof(ld_pat_flight[0]),
-            "icon glass flight");
-        if(flight_rt && ld_pin_code_pages_soft(flight_rt, 16)) {
-            void *backup = NULL;
-            int rc = api->hook((void *)flight_rt, (void *)repl_icon_glass_local_flight, &backup);
-            if(rc == 0 && backup) {
-                g_orig_icon_glass_flight = backup;
-                ld_blog("icon glass local flight hook installed at %p (vaddr 0x%lx)",
-                        (void *)flight_rt, (unsigned long)(flight_rt - lib->elf_base));
-            } else {
-                ld_blog("icon glass local flight hook failed at %p rc=%d backup=%d",
-                        (void *)flight_rt, rc, backup != NULL);
-            }
-        } else {
-            ld_blog("icon glass local flight target unavailable: %p", (void *)flight_rt);
-        }
-    }
+    /* Keep HyperOS 4's native SurfaceFlinger bitmap flight (canUseSfMode) enabled:
+     * forcing Dart's local Hero flight scales the live icon glass up to full screen
+     * during app launch/return animations and causes severe frame drops. */
     if(g_icon_glass_installed && g_home_options.glass_icon_corner > 0.0 && !g_orig_icon_glass_dock_scale) {
         if (!g_getstream_add_rt) {
             if (g_home_options.getstream_add_target_present &&
@@ -1523,6 +1503,7 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_superellipse_blur_install(se_on);
     ld_glass_superellipse_install(api, se_on,
                                   (float)g_home_options.large_folder_corner,
+                                  (float)g_home_options.large_folder_2x1_corner,
                                   (float)g_home_options.prismal.widget_corner);
     ld_glass_filter_hook_install(api);
     ld_home_margins_install(api,&lib);
@@ -2009,6 +1990,7 @@ static void on_library_loaded(const char *name, void *handle)
             ld_superellipse_blur_install(se_on);
             ld_glass_superellipse_install(g_api, se_on,
                                           (float)g_home_options.large_folder_corner,
+                                          (float)g_home_options.large_folder_2x1_corner,
                                           (float)g_home_options.prismal.widget_corner);
             ld_glass_filter_hook_install(g_api);
         }

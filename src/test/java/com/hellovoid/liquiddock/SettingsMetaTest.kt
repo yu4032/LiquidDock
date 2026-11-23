@@ -31,7 +31,7 @@ class SettingsMetaTest {
         }
         assertFalse(catalog.any { it.title == "iOS 玻璃效果" })
         assertTrue(catalog.any { it.page == Page.GlassFolders &&
-            it.key == openFolderBaseColorAlphaSpec.key })
+            it.key == largeFolder2x1CornerRadiusSpec.key })
         assertTrue(catalog.any { it.page == Page.ShortcutPopupAll &&
             it.key == com.hellovoid.liquiddock.ScopedGlassOptics.key(
                 com.hellovoid.liquiddock.ScopedGlassOptics.POPUP,
@@ -67,8 +67,10 @@ class SettingsMetaTest {
         assertEquals(customGlassSearchRows(Page.GlassFolders).map { it.key }.toSet(),
             folderGlassFocusCell.keys)
         folderGlassFocusCell.values.forEach { assertTrue(it in folderGlassCellOrder) }
-        assertEquals(FolderGlassCell.OPEN_FILL_ALPHA.id,
-            folderGlassFocusCell.getValue(openFolderBaseColorAlphaSpec.key))
+        assertEquals(FolderGlassCell.LARGE_GEOMETRY.id,
+            folderGlassFocusCell.getValue(largeFolder2x1CornerRadiusSpec.key))
+        assertEquals(FolderGlassCell.LARGE_GEOMETRY.id,
+            folderGlassFocusCell.getValue(largeFolderCornerRadiusSpec.key))
     }
 
     @Test fun fixedCustomComponentPagesIndexAllTheirRenderedStaticControls() {
@@ -124,8 +126,6 @@ class SettingsMetaTest {
         val base = filterSettingsSearch(catalog, "底色透明度")
         assertTrue(base.any { it.page == Page.LiquidColor && it.key ==
             com.hellovoid.liquiddock.config.ConfigSchema.Glass.BASE_COLOR_ALPHA.name() })
-        val folder = filterSettingsSearch(catalog, "底色 文件夹")
-        assertTrue(folder.any { it.page == Page.GlassFolders })
         for (target in listOf(Page.ShortcutPopupAll, Page.HandleMenuAll, Page.DialogAll,
                 Page.GboardAll)) {
             val rows = catalog.filter { it.page == target && it.key != null }
@@ -165,7 +165,7 @@ class SettingsMetaTest {
     @Test fun movedOptionsAndAnimationDependenciesComeFromTheirOwningPage() {
         val catalog = settingsSearchCatalog({ "resource:$it" }, pages)
         assertEquals(Page.LiquidSampling, catalog.single {
-            it.key == com.hellovoid.liquiddock.config.ConfigSchema.Dock.FRAME_SYNC.name()
+            it.key == com.hellovoid.liquiddock.config.ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE.name()
         }.page)
         assertTrue(pages.getValue(Page.Recents).indexOfKey(
             com.hellovoid.liquiddock.config.ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name()) >= 0)
