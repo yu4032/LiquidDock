@@ -167,6 +167,7 @@ object Os4NativeConfPublisher {
                 append("ws_dock_custom=1\n")
                 append("ws_taskbar_mode=").append(if (ws.taskbarMode) 1 else 0).append('\n')
                 append("ws_dock_icon_corner=").append(ws.dockIconGlassCornerRadius).append('\n')
+                append("ws_dock_height=").append(ws.dockHeightOffset).append('\n')
                 append("ws_dock_v_offset=").append(ws.dockVerticalOffset).append('\n')
                 append("ws_dock_icon_land_v_offset=").append(ws.dockIconLandscapeVerticalOffset).append('\n')
                 append("ws_dock_icon_port_v_offset=").append(ws.dockIconTopOffset).append('\n')

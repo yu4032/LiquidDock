@@ -74,6 +74,7 @@ internal fun optionSummary(key: String): String = when (key) {
     "workstation_all_apps_portrait_bottom_spacing" -> "在系统默认位置基础上叠加工作台所有应用竖屏图标区底部偏移"
     "workstation_all_apps_landscape_indicator_y" -> "工作台所有应用横屏页面指示器的垂直偏移；正值下移，负值上移，不影响普通桌面"
     "workstation_all_apps_portrait_indicator_y" -> "工作台所有应用竖屏页面指示器的垂直偏移；正值下移，负值上移，不影响普通桌面"
+    "workstation_dock_height_offset" -> "调整工作台 Dock 背景高度（相对原生高度增减 dp）；同时适用于普通工作台与任务栏模式"
     "workstation_dock_vertical_offset" -> "同时移动工作台 Dock 背景和全部图标，正值向下、负值向上；横竖屏共用"
     "workstation_dock_icon_landscape_vertical_offset" -> "仅在横屏调整图标垂直偏移，正值向下、负值向上"
     "workstation_dock_icon_top_offset" -> "工作台任务栏模式直接平移整行图标（正值向下、负值向上）；普通工作台模式仍调整图标顶部间距"
@@ -197,6 +198,7 @@ internal fun workstationSpecsFor(vararg configs: ConfigKey<Int>): List<IntSpec> 
 
 internal val workstationDockSpecs by lazy {
     workstationSpecsFor(
+        ConfigSchema.Workstation.DOCK_HEIGHT_OFFSET,
         ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET,
     )
 }
@@ -259,6 +261,7 @@ internal val workstationSpecs = listOf(
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_BOTTOM_SPACING, "所有应用 · 竖屏底部偏移"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_INDICATOR_Y, "所有应用 · 横屏指示器高度"),
     IntSpec(ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y, "所有应用 · 竖屏指示器高度"),
+    IntSpec(ConfigSchema.Workstation.DOCK_HEIGHT_OFFSET, "工作台 Dock 高度调整"),
     IntSpec(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET, "整个 Dock 垂直平移"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET, "横屏 · Dock 图标垂直偏移"),
     IntSpec(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET, "竖屏 · Dock 图标垂直偏移"),

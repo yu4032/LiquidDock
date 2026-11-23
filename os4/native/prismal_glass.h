@@ -533,9 +533,13 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     float eff_gy = fmaxf(gy - 2.0f * pad_px, 2.0f);
     float min_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fminf(eff_gx, eff_gy) : 100.0f;
     float max_glass_dim = (eff_gx > 1.0f && eff_gy > 1.0f) ? fmaxf(eff_gx, eff_gy) : 100.0f;
-    /* Preserve stock full-circle / capsule widgets (e.g. 2x2 circular clock widget). */
+    int is_dock = 0;
+#ifdef LD_GLASS_SUPERELLIPSE_H
+    is_dock = g_ld_gse_tls_is_dock;
+#endif
+    /* Preserve stock full-circle / capsule widgets (e.g. 2x2 circular clock widget) and Dock. */
     int is_circular = (gz >= min_glass_dim * 0.45f);
-    if (!is_circular) {
+    if (!is_circular && !is_dock) {
     if (min_glass_dim >= 360.0f && max_glass_dim <= 2000.0f && (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 3.2f) {
         int is_large_folder = (gz > 15.2f * d) ||
                               (fabsf(eff_gx - eff_gy) < 12.0f && fabsf(eff_gx - 169.7f * d) < 22.0f * d);
@@ -549,9 +553,10 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
             ld_write_f32(ubo, 0x18u, cr_px);
         }
     } else if (min_glass_dim >= 45.0f * d && min_glass_dim < 120.0f * d &&
-               max_glass_dim >= 120.0f * d && max_glass_dim <= 800.0f * d &&
+               max_glass_dim >= 120.0f * d && max_glass_dim <= 360.0f * d &&
+               (max_glass_dim / fmaxf(min_glass_dim, 1.0f)) <= 4.0f &&
                gz > 15.2f * d) {
-        /* 2x1 / 1x2 / 3x1 窄条大文件夹 */
+        /* 2x1 / 1x2 / 3x1 窄条大文件夹（排除 Dock 条） */
         double c21 = opt->large_folder_2x1_corner > 0.0
             ? opt->large_folder_2x1_corner : opt->large_folder_corner;
         if (c21 > 0.0) {

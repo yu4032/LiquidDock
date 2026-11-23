@@ -53,6 +53,7 @@ data class Os4WorkstationOptions(
     val dockCustomization: Boolean = false,
     val taskbarMode: Boolean = false,
     val dockIconGlassCornerRadius: Double = 0.0,
+    val dockHeightOffset: Double = 0.0,
     val dockVerticalOffset: Double = 0.0,
     val dockIconLandscapeVerticalOffset: Double = 0.0,
     val dockIconTopOffset: Double = 0.0,
@@ -76,6 +77,7 @@ data class Os4WorkstationOptions(
 ) {
     internal fun isValid(): Boolean =
         dockIconGlassCornerRadius.isFinite() && dockIconGlassCornerRadius in 0.0..100.0 &&
+            dockHeightOffset.isFinite() && dockHeightOffset in -80.0..80.0 &&
             dockVerticalOffset.isFinite() && dockVerticalOffset in -120.0..120.0 &&
             dockIconLandscapeVerticalOffset.isFinite() && dockIconLandscapeVerticalOffset in -48.0..48.0 &&
             dockIconTopOffset.isFinite() && dockIconTopOffset in -48.0..48.0 &&
@@ -302,6 +304,7 @@ data class Os4MainScreenOptions(
             add(ConfigSchema.Workstation.DESKTOP_SYNC_NORMAL.name())
             listOf(
                 ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS,
+                ConfigSchema.Workstation.DOCK_HEIGHT_OFFSET,
                 ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET,
                 ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET,
                 ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET,
@@ -510,6 +513,7 @@ data class Os4MainScreenOptions(
                                     dockCustomization = true,
                                     taskbarMode = boolean(ConfigSchema.Workstation.TASKBAR_MODE),
                                     dockIconGlassCornerRadius = dp(ConfigSchema.Workstation.DOCK_ICON_GLASS_CORNER_RADIUS),
+                                    dockHeightOffset = dp(ConfigSchema.Workstation.DOCK_HEIGHT_OFFSET),
                                     dockVerticalOffset = dp(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET),
                                     dockIconLandscapeVerticalOffset = dp(ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET),
                                     dockIconTopOffset = dp(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET),

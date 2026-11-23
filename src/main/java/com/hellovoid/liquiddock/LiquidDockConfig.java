@@ -513,7 +513,7 @@ final class LiquidDockConfig {
         final float allAppsPortraitTopSpacing, allAppsPortraitBottomSpacing;
         final float allAppsLandscapeIndicatorY, allAppsPortraitIndicatorY;
         final float iconTopOffset, iconBottomOffset;
-        final float dockVerticalOffset, iconLandscapeTopOffset;
+        final float dockHeightOffset, dockVerticalOffset, iconLandscapeTopOffset;
 
         Workstation(ConfigReader c) {
             dockEnabled = c.b(ConfigSchema.Workstation.DOCK_CUSTOMIZATION.name(),
@@ -550,6 +550,7 @@ final class LiquidDockConfig {
                     ConfigSchema.Workstation.ALL_APPS_PORTRAIT_INDICATOR_Y.runtimeFallback());
             iconTopOffset = c.f(ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.name(),
                     ConfigSchema.Workstation.DOCK_ICON_TOP_OFFSET.runtimeFallback());
+            dockHeightOffset = c.f(ConfigSchema.Workstation.DOCK_HEIGHT_OFFSET.name(), 0f);
             dockVerticalOffset = c.f(ConfigSchema.Workstation.DOCK_VERTICAL_OFFSET.name(), 0f);
             iconLandscapeTopOffset = c.f(
                     ConfigSchema.Workstation.DOCK_ICON_LANDSCAPE_VERTICAL_OFFSET.name(),

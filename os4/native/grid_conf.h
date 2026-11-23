@@ -285,6 +285,7 @@ struct ld_grid_conf {
         int dock_custom;
         int taskbar_mode;
         double dock_icon_corner;
+        double dock_height;
         double dock_v_offset;
         double dock_icon_land_v_offset;
         double dock_icon_port_v_offset;
@@ -986,6 +987,7 @@ static inline int ld_grid_conf_parse(const char *buf, size_t len, struct ld_grid
                 } else if (strncmp(key, "ws_", 3) == 0) {
                     struct { const char *name; uint32_t bit; double lo, hi; double *dst; } map[] = {
                         {"ws_dock_icon_corner",       1u<<2,   0.0, 100.0, &c.ws.dock_icon_corner},
+                        {"ws_dock_height",            1u<<14,-80.0,  80.0, &c.ws.dock_height},
                         {"ws_dock_v_offset",          1u<<3,-120.0, 120.0, &c.ws.dock_v_offset},
                         {"ws_dock_icon_land_v_offset",1u<<4, -48.0,  48.0, &c.ws.dock_icon_land_v_offset},
                         {"ws_dock_icon_port_v_offset",1u<<5, -48.0,  48.0, &c.ws.dock_icon_port_v_offset},

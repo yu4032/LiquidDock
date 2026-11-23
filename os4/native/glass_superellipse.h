@@ -94,6 +94,7 @@ static volatile float g_ld_gse_large_folder_corner;
 static volatile float g_ld_gse_large_folder_2x1_corner;
 static volatile float g_ld_gse_widget_corner;
 static __thread int g_ld_gse_tls_is_small_icon;
+static __thread int g_ld_gse_tls_is_dock;
 
 struct ld_gse_cache_entry {
     float w, h, rx, ry, n;
@@ -272,14 +273,17 @@ __attribute__((used)) static void *ld_gse_draw_hyper_material(
     }
 
     int prev_small_icon = g_ld_gse_tls_is_small_icon;
+    int prev_dock = g_ld_gse_tls_is_dock;
     float max_d = fmaxf(w, h);
     g_ld_gse_tls_is_small_icon = (rec != NULL && !dock && max_d > 1.0f && max_d < 115.0f);
+    g_ld_gse_tls_is_dock = (rec != NULL && dock);
 
     void *ret = NULL;
     if (g_ld_gse_orig_dhm)
         ret = ((ld_gse_dhm_fn)g_ld_gse_orig_dhm)(self, a1, a2, a3,
                                                  a4, a5, a6, a7, a8);
     g_ld_gse_tls_is_small_icon = prev_small_icon;
+    g_ld_gse_tls_is_dock = prev_dock;
     (void)patched;
     return ret;
 }

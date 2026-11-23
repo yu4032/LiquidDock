@@ -3,7 +3,11 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
 #include "native_api.h"
 #include "lib_base.h"
 #include "aot_scanner.h"
@@ -198,13 +202,69 @@ __attribute__((used,naked)) static void repl_ws_skip_blur_degrade(void)
     );
 }
 
+static inline double ld_ws_fallback_density(void)
+{
+#ifdef __ANDROID__
+    static double cached;
+    if (cached > 0.5) return cached;
+    char prop[92] = {0};
+    int n = __system_property_get("ro.sf.lcd_density", prop);
+    if (n <= 0) n = __system_property_get("persist.sys.miui_density", prop);
+    if (n > 0) {
+        double dpi = strtod(prop, NULL);
+        if (isfinite(dpi) && dpi >= 120.0 && dpi <= 960.0) {
+            cached = dpi / 160.0;
+            return cached;
+        }
+    }
+#endif
+    return 0.0;
+}
+
 static inline double ld_ws_device_width(void)
 {
     uint64_t bits = __atomic_load_n(&g_ws_device_width_bits, __ATOMIC_RELAXED);
-    if (!bits) return 0.0;
-    double d = 0.0;
-    memcpy(&d, &bits, sizeof d);
-    return (isfinite(d) && d > 100.0) ? d : 0.0;
+    if (bits) {
+        double d = 0.0;
+        memcpy(&d, &bits, sizeof d);
+        if (isfinite(d) && d > 100.0) return d;
+    }
+    /* Fallback to the current rotation's logical screen width so taskbar_mode
+     * never falls through with dw == 0 before GlobalHotseatWindowManager._buildDockLayout
+     * runs (which otherwise triggers a 220dp -> full-width spring zoom on AllApps/mode transitions). */
+    uint64_t packed = atomic_load_explicit(&g_ld_screen_state, memory_order_acquire);
+    unsigned pw = (unsigned)((packed >> 16) & UINT64_C(0xffff));
+    if (pw >= 320u) {
+        double dens = ld_ws_fallback_density();
+        if (dens > 0.5) {
+            double lw = (double)pw / dens;
+            if (isfinite(lw) && lw > 100.0 && lw < 8192.0) return lw;
+        }
+    }
+    return 0.0;
+}
+
+static inline int ld_ws_is_const_ro(uintptr_t addr)
+{
+    Dl_info di;
+    return dladdr((const void *)addr, &di) != 0;
+}
+
+static inline void ld_ws_apply_dock_height(uintptr_t size)
+{
+    double dh = g_home_options.ws.dock_height;
+    if (!size || dh == 0.0 || !isfinite(dh)) return;
+    if (ld_ws_is_const_ro(size)) return;
+    double sh = 0.0;
+    if (!ld_read_heap(size + 0xf, &sh, sizeof sh) || !isfinite(sh) || sh < 1.0) return;
+    static uintptr_t s_last_size;
+    static double s_last_out;
+    if (size == s_last_size && fabs(sh - s_last_out) < 0.01) return;
+    double next = sh + dh;
+    if (next < 16.0) next = 16.0;
+    memcpy((void *)(size + 0xf), &next, sizeof next);
+    s_last_size = size;
+    s_last_out = next;
 }
 
 static volatile int g_ws_last_dir __attribute__((used)) = -1;
@@ -230,12 +290,6 @@ static inline int ld_ws_direction(const struct ld_ws_ctx *c)
     double dw = ld_ws_device_width();
     if (dw > 100.0) return (dw > 800.0) ? 1 : 0;
     return -1;
-}
-
-static inline int ld_ws_is_const_ro(uintptr_t addr)
-{
-    Dl_info di;
-    return dladdr((const void *)addr, &di) != 0;
 }
 
 static inline int ld_ws_is_laptop(const struct ld_ws_ctx *c)
@@ -538,10 +592,6 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
 {
     if (!__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) return;
     if (!g_home_options.ws.dock_custom) return;
-    int dir = ld_ws_direction(c);
-    if (dir < 0) return;
-    double off = dir == 1 ? g_home_options.ws.dock_icon_land_v_offset
-                          : g_home_options.ws.dock_icon_port_v_offset;
     uintptr_t stack = (uintptr_t)c->ret_x0;
     if (!(stack & 1)) return;
     struct ld_dart_context dc;
@@ -573,28 +623,53 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
                 memcpy((void *)(insets0 + 0x1f), &zero, sizeof zero);
             }
         }
+        uintptr_t align0 = pad0 ? ld_heap_pointer(&dc, pad0, 0xb) : 0;
+        uintptr_t sized0 = align0 ? ld_heap_pointer(&dc, align0, 0xb) : 0;
         if (g_home_options.ws.taskbar_mode) {
-            uintptr_t align0 = pad0 ? ld_heap_pointer(&dc, pad0, 0xb) : 0;
-            uintptr_t sized0 = align0 ? ld_heap_pointer(&dc, align0, 0xb) : 0;
             uintptr_t w_box = sized0 ? ld_heap_pointer(&dc, sized0, 0xf) : 0;
             double w_val = 0.0;
             if (w_box && !ld_ws_is_const_ro(w_box) && !ld_ws_is_const_ro(pos0) &&
                 !ld_ws_is_const_ro(sized0) &&
-                ld_read_heap(w_box + 7, &w_val, 8) && isfinite(w_val) && w_val > 100.0) {
+                ld_read_heap(w_box + 7, &w_val, 8) && isfinite(w_val) &&
+                (w_val > 100.0 || w_val == -8.0)) {
                 double neg8 = -8.0;
                 uint32_t w_cptr = (uint32_t)w_box;
                 uint32_t null_cptr = (uint32_t)c->x[22];
-                memcpy((void *)(w_box + 7), &neg8, sizeof neg8);
+                if (w_val != -8.0) {
+                    memcpy((void *)(w_box + 7), &neg8, sizeof neg8);
+                }
                 memcpy((void *)(pos0 + 0x13), &w_cptr, sizeof w_cptr);
                 memcpy((void *)(pos0 + 0x1b), &w_cptr, sizeof w_cptr);
                 memcpy((void *)(sized0 + 0xf), &null_cptr, sizeof null_cptr);
                 static unsigned tb_logs;
-                if (__atomic_fetch_add(&tb_logs, 1u, __ATOMIC_RELAXED) < 3) {
+                if (w_val > 100.0 && __atomic_fetch_add(&tb_logs, 1u, __ATOMIC_RELAXED) < 3) {
                     ld_blog("ws_taskbar_overhang: orig_w=%.1f left=right=-8.0", w_val);
                 }
             }
         }
+        if (g_home_options.ws.dock_height != 0.0 && isfinite(g_home_options.ws.dock_height) &&
+            sized0 && !ld_ws_is_const_ro(sized0)) {
+            uintptr_t h_box = ld_heap_pointer(&dc, sized0, 0x13);
+            double h_val = 0.0;
+            if (h_box && !ld_ws_is_const_ro(h_box) &&
+                ld_read_heap(h_box + 7, &h_val, 8) && isfinite(h_val) &&
+                h_val >= 16.0 && h_val <= 240.0) {
+                static uintptr_t s_last_hbox;
+                static double s_last_hout;
+                if (!(h_box == s_last_hbox && fabs(h_val - s_last_hout) < 0.01)) {
+                    double next_h = h_val + g_home_options.ws.dock_height;
+                    if (next_h < 16.0) next_h = 16.0;
+                    memcpy((void *)(h_box + 7), &next_h, sizeof next_h);
+                    s_last_hbox = h_box;
+                    s_last_hout = next_h;
+                }
+            }
+        }
     }
+    int dir = ld_ws_direction(c);
+    if (dir < 0) return;
+    double off = dir == 1 ? g_home_options.ws.dock_icon_land_v_offset
+                          : g_home_options.ws.dock_icon_port_v_offset;
     if (!isfinite(off) || off == 0.0) return;
     uintptr_t w1 = pos1 ? ld_heap_pointer(&dc, pos1, 0xb) : 0;
     uintptr_t pad = w1 ? ld_heap_pointer(&dc, w1, 0xb) : 0;
@@ -657,6 +732,9 @@ __attribute__((used)) static void ld_ws_on_bg_sync(struct ld_dart_context *c)
     if (__atomic_fetch_add(&diag_logs, 1u, __ATOMIC_RELAXED) < 5) {
         ld_blog("ws_bg_sync_diag: taskbar=%d p_b=%.1f size=(%.1f,%.1f)",
                 g_home_options.ws.taskbar_mode, p_b, sw, sh);
+    }
+    if (size && g_home_options.ws.dock_height != 0.0) {
+        ld_ws_apply_dock_height(size);
     }
     if (!g_home_options.ws.taskbar_mode) return;
     double dw = ld_ws_device_width();
