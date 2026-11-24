@@ -260,7 +260,7 @@ static inline void ld_ws_apply_dock_height(uintptr_t size)
 {
     if (!g_home_options.ws.taskbar_mode) return;
     double dh = g_home_options.ws.dock_height;
-    if (!size || dh == 0.0 || !isfinite(dh)) return;
+    if (!size || dh <= 0.0 || !isfinite(dh)) return;
     if (ld_ws_is_const_ro(size)) return;
     double sh = 0.0;
     if (!ld_read_heap(size + 0xf, &sh, sizeof sh) || !isfinite(sh) || sh < 1.0) return;
@@ -268,7 +268,6 @@ static inline void ld_ws_apply_dock_height(uintptr_t size)
     static double s_last_out;
     if (size == s_last_size && fabs(sh - s_last_out) < 0.01) return;
     double next = sh + dh;
-    if (next < 16.0) next = 16.0;
     memcpy((void *)(size + 0xf), &next, sizeof next);
     s_last_size = size;
     s_last_out = next;
@@ -330,6 +329,15 @@ __attribute__((used)) static void ld_ws_post_device_width(struct ld_ws_ctx *c)
 
 static volatile uint64_t g_ws_orig_mb_bits __attribute__((used));
 
+static inline double ld_ws_orig_margin_bottom(void)
+{
+    uint64_t bits = __atomic_load_n(&g_ws_orig_mb_bits, __ATOMIC_RELAXED);
+    if (!bits) return 0.0;
+    double tmp = 0.0;
+    memcpy(&tmp, &bits, sizeof tmp);
+    return (isfinite(tmp) && tmp > 0.0 && tmp < 200.0) ? tmp : 0.0;
+}
+
 static inline double ld_ws_effective_dock_v_offset(void)
 {
     return g_home_options.ws.dock_v_offset;
@@ -351,7 +359,9 @@ __attribute__((used)) static void ld_ws_post_margin_bottom(struct ld_ws_ctx *c)
     uint64_t orig_bits = 0;
     memcpy(&orig_bits, &mb, sizeof orig_bits);
     __atomic_store_n(&g_ws_orig_mb_bits, orig_bits, __ATOMIC_RELAXED);
-    if (g_home_options.ws.taskbar_mode || v_off != 0.0) {
+    if (g_home_options.ws.taskbar_mode) {
+        mb = -(mb + v_off);
+    } else if (v_off != 0.0) {
         mb = -v_off;
     } else {
         return;
@@ -570,7 +580,9 @@ __attribute__((used)) static void ld_ws_on_dock_build_content(struct ld_ws_ctx *
         if (isfinite(tmp) && tmp > 1.0) orig_mb = tmp;
     }
     double v_off = ld_ws_effective_dock_v_offset();
-    if (g_home_options.ws.taskbar_mode || v_off != 0.0) {
+    if (g_home_options.ws.taskbar_mode) {
+        mb = -(orig_mb + v_off);
+    } else if (v_off != 0.0) {
         mb = -v_off;
     } else {
         return;
@@ -651,7 +663,7 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
             }
         }
         if (g_home_options.ws.taskbar_mode &&
-            g_home_options.ws.dock_height != 0.0 && isfinite(g_home_options.ws.dock_height) &&
+            g_home_options.ws.dock_height > 0.0 && isfinite(g_home_options.ws.dock_height) &&
             sized0 && !ld_ws_is_const_ro(sized0)) {
             uintptr_t h_box = ld_heap_pointer(&dc, sized0, 0x13);
             double h_val = 0.0;
@@ -662,7 +674,6 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
                 static double s_last_hout;
                 if (!(h_box == s_last_hbox && fabs(h_val - s_last_hout) < 0.01)) {
                     double next_h = h_val + g_home_options.ws.dock_height;
-                    if (next_h < 16.0) next_h = 16.0;
                     memcpy((void *)(h_box + 7), &next_h, sizeof next_h);
                     s_last_hbox = h_box;
                     s_last_hout = next_h;
@@ -671,10 +682,15 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
         }
     }
     int dir = ld_ws_direction(c);
-    if (dir < 0) return;
-    double off = dir == 1 ? g_home_options.ws.dock_icon_land_v_offset
-                          : g_home_options.ws.dock_icon_port_v_offset;
-    if (!isfinite(off) || off == 0.0) return;
+    double off = 0.0;
+    if (dir == 1) off = g_home_options.ws.dock_icon_land_v_offset;
+    else if (dir == 0) off = g_home_options.ws.dock_icon_port_v_offset;
+    if (!isfinite(off)) off = 0.0;
+    if (g_home_options.ws.taskbar_mode &&
+        g_home_options.ws.dock_height > 0.0 && isfinite(g_home_options.ws.dock_height)) {
+        off -= g_home_options.ws.dock_height * 0.5;
+    }
+    if (off == 0.0) return;
     uintptr_t w1 = pos1 ? ld_heap_pointer(&dc, pos1, 0xb) : 0;
     uintptr_t pad = w1 ? ld_heap_pointer(&dc, w1, 0xb) : 0;
     if (!pad) return;
@@ -812,13 +828,14 @@ __attribute__((used)) static void ld_ws_post_allapps_ind(struct ld_ws_ctx *c)
 __attribute__((used)) static void ld_ws_post_hotseat_bottom(struct ld_ws_ctx *c)
 {
     if (!__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) return;
+    if (!g_home_options.ws.dock_custom) return;
     double v_off = ld_ws_effective_dock_v_offset();
-    if (!g_home_options.ws.dock_custom || v_off == 0.0) return;
+    if (!g_home_options.ws.taskbar_mode && v_off == 0.0) return;
     double cur = 0.0;
     memcpy(&cur, &c->ret_d0, sizeof cur);
     if (!isfinite(cur)) return;
     double next = g_home_options.ws.taskbar_mode
-            ? -v_off
+            ? -(ld_ws_orig_margin_bottom() + v_off)
             : (cur - v_off);
     static unsigned logs;
     if (__atomic_fetch_add(&logs, 1u, __ATOMIC_RELAXED) < 5) {

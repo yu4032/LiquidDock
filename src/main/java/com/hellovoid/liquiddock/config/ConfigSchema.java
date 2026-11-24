@@ -839,7 +839,7 @@ public final class ConfigSchema {
                 "workstation_all_apps_portrait_indicator_y", 0, 0, 0, -160, 160,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_HEIGHT_OFFSET = dp(
-                "workstation_dock_height_offset", 0, 0, 0, -80, 80,
+                "workstation_dock_height_offset", 0, 0, 0, 0, 80,
                 ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Integer> DOCK_VERTICAL_OFFSET = dp(
                 "workstation_dock_vertical_offset", 0, 0, 0, -120, 120,

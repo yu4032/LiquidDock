@@ -86,7 +86,7 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     }
     page(Page.WorkstationDock, "调整工作台 Dock 的外观与图标位置。", listOf(
         toggle(ConfigSchema.Workstation.TASKBAR_MODE, "任务栏模式",
-            "将背景向屏幕左右延伸；开启后支持调节任务栏高度，也可配合垂直平移消除底部边距。"),
+            "开启后 Dock 立即贴底并向左右与底部三边延伸；高度调节以底部边缘为底线并保持图标垂直居中，仍支持垂直偏移调节。"),
     ) + workstationDockSpecs.map { spec ->
         val req = if (spec.key == ConfigSchema.Workstation.DOCK_HEIGHT_OFFSET.name()) {
             listOf(ConfigSchema.Workstation.TASKBAR_MODE to true)

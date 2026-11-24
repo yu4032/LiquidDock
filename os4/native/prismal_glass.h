@@ -995,29 +995,32 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
             float st = (float)opts->backlit_width + 2.0f;
             if (st > pad_dp) pad_dp = fminf(st, 10.0f);
         }
-        float taskbar_ov_dp = 0.0f;
+        float taskbar_lr_ov_dp = 0.0f;
+        float taskbar_b_ov_dp = 0.0f;
 #ifdef LD_WORKSTATION_H
         if (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED) &&
             g_home_options.ws.dock_custom && g_home_options.ws.taskbar_mode &&
             isfinite(orig_geo[0]) && isfinite(orig_geo[1]) &&
-            orig_geo[1] >= 36.0f * d && orig_geo[1] <= 180.0f * d) {
+            orig_geo[1] >= 24.0f * d && orig_geo[1] <= 240.0f * d) {
             float r_chk[4];
             memcpy(r_chk, (const uint8_t *)self + 0x28u, sizeof r_chk);
             float rect_max = fmaxf(fabsf(r_chk[2] - r_chk[0]), fabsf(r_chk[3] - r_chk[1]));
             double dw = ld_ws_device_width();
             float vp_w = (dw > 100.0) ? (float)(dw * d) : 0.0f;
             if (isfinite(rect_max) && rect_max > vp_w && rect_max < 8192.0f) vp_w = rect_max;
-            /* In Workstation AllApps, the taskbar glass bounds can be clipped to
-             * [0, vp_w] without the -16dp left/right/bottom overhang, exposing
-             * vertical edge bevels and 45-degree corners at the screen borders. */
-            if (vp_w > 300.0f &&
-                orig_geo[0] >= vp_w - 40.0f * d &&
-                orig_geo[0] <= vp_w + 16.0f * d) {
-                taskbar_ov_dp = 24.0f;
+            /* In Workstation taskbar mode, always extend the bottom off-screen
+             * (hiding the bottom glass bevel/corners) on both Desktop and AllApps.
+             * In AllApps, where horizontal bounds are clipped to [0, vp_w], also
+             * extend left and right off-screen. */
+            if (vp_w > 300.0f && orig_geo[0] >= vp_w - 40.0f * d) {
+                taskbar_b_ov_dp = 24.0f;
+                if (orig_geo[0] <= vp_w + 16.0f * d) {
+                    taskbar_lr_ov_dp = 24.0f;
+                }
             }
         }
 #endif
-        if (pad_dp > 0.0f || taskbar_ov_dp > 0.0f) {
+        if (pad_dp > 0.0f || taskbar_lr_ov_dp > 0.0f || taskbar_b_ov_dp > 0.0f) {
             memcpy(orig_rect, (const uint8_t *)self + 0x28u, sizeof orig_rect);
             memcpy(orig_alt, (const uint8_t *)self + 0x1d8u, sizeof orig_alt);
             memcpy(orig_geo, (const uint8_t *)self + 0x1c8u, sizeof orig_geo);
@@ -1034,35 +1037,37 @@ static uint8_t repl_glass_contents_render(void *self, const void *ctx, const voi
                      * cannot extend past the 4 straight RT edges and would clip to 4 corner triangles. */
                     eff_pad_dp = 0.0f;
                 }
-                if (eff_pad_dp > 0.0f || taskbar_ov_dp > 0.0f) {
+                if (eff_pad_dp > 0.0f || taskbar_lr_ov_dp > 0.0f || taskbar_b_ov_dp > 0.0f) {
                     float pad_px = eff_pad_dp * d;
-                    float ov_px = taskbar_ov_dp * d;
+                    float lr_px = taskbar_lr_ov_dp * d;
+                    float b_px = taskbar_b_ov_dp * d;
                     float qscale = orig_geo[0] / w;
                     if (!(qscale > 0.25f && qscale < 8.0f)) qscale = d;
                     float pad_q = pad_px / qscale;
-                    float ov_q = ov_px / qscale;
+                    float lr_q = lr_px / qscale;
+                    float b_q = b_px / qscale;
                     if (use_alt) {
                         float exp_alt[4] = {
-                            orig_alt[0] - pad_q - ov_q,
+                            orig_alt[0] - pad_q - lr_q,
                             orig_alt[1] - pad_q,
-                            orig_alt[2] + 2.0f * (pad_q + ov_q),
-                            orig_alt[3] + 2.0f * pad_q + ov_q
+                            orig_alt[2] + 2.0f * (pad_q + lr_q),
+                            orig_alt[3] + 2.0f * pad_q + b_q
                         };
                         memcpy((uint8_t *)self + 0x1d8u, exp_alt, sizeof exp_alt);
                         expanded_alt = 1;
                     } else {
                         float exp_rect[4] = {
-                            orig_rect[0] - pad_q - ov_q,
+                            orig_rect[0] - pad_q - lr_q,
                             orig_rect[1] - pad_q,
-                            orig_rect[2] + pad_q + ov_q,
-                            orig_rect[3] + pad_q + ov_q
+                            orig_rect[2] + pad_q + lr_q,
+                            orig_rect[3] + pad_q + b_q
                         };
                         memcpy((uint8_t *)self + 0x28u, exp_rect, sizeof exp_rect);
                         expanded_rect = 1;
                     }
                     float exp_geo[2] = {
-                        orig_geo[0] + 2.0f * (pad_px + ov_px),
-                        orig_geo[1] + 2.0f * pad_px + ov_px
+                        orig_geo[0] + 2.0f * (pad_px + lr_px),
+                        orig_geo[1] + 2.0f * pad_px + b_px
                     };
                     memcpy((uint8_t *)self + 0x1c8u, exp_geo, sizeof exp_geo);
                     expanded_geo = 1;
