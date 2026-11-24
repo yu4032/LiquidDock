@@ -271,6 +271,11 @@ static uint32_t g_fls_ti_cid;
 static double g_fls_ti_fw, g_fls_ti_fh, g_fls_ti_pad0, g_fls_ti_big_w;
 static double g_fls_ti_applied_inset;
 static struct ld_folder_preview_rect g_fls_ti_orig[LD_FLS_TEN_ICON_COUNT];
+/* Absolute (cell-relative) rects we last wrote. Used to tell an already-adjusted list
+ * (reused across calItemSize calls, e.g. long-press move) from a stock one so the
+ * inset is never captured as the new baseline and stacked. */
+static struct ld_folder_preview_rect g_fls_ti_written[LD_FLS_TEN_ICON_COUNT];
+static int g_fls_ti_written_valid;
 
 static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t null_low,
                                        uint32_t cid, int span_x, int span_y,
@@ -278,10 +283,10 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
                                        int from_cal_item_size)
 {
     if (!g_fls_list_off || span_x != 4 || span_y != 2 || fw <= fh * 1.5) return;
+    if (!from_cal_item_size && (!g_fls_ti_valid || cid != g_fls_ti_cid)) return;
 
     uint32_t lw = 0;
     if (!ld_read_heap(strat + g_fls_list_off, &lw, sizeof lw) || !(lw & 1u) || lw < 0x100000u) {
-        if (from_cal_item_size && g_fls_ti_valid && cid == g_fls_ti_cid) g_fls_ti_valid = 0;
         return;
     }
     uintptr_t list = (uintptr_t)lw + (x28 << 32);
@@ -293,12 +298,10 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
         (len_smi & 1u) ||
         !ld_read_heap(list + 0xfu, &aw, sizeof aw) ||
         !(aw & 1u) || aw < 0x100000u) {
-        if (from_cal_item_size && g_fls_ti_valid && cid == g_fls_ti_cid) g_fls_ti_valid = 0;
         return;
     }
     unsigned len = len_smi >> 1;
     if (len != LD_FLS_TEN_ICON_COUNT) {
-        if (from_cal_item_size && g_fls_ti_valid && cid == g_fls_ti_cid) g_fls_ti_valid = 0;
         return;
     }
     uintptr_t arr = (uintptr_t)aw + (x28 << 32);
@@ -324,8 +327,10 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
         cur[i] = (struct ld_folder_preview_rect){x - ph, y - pv, w, h};
     }
 
-    if (from_cal_item_size || !g_fls_ti_valid || cid != g_fls_ti_cid ||
-        fabs(fw - g_fls_ti_fw) > 0.5 || fabs(fh - g_fls_ti_fh) > 0.5) {
+    int same_shape = g_fls_ti_valid && cid == g_fls_ti_cid &&
+                     fabs(fw - g_fls_ti_fw) <= 0.5 && fabs(fh - g_fls_ti_fh) <= 0.5;
+    if (!same_shape) {
+        g_fls_ti_written_valid = 0;
         double pad0 = fmin(cur[0].x, cur[0].y);
         double big_w = cur[0].width;
         if (pad0 <= 1.0 || big_w < 30.0) return;
@@ -337,6 +342,33 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
         g_fls_ti_big_w = big_w;
         g_fls_ti_applied_inset = 0.0;
         g_fls_ti_valid = 1;
+    } else if (from_cal_item_size) {
+        /* calItemSize may rebuild only some entries. Per item: an entry still equal to
+         * what we wrote is ours (keep its stock baseline); anything else is stock. */
+        unsigned fresh = 0;
+        for (unsigned i = 0; i < LD_FLS_TEN_ICON_COUNT; i++) {
+            int ours = g_fls_ti_written_valid &&
+                       fabs(cur[i].x + ph - g_fls_ti_written[i].x) <= 0.05 &&
+                       fabs(cur[i].y + pv - g_fls_ti_written[i].y) <= 0.05 &&
+                       fabs(cur[i].width - g_fls_ti_written[i].width) <= 0.05 &&
+                       fabs(cur[i].height - g_fls_ti_written[i].height) <= 0.05;
+            if (!ours) {
+                g_fls_ti_orig[i] = cur[i];
+                fresh++;
+                if (i == 0) {
+                    double pad0 = fmin(cur[0].x, cur[0].y);
+                    if (pad0 > 1.0 && cur[0].width >= 30.0) {
+                        g_fls_ti_pad0 = pad0;
+                        g_fls_ti_big_w = cur[0].width;
+                    }
+                }
+            }
+        }
+        if (fresh) g_fls_ti_applied_inset = 0.0;
+        static unsigned fresh_logs;
+        if (fresh_logs++ < 12u)
+            ld_blog("folder_layout_sync: ten-icon recalc cid=0x%x fresh=%u/%u written=%d", cid,
+                    fresh, LD_FLS_TEN_ICON_COUNT, g_fls_ti_written_valid);
     }
 
     double inset = (double)__atomic_load_n(&g_home_options.folder_preview_inset, __ATOMIC_ACQUIRE);
@@ -365,7 +397,9 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
         memcpy((void *)(items[i] + 15u), &adj.height, sizeof adj.height);
         memcpy((void *)(items[i] + 23u), &nx, sizeof nx);
         memcpy((void *)(items[i] + 31u), &ny, sizeof ny);
+        g_fls_ti_written[i] = (struct ld_folder_preview_rect){nx, ny, adj.width, adj.height};
     }
+    g_fls_ti_written_valid = 1;
     g_fls_ti_applied_inset = inset;
     __atomic_store_n(&g_fls_ten_icon_inset_active, 1, __ATOMIC_RELEASE);
     static unsigned ti_logs;
