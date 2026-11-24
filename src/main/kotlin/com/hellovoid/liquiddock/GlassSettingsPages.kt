@@ -58,7 +58,7 @@ internal fun SoftGlassPage(
                 if (liquidGlass) {
                     "已开启液态玻璃，原生柔光玻璃渲染已自动关闭以节省性能；此开关独立于液态玻璃。"
                 } else {
-                    "仅作用于 OS4 系统桌面的原生柔光玻璃（与液态玻璃独立）。重启桌面生效，背景模糊设为 0 可观察清晰折射。"
+                    "仅作用于系统桌面的原生柔光玻璃（与液态玻璃独立）。重启桌面生效，背景模糊设为 0 可观察清晰折射。"
                 },
             )
         }
@@ -75,7 +75,7 @@ internal fun SoftGlassPage(
                     prefs,
                     ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE,
                     "取消桌面玻璃静止时的下采样",
-                    "禁用桌面原生在玻璃静止时的采样降级与 0.25× 预缩放下采样，保持完整采样分辨率。",
+                    "禁用桌面原生在玻璃静止时的采样降级与下采样，保持完整采样分辨率；实时生效。",
                     masterEnabled && (softGlass || liquidGlass),
                 )
             }
@@ -112,6 +112,7 @@ internal fun SoftGlassComponentsPage(
     open: (Page) -> Unit,
     searchFocus: SettingsFocusRequest? = null,
 ) {
+    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
@@ -138,7 +139,7 @@ internal fun SoftGlassComponentsPage(
     DenseSettingsList(
         padding,
         stringResource(R.string.page_soft_glass_components),
-        "OS4 系统桌面原生柔光玻璃组件：普通桌面图标、Dock 应用图标、小部件玻璃与 MAML 小组件隐藏规则。",
+        "系统桌面原生柔光玻璃组件：普通桌面图标、Dock 应用图标、小部件玻璃与 MAML 小组件隐藏规则。",
         focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.SoftGlassComponents, it.key) },
         focusSequence = searchFocus?.sequence,
     ) {
@@ -175,7 +176,7 @@ internal fun SoftGlassComponentsPage(
         }
         item(key = "soft-widgets-geometry") {
             SettingsCard {
-                IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
+                IntSetting(prefs, widgetSizeOffsetSpec, !os4Launcher && masterEnabled && liquidEnabled && widgetGlass)
                 ModernListDivider()
                 IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
             }
@@ -364,7 +365,7 @@ internal fun GlassIconsPage(
                         prefs,
                         ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE,
                         "图标玻璃下采样",
-                        "开启后 1×1 图标复用共享下采样背景以降低 GPU 与显存开销；关闭后全分辨率采样更清晰但更耗性能。",
+                        "开启后 1×1 图标复用共享下采样背景以降低 GPU 与显存开销；关闭后全分辨率采样更清晰但更耗性能；实时生效。",
                         masterEnabled && liquidEnabled && iconGlass,
                     )
                     ModernListDivider()
@@ -399,8 +400,9 @@ internal fun GlassIconsPage(
             SettingsCard {
                 ArrowPreference(
                     stringResource(R.string.launcher_highlights_entry),
-                    summary = stringResource(R.string.launcher_highlights_entry_summary),
-                    enabled = masterEnabled && liquidEnabled,
+                    summary = if (os4Launcher) "当前桌面暂未接入独立高光层开关"
+                    else stringResource(R.string.launcher_highlights_entry_summary),
+                    enabled = !os4Launcher && masterEnabled && liquidEnabled,
                     onClick = { open(Page.LauncherHighlights) },
                 )
             }
@@ -409,7 +411,8 @@ internal fun GlassIconsPage(
             SettingsCard {
                 ArrowPreference(
                     title = "阴影",
-                    summary = "独立设置 Prismal 外阴影与边缘描边",
+                    summary = if (os4Launcher) "独立开关图标折射描边与外阴影（数值参数继承全局）"
+                    else "独立设置 Prismal 外阴影与边缘描边",
                     enabled = masterEnabled && liquidEnabled,
                     onClick = { open(Page.IconEdge) },
                 )
@@ -466,15 +469,16 @@ internal fun GlassWidgetsPage(
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.WIDGET_DARK_CONTENT, "小组件深色内容适配",
-                    "将深色中性文字适配为浅色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
-                    masterEnabled && liquidEnabled && widgetGlass,
+                    if (os4Launcher) "当前桌面暂未接入此选项"
+                    else "将深色中性文字适配为浅色；MAML 优先使用原生深色变量，不处理图片与彩色内容",
+                    !os4Launcher && masterEnabled && liquidEnabled && widgetGlass,
                 )
             }
         }
         item(key = "widget-geometry-heading") { SmallTitle("尺寸与圆角") }
         item(key = "widget-geometry") {
             SettingsCard {
-                IntSetting(prefs, widgetSizeOffsetSpec, masterEnabled && liquidEnabled && widgetGlass)
+                IntSetting(prefs, widgetSizeOffsetSpec, !os4Launcher && masterEnabled && liquidEnabled && widgetGlass)
                 ModernListDivider()
                 IntSetting(prefs, widgetCornerRadiusSpec, masterEnabled && liquidEnabled && widgetGlass)
             }
@@ -483,8 +487,9 @@ internal fun GlassWidgetsPage(
             SettingsCard {
                 ArrowPreference(
                     title = "阴影",
-                    summary = "Prismal 外阴影与描边可独立设置，未调整时继承全局",
-                    enabled = masterEnabled && liquidEnabled && widgetGlass,
+                    summary = if (os4Launcher) "当前小组件阴影统一继承全局外阴影设置"
+                    else "Prismal 外阴影与描边可独立设置，未调整时继承全局",
+                    enabled = !os4Launcher && masterEnabled && liquidEnabled && widgetGlass,
                     onClick = { open(Page.WidgetEdge) },
                 )
             }
@@ -534,10 +539,12 @@ internal fun GlassFoldersPage(
     open: (Page) -> Unit,
     searchFocus: SettingsFocusRequest? = null,
 ) {
-    val liquidEnabled = prefs.getBoolean(
+    val os4Launcher = LocalSettingsAvailability.current.isOs4Launcher()
+    val useLiquidGlass = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
-    ) || prefs.getBoolean(
+    )
+    val liquidEnabled = useLiquidGlass || prefs.getBoolean(
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
         ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
@@ -570,16 +577,22 @@ internal fun GlassFoldersPage(
             SettingsCard {
                 BooleanSetting(
                     prefs, ConfigSchema.Glass.SMALL_FOLDER_GLASS,
-                    "小文件夹玻璃", "保留 1x1 文件夹缩略预览",
-                    masterEnabled && liquidEnabled,
+                    "小文件夹玻璃",
+                    if (os4Launcher) "当前随玻璃总开关生效，暂不支持单独关闭"
+                    else "保留 1x1 文件夹缩略预览",
+                    !os4Launcher && masterEnabled && liquidEnabled,
                 ) { smallFolderGlass = it }
             }
         }
         item(key = FolderGlassCell.SMALL_GEOMETRY.id) {
             SettingsCard {
-                IntSetting(prefs, smallFolderSizeOffsetSpec, masterEnabled && liquidEnabled && smallFolderGlass)
+                IntSetting(prefs, smallFolderSizeOffsetSpec, !os4Launcher && masterEnabled && liquidEnabled && smallFolderGlass)
                 ModernListDivider()
-                IntSetting(prefs, smallFolderCornerRadiusSpec, masterEnabled && liquidEnabled && smallFolderGlass)
+                IntSetting(
+                    prefs,
+                    smallFolderCornerRadiusSpec,
+                    masterEnabled && liquidEnabled && (os4Launcher || smallFolderGlass),
+                )
             }
         }
         item(key = FolderGlassCell.LARGE_HEADING.id) { SmallTitle("大文件夹") }
@@ -593,16 +606,17 @@ internal fun GlassFoldersPage(
                 ModernListDivider()
                 top.yukonga.miuix.kmp.basic.BasicComponent(
                     title = "大文件夹玻璃参数",
-                    summary = "统一使用最外部柔光玻璃全局参数；点击前往调节",
+                    summary = if (useLiquidGlass) "当前跟随液态玻璃全局参数；点击前往调节"
+                    else "当前跟随柔光玻璃全局参数；点击前往调节",
                     enabled = masterEnabled && liquidEnabled && largeFolderGlass,
                     insideMargin = ModernPreferenceMargin,
-                    onClick = { open(Page.SoftGlass) },
+                    onClick = { open(if (useLiquidGlass) Page.Liquid else Page.SoftGlass) },
                 )
             }
         }
         item(key = FolderGlassCell.LARGE_GEOMETRY.id) {
             SettingsCard {
-                IntSetting(prefs, largeFolderSizeOffsetSpec, masterEnabled && liquidEnabled && largeFolderGlass)
+                IntSetting(prefs, largeFolderSizeOffsetSpec, !os4Launcher && masterEnabled && liquidEnabled && largeFolderGlass)
                 ModernListDivider()
                 IntSetting(prefs, largeFolder2x1CornerRadiusSpec, masterEnabled && liquidEnabled && largeFolderGlass)
                 ModernListDivider()
@@ -614,8 +628,9 @@ internal fun GlassFoldersPage(
             SettingsCard {
                 ArrowPreference(
                     title = "阴影",
-                    summary = "桌面与展开文件夹的 Prismal 阴影独立设置",
-                    enabled = masterEnabled && liquidEnabled,
+                    summary = if (os4Launcher) "当前文件夹阴影统一继承全局外阴影设置"
+                    else "桌面与展开文件夹的 Prismal 阴影独立设置",
+                    enabled = !os4Launcher && masterEnabled && liquidEnabled,
                     onClick = { open(Page.FolderEdge) },
                 )
             }

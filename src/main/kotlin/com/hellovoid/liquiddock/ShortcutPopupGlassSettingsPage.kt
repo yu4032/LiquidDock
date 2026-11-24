@@ -229,7 +229,7 @@ private fun ScopedMenuGlassSettingsPage(
             SettingsCard {
                 ArrowPreference(
                     title = "全部参数",
-                    summary = "折射、厚度、OS4 高光与阴影等独立设置；未调整时继承全局",
+                    summary = "折射、厚度、边缘高光与阴影等独立设置；未调整时继承全局",
                     enabled = masterEnabled && liquidEnabled,
                     onClick = onOpenAll,
                 )

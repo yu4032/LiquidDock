@@ -53,26 +53,26 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     fun groups(groups: List<LiquidSpecGroup>): List<SettingsBlock> = groups.flatMapIndexed { i, group ->
         listOf(SettingsBlock.Header("group.$i", group.title)) + group.specs.map { row(it) }
     }
-    page(Page.SoftGlassMaterial, "OS4 系统桌面原生柔光玻璃的折射与轮廓参数。", emptyList(), softGlass)
-    page(Page.SoftGlassColor, "OS4 系统桌面原生柔光玻璃的颜色、背景模糊与色调曲线。", emptyList(), softGlass)
-    page(Page.SoftGlassLighting, "OS4 系统桌面原生柔光玻璃的光源方向与反射参数。", emptyList(), softGlass)
+    page(Page.SoftGlassMaterial, "系统桌面原生柔光玻璃的折射与轮廓参数。", emptyList(), softGlass)
+    page(Page.SoftGlassColor, "系统桌面原生柔光玻璃的颜色、背景模糊与色调曲线。", emptyList(), softGlass)
+    page(Page.SoftGlassLighting, "系统桌面原生柔光玻璃的光源方向与反射参数。", emptyList(), softGlass)
     page(Page.LiquidMaterial, "控制玻璃主体的基础材质感", groups(liquidMaterialGroups), glass)
     page(Page.LiquidRefraction, "折射形状、位移、边缘衰减与表面几何", groups(liquidRefractionGroups), glass)
     page(Page.LiquidColor, "染色保留背景纹理，底色可纯色覆盖；另可调整色散与饱和度", groups(liquidColorGroups), glass)
     page(Page.LiquidShadow, "玻璃内部阴影颜色与柔和程度", groups(liquidShadowGroups), glass)
-    page(Page.LiquidLighting, "调节焦散、菲涅尔反射与光源方向，并集中调整 OS4 边缘反射和方向光。",
+    page(Page.LiquidLighting, "调节焦散、菲涅尔反射与光源方向，并集中调整边缘反射和方向光。",
         groups(liquidLightingGroups + liquidOs4Groups) + listOf(
             SettingsBlock.Header("lighting.edge", "外阴影与描边"),
             SettingsBlock.Link("lighting.edge.scope", text(R.string.page_glass_edge),
                 "Prismal 外阴影与光学描边，按作用域（Dock、图标、小组件…）独立调整", Page.GlassEdge),
         ), glass)
-    page(Page.LiquidSampling, "控制桌面玻璃在静止与滚动/动画时的采样分辨率。",
+    page(Page.LiquidSampling, "控制桌面玻璃的静止采样分辨率与动画期着色性能优化。",
         listOf(
-            SettingsBlock.Header("sampling.performance", "实时背景采样"),
+            SettingsBlock.Header("sampling.performance", "实时背景采样与性能"),
             toggle(ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE, "取消桌面玻璃静止时的下采样",
-                "禁用桌面原生在玻璃静止时的采样降级与下采样，保持完整采样分辨率"),
-            toggle(ConfigSchema.Glass.MOTION_DOWNSAMPLE, "滚动与动画时玻璃降采样",
-                "开启后在桌面滑动、打开文件夹等动画期间临时恢复下采样以节省 GPU 性能；关闭后动画期间也保持高分辨率采样"),
+                "禁用桌面原生在玻璃静止时的采样降级与下采样，保持完整采样分辨率；实时生效"),
+            toggle(ConfigSchema.Glass.MOTION_DOWNSAMPLE, "滚动与动画时简化玻璃着色",
+                "开启后在桌面滑动、打开文件夹等动画期间临时简化焦散等高开销着色以提升流畅度；关闭后动画期间保持完整着色；实时生效"),
         ), glass)
     numbers(Page.DockGeometry, "调整 Dock 的尺寸、位置、圆角与图标间距。", dockSpecs, dock)
     listOf(Page.GridLandscape to "landscape", Page.GridPortrait to "portrait").forEach { (p, orientation) ->
@@ -133,20 +133,30 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     glassEdgePageScopes.forEach { (p, scope) ->
         val label = glassEdgeScopeLabels.getValue(scope)
         val global = scope == GlassEdgeEffects.GLOBAL
+        val iconNumbersOs4Unavailable = scope == GlassEdgeEffects.ICON
         fun edgeNumber(config: ConfigKey<Int>, title: String, unit: String = ""): SettingsBlock.Row {
             val spec = IntSpec(config, title, unit)
             val key = if (global) config.name() else GlassEdgeEffects.key(scope, config)
-            return SettingsBlock.Row(key, key, title, spec.summary, number = spec, scope = if (global) null else scope)
+            return SettingsBlock.Row(
+                key, key, title, spec.summary,
+                number = spec,
+                scope = if (global) null else scope,
+                os4Unavailable = iconNumbersOs4Unavailable,
+            )
         }
         fun edgeToggle(config: ConfigKey<Boolean>, title: String, summary: String): SettingsBlock.Row {
             val key = if (global) config.name() else GlassEdgeEffects.key(scope, config)
             return SettingsBlock.Row(key, key, title, summary, toggle = config, scope = if (global) null else scope)
         }
         val blocks = buildList {
-            add(SettingsBlock.Info("edge.intro", "$label · 设置液态玻璃的 Prismal 外阴影，以及沿玻璃轮廓的折射描边。仅在对应组件启用液态玻璃时生效。" +
-                if (global) "各组件可继承全局参数或独立调整。" else "本页未单独设置的参数继承全局默认。"))
+            val scopeNote = when {
+                global -> "各组件可继承全局参数或独立调整。"
+                scope == GlassEdgeEffects.ICON -> "当前仅支持独立开关折射描边与外阴影，其余数值参数继承全局默认。"
+                else -> "本页未单独设置的参数继承全局默认。"
+            }
+            add(SettingsBlock.Info("edge.intro", "$label · 设置液态玻璃的 Prismal 外阴影，以及沿玻璃轮廓的折射描边。仅在对应组件启用液态玻璃时生效。$scopeNote"))
             add(SettingsBlock.Header("edge.backlight", "玻璃边缘光照"))
-            add(edgeToggle(ConfigSchema.Glass.BACKLIT_ENABLED, "启用折射光照描边", "同一条描边随折射背景与 OS4 光照连续变色"))
+            add(edgeToggle(ConfigSchema.Glass.BACKLIT_ENABLED, "启用折射光照描边", "同一条描边随折射背景与方向光照连续变色"))
             add(edgeNumber(ConfigSchema.Glass.BACKLIT_STRENGTH, "描边不透明度", "%"))
             add(edgeNumber(ConfigSchema.Glass.BACKLIT_WIDTH, "细线宽度", "dp"))
             add(edgeNumber(ConfigSchema.Glass.BACKLIT_EXTENT, "暗色区延伸范围", "%"))

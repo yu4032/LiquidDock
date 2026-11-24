@@ -237,12 +237,17 @@ __attribute__((used)) static void ld_observe_folder_preview_inset(struct ld_dart
             || frame_width <= frame_height * 1.5) return;
 
     static double cached_pad0 = 0.0, cached_big_w = 0.0;
+    static double cached_fw = 0.0, cached_fh = 0.0;
     if (original.x < frame_width * 0.25 && original.y < frame_height * 0.4 && original.width > 35.0) {
         cached_pad0 = fmin(original.x, original.y);
         cached_big_w = original.width;
+        cached_fw = frame_width;
+        cached_fh = frame_height;
     }
-    double pad0 = cached_pad0 > 1.0 ? cached_pad0 : fmin(frame_width, frame_height) * 0.1338;
-    double big_w = cached_big_w > 1.0 ? cached_big_w : original.width;
+    int cache_matches = cached_pad0 > 1.0 && cached_big_w > 1.0
+            && fabs(frame_width - cached_fw) < 1.0 && fabs(frame_height - cached_fh) < 1.0;
+    double pad0 = cache_matches ? cached_pad0 : fmin(frame_width, frame_height) * 0.1338;
+    double big_w = cache_matches ? cached_big_w : original.width;
     if (!ld_inset_folder_preview(frame_width, frame_height, pad0, big_w, inset, &original, &adjusted)) return;
 
     // Write only this build's transient frame. Leave shared preview data intact.

@@ -43,6 +43,14 @@ object Os4HookHealth {
         map
     }.getOrDefault(emptyMap())
 
+    private fun isDetached(key: String, status: Map<String, Boolean>): Boolean {
+        if (status[key] != false) return false
+        // If the feature was disabled when the launcher started, its hook was intentionally
+        // not armed yet; it requires a launcher restart rather than a detached-hook alarm.
+        if (status["boot_$key"] == false) return false
+        return true
+    }
+
     internal fun detachedMessage(
         page: Page,
         prefs: SharedPreferences,
@@ -57,64 +65,74 @@ object Os4HookHealth {
         val gridOn = prefs.getBoolean(ConfigSchema.Grid.ENABLED.name(), ConfigSchema.Grid.ENABLED.uiDefault())
         val dockOn = prefs.getBoolean(ConfigSchema.Dock.ENABLED.name(), ConfigSchema.Dock.ENABLED.uiDefault())
         val dividerOn = prefs.getBoolean(ConfigSchema.Divider.ENABLED.name(), ConfigSchema.Divider.ENABLED.uiDefault())
-        val glassOn = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault())
+        val glassOn = prefs.getBoolean(ConfigSchema.Glass.ENABLED.name(), ConfigSchema.Glass.ENABLED.uiDefault()) ||
+            prefs.getBoolean(
+                ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+                ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
+            )
         val iconGlassOn = glassOn && prefs.getBoolean(
             ConfigSchema.Glass.ICON_GLASS.name(), ConfigSchema.Glass.ICON_GLASS.uiDefault())
-        val iconCorner = prefs.getInt(
-            ConfigSchema.Glass.ICON_CORNER_RADIUS.name(),
-            ConfigSchema.Glass.ICON_CORNER_RADIUS.uiDefault(),
-        )
+        val iconCornerKey = ConfigSchema.Glass.ICON_CORNER_RADIUS
+        val iconCornerTenthsKey = "${iconCornerKey.name()}_tenths"
+        val iconCorner = if (prefs.contains(iconCornerTenthsKey)) {
+            prefs.getInt(iconCornerTenthsKey, iconCornerKey.uiDefault())
+        } else {
+            prefs.getInt(iconCornerKey.name(), iconCornerKey.uiDefault())
+        }
         val widgetGlassOn = glassOn && prefs.getBoolean(
             ConfigSchema.Glass.WIDGET_GLASS.name(), ConfigSchema.Glass.WIDGET_GLASS.uiDefault())
-        val recentsBlurOn = prefs.getInt(
-            ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name(),
-            ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.uiDefault(),
-        ) != 100
+        val recentsBlurOn = listOf(
+            ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,
+            ConfigSchema.Recents.FOLDER_BLUR_PERCENT,
+            ConfigSchema.Recents.SHORTCUT_BLUR_PERCENT,
+            ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT,
+            ConfigSchema.Workstation.WS_ALL_APPS_BLUR_PERCENT,
+        ).any { key -> prefs.getInt(key.name(), key.uiDefault()) != 100 }
 
         return when (page) {
             Page.Grid, Page.GridBasics, Page.Workstation ->
-                if (gridOn && status["grid"] == false) {
+                if (gridOn && isDetached("grid", status)) {
                     "桌面网格布局 / 旋转 Hook 已脱钩，自定义行列数可能未生效。"
                 } else null
             Page.Dock ->
-                if (dockOn && status["dock"] == false) {
+                if (dockOn && isDetached("dock", status)) {
                     "Dock 几何参数 Hook 已脱钩，宽高、间距或底边距调整可能未生效。"
                 } else null
             Page.Divider ->
-                if (dividerOn && status["divider"] == false) {
+                if (dividerOn && isDetached("divider", status)) {
                     "Dock 分割线 Hook 已脱钩，分割线绘制可能未生效。"
                 } else null
             Page.GlassIcons -> when {
-                iconGlassOn && status["glass_icons"] == false ->
+                iconGlassOn && isDetached("glass_icons", status) ->
                     "图标玻璃 Hook 已脱钩，图标材质与圆角可能未生效。"
-                iconGlassOn && iconCorner > 0 && status["glass_icon_radius"] == false ->
+                iconGlassOn && iconCorner > 0 && isDetached("glass_icon_radius", status) ->
                     "图标圆角 / 旋转同步 Hook 已脱钩，旋转后圆角可能无法自动跟随尺寸变化。"
                 else -> null
             }
             Page.GlassWidgets ->
-                if (widgetGlassOn && status["glass_widgets"] == false) {
+                if (widgetGlassOn && isDetached("glass_widgets", status)) {
                     "小组件玻璃 / RemoteViews Hook 已脱钩，小组件材质或组件隐藏可能未生效。"
                 } else null
             Page.SoftGlass, Page.SoftGlassComponents, Page.Liquid, Page.GlassHub -> when {
-                glassOn && status["glass"] == false ->
+                glassOn && isDetached("glass", status) ->
                     "原生玻璃材质 Hook 已脱钩，玻璃效果可能未生效。"
                 (page == Page.SoftGlass || page == Page.SoftGlassComponents) &&
-                    recentsBlurOn && status["recents"] == false ->
+                    recentsBlurOn && isDetached("recents", status) ->
                     "多任务后台模糊 Hook 已脱钩，后台模糊度调整可能未生效。"
                 else -> null
             }
             Page.Home -> {
                 val detached = ArrayList<String>()
-                if (glassOn && status["glass"] == false) detached.add("原生玻璃")
-                if (iconGlassOn && status["glass_icons"] == false) detached.add("图标玻璃")
-                else if (iconGlassOn && iconCorner > 0f && status["glass_icon_radius"] == false) {
+                if (glassOn && isDetached("glass", status)) detached.add("原生玻璃")
+                if (iconGlassOn && isDetached("glass_icons", status)) detached.add("图标玻璃")
+                else if (iconGlassOn && iconCorner > 0 && isDetached("glass_icon_radius", status)) {
                     detached.add("图标圆角旋转同步")
                 }
-                if (widgetGlassOn && status["glass_widgets"] == false) detached.add("小组件玻璃")
-                if (gridOn && status["grid"] == false) detached.add("桌面网格")
-                if (dockOn && status["dock"] == false) detached.add("Dock 几何")
-                if (dividerOn && status["divider"] == false) detached.add("Dock 分割线")
-                if (recentsBlurOn && status["recents"] == false) detached.add("后台模糊")
+                if (widgetGlassOn && isDetached("glass_widgets", status)) detached.add("小组件玻璃")
+                if (gridOn && isDetached("grid", status)) detached.add("桌面网格")
+                if (dockOn && isDetached("dock", status)) detached.add("Dock 几何")
+                if (dividerOn && isDetached("divider", status)) detached.add("Dock 分割线")
+                if (recentsBlurOn && isDetached("recents", status)) detached.add("后台模糊")
                 if (detached.isEmpty()) null
                 else "检测到以下功能 Hook 脱钩：${detached.joinToString("、")}。请尝试重启桌面或检查模块日志。"
             }

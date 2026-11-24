@@ -186,7 +186,7 @@ internal fun ScopedGlassSettingsPage(
                     mutableStateOf(prefs.getBoolean(normalsKey, inherited))
                 }
                 SwitchPreference(
-                    title = "OS4 法线与方向光",
+                    title = "边缘法线与方向光",
                     summary = if (prefs.contains(normalsKey))
                         "独立设置；边缘法线与方向光强度可视化"
                     else

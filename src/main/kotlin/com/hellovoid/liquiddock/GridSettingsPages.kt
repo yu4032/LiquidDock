@@ -64,7 +64,7 @@ internal fun GridPage(
                     prefs,
                     ConfigSchema.Grid.ENABLED,
                     "自由主界面网格",
-                    "允许 2×2 到 10×6 的工作区布局；全屏居中、分屏跟随系统 pane 对齐；重启桌面生效",
+                    "允许 2×2 到 10×10 的自定义工作区行列布局（横竖屏自动交换）；重启桌面生效",
                     masterEnabled,
                 ) { customGrid = it }
             }
@@ -155,7 +155,7 @@ internal fun GridBasicsPage(
     DenseSettingsList(
         padding,
         stringResource(R.string.page_grid_basics),
-        "调整网格行列数、图标大小与小组件宽度。",
+        "调整图标大小、大文件夹、小组件尺寸、工作区网格与文件夹展开行列。",
         focusItemIndex = searchFocus?.let { customDenseFocusIndex(Page.GridBasics, it.key) },
         focusSequence = searchFocus?.sequence,
     ) {
