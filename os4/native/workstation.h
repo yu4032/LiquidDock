@@ -258,6 +258,7 @@ static inline int ld_ws_is_const_ro(uintptr_t addr)
 
 static inline void ld_ws_apply_dock_height(uintptr_t size)
 {
+    if (!g_home_options.ws.taskbar_mode) return;
     double dh = g_home_options.ws.dock_height;
     if (!size || dh == 0.0 || !isfinite(dh)) return;
     if (ld_ws_is_const_ro(size)) return;
@@ -350,10 +351,8 @@ __attribute__((used)) static void ld_ws_post_margin_bottom(struct ld_ws_ctx *c)
     uint64_t orig_bits = 0;
     memcpy(&orig_bits, &mb, sizeof orig_bits);
     __atomic_store_n(&g_ws_orig_mb_bits, orig_bits, __ATOMIC_RELAXED);
-    if (g_home_options.ws.taskbar_mode) {
+    if (g_home_options.ws.taskbar_mode || v_off != 0.0) {
         mb = -v_off;
-    } else if (v_off != 0.0) {
-        mb -= v_off;
     } else {
         return;
     }
@@ -571,10 +570,8 @@ __attribute__((used)) static void ld_ws_on_dock_build_content(struct ld_ws_ctx *
         if (isfinite(tmp) && tmp > 1.0) orig_mb = tmp;
     }
     double v_off = ld_ws_effective_dock_v_offset();
-    if (g_home_options.ws.taskbar_mode) {
+    if (g_home_options.ws.taskbar_mode || v_off != 0.0) {
         mb = -v_off;
-    } else if (v_off != 0.0) {
-        mb = orig_mb - v_off;
     } else {
         return;
     }
@@ -653,7 +650,8 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
                 }
             }
         }
-        if (g_home_options.ws.dock_height != 0.0 && isfinite(g_home_options.ws.dock_height) &&
+        if (g_home_options.ws.taskbar_mode &&
+            g_home_options.ws.dock_height != 0.0 && isfinite(g_home_options.ws.dock_height) &&
             sized0 && !ld_ws_is_const_ro(sized0)) {
             uintptr_t h_box = ld_heap_pointer(&dc, sized0, 0x13);
             double h_val = 0.0;
@@ -739,10 +737,10 @@ __attribute__((used)) static void ld_ws_on_bg_sync(struct ld_dart_context *c)
         ld_blog("ws_bg_sync_diag: taskbar=%d p_b=%.1f size=(%.1f,%.1f)",
                 g_home_options.ws.taskbar_mode, p_b, sw, sh);
     }
+    if (!g_home_options.ws.taskbar_mode) return;
     if (size && g_home_options.ws.dock_height != 0.0) {
         ld_ws_apply_dock_height(size);
     }
-    if (!g_home_options.ws.taskbar_mode) return;
     double dw = ld_ws_device_width();
     double zero = 0.0;
     if (size && dw > 100.0 && !ld_ws_is_const_ro(size)) {

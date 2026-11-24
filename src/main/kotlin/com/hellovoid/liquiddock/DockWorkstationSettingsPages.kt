@@ -48,6 +48,7 @@ internal fun DockPage(
             ),
         )
     }
+    val availability = LocalSettingsAvailability.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -73,7 +74,7 @@ internal fun DockPage(
                 ) { dockEnabled = it }
             }
         }
-        dockEntries.forEach { entry ->
+        dockEntries.filter { availability.allows(it.page) }.forEach { entry ->
             item {
                 ModernFeatureCard(
                     title = stringResource(entry.titleRes),
@@ -147,6 +148,7 @@ internal fun WorkstationPage(
         multiWindowEnabled = enabledState
         stageCount = countState
     }
+    val availability = LocalSettingsAvailability.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(

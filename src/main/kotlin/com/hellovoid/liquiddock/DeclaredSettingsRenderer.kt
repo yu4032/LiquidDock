@@ -104,9 +104,15 @@ internal fun DeclaredSettingsPage(
         ),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(if (hideRows) meta.blocks.filterNot {
+        val visibleBlocks = (if (hideRows) meta.blocks.filterNot {
             it is SettingsBlock.Row || it is SettingsBlock.Header
-        } else meta.blocks, key = { it.id }) { block ->
+        } else meta.blocks).filterNot { block ->
+            os4Launcher && (
+                (block is SettingsBlock.Row && block.os4Unavailable) ||
+                (block is SettingsBlock.Link && !availability.allows(block.destination))
+            )
+        }
+        items(visibleBlocks, key = { it.id }) { block ->
             when (block) {
                 is SettingsBlock.Info -> PageHeader(meta.title, block.text)
                 is SettingsBlock.Header -> SmallTitle(block.title)

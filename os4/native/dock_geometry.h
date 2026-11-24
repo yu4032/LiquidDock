@@ -75,19 +75,6 @@ __attribute__((used)) static void ld_observe_dock_background(struct ld_dart_cont
                 }
                 return;
             }
-        } else if (g_home_options.ws.dock_height != 0.0 && size) {
-            ld_ws_apply_dock_height(size);
-            if (g_home_options.dock.width == 0 && g_home_options.dock.corner == 0) return;
-            if (!ld_dock_active(c)) return;
-            struct ld_dock_conf no_h = g_home_options.dock;
-            no_h.height = 0.0;
-            double width = 0, height = 0, corner = 0;
-            if (!ld_read_heap(size + 7, &width, 8) || !ld_read_heap(size + 0xf, &height, 8)
-                    || !ld_read_heap(params + 0xb, &corner, 8)
-                    || !ld_dock_background(&no_h, &width, &height, &corner)) return;
-            if (!ld_ws_is_const_ro(size)) memcpy((void *)(size + 7), &width, 8);
-            if (!ld_ws_is_const_ro(params)) memcpy((void *)(params + 0xb), &corner, 8);
-            return;
         }
     }
     if(g_home_options.dock.width==0 && g_home_options.dock.height==0 && g_home_options.dock.corner==0) return;
@@ -152,7 +139,8 @@ static void *g_orig_dock_window_height __attribute__((used));
 static inline double ld_dock_effective_height_delta(struct ld_dart_context *c)
 {
     if (__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED) &&
-        g_home_options.ws.dock_custom && g_home_options.ws.dock_height != 0.0) {
+        g_home_options.ws.dock_custom && g_home_options.ws.taskbar_mode &&
+        g_home_options.ws.dock_height != 0.0) {
         return g_home_options.ws.dock_height;
     }
     if (g_home_options.dock.height > 0.0 && ld_dock_active(c)) {

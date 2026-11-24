@@ -208,10 +208,15 @@ static void ld_folder_size_install(const struct native_api *api, const ld_lib_in
 
 static void *g_orig_preview_inset;
 static uintptr_t g_preview_inset_resume;
+static volatile int g_fls_ten_icon_inset_active __attribute__((used));
 
 __attribute__((used)) static void ld_observe_folder_preview_inset(struct ld_dart_context *c)
 {
     c->reserved = (uintptr_t)g_orig_preview_inset;
+    /* When folder_layout_sync directly updates FolderLayout4x2Grid10.previewItemInfos,
+     * both preview rendering and open/close/return animations read the adjusted rects
+     * directly; skip the render-only fallback to avoid double-applying the inset. */
+    if (__atomic_load_n(&g_fls_ten_icon_inset_active, __ATOMIC_ACQUIRE)) return;
     double inset = (double)__atomic_load_n(&g_home_options.folder_preview_inset, __ATOMIC_ACQUIRE);
     if (inset == 0.0) return;
 

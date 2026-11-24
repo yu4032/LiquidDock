@@ -341,7 +341,23 @@ internal fun SettingsSearchScreen(
             keyboard?.show()
         }
     }
-    val results = remember(query, catalog) { filterSettingsSearch(catalog, query) }
+    val availability = LocalSettingsAvailability.current
+    val os4HiddenKeys = remember {
+        setOf(
+            ConfigSchema.Glass.WIDGET_DARK_CONTENT.name(),
+            ConfigSchema.Glass.WIDGET_SIZE_OFFSET.name(),
+            ConfigSchema.Glass.SMALL_FOLDER_GLASS.name(),
+            ConfigSchema.Glass.SMALL_FOLDER_SIZE_OFFSET.name(),
+            ConfigSchema.Glass.LARGE_FOLDER_SIZE_OFFSET.name(),
+        )
+    }
+    val visibleCatalog = remember(catalog, availability) {
+        if (!availability.isOs4Launcher()) catalog
+        else catalog.filter { item ->
+            availability.allows(item.page) && (item.key == null || item.key !in os4HiddenKeys)
+        }
+    }
+    val results = remember(query, visibleCatalog) { filterSettingsSearch(visibleCatalog, query) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(

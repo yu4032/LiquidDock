@@ -29,6 +29,7 @@
 #include <string.h>
 #include "bootlog.h"
 #include "executable_range.h"
+#include "folder_preview_inset.h"
 #include "home_margins.h"
 #include "workstation.h"
 
@@ -261,6 +262,121 @@ static unsigned ld_fls_shift_preview_items(uintptr_t strat, uintptr_t x28,
     return shifted;
 }
 
+/* Synchronize FolderLayout4x2Grid10 (5x2 ten-icon) previewItemInfos in place so
+ * preview rendering, folder open/close animations, and app launch/return animations
+ * all target the exact same adjusted icon rectangles. */
+#define LD_FLS_TEN_ICON_COUNT 13u
+static int g_fls_ti_valid;
+static uint32_t g_fls_ti_cid;
+static double g_fls_ti_fw, g_fls_ti_fh, g_fls_ti_pad0, g_fls_ti_big_w;
+static double g_fls_ti_applied_inset;
+static struct ld_folder_preview_rect g_fls_ti_orig[LD_FLS_TEN_ICON_COUNT];
+
+static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t null_low,
+                                       uint32_t cid, int span_x, int span_y,
+                                       double fw, double fh, double ph, double pv,
+                                       int from_cal_item_size)
+{
+    if (!g_fls_list_off || span_x != 4 || span_y != 2 || fw <= fh * 1.5) return;
+
+    uint32_t lw = 0;
+    if (!ld_read_heap(strat + g_fls_list_off, &lw, sizeof lw) || !(lw & 1u) || lw < 0x100000u) {
+        if (from_cal_item_size && g_fls_ti_valid && cid == g_fls_ti_cid) g_fls_ti_valid = 0;
+        return;
+    }
+    uintptr_t list = (uintptr_t)lw + (x28 << 32);
+    uint32_t lhdr = 0, len_smi = 0, aw = 0;
+    if ((null_low && (uint32_t)list == null_low) ||
+        !ld_read_heap(list - 1u, &lhdr, sizeof lhdr) ||
+        ((lhdr >> 12) & 0xfffffu) != 0x5cu ||
+        !ld_read_heap(list + 0xbu, &len_smi, sizeof len_smi) ||
+        (len_smi & 1u) ||
+        !ld_read_heap(list + 0xfu, &aw, sizeof aw) ||
+        !(aw & 1u) || aw < 0x100000u) {
+        if (from_cal_item_size && g_fls_ti_valid && cid == g_fls_ti_cid) g_fls_ti_valid = 0;
+        return;
+    }
+    unsigned len = len_smi >> 1;
+    if (len != LD_FLS_TEN_ICON_COUNT) {
+        if (from_cal_item_size && g_fls_ti_valid && cid == g_fls_ti_cid) g_fls_ti_valid = 0;
+        return;
+    }
+    uintptr_t arr = (uintptr_t)aw + (x28 << 32);
+
+    uintptr_t items[LD_FLS_TEN_ICON_COUNT];
+    struct ld_folder_preview_rect cur[LD_FLS_TEN_ICON_COUNT];
+    for (unsigned i = 0; i < LD_FLS_TEN_ICON_COUNT; i++) {
+        uint32_t ew = 0;
+        if (!ld_read_heap(arr + 0xfu + (size_t)i * 4u, &ew, sizeof ew) ||
+            !(ew & 1u) || ew < 0x100000u)
+            return;
+        uintptr_t item = (uintptr_t)ew + (x28 << 32);
+        if ((null_low && (uint32_t)item == null_low) || ld_ws_is_const_ro(item)) return;
+        double w = 0.0, h = 0.0, x = 0.0, y = 0.0;
+        if (!ld_read_heap(item + 7u, &w, sizeof w) ||
+            !ld_read_heap(item + 15u, &h, sizeof h) ||
+            !ld_read_heap(item + 23u, &x, sizeof x) ||
+            !ld_read_heap(item + 31u, &y, sizeof y) ||
+            !isfinite(w) || !isfinite(h) || !isfinite(x) || !isfinite(y) ||
+            w < 2.0 || w > 500.0 || h < 2.0 || h > 500.0)
+            return;
+        items[i] = item;
+        cur[i] = (struct ld_folder_preview_rect){x - ph, y - pv, w, h};
+    }
+
+    if (from_cal_item_size || !g_fls_ti_valid || cid != g_fls_ti_cid ||
+        fabs(fw - g_fls_ti_fw) > 0.5 || fabs(fh - g_fls_ti_fh) > 0.5) {
+        double pad0 = fmin(cur[0].x, cur[0].y);
+        double big_w = cur[0].width;
+        if (pad0 <= 1.0 || big_w < 30.0) return;
+        for (unsigned i = 0; i < LD_FLS_TEN_ICON_COUNT; i++) g_fls_ti_orig[i] = cur[i];
+        g_fls_ti_cid = cid;
+        g_fls_ti_fw = fw;
+        g_fls_ti_fh = fh;
+        g_fls_ti_pad0 = pad0;
+        g_fls_ti_big_w = big_w;
+        g_fls_ti_applied_inset = 0.0;
+        g_fls_ti_valid = 1;
+    }
+
+    double inset = (double)__atomic_load_n(&g_home_options.folder_preview_inset, __ATOMIC_ACQUIRE);
+    struct ld_folder_preview_rect target0 = g_fls_ti_orig[0];
+    if (inset != 0.0) {
+        if (!ld_inset_folder_preview(fw, fh, g_fls_ti_pad0, g_fls_ti_big_w, inset,
+                                     &g_fls_ti_orig[0], &target0))
+            return;
+    }
+    if (!from_cal_item_size && fabs(inset - g_fls_ti_applied_inset) < 0.01 &&
+        fabs(cur[0].x - target0.x) < 0.05 && fabs(cur[0].y - target0.y) < 0.05 &&
+        fabs(cur[0].width - target0.width) < 0.05) {
+        return;
+    }
+
+    for (unsigned i = 0; i < LD_FLS_TEN_ICON_COUNT; i++) {
+        struct ld_folder_preview_rect adj = g_fls_ti_orig[i];
+        if (inset != 0.0 &&
+            !ld_inset_folder_preview(fw, fh, g_fls_ti_pad0, g_fls_ti_big_w, inset,
+                                     &g_fls_ti_orig[i], &adj)) {
+            adj = g_fls_ti_orig[i];
+        }
+        double nx = adj.x + ph;
+        double ny = adj.y + pv;
+        memcpy((void *)(items[i] + 7u), &adj.width, sizeof adj.width);
+        memcpy((void *)(items[i] + 15u), &adj.height, sizeof adj.height);
+        memcpy((void *)(items[i] + 23u), &nx, sizeof nx);
+        memcpy((void *)(items[i] + 31u), &ny, sizeof ny);
+    }
+    g_fls_ti_applied_inset = inset;
+    __atomic_store_n(&g_fls_ten_icon_inset_active, 1, __ATOMIC_RELEASE);
+    static unsigned ti_logs;
+    if (ti_logs++ < 12u) {
+        ld_blog("folder_layout_sync: ten-icon preview inset synced cid=0x%x inset=%.1f pad0=%.2f big_w=%.2f orig0=(%.2f,%.2f,%.2f) adj0=(%.2f,%.2f,%.2f)",
+                cid, inset, g_fls_ti_pad0, g_fls_ti_big_w,
+                g_fls_ti_orig[0].x, g_fls_ti_orig[0].y, g_fls_ti_orig[0].width,
+                target0.x, target0.y, target0.width);
+    }
+}
+
 static struct ld_fls_cid_entry *ld_fls_find_cid(uint32_t cid)
 {
     for (int i = 0; i < LD_FLS_MAX_CIDS; i++) {
@@ -333,6 +449,10 @@ __attribute__((used)) static void ld_fls_post_cal_item_size(struct ld_ws_ctx *c)
     if (!isfinite(title_h) || title_h < -1.0 || title_h > ch * 0.85) return;
 
     ld_fls_record_cid(cid, span_x, span_y, title_h);
+    uint64_t null_obj = 0;
+    if (c->x[27]) ld_read_heap((uintptr_t)c->x[27] + 64u, &null_obj, sizeof null_obj);
+    ld_fls_sync_ten_icon_inset(strat, c->x[28], (uint32_t)null_obj,
+                               cid, span_x, span_y, fw, fh, ph, pv, 1);
 }
 
 __attribute__((used)) static void ld_fls_post_put_if_absent(struct ld_ws_ctx *c)
@@ -373,19 +493,23 @@ __attribute__((used)) static void ld_fls_post_put_if_absent(struct ld_ws_ctx *c)
     double new_ph = (cw * (double)e->span_x - fw) * 0.5;
     double new_pv = (ch * (double)e->span_y - fh - e->title_h) * 0.5;
     if (!isfinite(new_ph) || !isfinite(new_pv)) return;
-    if (fabs(cur_ph - new_ph) < 0.01 && fabs(cur_pv - new_pv) < 0.01) return;
-    if (ld_ws_is_const_ro(strat)) return;
-
-    double dph = new_ph - cur_ph;
-    double dpv = new_pv - cur_pv;
-    memcpy((void *)(strat + g_fls_ph_off), &new_ph, sizeof new_ph);
-    memcpy((void *)(strat + g_fls_pv_off), &new_pv, sizeof new_pv);
-    unsigned shifted = ld_fls_shift_preview_items(strat, c->x[28], (uint32_t)null_obj, dph, dpv);
-    static unsigned sync_logs;
-    if (sync_logs++ < 16u) {
-        ld_blog("folder_layout_sync: synced cid=0x%x span=%dx%d cw=%.2f ch=%.2f ph=%.2f->%.2f pv=%.2f->%.2f items=%u",
-                cid, e->span_x, e->span_y, cw, ch, cur_ph, new_ph, cur_pv, new_pv, shifted);
+    double active_ph = cur_ph, active_pv = cur_pv;
+    if ((fabs(cur_ph - new_ph) >= 0.01 || fabs(cur_pv - new_pv) >= 0.01) && !ld_ws_is_const_ro(strat)) {
+        double dph = new_ph - cur_ph;
+        double dpv = new_pv - cur_pv;
+        memcpy((void *)(strat + g_fls_ph_off), &new_ph, sizeof new_ph);
+        memcpy((void *)(strat + g_fls_pv_off), &new_pv, sizeof new_pv);
+        unsigned shifted = ld_fls_shift_preview_items(strat, c->x[28], (uint32_t)null_obj, dph, dpv);
+        active_ph = new_ph;
+        active_pv = new_pv;
+        static unsigned sync_logs;
+        if (sync_logs++ < 16u) {
+            ld_blog("folder_layout_sync: synced cid=0x%x span=%dx%d cw=%.2f ch=%.2f ph=%.2f->%.2f pv=%.2f->%.2f items=%u",
+                    cid, e->span_x, e->span_y, cw, ch, cur_ph, new_ph, cur_pv, new_pv, shifted);
+        }
     }
+    ld_fls_sync_ten_icon_inset(strat, c->x[28], (uint32_t)null_obj,
+                               cid, e->span_x, e->span_y, fw, fh, active_ph, active_pv, 0);
 }
 
 LD_WS_POST_OBSERVER(repl_fls_cal_item_size, ld_fls_post_cal_item_size, g_orig_fls_cal_item_size)
