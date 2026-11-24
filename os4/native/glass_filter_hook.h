@@ -29,14 +29,15 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
     uintptr_t vt = 0;
     uintptr_t expect = __atomic_load_n(&g_glass_vt_expect, __ATOMIC_ACQUIRE);
     if (!expect) {
-        if (!from_unwrap) return;
         if (!ld_read_heap((uintptr_t)obj, &vt, 8) || !vt) return;
-        /* Learn DlGlassImageFilter vtable dynamically from Unwrap's first returned object. */
+        /* Learn DlGlassImageFilter vtable dynamically from the first Unwrap or
+         * AcquireGlassBlurTextures call (both pass a DlGlassImageFilter*), so
+         * the very first shared-cache pass (e.g. large folder) is never skipped. */
         if (g_glass_eng_base && vt > g_glass_eng_base && vt < g_glass_eng_base + 0x4000000u) {
             __atomic_store_n(&g_glass_vt_expect, vt, __ATOMIC_RELEASE);
             expect = vt;
-            ld_blog("glass filter vtable learned dynamically: %p (off=0x%lx)",
-                    (void *)vt, (unsigned long)(vt - g_glass_eng_base));
+            ld_blog("glass filter vtable learned dynamically: %p (off=0x%lx from_unwrap=%d)",
+                    (void *)vt, (unsigned long)(vt - g_glass_eng_base), from_unwrap);
         } else {
             return;
         }
@@ -59,7 +60,9 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
         is_small_icon = g_ld_gse_tls_is_small_icon;
 #endif
         int downsample_icon = is_small_icon &&
-            __atomic_load_n(&g_prismal_icon_downsample, __ATOMIC_RELAXED);
+            (__atomic_load_n(&g_prismal_icon_downsample, __ATOMIC_RELAXED) ||
+             (__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) &&
+              __atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)));
         int32_t rate_i = 0;
         uint8_t *rate_ptr = (uint8_t *)obj + 0x34u;
         memcpy(&rate_i, rate_ptr, sizeof(rate_i));
@@ -102,8 +105,6 @@ static bool ld_acquire_blur_hook(void *canvas, void *filter, void *a2, void *a3,
         float orig_s0 = s0;
         if ((g_home_options.prismal.disable_stationary_downsample ||
              __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE)) &&
-            (!__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) ||
-             !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)) &&
             s0 > 0.0f && s0 < 1.0f) {
             s0 = 1.0f;
         }

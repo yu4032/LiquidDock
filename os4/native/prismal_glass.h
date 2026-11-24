@@ -658,7 +658,8 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
                    | ((blur_px >= 0.5f) ? 2u : 0u)
                    | (opt->show_normals ? 4u : 0u)
                    | (has_sharp_tex ? 8u : 0u)
-                   | (__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED) ? 16u : 0u);
+                   | ((__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) &&
+                       __atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)) ? 16u : 0u);
 
     ld_write_vec2(ubo, 0x08u, (float)opt->backdrop_scale_x, (float)opt->backdrop_scale_y);
     ld_write_f32(ubo, 0x1cu, fmaxf(0.0f, (float)opt->refraction_inset));
@@ -817,14 +818,13 @@ static __thread int g_tls_in_glass_acquire;
 
 __attribute__((used)) static int ld_compose_should_upscale(void)
 {
-    int allow_motion_ds = __atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED);
     return g_tls_in_glass_acquire &&
-           __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED) &&
-           (!allow_motion_ds || !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED));
+           __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED);
 }
 
 __attribute__((used)) static const ld_sp_t *ld_compose_resolve_wp(const ld_sp_t *snap, const ld_sp_t *wp)
 {
+    if (!g_tls_in_glass_acquire) return wp;
     if (wp && wp->ptr) {
         if (wp->ptr != g_tls_cached_wp_tex.ptr) {
             ld_sp_t old = g_tls_cached_wp_tex;
@@ -886,8 +886,6 @@ static void repl_make_base_blur(ld_sp_t *sret, void *ctx, const ld_sp_t *src_tex
         return;
     }
     if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) &&
-        (!__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) ||
-         !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)) &&
         scale > 0.0f && scale < 1.0f) {
         scale = 1.0f;
     }
@@ -903,8 +901,6 @@ static void repl_make_reflect_blur(ld_sp_t *sret, void *ctx, const ld_sp_t *src_
         return;
     }
     if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) &&
-        (!__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) ||
-         !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)) &&
         scale > 0.0f && scale < 1.0f) {
         scale = 1.0f;
     }
