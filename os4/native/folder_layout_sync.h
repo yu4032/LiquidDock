@@ -283,7 +283,6 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
                                        int from_cal_item_size)
 {
     if (!g_fls_list_off || span_x != 4 || span_y != 2 || fw <= fh * 1.5) return;
-    if (!from_cal_item_size && (!g_fls_ti_valid || cid != g_fls_ti_cid)) return;
 
     uint32_t lw = 0;
     if (!ld_read_heap(strat + g_fls_list_off, &lw, sizeof lw) || !(lw & 1u) || lw < 0x100000u) {
@@ -342,9 +341,10 @@ static void ld_fls_sync_ten_icon_inset(uintptr_t strat, uintptr_t x28, uint32_t 
         g_fls_ti_big_w = big_w;
         g_fls_ti_applied_inset = 0.0;
         g_fls_ti_valid = 1;
-    } else if (from_cal_item_size) {
-        /* calItemSize may rebuild only some entries. Per item: an entry still equal to
-         * what we wrote is ours (keep its stock baseline); anything else is stock. */
+    } else {
+        /* Either hook may (re)build the list, possibly only some entries. Per item: an
+         * entry still equal to what we wrote is ours (keep its stock baseline);
+         * anything else is stock. */
         unsigned fresh = 0;
         for (unsigned i = 0; i < LD_FLS_TEN_ICON_COUNT; i++) {
             int ours = g_fls_ti_written_valid &&
