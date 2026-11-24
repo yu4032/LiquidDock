@@ -64,7 +64,7 @@ __attribute__((used)) static void ld_observe_dock_background(struct ld_dart_cont
             double corner = 0.0;
             if (size) {
                 if (dw > 100.0 && !ld_ws_is_const_ro(size)) {
-                    double taskbar_w = dw + 16.0;
+                    double taskbar_w = dw + 32.0;
                     memcpy((void *)(size + 7), &taskbar_w, 8);
                 }
                 if (g_home_options.ws.dock_height != 0.0) {

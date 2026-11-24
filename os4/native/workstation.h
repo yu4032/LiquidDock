@@ -223,25 +223,31 @@ static inline double ld_ws_fallback_density(void)
 
 static inline double ld_ws_device_width(void)
 {
-    uint64_t bits = __atomic_load_n(&g_ws_device_width_bits, __ATOMIC_RELAXED);
-    if (bits) {
-        double d = 0.0;
-        memcpy(&d, &bits, sizeof d);
-        if (isfinite(d) && d > 100.0) return d;
-    }
-    /* Fallback to the current rotation's logical screen width so taskbar_mode
-     * never falls through with dw == 0 before GlobalHotseatWindowManager._buildDockLayout
-     * runs (which otherwise triggers a 220dp -> full-width spring zoom on AllApps/mode transitions). */
+    double screen_lw = 0.0;
     uint64_t packed = atomic_load_explicit(&g_ld_screen_state, memory_order_acquire);
     unsigned pw = (unsigned)((packed >> 16) & UINT64_C(0xffff));
     if (pw >= 320u) {
         double dens = ld_ws_fallback_density();
         if (dens > 0.5) {
             double lw = (double)pw / dens;
-            if (isfinite(lw) && lw > 100.0 && lw < 8192.0) return lw;
+            if (isfinite(lw) && lw > 100.0 && lw < 8192.0) screen_lw = lw;
         }
     }
-    return 0.0;
+    double cached = 0.0;
+    uint64_t bits = __atomic_load_n(&g_ws_device_width_bits, __ATOMIC_RELAXED);
+    if (bits) {
+        double d = 0.0;
+        memcpy(&d, &bits, sizeof d);
+        if (isfinite(d) && d > 100.0 && d < 8192.0) cached = d;
+    }
+    /* Prefer true logical screen width from g_ld_screen_state when available:
+     * in portrait AllApps, DockLayout.width (layout+7) can be narrower than the
+     * screen width (e.g. 655.3dp vs 668.4dp), which otherwise shrinks the
+     * taskbar background inward from the left/right screen edges. */
+    if (screen_lw > 100.0) {
+        return (cached > screen_lw && cached < screen_lw + 64.0) ? cached : screen_lw;
+    }
+    return cached;
 }
 
 static inline int ld_ws_is_const_ro(uintptr_t addr)
@@ -545,13 +551,13 @@ __attribute__((used)) static void ld_ws_on_dock_build_content(struct ld_ws_ctx *
         memcpy(&bits, &dw, sizeof bits);
         __atomic_store_n(&g_ws_device_width_bits, bits, __ATOMIC_RELAXED);
     }
-    if (!ld_read_heap(layout + 0x17, &mb, sizeof mb) || !isfinite(mb) || mb < 0.0) return;
+    if (!ld_read_heap(layout + 0x17, &mb, sizeof mb) || !isfinite(mb)) return;
     static uintptr_t last_layout;
     static double last_orig_mb;
     if (layout != last_layout) {
         last_layout = layout;
-        last_orig_mb = mb;
-    } else {
+        if (mb >= 0.0) last_orig_mb = mb;
+    } else if (last_orig_mb >= 0.0) {
         mb = last_orig_mb;
     }
     if (!__atomic_load_n(&g_ws_is_laptop_mode, __ATOMIC_RELAXED)) return;
@@ -568,7 +574,7 @@ __attribute__((used)) static void ld_ws_on_dock_build_content(struct ld_ws_ctx *
     if (g_home_options.ws.taskbar_mode) {
         mb = -v_off;
     } else if (v_off != 0.0) {
-        mb -= v_off;
+        mb = orig_mb - v_off;
     } else {
         return;
     }
@@ -631,19 +637,19 @@ __attribute__((used)) static void ld_ws_post_dock_build_content(struct ld_ws_ctx
             if (w_box && !ld_ws_is_const_ro(w_box) && !ld_ws_is_const_ro(pos0) &&
                 !ld_ws_is_const_ro(sized0) &&
                 ld_read_heap(w_box + 7, &w_val, 8) && isfinite(w_val) &&
-                (w_val > 100.0 || w_val == -8.0)) {
-                double neg8 = -8.0;
+                (w_val > 100.0 || w_val == -16.0)) {
+                double neg16 = -16.0;
                 uint32_t w_cptr = (uint32_t)w_box;
                 uint32_t null_cptr = (uint32_t)c->x[22];
-                if (w_val != -8.0) {
-                    memcpy((void *)(w_box + 7), &neg8, sizeof neg8);
+                if (w_val != -16.0) {
+                    memcpy((void *)(w_box + 7), &neg16, sizeof neg16);
                 }
                 memcpy((void *)(pos0 + 0x13), &w_cptr, sizeof w_cptr);
                 memcpy((void *)(pos0 + 0x1b), &w_cptr, sizeof w_cptr);
                 memcpy((void *)(sized0 + 0xf), &null_cptr, sizeof null_cptr);
                 static unsigned tb_logs;
                 if (w_val > 100.0 && __atomic_fetch_add(&tb_logs, 1u, __ATOMIC_RELAXED) < 3) {
-                    ld_blog("ws_taskbar_overhang: orig_w=%.1f left=right=-8.0", w_val);
+                    ld_blog("ws_taskbar_overhang: orig_w=%.1f left=right=-16.0", w_val);
                 }
             }
         }
@@ -740,7 +746,7 @@ __attribute__((used)) static void ld_ws_on_bg_sync(struct ld_dart_context *c)
     double dw = ld_ws_device_width();
     double zero = 0.0;
     if (size && dw > 100.0 && !ld_ws_is_const_ro(size)) {
-        double taskbar_w = dw + 16.0;
+        double taskbar_w = dw + 32.0;
         memcpy((void *)(size + 7), &taskbar_w, sizeof taskbar_w);
     }
     if (!ld_ws_is_const_ro(params)) {
