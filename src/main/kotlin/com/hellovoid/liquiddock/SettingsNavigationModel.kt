@@ -96,21 +96,21 @@ internal data class HubEntry(
 )
 
 internal val overviewEntries = listOf(
-    HubEntry(Page.Dock, R.string.page_dock, "Dock 外观、位置、动画与最近程序"),
-    HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与性能"),
+    HubEntry(Page.Dock, R.string.page_dock, "Dock 几何尺寸、位置与分隔线"),
+    HubEntry(Page.Liquid, R.string.page_liquid, "材质、折射、色彩、光照与采样性能"),
     HubEntry(Page.Grid, R.string.page_grid, "网格尺寸与横竖屏布局"),
 )
 
 internal val layoutEntries = listOf(
-    HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、横竖屏间距与分屏布局"),
-    HubEntry(Page.Dock, R.string.page_dock, "Dock 行为、尺寸、位置与最近程序"),
+    HubEntry(Page.Grid, R.string.page_grid, "网格尺寸、大文件夹、小组件缩放与横竖屏间距"),
+    HubEntry(Page.Dock, R.string.page_dock, "Dock 几何尺寸、位置、圆角与分隔线"),
     HubEntry(Page.Workstation, R.string.page_workstation, "工作台 Dock、所有应用布局与多分屏"),
 )
 
 internal val glassEntries = listOf(
     HubEntry(Page.Liquid, R.string.page_liquid, "液态玻璃材质与光学参数"),
     HubEntry(Page.GlassComponents, R.string.page_glass_components, "图标、小组件、文件夹与菜单外观"),
-    HubEntry(Page.SoftGlass, R.string.page_soft_glass, "OS4 系统桌面原生柔光玻璃参数"),
+    HubEntry(Page.SoftGlass, R.string.page_soft_glass, "系统桌面原生柔光玻璃参数"),
     HubEntry(Page.SoftGlassComponents, R.string.page_soft_glass_components, "桌面图标与小组件柔光玻璃"),
     HubEntry(Page.Recents, R.string.page_recents, "多任务、文件夹、所有应用与菜单背景模糊"),
     HubEntry(Page.AnimationSystem, R.string.page_animation_system, "通知与控制中心顶部模糊、系统手势手柄联动"),
@@ -125,7 +125,7 @@ internal val moreEntries = listOf(
 )
 
 internal val gridEntries = listOf(
-    HubEntry(Page.GridBasics, R.string.page_grid_basics, "图标大小、网格尺寸与小组件拉伸"),
+    HubEntry(Page.GridBasics, R.string.page_grid_basics, "图标大小、大文件夹、小组件缩放、网格与文件夹行列"),
     HubEntry(Page.GridLandscape, R.string.page_grid_landscape, "横屏距离与页面指示器"),
     HubEntry(Page.GridPortrait, R.string.page_grid_portrait, "竖屏距离与页面指示器"),
 )
@@ -161,17 +161,17 @@ internal val liquidEntries = listOf(
     HubEntry(Page.LiquidMaterial, R.string.page_liquid_material, "模糊、厚度、透射率与亮度"),
     HubEntry(Page.LiquidRefraction, R.string.page_liquid_refraction, "折射、法线、穹顶与位移"),
     HubEntry(Page.LiquidColor, R.string.page_liquid_color, "底色、色散与鲜艳度"),
-    HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "高光、焦散、OS4 边缘反射与方向光"),
+    HubEntry(Page.LiquidLighting, R.string.page_liquid_lighting, "高光、焦散、边缘反射与方向光"),
     HubEntry(Page.GlassEdge, R.string.page_glass_edge, "Prismal 外阴影与光学描边，仅液态玻璃开启时生效"),
     HubEntry(Page.LiquidShadow, R.string.page_liquid_shadow, "玻璃内部阴影颜色与柔和度"),
-    HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "背景缩放、帧率与帧同步"),
+    HubEntry(Page.LiquidSampling, R.string.page_liquid_sampling, "静止采样分辨率与动画期着色优化"),
 )
 
 internal val componentEntries = listOf(
-    HubEntry(Page.GlassIcons, R.string.page_glass_icons, "桌面图标、Dock 功能图标与多任务胶囊"),
-    HubEntry(Page.GlassWidgets, R.string.page_glass_widgets, "小组件玻璃、内容适配与组件隐藏"),
-    HubEntry(Page.GlassFolders, R.string.page_glass_folders, "大小文件夹玻璃与独立尺寸"),
-    HubEntry(Page.GlassMenus, R.string.page_glass_menus, "快捷菜单、系统顶部菜单与对话弹窗"),
+    HubEntry(Page.GlassIcons, R.string.page_glass_icons, "桌面与 Dock 图标玻璃、下采样、尺寸与圆角"),
+    HubEntry(Page.GlassWidgets, R.string.page_glass_widgets, "小组件玻璃、圆角与内部节点隐藏"),
+    HubEntry(Page.GlassFolders, R.string.page_glass_folders, "大文件夹玻璃开关、2×1 与大文件夹独立圆角、小文件夹圆角"),
+    HubEntry(Page.GlassMenus, R.string.page_glass_menus, "系统顶部菜单、快捷菜单与对话弹窗"),
     HubEntry(Page.SidebarEdge, R.string.page_sidebar_glass, "模糊、颜色、透明度、圆角与玻璃高光"),
 )
 

@@ -23,7 +23,7 @@ static inline int ld_inset_folder_preview(double frame_width, double frame_heigh
             || !isfinite(original->width) || !isfinite(original->height)
             || original->width <= 0 || original->height <= 0) return 0;
 
-    double pad1 = pad0 + inset;
+    double pad1 = fmax(0.0, pad0 + inset);
     double orig_cw = frame_width - 2.0 * pad0;
     double orig_ch = frame_height - 2.0 * pad0;
     double new_cw = frame_width - 2.0 * pad1;
@@ -32,7 +32,8 @@ static inline int ld_inset_folder_preview(double frame_width, double frame_heigh
 
     double scale_x = new_cw / orig_cw;
     double scale_y = new_ch / orig_ch;
-    double scale_icon = fmin(scale_x, scale_y);
+    /* Only shrink icons when insetting inward; never enlarge them when offsetting outward. */
+    double scale_icon = fmin(1.0, fmin(scale_x, scale_y));
     if (scale_icon <= 0.1) return 0;
 
     double new_big_w = big_w * scale_icon;

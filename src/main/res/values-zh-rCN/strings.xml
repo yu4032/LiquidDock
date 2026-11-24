@@ -120,7 +120,7 @@
     <string name="page_liquid_material">材质</string>
     <string name="page_liquid_refraction">折射</string>
     <string name="page_liquid_color">色彩与色散</string>
-    <string name="page_liquid_lighting">高光与OS4边缘</string>
+    <string name="page_liquid_lighting">高光与边缘</string>
     <string name="page_liquid_shadow">内阴影</string>
     <string name="page_liquid_sampling">采样与性能</string>
     <string name="page_animation_workspace">工作区与 Dock</string>

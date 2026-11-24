@@ -1013,6 +1013,8 @@ static void ld_ws_resolve_page_fields(ld_lib_info *lib)
             g_page_fields.container, g_page_fields.quick_call, g_page_fields.rx_value);
 }
 
+static int g_ws_hooks_installed_count __attribute__((used));
+
 static void ld_workstation_install(const struct native_api *api, ld_lib_info *lib)
 {
     static int installed;
@@ -1106,6 +1108,7 @@ static void ld_workstation_install(const struct native_api *api, ld_lib_info *li
         "ws_jump_to_page", (void *)repl_ws_jump_to_page, &g_orig_ws_jump_to_page,
         &g_ws_jump_to_page_hook_ready);
     if (ok_count > 0) installed = 1;
+    __atomic_store_n(&g_ws_hooks_installed_count, ok_count, __ATOMIC_RELEASE);
     ld_blog("workstation hooks installed=%d/%zu", ok_count, count);
 }
 

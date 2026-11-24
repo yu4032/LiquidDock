@@ -122,7 +122,7 @@
     <string name="page_liquid_material">Material</string>
     <string name="page_liquid_refraction">Refraction</string>
     <string name="page_liquid_color">Color &amp; dispersion</string>
-    <string name="page_liquid_lighting">Lighting &amp; OS4 edge</string>
+    <string name="page_liquid_lighting">Lighting &amp; edge</string>
     <string name="page_liquid_shadow">Inner shadow</string>
     <string name="page_liquid_sampling">Sampling &amp; performance</string>
     <string name="page_animation_workspace">Workspace &amp; Dock</string>

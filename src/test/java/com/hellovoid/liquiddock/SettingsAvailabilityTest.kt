@@ -12,7 +12,7 @@ class SettingsAvailabilityTest {
     @Test fun os4PortPagesAreNavigableForTestingWithoutBeingMarkedReady() {
         val testing = listOf(
             Page.Grid, Page.GridBasics, Page.GridLandscape, Page.GridPortrait,
-            Page.Dock, Page.DockGeometry, Page.DockBehavior, Page.DockRecentBlacklist,
+            Page.Dock, Page.DockGeometry,
             Page.Divider,
             Page.SoftGlass, Page.SoftGlassMaterial,
             Page.SoftGlassColor, Page.SoftGlassLighting,
@@ -20,8 +20,7 @@ class SettingsAvailabilityTest {
             Page.SoftGlassDock, Page.SoftGlassIcons, Page.SoftGlassWidgets, Page.SoftGlassLargeFolder,
             Page.WidgetComponents,
             Page.GlassIcons, Page.GlassWidgets, Page.GlassFolders,
-            Page.DockEdge, Page.IconEdge, Page.WidgetEdge, Page.FolderEdge,
-            Page.LauncherHighlights, Page.LauncherHighlightsCompact, Page.LauncherHighlightsLarge,
+            Page.IconEdge,
             Page.Recents,
             Page.WorkstationDock, Page.WorkstationDesktop, Page.WorkstationAppsLandscape, Page.WorkstationAppsPortrait,
         )
@@ -33,6 +32,9 @@ class SettingsAvailabilityTest {
 
     @Test fun unrelatedLauncherFeaturesStillGrayOut() {
         val grayedOut = setOf(
+            Page.DockBehavior, Page.DockRecentBlacklist,
+            Page.DockEdge, Page.WidgetEdge, Page.FolderEdge,
+            Page.LauncherHighlights, Page.LauncherHighlightsCompact, Page.LauncherHighlightsLarge,
             Page.ShortcutPopupCustomization, Page.ShortcutPopupAll, Page.PopupEdge,
             Page.DialogCustomization, Page.DialogAll, Page.DialogEdge,
         )

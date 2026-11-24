@@ -43,6 +43,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 enum class HookProbeState(val label: String) {
     ACTIVE("已生效"),
+    PENDING_RESTART("待重启"),
     DISABLED("未启用"),
     MISSING("未生效"),
     PAUSED("已暂停"),
@@ -76,11 +77,14 @@ data class HookFeatureConfig(
             fun bool(key: com.hellovoid.liquiddock.config.ConfigKey<Boolean>): Boolean =
                 prefs.getBoolean(key.name(), key.uiDefault())
 
-            val glassOn = bool(ConfigSchema.Glass.ENABLED)
-            val recentsBlur = prefs.getInt(
-                ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.name(),
-                ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT.uiDefault(),
-            ) != 100
+            val glassOn = bool(ConfigSchema.Glass.ENABLED) || bool(ConfigSchema.Glass.SOFT_GLASS_ENABLED)
+            val recentsBlur = listOf(
+                ConfigSchema.Recents.BACKGROUND_BLUR_PERCENT,
+                ConfigSchema.Recents.FOLDER_BLUR_PERCENT,
+                ConfigSchema.Recents.SHORTCUT_BLUR_PERCENT,
+                ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT,
+                ConfigSchema.Workstation.WS_ALL_APPS_BLUR_PERCENT,
+            ).any { key -> prefs.getInt(key.name(), key.uiDefault()) != 100 }
             fun nonZero(key: com.hellovoid.liquiddock.config.ConfigKey<Int>): Boolean {
                 val tenthsKey = "${key.name()}_tenths"
                 return if (prefs.contains(tenthsKey)) {
@@ -93,10 +97,12 @@ data class HookFeatureConfig(
                 ConfigSchema.Grid.LANDSCAPE_HORIZONTAL_DISTANCE,
                 ConfigSchema.Grid.LANDSCAPE_TOP_DISTANCE,
                 ConfigSchema.Grid.LANDSCAPE_BOTTOM_DISTANCE,
+                ConfigSchema.Grid.LANDSCAPE_ROW_GAP,
                 ConfigSchema.Grid.LANDSCAPE_INDICATOR_Y,
                 ConfigSchema.Grid.PORTRAIT_HORIZONTAL_DISTANCE,
                 ConfigSchema.Grid.PORTRAIT_TOP_DISTANCE,
                 ConfigSchema.Grid.PORTRAIT_BOTTOM_DISTANCE,
+                ConfigSchema.Grid.PORTRAIT_ROW_GAP,
                 ConfigSchema.Grid.PORTRAIT_INDICATOR_Y,
                 ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_HORIZONTAL_OFFSET,
                 ConfigSchema.Workstation.ALL_APPS_LANDSCAPE_TOP_SPACING,
@@ -143,6 +149,7 @@ data class HookMonitorSnapshot(
 ) {
     val enabledCount: Int get() = items.count { it.state != HookProbeState.DISABLED }
     val activeCount: Int get() = items.count { it.state == HookProbeState.ACTIVE }
+    val pendingRestartCount: Int get() = items.count { it.state == HookProbeState.PENDING_RESTART }
     val missingCount: Int get() = items.count { it.state == HookProbeState.MISSING }
 }
 
@@ -198,11 +205,17 @@ internal fun evaluateHookMonitor(
         else -> "Hook 已生效"
     }
 
-    fun resolve(enabled: Boolean, hooked: Boolean, stale: Boolean = statusStale): HookProbeState = when {
+    fun resolve(
+        enabled: Boolean,
+        hooked: Boolean,
+        stale: Boolean = statusStale,
+        pendingRestart: Boolean = false,
+    ): HookProbeState = when {
         !config.masterEnabled -> HookProbeState.PAUSED
         !enabled -> HookProbeState.DISABLED
         stale -> HookProbeState.MISSING
         hooked && (!patchDegraded || patchIntact > 0) -> HookProbeState.ACTIVE
+        pendingRestart -> HookProbeState.PENDING_RESTART
         else -> HookProbeState.MISSING
     }
 
@@ -217,9 +230,11 @@ internal fun evaluateHookMonitor(
         staleOverride: Boolean? = null,
     ): HookProbeItem {
         val isStale = staleOverride ?: statusStale
-        val state = resolve(enabled, hooked, isStale)
+        val bootDisabled = !isStale && statusMap["boot_$id"] == "0"
+        val state = resolve(enabled, hooked, isStale, pendingRestart = bootDisabled)
         val detail = when (state) {
             HookProbeState.ACTIVE -> if (patchDegraded) activeDetail else (activeDetailOverride ?: "Hook 已生效")
+            HookProbeState.PENDING_RESTART -> "新开启，重启桌面后生效"
             HookProbeState.DISABLED -> "开关未开启"
             HookProbeState.PAUSED -> "总开关已暂停"
             HookProbeState.MISSING -> if (isStale) {
@@ -229,32 +244,35 @@ internal fun evaluateHookMonitor(
         return HookProbeItem(id = id, title = title, state = state, detail = detail)
     }
 
+    val latestCurrentBootMarker = BOOT_PID_REGEX.findAll(currentBootLog).lastOrNull()
+    val currentBootSection = latestCurrentBootMarker?.let { currentBootLog.substring(it.range.first) }
+        ?: bootLog
+
     fun resolveHooked(key: String, fallbackLog: () -> Boolean): Boolean =
         if (!statusStale && statusMap.containsKey(key)) statusMap[key] == "1" else fallbackLog()
 
     val glassHooked = resolveHooked("glass") {
-        bootLog.contains("OS4 glass pipeline installed") ||
-            bootLog.contains("OS4 glass gates installed")
+        currentBootSection.contains("OS4 glass pipeline installed") ||
+            currentBootSection.contains("OS4 glass gates installed")
     }
 
     val iconGlassHooked = resolveHooked("glass_icons") {
-        bootLog.contains("icon glass hooks installed")
+        currentBootSection.contains("icon glass hooks installed")
     }
 
     val widgetGlassHooked = resolveHooked("glass_widgets") {
-        bootLog.contains("OS4 RemoteViews component hook installed") &&
-            bootLog.contains("OS4 RemoteViews bg hook installed")
+        currentBootSection.contains("OS4 RemoteViews component hook installed") &&
+            currentBootSection.contains("OS4 RemoteViews bg hook installed")
     }
 
     val gridHooked = resolveHooked("grid") {
-        bootLog.contains("complete layout pipeline ready=1")
+        currentBootSection.contains("complete layout pipeline ready=1")
     }
 
     val homeIconsHooked = resolveHooked("home_icons") {
-        bootLog.contains("home icons applied:")
+        currentBootSection.contains("home icons applied:")
     }
 
-    val latestCurrentBootMarker = BOOT_PID_REGEX.findAll(currentBootLog).lastOrNull()
     val currentMarginLog = latestCurrentBootMarker?.let { currentBootLog.substring(it.range.first) }
         ?: currentBootLog
     val currentLogHasMarginEvidence = HOME_MARGIN_STATUS_REGEX.containsMatchIn(currentMarginLog) ||
@@ -318,46 +336,47 @@ internal fun evaluateHookMonitor(
     val homeMarginsShouldReport = config.homeMarginsEnabled || homeMarginKnownFailure
 
     val folderHooked = resolveHooked("big_folder") {
-        val folderGateHooked = bootLog.contains("OS4 big folder gate installed:")
-        val padBypassMatch = PAD_BYPASS_REGEX.findAll(bootLog).lastOrNull()
+        val folderGateHooked = currentBootSection.contains("OS4 big folder gate installed:")
+        val padBypassMatch = PAD_BYPASS_REGEX.findAll(currentBootSection).lastOrNull()
         val folderBypassPatched = padBypassMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
         folderGateHooked || (folderBypassPatched != null && folderBypassPatched > 0)
     }
 
     val folderGridHooked = resolveHooked("folder_grid") {
-        bootLog.contains("OS4 folder grid setup") &&
-            (bootLog.contains("ready=1") || bootLog.contains("installed=7"))
+        currentBootSection.contains("OS4 folder grid setup") &&
+            (currentBootSection.contains("ready=1") || currentBootSection.contains("installed=7"))
     }
 
     val widget1x1Hooked = resolveHooked("widget_1x1") {
-        val widget1x1Match = WIDGET_1X1_MENU_REGEX.findAll(bootLog).lastOrNull()
+        val widget1x1Match = WIDGET_1X1_MENU_REGEX.findAll(currentBootSection).lastOrNull()
         val widget1x1Installed = widget1x1Match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
-        val widget1x1Resize = bootLog.contains("widget resize: 1x1 enlarge enabled")
+        val widget1x1Resize = currentBootSection.contains("widget resize: 1x1 enlarge enabled")
         widget1x1Installed > 0 || widget1x1Resize
     }
 
     val dockHooked = statusMap["dock"] == "1"
 
     val dividerHooked = resolveHooked("divider") {
-        bootLog.contains("divider: inner installed") && bootLog.contains("divider: bgPaint installed")
+        currentBootSection.contains("divider: inner installed") && currentBootSection.contains("divider: bgPaint installed")
     }
 
     val recentsHooked = resolveHooked("recents") {
-        bootLog.contains("OS4 Recents blur gate installed:")
+        currentBootSection.contains("OS4 Recents blur gate installed:")
     }
 
-    val wsMatch = WORKSTATION_HOOKS_REGEX.findAll(bootLog).lastOrNull()
-    val wsInstalled = wsMatch?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+    val wsHooksFromStatus = if (!statusStale) statusMap["workstation_hooks"]?.toIntOrNull() else null
+    val wsMatch = WORKSTATION_HOOKS_REGEX.findAll(currentBootSection).lastOrNull()
+    val wsInstalled = wsHooksFromStatus ?: (wsMatch?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0)
     val workstationHooked = resolveHooked("workstation") {
         wsInstalled > 0
     }
     val wsDetail = if (wsInstalled > 0) "已生效 ($wsInstalled 个 Hook)" else null
 
-    val widget1x1Match = Regex("""widget 1x1<->2x2 menu hooks=(\d+)""").findAll(bootLog).lastOrNull()
+    val widget1x1Match = Regex("""widget 1x1<->2x2 menu hooks=(\d+)""").findAll(currentBootSection).lastOrNull()
     val widget1x1Count = widget1x1Match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
     val widget1x1Detail = if (widget1x1Count > 0) "已生效 ($widget1x1Count 个 Hook)" else null
 
-    val folderGridDetail = if (bootLog.contains("installed=7")) "已生效 (7 个 Hook)" else null
+    val folderGridDetail = if (currentBootSection.contains("installed=7")) "已生效 (7 个 Hook)" else null
 
     val folderGridMissingDetail = when {
         statusMap["folder_cols_ready"] == "1" && statusMap["folder_rows_ready"] == "0" ->
@@ -368,11 +387,11 @@ internal fun evaluateHookMonitor(
     }
 
     val items = listOf(
-        probe("glass", "柔光玻璃", config.glassEnabled, glassHooked),
+        probe("glass", "液态 / 柔光玻璃", config.glassEnabled, glassHooked),
         probe("glass_icons", "图标玻璃", config.iconGlassEnabled, iconGlassHooked),
         probe("glass_widgets", "小组件玻璃", config.widgetGlassEnabled, widgetGlassHooked),
         probe("grid", "桌面网格", config.gridEnabled, gridHooked),
-        probe("home_icons", "图标与边距", config.iconSizeEnabled, homeIconsHooked),
+        probe("home_icons", "图标大小", config.iconSizeEnabled, homeIconsHooked),
         probe(
             "home_margins", "桌面与所有应用边距", homeMarginsShouldReport, homeMarginsHooked,
             missingDetail = homeMarginsMissingDetail,
@@ -385,7 +404,7 @@ internal fun evaluateHookMonitor(
         probe("widget_1x1", "1×1↔2×2", config.widget1x1Enabled, widget1x1Hooked, activeDetailOverride = widget1x1Detail),
         probe("dock", "Dock 布局", config.dockEnabled, dockHooked),
         probe("divider", "分割线", config.dividerEnabled, dividerHooked),
-        probe("recents", "最近任务模糊", config.recentsBlurEnabled, recentsHooked),
+        probe("recents", "背景模糊", config.recentsBlurEnabled, recentsHooked),
         probe("workstation", "工作台", config.workstationEnabled, workstationHooked, activeDetailOverride = wsDetail),
     )
 
@@ -432,12 +451,19 @@ fun HookMonitorCard(
     var snapshot by remember { mutableStateOf<HookMonitorSnapshot?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, prefs) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) refreshTick++
         }
+        val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            refreshTick++
+        }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        prefs.registerOnSharedPreferenceChangeListener(prefListener)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
+        }
     }
 
     LaunchedEffect(masterEnabled, refreshTick) {
@@ -487,15 +513,19 @@ fun HookMonitorCard(
                         !masterEnabled -> "总开关已暂停，重启桌面或恢复开关后生效"
                         !snap.hasStatusFile && snap.activeCount == 0 ->
                             "暂未读取到状态文件，请重启桌面后刷新"
-                        snap.missingCount == 0 ->
+                        snap.missingCount == 0 && snap.pendingRestartCount == 0 ->
                             "Hook 全部就绪 (${snap.activeCount}/${snap.enabledCount})"
+                        snap.missingCount == 0 ->
+                            "Hook 已就绪 (${snap.activeCount}/${snap.enabledCount})，${snap.pendingRestartCount} 项需重启桌面生效"
+                        snap.pendingRestartCount > 0 ->
+                            "Hook 已生效 ${snap.activeCount}/${snap.enabledCount}，${snap.pendingRestartCount} 项待重启，${snap.missingCount} 项异常"
                         else ->
                             "Hook 已生效 ${snap.activeCount}/${snap.enabledCount}，${snap.missingCount} 项异常"
                     }
                     Text(
                         text = summaryText,
                         fontSize = 12.sp,
-                        color = if (snap != null && snap.missingCount > 0 && masterEnabled) {
+                        color = if (snap != null && (snap.missingCount > 0 || snap.pendingRestartCount > 0) && masterEnabled) {
                             Color(0xFFD97706)
                         } else {
                             scheme.onSurfaceVariantSummary
@@ -571,6 +601,7 @@ private fun HookProbeTile(
     val scheme = MiuixTheme.colorScheme
     val (dotColor, stateColor) = when (item.state) {
         HookProbeState.ACTIVE -> Color(0xFF16A34A) to Color(0xFF16A34A)
+        HookProbeState.PENDING_RESTART -> Color(0xFFD97706) to Color(0xFFD97706)
         HookProbeState.MISSING -> Color(0xFFDC2626) to Color(0xFFDC2626)
         HookProbeState.DISABLED, HookProbeState.PAUSED ->
             scheme.onSurfaceVariantSummary.copy(alpha = 0.55f) to scheme.onSurfaceVariantSummary

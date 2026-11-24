@@ -1972,6 +1972,29 @@ static void ld_write_hook_status(void) {
     int folder_grid_ok = ((g_home_options.folder_grid_cols <= 0 || folder_cols_ready)
             && (g_home_options.folder_grid_rows <= 0 || folder_rows_ready)
             && (folder_cols_ready || folder_rows_ready)) ? 1 : 0;
+    int ws_hooks = __atomic_load_n(&g_ws_hooks_installed_count, __ATOMIC_ACQUIRE);
+    int workstation_ok = ws_hooks > 0 ? 1 : 0;
+
+    int boot_glass = (g_home_options.glass_enabled || g_home_options.soft_glass_enabled) ? 1 : 0;
+    int boot_glass_icons = (boot_glass && g_home_options.glass_icons) ? 1 : 0;
+    int boot_glass_icon_radius = (boot_glass_icons && g_home_options.glass_icon_corner > 0.0) ? 1 : 0;
+    int boot_glass_widgets = (boot_glass && g_home_options.glass_widgets) ? 1 : 0;
+    int boot_grid = (g_grid_cols > 0 && g_grid_rows > 0) ? 1 : 0;
+    int boot_dock = g_home_options.dock.enabled ? 1 : 0;
+    int boot_divider = 1;
+    int boot_recents = (g_home_options.recents_blur_percent != 100
+            || g_home_options.allapps_blur_percent != 100
+            || g_home_options.ws_allapps_blur_percent != 100
+            || g_home_options.folder_blur_percent != 100
+            || g_home_options.shortcut_blur_percent != 100) ? 1 : 0;
+    int boot_home_icons = g_home_options.icon_size_enabled ? 1 : 0;
+    int boot_home_margins = ld_hm_has_any_offsets() ? 1 : 0;
+    int boot_big_folder = g_home_options.big_folder_enabled ? 1 : 0;
+    int boot_widget_1x1 = g_home_options.widget_1x1_to_2x2_enabled ? 1 : 0;
+    int boot_folder_grid = (g_home_options.folder_grid_cols > 0
+            || g_home_options.folder_grid_rows > 0) ? 1 : 0;
+    int boot_workstation = g_home_options.ws.dock_custom ? 1 : 0;
+
     fprintf(fp,
             "pid=%d\n"
             "proc_starttime=%s\n"
@@ -2000,7 +2023,23 @@ static void ld_write_hook_status(void) {
             "frb_adapter=%d\n"
             "folder_grid=%d\n"
             "folder_cols_ready=%d\n"
-            "folder_rows_ready=%d\n",
+            "folder_rows_ready=%d\n"
+            "workstation=%d\n"
+            "workstation_hooks=%d\n"
+            "boot_glass=%d\n"
+            "boot_glass_icons=%d\n"
+            "boot_glass_icon_radius=%d\n"
+            "boot_glass_widgets=%d\n"
+            "boot_grid=%d\n"
+            "boot_dock=%d\n"
+            "boot_divider=%d\n"
+            "boot_recents=%d\n"
+            "boot_home_icons=%d\n"
+            "boot_home_margins=%d\n"
+            "boot_big_folder=%d\n"
+            "boot_widget_1x1=%d\n"
+            "boot_folder_grid=%d\n"
+            "boot_workstation=%d\n",
             (int)getpid(), starttime,
             pin_locked, pin_enomem, pin_failed,
             patch_total, patch_intact,
@@ -2010,7 +2049,12 @@ static void ld_write_hook_status(void) {
             ld_hm_status_name(home_margins_state), home_margins_hits,
             home_margins_scopes, home_margins_dirs,
             big_folder_ok, widget_1x1_ok, ld_frb_adapter_ready(),
-            folder_grid_ok, folder_cols_ready, folder_rows_ready);
+            folder_grid_ok, folder_cols_ready, folder_rows_ready,
+            workstation_ok, ws_hooks,
+            boot_glass, boot_glass_icons, boot_glass_icon_radius, boot_glass_widgets,
+            boot_grid, boot_dock, boot_divider, boot_recents,
+            boot_home_icons, boot_home_margins, boot_big_folder, boot_widget_1x1,
+            boot_folder_grid, boot_workstation);
     fclose(fp);
     rename(tmp, dst);
 }
@@ -2039,7 +2083,7 @@ static void install_grid_hook(const struct native_api *api) {
             || ld_hm_has_any_offsets()))
         install_grid_hook_unlocked(api);
     if (app_loaded) ld_write_hook_status();
-    if((g_installed || g_os4_glass_installed) && !g_trace_started) {
+    if((g_installed || g_os4_glass_installed || g_hm_cc_orig != NULL) && !g_trace_started) {
         pthread_t thread;
         if(pthread_create(&thread,NULL,trace_thread,NULL)==0) {
             pthread_detach(thread); g_trace_started=true;
@@ -2079,7 +2123,23 @@ static void *trace_thread(void *unused)
     unsigned last_calls = 0, last_glass_calls = 0;
     unsigned last_pipeline[4]={0};
     int light_sample_reported=0;
+    int last_hm_state = __atomic_load_n(&g_hm_status, __ATOMIC_RELAXED);
+    int last_hm_hit_seen = __atomic_load_n(&g_hm_context_hits, __ATOMIC_RELAXED) > 0 ? 1 : 0;
+    unsigned last_hm_scopes = __atomic_load_n(&g_hm_scope_mask, __ATOMIC_RELAXED);
+    unsigned last_hm_dirs = __atomic_load_n(&g_hm_dir_mask, __ATOMIC_RELAXED);
     for (;;) {
+        int cur_hm_state = __atomic_load_n(&g_hm_status, __ATOMIC_RELAXED);
+        int cur_hm_hit_seen = __atomic_load_n(&g_hm_context_hits, __ATOMIC_RELAXED) > 0 ? 1 : 0;
+        unsigned cur_hm_scopes = __atomic_load_n(&g_hm_scope_mask, __ATOMIC_RELAXED);
+        unsigned cur_hm_dirs = __atomic_load_n(&g_hm_dir_mask, __ATOMIC_RELAXED);
+        if (cur_hm_state != last_hm_state || cur_hm_hit_seen != last_hm_hit_seen
+                || cur_hm_scopes != last_hm_scopes || cur_hm_dirs != last_hm_dirs) {
+            last_hm_state = cur_hm_state;
+            last_hm_hit_seen = cur_hm_hit_seen;
+            last_hm_scopes = cur_hm_scopes;
+            last_hm_dirs = cur_hm_dirs;
+            ld_write_hook_status();
+        }
         unsigned calls = __atomic_load_n(&g_pad_trace[0], __ATOMIC_RELAXED);
         if (calls != last_calls) {
             last_calls = calls;

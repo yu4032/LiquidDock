@@ -178,4 +178,52 @@ class HookMonitorTest {
         assertEquals(HookProbeState.ACTIVE, glassDegraded.state)
         assertEquals("代码页校验异常 (9/10)", glassDegraded.detail)
     }
+
+    @Test
+    fun evaluateHookMonitor_marksNewlyEnabledFeatureAsPendingRestartNotMissing() {
+        val status = parseStatusKeyValues(
+            """
+            pid=25282
+            glass=1
+            boot_glass=1
+            glass_icons=1
+            boot_glass_icons=1
+            glass_widgets=1
+            boot_glass_widgets=1
+            grid=1
+            boot_grid=1
+            home_icons=0
+            boot_home_icons=0
+            big_folder=0
+            boot_big_folder=1
+            widget_1x1=1
+            boot_widget_1x1=1
+            dock=1
+            boot_dock=1
+            divider=1
+            boot_divider=1
+            recents=1
+            boot_recents=1
+            workstation=1
+            workstation_hooks=15
+            boot_workstation=1
+            """.trimIndent(),
+        )
+        val config = allEnabledConfig().copy(workstationEnabled = true)
+        val snapshot = evaluateHookMonitor(config, status, "100.000 native_init enter pid=25282")
+
+        val homeIcons = snapshot.items.first { it.id == "home_icons" }
+        assertEquals(HookProbeState.PENDING_RESTART, homeIcons.state)
+        assertEquals("新开启，重启桌面后生效", homeIcons.detail)
+
+        val bigFolder = snapshot.items.first { it.id == "big_folder" }
+        assertEquals(HookProbeState.MISSING, bigFolder.state)
+
+        val ws = snapshot.items.first { it.id == "workstation" }
+        assertEquals(HookProbeState.ACTIVE, ws.state)
+        assertEquals("已生效 (15 个 Hook)", ws.detail)
+
+        assertEquals(1, snapshot.pendingRestartCount)
+        assertEquals(1, snapshot.missingCount)
+    }
 }
