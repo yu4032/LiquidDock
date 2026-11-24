@@ -185,11 +185,11 @@ internal fun SoftGlassScopedPage(
     customKey: com.hellovoid.liquiddock.config.ConfigKey<Boolean>,
     overridesKey: com.hellovoid.liquiddock.config.ConfigKey<String>,
 ) {
-    val glassRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
+    val glassRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.SOFT_GLASS_ENABLED.name()] ?: 0
     val glassEnabled = remember(glassRevision) {
         prefs.getBoolean(
-            ConfigSchema.Glass.ENABLED.name(),
-            ConfigSchema.Glass.ENABLED.uiDefault(),
+            ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+            ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
         )
     }
     val customRevision = LocalSettingsPreferenceRevisions.current[customKey.name()] ?: 0

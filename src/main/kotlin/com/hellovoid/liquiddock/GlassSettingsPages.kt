@@ -28,13 +28,20 @@ internal fun SoftGlassPage(
     masterEnabled: Boolean,
     open: (Page) -> Unit,
 ) {
-    val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
-    var liquidGlass by remember(liquidRevision) {
+    val softRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.SOFT_GLASS_ENABLED.name()] ?: 0
+    var softGlass by remember(softRevision) {
         mutableStateOf(
             prefs.getBoolean(
-                ConfigSchema.Glass.ENABLED.name(),
-                ConfigSchema.Glass.ENABLED.uiDefault(),
+                ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+                ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
             ),
+        )
+    }
+    val liquidRevision = LocalSettingsPreferenceRevisions.current[ConfigSchema.Glass.ENABLED.name()] ?: 0
+    val liquidGlass = remember(liquidRevision) {
+        prefs.getBoolean(
+            ConfigSchema.Glass.ENABLED.name(),
+            ConfigSchema.Glass.ENABLED.uiDefault(),
         )
     }
     LazyColumn(
@@ -48,24 +55,28 @@ internal fun SoftGlassPage(
         item {
             PageHeader(
                 stringResource(R.string.page_soft_glass),
-                "仅作用于 OS4 系统桌面的原生柔光玻璃。重启桌面生效，背景模糊设为 0 可观察清晰折射。",
+                if (liquidGlass) {
+                    "已开启液态玻璃，原生柔光玻璃渲染已自动关闭以节省性能；此开关独立于液态玻璃。"
+                } else {
+                    "仅作用于 OS4 系统桌面的原生柔光玻璃（与液态玻璃独立）。重启桌面生效，背景模糊设为 0 可观察清晰折射。"
+                },
             )
         }
         item {
             SettingsCard {
                 BooleanSetting(
                     prefs,
-                    ConfigSchema.Glass.ENABLED,
+                    ConfigSchema.Glass.SOFT_GLASS_ENABLED,
                     "开启自定义",
-                    "开启后自定义桌面原生柔光玻璃参数；重启桌面生效。",
+                    "开启后自定义桌面原生柔光玻璃参数（关闭不影响液态玻璃）；重启桌面生效。",
                     masterEnabled,
-                ) { liquidGlass = it }
+                ) { softGlass = it }
                 BooleanSetting(
                     prefs,
                     ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE,
                     "取消桌面玻璃静止时的下采样",
                     "禁用桌面原生在玻璃静止时的采样降级与 0.25× 预缩放下采样，保持完整采样分辨率。",
-                    masterEnabled && liquidGlass,
+                    masterEnabled && (softGlass || liquidGlass),
                 )
             }
         }
@@ -80,7 +91,7 @@ internal fun SoftGlassPage(
                 )
             }
         }
-        if (!liquidGlass) {
+        if (!softGlass) {
             item {
                 ModernSurface(modifier = Modifier.padding(horizontal = 14.dp)) {
                     Text(
@@ -104,6 +115,9 @@ internal fun SoftGlassComponentsPage(
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
+    ) || prefs.getBoolean(
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
     var iconGlass by remember {
         mutableStateOf(
@@ -311,6 +325,9 @@ internal fun GlassIconsPage(
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
+    ) || prefs.getBoolean(
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
     var iconGlass by remember {
         mutableStateOf(
@@ -405,6 +422,9 @@ internal fun GlassWidgetsPage(
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
+    ) || prefs.getBoolean(
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
     var widgetGlass by remember {
         mutableStateOf(
@@ -509,6 +529,9 @@ internal fun GlassFoldersPage(
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
+    ) || prefs.getBoolean(
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
     var smallFolderGlass by remember {
         mutableStateOf(
@@ -616,6 +639,9 @@ internal fun LauncherHighlightTogglePage(
     val liquidEnabled = prefs.getBoolean(
         ConfigSchema.Glass.ENABLED.name(),
         ConfigSchema.Glass.ENABLED.uiDefault(),
+    ) || prefs.getBoolean(
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.name(),
+        ConfigSchema.Glass.SOFT_GLASS_ENABLED.uiDefault(),
     )
     SettingsList(
         padding = padding,

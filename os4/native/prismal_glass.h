@@ -110,6 +110,7 @@ static const uint32_t ld_pg_pat_set_scissor[8] = {
 
 static volatile int g_prismal_glass_active __attribute__((used));
 static volatile int g_prismal_no_downsample __attribute__((used));
+static volatile int g_prismal_motion_downsample __attribute__((used)) = 1;
 static volatile int g_prismal_icon_downsample __attribute__((used)) = 1;
 static volatile int g_prismal_icon_fixed_wallpaper __attribute__((used));
 
@@ -460,6 +461,9 @@ static void ld_prismal_maybe_reload(void)
             pthread_mutex_unlock(&g_prismal_conf_lock);
             __atomic_store_n(&g_prismal_no_downsample,
                              conf.prismal.disable_stationary_downsample ? 1 : 0,
+                             __ATOMIC_RELEASE);
+            __atomic_store_n(&g_prismal_motion_downsample,
+                             conf.prismal.motion_downsample ? 1 : 0,
                              __ATOMIC_RELEASE);
             __atomic_store_n(&g_prismal_icon_downsample,
                              conf.prismal.icon_downsample ? 1 : 0,
@@ -813,9 +817,10 @@ static __thread int g_tls_in_glass_acquire;
 
 __attribute__((used)) static int ld_compose_should_upscale(void)
 {
+    int allow_motion_ds = __atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED);
     return g_tls_in_glass_acquire &&
            __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_RELAXED) &&
-           !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED);
+           (!allow_motion_ds || !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED));
 }
 
 __attribute__((used)) static const ld_sp_t *ld_compose_resolve_wp(const ld_sp_t *snap, const ld_sp_t *wp)
@@ -881,7 +886,8 @@ static void repl_make_base_blur(ld_sp_t *sret, void *ctx, const ld_sp_t *src_tex
         return;
     }
     if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) &&
-        !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED) &&
+        (!__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) ||
+         !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)) &&
         scale > 0.0f && scale < 1.0f) {
         scale = 1.0f;
     }
@@ -897,7 +903,8 @@ static void repl_make_reflect_blur(ld_sp_t *sret, void *ctx, const ld_sp_t *src_
         return;
     }
     if (__atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE) &&
-        !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED) &&
+        (!__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) ||
+         !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)) &&
         scale > 0.0f && scale < 1.0f) {
         scale = 1.0f;
     }
@@ -1286,6 +1293,9 @@ static void ld_prismal_glass_install_ex(const struct native_api *api, int gui_en
         pthread_mutex_unlock(&g_prismal_conf_lock);
         __atomic_store_n(&g_prismal_no_downsample,
                          initial_opts->disable_stationary_downsample ? 1 : 0,
+                         __ATOMIC_RELEASE);
+        __atomic_store_n(&g_prismal_motion_downsample,
+                         initial_opts->motion_downsample ? 1 : 0,
                          __ATOMIC_RELEASE);
         __atomic_store_n(&g_prismal_icon_downsample,
                          initial_opts->icon_downsample ? 1 : 0,

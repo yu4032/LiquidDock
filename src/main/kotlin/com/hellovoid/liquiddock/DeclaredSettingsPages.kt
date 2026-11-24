@@ -31,6 +31,7 @@ internal val liquidNativeSections: Map<Page, List<Pair<String, List<String>>>> =
 
 internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMeta> = buildMap {
     val glass = listOf(ConfigSchema.Glass.ENABLED to true)
+    val softGlass = listOf(ConfigSchema.Glass.SOFT_GLASS_ENABLED to true)
     val dock = listOf(ConfigSchema.Dock.ENABLED to true)
     val grid = listOf(ConfigSchema.Grid.ENABLED to true)
     val workstation = listOf(ConfigSchema.Workstation.DOCK_CUSTOMIZATION to true)
@@ -52,9 +53,9 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
     fun groups(groups: List<LiquidSpecGroup>): List<SettingsBlock> = groups.flatMapIndexed { i, group ->
         listOf(SettingsBlock.Header("group.$i", group.title)) + group.specs.map { row(it) }
     }
-    page(Page.SoftGlassMaterial, "OS4 系统桌面原生柔光玻璃的折射与轮廓参数。", emptyList(), glass)
-    page(Page.SoftGlassColor, "OS4 系统桌面原生柔光玻璃的颜色、背景模糊与色调曲线。", emptyList(), glass)
-    page(Page.SoftGlassLighting, "OS4 系统桌面原生柔光玻璃的光源方向与反射参数。", emptyList(), glass)
+    page(Page.SoftGlassMaterial, "OS4 系统桌面原生柔光玻璃的折射与轮廓参数。", emptyList(), softGlass)
+    page(Page.SoftGlassColor, "OS4 系统桌面原生柔光玻璃的颜色、背景模糊与色调曲线。", emptyList(), softGlass)
+    page(Page.SoftGlassLighting, "OS4 系统桌面原生柔光玻璃的光源方向与反射参数。", emptyList(), softGlass)
     page(Page.LiquidMaterial, "控制玻璃主体的基础材质感", groups(liquidMaterialGroups), glass)
     page(Page.LiquidRefraction, "折射形状、位移、边缘衰减与表面几何", groups(liquidRefractionGroups), glass)
     page(Page.LiquidColor, "染色保留背景纹理，底色可纯色覆盖；另可调整色散与饱和度", groups(liquidColorGroups), glass)
@@ -65,11 +66,13 @@ internal fun declaredSettingsPages(text: (Int) -> String): Map<Page, SettingsMet
             SettingsBlock.Link("lighting.edge.scope", text(R.string.page_glass_edge),
                 "Prismal 外阴影与光学描边，按作用域（Dock、图标、小组件…）独立调整", Page.GlassEdge),
         ), glass)
-    page(Page.LiquidSampling, "控制桌面玻璃静止时的采样行为。",
+    page(Page.LiquidSampling, "控制桌面玻璃在静止与滚动/动画时的采样分辨率。",
         listOf(
             SettingsBlock.Header("sampling.performance", "实时背景采样"),
             toggle(ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE, "取消桌面玻璃静止时的下采样",
                 "禁用桌面原生在玻璃静止时的采样降级与下采样，保持完整采样分辨率"),
+            toggle(ConfigSchema.Glass.MOTION_DOWNSAMPLE, "滚动与动画时玻璃降采样",
+                "开启后在桌面滑动、打开文件夹等动画期间临时恢复下采样以节省 GPU 性能；关闭后动画期间也保持高分辨率采样"),
         ), glass)
     numbers(Page.DockGeometry, "调整 Dock 的尺寸、位置、圆角与图标间距。", dockSpecs, dock)
     listOf(Page.GridLandscape to "landscape", Page.GridPortrait to "portrait").forEach { (p, orientation) ->

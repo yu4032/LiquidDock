@@ -578,13 +578,14 @@ static void ld_install_os4_glass(const struct native_api *api,const ld_lib_info 
             return;
         }
     }
+    int any_glass_on = g_home_options.glass_enabled || g_home_options.soft_glass_enabled;
     __atomic_store_n(&g_os4_glass_override,
-            g_home_options.glass_enabled ? 1u : 0u,__ATOMIC_RELEASE);
+            any_glass_on ? 1u : 0u,__ATOMIC_RELEASE);
     __atomic_store_n(&g_os4_widget_glass_override,
-            (g_home_options.glass_enabled && g_home_options.glass_widgets) ? 1u : 0u,
+            (any_glass_on && g_home_options.glass_widgets) ? 1u : 0u,
             __ATOMIC_RELEASE);
     __atomic_store_n(&g_os4_large_folder_glass_override,
-            (g_home_options.glass_enabled && g_home_options.large_folder_glass) ? 1u : 0u,
+            (any_glass_on && g_home_options.large_folder_glass) ? 1u : 0u,
             __ATOMIC_RELEASE);
     __atomic_store_n(&g_os4_big_folder_enabled,
             g_home_options.big_folder_enabled ? 1u : 0u,__ATOMIC_RELEASE);
@@ -1224,7 +1225,7 @@ static void ld_install_icon_materials(const struct native_api *api,const ld_lib_
             }
         }
     }
-    if(g_home_options.glass_enabled && g_home_options.glass_icons && !g_icon_glass_container_patched) {
+    if((g_home_options.glass_enabled || g_home_options.soft_glass_enabled) && g_home_options.glass_icons && !g_icon_glass_container_patched) {
         struct {
             uintptr_t target;
             uint32_t expected;
@@ -1484,7 +1485,7 @@ static void ld_install_os4_glass_filter_and_scope(const struct native_api *api, 
                 ld_glass_filter_words, sizeof ld_glass_filter_words,
                 (void *)repl_glass_filter, &g_orig_glass_filter);
     }
-    if (g_home_options.glass_enabled && !g_glass_scope_installed) {
+    if ((g_home_options.glass_enabled || g_home_options.soft_glass_enabled) && !g_glass_scope_installed) {
         uintptr_t dock_light_start = 0, dock_light_end = 0;
         uintptr_t dock_dark_start = 0, dock_dark_end = 0;
         if (g_home_options.glass_observers_present) {
@@ -1560,8 +1561,9 @@ static void install_grid_hook_unlocked(const struct native_api *api)
     ld_widget_resize_install(api,&lib);
     ld_ws_resolve_page_fields(&lib);
     ld_workstation_install(api,&lib);
-    int se_on = g_home_options.glass_enabled && g_home_options.prismal.continuous_corners;
-    ld_prismal_glass_install_ex(api, g_home_options.glass_enabled && !g_home_options.soft_glass_enabled,
+    int any_glass = g_home_options.glass_enabled || g_home_options.soft_glass_enabled;
+    int se_on = any_glass && g_home_options.prismal.continuous_corners;
+    ld_prismal_glass_install_ex(api, g_home_options.glass_enabled,
                                 &g_home_options.prismal);
     ld_superellipse_blur_install(se_on);
     ld_glass_superellipse_install(api, se_on,
@@ -2028,7 +2030,7 @@ static void install_grid_hook(const struct native_api *api) {
     if (((g_grid_cols > 0 && g_grid_rows > 0) || g_home_options.icon_size_enabled
             || g_home_options.big_folder_enabled || g_home_options.widget_1x1_to_2x2_enabled
             || g_home_options.folder_grid_cols > 0 || g_home_options.folder_grid_rows > 0
-            || g_home_options.dock.enabled || g_home_options.glass_enabled
+            || g_home_options.dock.enabled || g_home_options.glass_enabled || g_home_options.soft_glass_enabled
             || g_home_options.widget_overrides || g_home_options.recents_blur_percent != 100
             || g_home_options.allapps_blur_percent != 100
             || g_home_options.ws_allapps_blur_percent != 100
@@ -2052,8 +2054,8 @@ static void on_library_loaded(const char *name, void *handle)
         const char *base=strrchr(name,'/'); base=base?base+1:name;
         if(!strcmp(base,"libapp.so") || !strcmp(base,"libapp_launcher.so")) install_grid_hook(g_api);
         else if(!strcmp(base,"libhyper_os_flutter.so")) {
-            int se_on = g_home_options.glass_enabled && g_home_options.prismal.continuous_corners;
-            ld_prismal_glass_install_ex(g_api, g_home_options.glass_enabled && !g_home_options.soft_glass_enabled,
+            int se_on = (g_home_options.glass_enabled || g_home_options.soft_glass_enabled) && g_home_options.prismal.continuous_corners;
+            ld_prismal_glass_install_ex(g_api, g_home_options.glass_enabled,
                                         &g_home_options.prismal);
             ld_superellipse_blur_install(se_on);
             ld_glass_superellipse_install(g_api, se_on,
@@ -2144,7 +2146,7 @@ on_library_loaded_t native_init(struct native_api *api)
     ld_madvise_guard_install(g_api);
     load_grid_config();
     ld_prepare_native_glass();
-    ld_prismal_glass_install_ex(g_api, g_home_options.glass_enabled && !g_home_options.soft_glass_enabled,
+    ld_prismal_glass_install_ex(g_api, g_home_options.glass_enabled,
                                 &g_home_options.prismal);
     install_grid_hook(g_api);
     ld_superellipse_install(g_api);

@@ -44,7 +44,8 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
         memcpy(&vt, obj, sizeof(vt));
     }
     if (vt != expect) return;
-    if (g_home_options.glass_enabled && g_home_options.native_glass.mask) {
+    int prismal_active = __atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE);
+    if (!prismal_active && g_home_options.soft_glass_enabled && g_home_options.native_glass.mask) {
         ld_native_glass_apply((uintptr_t)obj, &g_home_options.native_glass, ld_glass_fast_read, ld_glass_fast_write);
     }
     if (g_home_options.prismal.disable_stationary_downsample ||
@@ -93,7 +94,7 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
  * filter; apply the customization right before it so icon/folder blur follows it. */
 static bool ld_acquire_blur_hook(void *canvas, void *filter, void *a2, void *a3, void *a4, void *a5, int w6, float s0)
 {
-    if (filter && ((g_home_options.glass_enabled && g_home_options.native_glass.mask) ||
+    if (filter && ((g_home_options.soft_glass_enabled && g_home_options.native_glass.mask) ||
                    __atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE))) {
         ld_glass_apply_obj(filter, 0);
         static unsigned calls;
@@ -101,7 +102,8 @@ static bool ld_acquire_blur_hook(void *canvas, void *filter, void *a2, void *a3,
         float orig_s0 = s0;
         if ((g_home_options.prismal.disable_stationary_downsample ||
              __atomic_load_n(&g_prismal_no_downsample, __ATOMIC_ACQUIRE)) &&
-            !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED) &&
+            (!__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) ||
+             !__atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)) &&
             s0 > 0.0f && s0 < 1.0f) {
             s0 = 1.0f;
         }

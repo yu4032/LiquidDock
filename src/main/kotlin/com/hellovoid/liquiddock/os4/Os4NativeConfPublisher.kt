@@ -79,8 +79,9 @@ object Os4NativeConfPublisher {
             if (options.widget1x1To2x2Enabled) append("widget_1x1_to_2x2=1\n")
             if (options.preventWidgetStretchEnabled) append("widget_prevent_stretch=1\n")
             // Explicit opt-in only. An absent key preserves the stock OS4 material.
+            val anyGlass = options.glassEnabled || options.softGlassEnabled
             if (options.glassEnabled) append("glass_enabled=1\n")
-            if (options.glassEnabled && options.softGlassEnabled) append("soft_glass_enabled=1\n")
+            if (options.softGlassEnabled) append("soft_glass_enabled=1\n")
             if (options.glassEnabled && options.prismalOverrides.isNotEmpty()) {
                 for (spec in Os4MainScreenOptions.prismalSpecs) {
                     val v = options.prismalOverrides[spec.confKey] ?: continue
@@ -96,7 +97,7 @@ object Os4NativeConfPublisher {
                     }
                 }
             }
-            if (options.glassEnabled) {
+            if (options.softGlassEnabled && !options.glassEnabled) {
                 Os4NativeGlassOptions.configLines(options.glassNativeOverrides)!!.forEach {
                     append(it).append('\n')
                 }
@@ -111,14 +112,14 @@ object Os4NativeConfPublisher {
                     }
                 }
             }
-            if (options.glassEnabled && options.glassIcons) {
+            if (anyGlass && options.glassIcons) {
                 append("glass_icons=1\n")
                 append("glass_icon_size=").append(options.glassIconSize).append('\n')
                 append("glass_icon_corner=").append(options.glassIconCorner).append('\n')
             }
-            if (options.glassEnabled && options.glassWidgets) append("glass_widgets=1\n")
+            if (anyGlass && options.glassWidgets) append("glass_widgets=1\n")
             if (options.useDragMaterial) append("use_drag_material=1\n")
-            if (options.glassEnabled) {
+            if (anyGlass) {
                 append("large_folder_glass=").append(if (options.glassLargeFolder) 1 else 0).append('\n')
                 append("large_folder_corner=").append(options.glassLargeFolderCorner).append('\n')
                 append("large_folder_2x1_corner=").append(options.glassLargeFolder2x1Corner).append('\n')

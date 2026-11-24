@@ -97,16 +97,20 @@ __attribute__((used)) static void ld_observe_native_glass(struct ld_dart_context
             if(g_unified_widget_base_state==2) g_early_widget_count=0;
         }
     }
+    int prismal_active = __atomic_load_n(&g_prismal_glass_active, __ATOMIC_ACQUIRE);
     int base_applied=0;
-    if(scope==LD_GLASS_SCOPE_WIDGET) {
-        if(g_unified_widget_base_state>0 && g_unified_widget_base.mask) {
-            base_applied=ld_native_glass_apply(filter,&g_unified_widget_base,ld_read_heap,ld_native_glass_write);
-        } else if(g_early_widget_count<16) {
-            g_early_widget_filters[g_early_widget_count++]=filter;
+    int result=0;
+    if(!prismal_active && g_home_options.soft_glass_enabled) {
+        if(scope==LD_GLASS_SCOPE_WIDGET) {
+            if(g_unified_widget_base_state>0 && g_unified_widget_base.mask) {
+                base_applied=ld_native_glass_apply(filter,&g_unified_widget_base,ld_read_heap,ld_native_glass_write);
+            } else if(g_early_widget_count<16) {
+                g_early_widget_filters[g_early_widget_count++]=filter;
+            }
         }
+        result=opts->mask?ld_native_glass_apply(filter,opts,ld_read_heap,ld_native_glass_write):0;
     }
-    int result=opts->mask?ld_native_glass_apply(filter,opts,ld_read_heap,ld_native_glass_write):0;
-    if(__atomic_load_n(&g_prismal_glass_active,__ATOMIC_ACQUIRE)) {
+    if(prismal_active) {
         float blur_px=ld_prismal_current_blur_px();
         float br=blur_px>=0.5f?blur_px:0.01f;
         float bg=0.01f;

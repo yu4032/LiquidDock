@@ -224,6 +224,7 @@ data class Os4MainScreenOptions(
             PrismalFieldSpec("prismal_backlit_extent", ConfigSchema.Glass.BACKLIT_EXTENT, divisor = 100.0, min = 0.0, max = 1.0),
             PrismalFieldSpec("prismal_backlit_softness", ConfigSchema.Glass.BACKLIT_SOFTNESS, divisor = 100.0, min = 0.05, max = 2.0),
             PrismalFieldSpec("prismal_disable_stationary_downsample", ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE, isBool = true),
+            PrismalFieldSpec("prismal_motion_downsample", ConfigSchema.Glass.MOTION_DOWNSAMPLE, isBool = true),
             PrismalFieldSpec("prismal_icon_downsample", ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE, isBool = true),
             PrismalFieldSpec("prismal_icon_fixed_wallpaper", ConfigSchema.Glass.OS4_ICON_GLASS_FIXED_WALLPAPER, isBool = true),
             PrismalFieldSpec("prismal_widget_corner", ConfigSchema.Glass.WIDGET_CORNER_RADIUS, isDp = true, min = 0.0, max = 128.0),
@@ -411,19 +412,21 @@ data class Os4MainScreenOptions(
                         }
                     }
                 } else emptyMap()
-                val glassIcons = glassEnabled && boolean(ConfigSchema.Glass.ICON_GLASS)
-                val glassWidgets = glassEnabled && boolean(ConfigSchema.Glass.WIDGET_GLASS)
-                val glassLargeFolder = !glassEnabled || boolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS)
+                val anyGlass = glassEnabled || softGlassEnabled
+                val glassIcons = anyGlass && boolean(ConfigSchema.Glass.ICON_GLASS)
+                val glassWidgets = anyGlass && boolean(ConfigSchema.Glass.WIDGET_GLASS)
+                val glassLargeFolder = !anyGlass || boolean(ConfigSchema.Glass.LARGE_FOLDER_GLASS)
                 val glassLargeFolderNativeOutline = boolean(ConfigSchema.Glass.LARGE_FOLDER_NATIVE_OUTLINE)
                 val widgetOverrides = selectedOs4MamlWidget(values[WidgetComponentStore.SELECTION_KEY])
-                val nativeGlassOverrides = if (glassEnabled) {
+                val applySoftOverrides = softGlassEnabled && !glassEnabled
+                val nativeGlassOverrides = if (applySoftOverrides) {
                     Os4NativeGlassOptions.parse(string(ConfigSchema.Glass.OS4_NATIVE_OVERRIDES))
                         ?: return null
                 } else emptyMap()
                 fun scopedOverrides(
                     customKey: ConfigKey<Boolean>,
                     overridesKey: ConfigKey<String>,
-                ): Map<String, Double>? = if (glassEnabled && boolean(customKey)) {
+                ): Map<String, Double>? = if (applySoftOverrides && boolean(customKey)) {
                     Os4NativeGlassOptions.parse(string(overridesKey))
                 } else emptyMap()
                 val dockGlassOverrides = scopedOverrides(
@@ -448,7 +451,7 @@ data class Os4MainScreenOptions(
                 val allAppsBlurPercent = integer(ConfigSchema.Workstation.ALL_APPS_BLUR_PERCENT)
                 val wsAllAppsBlurPercent = integer(ConfigSchema.Workstation.WS_ALL_APPS_BLUR_PERCENT)
                 val workstationEnabled = boolean(ConfigSchema.Workstation.DOCK_CUSTOMIZATION)
-                if (!grid && !icons && !bigFolder && !folderGrid && !dockEnabled && !dividerEnabled && !glassEnabled &&
+                if (!grid && !icons && !bigFolder && !folderGrid && !dockEnabled && !dividerEnabled && !anyGlass &&
                     !widgetOverrides && !preventWidgetStretch && recentsBlurPercent == 100 &&
                     folderBlurPercent == 100 && shortcutBlurPercent == 100 &&
                     allAppsBlurPercent == 100 && wsAllAppsBlurPercent == 100 && !workstationEnabled) ""
