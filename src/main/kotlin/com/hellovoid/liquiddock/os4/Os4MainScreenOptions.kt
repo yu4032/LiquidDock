@@ -226,6 +226,7 @@ data class Os4MainScreenOptions(
             PrismalFieldSpec("prismal_disable_stationary_downsample", ConfigSchema.Glass.DISABLE_STATIONARY_DOWNSAMPLE, isBool = true),
             PrismalFieldSpec("prismal_motion_downsample", ConfigSchema.Glass.MOTION_DOWNSAMPLE, isBool = true),
             PrismalFieldSpec("prismal_icon_downsample", ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE, isBool = true),
+            PrismalFieldSpec("prismal_icon_return_fade", ConfigSchema.Glass.OS4_ICON_RETURN_FADE, isBool = true),
             PrismalFieldSpec("prismal_icon_fixed_wallpaper", ConfigSchema.Glass.OS4_ICON_GLASS_FIXED_WALLPAPER, isBool = true),
             PrismalFieldSpec("prismal_widget_corner", ConfigSchema.Glass.WIDGET_CORNER_RADIUS, isDp = true, min = 0.0, max = 128.0),
             PrismalFieldSpec("prismal_small_folder_corner", ConfigSchema.Glass.SMALL_FOLDER_CORNER_RADIUS, isDp = true, min = 0.0, max = 128.0),

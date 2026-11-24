@@ -367,6 +367,14 @@ internal fun GlassIconsPage(
                         "开启后 1×1 图标复用共享下采样背景以降低 GPU 与显存开销；关闭后全分辨率采样更清晰但更耗性能。",
                         masterEnabled && liquidEnabled && iconGlass,
                     )
+                    ModernListDivider()
+                    BooleanSetting(
+                        prefs,
+                        ConfigSchema.Glass.OS4_ICON_RETURN_FADE,
+                        "图标返回渐显",
+                        "退出应用返回桌面时为 1×1 图标玻璃添加渐显过渡（实验性，默认关闭以避免无关动画误触发）；实时生效。",
+                        masterEnabled && liquidEnabled && iconGlass,
+                    )
                 }
             }
         }

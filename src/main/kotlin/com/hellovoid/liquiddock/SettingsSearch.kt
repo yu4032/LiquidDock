@@ -169,6 +169,7 @@ internal fun customGlassSearchRows(page: Page): List<CustomGlassSearchRow> {
         Page.GlassIcons -> listOf(
             toggle(ConfigSchema.Glass.ICON_GLASS, "图标玻璃"),
             toggle(ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE, "图标玻璃下采样"),
+            toggle(ConfigSchema.Glass.OS4_ICON_RETURN_FADE, "图标返回渐显"),
             number(iconSizeOffsetSpec), number(iconCornerRadiusSpec),
         )
         Page.GlassWidgets -> listOf(
@@ -270,6 +271,7 @@ internal fun customDenseFocusIndex(page: Page, key: String): Int? {
         Page.GlassIcons -> when (key) {
             ConfigSchema.Glass.ICON_GLASS.name(),
             ConfigSchema.Glass.OS4_ICON_GLASS_DOWNSAMPLE.name(),
+            ConfigSchema.Glass.OS4_ICON_RETURN_FADE.name(),
             ConfigSchema.Glass.OS4_ICON_GLASS_FIXED_WALLPAPER.name() -> 2
             iconSizeOffsetSpec.key, iconCornerRadiusSpec.key -> 4
             else -> -1

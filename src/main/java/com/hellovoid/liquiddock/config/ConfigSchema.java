@@ -352,6 +352,8 @@ public final class ConfigSchema {
                 "liquid_icon_glass", true, true, true, ConfigKey.ExportMode.ALWAYS);
         public static final ConfigKey<Boolean> OS4_ICON_GLASS_DOWNSAMPLE = bool(
                 "liquid_os4_icon_glass_downsample", true, true, true, ConfigKey.ExportMode.IF_PRESENT);
+        public static final ConfigKey<Boolean> OS4_ICON_RETURN_FADE = bool(
+                "liquid_os4_icon_return_fade", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> OS4_ICON_GLASS_FIXED_WALLPAPER = bool(
                 "liquid_os4_icon_glass_fixed_wallpaper", false, false, false, ConfigKey.ExportMode.IF_PRESENT);
         public static final ConfigKey<Boolean> FUNCTIONAL_DOCK_ICON_GLASS = bool(
@@ -979,7 +981,7 @@ public final class ConfigSchema {
                 Glass.DISABLE_STATIONARY_DOWNSAMPLE,
                 Glass.MOTION_DOWNSAMPLE,
                 Glass.WIDGET_DARK_CONTENT, Glass.ICON_GLASS, Glass.OS4_ICON_GLASS_DOWNSAMPLE,
-                Glass.OS4_ICON_GLASS_FIXED_WALLPAPER,
+                Glass.OS4_ICON_RETURN_FADE, Glass.OS4_ICON_GLASS_FIXED_WALLPAPER,
                 Glass.FUNCTIONAL_DOCK_ICON_GLASS, Glass.RECENTS_CAPSULE_GLASS,
                 Glass.ICON_SIZE_OFFSET, Glass.ICON_CORNER_RADIUS,
                 Glass.WIDGET_SIZE_OFFSET, Glass.WIDGET_CORNER_RADIUS,

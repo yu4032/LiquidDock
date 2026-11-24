@@ -684,7 +684,7 @@ static void ld_prismal_fill_ubo(uint8_t *ubo, const struct ld_prismal_options *o
     ld_write_f32(ubo, 0x70u, (float)opt->vibrancy);
     ld_write_f32(ubo, 0x74u, (float)opt->brightness);
     ld_write_f32(ubo, 0x78u, dome);
-    if (g_tls_is_small_icon) {
+    if (g_tls_is_small_icon && opt->icon_return_fade) {
         float fade_a = ld_prismal_icon_return_fade(
             g_tls_ubo_orig_ox + g_tls_entity_tx,
             g_tls_ubo_orig_oy + g_tls_entity_ty);

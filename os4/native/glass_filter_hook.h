@@ -60,9 +60,7 @@ static void ld_glass_apply_obj(void *obj, int from_unwrap)
         is_small_icon = g_ld_gse_tls_is_small_icon;
 #endif
         int downsample_icon = is_small_icon &&
-            (__atomic_load_n(&g_prismal_icon_downsample, __ATOMIC_RELAXED) ||
-             (__atomic_load_n(&g_prismal_motion_downsample, __ATOMIC_RELAXED) &&
-              __atomic_load_n(&g_prismal_in_motion, __ATOMIC_RELAXED)));
+            __atomic_load_n(&g_prismal_icon_downsample, __ATOMIC_RELAXED);
         int32_t rate_i = 0;
         uint8_t *rate_ptr = (uint8_t *)obj + 0x34u;
         memcpy(&rate_i, rate_ptr, sizeof(rate_i));

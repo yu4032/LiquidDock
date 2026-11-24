@@ -121,6 +121,7 @@ struct ld_prismal_options {
     int disable_stationary_downsample;
     int motion_downsample;
     int icon_downsample;
+    int icon_return_fade;
     int icon_fixed_wallpaper;
     int icon_backlit_enabled;
     int icon_outer_shadow_enabled;
@@ -177,6 +178,7 @@ static inline void ld_prismal_options_defaults(struct ld_prismal_options *p)
     p->disable_stationary_downsample = 1;
     p->motion_downsample = 1;
     p->icon_downsample = 1;
+    p->icon_return_fade = 0;
     p->icon_fixed_wallpaper = 0;
     p->icon_backlit_enabled = -1;
     p->icon_outer_shadow_enabled = -1;
@@ -495,6 +497,7 @@ static inline int ld_prismal_conf_kv(const char *key, const char *val,
         {"prismal_icon_backlit_enabled", offsetof(struct ld_prismal_options, icon_backlit_enabled), 1, 0, 1},
         {"prismal_icon_outer_shadow_enabled", offsetof(struct ld_prismal_options, icon_outer_shadow_enabled), 1, 0, 1},
         {"prismal_motion_downsample", offsetof(struct ld_prismal_options, motion_downsample), 1, 0, 1},
+        {"prismal_icon_return_fade", offsetof(struct ld_prismal_options, icon_return_fade), 1, 0, 1},
     };
     const size_t n = sizeof(tbl) / sizeof(tbl[0]);
     for (size_t i = 0; i < n; ++i) {
